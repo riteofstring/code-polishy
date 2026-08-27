@@ -1,3 +1,5 @@
+![Code Polishy](./code-polishy-banner.png)
+
 # Code Polishy
 
 Code Polishy is an opinionated, agent-first policy engine that gives coding
