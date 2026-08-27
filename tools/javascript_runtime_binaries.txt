@@ -1,0 +1,20 @@
+# Every prebuilt binary artifact inside the pinned pnpm release, relative to the
+# installed pnpm component root. The pnpm archive is one published tarball, so
+# this inventory is host independent.
+#
+# The pinned SHA-256 in javascript_runtime_checksums.txt already proves these
+# bytes were not tampered with. This inventory exists so that a pnpm version
+# bump cannot quietly change the prebuilt binary surface that Code Polishy then
+# executes: any added, removed, or renamed artifact fails installation and
+# requires explicit review.
+#
+# None of these are admitted bundle dependencies, none are produced by an
+# install script, and none are downloaded after acquisition. Only the artifact
+# matching the installed host can load at all; the Windows executables and the
+# non-host reflink builds are inert on every supported host.
+dist/node_modules/@reflink/reflink-darwin-arm64/reflink.darwin-arm64.node
+dist/node_modules/@reflink/reflink-darwin-x64/reflink.darwin-x64.node
+dist/node_modules/@reflink/reflink-win32-arm64-msvc/reflink.win32-arm64-msvc.node
+dist/node_modules/@reflink/reflink-win32-x64-msvc/reflink.win32-x64-msvc.node
+dist/vendor/fastlist-0.3.0-x64.exe
+dist/vendor/fastlist-0.3.0-x86.exe

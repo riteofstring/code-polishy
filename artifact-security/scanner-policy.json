@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "trivyVersion": "0.72.0",
+  "sourceImage": "docker.io/aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f",
+  "dockerfileSha256": "cfe06c0dae3d705a745e29631659c7f9d498cc13f50586a26f8c4f28ee6dbc62",
+  "openVexSha256": "d0ded47bb87d03e7c33d06243a186855fd61f515fa1feef5489835194d6d18de",
+  "databaseRepository": "ghcr.io/aquasecurity/trivy-db:2",
+  "databaseSchemaVersion": 2,
+  "databaseMaximumAgeHours": 24,
+  "failSeverities": ["HIGH", "CRITICAL"],
+  "maximumArchiveBytes": 2147483648,
+  "maximumReportBytes": 67108864
+}

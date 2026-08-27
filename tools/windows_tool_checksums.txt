@@ -1,0 +1,8 @@
+# Exact upstream artifacts admitted by tools/install-policy-tools.ps1.
+# Windows releases are x64 until every carried tool has a native ARM64 build.
+go1.26.6.windows-amd64.zip 5b6c5b556525810463b5c897b50dc7a82d6a3dc0bfaf55d990a7e9f31d6b2318
+node-v24.18.0-win-x64.zip 0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821
+pnpm-11.13.0.tgz 865c76bd9111a45ca41f6eeed4067ff0ecdfee9eac83aad24179c83ffebe7599
+shellcheck-v0.11.0.zip 8a4e35ab0b331c85d73567b12f2a444df187f483e5079ceffa6bda1faa2e740e
+ruff-x86_64-pc-windows-msvc.zip c5d1185c47261f86361d03b547da25be79120226a6f1721d623b2aba9d27668b
+osv-scanner_windows_amd64.exe 0cdd113610126d5dfd5e12ad0e0b4f3e879291ff19bb43b0c52ed2f2c2df1a37

@@ -1,0 +1,767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy.schema.json",
+  "title": "Code Polishy project facts and overrides",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "modules", "tests"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "version": { "const": 3 },
+    "project": { "$ref": "#/$defs/project" },
+    "scope": { "$ref": "#/$defs/scope" },
+    "quality": { "$ref": "#/$defs/quality" },
+    "portability": { "$ref": "#/$defs/portability" },
+    "verification": { "$ref": "#/$defs/verification" },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/module" }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "tests": { "$ref": "#/$defs/tests" },
+    "supplyChain": { "$ref": "#/$defs/supplyChain" },
+    "policyModules": { "$ref": "#/$defs/policyModules" },
+    "exceptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/exception" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "nonemptyString": {
+      "type": "string",
+      "pattern": ".*\\S.*"
+    },
+    "identifierArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
+    },
+    "paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/identifier" },
+        "capabilities": { "$ref": "#/$defs/identifierArray" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude": { "$ref": "#/$defs/paths" },
+        "generated": { "$ref": "#/$defs/paths" },
+        "entryPoints": { "$ref": "#/$defs/paths" },
+        "development": { "$ref": "#/$defs/paths" },
+        "languages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/languageRule" }
+        }
+      }
+    },
+    "languageRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "paths"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "paths": {
+          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
+        }
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "go": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "goTest": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "typescript": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "typescriptTest": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxFileLines": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "maxTestFileLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1500
+        },
+        "complexity": { "$ref": "#/$defs/complexity" },
+        "maxDepth": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "maxTestDepth": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "maxParams": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "maxTestParams": { "type": "integer", "minimum": 1, "maximum": 8 }
+      }
+    },
+    "portability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "externalInputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/externalInput" }
+        }
+      }
+    },
+    "externalInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "module",
+        "sourcePaths",
+        "resolution",
+        "unavailableBehavior",
+        "contractSuite",
+        "behaviorSuite"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["directory", "file", "repository", "service"] },
+        "module": { "$ref": "#/$defs/identifier" },
+        "sourcePaths": {
+          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
+        },
+        "resolution": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["cli", "config", "environment", "default"] }
+        },
+        "environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        },
+        "unavailableBehavior": { "enum": ["fail", "warn"] },
+        "contractSuite": { "$ref": "#/$defs/identifier" },
+        "behaviorSuite": { "$ref": "#/$defs/identifier" },
+        "siblingFallback": {
+          "type": "string",
+          "pattern": "^(?:\\.\\./)+[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "description": "Merge-gate selection facts and optional checked-in merge-target guidance.",
+      "additionalProperties": false,
+      "properties": {
+        "trustedMergeTarget": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\s\\u0000]+$",
+          "description": "Optional checked-in trusted merge target used when the caller supplies no explicit target."
+        },
+        "mergeGate": { "$ref": "#/$defs/mergeGate" }
+      }
+    },
+    "mergeGate": {
+      "type": "object",
+      "description": "Allows merge-gate to select the recommended ordinary profile only for these modules; all other changes select the complete full gate.",
+      "additionalProperties": false,
+      "required": ["recommendedModules"],
+      "properties": {
+        "recommendedModules": {
+          "allOf": [{ "$ref": "#/$defs/identifierArray" }, { "minItems": 1 }]
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "paths"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "paths": {
+          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
+        },
+        "dependsOn": { "$ref": "#/$defs/identifierArray" },
+        "capabilities": { "$ref": "#/$defs/identifierArray" }
+      }
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/nonemptyString" }
+    },
+    "commandBase": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "argv": { "$ref": "#/$defs/argv" },
+        "cwd": { "$ref": "#/$defs/path" },
+        "paths": { "$ref": "#/$defs/paths" },
+        "modules": { "$ref": "#/$defs/identifierArray" },
+        "environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        },
+        "exclusiveResources": { "$ref": "#/$defs/identifierArray" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "check": {
+      "allOf": [
+        { "$ref": "#/$defs/commandBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "provides", "argv"],
+          "properties": {
+            "name": { "$ref": "#/$defs/identifier" },
+            "provides": {
+              "allOf": [
+                { "$ref": "#/$defs/identifierArray" },
+                { "minItems": 1 }
+              ]
+            },
+            "argv": { "$ref": "#/$defs/argv" },
+            "cwd": { "$ref": "#/$defs/path" },
+            "paths": { "$ref": "#/$defs/paths" },
+            "modules": { "$ref": "#/$defs/identifierArray" },
+            "environment": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            },
+            "exclusiveResources": { "$ref": "#/$defs/identifierArray" },
+            "runOn": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "check",
+                  "gate",
+                  "format",
+                  "build",
+                  "security",
+                  "supply-chain",
+                  "supply-chain-online"
+                ]
+              }
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            }
+          }
+        }
+      ]
+    },
+    "testSuite": {
+      "allOf": [
+        { "$ref": "#/$defs/commandBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "kind", "scope", "argv"],
+          "properties": {
+            "name": { "$ref": "#/$defs/identifier" },
+            "kind": { "$ref": "#/$defs/identifier" },
+            "scope": { "enum": ["module", "repository"] },
+            "cost": { "enum": ["quick", "standard", "expensive"] },
+            "modules": { "$ref": "#/$defs/identifierArray" },
+            "environment": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            },
+            "exclusiveResources": { "$ref": "#/$defs/identifierArray" },
+            "argv": { "$ref": "#/$defs/argv" },
+            "cwd": { "$ref": "#/$defs/path" },
+            "paths": { "$ref": "#/$defs/paths" },
+            "runOn": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": ["focused", "recommended", "full", "supplemental"]
+              }
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "scope": { "const": "module" } } },
+              "then": {
+                "required": ["modules"],
+                "properties": { "modules": { "minItems": 1, "maxItems": 1 } }
+              },
+              "else": { "properties": { "modules": { "maxItems": 0 } } }
+            },
+            {
+              "if": {
+                "required": ["runOn"],
+                "properties": {
+                  "runOn": { "contains": { "const": "focused" } }
+                }
+              },
+              "then": {
+                "properties": {
+                  "cost": { "const": "quick" },
+                  "runOn": {
+                    "allOf": [
+                      { "contains": { "const": "recommended" } },
+                      { "contains": { "const": "full" } }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": ["runOn"],
+                "properties": {
+                  "runOn": { "contains": { "const": "recommended" } }
+                }
+              },
+              "then": {
+                "properties": {
+                  "cost": { "enum": ["quick", "standard"] },
+                  "runOn": { "contains": { "const": "full" } }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": ["runOn"],
+                "properties": {
+                  "runOn": { "contains": { "const": "supplemental" } }
+                }
+              },
+              "then": {
+                "properties": {
+                  "cost": { "const": "expensive" },
+                  "runOn": { "maxItems": 1 }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "acceptance-mutation",
+                      "crap",
+                      "gherkin-mutation",
+                      "mutation",
+                      "risk-analysis"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "cost": { "const": "expensive" },
+                  "runOn": { "contains": { "const": "supplemental" } }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suites"],
+      "properties": {
+        "requiredKinds": { "$ref": "#/$defs/identifierArray" },
+        "requiredSupplementalKinds": { "$ref": "#/$defs/identifierArray" },
+        "suites": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/testSuite" }
+        }
+      }
+    },
+    "supplyChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimumReleaseAgeDays": { "type": "integer", "minimum": 30 },
+        "preferredNewDependencyAgeDays": { "type": "integer", "minimum": 30 },
+        "auditLevel": { "const": "low" },
+        "allowedDependencyProtocols": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["workspace:", "file:", "link:"] }
+        },
+        "allowedLicenses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9.-]+\\+?( WITH [A-Za-z0-9.-]+\\+?)?$"
+          }
+        },
+        "npmRegistryUrl": { "type": "string", "pattern": "^https://" },
+        "environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        },
+        "releaseArtifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/releaseArtifact" }
+        },
+        "vulnerabilityAssessments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/vulnerabilityAssessment" }
+        },
+        "releaseAgeAssessments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/releaseAgeAssessment" }
+        },
+        "dependencyOverridePolicies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependencyOverridePolicy" }
+        },
+        "artifactSecurity": { "$ref": "#/$defs/artifactSecurity" }
+      }
+    },
+    "artifactSecurity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outputDirectory": { "$ref": "#/$defs/path" },
+        "targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactTarget" }
+        }
+      }
+    },
+    "artifactTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "mode"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "module": { "$ref": "#/$defs/identifier" },
+        "mode": { "enum": ["archive", "command", "dockerfile"] },
+        "platform": { "enum": ["linux/amd64", "linux/arm64"] },
+        "dockerfile": { "$ref": "#/$defs/path" },
+        "context": { "$ref": "#/$defs/path" },
+        "archive": { "$ref": "#/$defs/path" },
+        "producer": { "$ref": "#/$defs/artifactProducer" },
+        "openVex": { "$ref": "#/$defs/path" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "dockerfile" } } },
+          "then": {
+            "required": ["dockerfile", "context"],
+            "not": {
+              "anyOf": [
+                { "required": ["archive"] },
+                { "required": ["producer"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "archive" } } },
+          "then": {
+            "required": ["archive"],
+            "not": {
+              "anyOf": [
+                { "required": ["dockerfile"] },
+                { "required": ["context"] },
+                { "required": ["producer"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "command" } } },
+          "then": {
+            "required": ["producer"],
+            "not": {
+              "anyOf": [
+                { "required": ["dockerfile"] },
+                { "required": ["context"] },
+                { "required": ["archive"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "artifactProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/argv" },
+        "cwd": { "$ref": "#/$defs/path" },
+        "environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        },
+        "manifest": { "$ref": "#/$defs/path" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "releaseArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "versionFile", "source"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "versionFile": { "$ref": "#/$defs/path" },
+        "source": {
+          "enum": [
+            "github-release",
+            "go-module",
+            "go-toolchain",
+            "node-runtime",
+            "npm"
+          ]
+        },
+        "locator": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9._@/+~-]*$"
+        },
+        "tagPrefix": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9._-]*$"
+        }
+      }
+    },
+    "vulnerabilityAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ecosystem",
+        "advisory",
+        "package",
+        "affectedVersion",
+        "scope",
+        "severity",
+        "status",
+        "basis",
+        "reason",
+        "impact",
+        "evidence",
+        "tracking",
+        "owner",
+        "approvedBy",
+        "approval",
+        "reviewed",
+        "expires"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "ecosystem": { "enum": ["go", "npm", "pnpm", "pypi"] },
+        "advisory": { "$ref": "#/$defs/nonemptyString" },
+        "package": { "$ref": "#/$defs/nonemptyString" },
+        "affectedVersion": {
+          "type": "string",
+          "pattern": "^[^*?\\[\\]<>=~^|,\\s]+$"
+        },
+        "scope": { "$ref": "#/$defs/path" },
+        "severity": { "enum": ["low", "moderate", "high"] },
+        "status": { "enum": ["not-affected", "risk-accepted"] },
+        "basis": {
+          "enum": [
+            "false-positive",
+            "unreachable",
+            "mitigated",
+            "temporary-no-fix"
+          ]
+        },
+        "reason": { "$ref": "#/$defs/nonemptyString" },
+        "impact": { "$ref": "#/$defs/nonemptyString" },
+        "evidence": { "type": "string", "pattern": "^https://" },
+        "tracking": { "type": "string", "pattern": "^https://" },
+        "owner": { "$ref": "#/$defs/nonemptyString" },
+        "approvedBy": { "$ref": "#/$defs/nonemptyString" },
+        "approval": { "type": "string", "pattern": "^https://" },
+        "reviewed": { "type": "string", "format": "date" },
+        "expires": { "type": "string", "format": "date" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "severity": { "const": "high" } } },
+          "then": {
+            "properties": {
+              "status": { "const": "not-affected" },
+              "basis": { "enum": ["false-positive", "unreachable"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "not-affected" } } },
+          "then": {
+            "properties": {
+              "basis": { "enum": ["false-positive", "unreachable"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "risk-accepted" } } },
+          "then": {
+            "properties": {
+              "basis": { "enum": ["mitigated", "temporary-no-fix"] }
+            }
+          }
+        }
+      ]
+    },
+    "releaseAgeAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ecosystem",
+        "package",
+        "version",
+        "scope",
+        "category",
+        "evidence",
+        "reason",
+        "owner",
+        "reviewed",
+        "expires"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "ecosystem": { "enum": ["artifact", "go", "npm", "pnpm", "pypi"] },
+        "package": { "$ref": "#/$defs/nonemptyString" },
+        "version": { "$ref": "#/$defs/nonemptyString" },
+        "scope": { "$ref": "#/$defs/path" },
+        "category": { "enum": ["security-fix", "supported-release"] },
+        "evidence": { "type": "string", "pattern": "^https://" },
+        "reason": { "$ref": "#/$defs/nonemptyString" },
+        "owner": { "$ref": "#/$defs/nonemptyString" },
+        "reviewed": { "type": "string", "format": "date" },
+        "expires": { "type": "string", "format": "date" }
+      }
+    },
+    "dependencyOverridePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ecosystem",
+        "path",
+        "field",
+        "contentSha256",
+        "reason",
+        "owner",
+        "reviewed",
+        "expires"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "ecosystem": { "enum": ["npm", "pnpm"] },
+        "path": { "$ref": "#/$defs/path" },
+        "field": { "enum": ["overrides", "pnpm.overrides"] },
+        "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "reason": { "$ref": "#/$defs/nonemptyString" },
+        "owner": { "$ref": "#/$defs/nonemptyString" },
+        "reviewed": { "type": "string", "format": "date" },
+        "expires": { "type": "string", "format": "date" }
+      }
+    },
+    "policyModules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "overrides": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/policyModuleOverride" }
+        }
+      }
+    },
+    "policyModuleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "mode"],
+      "properties": {
+        "name": { "enum": ["electron", "osv", "react", "ruff"] },
+        "root": { "$ref": "#/$defs/path" },
+        "mode": { "enum": ["enabled", "disabled"] },
+        "reason": { "$ref": "#/$defs/nonemptyString" },
+        "owner": { "$ref": "#/$defs/nonemptyString" },
+        "expires": { "type": "string", "format": "date" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "disabled" } } },
+          "then": { "required": ["reason", "owner", "expires"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["reason"] },
+                { "required": ["owner"] },
+                { "required": ["expires"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "check",
+        "path",
+        "subject",
+        "reason",
+        "owner",
+        "expires"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "check": { "type": "string", "pattern": "^[^*?\\[\\]]+$" },
+        "path": { "type": "string", "pattern": "^[^*?\\[\\]]+$" },
+        "subject": { "type": "string", "pattern": "^[^*?\\[\\]]+$" },
+        "reason": { "$ref": "#/$defs/nonemptyString" },
+        "owner": { "$ref": "#/$defs/nonemptyString" },
+        "expires": { "type": "string", "format": "date" }
+      }
+    }
+  }
+}

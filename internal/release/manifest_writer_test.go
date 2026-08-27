@@ -1,0 +1,52 @@
+package release
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestWriteManifestRecordsAndVerifiesExactStage(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"VERSION": "9.9.9\n", "scripts/go_version.txt": "1.26.6\n",
+		"tools/govulncheck-version.txt": "v1.3.0\n", "tools/node-version.txt": "24.18.0\n",
+		"tools/osv-scanner-version.txt": "v2.4.0\n", "tools/pnpm-version.txt": "11.13.0\n",
+		"tools/ruff-version.txt": "0.16.0\n", "tools/shellcheck-version.txt": "0.11.0\n",
+		"tools/staticcheck-version.txt": "v0.7.0\n", BinaryPath: "engine", LauncherBinaryPath: "launcher",
+	}
+	for relative, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest, err := WriteManifest(root, exampleRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.ContentDigest != releaseEntriesDigest(manifest.Entries) || manifest.ReleaseDigest != manifest.Identity() {
+		t.Fatalf("manifest=%+v", manifest)
+	}
+	read, present, err := ReadManifest(root)
+	if err != nil || !present {
+		t.Fatalf("read present=%v err=%v", present, err)
+	}
+	if err := read.Verify(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteManifest(root, exampleRevision); err == nil {
+		t.Fatal("overwrote an existing manifest")
+	}
+}
+
+func TestManifestRejectsContentDigestDetachedFromEntries(t *testing.T) {
+	_, manifest := exampleRelease(t)
+	manifest.ContentDigest = otherDigest
+	if _, err := parseManifest(render(t, manifest), "fixture"); err == nil {
+		t.Fatal("accepted a detached content digest")
+	}
+}

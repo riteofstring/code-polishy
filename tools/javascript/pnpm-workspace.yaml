@@ -1,0 +1,57 @@
+# Sealed pnpm settings for the policy-owned JavaScript tool bundle. pnpm 11
+# reads its own settings from this file rather than from `.npmrc`, so the
+# admission rules that must hold live here and not in npm-compatible config.
+#
+# The bundle is one package, so it declares no workspace members.
+packages: []
+
+# No dependency in the bundle may run a build script. The list is empty rather
+# than absent so that a future dependency needing one fails installation instead
+# of being approved implicitly.
+onlyBuiltDependencies: []
+strictDepBuilds: true
+
+# No dependency lifecycle script runs during fetch, install, or use.
+ignoreScripts: true
+enablePrePostScripts: false
+
+# The committed lock is authoritative. Installation resolves nothing, and a
+# peer declaration is a compatibility statement rather than an install
+# instruction: a peer the bundle needs is declared as a direct dependency.
+frozenLockfile: true
+preferFrozenLockfile: true
+autoInstallPeers: false
+resolutionMode: highest
+saveExact: true
+
+# Every extracted package is checked against its recorded integrity, and no
+# implicit hoisting lets a package reach what it did not declare.
+verifyStoreIntegrity: true
+nodeLinker: isolated
+hoist: false
+shamefullyHoist: false
+
+# Code Polishy's own 30-day hard minimum release age, enforced by the resolver
+# rather than only after the fact. A package whose registry metadata carries no
+# publish time cannot be aged, so it is rejected instead of assumed old enough.
+minimumReleaseAge: 43200
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+
+# The only admitted exceptions are exact releases that remove a vulnerability
+# from the version the hard minimum would otherwise force the bundle to keep.
+# Each entry needs a matching supplyChain.releaseAgeAssessments record that
+# expires when that exact release reaches the hard minimum on its own.
+minimumReleaseAgeExclude:
+  - brace-expansion@1.1.18
+  - brace-expansion@5.0.9
+  - js-yaml@4.3.1
+
+# Only registry sources are admitted, and a recorded resolution may never be
+# downgraded to a weaker one by a later resolution.
+blockExoticSubdeps: true
+trustLockfile: false
+trustPolicy: no-downgrade
+
+# No network side effect beyond the explicit fetch step.
+updateNotifier: false

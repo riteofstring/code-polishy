@@ -1,0 +1,23 @@
+{
+  "name": "code-polishy-javascript-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sealed, policy-owned JavaScript tool bundle. Consuming repositories never install or configure these tools themselves.",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": "24.18.0"
+  },
+  "dependencies": {
+    "@types/node": "24.13.3",
+    "@typescript-eslint/parser": "8.64.0",
+    "eslint": "9.39.5",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "js-yaml": "4.3.1",
+    "knip": "5.55.1",
+    "prettier": "3.9.5",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://code-polishy.invalid/security/vex/trivy-0.72.0/1",
+  "author": "Code Polishy maintainers",
+  "timestamp": "2026-08-03T05:43:34Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39822"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib@v1.26.4"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Code Polishy invokes Trivy only for its version command, an anonymous database download, and offline Docker-archive scans; binary reachability analysis found no vulnerable os.Root symbols."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-50151"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/oras.land/oras-go/v2@v2.6.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The scanner never pushes registry blobs or receives registry credentials; its only networked action is an anonymous database download with no mounted scan input or credentials."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-50163"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/oras.land/oras-go/v2@v2.6.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The scanner receives local Docker image archives with --input and --offline-scan; it never invokes ORAS artifact pull or unpack."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-56852"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/text@v0.38.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "Every scanned archive is captured locally from a declared artifact target; parsing is networkless, resource-bounded, and capped by a ten-minute timeout."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-hrxh-6v49-42gf"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/google.golang.org/grpc@v1.81.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The scanner does not run an xDS RBAC service or a gRPC HTTP/2 server; offline scans have no network, and database download receives no untrusted mounts or credentials."
+    }
+  ]
+}

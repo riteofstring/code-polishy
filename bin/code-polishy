@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Development-only source runner for this checkout.
+#
+# It runs the engine straight from source with the pinned Go toolchain so a
+# change can be exercised without installing a release. It is not a release and
+# no target lock can name it, so it is not a supported way to govern another
+# repository; a target runs the installed `code-polishy` launcher instead.
+
+policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+caller_root="$(pwd -P)"
+
+resolve_caller_directory() {
+  local option="$1"
+  local candidate="$2"
+  if [[ -z "${candidate}" ]]; then
+    echo "${option} requires a non-empty directory" >&2
+    exit 2
+  fi
+  if [[ "${candidate}" != /* ]]; then
+    candidate="${caller_root}/${candidate}"
+  fi
+  if [[ ! -d "${candidate}" ]]; then
+    echo "${option} directory does not exist: ${candidate}" >&2
+    exit 2
+  fi
+  (cd "${candidate}" && pwd -P)
+}
+
+target_root="$(resolve_caller_directory CODE_POLISHY_REPO_ROOT "${CODE_POLISHY_REPO_ROOT:-${caller_root}}")"
+arguments=("$@")
+for ((index = 0; index < ${#arguments[@]}; index += 1)); do
+  case "${arguments[index]}" in
+    --repo-root|--policy-root)
+      if ((index + 1 >= ${#arguments[@]})); then
+        echo "${arguments[index]} requires a directory" >&2
+        exit 2
+      fi
+      arguments[index + 1]="$(resolve_caller_directory "${arguments[index]}" "${arguments[index + 1]}")"
+      index=$((index + 1))
+      ;;
+    --repo-root=*|--policy-root=*)
+      option="${arguments[index]%%=*}"
+      value="${arguments[index]#*=}"
+      arguments[index]="${option}=$(resolve_caller_directory "${option}" "${value}")"
+      ;;
+    --config)
+      index=$((index + 1))
+      ;;
+    --config=*) ;;
+    *) break ;;
+  esac
+done
+
+cd "${policy_root}"
+development_binary="${policy_root}/.tools/bin/code-polishy-development"
+mkdir -p "$(dirname "${development_binary}")"
+"${policy_root}/scripts/go.sh" build -o "${development_binary}" ./cmd/code-polishy
+exec "${development_binary}" \
+  --policy-root "${policy_root}" --repo-root "${target_root}" "${arguments[@]}"

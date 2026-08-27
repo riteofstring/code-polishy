@@ -1,0 +1,577 @@
+{
+  "$schema": "schema/code-polishy.schema.json",
+  "version": 3,
+  "project": {
+    "kind": "tooling",
+    "capabilities": ["cli"]
+  },
+  "scope": {
+    "exclude": [],
+    "generated": [],
+    "entryPoints": ["tools/javascript/runner.mjs"]
+  },
+  "quality": {},
+  "modules": [
+    {
+      "name": "policy",
+      "paths": ["internal/policy/**"]
+    },
+    {
+      "name": "repository",
+      "paths": ["internal/repository/**"],
+      "dependsOn": ["policy"]
+    },
+    {
+      "name": "runner",
+      "paths": ["internal/runner/**"],
+      "dependsOn": ["policy"]
+    },
+    {
+      "name": "agents",
+      "paths": ["internal/agents/**"]
+    },
+    {
+      "name": "release",
+      "paths": ["internal/release/**"],
+      "dependsOn": ["policy"]
+    },
+    {
+      "name": "javascript",
+      "paths": ["internal/javascript/**"],
+      "dependsOn": ["release", "runner"]
+    },
+    {
+      "name": "quality",
+      "paths": ["internal/quality/**"],
+      "dependsOn": ["javascript", "policy", "repository", "runner"]
+    },
+    {
+      "name": "architecture",
+      "paths": ["internal/architecture/**"],
+      "dependsOn": ["javascript", "policy", "repository"]
+    },
+    {
+      "name": "testing",
+      "paths": ["internal/testing/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
+      "name": "supplychain",
+      "paths": ["internal/supplychain/**"],
+      "dependsOn": ["javascript", "policy", "repository", "runner"]
+    },
+    {
+      "name": "artifactsecurity",
+      "paths": ["internal/artifactsecurity/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
+      "name": "policymodule",
+      "paths": ["internal/policymodule/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
+      "name": "portability",
+      "paths": ["internal/portability/**"],
+      "dependsOn": ["policy", "repository"]
+    },
+    {
+      "name": "engine",
+      "paths": ["internal/engine/**"],
+      "dependsOn": [
+        "agents",
+        "architecture",
+        "artifactsecurity",
+        "policy",
+        "policymodule",
+        "portability",
+        "quality",
+        "repository",
+        "runner",
+        "supplychain",
+        "testing"
+      ]
+    },
+    {
+      "name": "cli",
+      "paths": ["cmd/code-polishy/**"],
+      "dependsOn": [
+        "agents",
+        "engine",
+        "policy",
+        "release",
+        "runner",
+        "testing"
+      ]
+    },
+    {
+      "name": "launcher",
+      "paths": ["cmd/code-polishy-launcher/**"],
+      "dependsOn": ["release", "runner"]
+    },
+    {
+      "name": "docs",
+      "paths": ["docs/**/*.md"]
+    },
+    {
+      "name": "tooling",
+      "paths": ["bin/**", "scripts/**", "skills/**", "templates/**", "tools/**"]
+    }
+  ],
+  "verification": {
+    "mergeGate": {
+      "recommendedModules": ["docs"]
+    }
+  },
+  "checks": [
+    {
+      "name": "go-build",
+      "provides": ["build"],
+      "argv": ["./scripts/build.sh"],
+      "modules": [
+        "policy",
+        "repository",
+        "runner",
+        "agents",
+        "release",
+        "javascript",
+        "quality",
+        "architecture",
+        "testing",
+        "supplychain",
+        "artifactsecurity",
+        "policymodule",
+        "portability",
+        "engine",
+        "cli",
+        "launcher",
+        "tooling"
+      ],
+      "runOn": ["build"]
+    },
+    {
+      "name": "javascript-bundle-lock",
+      "provides": ["lock-sync"],
+      "argv": ["./scripts/check-javascript-bundle.sh"],
+      "runOn": ["supply-chain"]
+    }
+  ],
+  "tests": {
+    "requiredKinds": ["unit", "contract"],
+    "requiredSupplementalKinds": ["mutation"],
+    "suites": [
+      {
+        "name": "policy-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["policy"],
+        "argv": ["./scripts/test.sh", "./internal/policy/..."]
+      },
+      {
+        "name": "repository-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": ["./scripts/test.sh", "./internal/repository/..."]
+      },
+      {
+        "name": "runner-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["runner"],
+        "argv": ["./scripts/test.sh", "./internal/runner/..."]
+      },
+      {
+        "name": "agents-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["agents"],
+        "argv": ["./scripts/test.sh", "./internal/agents/..."]
+      },
+      {
+        "name": "release-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["release"],
+        "argv": ["./scripts/test.sh", "./internal/release/..."]
+      },
+      {
+        "name": "javascript-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["javascript"],
+        "argv": ["./scripts/test.sh", "./internal/javascript/..."]
+      },
+      {
+        "name": "quality-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["quality"],
+        "argv": ["./scripts/test.sh", "./internal/quality/..."]
+      },
+      {
+        "name": "architecture-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["architecture"],
+        "argv": ["./scripts/test.sh", "./internal/architecture/..."]
+      },
+      {
+        "name": "testing-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["testing"],
+        "argv": ["./scripts/test.sh", "./internal/testing/..."]
+      },
+      {
+        "name": "supplychain-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["supplychain"],
+        "argv": ["./scripts/test.sh", "./internal/supplychain/..."]
+      },
+      {
+        "name": "artifactsecurity-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["artifactsecurity"],
+        "argv": ["./scripts/test.sh", "./internal/artifactsecurity/..."]
+      },
+      {
+        "name": "policymodule-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["policymodule"],
+        "argv": ["./scripts/test.sh", "./internal/policymodule/..."]
+      },
+      {
+        "name": "portability-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["portability"],
+        "argv": ["./scripts/test.sh", "./internal/portability/..."]
+      },
+      {
+        "name": "engine-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["engine"],
+        "argv": ["./scripts/test.sh", "./internal/engine/..."]
+      },
+      {
+        "name": "cli-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["cli"],
+        "argv": ["./scripts/test.sh", "./cmd/code-polishy/..."],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "launcher-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["launcher"],
+        "argv": ["./scripts/test.sh", "./cmd/code-polishy-launcher/..."],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "documentation-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["docs"],
+        "argv": ["./scripts/check-documentation.sh"],
+        "runOn": ["focused", "recommended", "full"],
+        "timeoutSeconds": 30
+      },
+      {
+        "name": "tooling-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["tooling"],
+        "argv": ["./scripts/test-tooling.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "repository-full",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "standard",
+        "argv": ["./scripts/test.sh", "./..."],
+        "runOn": ["full"]
+      },
+      {
+        "name": "policy-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["policy"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/policy"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["repository"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/repository"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "runner-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["runner"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/runner"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "agents-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["agents"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/agents"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "release-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["release"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/release"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "javascript-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["javascript"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/javascript"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/quality"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "architecture-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["architecture"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/architecture"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "testing-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["testing"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/testing"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "supplychain-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["supplychain"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/supplychain"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "artifactsecurity-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["artifactsecurity"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/artifactsecurity"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "policymodule-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["policymodule"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/policymodule"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "portability-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["portability"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/portability"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "engine-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["engine"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/engine"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "cli-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["cli"],
+        "argv": ["./scripts/go-mutation.sh", "./cmd/code-polishy"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "launcher-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["launcher"],
+        "argv": ["./scripts/go-mutation.sh", "./cmd/code-polishy-launcher"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      }
+    ]
+  },
+  "supplyChain": {
+    "releaseArtifacts": [
+      {
+        "name": "go",
+        "versionFile": "scripts/go_version.txt",
+        "source": "go-toolchain"
+      },
+      {
+        "name": "govulncheck",
+        "versionFile": "tools/govulncheck-version.txt",
+        "source": "go-module",
+        "locator": "golang.org/x/vuln"
+      },
+      {
+        "name": "gremlins",
+        "versionFile": "tools/gremlins-version.txt",
+        "source": "github-release",
+        "locator": "go-gremlins/gremlins"
+      },
+      {
+        "name": "node",
+        "versionFile": "tools/node-version.txt",
+        "source": "node-runtime"
+      },
+      {
+        "name": "osv-scanner",
+        "versionFile": "tools/osv-scanner-version.txt",
+        "source": "github-release",
+        "locator": "google/osv-scanner"
+      },
+      {
+        "name": "ruff",
+        "versionFile": "tools/ruff-version.txt",
+        "source": "github-release",
+        "locator": "astral-sh/ruff"
+      },
+      {
+        "name": "shellcheck",
+        "versionFile": "tools/shellcheck-version.txt",
+        "source": "github-release",
+        "locator": "koalaman/shellcheck",
+        "tagPrefix": "v"
+      },
+      {
+        "name": "staticcheck",
+        "versionFile": "tools/staticcheck-version.txt",
+        "source": "go-module",
+        "locator": "honnef.co/go/tools"
+      },
+      {
+        "name": "trivy",
+        "versionFile": "tools/trivy-version.txt",
+        "source": "github-release",
+        "locator": "aquasecurity/trivy",
+        "tagPrefix": "v"
+      }
+    ],
+    "releaseAgeAssessments": [
+      {
+        "id": "go-1-26-6-security-fix",
+        "ecosystem": "artifact",
+        "package": "go",
+        "version": "1.26.6",
+        "scope": "scripts/go_version.txt",
+        "category": "security-fix",
+        "evidence": "https://pkg.go.dev/vuln/GO-2026-6179",
+        "reason": "Go 1.26.6 fixes CVE-2026-56865 and CVE-2026-56864 in cmd/go checksum verification used by Code Polishy's networked go install steps; retaining 1.26.5 would allow a malicious GOPROXY, or coordinated GOPROXY and GOSUMDB, to persist attacker-controlled tool modules.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-08-26",
+        "expires": "2026-09-12"
+      },
+      {
+        "id": "brace-expansion-1-dos-fix",
+        "ecosystem": "pnpm",
+        "package": "brace-expansion",
+        "version": "1.1.18",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "reason": "Every brace-expansion 1.x release old enough to satisfy the hard minimum is affected by GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895, so the minimum would force the JavaScript bundle to keep a high-severity denial of service instead of the fix.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-08-15",
+        "expires": "2026-08-29"
+      },
+      {
+        "id": "brace-expansion-5-dos-fix",
+        "ecosystem": "pnpm",
+        "package": "brace-expansion",
+        "version": "5.0.9",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "reason": "Every brace-expansion 5.x release old enough to satisfy the hard minimum is affected by GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895, so the minimum would force the JavaScript bundle to keep a high-severity denial of service instead of the fix.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-08-15",
+        "expires": "2026-08-29"
+      },
+      {
+        "id": "js-yaml-4-3-1-fix",
+        "ecosystem": "pnpm",
+        "package": "js-yaml",
+        "version": "4.3.1",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+        "reason": "js-yaml 4.3.1 is the first 4.x release fixing GHSA-5p4m-2wfm-xmqj, and every older 4.x release the hard minimum would allow is affected.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-08-15",
+        "expires": "2026-08-30"
+      }
+    ]
+  },
+  "exceptions": []
+}

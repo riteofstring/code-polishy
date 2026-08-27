@@ -1,0 +1,111 @@
+{
+  "version": 3,
+  "project": {
+    "kind": "application",
+    "capabilities": ["backend", "frontend", "ui", "visual"]
+  },
+  "scope": {
+    "generated": ["frontend/src/generated/**"],
+    "entryPoints": ["frontend/src/routes/**"],
+    "development": ["frontend/*.config.ts"]
+  },
+  "quality": {},
+  "portability": {},
+  "modules": [
+    {
+      "name": "domain",
+      "paths": ["internal/domain/**"]
+    },
+    {
+      "name": "backend",
+      "paths": ["cmd/**", "internal/api/**", "internal/adapters/**"],
+      "dependsOn": ["domain"]
+    },
+    {
+      "name": "frontend",
+      "paths": ["frontend/**"],
+      "dependsOn": ["domain"]
+    }
+  ],
+  "checks": [
+    {
+      "name": "backend-build",
+      "provides": ["build"],
+      "argv": ["./scripts/go.sh", "build", "./..."],
+      "modules": ["domain", "backend"],
+      "runOn": ["build"]
+    },
+    {
+      "name": "frontend-build",
+      "provides": ["build"],
+      "argv": ["pnpm", "build"],
+      "cwd": "frontend",
+      "modules": ["frontend"],
+      "runOn": ["build"]
+    }
+  ],
+  "tests": {
+    "requiredKinds": ["unit", "integration", "browser", "visual"],
+    "suites": [
+      {
+        "name": "domain-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["domain"],
+        "argv": ["./scripts/go.sh", "test", "./internal/domain/..."],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "backend-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["backend"],
+        "argv": [
+          "./scripts/go.sh",
+          "test",
+          "./internal/api/...",
+          "./internal/adapters/..."
+        ],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "frontend-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["frontend"],
+        "argv": ["pnpm", "test"],
+        "cwd": "frontend",
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "application-integration",
+        "kind": "integration",
+        "scope": "repository",
+        "cost": "standard",
+        "argv": ["./scripts/test_integration.sh"],
+        "paths": ["cmd/**", "internal/**", "frontend/**"],
+        "runOn": ["recommended", "full"]
+      },
+      {
+        "name": "browser-workflows",
+        "kind": "browser",
+        "scope": "repository",
+        "cost": "expensive",
+        "argv": ["pnpm", "test:browser"],
+        "cwd": "frontend",
+        "runOn": ["full"]
+      },
+      {
+        "name": "visual-regression",
+        "kind": "visual",
+        "scope": "repository",
+        "cost": "expensive",
+        "argv": ["pnpm", "test:visual"],
+        "cwd": "frontend",
+        "runOn": ["full"]
+      }
+    ]
+  },
+  "supplyChain": {},
+  "exceptions": []
+}

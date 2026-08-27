@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "project": {
+    "kind": "application",
+    "capabilities": []
+  },
+  "scope": {},
+  "quality": {},
+  "portability": {},
+  "modules": [
+    {
+      "name": "application",
+      "paths": ["src/**"]
+    }
+  ],
+  "checks": [],
+  "tests": {
+    "suites": [
+      {
+        "name": "application-focused",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["application"],
+        "argv": ["./scripts/test.sh", "focused"]
+      },
+      {
+        "name": "application-full",
+        "kind": "integration",
+        "scope": "repository",
+        "cost": "standard",
+        "argv": ["./scripts/test.sh", "all"],
+        "runOn": ["recommended", "full"]
+      }
+    ]
+  },
+  "supplyChain": {},
+  "exceptions": []
+}
