@@ -2,91 +2,96 @@
 
 # Code Polishy
 
-Code Polishy is an opinionated, agent-first policy engine that gives coding
-agents, developers, and CI one versioned engineering contract instead of
-letting each agent decide what "good enough" means. Each governed repository
-locks the exact release that enforces it, so the rules and toolchain do not
-silently vary between runs.
+**One policy for all your repos. Deterministic constraints agents can't
+ignore.**
 
-## What does it do?
+Each repo describes its code boundaries, tests, and commands. Code Polishy
+applies the same policy with the same locked tools, so the same code gets the
+same result.
 
-The project describes its modules and dependency direction, required checks and
-test suites, product-specific build commands, artifact targets, and narrow
-exceptions in `.code-polishy.json`. Code Polishy uses that model for fast,
-change-focused feedback during implementation and selects the recommended or
-full validation profile for the final merge gate.
+## What it does
 
-Built-in checks cover declared Go and JavaScript/TypeScript architecture
-boundaries; exact direct pins, lock consistency, dependency release age, and
-standalone executable release age; known vulnerabilities for supported
-ecosystems; obvious no-op test
-configuration and empty Go tests; formatting; and common language-quality
-rules. Repository-configured commands and suites cover documentation, builds,
-product behavior, and ecosystems the shared engine cannot honestly decide.
+- Keeps code inside your module boundaries.
+- Flags giant files, deep nesting, and overly complex functions.
+- Runs required tests, builds, and project checks.
+- Checks dependency pins, lock files, and known vulnerabilities.
+- Requires dependency releases to be at least 30 days old.
 
-## Get running
+The policy ships with Code Polishy. The project details live in your repo.
+Agents get fast feedback while they work. One final gate checks the code before
+merge.
 
-Start your coding agent in the repository you want Code Polishy to govern and
-say:
+## Set it up
+
+Open a coding agent in your repo. Paste this:
 
 ```text
 Set up Code Polishy in this repository. Follow
 https://github.com/riteofstring/code-polishy.
 ```
 
-That is the primary installation interface. The agent preserves an existing
-Code Polishy lock or selects the latest stable annotated version tag, clones
-that exact tag into temporary space, verifies its identity, installs its native
-release, configures the target, and runs the adoption checks. Ask for a tag such
-as `v1.2.3` only when you want a particular version.
+The agent keeps any version already locked by the repo. For a new setup, it
+uses the latest stable version tag. Ask for a tag such as `v1.2.3` when you need
+a specific version.
 
-Nothing installs from floating `main`, and no GitHub Release asset is required.
-Windows uses the same tagged source workflow through native PowerShell and does
-not need WSL or Git Bash; Git itself is required. Allow about 1 GB of disk space
-for the self-contained policy toolchain. See the complete
-[AI-agent runbook](docs/ai-adoption.md) or the
-[manual installation details](docs/installation.md).
+Git is required. Allow about 1 GB of disk space. Windows works without WSL or
+Git Bash.
 
-## Daily commands
+See the [agent setup guide](docs/ai-adoption.md) or the
+[manual setup guide](docs/installation.md) for the full process.
+
+## Use it
 
 ```sh
-# Fast feedback while you are still editing
+# Fast checks while coding
 code-polishy test --changed
 
-# Review a dependency update before keeping it
+# Review a dependency update
 code-polishy dependency-review --base origin/main
 
-# Final pre-merge validation; do not rerun test --changed first
+# Final check before merge
 code-polishy merge-gate --base origin/main
 ```
 
-Use focused or changed tests while iterating. At a merge checkpoint, run the
-merge gate once for the current final candidate. If it fails, repair the
-finding and rerun the narrowest relevant check before repeating the merge gate
-for the repaired candidate.
+Fix the reported problem. Rerun the smallest useful check. Run the merge gate
+again when the final code is ready.
+
+## Languages and tools
+
+Built-in checks currently cover Go, JavaScript, TypeScript, shell scripts, and
+Python. Code Polishy ships exact versions of the tools it trusts. Agents,
+developers, and CI use the same binaries.
+
+- Go uses `gofmt`, `go vet`, Staticcheck, govulncheck, and built-in complexity
+  checks.
+- JavaScript and TypeScript use Prettier, ESLint, TypeScript, and Knip on a
+  locked Node runtime.
+- Shell scripts use Bash syntax checks and ShellCheck.
+- Python uses Ruff.
+- Dependencies use OSV-Scanner and package-manager audits.
+
+Code Polishy also rejects empty Go tests and test commands that can report
+success without running tests. Optional mutation tests check that changing real
+code makes the test suite fail.
+
+Other languages use commands declared by the repo. Code Polishy still decides
+when they run and whether they passed.
 
 ## What lives in your repo
 
-- `.code-polishy.lock.json` — exact trusted Code Polishy release.
-- `.code-polishy.json` — modules, dependency direction, tests, commands, and
-  narrow exceptions.
-- `AGENTS.md` — the release-owned operating rules for coding agents.
+- `.code-polishy.lock.json` locks the exact Code Polishy release.
+- `.code-polishy.json` defines your code boundaries, tests, commands, and
+  exceptions.
+- `AGENTS.md` tells coding agents how to work in the repo.
 
-After setup, `AGENTS.md` is the recurring agent interface; users should not
-need to repeat Code Polishy's operating rules in prompts.
+After setup, tell your agent what to build. `AGENTS.md` carries the rules.
 
-Task sessions are optional. See [Agent workflows](docs/agent-workflows.md) when
-you need isolated or unattended delivery.
+## More
 
-## Need the details?
-
-- [Installation details](docs/installation.md)
-- [Adopt Code Polishy](docs/adoption.md)
-- [Set up with an AI agent](docs/ai-adoption.md)
-- [Browse all documentation](docs/README.md)
+- [All docs](docs/README.md)
 - [Agent workflows](docs/agent-workflows.md)
 - [Architecture rules](docs/policies/architecture.md)
-- [Verification rules](docs/policies/verification.md)
-- [Supply-chain rules](docs/policies/supply-chain.md)
+- [Test rules](docs/policies/verification.md)
+- [Dependency rules](docs/policies/supply-chain.md)
 
 Apache-2.0 licensed. See [LICENSE](LICENSE).
