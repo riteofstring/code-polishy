@@ -210,6 +210,9 @@ func validateVerification(config *Config) error {
 			return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
 		}
 	}
+	if err := validateBehaviorReview(config.Verification.BehaviorReview); err != nil {
+		return err
+	}
 	mergeGate := config.Verification.MergeGate
 	if mergeGate == nil {
 		return nil
@@ -224,6 +227,13 @@ func validateVerification(config *Config) error {
 		if _, exists := config.ModuleByName[module]; !exists {
 			return fmt.Errorf("verification.mergeGate.recommendedModules references unknown module %q", module)
 		}
+	}
+	return nil
+}
+
+func validateBehaviorReview(behaviorReview *BehaviorReview) error {
+	if behaviorReview != nil && !behaviorReview.Required {
+		return errors.New("verification.behaviorReview.required must be true when behavior review is configured")
 	}
 	return nil
 }

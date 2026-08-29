@@ -425,6 +425,49 @@ func TestLoadAcceptsConfiguredMergeGate(t *testing.T) {
 	}
 }
 
+func TestLoadAcceptsRequiredBehaviorReview(t *testing.T) {
+	t.Parallel()
+	configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":{"required":true}},"checks":[]`, 1)
+	config, err := Load(writeConfig(t, configText), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Verification.BehaviorReview == nil || !config.Verification.BehaviorReview.Required {
+		t.Fatalf("behavior review = %+v", config.Verification.BehaviorReview)
+	}
+}
+
+func TestLoadDisablesBehaviorReviewWhenOmitted(t *testing.T) {
+	t.Parallel()
+	config, err := Load(writeConfig(t, minimalConfig()), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Verification.BehaviorReview != nil {
+		t.Fatalf("behavior review = %+v, want disabled", config.Verification.BehaviorReview)
+	}
+}
+
+func TestLoadRejectsNonOptInBehaviorReview(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		behaviorReview string
+		want           string
+	}{
+		"missing required": {behaviorReview: `{}`, want: "behaviorReview"},
+		"false required":   {behaviorReview: `{"required":false}`, want: "behaviorReview"},
+		"unknown field":    {behaviorReview: `{"required":true,"typo":true}`, want: "unknown field"},
+		"malformed value":  {behaviorReview: `{"required":"true"}`, want: "cannot unmarshal"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":`+test.behaviorReview+`},"checks":[]`, 1)
+			if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q behavior-review validation error, got %v", test.want, err)
+			}
+		})
+	}
+}
+
 func TestLoadAcceptsCheckedInTrustedMergeTarget(t *testing.T) {
 	t.Parallel()
 	configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"trustedMergeTarget":"origin/release"},"checks":[]`, 1)

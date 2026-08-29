@@ -30,6 +30,11 @@
       "dependsOn": ["policy"]
     },
     {
+      "name": "behaviorreview",
+      "paths": ["internal/behaviorreview/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
       "name": "agents",
       "paths": ["internal/agents/**"]
     },
@@ -85,6 +90,7 @@
         "agents",
         "architecture",
         "artifactsecurity",
+        "behaviorreview",
         "policy",
         "policymodule",
         "portability",
@@ -126,6 +132,7 @@
         "policy",
         "repository",
         "runner",
+        "behaviorreview",
         "agents",
         "release",
         "javascript",
@@ -174,6 +181,13 @@
         "scope": "module",
         "modules": ["runner"],
         "argv": ["./scripts/test.sh", "./internal/runner/..."]
+      },
+      {
+        "name": "behaviorreview-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["behaviorreview"],
+        "argv": ["./scripts/test.sh", "./internal/behaviorreview/..."]
       },
       {
         "name": "agents-unit",
@@ -311,6 +325,16 @@
         "cost": "expensive",
         "modules": ["runner"],
         "argv": ["./scripts/go-mutation.sh", "./internal/runner"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "behaviorreview-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["behaviorreview"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/behaviorreview"],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },

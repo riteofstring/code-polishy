@@ -238,7 +238,16 @@
           "pattern": "^[^\\s\\u0000]+$",
           "description": "Optional checked-in trusted merge target used when the caller supplies no explicit target."
         },
+        "behaviorReview": { "$ref": "#/$defs/behaviorReview" },
         "mergeGate": { "$ref": "#/$defs/mergeGate" }
+      }
+    },
+    "behaviorReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": { "const": true }
       }
     },
     "mergeGate": {

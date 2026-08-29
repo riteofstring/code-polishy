@@ -66,8 +66,13 @@ type Config struct {
 }
 
 type Verification struct {
-	MergeGate          *MergeGate `json:"mergeGate,omitempty"`
-	TrustedMergeTarget string     `json:"trustedMergeTarget,omitempty"`
+	BehaviorReview     *BehaviorReview `json:"behaviorReview,omitempty"`
+	MergeGate          *MergeGate      `json:"mergeGate,omitempty"`
+	TrustedMergeTarget string          `json:"trustedMergeTarget,omitempty"`
+}
+
+type BehaviorReview struct {
+	Required bool `json:"required"`
 }
 
 type MergeGate struct {
