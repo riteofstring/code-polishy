@@ -93,6 +93,55 @@ func TestResolveAncestorRequiresACleanCandidateAndExactAncestor(t *testing.T) {
 	}
 }
 
+func TestIsAncestorUsesExactRevisionsAndReportsDivergence(t *testing.T) {
+	t.Parallel()
+	repo, base := committedRepository(t)
+	git(t, repo.Root, "branch", "other")
+	git(t, repo.Root, "switch", "-c", "feature")
+	writeFile(t, repo.Root, "feature.txt", "feature\n")
+	git(t, repo.Root, "add", "feature.txt")
+	git(t, repo.Root, "commit", "-m", "feature")
+	feature, err := repo.CleanHead()
+	if err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "switch", "other")
+	writeFile(t, repo.Root, "other.txt", "other\n")
+	git(t, repo.Root, "add", "other.txt")
+	git(t, repo.Root, "commit", "-m", "other")
+	other, err := repo.CleanHead()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range map[string]struct {
+		ancestor, descendant string
+		want                 bool
+	}{
+		"equal":       {ancestor: base, descendant: base, want: true},
+		"ancestor":    {ancestor: base, descendant: feature, want: true},
+		"nonancestor": {ancestor: other, descendant: feature, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, queryErr := repo.IsAncestor(test.ancestor, test.descendant)
+			if queryErr != nil || got != test.want {
+				t.Fatalf("IsAncestor(%s, %s) = %t, %v; want %t, nil", test.ancestor, test.descendant, got, queryErr, test.want)
+			}
+		})
+	}
+
+	if _, err := repo.IsAncestor("main", feature); !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("IsAncestor(main, %s) error = %v, want invalid reference", feature, err)
+	}
+}
+
+func TestAncestryResultReportsUnexpectedGitFailuresAsOperational(t *testing.T) {
+	t.Parallel()
+	if _, err := ancestryResult(errors.New("git unavailable")); !errors.Is(err, ErrGitOperation) {
+		t.Fatalf("ancestryResult() error = %v, want operational Git error", err)
+	}
+}
+
 func TestPatchProducesBinaryEvidenceForExactRevisions(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)

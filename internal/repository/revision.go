@@ -90,6 +90,29 @@ func (repo Repository) ResolveAncestor(reference string) (string, error) {
 	return ancestor, nil
 }
 
+func (repo Repository) IsAncestor(ancestor, descendant string) (bool, error) {
+	ctx := context.Background()
+	resolvedAncestor, err := repo.resolveExactCommit(ctx, ancestor)
+	if err != nil {
+		return false, err
+	}
+	resolvedDescendant, err := repo.resolveExactCommit(ctx, descendant)
+	if err != nil {
+		return false, err
+	}
+	return ancestryResult(repo.gitRun(ctx, "merge-base", "--is-ancestor", resolvedAncestor, resolvedDescendant))
+}
+
+func ancestryResult(err error) (bool, error) {
+	if err == nil {
+		return true, nil
+	}
+	if gitExitStatus(err) == 1 {
+		return false, nil
+	}
+	return false, newGitError(GitErrorOperation, "check exact Git ancestry", err)
+}
+
 func (repo Repository) Patch(base, candidate string, paths []string) ([]byte, error) {
 	ctx := context.Background()
 	resolvedBase, err := repo.resolveExactCommit(ctx, base)
