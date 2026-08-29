@@ -108,9 +108,11 @@ policy upgrade, and do not invent authoritative suite counts.
   generated packet to a fresh native reviewer. Record red-on-pre-fix and
   green-on-candidate `regression-proof` evidence for every behavior it
   classifies as requested, save its strict result, and run `behavior-review
-finalize`. Keep `.code-polishy-reports/behavior-review` in the same workspace
+finalize`. The merge gate independently replays cited proofs. Keep
+  `.code-polishy-reports/behavior-review` in the same workspace
   or move it only as an explicit trusted CI artifact. The supervising agent's
-  existing context is not a fresh review.
+  existing context is not a fresh review, and local artifacts cannot
+  authenticate reviewer identity or context.
 
 Do not turn an ambiguous request such as "test it" into an ordinary merge
 checkpoint. A direct request for a scoped profile remains scoped feedback, not

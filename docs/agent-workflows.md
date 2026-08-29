@@ -61,19 +61,23 @@ merge-checkable receipt without making the reviewer a policy engine:
 1. Commit the candidate and keep it clean, apart from the excluded review
    reports.
 2. Run `code-polishy behavior-review prepare` and give only its packet to a
-   fresh native reviewer. The packet is that reviewer's complete authority.
+   fresh native reviewer. The packet is that reviewer's complete authority, and
+   the supervising runtime is responsible for enforcing fresh context.
 3. For every behavior the reviewer classifies as `requested`, run one or more
    `code-polishy regression-proof` commands that fail on the declared pre-fix
-   base and pass on the candidate.
+   base and pass on the candidate. Run them after preparation and do not choose
+   a pre-fix revision older than the packet's reviewed merge base.
 4. Save the strict review result at the packet's result path, then run
    `code-polishy behavior-review finalize` to write the receipt.
 5. Run `code-polishy merge-gate --base <merge-target>`. It validates the
-   receipt before its normal recommended or full work.
+   receipt and independently reruns every cited proof before its normal
+   recommended or full work.
 
 Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
 the workflow. A multi-job CI run may transfer that directory only as an explicit
 trusted artifact. Documentation-only candidates bypass the receipt; ordinary
-agent reviews remain available for work that does not opt in.
+agent reviews remain available for work that does not opt in. Local digests do
+not authenticate reviewer identity or history; see the policy's trust limits.
 
 ## Isolated task sessions
 

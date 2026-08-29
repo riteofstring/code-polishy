@@ -22,7 +22,8 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
 - Can require a [fresh behavior review](docs/policies/behavior-review.md) and
-  red/green regression proof before non-documentation merges.
+  independently replayed red/green regression proof before non-documentation
+  merges.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.

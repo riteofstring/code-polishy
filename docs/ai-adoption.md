@@ -79,7 +79,7 @@ Present at least these choices:
 | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source comments (`quality.allowComments`)                                     | `true`                                            | Keep `true` for human-written code or carefully curated existing comments. Recommend `false` only for a repository whose code is written and read entirely by AI and whose durable rationale belongs in mapped design documents. State that choosing `false` makes existing prose comments blocking before changing them. |
 | Adaptive application merge gate (`verification.mergeGate.recommendedModules`) | Omitted, so application changes use the full gate | Configure it only when read-only inventory identifies clearly bounded content modules that can safely use the recommended lane; shared escalation rules still force full when impact expands.                                                                                                                             |
-| Behavior-regression receipt (`verification.behaviorReview.required`)          | Omitted                                           | Configure it only when applicable merges can use a fresh packet-only reviewer and retain its reports in one workspace or an explicit trusted CI handoff.                                                                                                                                                                  |
+| Behavior-regression receipt (`verification.behaviorReview.required`)          | Omitted                                           | Configure it only when applicable merges can isolate a fresh packet-only reviewer and keep its reports under trusted custody; the merge gate replays cited proofs but cannot authenticate reviewer identity or context.                                                                                                   |
 | Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost.                                                                                                                                                                  |
 | Gherkin methodology                                                           | Do not introduce it                               | Preserve and execute existing governed `.feature` files. Recommend adding Gherkin only when the owner wants executable behavior specifications as a working method.                                                                                                                                                       |
 
@@ -439,8 +439,9 @@ The resulting guidance should make these execution boundaries clear:
   for the same candidate;
 - when `verification.behaviorReview.required` is enabled, non-documentation
   merge candidates use the packet-only fresh-reviewer, red/green proof, and
-  receipt workflow before `merge-gate`; its reports stay in the same workspace
-  or move through an explicit trusted CI handoff;
+  receipt workflow before `merge-gate`; the gate independently reruns cited
+  proofs, while the runtime enforces reviewer isolation and the reports stay in
+  the same workspace or move through an explicit trusted CI handoff;
 - local supplemental mutation and risk work runs through its separate direct
   stage after ordinary acceptance; only credentialed, destructive,
   production-mutating, and live-provider probes remain external approval

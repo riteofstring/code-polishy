@@ -30,11 +30,13 @@ segment-aware globs, containment, language detection, module ownership,
 immutable-base change boundaries, nested Go module discovery, and the exact
 clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
 
-`internal/behaviorreview` owns packet preparation, strict review-result and
-receipt validation, behavior-proof records, and disposable pre-fix execution.
-It depends only on policy, repository, and runner. The agent runtime supplies a
-fresh reviewer; this module gives that reviewer a bounded packet and gives the
-merge gate candidate-bound evidence it can validate.
+`internal/behaviorreview` owns packet preparation and its marker, strict
+review-result and receipt validation, candidate-material re-derivation,
+behavior-proof records, and disposable baseline/candidate replay. It depends
+only on policy, repository, and runner. The agent runtime supplies and isolates
+a fresh reviewer; this module gives that reviewer a bounded packet and gives the
+merge gate candidate-bound executable evidence. Local artifacts do not
+authenticate reviewer identity or context.
 
 `internal/runner` is the subprocess boundary for target-declared commands. It
 accepts argument arrays, resolves working directories and checked-in

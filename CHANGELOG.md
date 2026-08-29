@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Add an opt-in behavior-regression merge receipt that binds a fresh packet-only
-  review and per-requested-behavior red/green proof to the clean candidate.
+- Add an opt-in behavior-regression merge prerequisite that binds a prepared
+  packet-only review to the clean candidate, prevents candidate-side weakening,
+  and independently replays every requested-behavior red/green proof at merge.
 
 ## 0.19.0 - 2026-08-28
 

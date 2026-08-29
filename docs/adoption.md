@@ -578,11 +578,13 @@ non-documentation merge, configure:
 ```
 
 Omit this object when the repository does not need the receipt; `false` is not
-a valid weakening value. CI must retain
+a valid weakening value. Once the resolved merge base requires the receipt, a
+candidate cannot disable it by changing or removing the option. CI must retain
 `.code-polishy-reports/behavior-review` in the same workspace as preparation,
 proof, finalization, and `merge-gate`, or transfer it between jobs as an
-explicit trusted artifact. See [Behavior Regression Review](policies/behavior-review.md)
-before enabling it.
+explicit trusted artifact. The merge gate replays every cited proof; the agent
+runtime must separately enforce fresh-reviewer isolation. See
+[Behavior Regression Review](policies/behavior-review.md) before enabling it.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen
