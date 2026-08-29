@@ -525,32 +525,6 @@
         "expires": "2026-09-12"
       },
       {
-        "id": "brace-expansion-1-dos-fix",
-        "ecosystem": "pnpm",
-        "package": "brace-expansion",
-        "version": "1.1.18",
-        "scope": "tools/javascript/pnpm-lock.yaml",
-        "category": "security-fix",
-        "evidence": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
-        "reason": "Every brace-expansion 1.x release old enough to satisfy the hard minimum is affected by GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895, so the minimum would force the JavaScript bundle to keep a high-severity denial of service instead of the fix.",
-        "owner": "code-polishy-maintainer",
-        "reviewed": "2026-08-15",
-        "expires": "2026-08-29"
-      },
-      {
-        "id": "brace-expansion-5-dos-fix",
-        "ecosystem": "pnpm",
-        "package": "brace-expansion",
-        "version": "5.0.9",
-        "scope": "tools/javascript/pnpm-lock.yaml",
-        "category": "security-fix",
-        "evidence": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
-        "reason": "Every brace-expansion 5.x release old enough to satisfy the hard minimum is affected by GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895, so the minimum would force the JavaScript bundle to keep a high-severity denial of service instead of the fix.",
-        "owner": "code-polishy-maintainer",
-        "reviewed": "2026-08-15",
-        "expires": "2026-08-29"
-      },
-      {
         "id": "js-yaml-4-3-1-fix",
         "ecosystem": "pnpm",
         "package": "js-yaml",
