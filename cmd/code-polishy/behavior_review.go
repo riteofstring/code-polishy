@@ -24,6 +24,8 @@ type regressionProofOptions struct {
 	redExit  int
 }
 
+var regressionProofOptionNames = []string{"--base", "--suite", "--evidence", "--id", "--red-exit"}
+
 func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	options, err := parseBehaviorReviewOptions(arguments)
 	if err != nil {
@@ -148,78 +150,77 @@ func parseBehaviorReviewFinalize(options *behaviorReviewOptions, arguments []str
 func parseRegressionProofOptions(arguments []string) (regressionProofOptions, error) {
 	options := regressionProofOptions{redExit: 1}
 	redExitSelected := false
-	for index := 0; index < len(arguments); {
-		value, consumed, matched, err := namedOptionValue(arguments[index:], "--base")
-		if matched {
-			if err != nil {
-				return regressionProofOptions{}, err
-			}
-			if options.base != "" {
-				return regressionProofOptions{}, errorsDuplicateOption("regression-proof", "--base")
-			}
-			options.base = value
-			index += consumed
-			continue
+	for len(arguments) > 0 {
+		consumed, err := parseRegressionProofOption(arguments, &options, &redExitSelected)
+		if err != nil {
+			return regressionProofOptions{}, err
 		}
-		value, consumed, matched, err = namedOptionValue(arguments[index:], "--suite")
-		if matched {
-			if err != nil {
-				return regressionProofOptions{}, err
-			}
-			if options.suite != "" {
-				return regressionProofOptions{}, errorsDuplicateOption("regression-proof", "--suite")
-			}
-			options.suite = value
-			index += consumed
-			continue
-		}
-		value, consumed, matched, err = namedOptionValue(arguments[index:], "--evidence")
-		if matched {
-			if err != nil {
-				return regressionProofOptions{}, err
-			}
-			if slices.Contains(options.evidence, value) {
-				return regressionProofOptions{}, errorsDuplicateOption("regression-proof", "--evidence "+value)
-			}
-			options.evidence = append(options.evidence, value)
-			index += consumed
-			continue
-		}
-		value, consumed, matched, err = namedOptionValue(arguments[index:], "--id")
-		if matched {
-			if err != nil {
-				return regressionProofOptions{}, err
-			}
-			if options.id != "" {
-				return regressionProofOptions{}, errorsDuplicateOption("regression-proof", "--id")
-			}
-			options.id = value
-			index += consumed
-			continue
-		}
-		value, consumed, matched, err = namedOptionValue(arguments[index:], "--red-exit")
-		if matched {
-			if err != nil {
-				return regressionProofOptions{}, err
-			}
-			if redExitSelected {
-				return regressionProofOptions{}, errorsDuplicateOption("regression-proof", "--red-exit")
-			}
-			status, statusErr := strconv.Atoi(value)
-			if statusErr != nil || status < 1 || status > 255 {
-				return regressionProofOptions{}, fmt.Errorf("--red-exit requires an integer from 1 through 255")
-			}
-			options.redExit = status
-			redExitSelected = true
-			index += consumed
-			continue
-		}
-		return regressionProofOptions{}, fmt.Errorf("unknown regression-proof option %q", arguments[index])
+		arguments = arguments[consumed:]
 	}
-	if options.base == "" || options.suite == "" || len(options.evidence) == 0 || options.id == "" {
-		return regressionProofOptions{}, fmt.Errorf("regression-proof requires exactly one --base REF, --suite NAME, --id ID, and at least one --evidence PATH")
+	if err := validateRegressionProofOptions(options); err != nil {
+		return regressionProofOptions{}, err
 	}
 	return options, nil
+}
+
+func parseRegressionProofOption(arguments []string, options *regressionProofOptions, redExitSelected *bool) (int, error) {
+	option, _, _ := strings.Cut(arguments[0], "=")
+	if !slices.Contains(regressionProofOptionNames, option) {
+		return 0, fmt.Errorf("unknown regression-proof option %q", arguments[0])
+	}
+	value, consumed, _, err := namedOptionValue(arguments, option)
+	if err != nil {
+		return 0, err
+	}
+	switch option {
+	case "--base":
+		err = setRegressionProofValue(&options.base, value, option)
+	case "--suite":
+		err = setRegressionProofValue(&options.suite, value, option)
+	case "--evidence":
+		err = appendRegressionProofEvidence(options, value)
+	case "--id":
+		err = setRegressionProofValue(&options.id, value, option)
+	case "--red-exit":
+		err = setRegressionProofRedExit(options, redExitSelected, value)
+	}
+	return consumed, err
+}
+
+func setRegressionProofValue(target *string, value, option string) error {
+	if *target != "" {
+		return errorsDuplicateOption("regression-proof", option)
+	}
+	*target = value
+	return nil
+}
+
+func appendRegressionProofEvidence(options *regressionProofOptions, value string) error {
+	if slices.Contains(options.evidence, value) {
+		return errorsDuplicateOption("regression-proof", "--evidence "+value)
+	}
+	options.evidence = append(options.evidence, value)
+	return nil
+}
+
+func setRegressionProofRedExit(options *regressionProofOptions, selected *bool, value string) error {
+	if *selected {
+		return errorsDuplicateOption("regression-proof", "--red-exit")
+	}
+	status, err := strconv.Atoi(value)
+	if err != nil || status < 1 || status > 255 {
+		return fmt.Errorf("--red-exit requires an integer from 1 through 255")
+	}
+	options.redExit = status
+	*selected = true
+	return nil
+}
+
+func validateRegressionProofOptions(options regressionProofOptions) error {
+	if options.base == "" || options.suite == "" || len(options.evidence) == 0 || options.id == "" {
+		return fmt.Errorf("regression-proof requires exactly one --base REF, --suite NAME, --id ID, and at least one --evidence PATH")
+	}
+	return nil
 }
 
 func namedOptionValue(arguments []string, option string) (string, int, bool, error) {
