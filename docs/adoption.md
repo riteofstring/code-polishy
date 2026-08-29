@@ -562,10 +562,11 @@ control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
 Archive verbose output for audit and require the resulting status for merge.
 
-### Require behavior-regression proof when the repository needs it
+### Keep behavior-regression proof on by default
 
-To require fresh semantic review and executable red/green evidence before a
-non-documentation merge, configure:
+Fresh semantic review and executable red/green evidence are required before a
+non-documentation merge without additional configuration. The equivalent
+explicit setting is:
 
 ```json
 {
@@ -577,14 +578,16 @@ non-documentation merge, configure:
 }
 ```
 
-Omit this object when the repository does not need the receipt; `false` is not
-a valid weakening value. Once the resolved merge base requires the receipt, a
-candidate cannot disable it by changing or removing the option. CI must retain
+Set `required` to `false` only when the repository deliberately opts out. Once
+the resolved merge base requires the receipt, a candidate cannot disable it;
+the opt-out change needs one final receipt before the new setting becomes the
+trusted base. CI must retain
 `.code-polishy-reports/behavior-review` in the same workspace as preparation,
 proof, finalization, and `merge-gate`, or transfer it between jobs as an
 explicit trusted artifact. The merge gate replays every cited proof; the agent
 runtime must separately enforce fresh-reviewer isolation. See
-[Behavior Regression Review](policies/behavior-review.md) before enabling it.
+[Behavior Regression Review](policies/behavior-review.md) before relying on the
+workflow.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen

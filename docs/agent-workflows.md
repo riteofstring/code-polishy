@@ -53,7 +53,8 @@ non-deterministic evidence and does not replace policy checks or human approval.
 
 ## Required behavior regression review
 
-When a repository enables `verification.behaviorReview.required`, use the
+Unless the trusted base explicitly sets
+`verification.behaviorReview.required` to `false`, use the
 [Behavior Regression Review Policy](policies/behavior-review.md) for every
 non-documentation merge candidate. It turns a fresh semantic review into a
 merge-checkable receipt without making the reviewer a policy engine:

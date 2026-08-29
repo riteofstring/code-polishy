@@ -21,9 +21,9 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Makes "done" include the tests, builds, and project checks your repo requires.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
-- Can require a [fresh behavior review](docs/policies/behavior-review.md) and
-  independently replayed red/green regression proof before non-documentation
-  merges.
+- Requires a [fresh behavior review](docs/policies/behavior-review.md) and
+  independently replayed red/green regression proof by default before
+  non-documentation merges.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.

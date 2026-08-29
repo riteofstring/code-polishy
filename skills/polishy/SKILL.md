@@ -103,12 +103,15 @@ policy upgrade, and do not invent authoritative suite counts.
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
-- When `verification.behaviorReview.required` is enabled, prepare every clean,
+- Unless the trusted base explicitly sets
+  `verification.behaviorReview.required` to `false`, prepare every clean,
   committed non-documentation candidate before that merge gate. Give only the
   generated packet to a fresh native reviewer. Record red-on-pre-fix and
   green-on-candidate `regression-proof` evidence for every behavior it
   classifies as requested, save its strict result, and run `behavior-review
-finalize`. The merge gate independently replays cited proofs. Keep
+finalize`. On a long-lived branch, repeat the workflow against the previous
+  accepted checkpoint before starting the next task. The merge gate
+  independently replays cited proofs. Keep
   `.code-polishy-reports/behavior-review` in the same workspace
   or move it only as an explicit trusted CI artifact. The supervising agent's
   existing context is not a fresh review, and local artifacts cannot

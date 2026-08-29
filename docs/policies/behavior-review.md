@@ -1,18 +1,19 @@
 # Behavior Regression Review
 
-Behavior regression review is an optional merge prerequisite for changes that
+Behavior regression review is the default merge prerequisite for changes that
 need both a fresh semantic review and executable regression evidence. The agent
 runtime supplies the fresh reviewer. Code Polishy prepares the exact packet,
 records red/green proofs, validates the structured result, and replays every
 cited proof at the merge gate.
 
-This policy applies only when the repository opts in. Ordinary agent reviews
-remain useful advisory evidence and can inspect a dirty working tree; this
-workflow is deliberately bound to one clean committed candidate.
+Ordinary agent reviews remain useful advisory evidence and can inspect a dirty
+working tree; this workflow is deliberately bound to one clean committed
+candidate.
 
-## Enable the receipt
+## Default and explicit opt-out
 
-Add this exact configuration:
+No configuration is needed to require the receipt. This explicit setting has
+the same behavior as omission:
 
 ```json
 {
@@ -24,15 +25,18 @@ Add this exact configuration:
 }
 ```
 
-Omit `behaviorReview` to leave the feature disabled. Once it is present,
-`required` must be exactly `true`: `false`, a missing value, malformed JSON, or
-an unknown property is invalid configuration. The requirement applies when it
-is enabled by either the resolved merge base or the candidate, so a candidate
-cannot remove or weaken an existing requirement.
+`required` defaults to `true` when either the property or the whole
+`behaviorReview` object is omitted. A repository that cannot use this workflow
+may explicitly opt out with `"required": false`. Malformed values and unknown
+properties remain invalid configuration.
 
-When enabled, the receipt is required for recommended and full merge
-candidates. Ordinary Markdown-only candidates use the documentation merge level
-and bypass the receipt.
+The receipt is required when either the resolved merge base or the candidate
+requires it. A candidate therefore cannot weaken a required base by adding an
+opt-out. The opt-out change itself needs one final valid receipt; after that
+change reaches the trusted base, candidates that retain `false` are exempt.
+
+The receipt is required for recommended and full merge candidates. Ordinary
+Markdown-only candidates use the documentation merge level and bypass it.
 
 ## Required workflow
 
@@ -98,6 +102,23 @@ and bypass the receipt.
    every cited proof in disposable baseline and candidate worktrees before it
    runs ordinary recommended or full verification. Recorded success or edited
    logs alone cannot satisfy the gate.
+
+## Long-lived branch checkpoints
+
+Do not wait for a merge into the main branch when an AI is making a sequence of
+changes on one long-lived branch. After each accepted task, use the previous
+known-good commit as the base and run the same preparation, review, proof,
+finalization, and gate workflow:
+
+```sh
+code-polishy merge-gate --base PREVIOUS_CHECKPOINT
+```
+
+Only record the current commit as the next checkpoint after that gate passes.
+This keeps the review packet focused on the latest task and reruns durable
+regression tests before the next change begins. The final merge checkpoint must
+still repeat the workflow against the actual merge target; a receipt bound to a
+branch checkpoint cannot satisfy a gate against a different base.
 
 ## What makes a result valid
 

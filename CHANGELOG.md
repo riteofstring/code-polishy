@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- Add an opt-in behavior-regression merge prerequisite that binds a prepared
-  packet-only review to the clean candidate, prevents candidate-side weakening,
-  and independently replays every requested-behavior red/green proof at merge.
+- Add a default-on behavior-regression merge prerequisite that binds a prepared
+  packet-only review to the clean candidate, supports explicit repository
+  opt-out without candidate-side weakening, and independently replays every
+  requested-behavior red/green proof at merge or branch checkpoint.
 
 ## 0.19.0 - 2026-08-28
 

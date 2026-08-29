@@ -256,10 +256,10 @@ telemetry, and report notes. CI may archive that output and should make the
 resulting status required for merge. Human handoffs should summarize the
 outcome and concrete failures rather than repeat the receipt.
 
-## Optional behavior regression review receipt
+## Default behavior regression review receipt
 
-A repository may require a behavior-regression receipt for non-documentation
-merge candidates:
+Non-documentation merge candidates require a behavior-regression receipt by
+default. Omission is equivalent to:
 
 ```json
 {
@@ -271,16 +271,15 @@ merge candidates:
 }
 ```
 
-This is a strict opt-in: omit `behaviorReview` to disable the requirement;
-`required: false`, a missing `required`, or an unknown field is invalid
-configuration. The requirement applies when either the resolved merge base or
-the candidate enables it, so the candidate cannot disable an existing gate.
-With the option enabled, `merge-gate` validates the current clean candidate's
-receipt against the resolved base and replays every cited red/green proof before
-it starts ordinary recommended or full work. A missing, stale, malformed,
-unresolved, under-proved, or non-reproducible review becomes a
-`policy.behaviorReview` finding. The built-in documentation level bypasses this
-receipt.
+Both an omitted `behaviorReview` object and an omitted `required` property
+default to `true`. Set `required: false` only as an explicit repository opt-out.
+The requirement applies when either the resolved merge base or the candidate
+enables it, so a candidate cannot disable an existing gate. With the requirement
+active, `merge-gate` validates the current clean candidate's receipt against the
+resolved base and replays every cited red/green proof before it starts ordinary
+recommended or full work. A missing, stale, malformed, unresolved,
+under-proved, or non-reproducible review becomes a `policy.behaviorReview`
+finding. The built-in documentation level bypasses this receipt.
 
 The receipt comes from a packet-only review plus red/green regression proof for
 each requested behavior. The agent runtime must supply and isolate the fresh
