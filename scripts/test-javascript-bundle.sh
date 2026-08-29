@@ -62,6 +62,22 @@ fi
 if ! grep -q "\"node\": \"${node_version}\"" "${manifest}"; then
   fail "manifest does not pin the policy-owned Node ${node_version}"
 fi
+while IFS= read -r source_file; do
+  if [[ ! -f "${bundle_source}/${source_file}" ]]; then
+    fail "bundle source inventory names missing ${source_file}"
+  fi
+done <"${bundle_source}/source-files.txt"
+{
+  for source_path in "${bundle_source}"/* "${bundle_source}"/.[!.]*; do
+    [[ -f "${source_path}" ]] && basename "${source_path}"
+  done
+} | LC_ALL=C sort >"${fixture_root}/bundle-source-files"
+LC_ALL=C sort "${bundle_source}/source-files.txt" >"${fixture_root}/declared-source-files"
+if ! diff -u "${fixture_root}/declared-source-files" \
+  "${fixture_root}/bundle-source-files" >"${fixture_root}/source-files-diff"; then
+  cat "${fixture_root}/source-files-diff" >&2
+  fail "bundle source inventory is incomplete"
+fi
 while read -r specifier; do
   [[ -n "${specifier}" ]] || continue
   if [[ ! "${specifier}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -315,5 +331,26 @@ expect_rejected "a bundle installed from other checked-in source" \
 
 rm "${manifest_fixture}/${javascript_bundle_manifest_name}"
 expect_rejected "a bundle with no manifest" "${bundle_manifest}" verify "${manifest_fixture}"
+
+portable_source="${fixture_root}/portable-source"
+portable_bundle="${fixture_root}/portable-bundle"
+javascript_copy_bundle_source "${portable_source}"
+javascript_sealed_pnpm "${portable_source}" install --offline --frozen-lockfile \
+  --ignore-scripts --config.nodeLinker=hoisted >/dev/null
+"${policy_root}/.tools/bin/code-polishy" --policy-root "${policy_root}" \
+  release-manifest materialize --source "${portable_source}" \
+  --destination "${portable_bundle}" || fail "portable release materialization failed"
+if find "${portable_bundle}" -type l | grep -q .; then
+  fail "portable release materialization retained links"
+fi
+"${bundle_manifest}" write "${portable_bundle}" ||
+  fail "portable release manifest creation failed"
+printf '%s\n' '{"protocolVersion":3,"operation":"provenance"}' |
+  javascript_sealed_run "${javascript_node}" "${portable_bundle}/runner.mjs" \
+    >"${fixture_root}/portable-provenance" ||
+  fail "portable release bundle did not answer provenance"
+if ! grep -q '"operation":"provenance"' "${fixture_root}/portable-provenance"; then
+  fail "portable release bundle returned incomplete provenance"
+fi
 
 echo "test-javascript-bundle: all checks passed"

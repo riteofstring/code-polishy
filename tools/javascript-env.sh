@@ -43,30 +43,12 @@ javascript_store="${javascript_runtime_root}/store"
 
 
 
-javascript_bundle_source_files=(package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc runner.mjs protocol.mjs audit.mjs deadcode.mjs imports.mjs licenses.mjs packages.mjs)
+javascript_bundle_source_files=()
+while IFS= read -r javascript_bundle_source_file; do
+  javascript_bundle_source_files+=("${javascript_bundle_source_file}")
+done <"${javascript_bundle_source}/source-files.txt"
 export javascript_runner="${javascript_bundle_dir}/runner.mjs"
 export javascript_bundle_manifest_name="bundle-manifest.json"
-
-if command -v shasum >/dev/null 2>&1; then
-  javascript_digest_command=(shasum -a 256)
-elif command -v sha256sum >/dev/null 2>&1; then
-  javascript_digest_command=(sha256sum)
-else
-  echo "A SHA-256 checksum tool (shasum or sha256sum) is required." >&2
-  exit 1
-fi
-
-
-
-
-javascript_bundle_source_digest() {
-  (
-    cd "${javascript_bundle_source}" &&
-      LC_ALL=C "${javascript_digest_command[@]}" "${javascript_bundle_source_files[@]}" |
-      LC_ALL=C "${javascript_digest_command[@]}" | awk '{print $1}'
-  )
-}
-
 
 
 

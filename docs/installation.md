@@ -58,6 +58,11 @@ isolated dependency graph with absolute directory junctions. The tool installer
 therefore builds that graph only at its stable transaction-owned location and
 removes incomplete output on failure; moving a completed graph from a different
 staging path would leave its junction targets pointing at the wrong tree.
+The native release builder uses the same frozen lock and offline store to ask
+the pinned pnpm for its portable hoisted layout, converts its remaining links
+to regular entries, writes the bundle manifest, and proves the staged runner can
+report provenance before creating the ZIP. The portable layout is confined to
+the sealed release bundle and never resolves dependencies from a target.
 
 The tool installer is the only networked installation stage. It admits only
 the checked-in pinned tool artifacts, verifies every archive before extraction,

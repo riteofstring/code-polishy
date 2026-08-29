@@ -8,7 +8,10 @@
   "scope": {
     "exclude": [],
     "generated": [],
-    "entryPoints": ["tools/javascript/runner.mjs"]
+    "entryPoints": [
+      "tools/javascript/bundle-manifest.mjs",
+      "tools/javascript/runner.mjs"
+    ]
   },
   "quality": {},
   "modules": [

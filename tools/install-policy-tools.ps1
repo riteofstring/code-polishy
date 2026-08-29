@@ -136,11 +136,26 @@ try {
 
   New-Item -ItemType Directory -Force -Path $JavascriptRoot | Out-Null
   $BundleDestination = Join-Path $JavascriptRoot 'bundle'
+  $BundleSource = Join-Path $PolicyRoot 'tools/javascript'
+  $BundleSourceFiles = @(Get-Content -LiteralPath (Join-Path $BundleSource 'source-files.txt'))
+  if ($BundleSourceFiles.Count -eq 0 -or
+      @($BundleSourceFiles | Where-Object { -not $_ -or $_ -in @('.', '..') -or $_ -match '[/\\]' }).Count -gt 0 -or
+      @($BundleSourceFiles | Group-Object | Where-Object { $_.Count -gt 1 }).Count -gt 0) {
+    throw 'The JavaScript bundle source inventory is invalid.'
+  }
+  foreach ($SourceFile in $BundleSourceFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $BundleSource $SourceFile) -PathType Leaf)) {
+      throw "JavaScript bundle source is missing: $SourceFile"
+    }
+  }
   if (Test-Path -LiteralPath $BundleDestination) {
     Remove-Item -LiteralPath $BundleDestination -Recurse -Force
   }
   $BundleInstallation = $BundleDestination
-  Copy-Item -LiteralPath (Join-Path $PolicyRoot 'tools/javascript') -Destination $BundleInstallation -Recurse
+  New-Item -ItemType Directory -Path $BundleInstallation | Out-Null
+  foreach ($SourceFile in $BundleSourceFiles) {
+    Copy-Item -LiteralPath (Join-Path $BundleSource $SourceFile) -Destination (Join-Path $BundleInstallation $SourceFile)
+  }
   $Store = Join-Path $JavascriptRoot 'store'
   New-Item -ItemType Directory -Force -Path $Store | Out-Null
   $SavedHome = $env:USERPROFILE
@@ -152,6 +167,8 @@ try {
     & $Node $Pnpm --dir $BundleInstallation --store-dir $Store install --offline --frozen-lockfile --ignore-scripts
     if ($LASTEXITCODE -ne 0) { throw 'Pinned JavaScript materialization failed.' }
   } finally { $env:USERPROFILE = $SavedHome }
+  & $Node (Join-Path $PolicyRoot 'tools/javascript/bundle-manifest.mjs') write $BundleInstallation $PolicyRoot
+  if ($LASTEXITCODE -ne 0) { throw 'Pinned JavaScript manifest creation failed.' }
   $BundleInstallation = $null
 
   & (Join-Path $Bin 'staticcheck.exe') -version

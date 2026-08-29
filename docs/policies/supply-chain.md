@@ -470,8 +470,10 @@ configuration file.
   from that store with scripts disabled. The staged tree is verified and
   inventoried before it replaces the installed one, so a rejected bundle leaves
   the previous one intact.
-- `tools/javascript-bundle-manifest.sh` writes that inventory once, onto the
-  staged tree, and verifies it afterwards. `bundle-manifest.json` records the
+- `tools/javascript/bundle-manifest.mjs`, launched through
+  `tools/javascript-bundle-manifest.sh` on Unix and the pinned Node directly on
+  Windows, writes that inventory once onto the staged tree and verifies it
+  afterwards. `bundle-manifest.json` records the
   digest of the checked-in source the bundle was installed from, the pinned Node
   and pnpm versions, the exact tool versions, the installed entry count, and one
   digest over every installed byte and symlink target. Verification recomputes
@@ -497,6 +499,12 @@ configuration file.
   and reconciles `tools/javascript_bundle_inventory.txt` package by package
   against what pnpm reports as installed. Regenerate that inventory only with
   `--write-inventory`.
+- The native Windows release builder installs a second graph from that same
+  frozen lock and offline store using pnpm's portable hoisted linker, then
+  dereferences its remaining links. It writes a fresh bundle manifest and runs
+  provenance from the staged tree before archiving it. This keeps the source
+  installation isolated while giving the link-free ZIP ordinary Node package
+  resolution semantics after extraction.
 
 Because `tools/javascript/pnpm-lock.yaml` is a governed lock, the ordinary
 release-age, native audit, OSV, and dependency-review lanes apply to the bundle

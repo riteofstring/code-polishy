@@ -116,6 +116,10 @@ build_source_checkout() {
   copy_file "${policy_root}/tools/javascript-env.sh" "${source_root}/tools/javascript-env.sh"
   copy_file "${policy_root}/tools/javascript-bundle-manifest.sh" \
     "${source_root}/tools/javascript-bundle-manifest.sh"
+  copy_file "${policy_root}/tools/javascript/bundle-manifest.mjs" \
+    "${source_root}/tools/javascript/bundle-manifest.mjs"
+  copy_file "${policy_root}/tools/javascript/source-files.txt" \
+    "${source_root}/tools/javascript/source-files.txt"
   chmod +x "${source_root}/scripts/install.sh" "${source_root}/scripts/release-manifest.sh" \
     "${source_root}/scripts/release-version.sh" \
     "${source_root}/tools/javascript-bundle-manifest.sh"
@@ -234,6 +238,9 @@ EOF
 
   write_file "${source_root}/.tools/javascript/${platform_tag}/node/bin/node" <<EOF
 #!/usr/bin/env bash
+if [[ "\${1:-}" == "${source_root}/tools/javascript/bundle-manifest.mjs" ]]; then
+  exec "${policy_root}/.tools/javascript/${platform_tag}/node/bin/node" "\$@"
+fi
 if [[ "\${1:-}" == "--version" ]]; then
   echo "v${node_version}"
   exit 0

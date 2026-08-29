@@ -56,8 +56,44 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Native launcher build failed.' }
   } finally { Pop-Location }
 
-  & $Engine --policy-root $Stage release-manifest materialize --source (Join-Path $PolicyRoot '.tools/javascript/bundle') --destination (Join-Path $Stage '.tools/javascript/bundle')
+  $PortableBundle = Join-Path $Scratch 'portable-javascript-bundle'
+  $BundleSource = Join-Path $PolicyRoot 'tools/javascript'
+  $BundleSourceFiles = @(Get-Content -LiteralPath (Join-Path $BundleSource 'source-files.txt'))
+  if ($BundleSourceFiles.Count -eq 0 -or
+      @($BundleSourceFiles | Where-Object { -not $_ -or $_ -in @('.', '..') -or $_ -match '[/\\]' }).Count -gt 0 -or
+      @($BundleSourceFiles | Group-Object | Where-Object { $_.Count -gt 1 }).Count -gt 0) {
+    throw 'The JavaScript bundle source inventory is invalid.'
+  }
+  foreach ($SourceFile in $BundleSourceFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $BundleSource $SourceFile) -PathType Leaf)) {
+      throw "JavaScript bundle source is missing: $SourceFile"
+    }
+  }
+  New-Item -ItemType Directory -Path $PortableBundle | Out-Null
+  foreach ($SourceFile in $BundleSourceFiles) {
+    Copy-Item -LiteralPath (Join-Path $BundleSource $SourceFile) -Destination (Join-Path $PortableBundle $SourceFile)
+  }
+  $Node = Join-Path $PolicyRoot '.tools/javascript/windows-x64/node/bin/node.exe'
+  $Pnpm = Join-Path $PolicyRoot '.tools/javascript/windows-x64/pnpm/bin/pnpm.cjs'
+  $Store = Join-Path $PolicyRoot '.tools/javascript/store'
+  $SavedHome = $env:USERPROFILE
+  $env:USERPROFILE = Join-Path $Scratch 'home'
+  New-Item -ItemType Directory -Path $env:USERPROFILE | Out-Null
+  try {
+    & $Node $Pnpm --dir $PortableBundle --store-dir $Store install --offline --frozen-lockfile --ignore-scripts --config.nodeLinker=hoisted
+    if ($LASTEXITCODE -ne 0) { throw 'Portable JavaScript materialization failed.' }
+  } finally { $env:USERPROFILE = $SavedHome }
+  $StagedBundle = Join-Path $Stage '.tools/javascript/bundle'
+  & $Engine --policy-root $Stage release-manifest materialize --source $PortableBundle --destination $StagedBundle
   if ($LASTEXITCODE -ne 0) { throw 'JavaScript bundle release materialization failed.' }
+  & $Node (Join-Path $PolicyRoot 'tools/javascript/bundle-manifest.mjs') write $StagedBundle $PolicyRoot
+  if ($LASTEXITCODE -ne 0) { throw 'JavaScript bundle release manifest creation failed.' }
+  $ProvenanceOutput = @('{"protocolVersion":3,"operation":"provenance"}' | & $Node (Join-Path $StagedBundle 'runner.mjs'))
+  if ($LASTEXITCODE -ne 0 -or $ProvenanceOutput.Count -ne 1) { throw 'Portable JavaScript bundle provenance failed.' }
+  $Provenance = $ProvenanceOutput[0] | ConvertFrom-Json
+  if ($Provenance.protocolVersion -ne 3 -or $Provenance.operation -ne 'provenance' -or -not $Provenance.result.bundleDigest) {
+    throw 'Portable JavaScript bundle returned incomplete provenance.'
+  }
   $ReleaseDigest = (& $Engine --policy-root $Stage release-manifest write --root $Stage --source-revision $SourceRevision).Trim()
   if ($LASTEXITCODE -ne 0 -or $ReleaseDigest -notmatch '^[0-9a-f]{64}$') { throw 'Native release manifest creation failed.' }
   & $Engine --policy-root $Stage release-manifest verify --root $Stage
