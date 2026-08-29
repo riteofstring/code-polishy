@@ -112,6 +112,50 @@ func TestStandaloneArtifactOlderThanTheMinimumPasses(t *testing.T) {
 	}
 }
 
+func TestGitHubTokenTransportScopesCredentialToGitHubAPI(t *testing.T) {
+	t.Parallel()
+	received := map[string]string{}
+	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		received[request.URL.String()] = request.Header.Get("Authorization")
+		return artifactResponse(http.StatusOK, `{}`), nil
+	})
+	transport := githubTokenTransport{base: base, token: "github-actions-token"}
+	for _, endpoint := range []string{
+		"https://api.github.com/repos/example/tool/releases/tags/v1.0.0",
+		"http://api.github.com/repos/example/tool/releases/tags/v1.0.0",
+		"https://registry.npmjs.org/example",
+		"https://api.github.com.example.invalid/repos/example/tool",
+	} {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := transport.RoundTrip(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if request.Header.Get("Authorization") != "" {
+			t.Fatal("credential transport mutated its input request")
+		}
+	}
+	githubEndpoint := "https://api.github.com/repos/example/tool/releases/tags/v1.0.0"
+	if received[githubEndpoint] != "Bearer github-actions-token" {
+		t.Fatalf("GitHub API authorization = %q", received[githubEndpoint])
+	}
+	for endpoint, authorization := range received {
+		if endpoint != githubEndpoint && authorization != "" {
+			t.Fatalf("credential reached %s", endpoint)
+		}
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return function(request)
+}
+
 type artifactClientFunc func(*http.Request) (*http.Response, error)
 
 func (function artifactClientFunc) Do(request *http.Request) (*http.Response, error) {

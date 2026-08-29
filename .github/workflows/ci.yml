@@ -46,11 +46,15 @@ jobs:
       - name: Run complete policy gate
         if: github.event_name != 'schedule'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./.tools/bin/code-polishy gate
 
       - name: Run weekly online dependency security scan
         if: github.event_name == 'schedule'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./.tools/bin/code-polishy supply-chain
 
   windows:

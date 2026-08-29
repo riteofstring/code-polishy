@@ -15,6 +15,7 @@ func ApplyReleaseAgeAssessments(
 	kept := make([]Finding, 0, len(findings))
 	accepted := []AssessedReleaseAge{}
 	used := make(map[string]bool, len(assessments))
+	observationsComplete := releaseAgeObservationsComplete(findings)
 
 	for _, finding := range findings {
 		application := applyReleaseAgeFinding(finding, assessments, currentDate)
@@ -32,11 +33,20 @@ func ApplyReleaseAgeAssessments(
 	}
 
 	for _, assessment := range assessments {
-		if issue := releaseAgeAssessmentStatus(assessment, currentDate, used[assessment.ID], enforceUnused); issue != nil {
+		if issue := releaseAgeAssessmentStatus(assessment, currentDate, used[assessment.ID], enforceUnused && observationsComplete); issue != nil {
 			kept = append(kept, *issue)
 		}
 	}
 	return kept, accepted
+}
+
+func releaseAgeObservationsComplete(findings []Finding) bool {
+	for _, finding := range findings {
+		if finding.Check == "supplyChain.releaseAge" && finding.ReleaseAge == nil {
+			return false
+		}
+	}
+	return true
 }
 
 type releaseAgeApplication struct {

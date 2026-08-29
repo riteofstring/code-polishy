@@ -210,9 +210,14 @@ adoption.
   `artifact`, their configured name as the package, and their `versionFile` as
   the scope.
 - Expired, changed, overlong, and unused release-age assessments fail the
-  complete online profile. General exceptions cannot waive release age.
+  complete online profile. An unavailable metadata source remains a failure and
+  defers the unused-assessment determination until observation is complete.
+  General exceptions cannot waive release age.
 - Environment variables do not override checked-in age policy. Missing or
   malformed registry metadata is a failure, not evidence of age.
+- `GITHUB_TOKEN`, when present, authenticates release metadata requests only to
+  the exact HTTPS `api.github.com` host. It is never sent to another registry or
+  metadata service and does not change which release or policy is evaluated.
 - A release-age assessment never suppresses a native-audit or OSV finding for
   the same package. Vulnerability enforcement takes precedence over age.
 

@@ -681,6 +681,23 @@ func TestReleaseAgeAssessmentRequiresExactYoungReleaseAndBoundedExpiry(t *testin
 	}
 }
 
+func TestReleaseAgeMetadataFailureDefersUnusedAssessmentFinding(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	assessment := ReleaseAgeAssessment{
+		ID: "go-security-fix", Ecosystem: "artifact", Package: "go", Version: "1.26.6", Scope: "scripts/go_version.txt",
+		Expires: Date{Time: now.AddDate(0, 0, 15).Truncate(24 * time.Hour)},
+	}
+	failure := Finding{
+		Check: "supplyChain.releaseAge", Path: assessment.Scope, Subject: "go@1.26.6",
+		Message: "resolve standalone artifact release: release metadata request failed with HTTP 403",
+	}
+	kept, accepted := ApplyReleaseAgeAssessments([]Finding{failure}, []ReleaseAgeAssessment{assessment}, now, true)
+	if len(accepted) != 0 || len(kept) != 1 || kept[0] != failure {
+		t.Fatalf("kept=%+v accepted=%+v", kept, accepted)
+	}
+}
+
 func TestDateJSONRoundTripPreservesDateOnlyContract(t *testing.T) {
 	t.Parallel()
 	original := Date{Time: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)}
