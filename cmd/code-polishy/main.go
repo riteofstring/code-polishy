@@ -30,6 +30,9 @@ Commands:
   check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
   gate
   merge-gate --base REF
+  behavior-review prepare --base REF --intent-file PATH
+  behavior-review finalize --base REF
+  regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
   test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental|--module NAME...|--suite NAME...]
   test-plan [--base REF]
   test-levels [--base REF]
@@ -82,6 +85,9 @@ func run(arguments []string) int {
 			printMergePolicyForMode(os.Stdout, result.report.MergePolicy, invocation.verbose)
 		}
 		return operationalError(err)
+	}
+	for _, message := range result.messages {
+		fmt.Fprintln(os.Stdout, message)
 	}
 	if result.quiet {
 		return 0
@@ -269,8 +275,9 @@ type invocation struct {
 }
 
 type commandResult struct {
-	report engine.Report
-	quiet  bool
+	report   engine.Report
+	quiet    bool
+	messages []string
 }
 
 type commandHandler func(context.Context, *engine.Engine, []string) (commandResult, error)
@@ -303,6 +310,8 @@ func commandHandlers() map[string]commandHandler {
 		"doctor":            handleDoctor,
 		"gate":              handleGate,
 		"merge-gate":        handleMergeGate,
+		"behavior-review":   handleBehaviorReview,
+		"regression-proof":  handleRegressionProof,
 		"check":             handleCheck,
 		"architecture":      handleSelectionCommand("architecture"),
 		"format":            handleSelectionCommand("format"),
