@@ -225,6 +225,32 @@ func TestCandidateDeltaStaysExactWhenAnalysisExpands(t *testing.T) {
 	}
 }
 
+func TestChangedSelectionExcludesReviewArtifactsFromTheCandidate(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	writeFile(t, repo.Root, "README.md", "# Project\n")
+	writeFile(t, repo.Root, ".code-polishy-reports/behavior-review/tracked.json", "{}\n")
+	writeFile(t, repo.Root, ".code-polishy-reports/behavior-review/deleted.json", "{}\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "base")
+	writeFile(t, repo.Root, ".code-polishy-reports/behavior-review/tracked.json", "{\"updated\":true}\n")
+	if err := os.Remove(filepath.Join(repo.Root, ".code-polishy-reports/behavior-review/deleted.json")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, repo.Root, ".code-polishy-reports/behavior-review/receipt.json", "{}\n")
+	writeFile(t, repo.Root, "source.go", "package sample\n")
+
+	selection, err := repo.Select("changes", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection.All || selection.PolicySensitive ||
+		!slices.Equal(selection.Candidate.AddedOrModified, []string{"source.go"}) || len(selection.Candidate.Deleted) != 0 ||
+		!slices.Equal(selection.Files, []string{"source.go"}) {
+		t.Fatalf("selection = %+v", selection)
+	}
+}
+
 func TestChangedSelectionExpandsReleaseArtifactVersionFiles(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)

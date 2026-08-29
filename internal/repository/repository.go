@@ -790,7 +790,7 @@ func (repo Repository) candidatePaths(paths []string) []string {
 	result := []string{}
 	for _, path := range paths {
 		path = strings.TrimPrefix(filepath.ToSlash(path), "./")
-		if path != "" {
+		if path != "" && !repo.IsExcluded(path) {
 			result = append(result, path)
 		}
 	}
