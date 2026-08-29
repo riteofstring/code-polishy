@@ -216,8 +216,11 @@ adoption.
 - Environment variables do not override checked-in age policy. Missing or
   malformed registry metadata is a failure, not evidence of age.
 - `GITHUB_TOKEN`, when present, authenticates release metadata requests only to
-  the exact HTTPS `api.github.com` host. It is never sent to another registry or
-  metadata service and does not change which release or policy is evaluated.
+  the exact HTTPS `api.github.com` host. When a public repository rejects that
+  repository-scoped credential, the same request is attempted once without the
+  credential. It is never sent to another registry or metadata service and does
+  not change which release or policy is evaluated. A failed public attempt
+  remains a finding and reports bounded GitHub failure and rate-limit details.
 - A release-age assessment never suppresses a native-audit or OSV finding for
   the same package. Vulnerability enforcement takes precedence over age.
 

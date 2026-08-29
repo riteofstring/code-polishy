@@ -270,5 +270,14 @@ func (transport githubTokenTransport) RoundTrip(request *http.Request) (*http.Re
 	authenticated := request.Clone(request.Context())
 	authenticated.Header = request.Header.Clone()
 	authenticated.Header.Set("Authorization", "Bearer "+transport.token)
-	return transport.base.RoundTrip(authenticated)
+	response, err := transport.base.RoundTrip(authenticated)
+	if err != nil || response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden {
+		return response, err
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	_ = response.Body.Close()
+	public := request.Clone(request.Context())
+	public.Header = request.Header.Clone()
+	public.Header.Del("Authorization")
+	return transport.base.RoundTrip(public)
 }

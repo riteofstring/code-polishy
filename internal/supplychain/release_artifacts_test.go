@@ -150,6 +150,52 @@ func TestGitHubTokenTransportScopesCredentialToGitHubAPI(t *testing.T) {
 	}
 }
 
+func TestGitHubTokenTransportFallsBackToPublicMetadata(t *testing.T) {
+	t.Parallel()
+	authorizations := []string{}
+	released := "2026-06-30T09:52:02Z"
+	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		authorizations = append(authorizations, request.Header.Get("Authorization"))
+		if len(authorizations) == 1 {
+			return artifactResponse(http.StatusForbidden, `{"message":"Resource not accessible by integration"}`), nil
+		}
+		return artifactResponse(http.StatusOK, `{"tag_name":"v0.72.0","published_at":"`+released+`"}`), nil
+	})
+	client := &http.Client{Transport: githubTokenTransport{base: base, token: "github-actions-token"}}
+	observed, err := lookupGitHubRelease(t.Context(), client, "aquasecurity/trivy", "v0.72.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := time.Parse(time.RFC3339, released)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observed.Equal(want) {
+		t.Fatalf("release time = %s, want %s", observed, want)
+	}
+	if len(authorizations) != 2 || authorizations[0] != "Bearer github-actions-token" || authorizations[1] != "" {
+		t.Fatalf("authorization attempts = %q", authorizations)
+	}
+}
+
+func TestGitHubMetadataFailureReportsSafeReason(t *testing.T) {
+	t.Parallel()
+	client := artifactClientFunc(func(*http.Request) (*http.Response, error) {
+		response := artifactResponse(http.StatusForbidden, `{"message":"API rate limit exceeded"}`)
+		response.Header.Set("X-RateLimit-Remaining", "0")
+		response.Header.Set("Retry-After", "60")
+		return response, nil
+	})
+	target := map[string]any{}
+	err := fetchArtifactMetadata(
+		t.Context(), client, "https://api.github.com/repos/aquasecurity/trivy/releases/tags/v0.72.0", &target,
+	)
+	if err == nil || !strings.Contains(err.Error(), `GitHub message "API rate limit exceeded"`) ||
+		!strings.Contains(err.Error(), "rate-limit remaining 0") || !strings.Contains(err.Error(), "retry after 60") {
+		t.Fatalf("metadata error = %v", err)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

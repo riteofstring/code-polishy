@@ -17,7 +17,10 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const artifactMetadataMaximumBytes = 16 << 20
+const (
+	artifactMetadataMaximumBytes      = 16 << 20
+	artifactMetadataErrorMaximumBytes = 4 << 10
+)
 
 type artifactHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -285,7 +288,7 @@ func fetchArtifactMetadata(ctx context.Context, client artifactHTTPClient, endpo
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("release metadata request failed with HTTP %d", response.StatusCode)
+		return artifactMetadataStatusError(endpoint, response)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, artifactMetadataMaximumBytes+1))
 	if err != nil {
@@ -299,6 +302,51 @@ func fetchArtifactMetadata(ctx context.Context, client artifactHTTPClient, endpo
 		return err
 	}
 	return requireOneJSONValue(decoder)
+}
+
+func artifactMetadataStatusError(endpoint string, response *http.Response) error {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme != "https" || parsed.Host != "api.github.com" {
+		return fmt.Errorf("release metadata request failed with HTTP %d", response.StatusCode)
+	}
+	details := []string{}
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, artifactMetadataErrorMaximumBytes+1))
+	if readErr == nil && len(data) <= artifactMetadataErrorMaximumBytes {
+		var payload struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(data, &payload) == nil && boundedPrintableHTTPDetail(payload.Message, 512) {
+			details = append(details, fmt.Sprintf("GitHub message %q", payload.Message))
+		}
+	}
+	for _, header := range []struct {
+		Name  string
+		Label string
+	}{
+		{Name: "X-RateLimit-Remaining", Label: "rate-limit remaining"},
+		{Name: "Retry-After", Label: "retry after"},
+	} {
+		value := response.Header.Get(header.Name)
+		if boundedPrintableHTTPDetail(value, 64) {
+			details = append(details, header.Label+" "+value)
+		}
+	}
+	if len(details) == 0 {
+		return fmt.Errorf("release metadata request failed with HTTP %d", response.StatusCode)
+	}
+	return fmt.Errorf("release metadata request failed with HTTP %d (%s)", response.StatusCode, strings.Join(details, "; "))
+}
+
+func boundedPrintableHTTPDetail(value string, maximum int) bool {
+	if value == "" || len(value) > maximum || value != strings.TrimSpace(value) {
+		return false
+	}
+	for _, character := range value {
+		if character < ' ' || character > '~' {
+			return false
+		}
+	}
+	return true
 }
 
 func goProxyEscapePath(value string) string {
