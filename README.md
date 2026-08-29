@@ -5,86 +5,94 @@
 **One policy for all your repos. Deterministic constraints agents can't
 ignore.**
 
-Each repo describes its code boundaries, tests, and commands. Code Polishy
-applies the same policy with the same locked tools, so the same code gets the
-same result.
+Code Polishy gives every coding agent the same definition of done and enforces
+it before code merges.
 
 ## What it does
 
-- Keeps code inside your module boundaries.
-- Flags giant files, deep nesting, and overly complex functions.
-- Runs required tests, builds, and project checks.
-- Checks dependency pins, lock files, and known vulnerabilities.
-- Requires dependency releases to be at least 30 days old.
+Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 
-The policy ships with Code Polishy. The project details live in your repo.
-Agents get fast feedback while they work. One final gate checks the code before
-merge.
+- Stops agents from tangling parts of your codebase together.
+- Flags giant files and hard-to-follow functions before they become expensive
+  to change.
+- Makes "done" include the tests, builds, and project checks your repo requires.
+- Protects your software supply chain from surprise dependency changes and
+  known vulnerabilities.
+
+Agents catch problems while the change is still fresh, and one final gate stops
+unresolved issues before merge.
+
+## How it works
+
+![Code Polishy architecture: agents, developers, and CI run repository changes
+through shared policy checks, returning findings or a merge-ready
+result.](./code-polishy-architecture.svg)
 
 ## Set it up
 
-Open a coding agent in your repo. Paste this:
+Setup starts with one prompt to a coding agent:
 
 ```text
 Set up Code Polishy in this repository. Follow
 https://github.com/riteofstring/code-polishy.
 ```
 
-The agent keeps any version already locked by the repo. For a new setup, it
-uses the latest stable version tag. Ask for a tag such as `v1.2.3` when you need
-a specific version.
+Each repo keeps its current Code Polishy version until you choose to upgrade.
+A new setup uses the latest stable version tag. Ask for a tag such as `v1.2.3`
+when you need a specific version.
 
-Git is required. Allow about 1 GB of disk space. Windows works without WSL or
-Git Bash.
+Git is required. Allow about 1 GB of disk space. Windows x64 works without WSL
+or Git Bash.
 
 See the [agent setup guide](docs/ai-adoption.md) or the
 [manual setup guide](docs/installation.md) for the full process.
 
-## Use it
+## How agents use it
+
+A coding agent runs these commands as it works:
 
 ```sh
-# Fast checks while coding
+# Check the code you changed
 code-polishy test --changed
 
-# Review a dependency update
+# Review dependency risk before accepting an update
 code-polishy dependency-review --base origin/main
 
-# Final check before merge
+# Enforce the policy before merge
 code-polishy merge-gate --base origin/main
 ```
 
-Fix the reported problem. Rerun the smallest useful check. Run the merge gate
-again when the final code is ready.
+The merge gate chooses how much validation the change needs. Fix any finding,
+rerun the narrowest useful check, and run the gate again when the final code is
+ready.
 
-## Languages and tools
+## Languages
 
-Built-in checks currently cover Go, JavaScript, TypeScript, shell scripts, and
-Python. Code Polishy ships exact versions of the tools it trusts. Agents,
-developers, and CI use the same binaries.
+Code Polishy keeps its built-in tools fixed until you upgrade, so local and CI
+checks stay consistent.
 
-- Go uses `gofmt`, `go vet`, Staticcheck, govulncheck, and built-in complexity
-  checks.
-- JavaScript and TypeScript use Prettier, ESLint, TypeScript, and Knip on a
-  locked Node runtime.
-- Shell scripts use Bash syntax checks and ShellCheck.
-- Python uses Ruff.
-- Dependencies use OSV-Scanner and package-manager audits.
+- **Go, JavaScript, TypeScript, and Python:** Formats code and catches likely
+  bugs, type errors, unused code, and overly complex functions. Locked
+  dependencies are checked for known vulnerabilities.
+- **Shell scripts:** Catches syntax errors and common safety problems.
 
-Code Polishy also rejects empty Go tests and test commands that can report
-success without running tests. Optional mutation tests check that changing real
-code makes the test suite fail.
+Code Polishy also rejects empty Go tests and obvious test commands that can
+pass without running tests. Optional mutation testing can provide deeper proof.
 
-Other languages use commands declared by the repo. Code Polishy still decides
-when they run and whether they passed.
+Other languages can connect repo-owned checks. Code Polishy runs and enforces
+them but does not supply their tools.
 
-## What lives in your repo
+## What stays in your repo
 
-- `.code-polishy.lock.json` locks the exact Code Polishy release.
-- `.code-polishy.json` defines your code boundaries, tests, commands, and
-  exceptions.
-- `AGENTS.md` tells coding agents how to work in the repo.
+Three checked-in files keep every agent aligned:
 
-After setup, tell your agent what to build. `AGENTS.md` carries the rules.
+- `.code-polishy.lock.json` keeps the policy and tools stable until you choose
+  to upgrade.
+- `.code-polishy.json` describes your code boundaries, tests, commands, and
+  exceptions once.
+- `AGENTS.md` gives every coding agent the same operating instructions.
+
+Your prompts can stay focused on what you want built.
 
 ## More
 
