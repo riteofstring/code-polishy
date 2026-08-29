@@ -174,6 +174,21 @@ func TestValidateMergeReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 	}
 }
 
+func TestValidateMergeReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	path := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("artifact root before validation = %v, want missing", err)
+	}
+	_, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"})
+	if !errors.Is(err, ErrMissingReceipt) {
+		t.Fatalf("ValidateMergeReceipt() error = %v, want missing receipt", err)
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("artifact root after validation = %v, want missing", err)
+	}
+}
+
 func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root}

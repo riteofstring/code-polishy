@@ -31,13 +31,9 @@ const (
 )
 
 func behaviorReviewRoot(repo repository.Repository) (string, error) {
-	root, err := filepath.EvalSymlinks(repo.Root)
+	root, candidate, err := behaviorReviewCandidate(repo)
 	if err != nil {
-		return "", operational("resolve repository root", err)
-	}
-	candidate := filepath.Join(root, filepath.FromSlash(artifactDirectory))
-	if !pathInside(root, candidate) {
-		return "", fmt.Errorf("%w: behavior review artifact root escapes the repository", ErrInvalidInput)
+		return "", err
 	}
 	if err := validateOutputAncestor(root, candidate); err != nil {
 		return "", err
@@ -50,6 +46,43 @@ func behaviorReviewRoot(repo repository.Repository) (string, error) {
 		return "", fmt.Errorf("%w: behavior review artifact root resolves outside the repository", ErrInvalidInput)
 	}
 	return resolved, nil
+}
+
+func existingBehaviorReviewRoot(repo repository.Repository) (string, error) {
+	root, candidate, err := behaviorReviewCandidate(repo)
+	if err != nil {
+		return "", err
+	}
+	if err := validateOutputAncestor(root, candidate); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(candidate)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("%w: behavior review artifacts are unavailable", ErrMissingReceipt)
+	}
+	if err != nil {
+		return "", operational("inspect behavior review artifact root", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: behavior review artifact root is not a directory", ErrInvalidInput)
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil || !pathInside(root, resolved) {
+		return "", fmt.Errorf("%w: behavior review artifact root resolves outside the repository", ErrInvalidInput)
+	}
+	return resolved, nil
+}
+
+func behaviorReviewCandidate(repo repository.Repository) (string, string, error) {
+	root, err := filepath.EvalSymlinks(repo.Root)
+	if err != nil {
+		return "", "", operational("resolve repository root", err)
+	}
+	candidate := filepath.Join(root, filepath.FromSlash(artifactDirectory))
+	if !pathInside(root, candidate) {
+		return "", "", fmt.Errorf("%w: behavior review artifact root escapes the repository", ErrInvalidInput)
+	}
+	return root, candidate, nil
 }
 
 func validateOutputAncestor(root, candidate string) error {

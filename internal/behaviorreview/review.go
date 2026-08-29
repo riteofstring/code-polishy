@@ -342,7 +342,7 @@ func currentReceiptState(ctx context.Context, repo repository.Repository, refere
 	if err != nil {
 		return receiptState{}, err
 	}
-	root, err := behaviorReviewRoot(repo)
+	root, err := existingBehaviorReviewRoot(repo)
 	if err != nil {
 		return receiptState{}, err
 	}
