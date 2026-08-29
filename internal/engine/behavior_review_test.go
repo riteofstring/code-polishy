@@ -19,9 +19,9 @@ import (
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
-func TestMergeGateBypassesRequiredBehaviorReviewForDocumentationCandidates(t *testing.T) {
+func TestMergeGateBypassesDefaultBehaviorReviewForDocumentationCandidates(t *testing.T) {
 	root := documentationRepository(t)
-	enableRequiredBehaviorReview(t, root)
+	clearBehaviorReviewSetting(t, root)
 	initializeEngineGitRepository(t, root)
 	writeEngineFile(t, root, "README.md", "# Updated\n", 0o600)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -69,10 +69,10 @@ func TestMergeGateReportsMissingRequiredBehaviorReviewReceiptBeforeCommands(t *t
 
 func TestMergeGateRetainsTrustedBaseBehaviorReviewRequirement(t *testing.T) {
 	root := contentRepository(t, nil)
-	enableRequiredBehaviorReview(t, root)
+	setBehaviorReviewRequired(t, root, true)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "remove-requirement")
-	removeBehaviorReview(t, root)
+	setBehaviorReviewRequired(t, root, false)
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "remove behavior review requirement")
@@ -93,7 +93,7 @@ func TestMergeGateRetainsTrustedBaseBehaviorReviewRequirement(t *testing.T) {
 	}
 }
 
-func TestMergeGateRequiresReceiptWhenCandidateAddsBehaviorReviewConfig(t *testing.T) {
+func TestMergeGateRequiresReceiptWhenCandidateAddsDefaultBehaviorReviewConfig(t *testing.T) {
 	root := contentRepository(t, nil)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	config, err := os.ReadFile(configPath)
@@ -106,7 +106,7 @@ func TestMergeGateRequiresReceiptWhenCandidateAddsBehaviorReviewConfig(t *testin
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "add-requirement")
 	writeEngineFile(t, root, policy.ConfigFilename, string(config), 0o600)
-	enableRequiredBehaviorReview(t, root)
+	clearBehaviorReviewSetting(t, root)
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "add behavior review requirement")
@@ -127,8 +127,9 @@ func TestMergeGateRequiresReceiptWhenCandidateAddsBehaviorReviewConfig(t *testin
 	}
 }
 
-func TestMergeGateDoesNotRequireReceiptWhenBothConfigurationsDisableBehaviorReview(t *testing.T) {
+func TestMergeGateDoesNotRequireReceiptWhenBothConfigurationsExplicitlyDisableBehaviorReview(t *testing.T) {
 	root := contentRepository(t, nil)
+	setBehaviorReviewRequired(t, root, false)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "no-requirement")
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
@@ -286,7 +287,7 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 func requiredBehaviorReviewCandidate(t *testing.T) string {
 	t.Helper()
 	root := contentRepository(t, nil)
-	enableRequiredBehaviorReview(t, root)
+	clearBehaviorReviewSetting(t, root)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "behavior-review")
@@ -296,7 +297,7 @@ func requiredBehaviorReviewCandidate(t *testing.T) string {
 	return root
 }
 
-func enableRequiredBehaviorReview(t *testing.T, root string) {
+func setBehaviorReviewRequired(t *testing.T, root string, required bool) {
 	t.Helper()
 	path := filepath.Join(root, ".code-polishy.json")
 	data, err := os.ReadFile(path)
@@ -312,7 +313,7 @@ func enableRequiredBehaviorReview(t *testing.T, root string) {
 		verification = map[string]any{}
 		document["verification"] = verification
 	}
-	verification["behaviorReview"] = map[string]any{"required": true}
+	verification["behaviorReview"] = map[string]any{"required": required}
 	updated, err := json.Marshal(document)
 	if err != nil {
 		t.Fatal(err)
@@ -320,7 +321,7 @@ func enableRequiredBehaviorReview(t *testing.T, root string) {
 	writeEngineFile(t, root, ".code-polishy.json", string(updated)+"\n", 0o600)
 }
 
-func removeBehaviorReview(t *testing.T, root string) {
+func clearBehaviorReviewSetting(t *testing.T, root string) {
 	t.Helper()
 	path := filepath.Join(root, policy.ConfigFilename)
 	data, err := os.ReadFile(path)
@@ -333,7 +334,7 @@ func removeBehaviorReview(t *testing.T, root string) {
 	}
 	verification, ok := document["verification"].(map[string]any)
 	if !ok {
-		t.Fatalf("configuration has no verification object: %s", data)
+		return
 	}
 	delete(verification, "behaviorReview")
 	updated, err := json.Marshal(document)

@@ -38,7 +38,7 @@ func Parse(data []byte, source string) (Config, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	var config Config
+	config := Config{Verification: Verification{BehaviorReview: &BehaviorReview{Required: true}}}
 	if err := decoder.Decode(&config); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", source, err)
 	}
@@ -210,8 +210,8 @@ func validateVerification(config *Config) error {
 			return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
 		}
 	}
-	if err := validateBehaviorReview(config.Verification.BehaviorReview); err != nil {
-		return err
+	if config.Verification.BehaviorReview == nil {
+		return errors.New("verification.behaviorReview must be an object when configured")
 	}
 	mergeGate := config.Verification.MergeGate
 	if mergeGate == nil {
@@ -227,13 +227,6 @@ func validateVerification(config *Config) error {
 		if _, exists := config.ModuleByName[module]; !exists {
 			return fmt.Errorf("verification.mergeGate.recommendedModules references unknown module %q", module)
 		}
-	}
-	return nil
-}
-
-func validateBehaviorReview(behaviorReview *BehaviorReview) error {
-	if behaviorReview != nil && !behaviorReview.Required {
-		return errors.New("verification.behaviorReview.required must be true when behavior review is configured")
 	}
 	return nil
 }

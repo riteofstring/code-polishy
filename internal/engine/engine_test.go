@@ -1005,7 +1005,10 @@ func contentRepository(t *testing.T, excludes []string) string {
   "scope": {"exclude": [` + excludeJSON + `]},
   "quality": {},
   "modules": [{"name":"content","paths":["content/**"]}],
-  "verification": {"mergeGate":{"recommendedModules":["content"]}},
+  "verification": {
+    "behaviorReview": {"required": false},
+    "mergeGate":{"recommendedModules":["content"]}
+  },
   "checks": [
     {"name":"content-check","provides":["content-validation"],"argv":["true"],"modules":["content"],"runOn":["gate"]},
     {"name":"content-build","provides":["content-build"],"argv":["true"],"modules":["content"],"runOn":["build"]},
@@ -1033,6 +1036,7 @@ func documentationRepository(t *testing.T) string {
   "scope": {},
   "quality": {},
   "documentation": {"productInputs": ["docs/product-input.md"]},
+  "verification": {"behaviorReview": {"required": false}},
   "modules": [
     {"name": "docs", "paths": ["docs/**/*.md"]},
     {"name": "tooling", "paths": ["templates/**", "skills/**"]},
