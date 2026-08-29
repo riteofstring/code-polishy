@@ -175,6 +175,9 @@ EOF
   write_file "${source_root}/templates/CLAUDE.md" <<'EOF'
 Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.
 EOF
+  write_file "${source_root}/templates/behavior-review.md" <<'EOF'
+# Behavior review instructions
+EOF
   write_file "${source_root}/skills/polishy/SKILL.md" <<'EOF'
 # Polishy skill
 EOF
@@ -449,7 +452,7 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md schema/code-polishy.schema.json \
-  templates/AGENTS.md templates/CLAUDE.md \
+  templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
   skills/polishy/SKILL.md skills/polishy/agents/openai.yaml \
   artifact-security/scanner-policy.json \
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
@@ -479,6 +482,9 @@ for skill_file in \
 done
 cmp -s "${source_root}/templates/CLAUDE.md" "${release}/templates/CLAUDE.md" ||
   fail "the release did not carry the exact canonical CLAUDE.md redirect"
+cmp -s "${source_root}/templates/behavior-review.md" \
+  "${release}/templates/behavior-review.md" ||
+  fail "the release did not carry the exact behavior review instructions"
 [[ -x "${release}/bin/code-polishy" ]] || fail "the release binary is not executable"
 [[ -L "${release}/.tools/javascript/bundle/node_modules/example-tool" ]] ||
   fail "the release did not keep the bundle's links as links"
