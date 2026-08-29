@@ -1,7 +1,7 @@
 ---
 name: polishy
 description: >-
-  Operate a repository through the Code Polishy release its lock names: inspect policy health, clean up concrete findings, display testing diagnostics, run policy-selected ordinary merge verification, synchronize canonical agent guidance, and enforce caller-scoped task sessions. Use when the user invokes /polishy or $polishy, asks what tests or verification level to run, asks whether a repository is policy-ready, or requests a Code Polishy cleanup, merge gate, or AGENTS sync. Triggers on repository policy, policy check, cleanup, test levels, test plan, recommended tests, full tests, supplemental tests, merge gate, gate, doctor, task session, and AGENTS sync.
+  Operate a repository through the Code Polishy release its lock names: inspect policy health, clean up concrete findings, display testing diagnostics, run policy-selected ordinary merge verification, synchronize canonical agent guidance, and enforce caller-scoped task sessions. Use when the user invokes /polishy or $polishy, asks what tests or verification level to run, asks whether a repository is policy-ready, or requests a Code Polishy cleanup, merge gate, or AGENTS sync. Triggers on repository policy, policy check, cleanup, test levels, test plan, recommended tests, full tests, supplemental tests, behavior review, regression proof, merge gate, gate, doctor, task session, and AGENTS sync.
 ---
 
 # Operate Code Polishy
@@ -103,6 +103,14 @@ policy upgrade, and do not invent authoritative suite counts.
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
+- When `verification.behaviorReview.required` is enabled, prepare every clean,
+  committed non-documentation candidate before that merge gate. Give only the
+  generated packet to a fresh native reviewer. Record red-on-pre-fix and
+  green-on-candidate `regression-proof` evidence for every behavior it
+  classifies as requested, save its strict result, and run `behavior-review
+finalize`. Keep `.code-polishy-reports/behavior-review` in the same workspace
+  or move it only as an explicit trusted CI artifact. The supervising agent's
+  existing context is not a fresh review.
 
 Do not turn an ambiguous request such as "test it" into an ordinary merge
 checkpoint. A direct request for a scoped profile remains scoped feedback, not
@@ -151,18 +159,19 @@ caller explicitly requests an uncommitted handoff.
 
 ## Common Mistakes
 
-| Mistake                                           | Correction                                                                                       |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Running a sibling checkout or another release     | Use `code-polishy`, which runs the release the lock names                                        |
-| Treating a `PATH` miss as a missing installation  | Probe the caller-specified or default stable launcher paths                                      |
-| Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested               |
-| Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it |
-| Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically   |
-| Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                    |
-| Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                        |
-| Adding an exception to silence cleanup            | Fix the owner or make any necessary exception exact, owned, and expiring                         |
-| Starting autonomous work without selected modules | Require the caller to select modules before creating the task session                            |
-| Leaving completed verified changes uncommitted    | Commit task-owned changes unless the caller requests an uncommitted handoff                      |
+| Mistake                                           | Correction                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Running a sibling checkout or another release     | Use `code-polishy`, which runs the release the lock names                                             |
+| Treating a `PATH` miss as a missing installation  | Probe the caller-specified or default stable launcher paths                                           |
+| Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested                    |
+| Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it      |
+| Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically        |
+| Skipping an enabled behavior-review receipt       | Prepare the clean candidate, use a packet-only fresh reviewer, prove requested behavior, and finalize |
+| Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                         |
+| Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                             |
+| Adding an exception to silence cleanup            | Fix the owner or make any necessary exception exact, owned, and expiring                              |
+| Starting autonomous work without selected modules | Require the caller to select modules before creating the task session                                 |
+| Leaving completed verified changes uncommitted    | Commit task-owned changes unless the caller requests an uncommitted handoff                           |
 
 ## Output Format
 

@@ -562,6 +562,28 @@ control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
 Archive verbose output for audit and require the resulting status for merge.
 
+### Require behavior-regression proof when the repository needs it
+
+To require fresh semantic review and executable red/green evidence before a
+non-documentation merge, configure:
+
+```json
+{
+  "verification": {
+    "behaviorReview": {
+      "required": true
+    }
+  }
+}
+```
+
+Omit this object when the repository does not need the receipt; `false` is not
+a valid weakening value. CI must retain
+`.code-polishy-reports/behavior-review` in the same workspace as preparation,
+proof, finalization, and `merge-gate`, or transfer it between jobs as an
+explicit trusted artifact. See [Behavior Regression Review](policies/behavior-review.md)
+before enabling it.
+
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen
 inputs before strict doctor, because doctor verifies that declared executables

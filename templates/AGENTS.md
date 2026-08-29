@@ -60,6 +60,12 @@
 ## Reviews and delivery
 
 - Agent review cannot replace policy checks or human approval.
+- When `verification.behaviorReview.required` is enabled, a non-documentation
+  merge candidate must be clean and committed, prepared into a packet for a
+  fresh reviewer, proved red on the pre-fix base and green on the candidate for
+  every requested behavior, then finalized into a receipt before `merge-gate`.
+  Keep `.code-polishy-reports/behavior-review` in the same workspace or move it
+  only through an explicit trusted CI artifact handoff.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
   isolation.

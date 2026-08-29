@@ -256,6 +256,35 @@ telemetry, and report notes. CI may archive that output and should make the
 resulting status required for merge. Human handoffs should summarize the
 outcome and concrete failures rather than repeat the receipt.
 
+## Optional behavior regression review receipt
+
+A repository may require a behavior-regression receipt for non-documentation
+merge candidates:
+
+```json
+{
+  "verification": {
+    "behaviorReview": {
+      "required": true
+    }
+  }
+}
+```
+
+This is a strict opt-in: omit `behaviorReview` to disable the requirement;
+`required: false`, a missing `required`, or an unknown field is invalid
+configuration. With the option enabled, `merge-gate` validates the current
+clean candidate's receipt against the resolved base before it starts ordinary
+recommended or full work. A missing, stale, malformed, unresolved, or
+under-proved review becomes a `policy.behaviorReview` finding. The built-in
+documentation level bypasses this receipt.
+
+The receipt comes from a fresh packet-only review plus red/green regression
+proof for each requested behavior. It is additional merge evidence, not a
+replacement for ordinary tests, policy checks, human approval, or supplemental
+hardening. Follow the [Behavior Regression Review Policy](behavior-review.md)
+for the required sequence, artifact boundary, and limits.
+
 ## AI execution
 
 An AI collaborator should treat the levels differently:

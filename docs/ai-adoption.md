@@ -79,6 +79,7 @@ Present at least these choices:
 | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source comments (`quality.allowComments`)                                     | `true`                                            | Keep `true` for human-written code or carefully curated existing comments. Recommend `false` only for a repository whose code is written and read entirely by AI and whose durable rationale belongs in mapped design documents. State that choosing `false` makes existing prose comments blocking before changing them. |
 | Adaptive application merge gate (`verification.mergeGate.recommendedModules`) | Omitted, so application changes use the full gate | Configure it only when read-only inventory identifies clearly bounded content modules that can safely use the recommended lane; shared escalation rules still force full when impact expands.                                                                                                                             |
+| Behavior-regression receipt (`verification.behaviorReview.required`)          | Omitted                                           | Configure it only when applicable merges can use a fresh packet-only reviewer and retain its reports in one workspace or an explicit trusted CI handoff.                                                                                                                                                                  |
 | Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost.                                                                                                                                                                  |
 | Gherkin methodology                                                           | Do not introduce it                               | Preserve and execute existing governed `.feature` files. Recommend adding Gherkin only when the owner wants executable behavior specifications as a working method.                                                                                                                                                       |
 
@@ -95,6 +96,8 @@ mappings describe repository facts; declare them whenever those facts exist.
 Conditional policy modules and their exact, expiring overrides are policy
 mechanisms, not setup preferences. Agent reviews and task sessions remain
 optional workflows selected only when requested or operationally applicable.
+The behavior-regression receipt is a separate explicit opt-in and becomes
+required for applicable non-documentation merge candidates when enabled.
 
 For a repair or upgrade, preserve every explicit choice. Ask only about a newly
 introduced material choice that the existing configuration does not already
@@ -434,6 +437,10 @@ The resulting guidance should make these execution boundaries clear:
   so Code Polishy selects documentation, recommended, or full execution without
   a user choice, and they do not immediately precede it with `test --changed`
   for the same candidate;
+- when `verification.behaviorReview.required` is enabled, non-documentation
+  merge candidates use the packet-only fresh-reviewer, red/green proof, and
+  receipt workflow before `merge-gate`; its reports stay in the same workspace
+  or move through an explicit trusted CI handoff;
 - local supplemental mutation and risk work runs through its separate direct
   stage after ordinary acceptance; only credentialed, destructive,
   production-mutating, and live-provider probes remain external approval

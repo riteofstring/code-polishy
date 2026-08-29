@@ -8,12 +8,12 @@ engine owns their interpretation and the shared baseline.
 cmd/code-polishy
       |
       v
-internal/engine ------------------------------- orchestration and one report
-   |        |         |          |          |             |
-   v        v         v          v          v             v
-quality  architecture  testing  supplychain  policymodule  portability
-   \        |         /          /          /             /
-    +-------+--------+----------+----------+-------------+
+internal/engine -------------------------------------- orchestration and one report
+   |        |         |          |              |          |             |
+   v        v         v          v              v          v             v
+quality  architecture  testing  behaviorreview  supplychain  policymodule  portability
+   \        |         /          /              /          /             /
+    +-------+--------+----------+--------------+----------+-------------+
             |
    policy + repository + runner + javascript
 ```
@@ -27,7 +27,14 @@ never reaches execution.
 
 `internal/repository` owns Git selection, deletions, staged/worktree safety,
 segment-aware globs, containment, language detection, module ownership,
-immutable-base change boundaries, and nested Go module discovery.
+immutable-base change boundaries, nested Go module discovery, and the exact
+clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
+
+`internal/behaviorreview` owns packet preparation, strict review-result and
+receipt validation, behavior-proof records, and disposable pre-fix execution.
+It depends only on policy, repository, and runner. The agent runtime supplies a
+fresh reviewer; this module gives that reviewer a bounded packet and gives the
+merge gate candidate-bound evidence it can validate.
 
 `internal/runner` is the subprocess boundary for target-declared commands. It
 accepts argument arrays, resolves working directories and checked-in
@@ -152,7 +159,9 @@ execution.
 `internal/engine` composes checks, applies exceptions exactly once, and returns
 one report. Merge-gate reports also carry the selected policy level, trusted
 base label, and deterministic reasons; the CLI renders that disclosure before
-findings. The CLI translates reports to exit statuses:
+findings. When behavior-regression review is enabled, it validates the receipt
+before ordinary non-documentation merge work. The CLI translates reports to exit
+statuses:
 
 - `0`: the requested profile completed without findings;
 - `1`: policy or behavior findings;
@@ -198,7 +207,8 @@ merge-base delta ---> impacted modules + matching standard suites
 
 merge-gate delta ---> exact candidate classifier
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> shared escalation rules + target module allowlist
+                 ---> other candidate ---> optional behavior-review receipt validation
+                                      ---> shared escalation rules + target module allowlist
                                       ---> recommended pipeline OR complete full gate
 
 full profile ---> every suite marked full
@@ -222,9 +232,13 @@ delta separately from any repository-wide analysis expansion.
 `internal/testing.BuildMergeDecision` makes the deterministic level decision
 from that selection and compiled policy; `internal/engine` owns the three
 orchestration branches. The documentation branch runs only the built-in
-Markdown contract. The recommended branch runs strict doctor, applicable gate
-checks and builds, recommended tests, and offline supply-chain verification.
-For non-documentation candidates, any repository-wide expansion,
+Markdown contract and bypasses behavior-review receipt validation. For an opted
+in non-documentation candidate, the engine first validates a receipt bound to
+the exact base and clean candidate; report artifacts are excluded from the
+candidate delta so they cannot change its classification. The recommended branch
+runs strict doctor, applicable gate checks and builds, recommended tests, and
+offline supply-chain verification. For non-documentation candidates, any
+repository-wide expansion,
 path-ownership failure, non-allowlisted module, broad planner impact, or missing
 opt-in selects the existing complete gate.
 

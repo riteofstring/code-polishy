@@ -40,7 +40,7 @@ require the caller's explicit authorization.
 
 ## Agent reviews
 
-Bind a requested or required agent review to an explicit trusted base and exact
+A requested ordinary agent review binds to an explicit trusted base and exact
 candidate. A dirty-worktree review covers committed, staged, unstaged, and
 untracked changes so it cannot miss candidate state.
 
@@ -50,6 +50,30 @@ machine sentinels, and duplicates of automated checks. Distinguish repository
 contract concerns from requested-outcome concerns and tie each finding to its
 source instruction or objective and affected file or hunk. Agent review is
 non-deterministic evidence and does not replace policy checks or human approval.
+
+## Required behavior regression review
+
+When a repository enables `verification.behaviorReview.required`, use the
+[Behavior Regression Review Policy](policies/behavior-review.md) for every
+non-documentation merge candidate. It turns a fresh semantic review into a
+merge-checkable receipt without making the reviewer a policy engine:
+
+1. Commit the candidate and keep it clean, apart from the excluded review
+   reports.
+2. Run `code-polishy behavior-review prepare` and give only its packet to a
+   fresh native reviewer. The packet is that reviewer's complete authority.
+3. For every behavior the reviewer classifies as `requested`, run one or more
+   `code-polishy regression-proof` commands that fail on the declared pre-fix
+   base and pass on the candidate.
+4. Save the strict review result at the packet's result path, then run
+   `code-polishy behavior-review finalize` to write the receipt.
+5. Run `code-polishy merge-gate --base <merge-target>`. It validates the
+   receipt before its normal recommended or full work.
+
+Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
+the workflow. A multi-job CI run may transfer that directory only as an explicit
+trusted artifact. Documentation-only candidates bypass the receipt; ordinary
+agent reviews remain available for work that does not opt in.
 
 ## Isolated task sessions
 

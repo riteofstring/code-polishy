@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add an opt-in behavior-regression merge receipt that binds a fresh packet-only
+  review and per-requested-behavior red/green proof to the clean candidate.
+
 ## 0.19.0 - 2026-08-28
 
 - Make the self-mutation runner enforce its declared efficacy and mutant-
