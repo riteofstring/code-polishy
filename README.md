@@ -8,7 +8,8 @@ ignore.**
 Code Polishy gives every coding agent the same definition of done and enforces
 it before code merges.
 
-Built-in checks cover Go, JavaScript, TypeScript, Python, and shell scripts.
+Current built-in support includes Go, JavaScript, TypeScript, Python, and shell
+scripts.
 
 ## What it does
 
@@ -36,7 +37,7 @@ Setup starts with one prompt to a coding agent:
 
 ```text
 Set up Code Polishy in this repository. Follow
-https://github.com/riteofstring/code-polishy
+https://github.com/riteofstring/code-polishy.
 ```
 
 Each repo keeps its current Code Polishy version until you choose to upgrade.
