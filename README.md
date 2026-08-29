@@ -8,6 +8,8 @@ ignore.**
 Code Polishy gives every coding agent the same definition of done and enforces
 it before code merges.
 
+Built-in checks cover Go, JavaScript, TypeScript, Python, and shell scripts.
+
 ## What it does
 
 Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
