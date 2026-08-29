@@ -189,8 +189,103 @@ func TestValidateMergeReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) 
 	}
 }
 
+func TestFinalizeAndReceiptRejectRehashedPacketMaterial(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*reviewPacket)
+	}{
+		{name: "patch", mutate: func(packet *reviewPacket) { packet.Patch += "tampered patch\n" }},
+		{name: "instructions", mutate: func(packet *reviewPacket) { packet.Instructions = "tampered instructions\n" }},
+		{name: "design documents", mutate: func(packet *reviewPacket) { packet.DesignDocuments[0].Content = "tampered design\n" }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			assertFinalizeRejectsRehashedPacket(t, test.mutate)
+			assertReceiptRejectsRehashedPacket(t, test.mutate)
+		})
+	}
+}
+
+func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	prepareReview(t, repo)
+	root := behaviorRoot(t, repo)
+	packet, _, err := readPacket(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet.Intent = "Different requested change.\n"
+	refreshPacketDigests(&packet)
+	data, err := marshalArtifact(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorBytes(t, root, packetFilename, data)
+	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); !errors.Is(err, ErrStaleReview) {
+		t.Fatalf("Finalize() error = %v, want stale review", err)
+	}
+}
+
+func TestValidateMergeReceiptBindsPrepareMarker(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	prepared, receipt := finalizedPreservedReview(t, repo)
+	root := behaviorRoot(t, repo)
+	packet, _, err := readPacket(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet.Intent = "Different requested change.\n"
+	refreshPacketDigests(&packet)
+	packetData, markerData := writePacketAndMarker(t, root, packet)
+	if sha256Hex(packetData) == receipt.PacketSHA256 || sha256Hex(markerData) == receipt.PrepareSHA256 || packet.IntentSHA256 == prepared.IntentSHA256 {
+		t.Fatal("tampered packet did not change receipt-bound values")
+	}
+	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+		t.Fatalf("ValidateMergeReceipt() error = %v, want stale receipt", err)
+	}
+}
+
+func assertFinalizeRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)) {
+	t.Helper()
+	repo, _, _ := newBehaviorRepository(t)
+	prepared := prepareReview(t, repo)
+	writePreservedResult(t, repo, prepared)
+	root := behaviorRoot(t, repo)
+	packet, _, err := readPacket(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutate(&packet)
+	refreshPacketDigests(&packet)
+	writePacketAndMarker(t, root, packet)
+	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); !errors.Is(err, ErrStaleReview) {
+		t.Fatalf("Finalize() error = %v, want stale review", err)
+	}
+}
+
+func assertReceiptRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)) {
+	t.Helper()
+	repo, _, _ := newBehaviorRepository(t)
+	_, receipt := finalizedPreservedReview(t, repo)
+	root := behaviorRoot(t, repo)
+	packet, _, err := readPacket(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutate(&packet)
+	refreshPacketDigests(&packet)
+	packetData, markerData := writePacketAndMarker(t, root, packet)
+	receipt.PacketSHA256 = sha256Hex(packetData)
+	receipt.PrepareSHA256 = sha256Hex(markerData)
+	writeReceiptRecord(t, root, receipt)
+	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+		t.Fatalf("ValidateMergeReceipt() error = %v, want stale receipt", err)
+	}
+}
+
 func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
+	prepared := prepareReview(t, repo)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root}
 	result, err := Prove(context.Background(), repo, commandRunner, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "proof-1"})
 	if err != nil {
@@ -204,9 +299,7 @@ func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proof.ExpectedRedExitStatus != 1 || proof.Baseline.ExitStatus != 1 || proof.CandidateExecution.ExitStatus != 0 || proof.ApplyLogSHA256 == "" || proof.Baseline.LogSHA256 == "" || proof.CandidateExecution.LogSHA256 == "" {
-		t.Fatalf("proof = %+v", proof)
-	}
+	assertBoundProof(t, proof, prepared)
 	for _, name := range []string{"proof-1.apply.log", "proof-1.baseline.log", "proof-1.candidate.log", "proof-1.json"} {
 		if _, err := os.Stat(artifactPath(root, filepath.ToSlash(filepath.Join(proofDirectory, name)))); err != nil {
 			t.Fatalf("artifact %s: %v", name, err)
@@ -225,6 +318,7 @@ func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 
 func TestProveAllowsAnExistingReproducerWithAnEmptyEvidencePatch(t *testing.T) {
 	repo, _, _ := newExistingEvidenceRepository(t)
+	prepareReview(t, repo)
 	result, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "existing"})
 	if err != nil {
 		t.Fatal(err)
@@ -236,6 +330,70 @@ func TestProveAllowsAnExistingReproducerWithAnEmptyEvidencePatch(t *testing.T) {
 	if proof.EvidencePatchSHA256 != sha256Hex(nil) || proof.Baseline.ExitStatus != 1 || proof.CandidateExecution.ExitStatus != 0 {
 		t.Fatalf("proof = %+v", proof)
 	}
+}
+
+func TestProveRequiresPreparedReviewAndRejectsOlderReviewBase(t *testing.T) {
+	t.Run("missing prepare", func(t *testing.T) {
+		repo, _, _ := newBehaviorRepository(t)
+		_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "missing-prepare"})
+		if !errors.Is(err, ErrInvalidReview) {
+			t.Fatalf("Prove() error = %v, want invalid review", err)
+		}
+	})
+	t.Run("older base", func(t *testing.T) {
+		repo, _, _ := newBehaviorRepository(t)
+		prepareReview(t, repo)
+		_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main~1", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "older-base"})
+		if !errors.Is(err, ErrInvalidEvidence) {
+			t.Fatalf("Prove() error = %v, want invalid evidence", err)
+		}
+	})
+}
+
+func TestProveRejectsDestructiveSuite(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	prepareReview(t, repo)
+	repo.Config.Tests.Suites[0].Kind = "destructive"
+	_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "destructive"})
+	if !errors.Is(err, ErrInvalidEvidence) {
+		t.Fatalf("Prove() error = %v, want invalid evidence", err)
+	}
+}
+
+func TestProveChecksCandidateAfterTimeout(t *testing.T) {
+	t.Run("operational timeout", func(t *testing.T) {
+		repo, _, _ := newBehaviorRepository(t)
+		prepareReview(t, repo)
+		_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, timeoutCandidate: true}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "timeout"})
+		if !errors.Is(err, ErrOperational) {
+			t.Fatalf("Prove() error = %v, want operational failure", err)
+		}
+	})
+	t.Run("candidate changed", func(t *testing.T) {
+		repo, _, _ := newBehaviorRepository(t)
+		prepareReview(t, repo)
+		_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateCandidate: true, timeoutCandidate: true}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "timeout-mutation"})
+		if !errors.Is(err, ErrCandidateChanged) {
+			t.Fatalf("Prove() error = %v, want changed candidate", err)
+		}
+		if _, statErr := os.Stat(artifactPath(behaviorRoot(t, repo), proofArtifactName("timeout-mutation", ".json"))); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("successful proof artifact after mutation = %v, want missing", statErr)
+		}
+	})
+}
+
+func TestProveReturnsCleanupFailure(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	prepareReview(t, repo)
+	commandRunner := &behaviorRunner{candidateRoot: repo.Root, attachBaselineWorktree: true}
+	_, err := Prove(context.Background(), repo, commandRunner, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "cleanup"})
+	if !errors.Is(err, ErrCleanup) {
+		t.Fatalf("Prove() error = %v, want cleanup failure", err)
+	}
+	if len(commandRunner.roots) == 0 {
+		t.Fatal("runner did not receive the baseline worktree")
+	}
+	cleanupAttachedWorktree(t, repo, commandRunner.roots[0])
 }
 
 func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
@@ -259,6 +417,12 @@ func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
 				repo.Config.Tests.Suites[0].RunOn = []string{"supplemental"}
 			},
 		},
+		{
+			name: "review binding", mutate: func(t *testing.T, _ repository.Repository, root string, proof regressionProof) {
+				proof.ReviewID = "review-other"
+				writeProofRecord(t, root, proof)
+			},
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -280,8 +444,53 @@ func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
 	}
 }
 
+func TestReplayMergeReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	prepared := prepareReview(t, repo)
+	proof := proveReview(t, repo, "proof-1", 1)
+	writeRequestedResult(t, repo, prepared, proof.ID)
+	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	root := behaviorRoot(t, repo)
+	beforeReceipt := readBehaviorArtifact(t, root, receiptFilename)
+	beforeProof := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".json"))
+	beforeLog := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".candidate.log"))
+	receipt, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ValidateMergeReceiptOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(receipt.Proofs) != 1 || receipt.Proofs[0].ID != proof.ID {
+		t.Fatalf("replay receipt = %+v", receipt)
+	}
+	if string(beforeReceipt) != string(readBehaviorArtifact(t, root, receiptFilename)) || string(beforeProof) != string(readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".json"))) || string(beforeLog) != string(readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".candidate.log"))) {
+		t.Fatal("replay changed recorded proof artifacts")
+	}
+}
+
+func TestReplayMergeReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *testing.T) {
+	t.Run("semantic failure", func(t *testing.T) {
+		repo, _ := finalizedRequestedReview(t)
+		_, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, ValidateMergeReceiptOptions{Base: "main"})
+		if !errors.Is(err, ErrInvalidEvidence) {
+			t.Fatalf("ReplayMergeReceipt() error = %v, want invalid evidence", err)
+		}
+	})
+	t.Run("candidate worktree mutation", func(t *testing.T) {
+		repo, _ := finalizedRequestedReview(t)
+		_, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateReplayCandidate: true}, ValidateMergeReceiptOptions{Base: "main"})
+		if !errors.Is(err, ErrCandidateChanged) {
+			t.Fatalf("ReplayMergeReceipt() error = %v, want changed candidate", err)
+		}
+		if _, err := repo.CleanHead(); err != nil {
+			t.Fatalf("primary candidate changed during replay: %v", err)
+		}
+	})
+}
+
 func TestProveRejectsWrongRedStatusAndUnsafeEvidence(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
+	prepareReview(t, repo)
 	wrongStatusRunner := &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}
 	_, err := Prove(context.Background(), repo, wrongStatusRunner, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "wrong"})
 	if !errors.Is(err, ErrInvalidEvidence) {
@@ -300,6 +509,7 @@ func TestProveRejectsWrongRedStatusAndUnsafeEvidence(t *testing.T) {
 
 func TestProveDetectsCandidateMutation(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
+	prepareReview(t, repo)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root, mutateCandidate: true}
 	_, err := Prove(context.Background(), repo, commandRunner, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "mutation"})
 	if !errors.Is(err, ErrCandidateChanged) {
@@ -322,10 +532,13 @@ func TestBehaviorReviewArtifactRootRejectsEscapingSymlink(t *testing.T) {
 }
 
 type behaviorRunner struct {
-	candidateRoot   string
-	baselineStatus  int
-	mutateCandidate bool
-	roots           []string
+	candidateRoot          string
+	baselineStatus         int
+	mutateCandidate        bool
+	mutateReplayCandidate  bool
+	timeoutCandidate       bool
+	attachBaselineWorktree bool
+	roots                  []string
 }
 
 func (commandRunner *behaviorRunner) Run(ctx context.Context, root string, command policy.Command) error {
@@ -335,6 +548,12 @@ func (commandRunner *behaviorRunner) Run(ctx context.Context, root string, comma
 
 func (commandRunner *behaviorRunner) RunWithOutput(_ context.Context, root string, _ policy.Command) (runner.Result, runner.Output, error) {
 	commandRunner.roots = append(commandRunner.roots, root)
+	if commandRunner.attachBaselineWorktree && root != commandRunner.candidateRoot {
+		if err := exec.Command("git", "-C", root, "switch", "-c", "cleanup-block").Run(); err != nil {
+			return runner.Result{ExitStatus: -1}, runner.Output{}, err
+		}
+		commandRunner.attachBaselineWorktree = false
+	}
 	test, err := os.ReadFile(filepath.Join(root, "evidence_test.go"))
 	if err != nil {
 		return runner.Result{ExitStatus: -1}, runner.Output{}, err
@@ -347,10 +566,13 @@ func (commandRunner *behaviorRunner) RunWithOutput(_ context.Context, root strin
 		return runner.Result{ExitStatus: commandRunner.baselineStatus}, runner.Output{Stdout: []byte("baseline failed\n")}, errors.New("test failed")
 	}
 	if strings.Contains(string(test), "expect-new") && strings.TrimSpace(string(app)) == "new" {
-		if commandRunner.mutateCandidate && root == commandRunner.candidateRoot {
+		if commandRunner.mutateCandidate && root == commandRunner.candidateRoot || commandRunner.mutateReplayCandidate && root != commandRunner.candidateRoot {
 			if err := os.WriteFile(filepath.Join(root, "app.txt"), []byte("mutated\n"), 0o600); err != nil {
 				return runner.Result{ExitStatus: -1}, runner.Output{}, err
 			}
+		}
+		if commandRunner.timeoutCandidate && root == commandRunner.candidateRoot {
+			return runner.Result{ExitStatus: 124}, runner.Output{Stdout: []byte("candidate timed out\n")}, context.DeadlineExceeded
 		}
 		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: []byte("candidate passed\n")}, nil
 	}
@@ -361,6 +583,7 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 	t.Helper()
 	root := t.TempDir()
 	writeBehaviorFile(t, root, "templates/behavior-review.md", "Review the packet.\n")
+	writeBehaviorFile(t, root, "docs/design.md", "Application design.\n")
 	writeBehaviorFile(t, root, "app.txt", "old\n")
 	writeBehaviorFile(t, root, "README.md", "# Test\n")
 	gitBehavior(t, root, "init", "-b", "main")
@@ -368,6 +591,7 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 	gitBehavior(t, root, "config", "user.name", "Test")
 	gitBehavior(t, root, "add", ".")
 	gitBehavior(t, root, "commit", "-m", "base")
+	gitBehavior(t, root, "commit", "--allow-empty", "-m", "review base")
 	base := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
 	gitBehavior(t, root, "switch", "-c", "feature")
 	writeBehaviorFile(t, root, "app.txt", "new\n")
@@ -376,7 +600,8 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 	gitBehavior(t, root, "commit", "-m", "candidate")
 	candidate := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
 	config := policy.Config{
-		Modules: []policy.Module{{Name: "app", Paths: []string{"**"}}},
+		Modules:       []policy.Module{{Name: "app", Paths: []string{"**"}}},
+		Documentation: policy.Documentation{Design: []policy.DesignDocument{{Path: "docs/design.md", Module: "app"}}},
 		Tests: policy.Testing{Suites: []policy.TestSuite{{
 			Name: "unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30,
 		}}},
@@ -388,6 +613,7 @@ func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string,
 	t.Helper()
 	root := t.TempDir()
 	writeBehaviorFile(t, root, "templates/behavior-review.md", "Review the packet.\n")
+	writeBehaviorFile(t, root, "docs/design.md", "Application design.\n")
 	writeBehaviorFile(t, root, "app.txt", "old\n")
 	writeBehaviorFile(t, root, "evidence_test.go", "expect-new\n")
 	gitBehavior(t, root, "init", "-b", "main")
@@ -395,6 +621,7 @@ func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string,
 	gitBehavior(t, root, "config", "user.name", "Test")
 	gitBehavior(t, root, "add", ".")
 	gitBehavior(t, root, "commit", "-m", "base")
+	gitBehavior(t, root, "commit", "--allow-empty", "-m", "review base")
 	base := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
 	gitBehavior(t, root, "switch", "-c", "feature")
 	writeBehaviorFile(t, root, "app.txt", "new\n")
@@ -402,7 +629,8 @@ func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string,
 	gitBehavior(t, root, "commit", "-m", "candidate")
 	candidate := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
 	config := policy.Config{
-		Modules: []policy.Module{{Name: "app", Paths: []string{"**"}}},
+		Modules:       []policy.Module{{Name: "app", Paths: []string{"**"}}},
+		Documentation: policy.Documentation{Design: []policy.DesignDocument{{Path: "docs/design.md", Module: "app"}}},
 		Tests: policy.Testing{Suites: []policy.TestSuite{{
 			Name: "unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30,
 		}}},
@@ -439,6 +667,47 @@ func writeRequestedResult(t *testing.T, repo repository.Repository, prepared Pre
 	})
 }
 
+func assertBoundProof(t *testing.T, proof regressionProof, prepared PrepareResult) {
+	t.Helper()
+	if proof.ReviewID != prepared.ReviewID || proof.ReviewBase != prepared.Base || proof.ExpectedRedExitStatus != 1 || proof.Baseline.ExitStatus != 1 || proof.CandidateExecution.ExitStatus != 0 || proof.ApplyLogSHA256 == "" || proof.Baseline.LogSHA256 == "" || proof.CandidateExecution.LogSHA256 == "" {
+		t.Fatalf("proof = %+v", proof)
+	}
+}
+
+func finalizedPreservedReview(t *testing.T, repo repository.Repository) (PrepareResult, MergeReceipt) {
+	t.Helper()
+	prepared := prepareReview(t, repo)
+	writePreservedResult(t, repo, prepared)
+	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := readReceipt(behaviorRoot(t, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prepared, receipt
+}
+
+func finalizedRequestedReview(t *testing.T) (repository.Repository, ProveResult) {
+	t.Helper()
+	repo, _, _ := newBehaviorRepository(t)
+	prepared := prepareReview(t, repo)
+	proof := proveReview(t, repo, "proof-1", 1)
+	writeRequestedResult(t, repo, prepared, proof.ID)
+	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	return repo, proof
+}
+
+func writePreservedResult(t *testing.T, repo repository.Repository, prepared PrepareResult) {
+	t.Helper()
+	writeReviewResult(t, repo, prepared, ReviewResult{
+		Version: artifactVersion, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Behaviors: []Behavior{{Before: "existing interface", After: "existing interface", Classification: "preserved", ProofIDs: []string{}}}, Findings: []string{},
+	})
+}
+
 func writeReviewResult(t *testing.T, repo repository.Repository, prepared PrepareResult, review ReviewResult) {
 	t.Helper()
 	writeBehaviorFile(t, behaviorRoot(t, repo), defaultResultFilename, reviewJSON(review))
@@ -451,6 +720,59 @@ func writeProofRecord(t *testing.T, root string, proof regressionProof) {
 		t.Fatal(err)
 	}
 	writeBehaviorBytes(t, root, proofArtifactName(proof.ID, ".json"), data)
+}
+
+func writePacketAndMarker(t *testing.T, root string, packet reviewPacket) ([]byte, []byte) {
+	t.Helper()
+	data, err := marshalArtifact(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorBytes(t, root, packetFilename, data)
+	if err := writePrepareMarker(root, packet, data); err != nil {
+		t.Fatal(err)
+	}
+	marker, err := readArtifact(artifactPath(root, prepareMarkerFilename), maximumArtifactReadByte)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data, marker
+}
+
+func writeReceiptRecord(t *testing.T, root string, receipt MergeReceipt) {
+	t.Helper()
+	data, err := marshalArtifact(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorBytes(t, root, receiptFilename, data)
+}
+
+func readBehaviorArtifact(t *testing.T, root, name string) []byte {
+	t.Helper()
+	data, err := readArtifact(artifactPath(root, name), maximumArtifactReadByte)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func cleanupAttachedWorktree(t *testing.T, repo repository.Repository, worktree string) {
+	t.Helper()
+	if err := exec.Command("git", "-C", worktree, "switch", "--detach").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RemoveWorktree(context.Background(), worktree); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func refreshPacketDigests(packet *reviewPacket) {
+	packet.IntentSHA256 = sha256Hex([]byte(packet.Intent))
+	packet.PatchSHA256 = sha256Hex([]byte(packet.Patch))
+	for index := range packet.DesignDocuments {
+		packet.DesignDocuments[index].SHA256 = sha256Hex([]byte(packet.DesignDocuments[index].Content))
+	}
 }
 
 func reviewJSON(review ReviewResult) string {

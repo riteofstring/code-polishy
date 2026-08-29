@@ -16,6 +16,8 @@ import (
 
 const artifactVersion = 1
 
+const prepareMarkerFilename = "prepare.json"
+
 type packetDesignDocument struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
@@ -35,6 +37,14 @@ type reviewPacket struct {
 	Instructions    string                 `json:"instructions"`
 	ResultPath      string                 `json:"result_path"`
 	ProofDirectory  string                 `json:"proof_directory"`
+}
+
+type prepareMarker struct {
+	Version      int    `json:"version"`
+	ReviewID     string `json:"review_id"`
+	Base         string `json:"base"`
+	Candidate    string `json:"candidate"`
+	PacketSHA256 string `json:"packet_sha256"`
 }
 
 type Behavior struct {
@@ -70,9 +80,16 @@ type finalizationState struct {
 	candidate  string
 	packet     reviewPacket
 	packetData []byte
+	markerData []byte
 	review     ReviewResult
 	reviewData []byte
 	proofs     []ProofReference
+}
+
+type preparedPacketState struct {
+	packet     reviewPacket
+	packetData []byte
+	markerData []byte
 }
 
 type receiptState struct {
@@ -102,7 +119,21 @@ func prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 	if err := writeArtifactAtomic(artifactPath(root, packetFilename), data); err != nil {
 		return PrepareResult{}, err
 	}
+	if err := writePrepareMarker(root, packet, data); err != nil {
+		return PrepareResult{}, err
+	}
 	return PrepareResult{ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate, IntentSHA256: packet.IntentSHA256, PacketPath: artifactDisplayPath(packetFilename)}, nil
+}
+
+func writePrepareMarker(root string, packet reviewPacket, packetData []byte) error {
+	marker := prepareMarker{
+		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate, PacketSHA256: sha256Hex(packetData),
+	}
+	data, err := marshalArtifact(marker)
+	if err != nil {
+		return err
+	}
+	return writeArtifactAtomic(artifactPath(root, prepareMarkerFilename), data)
 }
 
 func collectPrepareInputs(ctx context.Context, repo repository.Repository, options PrepareOptions) (prepareInputs, error) {
@@ -221,19 +252,19 @@ func loadFinalization(ctx context.Context, repo repository.Repository, options F
 	if err != nil {
 		return finalizationState{}, err
 	}
-	packet, packetData, err := preparedPacketFor(root, base, candidate)
+	prepared, err := preparedPacketFor(repo, root, base, candidate)
 	if err != nil {
 		return finalizationState{}, err
 	}
-	review, reviewData, err := finalizedReviewInput(root, options.ResultPath, packet, candidate)
+	review, reviewData, err := finalizedReviewInput(root, prepared.packet, candidate)
 	if err != nil {
 		return finalizationState{}, err
 	}
-	proofs, err := proofReferences(repo, root, requestedProofIDs(review), candidate)
+	proofs, err := proofReferences(repo, root, requestedProofIDs(review), candidate, prepared.packet)
 	if err != nil {
 		return finalizationState{}, err
 	}
-	return finalizationState{root: root, base: base, candidate: candidate, packet: packet, packetData: packetData, review: review, reviewData: reviewData, proofs: proofs}, nil
+	return finalizationState{root: root, base: base, candidate: candidate, packet: prepared.packet, packetData: prepared.packetData, markerData: prepared.markerData, review: review, reviewData: reviewData, proofs: proofs}, nil
 }
 
 func finalizationIdentity(ctx context.Context, repo repository.Repository, reference string) (string, string, string, error) {
@@ -251,19 +282,82 @@ func finalizationIdentity(ctx context.Context, repo repository.Repository, refer
 	return root, base, candidate, nil
 }
 
-func preparedPacketFor(root, base, candidate string) (reviewPacket, []byte, error) {
+func preparedPacketFor(repo repository.Repository, root, base, candidate string) (preparedPacketState, error) {
 	packet, data, err := readPacket(root)
 	if err != nil {
-		return reviewPacket{}, nil, err
+		return preparedPacketState{}, err
 	}
 	if packet.Base != base || packet.Candidate != candidate {
-		return reviewPacket{}, nil, fmt.Errorf("%w: prepared packet does not match the current base and candidate", ErrStaleReview)
+		return preparedPacketState{}, fmt.Errorf("%w: prepared packet does not match the current base and candidate", ErrStaleReview)
 	}
-	return packet, data, nil
+	markerData, err := validatePrepareMarker(root, packet, data)
+	if err != nil {
+		return preparedPacketState{}, err
+	}
+	if err := validatePacketMaterial(repo, packet); err != nil {
+		return preparedPacketState{}, err
+	}
+	return preparedPacketState{packet: packet, packetData: data, markerData: markerData}, nil
 }
 
-func finalizedReviewInput(root, resultPath string, packet reviewPacket, candidate string) (ReviewResult, []byte, error) {
-	data, err := readRegularUTF8(reviewResultPath(root, resultPath), maximumResultBytes, true, "behavior review result")
+func validatePrepareMarker(root string, packet reviewPacket, packetData []byte) ([]byte, error) {
+	data, err := readArtifact(artifactPath(root, prepareMarkerFilename), maximumArtifactReadByte)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare marker is unavailable", ErrStaleReview)
+	}
+	var marker prepareMarker
+	if err := decodeStrict(data, &marker); err != nil {
+		return nil, fmt.Errorf("%w: prepare marker is invalid", ErrStaleReview)
+	}
+	if !markerMatchesPacket(marker, packet, packetData) {
+		return nil, fmt.Errorf("%w: prepared packet differs from its prepare marker", ErrStaleReview)
+	}
+	return data, nil
+}
+
+func markerMatchesPacket(marker prepareMarker, packet reviewPacket, packetData []byte) bool {
+	return allValid(
+		marker.Version == artifactVersion,
+		validIdentifier(marker.ReviewID),
+		validRevision(marker.Base),
+		validRevision(marker.Candidate),
+		validSHA256(marker.PacketSHA256),
+		marker.ReviewID == packet.ReviewID,
+		marker.Base == packet.Base,
+		marker.Candidate == packet.Candidate,
+		marker.PacketSHA256 == sha256Hex(packetData),
+	)
+}
+
+func validatePacketMaterial(repo repository.Repository, packet reviewPacket) error {
+	patch, documents, err := prepareCandidateMaterial(repo, packet.Base, packet.Candidate)
+	if err != nil {
+		return err
+	}
+	instructions, err := readCanonicalInstructions(repo)
+	if err != nil {
+		return err
+	}
+	if packet.Patch != string(patch) || packet.Instructions != string(instructions) || !samePacketDocuments(packet.DesignDocuments, documents) {
+		return fmt.Errorf("%w: prepared packet material differs from the bound candidate", ErrStaleReview)
+	}
+	return nil
+}
+
+func samePacketDocuments(left, right []packetDesignDocument) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func finalizedReviewInput(root string, packet reviewPacket, candidate string) (ReviewResult, []byte, error) {
+	data, err := readRegularUTF8(artifactPath(root, defaultResultFilename), maximumResultBytes, true, "behavior review result")
 	if err != nil {
 		return ReviewResult{}, nil, err
 	}
@@ -283,13 +377,6 @@ func finalizedReviewInput(root, resultPath string, packet reviewPacket, candidat
 	return review, data, nil
 }
 
-func reviewResultPath(root, path string) string {
-	if path == "" {
-		return artifactPath(root, defaultResultFilename)
-	}
-	return path
-}
-
 func reviewMatchesPacket(review ReviewResult, packet reviewPacket, candidate string) bool {
 	return allValid(
 		review.ReviewID == packet.ReviewID,
@@ -306,7 +393,7 @@ func writeFinalizedReview(state finalizationState) error {
 func writeMergeReceipt(state finalizationState) error {
 	receipt := MergeReceipt{
 		Version: artifactVersion, ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate,
-		IntentSHA256: state.packet.IntentSHA256, PacketSHA256: sha256Hex(state.packetData), ReviewSHA256: sha256Hex(state.reviewData), Proofs: state.proofs,
+		IntentSHA256: state.packet.IntentSHA256, PacketSHA256: sha256Hex(state.packetData), PrepareSHA256: sha256Hex(state.markerData), ReviewSHA256: sha256Hex(state.reviewData), Proofs: state.proofs,
 	}
 	data, err := marshalArtifact(receipt)
 	if err != nil {
@@ -320,7 +407,7 @@ func validateMergeReceipt(ctx context.Context, repo repository.Repository, optio
 	if err != nil {
 		return MergeReceipt{}, err
 	}
-	packet, err := validateReceiptPacket(state)
+	packet, err := validateReceiptPacket(repo, state)
 	if err != nil {
 		return MergeReceipt{}, err
 	}
@@ -328,7 +415,7 @@ func validateMergeReceipt(ctx context.Context, repo repository.Repository, optio
 	if err != nil {
 		return MergeReceipt{}, err
 	}
-	if err := validateReceiptProofs(repo, state, review); err != nil {
+	if err := validateReceiptProofs(repo, state, packet, review); err != nil {
 		return MergeReceipt{}, err
 	}
 	return state.receipt, nil
@@ -359,20 +446,21 @@ func currentReceiptState(ctx context.Context, repo repository.Repository, refere
 	return receiptState{root: root, base: base, candidate: candidate, receipt: receipt}, nil
 }
 
-func validateReceiptPacket(state receiptState) (reviewPacket, error) {
-	packet, data, err := readPacket(state.root)
+func validateReceiptPacket(repo repository.Repository, state receiptState) (reviewPacket, error) {
+	prepared, err := preparedPacketFor(repo, state.root, state.base, state.candidate)
 	if err != nil {
 		return reviewPacket{}, staleReceipt("prepared packet is unavailable", err)
 	}
-	if !packetMatchesReceipt(packet, data, state) {
+	if !packetMatchesReceipt(prepared.packet, prepared.packetData, prepared.markerData, state) {
 		return reviewPacket{}, staleReceipt("prepared packet does not match the receipt", nil)
 	}
-	return packet, nil
+	return prepared.packet, nil
 }
 
-func packetMatchesReceipt(packet reviewPacket, data []byte, state receiptState) bool {
+func packetMatchesReceipt(packet reviewPacket, data, markerData []byte, state receiptState) bool {
 	return allValid(
 		sha256Hex(data) == state.receipt.PacketSHA256,
+		sha256Hex(markerData) == state.receipt.PrepareSHA256,
 		packet.ReviewID == state.receipt.ReviewID,
 		packet.Base == state.base,
 		packet.Candidate == state.candidate,
@@ -404,8 +492,8 @@ func validateReceiptReview(state receiptState, packet reviewPacket) (ReviewResul
 	return review, nil
 }
 
-func validateReceiptProofs(repo repository.Repository, state receiptState, review ReviewResult) error {
-	proofs, err := proofReferences(repo, state.root, requestedProofIDs(review), state.candidate)
+func validateReceiptProofs(repo repository.Repository, state receiptState, packet reviewPacket, review ReviewResult) error {
+	proofs, err := proofReferences(repo, state.root, requestedProofIDs(review), state.candidate, packet)
 	if err != nil {
 		return staleReceipt("proofs do not validate", err)
 	}
@@ -646,6 +734,7 @@ func validReceiptHeader(receipt MergeReceipt) bool {
 		validRevision(receipt.Candidate),
 		validSHA256(receipt.IntentSHA256),
 		validSHA256(receipt.PacketSHA256),
+		validSHA256(receipt.PrepareSHA256),
 		validSHA256(receipt.ReviewSHA256),
 	)
 }

@@ -61,8 +61,7 @@ type PrepareResult struct {
 }
 
 type FinalizeOptions struct {
-	Base       string
-	ResultPath string
+	Base string
 }
 
 type FinalizeResult struct {
@@ -98,14 +97,15 @@ type ProofReference struct {
 }
 
 type MergeReceipt struct {
-	Version      int              `json:"version"`
-	ReviewID     string           `json:"review_id"`
-	Base         string           `json:"base"`
-	Candidate    string           `json:"candidate"`
-	IntentSHA256 string           `json:"intent_sha256"`
-	PacketSHA256 string           `json:"packet_sha256"`
-	ReviewSHA256 string           `json:"review_sha256"`
-	Proofs       []ProofReference `json:"proofs"`
+	Version       int              `json:"version"`
+	ReviewID      string           `json:"review_id"`
+	Base          string           `json:"base"`
+	Candidate     string           `json:"candidate"`
+	IntentSHA256  string           `json:"intent_sha256"`
+	PacketSHA256  string           `json:"packet_sha256"`
+	PrepareSHA256 string           `json:"prepare_sha256"`
+	ReviewSHA256  string           `json:"review_sha256"`
+	Proofs        []ProofReference `json:"proofs"`
 }
 
 func Prepare(ctx context.Context, repo repository.Repository, options PrepareOptions) (PrepareResult, error) {
@@ -122,4 +122,8 @@ func Prove(ctx context.Context, repo repository.Repository, commandRunner runner
 
 func ValidateMergeReceipt(ctx context.Context, repo repository.Repository, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
 	return validateMergeReceipt(ctx, repo, options)
+}
+
+func ReplayMergeReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
+	return replayMergeReceipt(ctx, repo, commandRunner, options)
 }

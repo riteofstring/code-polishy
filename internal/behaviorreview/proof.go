@@ -28,6 +28,8 @@ type proofExecution struct {
 type regressionProof struct {
 	Version               int            `json:"version"`
 	ID                    string         `json:"id"`
+	ReviewID              string         `json:"review_id"`
+	ReviewBase            string         `json:"review_base"`
 	Base                  string         `json:"base"`
 	Candidate             string         `json:"candidate"`
 	Suite                 string         `json:"suite"`
@@ -42,6 +44,9 @@ type regressionProof struct {
 
 type proofInputs struct {
 	id                    string
+	root                  string
+	reviewID              string
+	reviewBase            string
 	base                  string
 	candidate             string
 	suite                 policy.TestSuite
@@ -59,11 +64,7 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	if err != nil {
 		return ProveResult{}, err
 	}
-	root, err := behaviorReviewRoot(repo)
-	if err != nil {
-		return ProveResult{}, err
-	}
-	worktree, err := createProofWorktree(ctx, repo, root, inputs.base)
+	worktree, err := createProofWorktree(ctx, repo, inputs.root, inputs.base)
 	if err != nil {
 		return ProveResult{}, err
 	}
@@ -72,7 +73,7 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 			result, resultErr = clearedProofResult(resultErr, cleanupErr)
 		}
 	}()
-	proof, err := executeProof(ctx, repo, commandRunner, root, worktree, inputs)
+	proof, err := executeProof(ctx, repo, commandRunner, inputs.root, worktree, inputs)
 	if err != nil {
 		return ProveResult{}, err
 	}
@@ -80,10 +81,151 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	if err != nil {
 		return ProveResult{}, err
 	}
-	if err := writeArtifactAtomic(artifactPath(root, proofArtifactName(inputs.id, ".json")), data); err != nil {
+	if err := writeArtifactAtomic(artifactPath(inputs.root, proofArtifactName(inputs.id, ".json")), data); err != nil {
 		return ProveResult{}, err
 	}
 	return ProveResult{ID: inputs.id, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name, ProofPath: artifactDisplayPath(proofArtifactName(inputs.id, ".json"))}, nil
+}
+
+func replayMergeReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
+	ctx = reviewContext(ctx)
+	if commandRunner == nil {
+		return MergeReceipt{}, fmt.Errorf("%w: proof replay requires an output-capturing runner", ErrInvalidInput)
+	}
+	receipt, err := validateMergeReceipt(ctx, repo, options)
+	if err != nil {
+		return MergeReceipt{}, err
+	}
+	root, packet, err := replayPacket(repo, receipt)
+	if err != nil {
+		return MergeReceipt{}, err
+	}
+	for _, reference := range receipt.Proofs {
+		if err := replayProof(ctx, repo, commandRunner, root, packet, receipt.Candidate, reference); err != nil {
+			return MergeReceipt{}, err
+		}
+	}
+	return receipt, nil
+}
+
+func replayPacket(repo repository.Repository, receipt MergeReceipt) (string, reviewPacket, error) {
+	root, err := existingBehaviorReviewRoot(repo)
+	if err != nil {
+		return "", reviewPacket{}, staleReceipt("prepared packet is unavailable for replay", err)
+	}
+	prepared, err := preparedPacketFor(repo, root, receipt.Base, receipt.Candidate)
+	if err != nil {
+		return "", reviewPacket{}, staleReceipt("prepared packet changed before replay", err)
+	}
+	state := receiptState{base: receipt.Base, candidate: receipt.Candidate, receipt: receipt}
+	if !packetMatchesReceipt(prepared.packet, prepared.packetData, prepared.markerData, state) {
+		return "", reviewPacket{}, staleReceipt("prepared packet does not match replay receipt", nil)
+	}
+	return root, prepared.packet, nil
+}
+
+func replayProof(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root string, packet reviewPacket, candidate string, reference ProofReference) error {
+	proof, data, err := readProof(root, reference.ID)
+	if err != nil {
+		return err
+	}
+	if sha256Hex(data) != reference.SHA256 {
+		return fmt.Errorf("%w: proof %q does not match its receipt digest", ErrInvalidEvidence, proof.ID)
+	}
+	suite, patch, err := proofReplayMaterial(repo, proof, candidate, packet)
+	if err != nil {
+		return replayEvidenceError(proof.ID, err)
+	}
+	return replayProofExecution(ctx, repo, commandRunner, root, candidate, proof, suite, patch)
+}
+
+func replayEvidenceError(id string, err error) error {
+	if errors.Is(err, ErrOperational) || errors.Is(err, ErrCleanup) || errors.Is(err, ErrCandidateChanged) {
+		return err
+	}
+	return fmt.Errorf("%w: proof %q cannot be replayed: %v", ErrInvalidEvidence, id, err)
+}
+
+func replayProofExecution(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root, candidate string, proof regressionProof, suite policy.TestSuite, patch []byte) (resultErr error) {
+	baseline, err := createReplayWorktree(ctx, repo, root, "replay-baseline-", proof.Base)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		resultErr = joinReplayCleanup(resultErr, cleanupProofWorktree(repo, baseline))
+	}()
+	candidateWorktree, err := createReplayWorktree(ctx, repo, root, "replay-candidate-", candidate)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		resultErr = joinReplayCleanup(resultErr, cleanupProofWorktree(repo, candidateWorktree))
+	}()
+	candidateRepository := repo
+	candidateRepository.Root = candidateWorktree
+	if err := replayApplyEvidencePatch(ctx, baseline, patch); err != nil {
+		return err
+	}
+	if err := ensureCandidateUnchanged(repo, candidate); err != nil {
+		return err
+	}
+	baselineResult, _, baselineErr := runSuite(ctx, commandRunner, baseline, suite)
+	if err := ensureCandidateUnchanged(repo, candidate); err != nil {
+		return err
+	}
+	if err := validateReplayBaseline(ctx, baselineResult.ExitStatus, baselineErr, proof); err != nil {
+		return err
+	}
+	if err := ensureReplayCandidateUnchanged(repo, candidateRepository, candidate); err != nil {
+		return err
+	}
+	candidateResult, _, candidateErr := runSuite(ctx, commandRunner, candidateWorktree, suite)
+	if err := ensureReplayCandidateUnchanged(repo, candidateRepository, candidate); err != nil {
+		return err
+	}
+	return validateReplayCandidate(ctx, candidateResult.ExitStatus, candidateErr, proof)
+}
+
+func ensureReplayCandidateUnchanged(repo, candidateRepository repository.Repository, candidate string) error {
+	if err := ensureCandidateUnchanged(repo, candidate); err != nil {
+		return err
+	}
+	return ensureCandidateUnchanged(candidateRepository, candidate)
+}
+
+func joinReplayCleanup(previous, cleanupErr error) error {
+	if cleanupErr == nil {
+		return previous
+	}
+	if previous == nil {
+		return cleanupErr
+	}
+	return errors.Join(previous, cleanupErr)
+}
+
+func replayApplyEvidencePatch(ctx context.Context, worktree string, patch []byte) error {
+	_, err := applyEvidencePatch(ctx, worktree, patch)
+	return err
+}
+
+func validateReplayBaseline(ctx context.Context, status int, runErr error, proof regressionProof) error {
+	if executionOperational(ctx, status, runErr) {
+		return operational("replay baseline regression suite", runErr)
+	}
+	if status != proof.ExpectedRedExitStatus {
+		return fmt.Errorf("%w: replay baseline suite %q exited with %d, expected %d", ErrInvalidEvidence, proof.Suite, status, proof.ExpectedRedExitStatus)
+	}
+	return nil
+}
+
+func validateReplayCandidate(ctx context.Context, status int, runErr error, proof regressionProof) error {
+	if executionOperational(ctx, status, runErr) {
+		return operational("replay candidate regression suite", runErr)
+	}
+	if runErr != nil || status != 0 {
+		return fmt.Errorf("%w: replay candidate suite %q did not exit successfully", ErrInvalidEvidence, proof.Suite)
+	}
+	return nil
 }
 
 func collectProofInputs(ctx context.Context, repo repository.Repository, options ProveOptions) (proofInputs, error) {
@@ -95,11 +237,45 @@ func collectProofInputs(ctx context.Context, repo repository.Repository, options
 	if err != nil {
 		return proofInputs{}, err
 	}
+	root, packet, err := preparedProofPacket(repo, candidate)
+	if err != nil {
+		return proofInputs{}, err
+	}
+	if err := proofBaseMatchesReview(repo, packet.Base, base); err != nil {
+		return proofInputs{}, err
+	}
 	suite, evidence, patch, err := proofMaterial(repo, base, candidate, options)
 	if err != nil {
 		return proofInputs{}, err
 	}
-	return proofInputs{id: options.ID, base: base, candidate: candidate, suite: suite, evidence: evidence, patch: patch, expectedRedExitStatus: expected}, nil
+	return proofInputs{id: options.ID, root: root, reviewID: packet.ReviewID, reviewBase: packet.Base, base: base, candidate: candidate, suite: suite, evidence: evidence, patch: patch, expectedRedExitStatus: expected}, nil
+}
+
+func preparedProofPacket(repo repository.Repository, candidate string) (string, reviewPacket, error) {
+	root, err := existingBehaviorReviewRoot(repo)
+	if err != nil {
+		return "", reviewPacket{}, fmt.Errorf("%w: prepared packet is required", ErrInvalidReview)
+	}
+	packet, _, err := readPacket(root)
+	if err != nil {
+		return "", reviewPacket{}, err
+	}
+	prepared, err := preparedPacketFor(repo, root, packet.Base, candidate)
+	if err != nil {
+		return "", reviewPacket{}, err
+	}
+	return root, prepared.packet, nil
+}
+
+func proofBaseMatchesReview(repo repository.Repository, reviewBase, proofBase string) error {
+	allowed, err := repo.IsAncestor(reviewBase, proofBase)
+	if err != nil {
+		return operational("verify regression proof review ancestry", err)
+	}
+	if !allowed {
+		return fmt.Errorf("%w: regression proof base predates the prepared review base", ErrInvalidEvidence)
+	}
+	return nil
 }
 
 func validateProofRequest(ctx context.Context, options ProveOptions) (int, error) {
@@ -151,19 +327,27 @@ func proofMaterial(repo repository.Repository, base, candidate string, options P
 }
 
 func createProofWorktree(ctx context.Context, repo repository.Repository, root, base string) (string, error) {
+	return createDetachedProofWorktree(ctx, repo, root, "baseline-", base)
+}
+
+func createReplayWorktree(ctx context.Context, repo repository.Repository, root, prefix, revision string) (string, error) {
+	return createDetachedProofWorktree(ctx, repo, root, prefix, revision)
+}
+
+func createDetachedProofWorktree(ctx context.Context, repo repository.Repository, root, prefix, revision string) (string, error) {
 	parent, err := proofWorktreeDirectory(root)
 	if err != nil {
 		return "", err
 	}
-	path, err := os.MkdirTemp(parent, "baseline-")
+	path, err := os.MkdirTemp(parent, prefix)
 	if err != nil {
 		return "", operational("reserve regression proof worktree", err)
 	}
 	if err := os.Remove(path); err != nil {
 		return "", operational("prepare regression proof worktree", err)
 	}
-	if err := repo.AddDetachedWorktree(ctx, path, base); err != nil {
-		return "", operational("create baseline worktree", err)
+	if err := repo.AddDetachedWorktree(ctx, path, revision); err != nil {
+		return "", operational("create regression proof worktree", err)
 	}
 	return path, nil
 }
@@ -188,19 +372,22 @@ func executeProof(ctx context.Context, repo repository.Repository, commandRunner
 	if err != nil {
 		return regressionProof{}, err
 	}
-	baseline, baselineErr := runAndRecord(ctx, commandRunner, root, worktree, inputs.suite, inputs.id, ".baseline.log")
+	baseline, baselineErr := runAndRecord(ctx, repo, commandRunner, root, worktree, inputs.candidate, inputs.suite, inputs.id, ".baseline.log")
+	if errors.Is(baselineErr, ErrCandidateChanged) {
+		return regressionProof{}, baselineErr
+	}
 	if err := validateBaselineRun(ctx, baseline, baselineErr, inputs); err != nil {
 		return regressionProof{}, err
 	}
-	candidate, candidateErr := runAndRecord(ctx, commandRunner, root, repo.Root, inputs.suite, inputs.id, ".candidate.log")
+	candidate, candidateErr := runAndRecord(ctx, repo, commandRunner, root, repo.Root, inputs.candidate, inputs.suite, inputs.id, ".candidate.log")
+	if errors.Is(candidateErr, ErrCandidateChanged) {
+		return regressionProof{}, candidateErr
+	}
 	if err := validateCandidateRun(ctx, candidate, candidateErr, inputs.suite.Name); err != nil {
 		return regressionProof{}, err
 	}
-	if err := ensureCandidateUnchanged(repo, inputs.candidate); err != nil {
-		return regressionProof{}, err
-	}
 	return regressionProof{
-		Version: artifactVersion, ID: inputs.id, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name,
+		Version: artifactVersion, ID: inputs.id, ReviewID: inputs.reviewID, ReviewBase: inputs.reviewBase, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name,
 		Evidence: inputs.evidence, EvidencePatchSHA256: sha256Hex(inputs.patch), ExpectedRedExitStatus: inputs.expectedRedExitStatus,
 		ApplyLogPath: artifactDisplayPath(proofArtifactName(inputs.id, ".apply.log")), ApplyLogSHA256: applyDigest,
 		Baseline: baseline, CandidateExecution: candidate,
@@ -219,13 +406,15 @@ func applyAndRecord(ctx context.Context, root, worktree string, inputs proofInpu
 	return digest, nil
 }
 
-func runAndRecord(ctx context.Context, commandRunner runner.OutputRunner, artifactRoot, executionRoot string, suite policy.TestSuite, id, suffix string) (proofExecution, error) {
+func runAndRecord(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, artifactRoot, executionRoot, candidate string, suite policy.TestSuite, id, suffix string) (proofExecution, error) {
 	result, output, runErr := runSuite(ctx, commandRunner, executionRoot, suite)
 	digest, err := writeProofArtifact(artifactRoot, id, suffix, suiteLog(result, output, runErr))
+	changedErr := ensureCandidateUnchanged(repo, candidate)
 	if err != nil {
-		return proofExecution{}, err
+		return proofExecution{}, errors.Join(err, changedErr)
 	}
-	return proofExecution{ExitStatus: result.ExitStatus, LogPath: artifactDisplayPath(proofArtifactName(id, suffix)), LogSHA256: digest}, runErr
+	execution := proofExecution{ExitStatus: result.ExitStatus, LogPath: artifactDisplayPath(proofArtifactName(id, suffix)), LogSHA256: digest}
+	return execution, errors.Join(runErr, changedErr)
 }
 
 func validateBaselineRun(ctx context.Context, execution proofExecution, runErr error, inputs proofInputs) error {
@@ -388,7 +577,11 @@ func configuredSuites(config policy.Config, name string) []policy.TestSuite {
 }
 
 func ordinarySuiteAllowed(suite policy.TestSuite) bool {
-	return allValid(!slices.Contains(suite.RunOn, "supplemental"), suite.Kind != "live", len(suite.Environment) == 0)
+	return allValid(
+		!slices.Contains(suite.RunOn, "supplemental"),
+		!slices.Contains([]string{"live", "credentialed", "destructive"}, suite.Kind),
+		len(suite.Environment) == 0,
+	)
 }
 
 func validateEvidence(repo repository.Repository, values []string) ([]string, error) {
@@ -434,14 +627,14 @@ func evidenceFileIsRegular(repo repository.Repository, path string) error {
 	return nil
 }
 
-func proofReferences(repo repository.Repository, root string, ids []string, candidate string) ([]ProofReference, error) {
+func proofReferences(repo repository.Repository, root string, ids []string, candidate string, packet reviewPacket) ([]ProofReference, error) {
 	references := make([]ProofReference, 0, len(ids))
 	for _, id := range ids {
 		proof, data, err := readProof(root, id)
 		if err != nil {
 			return nil, err
 		}
-		if err := validateProofForCandidate(repo, root, proof, candidate); err != nil {
+		if err := validateProofForCandidate(repo, root, proof, candidate, packet); err != nil {
 			return nil, err
 		}
 		references = append(references, ProofReference{ID: id, SHA256: sha256Hex(data)})
@@ -471,25 +664,38 @@ func readProof(root, id string) (regressionProof, []byte, error) {
 	return proof, data, nil
 }
 
-func validateProofForCandidate(repo repository.Repository, root string, proof regressionProof, candidate string) error {
+func validateProofForCandidate(repo repository.Repository, root string, proof regressionProof, candidate string, packet reviewPacket) error {
+	if _, _, err := proofReplayMaterial(repo, proof, candidate, packet); err != nil {
+		return err
+	}
+	return verifyProofLogs(root, proof)
+}
+
+func proofReplayMaterial(repo repository.Repository, proof regressionProof, candidate string, packet reviewPacket) (policy.TestSuite, []byte, error) {
 	if proof.Candidate != candidate {
-		return fmt.Errorf("%w: proof %q is bound to another candidate", ErrInvalidEvidence, proof.ID)
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q is bound to another candidate", ErrInvalidEvidence, proof.ID)
+	}
+	if proof.ReviewID != packet.ReviewID || proof.ReviewBase != packet.Base {
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q is not bound to the prepared review", ErrInvalidEvidence, proof.ID)
 	}
 	base, err := repo.ResolveAncestor(proof.Base)
 	if err != nil {
-		return fmt.Errorf("%w: proof %q base is unavailable", ErrInvalidEvidence, proof.ID)
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q base is unavailable", ErrInvalidEvidence, proof.ID)
 	}
 	if base == candidate {
-		return fmt.Errorf("%w: proof %q has no pre-fix base", ErrInvalidEvidence, proof.ID)
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q has no pre-fix base", ErrInvalidEvidence, proof.ID)
+	}
+	if err := proofBaseMatchesReview(repo, packet.Base, base); err != nil {
+		return policy.TestSuite{}, nil, err
 	}
 	suite, evidence, patch, err := proofMaterial(repo, base, candidate, ProveOptions{Suite: proof.Suite, Evidence: proof.Evidence})
 	if err != nil {
-		return err
+		return policy.TestSuite{}, nil, err
 	}
 	if suite.Name != proof.Suite || !slices.Equal(evidence, proof.Evidence) || sha256Hex(patch) != proof.EvidencePatchSHA256 {
-		return fmt.Errorf("%w: proof %q does not match current suite, evidence, or patch", ErrInvalidEvidence, proof.ID)
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q does not match current suite, evidence, or patch", ErrInvalidEvidence, proof.ID)
 	}
-	return verifyProofLogs(root, proof)
+	return suite, patch, nil
 }
 
 func validateProofStructure(proof regressionProof) error {
@@ -509,6 +715,8 @@ func validProofHeader(proof regressionProof) bool {
 	return allValid(
 		proof.Version == artifactVersion,
 		validIdentifier(proof.ID),
+		validIdentifier(proof.ReviewID),
+		validRevision(proof.ReviewBase),
 		validRevision(proof.Base),
 		validRevision(proof.Candidate),
 		validIdentifier(proof.Suite),
