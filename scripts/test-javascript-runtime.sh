@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Offline contract tests for the pinned policy-owned JavaScript runtime.
-# Acquisition itself is exercised by tools/install-javascript-runtime.sh during
-# toolchain installation; these tests cover the checked-in pins, the checksum
-# and binary inventories, and every rejection path of the digest verifier.
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 verify_sha256="${policy_root}/tools/verify-sha256.sh"
@@ -38,15 +38,15 @@ expect_rejected() {
 node_version="$(tr -d '[:space:]' <"${policy_root}/tools/node-version.txt")"
 pnpm_version="$(tr -d '[:space:]' <"${policy_root}/tools/pnpm-version.txt")"
 
-# Pinned runtime versions are exact.
+
 for pin in "node:${node_version}" "pnpm:${pnpm_version}"; do
   if [[ ! "${pin#*:}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     fail "${pin%%:*} version pin '${pin#*:}' is not an exact version"
   fi
 done
 
-# The checksum inventory covers every supported host and only the pinned
-# versions, with one well-formed digest each.
+
+
 expected_entries="node-v${node_version}-darwin-arm64.tar.gz
 node-v${node_version}-darwin-x64.tar.gz
 node-v${node_version}-linux-arm64.tar.gz
@@ -69,7 +69,7 @@ while read -r entry digest extra; do
   fi
 done <"${checksums}"
 
-# The binary inventory lists contained relative paths only.
+
 while read -r artifact; do
   [[ -n "${artifact}" ]] || continue
   case "${artifact}" in
@@ -81,8 +81,8 @@ if ! grep -q 'reflink' "${binaries}"; then
   fail "binary inventory does not record the pnpm prebuilt binaries"
 fi
 
-# The installer resolves no ambient JavaScript toolchain and installs only
-# under the policy-owned tool directory.
+
+
 for script in "${installer}" "${runtime_env}"; do
   if grep -nE 'command -v (node|npm|npx|pnpm|corepack)\b' "${script}"; then
     fail "$(basename "${script}") looks up a JavaScript tool on PATH"
@@ -97,8 +97,8 @@ fi
 if ! grep -q 'javascript_sealed_run' "${installer}"; then
   fail "installer does not execute the staged runtime under a closed environment"
 fi
-# A caller that forgets to own a scratch directory must fail rather than reach
-# the invoking user's home.
+
+
 if (
   # shellcheck source=tools/javascript-env.sh
   source "${runtime_env}"
@@ -108,7 +108,7 @@ if (
   fail "a sealed run without a caller-owned scratch home was accepted"
 fi
 
-# verify-sha256.sh accepts a file that matches its pinned digest.
+
 payload="${fixture_root}/payload.bin"
 printf 'sealed javascript runtime fixture\n' >"${payload}"
 if command -v shasum >/dev/null 2>&1; then
@@ -121,7 +121,7 @@ printf '# fixture\npayload.bin %s\n' "${payload_digest}" >"${good_inventory}"
 "${verify_sha256}" "${good_inventory}" payload.bin "${payload}" \
   || fail "matching digest was rejected"
 
-# Every rejection path fails explicitly.
+
 tampered="${fixture_root}/tampered.bin"
 printf 'sealed javascript runtime fixture (tampered)\n' >"${tampered}"
 expect_rejected "a mismatched digest" "${verify_sha256}" "${good_inventory}" payload.bin "${tampered}"

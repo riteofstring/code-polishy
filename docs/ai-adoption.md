@@ -63,6 +63,43 @@ Adoption is complete only when:
 A config that merely parses is not an adoption. A green placeholder command is
 not evidence.
 
+## First-install setup wizard
+
+For a target with no `.code-polishy.json`, inspect the repository read-only long
+enough to tailor recommendations, then ask one bundled setup question before the
+first target write. Show every deliberate choice, its default, the recommended
+selection for this repository, and the evidence behind that recommendation.
+Wait for one response and record the selected configuration explicitly. This is
+a one-time policy setup, not recurring authorization for the agent to run normal
+adoption work.
+
+Present at least these choices:
+
+| Choice                                                                        | Default                                           | Recommendation rule                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source comments (`quality.allowComments`)                                     | `true`                                            | Keep `true` for human-written code or carefully curated existing comments. Recommend `false` only for a repository whose code is written and read entirely by AI and whose durable rationale belongs in mapped design documents. State that choosing `false` makes existing prose comments blocking before changing them. |
+| Adaptive application merge gate (`verification.mergeGate.recommendedModules`) | Omitted, so application changes use the full gate | Configure it only when read-only inventory identifies clearly bounded content modules that can safely use the recommended lane; shared escalation rules still force full when impact expands.                                                                                                                             |
+| Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost.                                                                                                                                                                  |
+| Gherkin methodology                                                           | Do not introduce it                               | Preserve and execute existing governed `.feature` files. Recommend adding Gherkin only when the owner wants executable behavior specifications as a working method.                                                                                                                                                       |
+
+Write the selected `allowComments` value even when it is `true`, so a new
+repository records the decision instead of relying on omission. Once the user
+answers, continue installation, configuration, repair, verification, and commit
+work without asking for permission at each step.
+
+Do not present mandatory or fact-triggered controls as optional. Python Ruff
+complexity, `ty` type checking, formatting, ordinary tests, dependency policy,
+and vulnerability checks activate automatically. Modules, capabilities,
+external inputs, artifact targets, product-input Markdown, and current design
+mappings describe repository facts; declare them whenever those facts exist.
+Conditional policy modules and their exact, expiring overrides are policy
+mechanisms, not setup preferences. Agent reviews and task sessions remain
+optional workflows selected only when requested or operationally applicable.
+
+For a repair or upgrade, preserve every explicit choice. Ask only about a newly
+introduced material choice that the existing configuration does not already
+answer; do not replay the entire wizard.
+
 ## 1. Establish both repository boundaries
 
 Before changing anything:
@@ -271,7 +308,7 @@ ordinary full behavior suite as described in
 ## 5. Reuse policy-owned tools and add only project-specific providers
 
 Allow source and dependency evidence to activate the shared Go, Shell, Ruff,
-Node/TypeScript, React, Electron, and OSV behavior. Do not copy equivalent
+`ty`, Node/TypeScript, React, Electron, and OSV behavior. Do not copy equivalent
 commands into target JSON.
 
 Add target `checks` only for facts that cannot be shared safely, such as:
@@ -288,10 +325,10 @@ the modules and capability it covers, have a bounded timeout, and fail when its
 evidence is missing. It must not auto-install packages during a policy check.
 
 The installed release supplies the Go toolchain, ShellCheck, staticcheck,
-govulncheck, Ruff, OSV-Scanner, and the sealed JavaScript tooling. Do not add
-target-local copies of those tools or ask a target dependency to satisfy shared
-coverage. A missing or corrupted shared tool means the locked release must be
-installed or repaired; it is not a target dependency gap.
+govulncheck, Ruff, `ty`, OSV-Scanner, and the sealed JavaScript tooling. Do not
+add target-local copies of those tools or ask a target dependency to satisfy
+shared coverage. A missing or corrupted shared tool means the locked release
+must be installed or repaired; it is not a target dependency gap.
 
 Use existing target tools where honest for genuinely project-specific
 providers. If such a provider requires a new or updated target dependency,
@@ -308,12 +345,13 @@ approved, generate the candidate lock without lifecycle scripts and run
 `code-polishy dependency-review --base <merge-target>` before the normal frozen
 installation.
 
-Optional supplemental mutation engines are not part of baseline adoption. Do
-not propose or install one unless the repository already requires its mutation
-kind or the owner explicitly requests mutation hardening. A new runtime
-architecture, commercial service, credential, or substantial product
-dependency remains a separate material choice: report it and request direction
-rather than silently choosing one.
+Optional supplemental mutation engines are not part of baseline adoption. The
+one-time setup wizard presents the choice, but the agent installs or configures
+no engine unless the repository already requires its mutation kind or the owner
+selects mutation hardening. After the wizard, do not re-propose it. A new runtime
+architecture, commercial service, credential, or substantial product dependency
+remains a separate material choice: report it and request direction rather than
+silently choosing one.
 
 ## 6. Define honest tests at each scale
 
@@ -386,14 +424,16 @@ policy rationale, and edge-case detail.
 The resulting guidance should make these execution boundaries clear:
 
 - exact/module/changed tests are routine during implementation;
+- ordinary Markdown-only changes are formatted and validated without
+  application tests or a user authorization prompt;
 - ordinary interactive edits use the caller's checkout and finish with a
   coherent verified commit; task sessions are for requested isolation or
   unattended work;
 - `test-levels` (and the `test-plan` compatibility alias) is read-only;
 - agents resolve a trusted merge target and run `merge-gate --base <merge-target>`
-  so Code Polishy selects ordinary recommended or full execution without a user
-  choice, and they do not immediately precede it with `test --changed` for the
-  same candidate;
+  so Code Polishy selects documentation, recommended, or full execution without
+  a user choice, and they do not immediately precede it with `test --changed`
+  for the same candidate;
 - local supplemental mutation and risk work runs through its separate direct
   stage after ordinary acceptance; only credentialed, destructive,
   production-mutating, and live-provider probes remain external approval
@@ -420,7 +460,8 @@ do not weaken the lock or add a download step.
 ## 9. Establish the baseline without hiding debt
 
 Iterate from narrow deterministic checks toward the policy-selected ordinary
-gate:
+gate. When adoption work changes only ordinary Markdown, run
+`code-polishy format --git-changes` and skip the application commands below:
 
 ```sh
 code-polishy doctor --strict

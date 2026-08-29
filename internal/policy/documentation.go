@@ -1,0 +1,129 @@
+package policy
+
+import (
+	"fmt"
+	pathpkg "path"
+	"strings"
+)
+
+type documentationValidation struct {
+	documents map[string]bool
+	modules   map[string]bool
+	sources   map[string]bool
+}
+
+func validateDocumentation(config *Config) error {
+	state := documentationValidation{
+		documents: map[string]bool{},
+		modules:   map[string]bool{},
+		sources:   map[string]bool{},
+	}
+	if err := validateDocumentationProductInputs(config.Documentation.ProductInputs); err != nil {
+		return err
+	}
+	for index, document := range config.Documentation.Design {
+		if err := state.validateDocument(config, index, document); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateDocumentationProductInputs(paths []string) error {
+	if err := validateUniqueStrings(paths, "documentation.productInputs", false); err != nil {
+		return err
+	}
+	for index, path := range paths {
+		label := fmt.Sprintf("documentation.productInputs[%d]", index)
+		if err := concreteRepositoryPath(path, label); err != nil {
+			return err
+		}
+		if !IsMarkdownPath(path) {
+			return fmt.Errorf("%s must name a Markdown file", label)
+		}
+	}
+	return nil
+}
+
+func IsMarkdownPath(path string) bool {
+	return strings.EqualFold(pathpkg.Ext(path), ".md") || strings.EqualFold(pathpkg.Ext(path), ".markdown")
+}
+
+func (state documentationValidation) validateDocument(config *Config, index int, document DesignDocument) error {
+	label := fmt.Sprintf("documentation.design[%d]", index)
+	if err := validateDesignDocumentPath(document.Path, label+".path"); err != nil {
+		return err
+	}
+	if state.documents[document.Path] {
+		return fmt.Errorf("duplicate design document path %q", document.Path)
+	}
+	state.documents[document.Path] = true
+	return state.validateTarget(config, document, label)
+}
+
+func (state documentationValidation) validateTarget(config *Config, document DesignDocument, label string) error {
+	if document.Module == "" && len(document.SourcePaths) == 0 {
+		return fmt.Errorf("%s must use exactly one of module or sourcePaths", label)
+	}
+	if document.Module != "" {
+		if len(document.SourcePaths) > 0 {
+			return fmt.Errorf("%s must use exactly one of module or sourcePaths", label)
+		}
+		return state.validateModule(config, document.Module, label)
+	}
+	return validateDesignSourcePaths(config, document.SourcePaths, label+".sourcePaths", state.sources)
+}
+
+func (state documentationValidation) validateModule(config *Config, module, label string) error {
+	if err := identifier(module, label+".module"); err != nil {
+		return err
+	}
+	if _, exists := config.ModuleByName[module]; !exists {
+		return fmt.Errorf("%s.module references unknown module %q", label, module)
+	}
+	if state.modules[module] {
+		return fmt.Errorf("module %q has more than one design document", module)
+	}
+	state.modules[module] = true
+	return nil
+}
+
+func validateDesignDocumentPath(value, label string) error {
+	if err := concreteRepositoryPath(value, label); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(value, "docs/design/") || !strings.HasSuffix(value, ".md") {
+		return fmt.Errorf("%s must name a Markdown document under docs/design", label)
+	}
+	return nil
+}
+
+func validateDesignSourcePaths(config *Config, paths []string, label string, seen map[string]bool) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("%s must not be empty", label)
+	}
+	for index, path := range paths {
+		pathLabel := fmt.Sprintf("%s[%d]", label, index)
+		if err := concreteRepositoryPath(path, pathLabel); err != nil {
+			return err
+		}
+		if seen[path] {
+			return fmt.Errorf("source path %q has more than one design document", path)
+		}
+		seen[path] = true
+		if owners := configuredModuleNames(config, path); len(owners) != 1 {
+			return fmt.Errorf("%s must match exactly one module, matched %d", pathLabel, len(owners))
+		}
+	}
+	return nil
+}
+
+func configuredModuleNames(config *Config, path string) []string {
+	owners := []string{}
+	for _, module := range config.Modules {
+		if MatchesAny(path, module.Paths) {
+			owners = append(owners, module.Name)
+		}
+	}
+	return owners
+}

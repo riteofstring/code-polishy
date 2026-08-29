@@ -13,7 +13,7 @@ func TestVerifyAcceptsTheReleaseAsInstalled(t *testing.T) {
 	if err := manifest.Verify(directory); err != nil {
 		t.Fatalf("a release as it was installed was refused: %v", err)
 	}
-	// A release keeps its own record, and nothing records that record.
+
 	if err := os.Remove(filepath.Join(directory, ManifestFilename)); err != nil {
 		t.Fatalf("remove the manifest: %v", err)
 	}

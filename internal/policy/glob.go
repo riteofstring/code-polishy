@@ -15,8 +15,6 @@ func MatchesAny(path string, patterns []string) bool {
 	return false
 }
 
-// Match implements portable path globs: * and ? stay inside one path segment,
-// while ** crosses directory boundaries. A leading **/ may match zero segments.
 func Match(path, pattern string) bool {
 	path = strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
 	pattern = strings.TrimPrefix(strings.ReplaceAll(pattern, "\\", "/"), "./")

@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# Materialize the exact Windows x64 policy toolchain without Bash, WSL,
-# Chocolatey, winget, npm, Corepack, or ambient language runtimes.
+
+
 $PolicyRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
   throw 'Code Polishy Windows releases currently require x64.'
@@ -111,15 +111,29 @@ try {
   if ($Ruff.Count -ne 1) { throw 'Ruff archive did not contain exactly one ruff.exe.' }
   Copy-Item -LiteralPath $Ruff[0].FullName -Destination (Join-Path $Bin 'ruff.exe') -Force
 
+  $TyVersion = Read-Pin 'tools/ty-version.txt'
+  $TyAsset = 'ty-x86_64-pc-windows-msvc.zip'
+  $TyArchive = Get-Verified $TyAsset "https://github.com/astral-sh/ty/releases/download/$TyVersion/$TyAsset"
+  $TyExtract = Join-Path $Scratch 'ty-extract'
+  Expand-Archive -LiteralPath $TyArchive -DestinationPath $TyExtract
+  $Ty = Join-Path $TyExtract 'ty.exe'
+  if (-not (Test-Path -LiteralPath $Ty -PathType Leaf)) { throw 'ty archive did not contain the expected executable.' }
+  $TyDestination = Join-Path $Bin 'ty.exe'
+  Copy-Item -LiteralPath $Ty -Destination $TyDestination -Force
+  $TyReported = (& $TyDestination --version)
+  if ($LASTEXITCODE -ne 0 -or $TyReported -notmatch "^ty $([regex]::Escape($TyVersion))(?:\s|$)") {
+    throw 'Pinned ty verification failed.'
+  }
+
   $OsvVersion = Read-Pin 'tools/osv-scanner-version.txt'
   $OsvAsset = 'osv-scanner_windows_amd64.exe'
   $Osv = Get-Verified $OsvAsset "https://github.com/google/osv-scanner/releases/download/$OsvVersion/$OsvAsset"
   Copy-Item -LiteralPath $Osv -Destination (Join-Path $Bin 'osv-scanner.exe') -Force
 
-  # Without symbolic-link privilege, pnpm uses absolute Windows junctions.
-  # Materialize at the stable final path so those links remain valid, and keep
-  # the path transaction-owned until installation succeeds so failure removes
-  # an incomplete bundle.
+
+
+
+
   New-Item -ItemType Directory -Force -Path $JavascriptRoot | Out-Null
   $BundleDestination = Join-Path $JavascriptRoot 'bundle'
   if (Test-Path -LiteralPath $BundleDestination) {
@@ -144,6 +158,7 @@ try {
   & (Join-Path $Bin 'govulncheck.exe') -version
   & (Join-Path $Bin 'osv-scanner.exe') --version
   & (Join-Path $Bin 'ruff.exe') --version
+  & (Join-Path $Bin 'ty.exe') --version
   & (Join-Path $ShellcheckRoot 'shellcheck.exe') --version
   Write-Host 'Installed the checksum-pinned Code Polishy Windows x64 toolchain.'
 } finally {

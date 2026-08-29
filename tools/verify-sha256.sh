@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Verify one downloaded file against its checked-in SHA-256 entry.
-#
-# Usage: verify-sha256.sh <checksum-inventory> <entry-name> <file>
-#
-# The inventory is a checked-in "<entry-name> <sha256>" table. A missing,
-# duplicated, or malformed entry is a failure, never an unverified download.
+
+
+
+
+
+
 
 if [[ "$#" -ne 3 ]]; then
   echo "usage: verify-sha256.sh <checksum-inventory> <entry-name> <file>" >&2

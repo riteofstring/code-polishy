@@ -73,7 +73,18 @@ This repository pins Gremlins `v0.6.0` by release checksum. Its self mutation
 script copies committed and working-tree state into a disposable Git worktree
 and enforces at least 80% test efficacy and 80% mutant coverage. Those numbers
 are a baseline, not permission to ignore a surviving mutant in behavior-critical
-changed code.
+changed code. The runner supplies those thresholds through a private temporary
+configuration because the pinned Gremlins release does not enforce the
+equivalent subcommand flags. Before mutation, the runner asks pinned Go which
+production files are inactive on the current host and excludes exactly those
+files; Gremlins otherwise counts build-incompatible source as uncovered.
+
+The quality module disables Gremlins' conditional-boundary operator. Its
+language scanners are tested through observable policy findings, while that
+operator predominantly changes private cursor comparisons without changing a
+finding. Requiring assertions against those private comparisons would create
+change-detector tests. The suite retains conditional negation, arithmetic,
+increment/decrement, and negative-inversion mutation and the same 80% gates.
 
 ## Supplemental execution
 
@@ -94,11 +105,12 @@ impact-relevant supplemental quality separately but executes none of it.
 
 An AI collaborator should first stabilize focused tests and, at an ordinary
 merge checkpoint, run `merge-gate --base <merge-target>` without asking the
-user to choose an ordinary profile. Run the direct supplemental command after
-ordinary acceptance when the caller or checked-in workflow requires local
-hardening. Credentialed, destructive, production-mutating, and live-provider
-probes need external approval; do not start every mutation suite after every
-edit.
+user to choose an ordinary level. An ordinary Markdown-only candidate selects
+the documentation level and zero application suites. Run the direct
+supplemental command after ordinary acceptance when the caller or checked-in
+workflow requires local hardening. Credentialed, destructive,
+production-mutating, and live-provider probes need external approval; do not
+start every mutation suite after every edit.
 
 ## Optional Gherkin, mandatory execution
 

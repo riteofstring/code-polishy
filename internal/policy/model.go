@@ -2,22 +2,17 @@ package policy
 
 import "time"
 
-// ConfigVersion is the one .code-polishy.json version the sealed runtime reads.
-// It names the shape a target declares facts in, so the schema, the parser, the
-// templates, and every fixture carry the same number.
 const ConfigVersion = 3
 
 const (
 	ConfigFilename = ".code-polishy.json"
-	// LockFilename is the other file a target checks in: the exact Code Polishy
-	// release it requires. internal/release owns what is in it; the name is
-	// here because it names a target's policy control plane, as
-	// ConfigFilename does.
+
 	LockFilename                            = ".code-polishy.lock.json"
 	MaxFileLines                            = 1000
 	MaxTestFileLines                        = 1500
 	MaxGoComplexity                         = 12
 	MaxGoTestComplexity                     = 20
+	MaxPythonComplexity                     = 10
 	MaxTypeScriptComplexity                 = 10
 	MaxTypeScriptTestComplexity             = 10
 	MaxTypeScriptDepth                      = 4
@@ -55,6 +50,7 @@ type Config struct {
 	Scope               Scope                `json:"scope,omitempty"`
 	Quality             Quality              `json:"quality,omitempty"`
 	Portability         Portability          `json:"portability,omitempty"`
+	Documentation       Documentation        `json:"documentation,omitempty"`
 	Modules             []Module             `json:"modules"`
 	Verification        Verification         `json:"verification,omitempty"`
 	Checks              []Command            `json:"checks,omitempty"`
@@ -65,9 +61,7 @@ type Config struct {
 	ConfigPath          string               `json:"-"`
 	ModuleByName        map[string]int       `json:"-"`
 	ActivePolicyModules []ActivePolicyModule `json:"-"`
-	// JavaScriptLintScopes is resolved, never configured: it is how the
-	// conditional policy modules a repository activated reach the sealed
-	// bundle's lint operation.
+
 	JavaScriptLintScopes []JavaScriptLintScope `json:"-"`
 }
 
@@ -88,15 +82,9 @@ type Project struct {
 type Scope struct {
 	Exclude   []string `json:"exclude,omitempty"`
 	Generated []string `json:"generated,omitempty"`
-	// EntryPoints are the governed files something outside the repository
-	// loads: a published entry, a runtime hook, a launcher. Reachability
-	// analysis cannot infer them without executing target configuration, so a
-	// target declares the ones the built-in conventions do not already cover.
+
 	EntryPoints []string `json:"entryPoints,omitempty"`
-	// Development are the governed files that exist only to build, configure,
-	// or exercise the product and never ship with it. Tests already are; a
-	// target declares the configuration, scripts, and harnesses that also are,
-	// because only it knows which of its files it ships.
+
 	Development []string       `json:"development,omitempty"`
 	Languages   []LanguageRule `json:"languages,omitempty"`
 }
@@ -110,6 +98,7 @@ type Quality struct {
 	MaxFileLines     int        `json:"maxFileLines,omitempty"`
 	MaxTestFileLines int        `json:"maxTestFileLines,omitempty"`
 	Complexity       Complexity `json:"complexity,omitempty"`
+	AllowComments    *bool      `json:"allowComments,omitempty"`
 	MaxDepth         int        `json:"maxDepth,omitempty"`
 	MaxTestDepth     int        `json:"maxTestDepth,omitempty"`
 	MaxParams        int        `json:"maxParams,omitempty"`
@@ -119,12 +108,28 @@ type Quality struct {
 type Complexity struct {
 	Go             int `json:"go,omitempty"`
 	GoTest         int `json:"goTest,omitempty"`
+	Python         int `json:"python,omitempty"`
 	TypeScript     int `json:"typescript,omitempty"`
 	TypeScriptTest int `json:"typescriptTest,omitempty"`
 }
 
+func (quality Quality) CommentsAllowed() bool {
+	return quality.AllowComments == nil || *quality.AllowComments
+}
+
 type Portability struct {
 	ExternalInputs []ExternalInput `json:"externalInputs,omitempty"`
+}
+
+type Documentation struct {
+	Design        []DesignDocument `json:"design,omitempty"`
+	ProductInputs []string         `json:"productInputs,omitempty"`
+}
+
+type DesignDocument struct {
+	Path        string   `json:"path"`
+	Module      string   `json:"module,omitempty"`
+	SourcePaths []string `json:"sourcePaths,omitempty"`
 }
 
 type ExternalInput struct {
@@ -190,9 +195,7 @@ type SupplyChain struct {
 	PreferredNewDependencyAgeDays int      `json:"preferredNewDependencyAgeDays,omitempty"`
 	AuditLevel                    string   `json:"auditLevel,omitempty"`
 	AllowedDependencyProtocols    []string `json:"allowedDependencyProtocols,omitempty"`
-	// AllowedLicenses is the license policy of a pnpm project, as the SPDX
-	// identifiers a resolved dependency may be licensed under. An empty list
-	// declares no license policy and enforces none.
+
 	AllowedLicenses            []string                   `json:"allowedLicenses,omitempty"`
 	NPMRegistryURL             string                     `json:"npmRegistryUrl,omitempty"`
 	Environment                []string                   `json:"environment,omitempty"`
@@ -203,10 +206,6 @@ type SupplyChain struct {
 	ArtifactSecurity           ArtifactSecurity           `json:"artifactSecurity,omitempty"`
 }
 
-// ReleaseArtifact declares one standalone third-party executable whose version
-// is owned by a checked-in pin rather than a supported dependency lock. Source
-// selects a fixed upstream metadata protocol; Locator identifies a package or
-// GitHub repository within that protocol, never an arbitrary URL.
 type ReleaseArtifact struct {
 	Name        string `json:"name"`
 	VersionFile string `json:"versionFile"`
@@ -306,10 +305,6 @@ type ActivePolicyModule struct {
 	Evidence string
 }
 
-// JavaScriptLintScope is the framework rule activation one governed root
-// resolved to. The nearest scope containing a file decides which rules the
-// sealed lint configuration runs over it; a file under no scope is linted with
-// the shared budgets alone.
 type JavaScriptLintScope struct {
 	Root             string
 	ReactHooks       bool

@@ -36,6 +36,7 @@ fi
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-mutation.XXXXXX")"
 worktree="${temporary_dir}/worktree"
+gremlins_config="${temporary_dir}/gremlins.yaml"
 cleanup() {
   git -C "${repo_root}" worktree remove --force "${worktree}" >/dev/null 2>&1 || true
   rm -rf "${temporary_dir}"
@@ -53,9 +54,30 @@ while IFS= read -r -d '' path; do
   cp -p "${repo_root}/${path}" "${worktree}/${path}"
 done < <(git -C "${repo_root}" ls-files --others --exclude-standard -z)
 
+printf '%s\n' \
+  'unleash:' \
+  '  workers: 2' \
+  '  threshold:' \
+  '    efficacy: 80' \
+  '    mutant-coverage: 80' >"${gremlins_config}"
+
 cd "${worktree}"
-"${gremlins}" unleash \
-  --threshold-efficacy 80 \
-  --threshold-mcover 80 \
-  --workers 2 \
-  "$@"
+inactive_patterns=()
+mutation_target="${1:-}"
+if [[ -n "${mutation_target}" && "${mutation_target}" != -* ]]; then
+  module_directory="$("${mutation_go}" list -m -f '{{ .Dir }}')"
+  go_list_template="{{ \$directory := .Dir }}{{ range .IgnoredGoFiles }}{{ printf \"%s/%s\\n\" \$directory . }}{{ end }}"
+  ignored_sources="$("${mutation_go}" list -f "${go_list_template}" "${mutation_target}")"
+  while IFS= read -r ignored_source; do
+    [[ -n "${ignored_source}" && "${ignored_source}" == "${module_directory}/"* && "${ignored_source}" != *_test.go ]] || continue
+    inactive_source="${ignored_source##*/}"
+    inactive_patterns+=("(^|/)${inactive_source//./[.]}$")
+  done <<<"${ignored_sources}"
+fi
+if [[ "${#inactive_patterns[@]}" -gt 0 ]]; then
+  printf '%s\n' '  exclude-files:' >>"${gremlins_config}"
+  for inactive_pattern in "${inactive_patterns[@]}"; do
+    printf "    - '%s'\n" "${inactive_pattern}" >>"${gremlins_config}"
+  done
+fi
+"${gremlins}" --config "${gremlins_config}" unleash "$@"

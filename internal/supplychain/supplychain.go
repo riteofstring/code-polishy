@@ -120,12 +120,6 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	return uniqueFindings(findings)
 }
 
-// nodeCapabilities names what one Node dependency manifest still needs a target
-// provider for. Code Polishy owns lock consistency for a pnpm project and audits
-// it with the pinned pnpm inside the sealed bundle, so a pnpm manifest needs
-// neither. No other package manager ships inside the bundle: a manifest that
-// declares one keeps owning both its lock synchronization and its vulnerability
-// scanning.
 func nodeCapabilities(repo repository.Repository, path string) []string {
 	capabilities := []string{}
 	if !pnpmGoverned(repo, path) {
@@ -370,10 +364,6 @@ func supplyCapabilityFindings(commands []policy.Command, module, label string, c
 	return findings
 }
 
-// requireOneJSONValue rejects a scanner or registry report that carries more
-// than the one document it was decoded as. Trailing content means the reader
-// and the writer disagree about what was reported, which is never something to
-// read past.
 func requireOneJSONValue(decoder *json.Decoder) error {
 	var extra any
 	if err := decoder.Decode(&extra); errors.Is(err, io.EOF) {

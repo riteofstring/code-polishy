@@ -1,29 +1,38 @@
 package quality
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-// A target without JavaScript never launches the sealed bundle, so an
-// uninstalled bundle is not its problem.
 func TestJavaScriptBundleStatusIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.PolicyRoot = t.TempDir()
-	findings, notes := JavaScriptBundleStatus(repo, []string{"internal/sample/file.go", "docs/plan.md"})
+	findings, notes := JavaScriptBundleStatus(repo, []string{"internal/sample/file.go", "config.json"})
 	if len(findings) != 0 || len(notes) != 0 {
 		t.Fatalf("findings = %+v, notes = %+v", findings, notes)
 	}
 }
 
-// A JavaScript-bearing target fails closed when the bundle is absent instead of
-// falling back to an ambient runtime or a target-installed tool.
+func TestJavaScriptBundleStatusRequiresTheSealedBundleForMarkdown(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.PolicyRoot = t.TempDir()
+	writeQualityFile(t, repo.Root, "docs/plan.md", "# Plan\n")
+	findings, notes := JavaScriptBundleStatus(repo, []string{"docs/plan.md"})
+	if len(findings) != 1 || findings[0].Check != "policy.tool" || len(notes) != 0 {
+		t.Fatalf("findings = %+v, notes = %+v", findings, notes)
+	}
+}
+
 func TestJavaScriptBundleStatusFailsClosedWithoutTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -40,9 +49,7 @@ func TestJavaScriptBundleStatusFailsClosedWithoutTheBundle(t *testing.T) {
 	}
 }
 
-// What answered is reported exactly: the digest over the installed bytes, both
-// pinned runtime versions, and every analyzer version.
-func TestJavaScriptBundleStatusReportsExactProvenance(t *testing.T) {
+func TestJavaScriptBundleStatusReportsCompleteProvenance(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.PolicyRoot = fakeInstalledBundle(t)
@@ -50,29 +57,54 @@ func TestJavaScriptBundleStatusReportsExactProvenance(t *testing.T) {
 	if len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}
-	expected := "sealed JavaScript bundle a1b2c3: node 24.18.0, pnpm 11.13.0, eslint 9.39.5, prettier 3.9.5"
-	if len(notes) != 1 || notes[0] != expected {
+	if len(notes) != 1 {
 		t.Fatalf("notes = %+v", notes)
+	}
+	for _, fact := range []string{"sealed JavaScript bundle", "a1b2c3", "node 24.18.0", "pnpm 11.13.0", "eslint 9.39.5", "prettier 3.9.5"} {
+		if !strings.Contains(notes[0], fact) {
+			t.Fatalf("provenance note omitted %q: %q", fact, notes[0])
+		}
 	}
 }
 
-// A target without JavaScript is never formatted by the sealed bundle, so a
-// Go-only or content-only repository never has to install it.
-func TestJavaScriptFormatIgnoresTargetsWithoutJavaScript(t *testing.T) {
+func TestJavaScriptFormatOwnsMarkdownWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
-	repo.PolicyRoot = t.TempDir()
+	policyRoot, observed := fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+	repo.PolicyRoot = policyRoot
 	writeQualityFile(t, repo.Root, "docs/plan.md", "# plan\n")
 	writeQualityFile(t, repo.Root, "config.json", "{}\n")
 	findings := JavaScriptFormatFindings(t.Context(), repo, []string{"docs/plan.md", "config.json"})
 	if len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}
+	request, err := os.ReadFile(observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(request), `"paths":["docs/plan.md"]`) {
+		t.Fatalf("formatter selection = %s", request)
+	}
 }
 
-// Everything the sealed formatter reports becomes a finding: a file it would
-// rewrite fails the check, and a file it could not decide fails closed instead
-// of passing as formatted.
+func TestJavaScriptFormatOwnsMarkdownExtensionCaseInsensitively(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	policyRoot, observed := fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+	repo.PolicyRoot = policyRoot
+	writeQualityFile(t, repo.Root, "docs/guide.MARKDOWN", "# Guide\n")
+	if findings := JavaScriptFormatFindings(t.Context(), repo, []string{"docs/guide.MARKDOWN"}); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
+	}
+	request, err := os.ReadFile(observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(request), `"paths":["docs/guide.MARKDOWN"]`) {
+		t.Fatalf("formatter selection = %s", request)
+	}
+}
+
 func TestJavaScriptFormatReportsChangedAndUndecidedFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -93,8 +125,6 @@ func TestJavaScriptFormatReportsChangedAndUndecidedFiles(t *testing.T) {
 	}
 }
 
-// Writing reports what it could not decide, but a file it rewrote is not a
-// failure: the caller asked for exactly that.
 func TestJavaScriptFormatWriteReportsOnlyUndecidedFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -114,8 +144,6 @@ func TestJavaScriptFormatWriteReportsOnlyUndecidedFiles(t *testing.T) {
 	}
 }
 
-// Code Polishy owns the file set. A generated file and a lockfile are never
-// selected, and the governed set is not limited to JavaScript source.
 func TestJavaScriptFormatSelectsOnlyTheGovernedFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -142,8 +170,6 @@ func TestJavaScriptFormatSelectsOnlyTheGovernedFiles(t *testing.T) {
 	}
 }
 
-// A target that ships formatter configuration is told the configuration is not
-// read, rather than having it silently ignored.
 func TestJavaScriptFormatRejectsTargetFormatterConfiguration(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -156,7 +182,6 @@ func TestJavaScriptFormatRejectsTargetFormatterConfiguration(t *testing.T) {
 	}
 }
 
-// A target without JavaScript is never linted by the sealed bundle either.
 func TestJavaScriptLintIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -167,17 +192,13 @@ func TestJavaScriptLintIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	}
 }
 
-// Everything the sealed linter reports becomes a finding: a budget violation is
-// a complexity finding, another rule is a lint finding, an ignored inline
-// directive is reported rather than silently honored, and a file the linter
-// could not decide fails closed.
-func TestJavaScriptLintReportsViolationsDirectivesAndUndecidedFiles(t *testing.T) {
+func TestJavaScriptLintReportsSourceCommentViolationsAndUndecidedFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	result := `{"findings":[` +
 		`{"path":"app/main.ts","line":4,"column":2,"rule":"max-depth","message":"too deep"},` +
 		`{"path":"app/view.tsx","line":9,"column":1,"rule":"jsx-a11y/alt-text","message":"missing alt"}],` +
-		`"directives":[{"path":"app/main.ts","line":1}],` +
+		`"comments":[{"path":"app/main.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
 		`"unsupported":[{"path":"app/broken.ts","reason":"line 2: Unexpected token"}]}`
 	repo.PolicyRoot, _ = fakeFileBundle(t, result)
 	for _, path := range []string{"app/main.ts", "app/view.tsx", "app/broken.ts"} {
@@ -187,13 +208,13 @@ func TestJavaScriptLintReportsViolationsDirectivesAndUndecidedFiles(t *testing.T
 	if len(findings) != 4 {
 		t.Fatalf("findings = %+v", findings)
 	}
-	if findings[0].Check != "quality.lintCoverage" || findings[0].Path != "app/broken.ts" ||
+	if findings[0].Check != "policy.sourceCommentCoverage" || findings[0].Path != "app/broken.ts" ||
 		!strings.Contains(findings[0].Message, "Unexpected token") {
 		t.Fatalf("coverage finding = %+v", findings[0])
 	}
-	if findings[1].Check != "quality.lintDirective" || findings[1].Path != "app/main.ts" ||
-		!strings.Contains(findings[1].Message, "line 1") {
-		t.Fatalf("directive finding = %+v", findings[1])
+	if findings[1].Check != "policy.sourceComment" || findings[1].Path != "app/main.ts" || findings[1].Subject != "1:1" ||
+		!strings.Contains(findings[1].Message, "prose comments") {
+		t.Fatalf("source comment finding = %+v", findings[1])
 	}
 	if findings[2].Check != "quality.complexity" || findings[2].Subject != "max-depth" ||
 		!strings.Contains(findings[2].Message, "line 4, column 2") {
@@ -204,8 +225,66 @@ func TestJavaScriptLintReportsViolationsDirectivesAndUndecidedFiles(t *testing.T
 	}
 }
 
-// Production and test source are linted under their own budgets, in ESLint's
-// allowed-maximum form, and neither selection can be handed the other's.
+func TestJavaScriptLintAllowsCommentsWithoutWeakeningLint(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	allowComments := true
+	repo.Config.Quality.AllowComments = &allowComments
+	result := `{"findings":[{"path":"app/main.ts","line":4,"column":2,"rule":"max-depth","message":"too deep"}],` +
+		`"comments":[{"path":"app/main.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
+		`"unsupported":[{"path":"app/broken.ts","reason":"line 2: Unexpected token"}]}`
+	repo.PolicyRoot, _ = fakeFileBundle(t, result)
+	for _, path := range []string{"app/main.ts", "app/broken.ts"} {
+		writeQualityFile(t, repo.Root, path, "export {};\n")
+	}
+	findings := JavaScriptLintFindings(t.Context(), repo, []string{"app/main.ts", "app/broken.ts"})
+	if len(findings) != 1 || findings[0].Check != "quality.complexity" || findings[0].Subject != "max-depth" {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestJavaScriptLintClassifiesParserCommentFacts(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	allowed := []javascript.LintComment{
+		{Path: "src/cli.ts", Kind: "Shebang", Raw: "#!/usr/bin/env node", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true, ByteZero: true},
+		{Path: "src/declarations.d.ts", Kind: "Line", Raw: `/// <reference path="./types.d.ts" />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference types="vitest" />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/libraries.mts", Kind: "Line", Raw: `/// <reference lib="es2022" />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/defaults.cts", Kind: "Line", Raw: `/// <reference no-default-lib="true" />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/environment.test.ts", Kind: "Line", Raw: "// @vitest-environment jsdom", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "tests/environment.ts", Kind: "Block", Raw: "/* @vitest-environment jsdom */", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+	}
+	if findings := javascriptLintResultFindings(repo, javascript.LintResult{Comments: allowed}); len(findings) != 0 {
+		t.Fatalf("allowed comments = %+v", findings)
+	}
+	rejected := []javascript.LintComment{
+		{Path: "src/cli.ts", Kind: "Shebang", Raw: "#!", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true, ByteZero: true},
+		{Path: "src/cli.ts", Kind: "Shebang", Raw: "#!/usr/bin/env node", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference path='./types.d.ts' />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference lib = "es2022" />`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference types="vitest" /> prose`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference types="vitest" /> eslint-disable`, Complete: true, Line: 1, Column: 1, BeforeCode: true},
+		{Path: "src/types.ts", Kind: "Line", Raw: `/// <reference types="vitest" />`, Complete: true, Line: 2, Column: 1},
+		{Path: "src/environment.ts", Kind: "Line", Raw: "// @vitest-environment jsdom", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "src/environment.test.ts", Kind: "Line", Raw: "//  @vitest-environment jsdom", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "src/environment.test.ts", Kind: "Block", Raw: "/* @vitest-environment jsdom  */", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "src/environment.test.ts", Kind: "Line", Raw: "// @vitest-environment jsdom", Complete: true, Line: 2, Column: 1, Preamble: true},
+		{Path: "src/environment.test.ts", Kind: "Line", Raw: "// @vitest-environment jsdom", Complete: true, Line: 2, Column: 1, BeforeCode: true},
+		{Path: "src/environment.test.ts", Kind: "Line", Raw: "// @vitest-environment jsdom", Line: 1, Column: 1, BeforeCode: true, Preamble: true},
+		{Path: "src/prose.ts", Kind: "Line", Raw: "// prose", Complete: true, Line: 3, Column: 5},
+	}
+	findings := javascriptLintResultFindings(repo, javascript.LintResult{Comments: rejected})
+	if len(findings) != len(rejected) {
+		t.Fatalf("rejected comments = %+v", findings)
+	}
+	for index, finding := range findings {
+		if finding.Check != "policy.sourceComment" || finding.Subject != fmt.Sprintf("%d:%d", rejected[index].Line, rejected[index].Column) {
+			t.Fatalf("finding %d = %+v", index, finding)
+		}
+	}
+}
+
 func TestJavaScriptLintSeparatesProductionAndTestBudgets(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -233,8 +312,6 @@ func TestJavaScriptLintSeparatesProductionAndTestBudgets(t *testing.T) {
 	}
 }
 
-// Framework rules follow the resolved policy modules, and only over the source
-// the declaring root owns: an unrelated package is linted without them.
 func TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -266,8 +343,6 @@ func TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot(t *testing.T) 
 	}
 }
 
-// Code Polishy owns the linted file set: generated source is never selected, and
-// neither is a file the sealed linter does not parse.
 func TestJavaScriptLintSelectsOnlyGovernedSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -291,8 +366,6 @@ func TestJavaScriptLintSelectsOnlyGovernedSource(t *testing.T) {
 	}
 }
 
-// A target that ships lint configuration is told it is not read, rather than
-// having it silently ignored.
 func TestJavaScriptLintRejectsTargetLintConfiguration(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -315,9 +388,6 @@ func TestJavaScriptTypeCheckIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	}
 }
 
-// Every diagnostic the compiler produced becomes a finding attributed to its
-// exact TypeScript code, and a project the bundle refused to analyze is missing
-// coverage rather than a clean project.
 func TestJavaScriptTypeCheckReportsDiagnosticsAndRefusedProjects(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -342,8 +412,6 @@ func TestJavaScriptTypeCheckReportsDiagnosticsAndRefusedProjects(t *testing.T) {
 	}
 }
 
-// A governed file the project's program never contained was never checked, so
-// it is reported rather than counted as passing.
 func TestJavaScriptTypeCheckFailsClosedOnUncoveredSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -361,8 +429,6 @@ func TestJavaScriptTypeCheckFailsClosedOnUncoveredSource(t *testing.T) {
 	}
 }
 
-// Source no project governs at all is reported without launching the bundle for
-// it, because there is no project to check it under.
 func TestJavaScriptTypeCheckReportsSourceNoProjectGoverns(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -379,10 +445,6 @@ func TestJavaScriptTypeCheckReportsSourceNoProjectGoverns(t *testing.T) {
 	}
 }
 
-// Each file is checked under the nearest project above it, so a package in a
-// monorepo is checked under its own settings rather than a sibling's or the
-// root's. A directory declaring several projects and no tsconfig.json declares
-// none of them, and the search continues upward instead of guessing.
 func TestJavaScriptTypeCheckSelectsTheNearestProject(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -413,8 +475,6 @@ func TestJavaScriptTypeCheckSelectsTheNearestProject(t *testing.T) {
 	}
 }
 
-// Only TypeScript source requires coverage. A generated file is never selected,
-// and JavaScript is checked only when the target's own project asks for it.
 func TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -445,9 +505,6 @@ func TestJavaScriptDeadCodeIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	}
 }
 
-// Reachability is a whole-tree fact, so the analysis is never narrowed to the
-// selection. It is skipped outright when the selection contains nothing it
-// reads, which is the only way a change avoids paying for it.
 func TestJavaScriptDeadCodeRunsOnlyForSelectionsItDependsOn(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -470,9 +527,6 @@ func TestJavaScriptDeadCodeRunsOnlyForSelectionsItDependsOn(t *testing.T) {
 	}
 }
 
-// Everything the analysis depends on is decided here: the nearest package owns
-// a file, the outermost package decides which tree the analysis covers, and the
-// entry points are the ones Code Polishy and the target declare.
 func TestJavaScriptDeadCodeDeclaresPackagesAndEntryPoints(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -507,9 +561,6 @@ func TestJavaScriptDeadCodeDeclaresPackagesAndEntryPoints(t *testing.T) {
 	}
 }
 
-// Two package trees with no package above them are two analyses, because
-// neither can resolve the other and pretending otherwise would report a
-// sibling's used export as dead.
 func TestJavaScriptDeadCodeAnalyzesIndependentTreesSeparately(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -532,9 +583,6 @@ func TestJavaScriptDeadCodeAnalyzesIndependentTreesSeparately(t *testing.T) {
 	}
 }
 
-// Governed source the analyzer cannot reach fails closed instead of passing:
-// source no package declares is never analyzed at all, and a file type the
-// analyzer does not read is reported rather than assumed reachable.
 func TestJavaScriptDeadCodeFailsClosedOnUnanalyzableSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -560,8 +608,6 @@ func TestJavaScriptDeadCodeFailsClosedOnUnanalyzableSource(t *testing.T) {
 	}
 }
 
-// Everything the analyzer reported becomes a finding, and a selected file it
-// answered about neither way is missing coverage rather than reachable.
 func TestJavaScriptDeadCodeReportsUnusedFilesExportsAndCoverage(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -605,8 +651,6 @@ func TestJavaScriptDeadCodeReportsUnusedFilesExportsAndCoverage(t *testing.T) {
 	}
 }
 
-// A target that ships dead-code configuration is told it decides nothing, for
-// the same reason a target lint or formatter configuration is.
 func TestJavaScriptDeadCodeReportsTargetConfiguration(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -623,7 +667,6 @@ func TestJavaScriptDeadCodeReportsTargetConfiguration(t *testing.T) {
 
 const emptyDeadCodeResult = `{"unusedFiles":[],"unusedExports":[],"covered":[],"unsupported":[]}`
 
-// deadCodeResult is a clean tree in which exactly these files were analyzed.
 func deadCodeResult(covered ...string) string {
 	quoted := make([]string, 0, len(covered))
 	for _, path := range covered {
@@ -632,11 +675,10 @@ func deadCodeResult(covered ...string) string {
 	return `{"unusedFiles":[],"unusedExports":[],"covered":[` + strings.Join(quoted, ",") + `],"unsupported":[]}`
 }
 
-const emptyLintResult = `{"findings":[],"directives":[],"unsupported":[]}`
+const emptyLintResult = `{"findings":[],"comments":[],"unsupported":[]}`
 
 const emptyTypeCheckResult = `{"diagnostics":[],"covered":[],"unsupported":[]}`
 
-// typeCheckResult is a clean project that covered exactly these files.
 func typeCheckResult(covered ...string) string {
 	quoted := make([]string, 0, len(covered))
 	for _, path := range covered {
@@ -645,29 +687,23 @@ func typeCheckResult(covered ...string) string {
 	return `{"diagnostics":[],"covered":[` + strings.Join(quoted, ",") + `],"unsupported":[]}`
 }
 
-// fakeInstalledBundle stands in for one installed policy checkout: a runtime and
-// a runner at the one policy-owned path, answering the closed protocol.
 func fakeInstalledBundle(t *testing.T) string {
 	t.Helper()
-	response := `{"protocolVersion":2,"operation":"provenance","result":{"bundleDigest":"a1b2c3",` +
+	response := `{"protocolVersion":3,"operation":"provenance","result":{"bundleDigest":"a1b2c3",` +
 		`"node":"24.18.0","pnpm":"11.13.0","tools":{"prettier":"3.9.5","eslint":"9.39.5"}}}`
 	return installBundleScript(t, "#!/bin/sh\nprintf '%s\\n' '"+response+"'\n")
 }
 
-// fakeFileBundle answers every file operation with one result and records each
-// request it was handed on its own line, so a test can assert exactly what Go
-// selected and how many exchanges it took.
 func fakeFileBundle(t *testing.T, result string) (policyRoot, observedRequests string) {
 	t.Helper()
 	observed := filepath.Join(t.TempDir(), "requests.jsonl")
 	current := observed + ".current"
-	// The adapter refuses an answer to another operation, so the stand-in
-	// answers with the operation it was actually handed.
+
 	script := "#!/bin/sh\n/bin/cat >" + current + "\n" +
 		`operation=$(/usr/bin/sed -n 's/.*"operation":"\([a-z-]*\)".*/\1/p' ` + current + ")\n" +
 		"/bin/cat " + current + " >>" + observed + "\n" +
 		"printf '\\n' >>" + observed + "\n" +
-		`printf '{"protocolVersion":2,"operation":"%s","result":%s}\n' "${operation}" '` + result + "'\n"
+		`printf '{"protocolVersion":3,"operation":"%s","result":%s}\n' "${operation}" '` + result + "'\n"
 	return installBundleScript(t, script), observed
 }
 

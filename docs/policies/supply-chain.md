@@ -147,6 +147,11 @@ install script, or executable configuration runs, and no registry is contacted.
   satisfy Code Polishy license coverage: that would not prove ordinary
   installation behavior. Complete foreign-platform evidence instead requires
   the ordinary gate on a compatible host.
+- Platform selectors follow pnpm's host-admission semantics exactly. An
+  explicit negative selector wins; a positive list requires a match; an
+  all-negative list admits hosts it does not exclude; and `any` is universal
+  only when it is the sole selector. Malformed or contradictory selector data
+  remains undecidable and fails closed.
 - A reviewed exception is a narrow, owned, expiring `exceptions` entry naming
   the check and the exact `<package>@<version>` subject, exactly like every
   other governed exception.
@@ -257,7 +262,9 @@ missing-coverage finding, never a workspace that declared nothing.
   package is not there to be read, so none of them can redirect the audit,
   suppress a result, or run target code. Advisories are reported as identities,
   packages, severities, and exact affected releases; the severity threshold and
-  every assessment stay in Go. A reported version that is no exact release is
+  every assessment stay in Go. pnpm's nonzero exit when advisories are present
+  is a valid audit report; only a refused, unreadable, or malformed JSON report
+  is an audit failure. A reported version that is no exact release is
   missing coverage, whether it is the only one the advisory named or one of
   several, so a partly readable advisory never passes as a decided one.
 - No other package manager ships inside the bundle, so a Node manifest that
@@ -509,8 +516,9 @@ reaches the minimum on its own.
 6. Inspect lifecycle allowlists and transitive changes.
 7. Run focused tests for affected modules.
 8. Resolve the trusted merge target and run
-   `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes normally select its complete full
-   gate without a recommended-versus-full question.
+   `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes
+   normally select its complete full gate without a user level-selection
+   question.
 9. Run the online supply-chain gate.
 10. Record any accepted finding with exact identity and severity, linked
     analysis and remediation, distinct owner and approver, approval record, and

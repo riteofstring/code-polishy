@@ -21,13 +21,23 @@ type Repository struct {
 	Config     policy.Config
 }
 
+const DesignDocumentationCheck = "policy.designDocumentation"
+
 type Selection struct {
-	// Base is the exact revision from which Git changes were selected. It is
-	// empty for selections that do not compare a candidate with a revision.
-	Base    string
-	Files   []string
-	Deleted []string
-	All     bool
+	Base            string
+	Candidate       CandidateDelta
+	Files           []string
+	All             bool
+	PolicySensitive bool
+}
+
+type CandidateDelta struct {
+	AddedOrModified []string
+	Deleted         []string
+}
+
+func (candidate CandidateDelta) Paths() []string {
+	return uniqueSorted(append(append([]string{}, candidate.AddedOrModified...), candidate.Deleted...))
 }
 
 type GoModule struct {
@@ -66,7 +76,7 @@ func (repo Repository) Select(mode string, explicit []string) (Selection, error)
 	switch mode {
 	case "all":
 		files, err := repo.AllFiles()
-		return Selection{Files: files, All: true}, err
+		return Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}, err
 	case "files":
 		if len(explicit) == 0 {
 			return Selection{}, errors.New("--files needs at least one path")
@@ -85,7 +95,8 @@ func (repo Repository) Select(mode string, explicit []string) (Selection, error)
 			}
 			files = append(files, normalized)
 		}
-		return Selection{Files: uniqueSorted(files)}, nil
+		files = uniqueSorted(files)
+		return Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files}, nil
 	case "staged":
 		return repo.stagedSelection()
 	case "changes", "":
@@ -131,9 +142,6 @@ func (repo Repository) AllFiles() ([]string, error) {
 	return uniqueSorted(files), err
 }
 
-// RawFiles inventories tracked and visible untracked files without applying the
-// target's configured excludes. It lets doctor prove that an adapter did not
-// hide executable code, manifests, or workflows from the shared baseline.
 func (repo Repository) RawFiles() ([]string, error) {
 	if repo.hasGit() {
 		return repo.rawGitFiles()
@@ -187,7 +195,7 @@ func (repo Repository) rawWalkFiles() ([]string, error) {
 func (repo Repository) changedSelection() (Selection, error) {
 	if !repo.hasGit() || repo.git("rev-parse", "--verify", "HEAD") != nil {
 		files, err := repo.AllFiles()
-		return Selection{Files: files, All: true}, err
+		return Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}, err
 	}
 	head, err := repo.gitLines("rev-parse", "--verify", "HEAD")
 	if err != nil || len(head) != 1 || !exactRevision(head[0]) {
@@ -196,8 +204,6 @@ func (repo Repository) changedSelection() (Selection, error) {
 	return repo.selectionSince(head[0])
 }
 
-// SelectBase returns the committed and working-tree changes since the merge
-// base of base and HEAD. Untracked files participate as current work.
 func (repo Repository) SelectBase(base string) (Selection, error) {
 	mergeBase, err := repo.MergeBase(base)
 	if err != nil {
@@ -206,8 +212,6 @@ func (repo Repository) SelectBase(base string) (Selection, error) {
 	return repo.selectionSince(mergeBase)
 }
 
-// MergeBase resolves a user-supplied ref to the single commit shared with
-// HEAD. Callers can then use the opaque exact revision with FilesAt and ReadAt.
 func (repo Repository) MergeBase(base string) (string, error) {
 	if !repo.hasGit() || repo.git("rev-parse", "--verify", "HEAD") != nil {
 		return "", errors.New("--base requires a Git repository with at least one commit")
@@ -284,9 +288,11 @@ func (repo Repository) selectionSince(revision string) (Selection, error) {
 		return Selection{}, err
 	}
 	rawChanged := append(append([]string{}, changed...), untracked...)
+	candidate := CandidateDelta{AddedOrModified: repo.candidatePaths(rawChanged), Deleted: repo.candidatePaths(deleted)}
 	files := repo.existingIncluded(rawChanged)
-	selection := Selection{Base: revision, Files: files, Deleted: uniqueSorted(deleted)}
-	if len(deleted) > 0 || repo.hasNonRegularIncluded(rawChanged) || repo.policyInputChanged(append(rawChanged, deleted...)) {
+	policySensitive := repo.policyInputChanged(candidate.Paths())
+	selection := Selection{Base: revision, Candidate: candidate, Files: files, PolicySensitive: policySensitive}
+	if len(candidate.Deleted) > 0 || repo.hasNonRegularIncluded(rawChanged) || policySensitive {
 		selection.Files, err = repo.AllFiles()
 		selection.All = true
 	}
@@ -301,17 +307,18 @@ func (repo Repository) stagedSelection() (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	expand, err := repo.stagedSelectionRequiresAll(staged, deleted)
+	candidate := CandidateDelta{AddedOrModified: repo.candidatePaths(staged), Deleted: repo.candidatePaths(deleted)}
+	expand, policySensitive, err := repo.stagedSelectionRequiresAll(staged, candidate)
 	if err != nil {
 		return Selection{}, err
 	}
 	if expand {
-		return repo.fullStagedSelection(deleted)
+		return repo.fullStagedSelection(candidate, policySensitive)
 	}
 	if err := repo.rejectStagedWorkingTreeDivergence(staged); err != nil {
 		return Selection{}, err
 	}
-	return Selection{Files: repo.existingIncluded(staged), Deleted: uniqueSorted(deleted)}, nil
+	return Selection{Candidate: candidate, Files: repo.existingIncluded(staged), PolicySensitive: policySensitive}, nil
 }
 
 func (repo Repository) stagedChanges() ([]string, []string, error) {
@@ -326,17 +333,18 @@ func (repo Repository) stagedChanges() ([]string, []string, error) {
 	return staged, deleted, nil
 }
 
-func (repo Repository) stagedSelectionRequiresAll(staged, deleted []string) (bool, error) {
+func (repo Repository) stagedSelectionRequiresAll(staged []string, candidate CandidateDelta) (bool, bool, error) {
 	nonRegular, err := repo.hasStagedNonRegularIncluded(staged)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return len(deleted) > 0 || nonRegular || repo.policyInputChanged(append(append([]string{}, staged...), deleted...)), nil
+	policySensitive := repo.policyInputChanged(candidate.Paths())
+	return len(candidate.Deleted) > 0 || nonRegular || policySensitive, policySensitive, nil
 }
 
-func (repo Repository) fullStagedSelection(deleted []string) (Selection, error) {
+func (repo Repository) fullStagedSelection(candidate CandidateDelta, policySensitive bool) (Selection, error) {
 	files, err := repo.AllFiles()
-	return Selection{Files: files, Deleted: uniqueSorted(deleted), All: true}, err
+	return Selection{Candidate: candidate, Files: files, All: true, PolicySensitive: policySensitive}, err
 }
 
 func (repo Repository) rejectStagedWorkingTreeDivergence(staged []string) error {
@@ -412,20 +420,10 @@ func (repo Repository) IsTest(path string) bool {
 	return policy.IsTestPath(path)
 }
 
-// IsDevelopment reports whether one governed file exists only to build,
-// configure, or exercise the product rather than to ship with it. A test
-// already does; which of the rest do is a fact only the target knows, so it
-// declares them.
 func (repo Repository) IsDevelopment(path string) bool {
 	return repo.IsTest(path) || policy.MatchesAny(path, repo.Config.Scope.Development)
 }
 
-// GoTool names the pinned Go toolchain executable Code Polishy runs. A release
-// carries the toolchain it pins, so there is one path and it is always the
-// policy root's: nothing is taken from an ambient PATH, a host installation, or
-// an environment override. A policy root without it reports the missing tool
-// rather than governing a repository with whatever Go the machine happens to
-// have.
 func (repo Repository) GoTool(name string) string {
 	executableName := name
 	if runtime.GOOS == "windows" {
@@ -434,10 +432,6 @@ func (repo Repository) GoTool(name string) string {
 	return filepath.Join(repo.PolicyRoot, ".tools", "go", runtime.GOOS+"-"+runtime.GOARCH, "go", "bin", executableName)
 }
 
-// CommandEnvironment is the single inventory of release-owned executables
-// exposed to governed commands and task-session writers. Callers prepend these
-// directories in order, so a host tool with the same name can never outrank
-// the release Code Polishy verified.
 func (repo Repository) CommandEnvironment() GovernedEnvironment {
 	goDirectory := filepath.Dir(repo.GoTool("go"))
 	policyBin := filepath.Join(repo.PolicyRoot, ".tools", "bin")
@@ -461,6 +455,7 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 			{Name: "govulncheck", Path: repo.PolicyTool("govulncheck"), Version: repo.ToolPin("govulncheck")},
 			{Name: "osv-scanner", Path: repo.PolicyTool("osv-scanner"), Version: repo.ToolPin("osv-scanner")},
 			{Name: "ruff", Path: repo.PolicyTool("ruff"), Version: repo.ToolPin("ruff")},
+			{Name: "ty", Path: repo.PolicyTool("ty"), Version: repo.ToolPin("ty")},
 		}},
 		{directory: shellcheckDirectory, tools: []GovernedTool{{Name: "shellcheck", Path: filepath.Join(shellcheckDirectory, executableName("shellcheck")), Version: repo.ToolPin("shellcheck")}}},
 		{directory: nodeDirectory, tools: []GovernedTool{{Name: "node", Path: filepath.Join(nodeDirectory, executableName("node")), Version: repo.ToolPin("node")}}},
@@ -504,21 +499,10 @@ func executableName(name string) string {
 	return name
 }
 
-// PolicyTool names one pinned analyzer the policy root carries, under the same
-// rule the Go toolchain follows: one path, always the policy root's.
 func (repo Repository) PolicyTool(name string) string {
 	return filepath.Join(repo.PolicyRoot, ".tools", "bin", executableName(name))
 }
 
-// ToolPin is the exact version the policy root pins for one carried executable,
-// without a leading `v`: the distributions disagree about it, and a release
-// records one form. The pin is a file the release carries beside the tool it
-// names, so a check compares what a tool reports against the release's own
-// record rather than against a version compiled into the engine.
-//
-// A policy root that does not record the pin pins nothing, which is reported as
-// an empty version so the caller refuses the tool rather than accepting
-// whatever happens to be installed.
 func (repo Repository) ToolPin(name string) string {
 	relative := filepath.Join("tools", name+"-version.txt")
 	if name == "go" {
@@ -590,6 +574,159 @@ func (repo Repository) ModuleNames(path string) []string {
 	return names
 }
 
+func (repo Repository) DesignDocumentFindings() []policy.Finding {
+	findings := []policy.Finding{}
+	for _, document := range repo.Config.Documentation.Design {
+		if message := repo.designDocumentPathMessage(document.Path); message != "" {
+			findings = append(findings, designDocumentFinding(document.Path, message))
+		}
+		if document.Module != "" && !repo.hasModule(document.Module) {
+			findings = append(findings, designDocumentFinding(document.Path, "mapped module does not exist"))
+		}
+		for _, sourcePath := range document.SourcePaths {
+			if message := repo.designSourcePathMessage(sourcePath); message != "" {
+				findings = append(findings, designDocumentFinding(sourcePath, message))
+			}
+		}
+	}
+	sort.Slice(findings, func(left, right int) bool {
+		return findings[left].Check+"\x00"+findings[left].Path+"\x00"+findings[left].Subject+"\x00"+findings[left].Message <
+			findings[right].Check+"\x00"+findings[right].Path+"\x00"+findings[right].Subject+"\x00"+findings[right].Message
+	})
+	return findings
+}
+
+func (repo Repository) DesignDocumentsForFiles(paths []string) []string {
+	documents := map[string]bool{}
+	for _, path := range paths {
+		normalized, err := repo.NormalizePath(path)
+		if err != nil {
+			continue
+		}
+		if document, exists := repo.designDocumentForSource(normalized); exists {
+			documents[document.Path] = true
+			continue
+		}
+		for _, module := range repo.ModuleNames(normalized) {
+			if document, exists := repo.designDocumentForModule(module); exists {
+				documents[document.Path] = true
+			}
+		}
+	}
+	return sortedSet(documents)
+}
+
+func (repo Repository) DesignDocumentsForModules(modules []string) ([]string, error) {
+	selected := map[string]bool{}
+	for _, module := range modules {
+		if !repo.hasModule(module) {
+			return nil, fmt.Errorf("unknown module %q", module)
+		}
+		if selected[module] {
+			return nil, fmt.Errorf("module %q was specified more than once", module)
+		}
+		selected[module] = true
+	}
+	documents := map[string]bool{}
+	for _, document := range repo.Config.Documentation.Design {
+		if document.Module != "" && selected[document.Module] {
+			documents[document.Path] = true
+			continue
+		}
+		for _, sourcePath := range document.SourcePaths {
+			for _, module := range repo.ModuleNames(sourcePath) {
+				if selected[module] {
+					documents[document.Path] = true
+					break
+				}
+			}
+		}
+	}
+	return sortedSet(documents), nil
+}
+
+func (repo Repository) designDocumentPathMessage(path string) string {
+	if !strings.HasPrefix(path, "docs/design/") || !strings.HasSuffix(path, ".md") {
+		return "mapped document must be Markdown under docs/design"
+	}
+	if err := repo.containedRegularFile(path); err != nil {
+		return "mapped document is missing, non-regular, or escapes the repository"
+	}
+	return ""
+}
+
+func (repo Repository) designSourcePathMessage(path string) string {
+	if err := repo.containedRegularFile(path); err != nil {
+		return "mapped source path is missing, non-regular, or escapes the repository"
+	}
+	if repo.IsExcluded(path) {
+		return "mapped source path is excluded from governed scope"
+	}
+	if !repo.IsSourceCommentSource(path) {
+		return "mapped source path is not governed source"
+	}
+	if owners := repo.ModuleNames(path); len(owners) != 1 {
+		return "mapped source path must belong to exactly one module"
+	}
+	return ""
+}
+
+func (repo Repository) containedRegularFile(path string) error {
+	normalized, err := repo.NormalizePath(path)
+	if err != nil || normalized != path {
+		return errors.New("path is not a canonical repository path")
+	}
+	info, err := os.Lstat(filepath.Join(repo.Root, filepath.FromSlash(path)))
+	if err != nil || !info.Mode().IsRegular() {
+		return errors.New("path is missing or non-regular")
+	}
+	_, err = repo.Resolve(path)
+	return err
+}
+
+func (repo Repository) hasModule(name string) bool {
+	if _, exists := repo.Config.ModuleByName[name]; exists {
+		return true
+	}
+	for _, module := range repo.Config.Modules {
+		if module.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (repo Repository) designDocumentForSource(path string) (policy.DesignDocument, bool) {
+	for _, document := range repo.Config.Documentation.Design {
+		if slices.Contains(document.SourcePaths, path) {
+			return document, true
+		}
+	}
+	return policy.DesignDocument{}, false
+}
+
+func (repo Repository) designDocumentForModule(module string) (policy.DesignDocument, bool) {
+	for _, document := range repo.Config.Documentation.Design {
+		if document.Module == module {
+			return document, true
+		}
+	}
+	return policy.DesignDocument{}, false
+}
+
+func designDocumentFinding(subject, message string) policy.Finding {
+	return policy.Finding{Check: DesignDocumentationCheck, Path: policy.ConfigFilename, Subject: subject, Message: message}
+}
+
+func sortedSet(values map[string]bool) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
 func (repo Repository) GoModules(files []string) []GoModule {
 	modules := []GoModule{}
 	for _, path := range files {
@@ -649,6 +786,17 @@ func (repo Repository) existingIncluded(paths []string) []string {
 	return uniqueSorted(files)
 }
 
+func (repo Repository) candidatePaths(paths []string) []string {
+	result := []string{}
+	for _, path := range paths {
+		path = strings.TrimPrefix(filepath.ToSlash(path), "./")
+		if path != "" {
+			result = append(result, path)
+		}
+	}
+	return uniqueSorted(result)
+}
+
 func (repo Repository) hasNonRegularIncluded(paths []string) bool {
 	for _, path := range paths {
 		path = strings.TrimPrefix(filepath.ToSlash(path), "./")
@@ -700,10 +848,7 @@ func normalizePolicyInputPath(path string) string {
 
 func isPolicyInput(path string) bool {
 	name := filepath.Base(path)
-	// The lock names which Code Polishy release governs this repository, so
-	// changing it changes what every check means, exactly as changing the
-	// configuration does. Together they are the whole policy control plane a
-	// target checks in.
+
 	if slices.Contains([]string{policy.ConfigFilename, policy.LockFilename}, path) ||
 		strings.HasPrefix(path, ".github/workflows/") {
 		return true
@@ -727,7 +872,7 @@ func policyToolConfigName(name string) bool {
 		strings.HasPrefix(name, "knip.") || strings.HasPrefix(name, ".knip.") ||
 		strings.HasPrefix(name, "prettier.config.") || name == ".prettierrc" || strings.HasPrefix(name, ".prettierrc.") ||
 		strings.HasPrefix(name, "tsconfig") && strings.HasSuffix(name, ".json") ||
-		slices.Contains([]string{"ruff.toml", ".ruff.toml", "osv-scanner.toml"}, name)
+		slices.Contains([]string{"ruff.toml", ".ruff.toml", "ty.toml", "osv-scanner.toml"}, name)
 }
 
 func containerInputName(name string) bool {

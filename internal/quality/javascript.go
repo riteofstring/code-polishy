@@ -14,67 +14,37 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// How long the sealed bundle has to report what it is. It reads only its own
-// installed JSON, so an exchange that takes longer than this is a broken
-// installation rather than slow work.
 const javascriptProvenanceBudget = 2 * time.Minute
 
-// How long the sealed bundle has to format one selection. It parses and prints
-// each selected file once, so this bounds a whole-repository run.
 const javascriptFormatBudget = 12 * time.Minute
 
-// How long the sealed bundle has to lint every group of one selection. Groups
-// share it, so a selection cannot buy more time by splitting into more of them.
 const javascriptLintBudget = 20 * time.Minute
 
-// How long the sealed bundle has to type check every project a selection
-// reaches. Projects share it for the same reason lint groups do.
 const javascriptTypeCheckBudget = 30 * time.Minute
 
-// How long the sealed bundle has to analyze every package tree for dead code.
-// Trees share it, so a repository cannot buy more time by having more of them.
 const javascriptDeadCodeBudget = 30 * time.Minute
 
-// The file types the sealed central formatting configuration governs. Code
-// Policy owns this list: a target neither extends nor narrows it.
 var javascriptFormatExtensions = map[string]bool{
 	".cjs": true, ".css": true, ".cts": true, ".html": true, ".js": true,
 	".json": true, ".jsonc": true, ".jsx": true, ".md": true, ".mjs": true,
-	".mts": true, ".ts": true, ".tsx": true, ".yaml": true, ".yml": true,
+	".markdown": true, ".mts": true, ".ts": true, ".tsx": true, ".yaml": true, ".yml": true,
 }
 
-// The source files the sealed linter and dead-code analyzer decide. It is the
-// JavaScript and TypeScript the bundle parses on its own, not everything the
-// formatter prints: a single-file component needs a compiler, and a compiler is
-// target code.
 var javascriptSourceExtensions = map[string]bool{
 	".cjs": true, ".cts": true, ".js": true, ".jsx": true,
 	".mjs": true, ".mts": true, ".ts": true, ".tsx": true,
 }
 
-// The source the sealed type checker must cover. It is TypeScript alone: a
-// JavaScript file is checked only when the target's own project asks for it,
-// so requiring coverage for one would fail every ordinary project.
 var javascriptTypeCheckExtensions = map[string]bool{
 	".cts": true, ".mts": true, ".ts": true, ".tsx": true,
 }
 
-// The budget rules, whose violations are complexity findings rather than
-// ordinary lint findings.
 var javascriptComplexityRules = map[string]bool{
 	"complexity": true, "max-depth": true, "max-params": true,
 }
 
-// JavaScriptBundleStatus launches the sealed, policy-owned JavaScript tool
-// bundle and reports exactly which bytes and analyzer versions answered.
-//
-// It launches only when the target actually bears JavaScript or TypeScript, so
-// a target without either never requires the bundle. When the target does bear
-// it, a missing, corrupted, or unanswering bundle is a finding rather than a
-// fallback: no ambient runtime, user cache, or target-installed tool may stand
-// in for it.
 func JavaScriptBundleStatus(repo repository.Repository, files []string) ([]policy.Finding, []string) {
-	if !bearsJavaScript(repo, files) {
+	if !bearsJavaScript(repo, files) && len(markdownFormatFiles(repo, files)) == 0 {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), javascriptProvenanceBudget)
@@ -88,15 +58,10 @@ func JavaScriptBundleStatus(repo repository.Repository, files []string) ([]polic
 	return nil, []string{note}
 }
 
-// JavaScriptFormatFindings reports every selected file the sealed bundle's
-// central formatting configuration would rewrite, and every selected file it
-// could not decide at all. It changes nothing.
 func JavaScriptFormatFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	return javascriptFormat(ctx, repo, files, false)
 }
 
-// JavaScriptFormatWrite rewrites those files. Writing is a separate operation
-// the bundle only performs when this Go caller asks for it.
 func JavaScriptFormatWrite(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	return javascriptFormat(ctx, repo, files, true)
 }
@@ -107,13 +72,18 @@ func javascriptFormat(ctx context.Context, repo repository.Repository, files []s
 		return []policy.Finding{toolFinding("javascript-bundle", err.Error())}
 	}
 	if !governed {
-		return nil
+		return markdownFormat(ctx, repo, files, write)
 	}
 	findings := javascriptFormatConfigFindings(repo, files)
 	selected := javascriptFormatFiles(repo, files)
+	return append(findings, runJavaScriptFormat(ctx, repo, selected, write)...)
+}
+
+func runJavaScriptFormat(ctx context.Context, repo repository.Repository, selected []string, write bool) []policy.Finding {
 	if len(selected) == 0 {
-		return findings
+		return nil
 	}
+	findings := []policy.Finding{}
 	ctx, cancel := context.WithTimeout(ctx, javascriptFormatBudget)
 	defer cancel()
 	bundle := javascript.Bundle{PolicyRoot: repo.PolicyRoot}
@@ -143,13 +113,6 @@ func javascriptFormat(ctx context.Context, repo repository.Repository, files []s
 	return findings
 }
 
-// JavaScriptLintFindings reports what the sealed bundle's central lint
-// configuration finds in the selected JavaScript and TypeScript source.
-//
-// Go decides everything the run depends on: which files are linted, the exact
-// budgets each one is held to, and which framework rules are active. The bundle
-// supplies ESLint, the parsers, and the plug-ins, so a target installs, pins,
-// and configures none of them.
 func JavaScriptLintFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	governed, err := javascriptTarget(repo)
 	if err != nil {
@@ -171,15 +134,11 @@ func JavaScriptLintFindings(ctx context.Context, repo repository.Repository, fil
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
 		}
-		findings = append(findings, javascriptLintResultFindings(result)...)
+		findings = append(findings, javascriptLintResultFindings(repo, result)...)
 	}
 	return findings
 }
 
-// One lint exchange over files that share exact budgets and activation. A
-// selection is split into as few of these as its own facts require, so a test
-// file is never held to a production budget and a package without React never
-// has React rules run over it.
 type javascriptLintGroup struct {
 	limits     javascript.LintLimits
 	activation javascript.LintActivation
@@ -215,9 +174,6 @@ func javascriptLintGroups(repo repository.Repository, files []string) []javascri
 	return groups
 }
 
-// The shared thresholds in ESLint's form. A budget is the complexity a file
-// must not reach, so the rule's allowed maximum is one less; depth and
-// parameter limits are already allowed maximums.
 func javascriptLintLimits(repo repository.Repository, test bool) javascript.LintLimits {
 	quality := repo.Config.Quality
 	if test {
@@ -241,10 +197,6 @@ func javascriptLimit(value, fallback int) int {
 	return value
 }
 
-// Which framework rules a file is linted with, decided by the conditional
-// policy modules already resolved for the repository. The nearest declaring
-// root wins, so a React package in a monorepo does not activate React rules
-// over an unrelated sibling.
 func javascriptLintActivation(repo repository.Repository, path string) javascript.LintActivation {
 	activation := javascript.LintActivation{}
 	nearest := ""
@@ -262,19 +214,25 @@ func javascriptScopeOwns(root, path string) bool {
 	return root == "." || strings.HasPrefix(path, root+"/")
 }
 
-func javascriptLintResultFindings(result javascript.LintResult) []policy.Finding {
+func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
 	findings := []policy.Finding{}
-	for _, entry := range result.Unsupported {
-		findings = append(findings, policy.Finding{
-			Check: "quality.lintCoverage", Path: entry.Path, Subject: "eslint",
-			Message: "the policy-owned linter could not decide this file: " + entry.Reason,
-		})
-	}
-	for _, directive := range result.Directives {
-		findings = append(findings, policy.Finding{
-			Check: "quality.lintDirective", Path: directive.Path, Subject: "eslint",
-			Message: fmt.Sprintf("line %d declares an inline ESLint directive, which the sealed configuration never honors; remove it or declare a Code Polishy exception", directive.Line),
-		})
+	if !repo.Config.Quality.CommentsAllowed() {
+		for _, entry := range result.Unsupported {
+			findings = append(findings, policy.Finding{
+				Check: "policy.sourceCommentCoverage", Path: entry.Path, Subject: "eslint",
+				Message: "the policy-owned source-comment scanner could not decide this file: " + entry.Reason,
+			})
+		}
+		for _, comment := range result.Comments {
+			if javascriptSourceCommentAllowed(repo, comment) {
+				continue
+			}
+			findings = append(findings, policy.Finding{
+				Check: "policy.sourceComment", Path: comment.Path,
+				Subject: fmt.Sprintf("%d:%d", comment.Line, comment.Column),
+				Message: "prose comments and docstrings are forbidden; move durable context to a design document or use an allowed machine directive",
+			})
+		}
 	}
 	for _, violation := range result.Findings {
 		check := "quality.lint"
@@ -289,14 +247,51 @@ func javascriptLintResultFindings(result javascript.LintResult) []policy.Finding
 	return findings
 }
 
-// JavaScriptTypeCheckFindings reports what the TypeScript compiler finds in the
-// projects that govern the selected source.
-//
-// The sealed bundle supplies the compiler, so a target pins and installs none.
-// The target still owns its projects, because the language level, libraries,
-// and strictness of a codebase are facts about that codebase. Go decides which
-// project governs which file and requires that a governed file is actually
-// covered by one: a file no project reaches is missing coverage, not clean.
+func javascriptSourceCommentAllowed(repo repository.Repository, comment javascript.LintComment) bool {
+	return javascriptShebangAllowed(comment) ||
+		javascriptTypeScriptReferenceAllowed(comment) ||
+		javascriptVitestEnvironmentAllowed(repo, comment)
+}
+
+func javascriptShebangAllowed(comment javascript.LintComment) bool {
+	return comment.Complete && comment.Kind == "Shebang" && comment.ByteZero && comment.BeforeCode && comment.Preamble &&
+		comment.Line == 1 && comment.Column == 1 && strings.HasPrefix(comment.Raw, "#!") &&
+		strings.TrimSpace(strings.TrimPrefix(comment.Raw, "#!")) != ""
+}
+
+func javascriptTypeScriptReferenceAllowed(comment javascript.LintComment) bool {
+	return comment.Complete && javascriptTypeCheckExtensions[strings.ToLower(filepath.Ext(comment.Path))] &&
+		comment.Kind == "Line" && comment.BeforeCode && javascriptTripleSlashReference(comment.Raw)
+}
+
+func javascriptTripleSlashReference(raw string) bool {
+	const prefix = "/// <reference "
+	const suffix = " />"
+	if !strings.HasPrefix(raw, prefix) || !strings.HasSuffix(raw, suffix) {
+		return false
+	}
+	attribute := strings.TrimSuffix(strings.TrimPrefix(raw, prefix), suffix)
+	return javascriptTripleSlashAttribute(attribute, "path") ||
+		javascriptTripleSlashAttribute(attribute, "types") ||
+		javascriptTripleSlashAttribute(attribute, "lib") ||
+		attribute == `no-default-lib="true"`
+}
+
+func javascriptTripleSlashAttribute(attribute, name string) bool {
+	prefix := name + `="`
+	if !strings.HasPrefix(attribute, prefix) || !strings.HasSuffix(attribute, `"`) {
+		return false
+	}
+	value := strings.TrimSuffix(strings.TrimPrefix(attribute, prefix), `"`)
+	return value != "" && !strings.ContainsAny(value, "\"\r\n")
+}
+
+func javascriptVitestEnvironmentAllowed(repo repository.Repository, comment javascript.LintComment) bool {
+	return comment.Complete && repo.IsTest(comment.Path) && comment.BeforeCode && comment.Preamble &&
+		((comment.Kind == "Line" && comment.Raw == "// @vitest-environment jsdom") ||
+			(comment.Kind == "Block" && comment.Raw == "/* @vitest-environment jsdom */"))
+}
+
 func JavaScriptTypeCheckFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	inventory, err := repo.AllFiles()
 	if err != nil {
@@ -326,9 +321,6 @@ func JavaScriptTypeCheckFindings(ctx context.Context, repo repository.Repository
 	return findings
 }
 
-// One typecheck exchange: the project and the selected files it must cover. A
-// file is checked by the nearest project above it, so a monorepo package is
-// checked under its own settings rather than an unrelated sibling's.
 type javascriptTypeCheckProject struct {
 	project string
 	paths   []string
@@ -358,7 +350,6 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 	return projects, ungoverned
 }
 
-// The selected source the type checker must cover.
 func javascriptTypeCheckFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
@@ -370,10 +361,6 @@ func javascriptTypeCheckFiles(repo repository.Repository, files []string) []stri
 	return selected
 }
 
-// The one project each directory declares. A directory declaring tsconfig.json
-// declares that; a directory declaring exactly one other tsconfig*.json
-// declares that instead. Anything more ambiguous declares nothing, so the
-// search continues upward rather than guessing which project a file belongs to.
 func javascriptProjectConfigurations(inventory []string) map[string]string {
 	declared := map[string][]string{}
 	for _, path := range inventory {
@@ -404,8 +391,6 @@ func javascriptDirectoryFile(directory, name string) string {
 	return directory + "/" + name
 }
 
-// The nearest project above a file, which is the project whose settings that
-// file is actually compiled under.
 func javascriptNearestProject(configurations map[string]string, path string) (string, bool) {
 	directory := filepath.ToSlash(filepath.Dir(path))
 	for {
@@ -444,18 +429,6 @@ func javascriptCoverageFinding(path, message string) policy.Finding {
 	return policy.Finding{Check: "quality.typecheckCoverage", Path: path, Subject: "typescript", Message: message}
 }
 
-// JavaScriptDeadCodeFindings reports the governed source no entry point reaches
-// and the exported symbols nothing uses.
-//
-// Reachability is a property of a whole package tree rather than of one file,
-// so the analysis always covers a tree: deleting the last import of a module
-// makes an untouched file dead. It runs whenever the selection contains
-// something that can change that answer, and is skipped entirely otherwise.
-//
-// Go owns every fact the analysis depends on: which package owns which governed
-// file, which of those files are entry points, and which governed source went
-// unanalyzed. The bundle supplies Knip, so a target installs, pins, and
-// configures none of it.
 func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	inventory, err := repo.AllFiles()
 	if err != nil {
@@ -488,22 +461,16 @@ func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository,
 	return findings
 }
 
-// One dead-code exchange: the package tree it analyzes, and every package in
-// that tree with the governed files and entry points Go decided for it.
 type javascriptDeadCodeAnalysis struct {
 	directory  string
 	workspaces []javascript.DeadCodeWorkspace
 }
 
-// One governed file the analysis did not decide, with the reason.
 type javascriptUncoveredFile struct {
 	path   string
 	reason string
 }
 
-// Whether the selection contains anything the dead-code answer depends on. The
-// analysis is never narrowed to the selection, because a whole tree decides
-// what is reachable; it is only skipped when nothing it reads changed.
 func javascriptDeadCodeSelected(files []string) bool {
 	for _, path := range files {
 		name := filepath.Base(path)
@@ -549,7 +516,6 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 	return javascriptDeadCodeTrees(packages, grouped), uncovered
 }
 
-// Every directory that declares a package.
 func javascriptPackageRoots(inventory []string) map[string]bool {
 	roots := map[string]bool{}
 	for _, path := range inventory {
@@ -560,7 +526,6 @@ func javascriptPackageRoots(inventory []string) map[string]bool {
 	return roots
 }
 
-// The package that owns a file, which is the nearest one above it.
 func javascriptOwningPackage(packages map[string]bool, path string) (string, bool) {
 	directory := filepath.ToSlash(filepath.Dir(path))
 	for {
@@ -574,10 +539,6 @@ func javascriptOwningPackage(packages map[string]bool, path string) (string, boo
 	}
 }
 
-// One analysis per independent package tree. The outermost package above a
-// package decides which tree it belongs to, so a workspace monorepo is analyzed
-// whole -- an export a sibling package uses is used -- and two unrelated
-// package trees are analyzed separately rather than pretending to be one.
 func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javascript.DeadCodeWorkspace) []javascriptDeadCodeAnalysis {
 	trees := map[string][]javascript.DeadCodeWorkspace{}
 	for root, workspace := range grouped {
@@ -613,15 +574,8 @@ func javascriptOutermostPackage(packages map[string]bool, root string) string {
 	return outermost
 }
 
-// The conventional names of a module something loads rather than imports.
 var javascriptEntryNames = map[string]bool{"cli": true, "index": true, "main": true}
 
-// Which governed files are entry points. Code Polishy owns this: a test file is
-// loaded by its runner, a module at a conventional package entry name is loaded
-// by whatever consumes the package, a configuration module beside a package
-// manifest is loaded by the tool it configures, and a target declares the rest
-// as facts about itself. None of it is learned from a framework configuration
-// file, because learning it that way means executing that file.
 func javascriptEntryPoint(repo repository.Repository, root, path string) bool {
 	if repo.IsTest(path) || policy.MatchesAny(path, repo.Config.Scope.EntryPoints) {
 		return true
@@ -669,7 +623,6 @@ func javascriptDeadCodeResultFindings(analysis javascriptDeadCodeAnalysis, resul
 	return findings
 }
 
-// What each analyzer issue type calls the symbol it reported.
 var javascriptUnusedExportNouns = map[string]string{
 	"classMembers": "class member", "enumMembers": "enum member",
 	"exports": "export", "nsExports": "namespace export",
@@ -692,9 +645,6 @@ func javascriptDeadCodeCoverageFinding(path, message string) policy.Finding {
 	return policy.Finding{Check: "quality.deadCodeCoverage", Path: path, Subject: "knip", Message: message}
 }
 
-// A target that ships dead-code configuration believes it decides what is
-// reachable. Code Polishy owns the sealed configuration and never reads such a
-// file, so it is reported rather than silently ignored.
 func javascriptDeadCodeConfigFindings(files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
@@ -710,9 +660,6 @@ func javascriptDeadCodeConfigFindings(files []string) []policy.Finding {
 	return findings
 }
 
-// A target that ships lint configuration believes it decides which rules run.
-// Code Polishy owns the sealed central configuration and never reads such a
-// file, so it is reported rather than silently ignored.
 func javascriptLintConfigFindings(files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
@@ -728,9 +675,6 @@ func javascriptLintConfigFindings(files []string) []policy.Finding {
 	return findings
 }
 
-// A target that ships formatter configuration believes it decides formatting.
-// Code Polishy owns the sealed central configuration and never reads such a
-// file, so it is reported rather than silently ignored.
 func javascriptFormatConfigFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
@@ -750,10 +694,6 @@ func javascriptFormatConfigName(name string) bool {
 		strings.HasPrefix(name, "prettier.config.") || name == ".prettierignore"
 }
 
-// The governed files the sealed formatter decides. Generated files are excluded
-// for the same reason every other quality check excludes them: nobody edits
-// them. A lockfile is excluded because its package manager owns its exact
-// bytes, and reformatting one would rewrite a record rather than source.
 func javascriptFormatFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
@@ -770,10 +710,16 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 	return selected
 }
 
-// Whether the target bears JavaScript or TypeScript at all. It is decided over
-// the whole repository rather than one selection, so a change that touches only
-// Markdown in a JavaScript target is still formatted, and no selection in a
-// target without JavaScript ever launches the bundle.
+func markdownFormatFiles(repo repository.Repository, files []string) []string {
+	selected := []string{}
+	for _, path := range files {
+		if markdownPath(path) && !repo.IsGenerated(path) {
+			selected = append(selected, path)
+		}
+	}
+	return uniqueMarkdownPaths(selected)
+}
+
 func javascriptTarget(repo repository.Repository) (bool, error) {
 	inventory, err := repo.AllFiles()
 	if err != nil {
@@ -791,8 +737,6 @@ func bearsJavaScript(repo repository.Repository, files []string) bool {
 	return false
 }
 
-// Every analyzer version the bundle answered with, so a report attributes its
-// JavaScript findings to exact tools.
 func analyzerVersions(tools map[string]string) string {
 	described := make([]string, 0, len(tools))
 	for name, version := range tools {

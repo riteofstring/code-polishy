@@ -18,9 +18,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-// Full npm packuments for long-lived scoped packages can exceed 15 MiB. Keep
-// registry reads bounded while allowing enough time to transfer and decode
-// valid metadata up to the release-age decoder's size limit.
 const registryRequestTimeout = 2 * time.Minute
 
 func checkGoOnlineWithCommands(ctx context.Context, repo repository.Repository, module repository.GoModule, commands []policy.Command, commandRunner runner.Runner) []policy.Finding {
@@ -141,14 +138,6 @@ func resolvedGoModule(item goListedModule) goListedModule {
 	return item
 }
 
-// auditNodeWithCommand parses one native vulnerability audit that the common
-// runner already executed through the sealed JavaScript bundle.
-//
-// The audit is pnpm's own, so it stays the independent lane it always was next
-// to OSV, but the executable that performs it is now the policy-owned one at a
-// known installed path rather than whatever a PATH lookup found. Only pnpm is
-// audited: no other package manager ships inside the bundle, so a target using
-// one declares a security provider instead, which CoverageFindings requires.
 func auditNodeWithCommand(ctx context.Context, repo repository.Repository, manifest nodeManifest, command policy.Command, commandRunner runner.Runner) []policy.Finding {
 	scope, found := nodeLockPath(repo, manifest.Root, manifest.Manager)
 	if !found {
@@ -178,9 +167,6 @@ func auditNodeWithCommand(ctx context.Context, repo repository.Repository, manif
 	return nodeAuditFindings(repo.Config.SupplyChain.AuditLevel, result, scope)
 }
 
-// nodeAuditFindings decides what the native audit reported. Severity, exactness,
-// and coverage are all decided here: the bundle reports what the registry
-// answered and nothing about what it means.
 func nodeAuditFindings(auditLevel string, result javascript.AuditResult, path string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, entry := range result.Unsupported {
@@ -201,12 +187,6 @@ func nodeAuditFindings(auditLevel string, result javascript.AuditResult, path st
 	return uniqueFindings(findings)
 }
 
-// nodeAdvisoryFindings names one advisory once per affected release, and names
-// every reported version that is no exact release at all. A version this side
-// cannot name is a version no assessment, expiry, or OSV result can be
-// reconciled with, so it is missing coverage rather than something to drop:
-// dropping it would let an advisory that also named one usable release report
-// as fully covered while part of what it said went unread.
 func nodeAdvisoryFindings(advisory javascript.Advisory, path string) []policy.Finding {
 	findings := []policy.Finding{}
 	unusable := []string{}
@@ -226,8 +206,6 @@ func nodeAdvisoryFindings(advisory javascript.Advisory, path string) []policy.Fi
 	return findings
 }
 
-// nodeAdvisoryCoverageFinding names the reported versions no policy decision can
-// be made against.
 func nodeAdvisoryCoverageFinding(path string, advisory javascript.Advisory, versions []string) policy.Finding {
 	return policy.Finding{
 		Check: "policy.securityScanner", Path: path, Subject: advisory.ID,
@@ -235,8 +213,6 @@ func nodeAdvisoryCoverageFinding(path string, advisory javascript.Advisory, vers
 	}
 }
 
-// nodeVulnerabilityFinding is one advisory against one resolved release. The
-// ecosystem is pnpm because the sealed bundle audits pnpm and nothing else.
 func nodeVulnerabilityFinding(path, advisory string, aliases []string, packageName, affected, severity, title string) policy.Finding {
 	severity = policy.NormalizeVulnerabilitySeverity(severity)
 	if title == "" {

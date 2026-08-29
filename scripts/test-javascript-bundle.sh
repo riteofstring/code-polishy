@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Offline contract tests for the sealed, policy-owned JavaScript tool bundle.
-#
-# Acquisition and materialization themselves are exercised by
-# tools/install-javascript-bundle.sh during toolchain installation. These tests
-# cover the checked-in manifest, settings, and inventory, the checked-in modules
-# the runner loads, and every rejection path of the lock, tree, and
-# installed-manifest verifiers. What the runner itself reports and refuses is
-# covered by scripts/test-javascript-runner.sh and
-# scripts/test-javascript-project.sh.
+
+
+
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/javascript-env.sh
@@ -23,12 +23,12 @@ inventory="${policy_root}/tools/javascript_bundle_inventory.txt"
 manifest="${bundle_source}/package.json"
 settings="${bundle_source}/pnpm-workspace.yaml"
 lockfile="${bundle_source}/pnpm-lock.yaml"
-# Every checked-in module the runner loads. They are policy-owned bytes covered
-# by the source digest and the installed manifest, exactly like the entry point.
+
+
 runner_sources=("${bundle_source}"/*.mjs)
 
-# Resolved physically: a file operation admits only a normal absolute root, and
-# TMPDIR is allowed to be a symlink or to end in a separator.
+
+
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-javascript-bundle-test.XXXXXX")" && pwd -P)"
 cleanup() {
   rm -rf "${fixture_root}"
@@ -52,8 +52,8 @@ expect_rejected() {
   fi
 }
 
-# Every direct dependency is pinned to an exact version, and the bundle declares
-# the exact runtime and package manager it is resolved against.
+
+
 node_version="$(tr -d '[:space:]' <"${policy_root}/tools/node-version.txt")"
 pnpm_version="$(tr -d '[:space:]' <"${policy_root}/tools/pnpm-version.txt")"
 if ! grep -q "\"packageManager\": \"pnpm@${pnpm_version}\"" "${manifest}"; then
@@ -71,14 +71,14 @@ done < <(awk '/"dependencies"/ { in_dependencies = 1; next }
   /^  }/ { in_dependencies = 0 }
   in_dependencies { gsub(/[",]/, ""); print $2 }' "${manifest}")
 
-# The manifest declares no script of its own, so nothing runs when the bundle is
-# installed or invoked.
+
+
 if grep -q '"scripts"' "${manifest}"; then
   fail "manifest declares scripts"
 fi
 
-# The settings that make installation sealed are all present at the one owner
-# pnpm reads them from.
+
+
 for required_setting in \
   "onlyBuiltDependencies: []" \
   "strictDepBuilds: true" \
@@ -98,12 +98,12 @@ for required_setting in \
   fi
 done
 
-# The npm registry is the only source the bundle names anywhere.
+
 if ! grep -q '^registry=https://registry.npmjs.org/$' "${bundle_source}/.npmrc"; then
   fail "bundle npmrc does not pin the npm registry"
 fi
 
-# Nothing in the bundle tooling resolves a JavaScript tool from PATH.
+
 for script in "${policy_root}/tools/javascript-env.sh" \
   "${policy_root}/tools/install-javascript-bundle.sh" \
   "${bundle_manifest}" \
@@ -116,8 +116,8 @@ for script in "${policy_root}/tools/javascript-env.sh" \
   fi
 done
 
-# The checked-in lock is admissible, and the inventory accounts for exactly the
-# packages it names.
+
+
 "${verify_lock}" "${lockfile}" || fail "the checked-in lock was rejected"
 locked="${fixture_root}/locked.txt"
 awk '/^packages:/ { in_packages = 1; next }
@@ -134,7 +134,7 @@ if grep -v '^#' "${inventory}" | awk -F'\t' 'NF != 2 || $2 == ""' | grep -q .; t
   fail "the checked-in inventory has entries without a license"
 fi
 
-# Every lock rejection path fails explicitly.
+
 tampered="${fixture_root}/pnpm-lock.yaml"
 expect_rejected "a missing lock" "${verify_lock}" "${fixture_root}/absent.yaml"
 expect_rejected "wrong usage" "${verify_lock}"
@@ -158,7 +158,7 @@ expect_rejected "a resolution override" "${verify_lock}" "${tampered}"
 sed 's/^        specifier: 3\.9\.5$/        specifier: ^3.9.5/' "${lockfile}" >"${tampered}"
 expect_rejected "a non-exact direct specifier" "${verify_lock}" "${tampered}"
 
-# Every materialized-tree rejection path fails explicitly.
+
 expect_rejected "an unmaterialized bundle" "${verify_tree}" "${fixture_root}"
 expect_rejected "wrong tree-verifier usage" "${verify_tree}"
 
@@ -198,8 +198,8 @@ touch "${tree_fixture}/node_modules/native.node"
 expect_rejected "a tree carrying a prebuilt binary" "${verify_tree}" "${tree_fixture}"
 rm "${tree_fixture}/node_modules/native.node"
 
-# The isolated linker resolves every tool through a relative link inside the
-# bundle, so a link naming a binary or pointing outside it is refused.
+
+
 ln -s .pnpm/example/native.node "${tree_fixture}/node_modules/linked.node"
 expect_rejected "a tree linking to a prebuilt binary" "${verify_tree}" "${tree_fixture}"
 rm "${tree_fixture}/node_modules/linked.node"
@@ -216,17 +216,17 @@ ln -s .pnpm/example/node_modules/example "${tree_fixture}/node_modules/example"
 "${verify_tree}" "${tree_fixture}" || fail "a contained package symlink was rejected"
 rm "${tree_fixture}/node_modules/example"
 
-# The runner locates nothing relative to the working directory or an ambient
-# module path.
+
+
 for prohibited_construct in process.cwd 'require('; do
   if grep -nF "${prohibited_construct}" "${runner_sources[@]}"; then
     fail "the runner uses '${prohibited_construct}'"
   fi
 done
 
-# The native audit is the one operation that starts another process, so it is
-# the one module allowed to, it may start only one, and what it starts is the
-# runtime already running the runner rather than anything a lookup could find.
+
+
+
 audit_source="${bundle_source}/audit.mjs"
 for module_source in "${runner_sources[@]}"; do
   [[ "${module_source}" == "${audit_source}" ]] && continue
@@ -241,16 +241,16 @@ audit_spawn="$(tr -d '\n' <"${audit_source}" | grep -o 'spawnSync([^,]*,' | tr -
 if [[ "${audit_spawn}" != "spawnSync( process.execPath," ]]; then
   fail "the native audit starts something other than the pinned runtime: ${audit_spawn}"
 fi
-# The executable it hands that runtime is the pinned pnpm, at the one installed
-# path that holds it beside this bundle.
+
+
 if ! grep -qF '"pnpm.cjs",' "${audit_source}" || ! grep -qF 'bundleDirectory,' "${audit_source}"; then
   fail "the native audit does not resolve the pinned pnpm beside the installed bundle"
 fi
-# One analyzer reads its own settings as it loads, so it is loaded after the
-# runner has read the request rather than before. A deferred import names an
-# installed path beside the runner exactly like a static one does; a computed
-# specifier would be a way out of the bundle, so every one of them is required
-# to be a literal bundle path.
+
+
+
+
+
 while read -r deferred_specifier; do
   case "${deferred_specifier}" in
     '"./node_modules/'*) ;;
@@ -259,8 +259,8 @@ while read -r deferred_specifier; do
 done < <(cat "${runner_sources[@]}" | tr -d '\n' | grep -o 'import([^)]*)' |
   sed -e 's/^import( *//' -e 's/ *)$//')
 
-# The installed manifest accounts for the installed bytes, and every way the
-# tree can diverge from it is rejected.
+
+
 "${bundle_manifest}" verify "${javascript_bundle_dir}" ||
   fail "the installed bundle does not match its manifest"
 expect_rejected "wrong manifest usage" "${bundle_manifest}" verify
@@ -274,8 +274,8 @@ printf 'installed\n' >"${manifest_fixture}/node_modules/installed.js"
 "${bundle_manifest}" write "${manifest_fixture}" || fail "writing a bundle manifest failed"
 "${bundle_manifest}" verify "${manifest_fixture}" || fail "a freshly written manifest was rejected"
 
-# The manifest is canonical rather than a bag of independently trusted fields.
-# Changing provenance while leaving every payload entry untouched is corruption.
+
+
 sed 's/"node": "[^"]*"/"node": "0.0.0"/' \
   "${manifest_fixture}/${javascript_bundle_manifest_name}" >"${fixture_root}/changed-manifest.json"
 cp "${fixture_root}/changed-manifest.json" "${manifest_fixture}/${javascript_bundle_manifest_name}"
@@ -294,8 +294,8 @@ rm "${manifest_fixture}/node_modules/installed.js"
 expect_rejected "a removed installed file" "${bundle_manifest}" verify "${manifest_fixture}"
 printf 'installed\n' >"${manifest_fixture}/node_modules/installed.js"
 
-# A symlink is part of what was installed, so adding or retargeting one changes
-# the bundle even though every installed file still matches.
+
+
 printf 'other\n' >"${manifest_fixture}/node_modules/other.js"
 ln -s installed.js "${manifest_fixture}/node_modules/tool.js"
 expect_rejected "an added symlink" "${bundle_manifest}" verify "${manifest_fixture}"

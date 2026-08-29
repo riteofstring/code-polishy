@@ -2,7 +2,7 @@
 
 Conditional policy modules keep standard rules in the pinned Code Polishy
 checkout. A consuming repository imports the policy once; it does not copy the
-same Ruff, React, Electron, or OSV command definitions into local config.
+same Ruff, `ty`, React, Electron, or OSV command definitions into local config.
 
 ## Compilation model
 
@@ -48,12 +48,31 @@ The module uses policy-owned Ruff `0.16.0` for:
 
 - selected-file `ruff format --check` during `check` and `gate`;
 - selected-file `ruff check --no-fix` during `check` and `gate`;
+- selected-file, isolated C901 complexity checks during `check` and `gate`;
 - selected-file `ruff format` during `format` or `fix`.
 
-It supplies format, lint, and unused/dead-code coverage. Python type checking,
-domain architecture, and build semantics still need an applicable shared
-module or project-specific provider; Ruff must not be mislabeled as proof it
-does not provide.
+The C901 command ignores target Ruff configuration and `noqa`, and translates
+the shared fails-at threshold of 10 to Ruff's native maximum of 9. A target may
+lower `quality.complexity.python`, but cannot raise or disable it.
+
+Ruff supplies format, lint, complexity, and unused/dead-code coverage. Domain
+architecture and build semantics still need an applicable shared module or
+project-specific provider; Ruff must not be mislabeled as proof it does not
+provide.
+
+### ty
+
+Any governed `.py` or `.pyi` file also activates `ty`. Its project root is the
+nearest ancestor containing `ty.toml` or `pyproject.toml`, falling back to the
+repository root. The module runs selected-file `ty check` during `check` and
+`gate` and supplies built-in `typecheck` coverage.
+
+The release carries `ty` `0.0.65` and invokes it with the release-owned
+`tools/ty.toml`. That configuration keeps `ty`'s normal diagnostic severity; it
+does not enable every rule or turn warnings into errors. A target `ty.toml` or
+any `pyproject.toml` establishes only the command's project boundary; it does
+not replace or weaken the policy-owned diagnostic configuration. A target
+therefore pins no Python type checker and declares no Python typecheck provider.
 
 ### The Node quality baseline
 

@@ -434,8 +434,6 @@ func exactReleaseAssessmentVersion(ecosystem, version string) bool {
 	}
 }
 
-// ExactArtifactVersion reports whether one standalone artifact pin identifies
-// one semantic release, with an optional leading v used by some upstreams.
 func ExactArtifactVersion(version string) bool {
 	return artifactVersionPattern.MatchString(version)
 }
@@ -529,10 +527,6 @@ func validateDependencyProtocols(protocols []string) error {
 	return nil
 }
 
-// validateAllowedLicenses requires the license policy to name licenses the way
-// SPDX does. A configured entry is one identifier, optionally qualified by the
-// exception a dependency's own expression writes after WITH, so a declared
-// expression can be compared with this list as written rather than interpreted.
 func validateAllowedLicenses(licenses []string) error {
 	if err := validateUniqueStrings(licenses, "supplyChain.allowedLicenses", false); err != nil {
 		return err
@@ -546,10 +540,6 @@ func validateAllowedLicenses(licenses []string) error {
 	return nil
 }
 
-// IsLicenseIdentifier reports whether one token names an SPDX license or
-// exception, including the trailing "+" an or-later license carries. Both a
-// configured policy entry and a dependency's own declared expression are made
-// of these, so both sides read them the same way.
 func IsLicenseIdentifier(value string) bool {
 	return licenseIdentifierPattern.MatchString(value)
 }

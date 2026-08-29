@@ -23,9 +23,6 @@ type ChangeBoundaryResult struct {
 	Findings        []policy.Finding
 }
 
-// CheckChangeBoundary reads module ownership from the exact trusted commit and
-// compares that immutable policy with every repository change through the
-// current worktree. Candidate configuration never participates in the check.
 func CheckChangeBoundary(root, policyRoot, configPath, base string, allowedModules, allowedPaths, allowedNewPaths []string) (ChangeBoundaryResult, error) {
 	bare, normalizedConfig, err := trustedBoundaryRepository(root, policyRoot, configPath, base)
 	if err != nil {
@@ -176,10 +173,6 @@ func (repo Repository) regularWorktreeFile(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-// regularNewArtifactFile requires every Git state that can carry an artifact
-// to agree that it is a regular file addition. An absent index entry is valid
-// only for an untracked artifact; once HEAD contains it, absence is a staged
-// deletion rather than an addition.
 func (repo Repository) regularNewArtifactFile(path string) bool {
 	headPresent, headRegular := repo.regularFileOrAbsentAt("HEAD", path)
 	return headRegular && repo.regularWorktreeFile(path) && repo.regularIndexFileOrAbsent(path, headPresent)
@@ -262,9 +255,7 @@ func boundaryFindings(repo Repository, configPath, path string, allowed, exactAl
 
 func protectedControlPath(path, configPath string) bool {
 	path = filepath.ToSlash(path)
-	// The lock names which Code Polishy release governs this repository, so a
-	// task session can no more change it than the configuration it reads. A
-	// target carries no policy checkout or wrapper to protect beside them.
+
 	return path == configPath || slices.Contains([]string{policy.LockFilename, "CODEOWNERS", ".github/CODEOWNERS"}, path) ||
 		strings.HasPrefix(path, ".github/workflows/") || path == ".gitignore" || strings.HasSuffix(path, "/.gitignore") ||
 		path == ".gitattributes" || strings.HasSuffix(path, "/.gitattributes")
@@ -291,9 +282,7 @@ func (repo Repository) changedPathsSinceExact(revision string) ([]string, map[st
 		options   []string
 		revisions []string
 	}
-	// Compare the trusted base with each Git state independently. A working
-	// tree or index can otherwise restore a committed or staged path to its base
-	// bytes and hide that change from a single base-to-working-tree comparison.
+
 	views := []diffView{
 		{revisions: []string{revision, "HEAD"}},
 		{revisions: []string{revision}},
@@ -324,10 +313,6 @@ func (repo Repository) changedPathsSinceExact(revision string) ([]string, map[st
 	return uniqueSorted(append(changed, untracked...)), additions, nil
 }
 
-// committedPathsSinceExact inventories the diff for every candidate commit,
-// not only the final candidate tree. A task could otherwise commit a forbidden
-// path and restore it before HEAD. New artifacts must remain regular through
-// every commit that changes them.
 func (repo Repository) committedPathsSinceExact(revision string, newAllowed map[string]bool) ([]string, map[string]bool, error) {
 	committedNewPaths := make(map[string]bool, len(newAllowed))
 	for path := range newAllowed {

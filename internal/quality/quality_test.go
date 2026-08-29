@@ -86,8 +86,8 @@ func TestCoverageRequiresAdaptersForUnknownLanguages(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
-	if len(findings) != 6 {
-		t.Fatalf("expected six required capabilities, got %+v", findings)
+	if len(withoutSourceCommentCoverage(findings)) != 6 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+		t.Fatalf("findings = %+v", findings)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestCoverageUsesModuleScopedProvider(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	repo.Config.Checks = []policy.Command{{Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check", "gate"}}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"}); len(findings) != 0 {
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"}); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("provider should cover module: %+v", findings)
 	}
 }
@@ -124,6 +124,7 @@ func TestCoverageRequiresProvidersInLocalAndGateProfiles(t *testing.T) {
 	repo.Config.Checks = []policy.Command{{Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check"}}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
+	findings = withoutSourceCommentCoverage(findings)
 	if len(findings) != 6 || !strings.Contains(findings[0].Message, "gate") {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -175,7 +176,7 @@ func TestCoverageAdmitsProviderReachingSourceNoBuiltInDecides(t *testing.T) {
 	}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	writeQualityFile(t, repo.Root, "internal/sample/build.ts", "export const build = 1;\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs", "internal/sample/build.ts"}); len(findings) != 0 {
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs", "internal/sample/build.ts"}); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("a provider covering source no built-in decides is the target's own: %+v", findings)
 	}
 }
@@ -202,12 +203,6 @@ func TestCoverageRefusesTargetFormatterOnlyWhereTheSealedBundleFormats(t *testin
 	}
 }
 
-// A single-file component is TypeScript to the repository and source to nobody
-// else: the sealed formatter does not print one and the sealed linter, type
-// checker, and analyzers do not parse one, because reading it needs a framework
-// compiler no policy operation runs. A check covering only those files
-// therefore replaces no built-in checker, while one that also reaches the
-// source the bundle does decide still does.
 func TestCoverageAdmitsTargetProviderForSourceTheSealedBundleNeverReads(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -220,11 +215,12 @@ func TestCoverageAdmitsTargetProviderForSourceTheSealedBundleNeverReads(t *testi
 	writeQualityFile(t, repo.Root, "frontend/App.vue", "<template />\n")
 	writeQualityFile(t, repo.Root, "frontend/main.ts", "export const value = 1;\n")
 	component := []string{"frontend/App.vue", "frontend/main.ts"}
-	if findings := CoverageFindings(repo, component); len(findings) != 0 {
+	if findings := CoverageFindings(repo, component); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("a check covering only single-file components is the target's own: %+v", findings)
 	}
 	repo.Config.Checks[0].Paths = []string{"frontend/**"}
 	findings := CoverageFindings(repo, component)
+	findings = withoutSourceCommentCoverage(findings)
 	if len(findings) != 3 {
 		t.Fatalf("a check reaching the source the bundle decides is refused: %+v", findings)
 	}
@@ -261,6 +257,7 @@ func TestCoverageRejectsAmbiguousCustomLanguageRules(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	writeQualityFile(t, repo.Root, "lib/sample.ex", "defmodule Sample do\nend\n")
 	findings := CoverageFindings(repo, []string{"lib/sample.ex"})
+	findings = withoutSourceCommentCoverage(findings)
 	if len(findings) != 1 || findings[0].Check != "policy.languageCoverage" {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -352,10 +349,6 @@ func TestSecurityProviderFailuresAreNonSuppressiblePolicyFindings(t *testing.T) 
 	}
 }
 
-// A shell script says where it sources from, and the check reads that file
-// rather than deciding the script from the selection it arrived in. The
-// declared path is written against the repository the script lives in, so that
-// is where the check runs.
 func TestShellCheckReadsTheSourcesAScriptDeclares(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -410,9 +403,10 @@ func (failingQualityRunner) Run(context.Context, string, policy.Command) error {
 func qualityRepository(t *testing.T) repository.Repository {
 	t.Helper()
 	root := t.TempDir()
+	allowComments := false
 	config := policy.Config{
 		Project: policy.Project{Kind: "content"},
-		Quality: policy.Quality{MaxFileLines: policy.MaxFileLines, MaxTestFileLines: policy.MaxTestFileLines, Complexity: policy.Complexity{Go: policy.MaxGoComplexity, GoTest: policy.MaxGoTestComplexity}},
+		Quality: policy.Quality{MaxFileLines: policy.MaxFileLines, MaxTestFileLines: policy.MaxTestFileLines, Complexity: policy.Complexity{Go: policy.MaxGoComplexity, GoTest: policy.MaxGoTestComplexity}, AllowComments: &allowComments},
 	}
 	return repository.Repository{Root: root, Config: config}
 }
@@ -434,4 +428,14 @@ func findingChecks(findings []policy.Finding) map[string]bool {
 		checks[finding.Check] = true
 	}
 	return checks
+}
+
+func withoutSourceCommentCoverage(findings []policy.Finding) []policy.Finding {
+	result := []policy.Finding{}
+	for _, finding := range findings {
+		if finding.Check != "policy.sourceCommentCoverage" {
+			result = append(result, finding)
+		}
+	}
+	return result
 }

@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install one exact Code Polishy release from this local checkout.
-#
-# Usage: install.sh [--prefix DIR] [--command-dir DIR] [--add-to-path [--path-profile FILE]]
-#
-# Source acquisition stays outside this script. A user or agent checks out one
-# exact reviewed version tag, then runs this installer from that checkout. The
-# installer never chooses a version, invokes `gh`, calls a GitHub API, asks for
-# a token, inspects or changes remotes, fetches, pulls, or switches revisions.
-# It reads the local commit identity, requires a clean checkout, and builds what
-# is already there. Maintainers may use the same path for a clean candidate
-# commit before its release tag is created.
-#
-# Acquiring the sealed JavaScript runtime and tool bundle is a separate explicit
-# step. This installer refuses to run until they are installed and verified, so
-# installation itself downloads nothing.
-#
-# The release is staged, verified, and only then moved into place under one
-# name, so an interrupted or rejected installation never leaves a release a
-# target could run.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 caller_root="$(pwd -P)"
@@ -238,12 +238,12 @@ source "${policy_root}/tools/javascript-env.sh"
 release_manifest="${policy_root}/scripts/release-manifest.sh"
 bundle_manifest="${policy_root}/tools/javascript-bundle-manifest.sh"
 
-# Everything a release carries besides the built binary and its own manifest:
-# the version-matched documentation, schema, templates, and canonical guidance
-# a target is given; the pinned versions and workflow scripts the engine reads
-# at runtime; the sealed JavaScript runtime and tool bundle; and the bundle's
-# dependency and license inventory. Each path is required; a missing one fails
-# the installation rather than producing a release with a hole in it.
+
+
+
+
+
+
 release_contents=(
   "VERSION"
   "LICENSE"
@@ -264,15 +264,17 @@ release_contents=(
   "tools/govulncheck-version.txt"
   "tools/osv-scanner-version.txt"
   "tools/ruff-version.txt"
+  "tools/ty-version.txt"
+  "tools/ty.toml"
   "tools/trivy-version.txt"
   "tools/javascript_bundle_inventory.txt"
 )
 
-# The pinned tools the engine runs from its own policy root. A release is the
-# whole Code Polishy a target gets, so it carries them: a target installs no
-# policy tooling, and nothing is taken from an ambient PATH or a host
-# installation. Acquiring them is the same separate explicit step the sealed
-# runtime uses, so installation itself still downloads nothing.
+
+
+
+
+
 case "${javascript_arch_tag}" in
   arm64)
     go_arch_tag="arm64"
@@ -296,19 +298,20 @@ policy_tools=(
   ".tools/bin/govulncheck"
   ".tools/bin/osv-scanner"
   ".tools/bin/ruff"
+  ".tools/bin/ty"
 )
 
-# Each acquired executable a release carries, beside the checked-in file that
-# pins its version. A release records these versions and a target trusts them,
-# so the installer asks every one of them what it is before it stages anything:
-# a presence check and the byte inventory cannot show that an ignored local tool
-# cache holds the version the manifest would claim.
-#
-# The engine and the launcher are built here from the reviewed commit rather
-# than acquired, so what they are is the source revision the manifest already
-# records. The bundle's analyzers are governed by its frozen lock, inventory,
-# and manifest, and the only executables that run them are the Node and pnpm
-# probed here.
+
+
+
+
+
+
+
+
+
+
+
 carried_tools=(
   "go:scripts/go_version.txt"
   "node:tools/node-version.txt"
@@ -318,18 +321,19 @@ carried_tools=(
   "govulncheck:tools/govulncheck-version.txt"
   "osv-scanner:tools/osv-scanner-version.txt"
   "ruff:tools/ruff-version.txt"
+  "ty:tools/ty-version.txt"
 )
 
-# The version a checked-in pin names, in the one form every probe reports: the
-# distributions disagree about a leading `v`, and a release records one form.
+
+
 pinned_version() {
   local value
   value="$(tr -d '[:space:]' <"${policy_root}/$1")"
   printf '%s\n' "${value#v}"
 }
 
-# The version the local executable reports, asked of it the way its own
-# distribution answers.
+
+
 probed_version() {
   case "$1" in
     go)
@@ -347,9 +351,9 @@ probed_version() {
         awk '/^version:/ { print $2 }'
       ;;
     staticcheck | govulncheck)
-      # Read out of the binary with the pinned toolchain rather than asked of
-      # the binary: `govulncheck -version` contacts the vulnerability database,
-      # and which version a release carries is an offline question.
+
+
+
       javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
         "${policy_root}/.tools/bin/$1" |
         awk '$1 == "mod" { sub(/^v/, "", $3); print $3; exit }'
@@ -360,6 +364,9 @@ probed_version() {
       ;;
     ruff)
       javascript_sealed_run "${policy_root}/.tools/bin/ruff" --version | awk '{ print $2 }'
+      ;;
+    ty)
+      javascript_sealed_run "${policy_root}/.tools/bin/ty" --version | awk '{ print $2 }'
       ;;
     *)
       echo "There is no version probe for the carried ${1}." >&2
@@ -377,8 +384,8 @@ done
 validate_command_link
 plan_path_persistence
 
-# A release names the exact reviewed commit it was built from, so the checkout
-# must be a repository whose working tree carries nothing that commit does not.
+
+
 if ! git -C "${policy_root}" rev-parse --git-dir >/dev/null 2>&1; then
   echo "Install Code Polishy from a Git checkout; ${policy_root} is not one." >&2
   exit 1
@@ -388,8 +395,8 @@ if [[ "${checkout_root}" != "${policy_root}" ]]; then
   echo "Install Code Polishy from its own checkout root, not from ${checkout_root}." >&2
   exit 1
 fi
-# The drift report is pinned rather than inherited: configuration such as
-# status.showUntrackedFiles=no must not hide untracked files from this gate.
+
+
 if [[ -n "$(git -C "${policy_root}" status --porcelain=v1 --untracked-files=all)" ]]; then
   echo "The Code Polishy checkout at ${policy_root} is not clean." >&2
   echo "Check out the exact reviewed commit before installing a release." >&2
@@ -408,15 +415,15 @@ for relative in "${release_contents[@]}"; do
   fi
 done
 
-# The version names the installed release, so it is read here, before anything
-# is staged, by the one strict reader the release preflight also runs:
-# whitespace is refused with its exact remedy rather than deleted into a
-# different release name.
+
+
+
+
 code_polishy_version="$("${policy_root}/scripts/release-version.sh" "${policy_root}/VERSION")"
 
-# The sealed runtime and bundle are installed by their own explicit acquisition
-# step. Confirming them here keeps installation offline and keeps a release from
-# carrying a bundle that no longer matches its checked-in pins.
+
+
+
 if [[ ! -x "${javascript_node}" || ! -f "${javascript_pnpm}" ]]; then
   echo "The policy-owned JavaScript runtime is not installed at ${javascript_runtime_dir}." >&2
   echo "Run ./tools/install-javascript-runtime.sh before installing a release." >&2
@@ -447,10 +454,10 @@ cleanup() {
     rm -f "${path_profile_staging}"
   fi
 }
-# An installation interrupted after staging has begun removes the trees it made
-# itself rather than leaving them for the next one to find. Neither one is a
-# release a target could run -- no lock can name either -- but a release store
-# holds only complete releases.
+
+
+
+
 interrupted() {
   cleanup
   echo "The Code Polishy installation was interrupted; nothing was installed." >&2
@@ -487,9 +494,9 @@ for relative in "${release_contents[@]}"; do
   cp -RPp "${policy_root}/${relative}" "${staging}/${relative}"
 done
 
-# The sealed runtime is the one platform-specific tree in a release, and the
-# bundle is shared by every supported host. Both keep the layout the engine
-# already resolves, so an installed release is simply a complete policy root.
+
+
+
 staged_tools="${staging}/.tools"
 staged_javascript="${staged_tools}/javascript"
 mkdir -p "${staged_javascript}"
@@ -500,15 +507,15 @@ for relative in "${policy_tools[@]}"; do
   cp -RPp "${policy_root}/${relative}" "${staging}/${relative}"
 done
 
-# A release is the whole Code Polishy interface a target gets, so the submodule
-# and wrapper control plane the direct cutover removed must not reach one
-# through a template, canonical guidance, a skill, or a workflow script. Search
-# the staged tree for the paths that plane was made of and every policy-owned
-# runtime or instruction surface for the commands that drove it. The changelog
-# and permanent guides may explain why a retired command is invalid;
-# explanation is not an executable or canonical instruction. The acquired tools
-# under .tools are third-party bytes governed by their own checksums, inventory,
-# and manifest and are not searched for Code Polishy's own retired commands.
+
+
+
+
+
+
+
+
+
 echo "Searching the staged release for retired paths and commands..."
 retired_paths="$(find "${staging}" -path "${staged_tools}" -prune -o \
   \( -name ".gitmodules" -o -name ".git" \
@@ -527,8 +534,8 @@ for relative in "${release_contents[@]}"; do
   esac
 done
 for retired in "check_policy.sh" "git submodule"; do
-  # grep reports 0 when it matched and 1 when it did not; anything above that is
-  # a search that failed, which is not a release that carries nothing.
+
+
   search_status=0
   retired_text="$(grep -rIl -F -e "${retired}" -- "${staged_text[@]}")" || search_status=$?
   if ((search_status > 1)); then
@@ -557,9 +564,9 @@ if [[ -e "${destination}" ]]; then
   if "${release_manifest}" verify "${destination}" >/dev/null 2>&1; then
     installed_message="Code Polishy ${code_polishy_version} is already installed at ${destination}."
   else
-    # A release that no longer matches its own manifest is replaced whole. The
-    # rejected bytes move aside first so the installed name is never a partial
-    # tree, and they are removed only once the verified one is in place.
+
+
+
     rm -rf "${superseded}"
     mv "${destination}" "${superseded}"
     mv "${staging}" "${destination}"
@@ -569,14 +576,14 @@ else
   mv "${staging}" "${destination}"
 fi
 
-# The launcher is the one stable path a target runs. It is taken from the
-# release that was just verified rather than built again, and it is moved into
-# place within its own directory so the installed name is never a partial file.
-# One launcher selects every installed release that records itself the way this
-# one does, so refreshing it does not change how another of those is selected. A
-# release recorded under an earlier manifest version is not one of them: the
-# launcher reads one exact manifest version, so a release installed before the
-# manifest changed is reinstalled from its commit rather than reinterpreted.
+
+
+
+
+
+
+
+
 mkdir -p "${launcher_root}"
 cp -p "${destination}/bin/code-polishy-launcher" "${launcher_staging}"
 mv -f "${launcher_staging}" "${launcher_path}"

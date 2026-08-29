@@ -38,7 +38,7 @@ version before staging a release.
   `tools/javascript/pnpm-lock.yaml` locks the complete graph and
   `tools/javascript_bundle_inventory.txt` records installed packages and
   licenses.
-- ShellCheck, Ruff, OSV-Scanner, and Gremlins are downloaded from their
+- ShellCheck, Ruff, `ty`, OSV-Scanner, and Gremlins are downloaded from their
   official release origins and checked against repository-owned versions and
   archive digests.
 - Trivy is copied from an exact official image digest into the minimal scanner
@@ -55,7 +55,7 @@ keep the sealed bundle portable and minimal.
 ## Implementation boundaries
 
 - Go is the only engine runtime. Python remains a supported target ecosystem
-  through the carried Ruff executable.
+  through the carried Ruff and `ty` executables.
 - Generic JavaScript quality checks run through Code Polishy's sealed bundle,
   independent of target-local development dependencies.
 - Target-specific commands, paths, external inputs, and exceptions live in the

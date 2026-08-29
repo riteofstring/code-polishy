@@ -17,21 +17,16 @@ import (
 const engineBytes = "the policy engine"
 const uninstalledDigest = "3333333333333333333333333333333333333333333333333333333333333333"
 
-// bundleFile and bundleLink stand in for the sealed JavaScript bundle: a
-// release is a tree of files and pnpm's links, not one binary.
 const bundleFile = ".tools/javascript/bundle/runner.mjs"
 const bundleLink = ".tools/javascript/bundle/node_modules/tool"
 
-// store builds an install prefix holding one or more installed releases, each
-// named by exactly the version and release digest a lock would.
 type store struct {
 	prefix string
 }
 
 func newStore(t *testing.T) store {
 	t.Helper()
-	// The launcher resolves its own path, so the store a test compares against
-	// is the resolved one rather than the link a temporary directory may be.
+
 	prefix, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatalf("resolve the install prefix: %v", err)
@@ -39,9 +34,10 @@ func newStore(t *testing.T) store {
 	return store{prefix: prefix}
 }
 
-// install writes one release built from the given reviewed commit, whose
-// manifest records exactly the tree it installs, and returns the lock a target
-// needs to require it.
+func (installed store) releaseRoot(lock release.Lock) string {
+	return filepath.Join(installed.prefix, "releases", lock.CodePolishyVersion+"-"+lock.ReleaseDigest)
+}
+
 func (installed store) install(t *testing.T, revision, engine string) release.Lock {
 	t.Helper()
 	host, err := release.Host()
@@ -53,7 +49,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 		SourceRevision: revision, Host: host, Features: []string{"javascript-bundle"},
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Ty: "0.0.65",
 		},
 		Entries: []release.Entry{
 			{Path: bundleLink, Symlink: "../.pnpm/tool"},
@@ -64,8 +60,11 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	manifest.EntryCount = len(manifest.Entries)
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
-	lock := release.LockFor(manifest)
-	directory := release.Directory(installed.prefix, lock)
+	lock := release.Lock{
+		LockVersion: release.LockVersion, CodePolishyVersion: "9.9.9",
+		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
+	}
+	directory := installed.releaseRoot(lock)
 	writeFile(t, directory, release.BinaryPath, engine)
 	writeFile(t, directory, bundleFile, engine+" runner")
 	writeLink(t, directory, bundleLink, "../.pnpm/tool")
@@ -106,8 +105,6 @@ func digestOf(content string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// launcherIn runs the launcher as if it were installed at <prefix>/bin, from
-// inside the given repository, and reports what it launched.
 func launcherIn(t *testing.T, installed store, repoRoot string, arguments ...string) (int, string, []string) {
 	t.Helper()
 	launcherPath := filepath.Join(installed.prefix, "bin", "code-polishy")
@@ -137,7 +134,17 @@ func repositoryWith(t *testing.T, lock *release.Lock) string {
 	t.Helper()
 	repoRoot := t.TempDir()
 	if lock != nil {
-		if err := os.WriteFile(filepath.Join(repoRoot, release.LockFilename), release.RenderLock(*lock), 0o644); err != nil {
+		document := struct {
+			LockVersion        int      `json:"lockVersion"`
+			CodePolishyVersion string   `json:"codePolishyVersion"`
+			ReleaseDigest      string   `json:"releaseDigest"`
+			Features           []string `json:"features"`
+		}{lock.LockVersion, lock.CodePolishyVersion, lock.ReleaseDigest, lock.Features}
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			t.Fatalf("encode the lock fixture: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(repoRoot, release.LockFilename), encoded, 0o644); err != nil {
 			t.Fatalf("write the lock: %v", err)
 		}
 	}
@@ -159,11 +166,12 @@ func TestLauncherRunsTheReleaseTheLockNames(t *testing.T) {
 		if status != 0 {
 			t.Fatalf("status=%d stderr=%s", status, stderr)
 		}
-		expected := filepath.Join(release.Directory(installed.prefix, lock), filepath.FromSlash(release.BinaryPath))
+		releaseRoot := installed.releaseRoot(lock)
+		expected := filepath.Join(releaseRoot, filepath.FromSlash(release.BinaryPath))
 		if argv[0] != expected {
 			t.Fatalf("launched %q, wanted %q", argv[0], expected)
 		}
-		wanted := []string{expected, "--policy-root", release.Directory(installed.prefix, lock),
+		wanted := []string{expected, "--policy-root", releaseRoot,
 			"--repo-root", repoRoot, "check", "--all"}
 		if !slices.Equal(argv, wanted) {
 			t.Fatalf("argv = %v, wanted %v", argv, wanted)
@@ -195,7 +203,7 @@ func TestLauncherNamesTheReleaseAMissingInstallationNeeds(t *testing.T) {
 func TestLauncherRefusesAReleaseThatChangedAfterInstallation(t *testing.T) {
 	installed := newStore(t)
 	lock := installed.install(t, exampleRevision(1), engineBytes)
-	binary := filepath.Join(release.Directory(installed.prefix, lock), filepath.FromSlash(release.BinaryPath))
+	binary := filepath.Join(installed.releaseRoot(lock), filepath.FromSlash(release.BinaryPath))
 	if err := os.WriteFile(binary, []byte("tampered"), 0o755); err != nil {
 		t.Fatalf("change the installed binary: %v", err)
 	}
@@ -205,12 +213,10 @@ func TestLauncherRefusesAReleaseThatChangedAfterInstallation(t *testing.T) {
 	}
 }
 
-// The engine reads the whole release it is handed, so the launcher verifies the
-// whole release: a bundle file the release does not record never reaches it.
 func TestLauncherRefusesAReleaseCarryingBytesItDoesNotRecord(t *testing.T) {
 	installed := newStore(t)
 	lock := installed.install(t, exampleRevision(1), engineBytes)
-	added := filepath.Join(release.Directory(installed.prefix, lock),
+	added := filepath.Join(installed.releaseRoot(lock),
 		filepath.FromSlash(".tools/javascript/bundle/added.mjs"))
 	if err := os.WriteFile(added, []byte("// added\n"), 0o644); err != nil {
 		t.Fatalf("add a file to the release: %v", err)
@@ -221,13 +227,10 @@ func TestLauncherRefusesAReleaseCarryingBytesItDoesNotRecord(t *testing.T) {
 	}
 }
 
-// A release built from another commit, installed under the name the lock uses,
-// is still that other release. The launcher recomputes which release the record
-// describes rather than trusting the digest written in it.
 func TestLauncherRefusesAReleaseThatIsNotTheOneItRecords(t *testing.T) {
 	installed := newStore(t)
 	lock := installed.install(t, exampleRevision(1), engineBytes)
-	manifestPath := filepath.Join(release.Directory(installed.prefix, lock), release.ManifestFilename)
+	manifestPath := filepath.Join(installed.releaseRoot(lock), release.ManifestFilename)
 	recorded, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read the manifest: %v", err)
@@ -274,7 +277,7 @@ func TestLauncherReadsTheLockOfTheSelectedRepository(t *testing.T) {
 	if status != 0 {
 		t.Fatalf("status=%d stderr=%s", status, stderr)
 	}
-	wanted := []string{argv[0], "--policy-root", release.Directory(installed.prefix, lock),
+	wanted := []string{argv[0], "--policy-root", installed.releaseRoot(lock),
 		"--repo-root", target, "--config", "policy.json", "check"}
 	if !slices.Equal(argv, wanted) {
 		t.Fatalf("argv = %v, wanted %v", argv, wanted)

@@ -83,6 +83,10 @@ An operation that runs rules carries them. A lint request states the exact
 allowed maximums and the closed framework activation Go resolved, so the bundle
 never defaults, translates, or discovers a policy threshold, and a target
 configuration file or inline directive changes nothing about which rules ran.
+The lint response carries bounded parser comment facts and whether each fact is
+complete; Go alone owns the closed machine-directive registry and turns every
+other fact into a source-comment finding when the target selects the strict
+comment policy.
 A typecheck request names the one contained project the selection is checked
 under, so the bundle resolves no project of its own; Go owns which project
 governs which file and requires that a governed file was actually covered.
@@ -192,8 +196,10 @@ merge-base delta ---> impacted modules + matching standard suites
                  ---> recommended option
                  ---> risk/size heuristic ---> suggested option
 
-merge-gate delta ---> shared escalation rules + target module allowlist
-                 ---> recommended pipeline OR complete full gate
+merge-gate delta ---> exact candidate classifier
+                 ---> ordinary Markdown ---> built-in documentation contract
+                 ---> other candidate ---> shared escalation rules + target module allowlist
+                                      ---> recommended pipeline OR complete full gate
 
 full profile ---> every suite marked full
 
@@ -211,11 +217,14 @@ It lists supplemental strength suites separately so their lifecycle stage and
 runtime cost are not hidden inside the word “full.”
 
 The executable merge gate is distinct from that read-only planner. Its only
-caller input is a Git base. `internal/testing.BuildMergeDecision` makes the
-deterministic level decision from repository-owned selection and compiled
-policy; `internal/engine` owns the two orchestration branches. The recommended
-branch still runs strict doctor, applicable gate checks and builds, recommended
-tests, and offline supply-chain verification. Any repository-wide expansion,
+caller input is a Git base. Repository selection preserves the exact candidate
+delta separately from any repository-wide analysis expansion.
+`internal/testing.BuildMergeDecision` makes the deterministic level decision
+from that selection and compiled policy; `internal/engine` owns the three
+orchestration branches. The documentation branch runs only the built-in
+Markdown contract. The recommended branch runs strict doctor, applicable gate
+checks and builds, recommended tests, and offline supply-chain verification.
+For non-documentation candidates, any repository-wide expansion,
 path-ownership failure, non-allowlisted module, broad planner impact, or missing
 opt-in selects the existing complete gate.
 
@@ -250,8 +259,8 @@ that lock names, verifies it, and passes the target's repository root to it
 separately. The engine reads config and source from the target while resolving
 policy-owned tools from the release beside it. A release carries every pinned
 tool the engine runs — the sealed Node runtime and JavaScript bundle, the Go
-toolchain, ShellCheck, staticcheck, govulncheck, OSV-Scanner, and Ruff — and
-none of them is resolved from an ambient `PATH`, a host installation, or an
+toolchain, ShellCheck, staticcheck, govulncheck, OSV-Scanner, Ruff, and `ty` —
+and none of them is resolved from an ambient `PATH`, a host installation, or an
 environment override, so what a check decides does not depend on the machine it
 ran on. The release manifest records the exact version of each one, the
 installer probes every local tool against its checked-in pin before staging a

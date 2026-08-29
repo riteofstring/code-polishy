@@ -16,16 +16,13 @@ import (
 )
 
 var releasePinPaths = struct {
-	version, goVersion, govulncheck, node, osv, pnpm, ruff, shellcheck, staticcheck string
+	version, goVersion, govulncheck, node, osv, pnpm, ruff, shellcheck, staticcheck, ty string
 }{
 	"VERSION", "scripts/go_version.txt", "tools/govulncheck-version.txt", "tools/node-version.txt",
 	"tools/osv-scanner-version.txt", "tools/pnpm-version.txt", "tools/ruff-version.txt",
-	"tools/shellcheck-version.txt", "tools/staticcheck-version.txt",
+	"tools/shellcheck-version.txt", "tools/staticcheck-version.txt", "tools/ty-version.txt",
 }
 
-// WriteManifest gives a staged native release its complete byte-level record.
-// The stage must not already contain a manifest and is never published by this
-// function; callers verify it and archive or install it only after success.
 func WriteManifest(releaseDir, sourceRevision string) (Manifest, error) {
 	root, err := filepath.EvalSymlinks(releaseDir)
 	if err != nil {
@@ -64,8 +61,8 @@ func composeReleaseManifest(root, sourceRevision string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	pins := make([]string, 8)
-	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck} {
+	pins := make([]string, 9)
+	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck, releasePinPaths.ty} {
 		pins[index], err = readReleasePin(root, path, true)
 		if err != nil {
 			return Manifest{}, err
@@ -95,7 +92,7 @@ func readReleasePin(root, relative string, trimV bool) (string, error) {
 
 func newReleaseManifest(version, sourceRevision, host string, pins []string, entries []Entry) Manifest {
 	manifest := Manifest{ManifestVersion: ManifestVersion, CodePolishyVersion: version, SourceRevision: sourceRevision,
-		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Ruff: pins[5], Shellcheck: pins[6], Staticcheck: pins[7]}, Entries: entries, EntryCount: len(entries)}
+		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Ruff: pins[5], Shellcheck: pins[6], Staticcheck: pins[7], Ty: pins[8]}, Entries: entries, EntryCount: len(entries)}
 	manifest.ReleaseDigest = manifest.Identity()
 	manifest.ContentDigest = releaseEntriesDigest(entries)
 	return manifest
@@ -187,7 +184,4 @@ func releaseEntriesDigest(entries []Entry) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// EntriesDigest returns the canonical content identity for one ordered entry
-// list. It is exported for release tooling that constructs a manifest fixture
-// before writing the document through the normal parser.
 func EntriesDigest(entries []Entry) string { return releaseEntriesDigest(entries) }

@@ -155,9 +155,6 @@ func canonicalJSONSHA256(raw json.RawMessage) (string, error) {
 	return fmt.Sprintf("%x", digest[:]), nil
 }
 
-// pnpmGovernanceFindings decides what every pnpm root the selection reaches
-// declares about lifecycle ownership and native supply-chain protections. Both
-// are written in the same workspace file, so each root is read once.
 func pnpmGovernanceFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, root := range pnpmLifecycleRoots(repo, files) {
@@ -172,8 +169,7 @@ func pnpmRootGovernanceFindings(ctx context.Context, repo repository.Repository,
 	if !ok {
 		return nil
 	}
-	// Settings that could not be read leave both decisions below undecidable,
-	// so why they could not be read is the whole answer for this root.
+
 	workspace, unread := pnpmWorkspaceSettings(ctx, repo, root)
 	if len(unread) > 0 {
 		return unread
@@ -332,9 +328,6 @@ func packageJSONPath(root string) string {
 	return root + "/package.json"
 }
 
-// lifecycleDeclarationFindings decides who governs dependency lifecycle
-// scripts at one pnpm root. Exactly one owner may declare it: the root
-// manifest's pnpm object or its workspace file, never both and never neither.
 func lifecycleDeclarationFindings(owner string, payload packageJSON, workspace pnpmWorkspace) []policy.Finding {
 	findings := []policy.Finding{}
 	packageOnly := payload.PNPM.OnlyBuiltDependencies != nil
@@ -366,10 +359,6 @@ func lifecycleFinding(path, subject, message string) policy.Finding {
 	return policy.Finding{Check: "supplyChain.lifecycleScripts", Path: path, Subject: subject, Message: message}
 }
 
-// pnpmWorkspace is what the settings file of one pnpm root declares. Path is
-// empty when no file owns those settings, when more than one could, or when the
-// one that does could not be read; each of those is reported as its own finding
-// rather than as a root that declared nothing.
 type pnpmWorkspace struct {
 	Path     string
 	Settings map[string][]string
@@ -380,10 +369,6 @@ func (workspace pnpmWorkspace) declares(setting string) bool {
 	return declared
 }
 
-// pnpmWorkspaceSettings reads the settings file of one pnpm root through the
-// sealed JavaScript bundle. pnpm resolves under that file and it is YAML, so
-// reading it here would mean approximating with line scanning a format the
-// bundle parses with the parser pnpm itself uses.
 func pnpmWorkspaceSettings(ctx context.Context, repo repository.Repository, root string) (pnpmWorkspace, []policy.Finding) {
 	candidates := pnpmWorkspaceCandidates(repo, root)
 	if len(candidates) == 0 {
@@ -422,9 +407,6 @@ func pnpmWorkspaceSettings(ctx context.Context, repo repository.Repository, root
 	return pnpmWorkspace{Path: path, Settings: settings}, nil
 }
 
-// pnpmWorkspaceCandidates names every settings file that exists at one pnpm
-// root. They are found in the tree rather than in the selection, so changing a
-// manifest alone still reads the settings that govern it.
 func pnpmWorkspaceCandidates(repo repository.Repository, root string) []string {
 	candidates := []string{}
 	for _, name := range []string{"pnpm-workspace.yaml", "pnpm-workspace.yml"} {

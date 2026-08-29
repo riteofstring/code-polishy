@@ -205,8 +205,13 @@ func newScannerRuntime(client dockerClient, configured scannerPolicy, platform s
 	if err != nil {
 		return nil, err
 	}
-	root, err := os.MkdirTemp("", "code-polishy-artifact-security-")
+	createdRoot, err := os.MkdirTemp("", "code-polishy-artifact-security-")
 	if err != nil {
+		return nil, err
+	}
+	root, err := filepath.EvalSymlinks(createdRoot)
+	if err != nil {
+		_ = os.RemoveAll(createdRoot)
 		return nil, err
 	}
 	if err := os.Chmod(root, 0o700); err != nil {

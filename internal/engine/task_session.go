@@ -14,9 +14,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-// TaskSessionOptions is the complete caller-owned authority for one disposable
-// implementation worktree. The worker cannot change these values after the
-// session begins.
 type TaskSessionOptions struct {
 	RepoRoot        string
 	PolicyRoot      string
@@ -33,8 +30,6 @@ type TaskSessionOptions struct {
 	Stderr          io.Writer
 }
 
-// TaskSessionResult reports the observable terminal state of a native task
-// session. Artifacts remain outside the repository regardless of outcome.
 type TaskSessionResult struct {
 	Status        string
 	ExitStatus    int
@@ -61,9 +56,6 @@ type nativeTaskSession struct {
 	retainWorktree           bool
 }
 
-// RunTaskSession executes a fresh task session entirely through Go and the
-// native host process boundary. Git is the only external repository adapter;
-// no shell or Unix process utility participates in orchestration.
 func RunTaskSession(ctx context.Context, options TaskSessionOptions) (TaskSessionResult, error) {
 	session := &nativeTaskSession{options: options}
 	if err := session.prepare(ctx); err != nil {

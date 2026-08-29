@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Contract tests that govern disposable target repositories with the installed
-# Code Polishy release.
-#
-# Every other test here exercises one part: the Go packages decide policy from
-# facts, the runner tests answer one protocol request, and the install tests
-# decide what an installer stages. This one starts where a target starts. It
-# writes a repository, gives it the `.code-polishy.lock.json` this checkout
-# requires, and runs the installed launcher against it, so what is under test is
-# the release as a whole: the engine, the pinned Go toolchain and ShellCheck it
-# carries, the sealed Node runtime and JavaScript tool bundle, the schema, and
-# the canonical guidance.
-#
-# The shapes are the ones Code Polishy claims to support and does not otherwise
-# see: Go with no JavaScript at all, a pnpm application, a pnpm workspace,
-# TypeScript, and React. This repository governs itself with the release it
-# builds, which covers a Go repository that also owns the bundle source; none of
-# these five is that.
-#
-# Each target is first brought to a clean pass, because a target that cannot
-# reach one is not governed by a release, it is merely refused by it. A defect
-# is then introduced into the same repository and the exact finding it must
-# produce is required, because a pass that no defect can disturb is a check that
-# did not run.
-#
-# A release store is outside this checkout and CI builds the engine from source
-# rather than installing a release, so this is a maintainer step run against an
-# installed release rather than part of the ordinary tooling suite.
-#
-# Usage: test-installed-release.sh [--prefix DIR]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 prefix="${HOME}/.local/share/code-polishy"
@@ -84,8 +84,8 @@ if [[ ! -d "${release}" || -L "${release}" ]]; then
   fail "the locked release directory is unavailable at ${release}"
 fi
 
-# Resolved physically, because the launcher resolves the repository it is given
-# and a temporary directory is a link on some hosts.
+
+
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-installed-release.XXXXXX")" && pwd -P)"
 cleanup() {
   rm -rf "${fixture_root}"
@@ -99,24 +99,27 @@ write_file() {
   cat >"$1"
 }
 
-# The product commands a target owns. Every shape here declares a build provider
-# and focused suites, so each carries the same pair of do-nothing scripts: what
-# is under test is that a release supervises the commands a target declares, not
-# what a disposable repository builds.
+
+
+
+
 write_target_commands() {
   local target="$1" name
   for name in build test; do
     write_file "${target}/scripts/${name}.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
+  printf '%s\n' "$(basename "$0")" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
+fi
 exit 0
 EOF
     chmod +x "${target}/scripts/${name}.sh"
   done
 }
 
-# A repository with a dependency graph owes a weekly online scan, and every
-# shape here has one.
+
+
 write_security_workflow() {
   write_file "$1/.github/workflows/security.yml" <<'EOF'
 name: security
@@ -131,9 +134,9 @@ jobs:
 EOF
 }
 
-# The pnpm settings Code Polishy requires of a target that installs with pnpm.
-# They are the target's own admission rules, not the bundle's: nothing here is
-# installed, and no fixture reaches a registry.
+
+
+
 write_pnpm_workspace() {
   local target="$1"
   shift
@@ -156,10 +159,10 @@ EOF
   } >"${target}/pnpm-workspace.yaml"
 }
 
-# Everything a target repository needs before a release will govern it: the
-# exact release this checkout requires, canonical guidance written by that
-# release, canonical formatting, and a commit, because a target is a repository
-# rather than a directory.
+
+
+
+
 seal_target() {
   local target="$1"
   cp "${lock}" "${target}/.code-polishy.lock.json"
@@ -182,13 +185,14 @@ seal_target() {
   "${real_git}" -C "${target}" commit --quiet -m "disposable target"
 }
 
-# One run of the installed launcher against one target. The launcher is given
-# the repository and nothing else: it resolves the lock, verifies every recorded
-# byte of the release, and runs the engine from it.
+
+
+
 run_policy() {
   local target="$1"
   shift
-  "${launcher}" --repo-root "${target}" "$@" >"${output}" 2>&1
+  CODE_POLISHY_INSTALLED_TEST_LOG="${target}/.git/code-polishy-command-log" \
+    "${launcher}" --repo-root "${target}" "$@" >"${output}" 2>&1
 }
 
 excerpt() {
@@ -211,8 +215,8 @@ expect_findings() {
   fi
 }
 
-# One exact finding, matched the way a report writes it: a check, the path it
-# was decided about, and the subject it names.
+
+
 expect_finding() {
   local description="$1" check="$2" path="$3" subject="$4"
   if ! grep -Eq "^FAIL +${check} +${path} \[${subject}\]" "${output}"; then
@@ -227,11 +231,49 @@ expect_absent() {
   fi
 }
 
+expect_no_target_commands() {
+  local target="$1" description="$2"
+  local command_log="${target}/.git/code-polishy-command-log"
+  if [[ -s "${command_log}" ]]; then
+    fail "${description}: target commands ran: $(head -20 "${command_log}")"
+  fi
+}
+
+exercise_documentation_lane() {
+  local target="$1" description="$2"
+  local command_log="${target}/.git/code-polishy-command-log"
+  write_file "${target}/README.md" <<'EOF'
+# Documentation lane
+
+
+
+This change only updates ordinary Markdown.
+EOF
+  : >"${command_log}"
+  expect_findings "${target}" "${description} unformatted documentation" merge-gate --base HEAD
+  expect_finding "${description}" "quality.format" "README.md" "prettier"
+  expect_no_target_commands "${target}" "${description} unformatted documentation gate"
+  expect_pass "${target}" "${description} documentation format" format --git-changes
+  expect_no_target_commands "${target}" "${description} documentation format"
+  : >"${command_log}"
+  expect_pass "${target}" "${description} documentation merge gate" merge-gate --base HEAD
+  grep -q '^MERGE GATE: DOCUMENTATION against HEAD$' "${output}" ||
+    fail "${description}: merge gate did not disclose the documentation lane: $(excerpt)"
+  expect_no_target_commands "${target}" "${description} documentation merge gate"
+  expect_pass "${target}" "${description} documentation levels" test-levels --base HEAD
+  grep -Eq '^\| documentation \* +\| 0 application suites +\| automatic +\| merge-gate --base REF +\|$' "${output}" ||
+    fail "${description}: test-levels did not disclose zero application suites: $(excerpt)"
+  expect_no_target_commands "${target}" "${description} documentation levels"
+  : >"${command_log}"
+  expect_pass "${target}" "${description} changed tests" test --changed --base HEAD
+  expect_no_target_commands "${target}" "${description} changed tests"
+}
+
 echo "Governing disposable targets with the release ${policy_root}/.code-polishy.lock.json requires..."
 
-# A Go repository with no JavaScript in it. It is governed by the Go toolchain
-# and ShellCheck the release carries, and no JavaScript-owned check has anything
-# to decide about it.
+
+
+
 go_only="${fixture_root}/go-only"
 mkdir -p "${go_only}"
 write_file "${go_only}/go.mod" <<'EOF'
@@ -240,10 +282,8 @@ module example.test/goonly
 go 1.26
 EOF
 write_file "${go_only}/internal/greeting/greeting.go" <<'EOF'
-// Package greeting renders one greeting.
 package greeting
 
-// Render returns the greeting for one name.
 func Render(name string) string {
 	return "hello, " + name
 }
@@ -310,13 +350,14 @@ write_file "${go_only}/.code-polishy.json" <<'EOF'
 }
 EOF
 seal_target "${go_only}"
+exercise_documentation_lane "${go_only}" "go-only"
 expect_pass "${go_only}" "go-only" check --all
 expect_pass "${go_only}" "go-only" --verbose doctor --strict
-# The conditional policy modules a Go repository activates are decided from what
-# it contains. A JavaScript framework module is not one of them, and no
-# JavaScript-owned check reports anything, so a target without JavaScript is not
-# asked for the bundle's coverage. Activation is a report note, so the strict
-# doctor runs with the global --verbose flag that prints notes.
+
+
+
+
+
 if ! grep -q "conditional policy module: osv at ." "${output}"; then
   fail "go-only: the release activated no dependency scanning: $(excerpt)"
 fi
@@ -325,7 +366,6 @@ expect_absent "go-only activated a JavaScript framework policy module" \
 write_file "${go_only}/internal/greeting/farewell.go" <<'EOF'
 package greeting
 
-// Farewell is checked in unformatted.
 func Farewell( name string ) string {
 return "goodbye, " + name
 }
@@ -335,9 +375,9 @@ expect_finding "go-only" "quality.gofmt" "internal/greeting/farewell.go" "format
 expect_absent "go-only reported a JavaScript-owned check" \
   "^FAIL +quality\.(format|lint|typecheck|deadCode) "
 
-# A pnpm application. Its source is JavaScript, so the sealed formatter and the
-# sealed linter own it and the Go-owned complexity budgets are the rules they
-# run.
+
+
+
 pnpm_app="${fixture_root}/pnpm-app"
 mkdir -p "${pnpm_app}"
 write_file "${pnpm_app}/package.json" <<'EOF'
@@ -415,10 +455,11 @@ write_file "${pnpm_app}/.code-polishy.json" <<'EOF'
 }
 EOF
 seal_target "${pnpm_app}"
+exercise_documentation_lane "${pnpm_app}" "pnpm-app"
 expect_pass "${pnpm_app}" "pnpm-app" check --all
 expect_pass "${pnpm_app}" "pnpm-app" supply-chain --offline
-# The formatter decides one file, and the linter decides another, so one run
-# reports both rather than one masking the other.
+
+
 write_file "${pnpm_app}/src/unformatted.js" <<'EOF'
 export function shout( text ) {
     return text.toUpperCase()
@@ -433,9 +474,9 @@ expect_findings "${pnpm_app}" "pnpm-app" check --all
 expect_finding "pnpm-app" "quality.format" "src/unformatted.js" "prettier"
 expect_finding "pnpm-app" "quality.complexity" "src/parameters.js" "max-params"
 
-# A pnpm workspace. Package ownership and declared module direction are decided
-# across its members, and a workspace link is a resolution rather than a
-# release.
+
+
+
 monorepo="${fixture_root}/pnpm-monorepo"
 mkdir -p "${monorepo}"
 write_file "${monorepo}/package.json" <<'EOF'
@@ -496,8 +537,8 @@ export function main() {
   return greet("world");
 }
 EOF
-# The workspace link pnpm materializes, written here because no fixture
-# installs.
+
+
 mkdir -p "${monorepo}/packages/app/node_modules/@fixture"
 ln -s ../../../lib "${monorepo}/packages/app/node_modules/@fixture/lib"
 write_target_commands "${monorepo}"
@@ -561,8 +602,8 @@ EOF
 seal_target "${monorepo}"
 expect_pass "${monorepo}" "pnpm-monorepo" check --all
 expect_pass "${monorepo}" "pnpm-monorepo" supply-chain --offline
-# The library reaching back into the application is the direction the target
-# declared it does not have.
+
+
 write_file "${monorepo}/packages/lib/src/index.js" <<'EOF'
 import { main } from "../../app/src/index.js";
 
@@ -573,8 +614,8 @@ EOF
 expect_findings "${monorepo}" "pnpm-monorepo" architecture --all
 expect_finding "pnpm-monorepo" "architecture.moduleDependency" "packages/lib/src/index.js" "app"
 
-# A TypeScript project. Diagnostics come from the compiler the bundle carries,
-# reachability from the entry point the target declared.
+
+
 typescript="${fixture_root}/typescript"
 mkdir -p "${typescript}"
 write_file "${typescript}/package.json" <<'EOF'
@@ -665,7 +706,7 @@ write_file "${typescript}/.code-polishy.json" <<'EOF'
 EOF
 seal_target "${typescript}"
 expect_pass "${typescript}" "typescript" check --all
-# One file the compiler rejects, and one that no entry point reaches.
+
 write_file "${typescript}/src/widen.ts" <<'EOF'
 export function widen(count: number): string {
   return count;
@@ -675,9 +716,9 @@ expect_findings "${typescript}" "typescript" check --all
 expect_finding "typescript" "quality.typecheck" "src/widen.ts" "TS2322"
 expect_finding "typescript" "quality.deadCode" "src/widen.ts" "knip"
 
-# A React application. The Hooks rules are activated by what the package
-# declares rather than by anything the target configures, and the target
-# installs no lint plug-in for them.
+
+
+
 react="${fixture_root}/react"
 mkdir -p "${react}"
 write_file "${react}/package.json" <<'EOF'
@@ -718,9 +759,9 @@ packages:
     resolution: {integrity: sha512-bbb==}
 EOF
 write_pnpm_workspace "${react}"
-# The declarations a target's own installation would have left, written here
-# because no fixture installs. They are what the compiler reads about React;
-# the rules that decide the source come from the bundle.
+
+
+
 write_file "${react}/node_modules/react/package.json" <<'EOF'
 {
   "name": "react",

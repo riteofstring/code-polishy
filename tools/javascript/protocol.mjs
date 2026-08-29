@@ -1,25 +1,14 @@
-// The bounded JSON protocol every operation of the sealed, policy-owned
-// JavaScript tool bundle answers under, and the reading it is allowed to do.
-//
-// One request arrives on stdin or in the exact runner argument and one response
-// leaves on stdout. Nothing here is resolved from the invoking environment, the
-// working directory, a target's
-// node_modules, a user cache, or a global installation: every bundle path is
-// derived from this file's own installed location, and every target path is
-// required to name something inside the declared target tree.
-
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAXIMUM_REQUEST_BYTES = 1024 * 1024;
 export const MAXIMUM_OPERATION_PATHS = 4096;
 const MAXIMUM_FILE_BYTES = 4 * 1024 * 1024;
 const MAXIMUM_REASON_CHARACTERS = 200;
 const BUNDLE_MANIFEST_NAME = "bundle-manifest.json";
-// Environment that would let another party inject code, a module path, or a
-// debugger into a policy run. Go scrubs these; the bundle refuses them anyway.
+
 const PROHIBITED_ENVIRONMENT = [
   "NODE_OPTIONS",
   "NODE_PATH",
@@ -27,16 +16,9 @@ const PROHIBITED_ENVIRONMENT = [
 ];
 
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
-// The installed bundle as the file system really names it. Every analyzer is
-// installed behind a link, so a policy-owned declaration the type checker reads
-// arrives as a path inside the virtual store rather than the one it was
-// imported through.
+
 const bundleRoot = realpathSync(bundleDirectory);
-// The target tree as the file system really names it, recorded when a request
-// declares its root. A read is checked against this rather than against the
-// path the request wrote, because a lexical check only describes the text of a
-// path: a symlinked directory component makes a contained-looking relative path
-// name a file anywhere on the host.
+
 let targetRoot = "";
 
 export function respond(response) {
@@ -65,7 +47,6 @@ function readBundleJson(...segments) {
   }
 }
 
-// Refuse a launch that is not the sealed one before reading a request.
 export function requireSealedLaunch() {
   if (process.execArgv.length > 0) {
     fail(
@@ -85,9 +66,6 @@ export function requireSealedLaunch() {
   }
 }
 
-// What ran, from the installed bytes themselves. Every declared tool version is
-// confirmed against the package actually installed beside the runner, so a
-// drifted or substituted tree fails instead of reporting the version it claims.
 export function provenance() {
   const manifest = readBundleJson(BUNDLE_MANIFEST_NAME);
   const tools = {};
@@ -112,8 +90,6 @@ export function provenance() {
   };
 }
 
-// One bounded line of text. A tool's own diagnostics are the only unbounded
-// thing an operation handles, and none of them crosses the protocol whole.
 export function truncate(text) {
   const single = text.split("\n", 1)[0];
   return single.length > MAXIMUM_REASON_CHARACTERS
@@ -121,15 +97,10 @@ export function truncate(text) {
     : single;
 }
 
-// A file a sealed analyzer cannot decide. Reporting it is how coverage fails
-// closed: Go turns each one into a finding rather than treating it as clean.
 export function unsupported(path, reason) {
   return { path, reason: truncate(reason) };
 }
 
-// Where a path really is, or nothing when it names nothing. A path that does
-// not exist resolves nowhere, which is also the answer every caller wants: an
-// absent file is not a readable one.
 function resolved(path) {
   try {
     return realpathSync(path);
@@ -142,35 +113,20 @@ function insideTree(tree, path) {
   return tree !== "" && (path === tree || path.startsWith(`${tree}/`));
 }
 
-// Whether a path really names something inside the target tree. This is the one
-// question every static operation asks before it reads: a selected path, an
-// extension chain, a resolved module, and a link inside the target are all
-// admitted only when what they actually name is still inside the repository.
 export function containedRead(path) {
   return insideTree(targetRoot, resolved(path));
 }
 
-// Whether a path really names something the type checker may read. Its program
-// also reads the library declarations installed inside the bundle, which are
-// policy-owned bytes and the only tree outside the target a static operation
-// ever opens.
 export function containedProgramRead(path) {
   const real = resolved(path);
   return insideTree(targetRoot, real) || insideTree(bundleRoot, real);
 }
 
-// The remainder of an absolute file name inside the declared target tree, or
-// null for anything else. A tool names files absolutely; a result names one the
-// way the request did, and a file outside the target is never named at all.
 export function insideRoot(root, fileName) {
   const prefix = `${root}/`;
   return fileName.startsWith(prefix) ? fileName.slice(prefix.length) : null;
 }
 
-// Read one selected target file as text. Anything an analyzer must not decide
-// on bytes alone — an oversized file, a file that is not UTF-8 text, a symlink,
-// a directory, a path that really names a file outside the target tree — is
-// unsupported rather than silently analyzed or rewritten.
 export function readTargetFile(absolute, path, unsupportedPaths) {
   let info;
   let contained = false;
@@ -182,8 +138,6 @@ export function readTargetFile(absolute, path, unsupportedPaths) {
       data = readFileSync(absolute);
     }
   } catch (error) {
-    // The runtime names the file absolutely; the reported reason names it the
-    // way the request did, so no host path crosses the protocol.
     unsupportedPaths.push(
       unsupported(
         path,
@@ -219,10 +173,6 @@ export function readTargetFile(absolute, path, unsupportedPaths) {
   return text;
 }
 
-// The target tree a file operation reads. It is absolute and already normal, so
-// nothing here has to guess what an unnormalized or relative root would mean,
-// and it is recorded as the file system really names it, because that is what
-// every later read is checked against.
 export function requireContainedRoot(root) {
   if (
     typeof root !== "string" ||
@@ -242,8 +192,6 @@ export function requireContainedRoot(root) {
   targetRoot = real;
 }
 
-// Selected paths are repository relative and clean, so every one of them names
-// a file inside the declared root and no other tree can be reached through one.
 export function requireContainedPaths(paths) {
   if (!Array.isArray(paths)) {
     fail("the request declares paths that are not an array");
@@ -275,8 +223,6 @@ export function requireContainedPath(path) {
   }
 }
 
-// One JSON object with exactly the declared fields. An unknown field is a
-// protocol disagreement, and a missing one is never defaulted.
 export function requireExactObject(value, description, names) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     fail(`${description} is not a JSON object`);

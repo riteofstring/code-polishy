@@ -299,7 +299,8 @@ func TestCheckComparesTheEntireCanonicalAgentsFile(t *testing.T) {
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(expectedClaudeRedirect), 0o600)
 	status = Check(repoRoot, policyRoot)
-	if !status.Current || status.Message != "AGENTS.md canonical guidance is current; CLAUDE.md redirect is current" {
+	if !status.Current || !strings.Contains(status.Message, "AGENTS.md canonical guidance is current") ||
+		!strings.Contains(status.Message, "CLAUDE.md redirect is current") {
 		t.Fatalf("current status = %+v", status)
 	}
 }

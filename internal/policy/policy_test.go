@@ -37,14 +37,15 @@ func TestLoadAppliesNonBypassableDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Quality.MaxFileLines != MaxFileLines || config.Quality.Complexity.Go != MaxGoComplexity ||
-		config.Quality.MaxTestDepth != MaxTypeScriptTestDepth || config.Quality.MaxTestParams != MaxTypeScriptTestParams {
+	if config.Quality.MaxFileLines != 1000 || config.Quality.Complexity.Go != 12 ||
+		config.Quality.Complexity.Python != 10 ||
+		config.Quality.MaxTestDepth != 8 || config.Quality.MaxTestParams != 8 {
 		t.Fatalf("baseline defaults were not applied: %+v", config.Quality)
 	}
-	if config.SupplyChain.MinimumReleaseAgeDays != MinimumReleaseAgeDays {
+	if config.SupplyChain.MinimumReleaseAgeDays != 30 {
 		t.Fatalf("release age = %d", config.SupplyChain.MinimumReleaseAgeDays)
 	}
-	if config.SupplyChain.PreferredNewDependencyAgeDays != PreferredNewDependencyAgeDays || config.SupplyChain.AuditLevel != "low" {
+	if config.SupplyChain.PreferredNewDependencyAgeDays != 90 || config.SupplyChain.AuditLevel != "low" {
 		t.Fatalf("dependency admission defaults = %+v", config.SupplyChain)
 	}
 	moduleSuite := config.Tests.Suites[0]
@@ -54,6 +55,174 @@ func TestLoadAppliesNonBypassableDefaults(t *testing.T) {
 	repositorySuite := config.Tests.Suites[1]
 	if repositorySuite.Cost != "standard" || !slices.Equal(repositorySuite.RunOn, []string{"full"}) {
 		t.Fatalf("repository suite defaults = %+v", repositorySuite)
+	}
+}
+
+func TestLoadAppliesCommentPolicyDefault(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		quality string
+		allowed bool
+	}{
+		"omitted":        {quality: `{}`, allowed: true},
+		"explicit false": {quality: `{"allowComments":false}`, allowed: false},
+		"explicit true":  {quality: `{"allowComments":true}`, allowed: true},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			configText := strings.Replace(minimalConfig(), `"quality":{}`, `"quality":`+testCase.quality, 1)
+			config, err := Load(writeConfig(t, configText), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Quality.CommentsAllowed() != testCase.allowed {
+				t.Fatalf("CommentsAllowed() = %t, want %t", config.Quality.CommentsAllowed(), testCase.allowed)
+			}
+		})
+	}
+}
+
+func TestDocumentationDesignMappingsResolveOneOwnerPerTarget(t *testing.T) {
+	t.Parallel()
+	documentation := `{"design":[
+  {"path":"docs/design/content.md","module":"content"},
+  {"path":"docs/design/entry.md","sourcePaths":["content/entry.go","content/config.ts"]}
+]}`
+	config, err := Load(writeConfig(t, strings.Replace(minimalConfig(), `"checks":[]`, `"documentation":`+documentation+`,"checks":[]`, 1)), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Documentation.Design) != 2 || config.Documentation.Design[0].Module != "content" ||
+		!slices.Equal(config.Documentation.Design[1].SourcePaths, []string{"content/entry.go", "content/config.ts"}) {
+		t.Fatalf("design documents = %+v", config.Documentation.Design)
+	}
+}
+
+func TestDocumentationProductInputsAcceptExactMarkdownPaths(t *testing.T) {
+	t.Parallel()
+	documentation := `{"productInputs":["docs/site.MD","generated/reference.MARKDOWN"]}`
+	config, err := Load(writeConfig(t, strings.Replace(minimalConfig(), `"checks":[]`, `"documentation":`+documentation+`,"checks":[]`, 1)), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(config.Documentation.ProductInputs, []string{"docs/site.MD", "generated/reference.MARKDOWN"}) {
+		t.Fatalf("product inputs = %v", config.Documentation.ProductInputs)
+	}
+}
+
+func TestDocumentationProductInputsRejectNonExactOrNonMarkdownPaths(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		paths string
+		want  string
+	}{
+		"duplicate": {
+			paths: `["docs/site.md","docs/site.md"]`,
+			want:  "must not contain duplicate",
+		},
+		"glob": {
+			paths: `["docs/*.md"]`,
+			want:  "concrete repository path",
+		},
+		"escape": {
+			paths: `["../docs/site.md"]`,
+			want:  "stay inside the repository",
+		},
+		"noncanonical": {
+			paths: `["./docs/site.md"]`,
+			want:  "canonical repository-relative path",
+		},
+		"non markdown": {
+			paths: `["docs/site.txt"]`,
+			want:  "must name a Markdown file",
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			documentation := `{"productInputs":` + test.paths + `}`
+			config := strings.Replace(minimalConfig(), `"checks":[]`, `"documentation":`+documentation+`,"checks":[]`, 1)
+			if _, err := Load(writeConfig(t, config), ""); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestDocumentationDesignMappingsRejectAmbiguousOrUnboundedTargets(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		documentation string
+		config        func(string) string
+		want          string
+	}{
+		"requires one selector": {
+			documentation: `{"design":[{"path":"docs/design/content.md"}]}`,
+			want:          "exactly one of module or sourcePaths",
+		},
+		"rejects both selectors": {
+			documentation: `{"design":[{"path":"docs/design/content.md","module":"content","sourcePaths":["content/file.go"]}]}`,
+			want:          "exactly one of module or sourcePaths",
+		},
+		"rejects unknown module": {
+			documentation: `{"design":[{"path":"docs/design/content.md","module":"missing"}]}`,
+			want:          "unknown module",
+		},
+		"rejects duplicate document": {
+			documentation: `{"design":[{"path":"docs/design/content.md","module":"content"},{"path":"docs/design/content.md","sourcePaths":["content/file.go"]}]}`,
+			want:          "duplicate design document path",
+		},
+		"rejects duplicate module": {
+			documentation: `{"design":[{"path":"docs/design/one.md","module":"content"},{"path":"docs/design/two.md","module":"content"}]}`,
+			want:          "more than one design document",
+		},
+		"rejects duplicate source": {
+			documentation: `{"design":[{"path":"docs/design/one.md","sourcePaths":["content/file.go"]},{"path":"docs/design/two.md","sourcePaths":["content/file.go"]}]}`,
+			want:          "source path \"content/file.go\" has more than one design document",
+		},
+		"rejects glob document path": {
+			documentation: `{"design":[{"path":"docs/design/*.md","module":"content"}]}`,
+			want:          "concrete repository path",
+		},
+		"rejects historical document path": {
+			documentation: `{"design":[{"path":"docs/history/content.md","module":"content"}]}`,
+			want:          "under docs/design",
+		},
+		"rejects non markdown document path": {
+			documentation: `{"design":[{"path":"docs/design/content.markdown","module":"content"}]}`,
+			want:          "under docs/design",
+		},
+		"rejects noncanonical document path": {
+			documentation: `{"design":[{"path":"./docs/design/content.md","module":"content"}]}`,
+			want:          "canonical repository-relative path",
+		},
+		"rejects glob source path": {
+			documentation: `{"design":[{"path":"docs/design/content.md","sourcePaths":["content/*.go"]}]}`,
+			want:          "concrete repository path",
+		},
+		"rejects unmatched source": {
+			documentation: `{"design":[{"path":"docs/design/content.md","sourcePaths":["other/file.go"]}]}`,
+			want:          "must match exactly one module, matched 0",
+		},
+		"rejects multiply owned source": {
+			documentation: `{"design":[{"path":"docs/design/content.md","sourcePaths":["content/file.go"]}]}`,
+			config: func(text string) string {
+				return strings.Replace(text, `[{"name":"content","paths":["content/**"]}]`, `[{"name":"content","paths":["content/**"]},{"name":"other","paths":["content/**"]}]`, 1)
+			},
+			want: "must match exactly one module, matched 2",
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			config := strings.Replace(minimalConfig(), `"checks":[]`, `"documentation":`+test.documentation+`,"checks":[]`, 1)
+			if test.config != nil {
+				config = test.config(config)
+			}
+			if _, err := Load(writeConfig(t, config), ""); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 
@@ -113,8 +282,6 @@ func TestExplicitEmptyProtocolsRemainStrict(t *testing.T) {
 	}
 }
 
-// A license policy names licenses the way SPDX does, so a declared expression
-// can be compared with it as written rather than interpreted.
 func TestLicensePolicyNamesSPDXIdentifiers(t *testing.T) {
 	t.Parallel()
 	allowed := `"allowedLicenses":["MIT","Apache-2.0","GPL-2.0-or-later","LGPL-2.1+","GPL-2.0-only WITH Classpath-exception-2.0"]`
@@ -346,7 +513,7 @@ func TestExternalInputsRequireCheapContractAndOrdinaryBehaviorEvidence(t *testin
 func TestConditionalPolicyModuleOverridesAreExactAndGoverned(t *testing.T) {
 	t.Parallel()
 	expiry := time.Now().UTC().AddDate(0, 0, 30).Format("2006-01-02")
-	disabled := `"policyModules":{"overrides":[{"name":"react","root":"./web/","mode":"disabled","reason":"fixture package","owner":"quality","expires":"` + expiry + `"}]},`
+	disabled := `"policyModules":{"overrides":[{"name":"ty","root":"./web/","mode":"disabled","reason":"fixture package","owner":"quality","expires":"` + expiry + `"}]},`
 	configText := strings.Replace(minimalConfig(), `"quality":{}`, disabled+`"quality":{}`, 1)
 	config, err := Load(writeConfig(t, configText), "")
 	if err != nil {
@@ -399,8 +566,6 @@ func TestLoadRejectsUniversalExclude(t *testing.T) {
 	}
 }
 
-// Development-only files are declared the same way every other scope fact is,
-// and a pattern that would hide the repository is refused there too.
 func TestLoadReadsDevelopmentScope(t *testing.T) {
 	t.Parallel()
 	valid := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"development":["*.config.ts"]},"quality":{}`, 1)
@@ -1035,9 +1200,7 @@ func TestCheckedInSchemaAndTemplatesLoad(t *testing.T) {
 	if err := json.Unmarshal(schemaData, &schema); err != nil {
 		t.Fatalf("schema is not valid JSON: %v", err)
 	}
-	// The schema a target validates against and the parser that reads it name
-	// the same version, so no target can be told its file is valid by one and
-	// refused by the other.
+
 	if schema.Properties.Version.Const != ConfigVersion {
 		t.Errorf("schema version const = %d, parser expects %d", schema.Properties.Version.Const, ConfigVersion)
 	}
@@ -1098,9 +1261,6 @@ func TestCheckedInToolVersionPinsHaveReleaseAgeCoverage(t *testing.T) {
 		covered[artifact.VersionFile] = true
 	}
 
-	// pnpm is already observed as the exact packageManager release in the
-	// JavaScript manifest, so its separate archive pin must identify that same
-	// release rather than creating a second artifact-age identity.
 	packageData, err := os.ReadFile(filepath.Join(repositoryRoot, "tools", "javascript", "package.json"))
 	if err != nil {
 		t.Fatal(err)

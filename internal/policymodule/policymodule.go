@@ -31,6 +31,8 @@ func Resolve(repo repository.Repository, files []string) Resolution {
 		switch activation.Name {
 		case "ruff":
 			applyRuff(repo, files, activation, &resolution)
+		case "ty":
+			applyTy(repo, files, activation, &resolution)
 		case "react":
 			applyReact(packages, activation, &resolution)
 		case "electron":
@@ -62,6 +64,9 @@ func discover(repo repository.Repository, files []string, packages []nodePackage
 	active := []policy.ActivePolicyModule{}
 	for _, root := range pythonRoots(repo, files) {
 		active = append(active, activation("ruff", root, "Python source"))
+	}
+	for _, root := range tyRoots(repo, files) {
+		active = append(active, activation("ty", root, "Python source"))
 	}
 	for _, pkg := range packages {
 		if pkg.hasDependency("react") {

@@ -69,10 +69,7 @@ func TestOSRunnerBoundsStructuredOutputCapture(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "captured structured output") {
 		t.Fatalf("large structured output error = %v", err)
 	}
-	// The process completed successfully, but the governed command failed
-	// because accepting a truncated structured response would be unsafe. Keep
-	// the process status as execution evidence while the caller records the
-	// governed failure.
+
 	if result.ExitStatus != 0 || len(output.Stdout) != maximumStructuredOutputBytes || len(output.Stderr) != maximumStructuredDiagnosticBytes {
 		t.Fatalf("large structured output result=%+v stdout=%d stderr=%d", result, len(output.Stdout), len(output.Stderr))
 	}
@@ -429,8 +426,6 @@ func TestToolOutputUsesRestrictedEnvironment(t *testing.T) {
 	}
 }
 
-// Which version of a pinned Go analyzer a policy root carries is read out of
-// the binary with the pinned toolchain, so deciding it contacts nothing.
 func TestGoModuleVersionReadsTheBinaryRatherThanRunningIt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -448,8 +443,7 @@ func TestGoModuleVersionReadsTheBinaryRatherThanRunningIt(t *testing.T) {
 	if got := GoModuleVersion(goTool, binary); got != "1.3.0" {
 		t.Fatalf("GoModuleVersion = %q, want 1.3.0", got)
 	}
-	// A toolchain that cannot read the file names no version, so the caller
-	// refuses the tool rather than accepting whatever is installed.
+
 	if got := GoModuleVersion(filepath.Join(root, "absent"), binary); got != "" {
 		t.Fatalf("a missing toolchain reported %q", got)
 	}

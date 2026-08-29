@@ -13,9 +13,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// SourceFindings performs conservative, cheap checks for test bodies that
-// cannot provide evidence. Semantic weakness is left to supplemental mutation
-// suites because source-shape heuristics cannot prove test effectiveness.
 func SourceFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {

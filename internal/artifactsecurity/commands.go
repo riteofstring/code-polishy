@@ -9,10 +9,6 @@ import (
 
 const governedDockerCommandPrefix = "artifact-security-docker-"
 
-// PlannedCommands describes every external process on the successful artifact
-// security path before a merge gate starts. Docker arguments include private
-// runtime paths and random container names, so the frozen plan owns the stable
-// operation identity while the receipt records the exact invocation.
 func PlannedCommands(repo repository.Repository) []policy.Command {
 	targets := repo.Config.SupplyChain.ArtifactSecurity.Targets
 	if len(targets) == 0 {
@@ -79,9 +75,6 @@ func plannedDockerCleanupCommand(operation string) policy.Command {
 	return dockerCleanupCommand(governedDockerCommandPrefix + operation)
 }
 
-// MatchesPlannedCommand permits the private paths and unpredictable container
-// names that are deliberately created after the frozen plan. Every other
-// governed command continues to require an exact identity match.
 func MatchesPlannedCommand(expected, actual policy.Command) bool {
 	if strings.HasPrefix(expected.Name, governedDockerCommandPrefix) {
 		return matchesPlannedDockerCommand(expected, actual)
@@ -123,8 +116,6 @@ func samePlannedArtifactCommandBoundary(expected, actual policy.Command) bool {
 	return expected.Name == actual.Name && expected.Cwd == actual.Cwd && expected.TimeoutSeconds == actual.TimeoutSeconds && expected.SealedEnvironment == actual.SealedEnvironment
 }
 
-// IsCleanupCommand identifies the transaction-preserving cleanup operations
-// that may run after a failed preparation step.
 func IsCleanupCommand(command policy.Command) bool {
 	return strings.HasPrefix(command.Name, governedDockerCommandPrefix) && strings.Contains(command.Name, "-remove")
 }

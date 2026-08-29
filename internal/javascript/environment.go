@@ -6,11 +6,6 @@ import (
 	"path/filepath"
 )
 
-// scratch is the policy-owned temporary tree one operation runs against: its
-// working directory, its temporary directory, and every location a tool would
-// otherwise read user configuration or a cache from. The exchange deletes it,
-// so no policy run reads or writes the invoking user's home, and nothing an
-// operation writes survives it.
 type scratch struct {
 	root string
 	home string
@@ -38,11 +33,6 @@ func newScratch() (scratch, error) {
 	return created, nil
 }
 
-// environment is the child's complete environment. It is built rather than
-// filtered, so credential, proxy, loader, debugger, package-manager, and
-// user-configuration variables are absent by construction instead of by
-// blocklist. PATH is empty because every executable a policy operation runs is
-// named by an absolute policy-owned path.
 func (created scratch) environment() []string {
 	absentConfiguration := filepath.Join(created.home, "absent-npmrc")
 	return []string{

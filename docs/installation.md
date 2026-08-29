@@ -53,6 +53,12 @@ checksum and complete release manifest, installs it atomically, and deletes the
 ZIP. That archive is an internal staging boundary, not a downloaded or
 published release asset.
 
+When Windows does not grant symlink creation privilege, pnpm materializes its
+isolated dependency graph with absolute directory junctions. The tool installer
+therefore builds that graph only at its stable transaction-owned location and
+removes incomplete output on failure; moving a completed graph from a different
+staging path would leave its junction targets pointing at the wrong tree.
+
 The tool installer is the only networked installation stage. It admits only
 the checked-in pinned tool artifacts, verifies every archive before extraction,
 builds the pinned Go analyzers with the pinned Go toolchain, and installs the
@@ -102,8 +108,8 @@ One release identity has one self-contained policy root per supported host:
   toolchain;
 - the sealed Node runtime and JavaScript tool bundle;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
-  staticcheck, govulncheck, OSV-Scanner, and Ruff. A target installs no policy
-  tooling, and none of these is ever taken from an ambient `PATH`, a host
+  staticcheck, govulncheck, OSV-Scanner, Ruff, and `ty`. A target installs no
+  policy tooling, and none of these is ever taken from an ambient `PATH`, a host
   installation, or an environment override, so a check decides the same thing
   on every machine that has the matching host release;
 - the version-matched `README.md`, `CHANGELOG.md`, and complete permanent
@@ -147,6 +153,12 @@ with that reason rather than reinterpreted, so a release installed before the
 manifest changed is reinstalled from its commit rather than read as if it
 recorded what a release records now.
 
+Code Polishy 0.19.0 uses manifest version 3. Its required `tools.ty` field
+records the carried `ty` 0.0.65 release. A version 2 manifest is rejected and
+reinstalled from its exact source commit; it is never treated as evidence that
+the release carried or verified `ty`. The target configuration version is a
+separate contract.
+
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after
 installation, or copied from another host fails verification and is reinstalled
@@ -158,9 +170,9 @@ run on Linux, macOS, and Windows.
 Before it stages anything, the installer asks every tool the release will carry
 what version it is and requires the answer to be the version the checked-in pin
 beside it names — the Go toolchain, Node, pnpm, ShellCheck, staticcheck,
-govulncheck, OSV-Scanner, and Ruff. The manifest records those versions and a
-target trusts them, and a present file and a byte inventory cannot show that a
-local tool cache holds the version the manifest would claim. The two Go
+govulncheck, OSV-Scanner, Ruff, and `ty`. The manifest records those versions
+and a target trusts them, and a present file and a byte inventory cannot show
+that a local tool cache holds the version the manifest would claim. The two Go
 analyzers are read out of their binaries with the pinned toolchain rather than
 asked: `govulncheck -version` contacts the vulnerability database, and
 installation reaches no network. The engine and the launcher are built here

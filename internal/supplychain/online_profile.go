@@ -22,10 +22,6 @@ func Online(ctx context.Context, repo repository.Repository, files []string, com
 	return OnlineWithCommands(ctx, repo, files, commands, commandRunner)
 }
 
-// OnlineCommands is the complete ordered set of governed process commands in
-// the online supply-chain profile. Provider-owned assessments remain outside
-// this list, but every local process (including structured-report scanners)
-// is planned through the common runner.
 func OnlineCommands(repo repository.Repository, files []string) ([]policy.Command, error) {
 	commands := []policy.Command{}
 	for _, module := range repo.GoModules(files) {

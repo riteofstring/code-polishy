@@ -7,8 +7,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// A repository that declares no allowed licenses declares no license policy, so
-// none is invented for it and the bundle is never asked for metadata.
 func TestNoConfiguredLicensePolicyEnforcesNone(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -22,8 +20,6 @@ func TestNoConfiguredLicensePolicyEnforcesNone(t *testing.T) {
 	}
 }
 
-// Every resolved release is decided against the configured policy: a license it
-// allows passes, and one it does not is named with the expression it declared.
 func TestConfiguredLicensePolicyDecidesEveryResolvedRelease(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT", "Apache-2.0"},
@@ -41,9 +37,6 @@ func TestConfiguredLicensePolicyDecidesEveryResolvedRelease(t *testing.T) {
 	}
 }
 
-// A release the installed tree has no metadata for was never decided, so it is
-// missing coverage rather than a release with nothing against it. Only the
-// registry releases the lock resolved are in scope.
 func TestUnreadableLicenseMetadataIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT"}, ``,
@@ -56,9 +49,6 @@ func TestUnreadableLicenseMetadataIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// A normal frozen install on this host omits an optional release that the lock
-// declares only for another platform. The installed tree therefore has no
-// manifest to read, but the sealed package fact makes that absence expected.
 func TestPlatformExcludedLicenseMetadataIsNotMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT"}, ``,
@@ -72,10 +62,6 @@ func TestPlatformExcludedLicenseMetadataIsNotMissingCoverage(t *testing.T) {
 	}
 }
 
-// Only a foreign optional release may omit its metadata without blocking. A
-// universal release, a host-compatible optional release, a release reached by
-// both optional and required snapshots, and an undecidable one all remain
-// coverage obligations.
 func TestRequiredAndUnknownLicenseMetadataRemainMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT"}, ``,
@@ -101,9 +87,6 @@ func TestRequiredAndUnknownLicenseMetadataRemainMissingCoverage(t *testing.T) {
 	}
 }
 
-// A platform exclusion changes only the expectation that a normal host install
-// has metadata. If the release is nevertheless installed, its declared license
-// is still governed rather than ignored.
 func TestInstalledPlatformExcludedLicenseMetadataIsStillEnforced(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT"},
@@ -119,8 +102,6 @@ func TestInstalledPlatformExcludedLicenseMetadataIsStillEnforced(t *testing.T) {
 	}
 }
 
-// A tree the reader could not open at all is reported as the reason it gave,
-// against the path it names, so an uninstalled project fails closed.
 func TestUnreadableInstalledTreeIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -140,9 +121,6 @@ func TestUnreadableInstalledTreeIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// A lock the reader could not read resolves nothing, so it is reported as
-// missing lock coverage alone rather than as that plus a license lane with
-// nothing to govern.
 func TestAnUnreadableLockReportsNoLicenseCoverage(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -161,8 +139,6 @@ func TestAnUnreadableLockReportsNoLicenseCoverage(t *testing.T) {
 	}
 }
 
-// A missing bundle fails closed: a license is never decided by an ambient
-// runtime or by assuming a package declared what it should have.
 func TestLicenseFactsFailClosedWithoutTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -174,8 +150,6 @@ func TestLicenseFactsFailClosedWithoutTheBundle(t *testing.T) {
 	}
 }
 
-// A dual license offers a choice, so allowing either side admits it; a package
-// licensed under two licenses at once binds the target to both.
 func TestLicenseExpressionOperatorsDecideTheChoiceTheyOffer(t *testing.T) {
 	t.Parallel()
 	allowed := licenseAllowList([]string{"MIT", "Apache-2.0 WITH LLVM-exception"})
@@ -195,8 +169,6 @@ func TestLicenseExpressionOperatorsDecideTheChoiceTheyOffer(t *testing.T) {
 	}
 }
 
-// An expression this reader cannot parse is refused rather than admitted on a
-// guess: a license nobody can name is not one the target reviewed.
 func TestUnreadableLicenseExpressionIsRefused(t *testing.T) {
 	t.Parallel()
 	allowed := licenseAllowList([]string{"MIT"})
@@ -209,8 +181,6 @@ func TestUnreadableLicenseExpressionIsRefused(t *testing.T) {
 	}
 }
 
-// licenseRepository is one pnpm project whose installed tree declares exactly
-// these licenses and whose lockfile resolved exactly these packages.
 func licenseRepository(t *testing.T, allowed []string, installed, resolved string) repository.Repository {
 	t.Helper()
 	repo := pnpmRepository(t)

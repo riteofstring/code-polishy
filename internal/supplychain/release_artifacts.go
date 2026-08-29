@@ -250,9 +250,7 @@ func lookupNodeRuntimeRelease(ctx context.Context, client artifactHTTPClient, ve
 		if err != nil {
 			return time.Time{}, fmt.Errorf("node release %s has an invalid release date", wanted)
 		}
-		// Node publishes a calendar date without a time. The following UTC
-		// midnight is the conservative upper bound, so the gate never admits a
-		// runtime before the full release day plus the configured minimum.
+
 		return date.AddDate(0, 0, 1), nil
 	}
 	return time.Time{}, fmt.Errorf("node release metadata omitted %s", wanted)

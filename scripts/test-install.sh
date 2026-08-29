@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Contract tests for local Code Polishy release installation.
-#
-# Every case runs the real installer and the real release-manifest script
-# against a disposable checkout built in a temporary directory, so nothing here
-# reads or writes the developer's own installation, checkout, or Git history.
-# The disposable checkout stands in for a reviewed one: it carries the same
-# layout and the same version pins, with a stub build and a stub sealed runtime,
-# because what is under test is what the installer decides rather than what the
-# compiler and Node emit.
+
+
+
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# Resolved, because the launcher resolves the paths it hands a release and a
-# temporary directory is a link on some hosts.
+
+
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-install-test.XXXXXX")" && pwd -P)"
 cleanup() {
   rm -rf "${fixture_root}"
@@ -32,10 +32,10 @@ release_list="${fixture_root}/releases.txt"
 launcher_binary="${fixture_root}/code-polishy-launcher"
 real_git="$(command -v git)"
 
-# Every git invocation here — building fixtures and the installer under test —
-# runs against pinned empty user and system configuration, so a developer's own
-# settings (signing, hook templates, status tuning) cannot shape what these
-# contracts prove.
+
+
+
+
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 fail() {
@@ -54,9 +54,9 @@ case "$(uname -m)" in
   *) fail "unsupported test architecture $(uname -m)" ;;
 esac
 platform_tag="${os_tag}-${arch_tag}"
-# The pinned Go toolchain and ShellCheck name this host the way their own
-# distributions do, and a release keeps each tree under the name the engine
-# resolves.
+
+
+
 case "${arch_tag}" in
   arm64)
     go_platform_tag="${os_tag}-arm64"
@@ -88,8 +88,8 @@ EOF
   chmod +x "$1"
 }
 
-# A stub that answers the one version probe the installer makes of it, in the
-# form its own distribution answers, and nothing else.
+
+
 write_version_tool() {
   local path="$1" probe="$2" reported="$3"
   write_file "${path}" <<EOF
@@ -104,7 +104,7 @@ EOF
   chmod +x "${path}"
 }
 
-# A checkout with exactly the layout a release is built from.
+
 build_source_checkout() {
   local bundle_source_file
   rm -rf "${source_root}"
@@ -152,7 +152,11 @@ EOF
   printf 'v1.3.0\n' >"${source_root}/tools/govulncheck-version.txt"
   printf 'v2.4.0\n' >"${source_root}/tools/osv-scanner-version.txt"
   printf '0.16.0\n' >"${source_root}/tools/ruff-version.txt"
+  printf '0.0.65\n' >"${source_root}/tools/ty-version.txt"
   printf '0.72.0\n' >"${source_root}/tools/trivy-version.txt"
+  write_file "${source_root}/tools/ty.toml" <<'EOF'
+[rules]
+EOF
   printf '# disposable inventory\nexample-tool@1.2.3\tMIT\n' \
     >"${source_root}/tools/javascript_bundle_inventory.txt"
   write_file "${source_root}/.gitignore" <<'EOF'
@@ -183,10 +187,10 @@ exit 0
 EOF
   chmod +x "${source_root}/tools/shellcheck.sh"
 
-  # The engine binary is a stub, because what is under test is what the
-  # installer decides rather than what the compiler emits. The launcher is the
-  # real one: selecting the exact locked release out of an installed store is
-  # the behavior these cases exercise.
+
+
+
+
   write_file "${source_root}/scripts/build.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -209,7 +213,7 @@ fi
 EOF
   chmod +x "${source_root}/scripts/build.sh"
 
-  # The checked-in bundle source that the bundle manifest digests.
+
   write_file "${source_root}/tools/javascript/package.json" <<'EOF'
 {
   "name": "code-polishy-javascript",
@@ -225,9 +229,9 @@ EOF
       >"${source_root}/tools/javascript/${bundle_source_file}"
   done
 
-  # The sealed runtime and the materialized bundle, as their own acquisition
-  # step would have left them. Node answers what it is and what the pnpm it runs
-  # is, because the installer asks both before it stages a release.
+
+
+
   write_file "${source_root}/.tools/javascript/${platform_tag}/node/bin/node" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "--version" ]]; then
@@ -257,12 +261,12 @@ EOF
   "${source_root}/tools/javascript-bundle-manifest.sh" write \
     "${source_root}/.tools/javascript/bundle"
 
-  # The pinned tools the engine runs from its policy root, as their own
-  # acquisition step would have left them. A target installs no policy tooling
-  # and has no ambient one to fall back to, so a release carries these. Each one
-  # answers the version probe the installer makes of it: the toolchain answers
-  # for itself and for the module version recorded in each Go analyzer it is
-  # asked to read.
+
+
+
+
+
+
   write_file "${source_root}/.tools/go/${go_platform_tag}/go/bin/go" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
@@ -289,7 +293,8 @@ EOF
     --version "version: 0.11.0"
   write_version_tool "${source_root}/.tools/bin/osv-scanner" --version "osv-scanner version: 2.4.0"
   write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.16.0"
-  # Read with the toolchain rather than run, so these two only have to exist.
+  write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
+
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
 
@@ -300,9 +305,9 @@ EOF
   "${real_git}" -C "${source_root}" commit --quiet -m "disposable checkout"
 }
 
-# git and gh wrappers that record what the installer asks of them. The installer
-# must read local identity and local status only, and must never reach for a
-# remote or for an authenticated GitHub client.
+
+
+
 build_command_shims() {
   mkdir -p "${shim_bin}"
   cat >"${shim_bin}/git" <<EOF
@@ -324,10 +329,11 @@ install_release() {
 }
 
 path_after_action() {
-  # The nested shell expands ACTION_FILE and PATH after it starts.
-  # shellcheck disable=SC2016
   env ACTION_FILE="$1" PATH=/usr/bin:/bin \
-    bash --noprofile --norc -c 'source "$ACTION_FILE"; printf "%s\n" "$PATH"'
+    bash --noprofile --norc <<'EOF'
+source "${ACTION_FILE}"
+printf '%s\n' "${PATH}"
+EOF
 }
 
 record_installed_releases() {
@@ -352,9 +358,9 @@ manifest_field() {
   awk -v key="\"$2\":" '$1 == key { value = $2; gsub(/[",]/, "", value); print value; exit }' "$1"
 }
 
-# Write the lock that requires one installed release, exactly as the release's
-# own `lock` command would, so the launcher is driven by a target's checked-in
-# file rather than by anything this test hands it.
+
+
+
 write_target_lock() {
   local target="$1"
   local manifest="$2"
@@ -374,8 +380,8 @@ EOF
 build_source_checkout
 build_command_shims
 
-# An existing command path outside the install prefix is independent user state.
-# The installer refuses a collision before it writes a release or launcher.
+
+
 mkdir -p "${command_root}"
 ln -s "${fixture_root}/unrelated-command" "${command_link}"
 if install_release >"${fixture_root}/command-collision.log" 2>&1; then
@@ -387,7 +393,7 @@ grep -q "Refusing to replace the unrelated command link" \
 [[ ! -e "${prefix}" ]] || fail "a command-link collision changed the install prefix"
 rm "${command_link}"
 
-# A clean checkout installs exactly one verified release.
+
 install_release >"${fixture_root}/install.log"
 grep -Fq 'Command discovery:' "${fixture_root}/install.log" ||
   fail "installer did not report stable launcher discovery"
@@ -416,11 +422,11 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
   fail "the release does not record this host"
 [[ "$(manifest_field "${manifest}" codePolishyVersion)" == "9.9.9" ]] ||
   fail "the release does not record the checkout version"
-# The release records the exact version of every executable it carries, in the
-# one form its pins are compared in, so a target reading the manifest learns
-# what governs it without opening the release.
+
+
+
 for carried in go:1.26.6 node:24.18.0 pnpm:11.13.0 shellcheck:0.11.0 \
-  staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 ruff:0.16.0; do
+  staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 ruff:0.16.0 ty:0.0.65; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
 done
@@ -431,9 +437,9 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 [[ "${release_digest}" != "${content_digest}" ]] ||
   fail "the host-independent digest is the installed-bytes digest"
 
-# Every documented or runtime path a release promises. A release that is
-# missing one is incomplete, so each is required here rather than discovered
-# when a target tries to read the docs or run the command that needs it.
+
+
+
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md schema/code-polishy.schema.json \
   templates/AGENTS.md templates/CLAUDE.md \
@@ -442,7 +448,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
   tools/staticcheck-version.txt tools/govulncheck-version.txt \
-  tools/osv-scanner-version.txt tools/ruff-version.txt \
+  tools/osv-scanner-version.txt tools/ruff-version.txt tools/ty-version.txt tools/ty.toml \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
   ".tools/javascript/${platform_tag}/node/bin/node" \
   ".tools/javascript/${platform_tag}/pnpm/bin/pnpm.cjs" \
@@ -450,7 +456,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/go/${go_platform_tag}/go/bin/go" \
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
-  .tools/bin/staticcheck .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff; do
+  .tools/bin/staticcheck .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
@@ -472,7 +478,7 @@ cmp -s "${source_root}/templates/CLAUDE.md" "${release}/templates/CLAUDE.md" ||
 "${release}/scripts/release-manifest.sh" verify "${release}" ||
   fail "a freshly installed release does not verify"
 
-# The installer reads local identity and local status only.
+
 if [[ -e "${gh_marker}" ]]; then
   fail "the installer invoked gh"
 fi
@@ -484,7 +490,7 @@ while read -r invocation; do
 done <"${git_log}"
 grep -q "rev-parse HEAD" "${git_log}" || fail "the installer did not read the local commit"
 
-# Installing the same commit again keeps the verified release it already has.
+
 CODE_POLISHY_TEST_BUILD_MARK=second install_release >"${fixture_root}/reinstall.log"
 grep -q "already installed" "${fixture_root}/reinstall.log" ||
   fail "reinstalling the same commit did not recognize the installed release"
@@ -497,8 +503,8 @@ grep -Fq 'Command discovery: code-polishy already resolves to the installed laun
   "${fixture_root}/discoverable-reinstall.log" ||
   fail "installer did not recognize the stable launcher already on PATH"
 
-# Persistent PATH configuration is explicit, uses one caller-selected profile,
-# and remains idempotent across reinstalls.
+
+
 install_release --add-to-path --path-profile "${path_profile}" \
   >"${fixture_root}/add-to-path.log"
 grep -Fq '# Code Polishy PATH' "${path_profile}" ||
@@ -511,8 +517,8 @@ install_release --add-to-path --path-profile "${path_profile}" \
 [[ "$(grep -Fc '# Code Polishy PATH' "${path_profile}")" == "1" ]] ||
   fail "--add-to-path duplicated its profile entry"
 
-# A changed owned marker is no longer the installer's exact state to update.
-# Refuse it before touching the verified release, then restore the fixture.
+
+
 cp "${path_profile}" "${fixture_root}/expected-shell-profile"
 printf 'export PATH=/unrelated:"%s" # Code Polishy PATH\n' "\$PATH" >"${path_profile}"
 if install_release --add-to-path --path-profile "${path_profile}" \
@@ -524,8 +530,8 @@ grep -q "Refusing to replace the existing Code Polishy PATH entry" \
   fail "a changed PATH entry was refused without naming the conflict"
 mv "${fixture_root}/expected-shell-profile" "${path_profile}"
 
-# A release whose installed bytes changed is replaced whole by reinstalling the
-# commit it was built from, and the rejected tree does not stay in the store.
+
+
 printf 'tampered\n' >>"${release}/bin/code-polishy"
 install_release >"${fixture_root}/replace.log"
 [[ "$(installed_release_count)" == "1" ]] ||
@@ -538,7 +544,7 @@ if [[ -n "$(find "${prefix}/releases" -mindepth 1 -maxdepth 1 -name '.superseded
   fail "replacing a changed release left the rejected tree in the store"
 fi
 
-# A dirty checkout is not a reviewed commit.
+
 printf 'uncommitted\n' >"${source_root}/scratch.txt"
 if install_release >"${fixture_root}/dirty.log" 2>&1; then
   fail "a dirty checkout installed a release"
@@ -548,8 +554,8 @@ grep -q "is not clean" "${fixture_root}/dirty.log" ||
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a dirty checkout changed what is installed"
 
-# Untracked drift is refused even where configuration hides it from an
-# unpinned status report.
+
+
 "${real_git}" -C "${source_root}" config status.showUntrackedFiles no
 if install_release >"${fixture_root}/hidden-dirty.log" 2>&1; then
   fail "a dirty checkout with status.showUntrackedFiles=no installed a release"
@@ -561,9 +567,9 @@ rm "${source_root}/scratch.txt"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a config-hidden dirty checkout changed what is installed"
 
-# A release carries the pinned tools the engine runs, so a checkout that has not
-# acquired one installs nothing. Otherwise the release a target locks would
-# report its own missing inputs as findings on that target.
+
+
+
 mv "${source_root}/.tools/bin/osv-scanner" "${fixture_root}/held-osv-scanner"
 if install_release >"${fixture_root}/missing-tool.log" 2>&1; then
   fail "a checkout missing a pinned tool installed a release"
@@ -574,11 +580,11 @@ mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout missing a pinned tool changed what is installed"
 
-# A release records the exact version of every tool it carries, so the installer
-# asks each one what it is before it stages anything. A tool that is not the
-# version its checked-in pin names installs nothing: present bytes and a byte
-# inventory cannot show that an ignored local tool cache holds the version the
-# manifest would claim.
+
+
+
+
+
 write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.99.0"
 if install_release >"${fixture_root}/tool-version.log" 2>&1; then
   fail "a checkout whose Ruff is not the pinned version installed a release"
@@ -591,9 +597,21 @@ write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.16.0"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose Ruff is not the pinned version changed what is installed"
 
-# So does one whose Go analyzer records another module version, which is read
-# out of the binary rather than asked of it: `govulncheck -version` contacts the
-# vulnerability database, and installation reaches no network.
+write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.99 (disposable)"
+if install_release >"${fixture_root}/ty-version.log" 2>&1; then
+  fail "a checkout whose ty is not the pinned version installed a release"
+fi
+if ! grep -q "ty" "${fixture_root}/ty-version.log" ||
+  ! grep -q "0.0.99" "${fixture_root}/ty-version.log"; then
+  fail "the unpinned ty was refused without naming it and what it reports"
+fi
+write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose ty is not the pinned version changed what is installed"
+
+
+
+
 sed 's#golang.org/x/vuln\\tv1.3.0#golang.org/x/vuln\\tv1.3.1#' \
   "${source_root}/.tools/go/${go_platform_tag}/go/bin/go" >"${fixture_root}/other-go"
 cp "${source_root}/.tools/go/${go_platform_tag}/go/bin/go" "${fixture_root}/held-go"
@@ -607,16 +625,16 @@ cp "${fixture_root}/held-go" "${source_root}/.tools/go/${go_platform_tag}/go/bin
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose govulncheck is not the pinned version changed what is installed"
 
-# Commit what the checkout carries now, so a case that stages a retired path or
-# command is refused for that reason rather than for an unclean checkout.
+
+
 commit_checkout() {
   "${real_git}" -C "${source_root}" add -A
   "${real_git}" -C "${source_root}" commit --quiet -m "$1"
 }
 
-# A release is the whole Code Polishy interface a target gets, so the submodule
-# and wrapper control plane the direct cutover removed must not reach one. A
-# checkout that would stage one of its paths installs nothing.
+
+
+
 write_file "${source_root}/templates/check_policy.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 0
@@ -632,8 +650,8 @@ grep -q "templates/check_policy.sh" "${fixture_root}/retired-path.log" ||
 rm "${source_root}/templates/check_policy.sh"
 commit_checkout "disposable retired wrapper removed"
 
-# Neither does one whose canonical guidance still tells a target to run a command
-# that plane owned.
+
+
 write_file "${source_root}/templates/AGENTS.md" <<'EOF'
 # Canonical guidance
 
@@ -655,10 +673,10 @@ if [[ -n "$(find "${prefix}/releases" -mindepth 1 -maxdepth 1 -name '.staging-*'
   fail "a refused release left a staging tree behind"
 fi
 
-# The installer reads VERSION with the same strict shared reader the release
-# preflight runs: a file whose content only matches a version after trimming
-# records that whitespace, not the version, so it is refused with the exact
-# remedy rather than deleted into a release name.
+
+
+
+
 printf '9. 9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable whitespace version"
 if install_release >"${fixture_root}/version.log" 2>&1; then
@@ -671,8 +689,8 @@ grep -q "carries whitespace" "${fixture_root}/version.log" ||
 printf '9.9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable version restored"
 
-# An installation that fails after staging has begun leaves nothing behind to
-# run: no release under a name a lock could select, and no staging tree.
+
+
 build_marker="${fixture_root}/fail-the-build"
 : >"${build_marker}"
 if CODE_POLISHY_TEST_BUILD_FAILS="${build_marker}" install_release \
@@ -686,7 +704,7 @@ if [[ -n "$(find "${prefix}/releases" -mindepth 1 -maxdepth 1 -name '.staging-*'
   fail "a failed installation left a staging tree behind"
 fi
 
-# Neither does one interrupted by a signal once the staging tree exists.
+
 interrupt_marker="${fixture_root}/interrupt-the-install"
 : >"${interrupt_marker}"
 if CODE_POLISHY_TEST_INTERRUPT="${interrupt_marker}" install_release \
@@ -702,7 +720,7 @@ if [[ -n "$(find "${prefix}/releases" -mindepth 1 -maxdepth 1 -name '.staging-*'
   fail "an interrupted installation left a staging tree behind"
 fi
 
-# A release that changed after installation is rejected rather than executed.
+
 changed="${fixture_root}/changed"
 cp -RPp "${release}" "${changed}"
 printf 'tampered\n' >>"${changed}/bin/code-polishy"
@@ -711,7 +729,7 @@ if "${changed}/scripts/release-manifest.sh" verify "${changed}" >/dev/null 2>&1;
 fi
 rm -rf "${changed}"
 
-# So is one whose bundle links were retargeted without changing a file.
+
 retargeted="${fixture_root}/retargeted"
 cp -RPp "${release}" "${retargeted}"
 mkdir -p "${retargeted}/.tools/javascript/bundle/node_modules/.pnpm/other-tool"
@@ -722,7 +740,7 @@ if "${retargeted}/scripts/release-manifest.sh" verify "${retargeted}" >/dev/null
 fi
 rm -rf "${retargeted}"
 
-# So is a release recorded for another host.
+
 foreign="${fixture_root}/foreign"
 other_host="linux-x64"
 if [[ "${platform_tag}" == "${other_host}" ]]; then
@@ -737,7 +755,7 @@ if "${foreign}/scripts/release-manifest.sh" verify "${foreign}" >/dev/null 2>&1;
 fi
 rm -rf "${foreign}"
 
-# A release with no manifest is not a release.
+
 unmanaged="${fixture_root}/unmanaged"
 cp -RPp "${release}" "${unmanaged}"
 rm "${unmanaged}/release-manifest.json"
@@ -746,7 +764,7 @@ if "${policy_root}/scripts/release-manifest.sh" verify "${unmanaged}" >/dev/null
 fi
 rm -rf "${unmanaged}"
 
-# Two reviewed commits install as two exact releases side by side.
+
 printf '# Canonical guidance, revised\n' >"${source_root}/templates/AGENTS.md"
 "${real_git}" -C "${source_root}" add -A
 "${real_git}" -C "${source_root}" commit --quiet -m "second disposable commit"
@@ -763,13 +781,13 @@ second_release="$(installed_release 2)"
   "$(manifest_field "${second_release}/release-manifest.json" releaseDigest)" ]] ||
   fail "two reviewed commits share one release digest"
 
-# The managed command link resolves to the stable launcher beside the release
-# store, and running through that link preserves release-store discovery.
+
+
 [[ -x "${prefix}/bin/code-polishy" ]] || fail "the installer did not install the launcher"
 launcher="${command_link}"
 [[ -x "${launcher}" ]] || fail "the managed command link is not executable"
 
-# A target with no lock is told what to write rather than given a release.
+
 target="${fixture_root}/target"
 mkdir -p "${target}"
 if (cd "${target}" && "${launcher}" check) >"${fixture_root}/unlocked.log" 2>&1; then
@@ -778,8 +796,8 @@ fi
 grep -q ".code-polishy.lock.json" "${fixture_root}/unlocked.log" ||
   fail "a target with no lock was not told which file to write"
 
-# Each lock selects exactly the release it names, out of the two installed. The
-# two engine binaries differ, so what ran is visible in what it printed.
+
+
 newer_release="${first_release}"
 if [[ "${newer_release}" == "${release}" ]]; then
   newer_release="${second_release}"
@@ -797,7 +815,7 @@ for selected in "${release}:first" "${newer_release}:second"; do
     fail "the launcher did not hand ${installed} the target and the caller's arguments"
 done
 
-# A lock naming a release this host does not have names the digest to install.
+
 missing_digest="0000000000000000000000000000000000000000000000000000000000000000"
 sed "s/\"releaseDigest\": \".*\"/\"releaseDigest\": \"${missing_digest}\"/" \
   "${target}/.code-polishy.lock.json" >"${fixture_root}/missing-lock.json"
@@ -810,10 +828,10 @@ grep -q "${missing_digest}" "${fixture_root}/missing.log" ||
 grep -q "./scripts/install.sh" "${fixture_root}/missing.log" ||
   fail "a missing release did not name the local installation step"
 
-# The engine reads its whole release, so the launcher verifies the whole
-# release: a file the release does not record is refused before it runs, and so
-# is a recorded file the release no longer has. Both are restored afterwards, so
-# what the last case exercises is only what it changed.
+
+
+
+
 write_target_lock "${target}" "${release}/release-manifest.json"
 added="${release}/.tools/javascript/bundle/added.mjs"
 printf '// added\n' >"${added}"
@@ -835,7 +853,7 @@ mv "${fixture_root}/removed-runner.mjs" "${removed}"
 (cd "${target}" && "${launcher}" check --all) >"${fixture_root}/restored.log" 2>&1 ||
   fail "the release did not run once it was whole again"
 
-# A release whose engine changed after installation is refused before it runs.
+
 write_target_lock "${target}" "${newer_release}/release-manifest.json"
 printf '\n# tampered\n' >>"${newer_release}/bin/code-polishy"
 if (cd "${target}" && "${launcher}" check) >"${fixture_root}/tampered.log" 2>&1; then

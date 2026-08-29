@@ -157,8 +157,7 @@ func TestProtectedControlPathsIncludeIgnoreAndDeliveryFiles(t *testing.T) {
 	if protectedControlPath("owned/value.md", ".code-polishy.json") {
 		t.Fatal("ordinary owned file was treated as control-plane")
 	}
-	// A target installs a release and locks it; retired submodule and wrapper
-	// artifacts are ordinary paths rather than reserved control-plane paths.
+
 	for _, path := range []string{".gitmodules", "check_policy.sh"} {
 		if protectedControlPath(path, ".code-polishy.json") {
 			t.Errorf("%s is submodule-era control plane and must not be protected", path)

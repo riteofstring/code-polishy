@@ -12,6 +12,7 @@
     "scope": { "$ref": "#/$defs/scope" },
     "quality": { "$ref": "#/$defs/quality" },
     "portability": { "$ref": "#/$defs/portability" },
+    "documentation": { "$ref": "#/$defs/documentation" },
     "verification": { "$ref": "#/$defs/verification" },
     "modules": {
       "type": "array",
@@ -53,6 +54,28 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/path" }
     },
+    "exactPath": {
+      "allOf": [
+        { "$ref": "#/$defs/path" },
+        { "not": { "pattern": "[*?]|\\[" } }
+      ]
+    },
+    "exactPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/exactPath" }
+    },
+    "markdownPath": {
+      "allOf": [
+        { "$ref": "#/$defs/exactPath" },
+        { "pattern": "\\.(?:[mM][dD]|[mM][aA][rR][kK][dD][oO][wW][nN])$" }
+      ]
+    },
+    "markdownPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/markdownPath" }
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
@@ -93,6 +116,7 @@
       "properties": {
         "go": { "type": "integer", "minimum": 1, "maximum": 12 },
         "goTest": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "python": { "type": "integer", "minimum": 1, "maximum": 10 },
         "typescript": { "type": "integer", "minimum": 1, "maximum": 10 },
         "typescriptTest": { "type": "integer", "minimum": 1, "maximum": 10 }
       }
@@ -108,6 +132,7 @@
           "maximum": 1500
         },
         "complexity": { "$ref": "#/$defs/complexity" },
+        "allowComments": { "type": "boolean", "default": true },
         "maxDepth": { "type": "integer", "minimum": 1, "maximum": 4 },
         "maxTestDepth": { "type": "integer", "minimum": 1, "maximum": 8 },
         "maxParams": { "type": "integer", "minimum": 1, "maximum": 5 },
@@ -123,6 +148,44 @@
           "items": { "$ref": "#/$defs/externalInput" }
         }
       }
+    },
+    "documentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/designDocument" }
+        },
+        "productInputs": { "$ref": "#/$defs/markdownPaths" }
+      }
+    },
+    "designDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "allOf": [
+            { "$ref": "#/$defs/exactPath" },
+            { "pattern": "^docs/design/.+\\.md$" }
+          ]
+        },
+        "module": { "$ref": "#/$defs/identifier" },
+        "sourcePaths": {
+          "allOf": [{ "$ref": "#/$defs/exactPaths" }, { "minItems": 1 }]
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["module"],
+          "not": { "required": ["sourcePaths"] }
+        },
+        {
+          "required": ["sourcePaths"],
+          "not": { "required": ["module"] }
+        }
+      ]
     },
     "externalInput": {
       "type": "object",
@@ -718,7 +781,7 @@
       "additionalProperties": false,
       "required": ["name", "mode"],
       "properties": {
-        "name": { "enum": ["electron", "osv", "react", "ruff"] },
+        "name": { "enum": ["electron", "osv", "react", "ruff", "ty"] },
         "root": { "$ref": "#/$defs/path" },
         "mode": { "enum": ["enabled", "disabled"] },
         "reason": { "$ref": "#/$defs/nonemptyString" },

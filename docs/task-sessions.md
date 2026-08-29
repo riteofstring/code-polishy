@@ -15,6 +15,10 @@ scope. It validates committed, staged, unstaged, deleted, renamed, and untracked
 candidate paths against that frozen scope. Policy configuration, lock files,
 workflow files, code-owner files, and Git controls remain protected.
 
+Scope validation inspects every commit between the trusted base and the
+candidate. A worker therefore cannot commit a forbidden path temporarily and
+restore it before promotion to hide the out-of-scope mutation.
+
 ## Lifecycle
 
 The task reuses one worktree for setup, implementation, native-subagent work,

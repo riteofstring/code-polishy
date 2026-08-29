@@ -53,9 +53,6 @@ func MarshalGovernedEnvironment(receipt GovernedEnvironmentReceipt) ([]byte, err
 	return json.MarshalIndent(receipt, "", "  ")
 }
 
-// ParseGovernedEnvironment reads one exact receipt and rejects unknown fields,
-// trailing documents, invalid tools, and a digest that does not bind the
-// recorded content.
 func ParseGovernedEnvironment(data []byte) (GovernedEnvironmentReceipt, error) {
 	var receipt GovernedEnvironmentReceipt
 	decoder := json.NewDecoder(strings.NewReader(string(data)))

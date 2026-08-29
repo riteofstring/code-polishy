@@ -37,10 +37,6 @@ func TestCustomLanguageRulesExtendDetectionWithoutOverridingBuiltIns(t *testing.
 	}
 }
 
-// The pinned toolchain the policy root carries is the only Go Code Polishy runs.
-// An ambient toolchain on PATH and an environment override are not other ways
-// to answer this question, because a target would then be governed by whatever
-// Go its machine happens to have.
 func TestGoToolResolvesOnlyThePinnedToolchainThePolicyRootCarries(t *testing.T) {
 	policyRoot := t.TempDir()
 	ambient := t.TempDir()
@@ -64,20 +60,18 @@ func TestGoToolResolvesOnlyThePinnedToolchainThePolicyRootCarries(t *testing.T) 
 	}
 }
 
-// The pin a policy root carries is the version it requires, in the one form a
-// release records: a leading `v` belongs to the distribution that prints it.
 func TestToolPinReadsWhatThePolicyRootCarries(t *testing.T) {
 	t.Parallel()
 	policyRoot := t.TempDir()
 	writeFile(t, policyRoot, "scripts/go_version.txt", "1.26.6\n")
 	writeFile(t, policyRoot, "tools/osv-scanner-version.txt", "v2.4.0\n")
 	writeFile(t, policyRoot, "tools/ruff-version.txt", "\n")
+	writeFile(t, policyRoot, "tools/ty-version.txt", "0.0.65\n")
 	repo := Repository{PolicyRoot: policyRoot}
 	for name, want := range map[string]string{
 		"go": "1.26.6", "osv-scanner": "2.4.0",
-		// A policy root that records no usable pin pins nothing, so the caller
-		// refuses the tool rather than accepting whatever is installed.
-		"ruff": "", "staticcheck": "",
+
+		"ruff": "", "staticcheck": "", "ty": "0.0.65",
 	} {
 		if got := repo.ToolPin(name); got != want {
 			t.Fatalf("ToolPin(%q) = %q, want %q", name, got, want)
@@ -197,8 +191,37 @@ func TestChangedSelectionExpandsPolicyInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Files, "a.go") {
+	if !selection.All || !selection.PolicySensitive || !slices.Equal(selection.Candidate.AddedOrModified, []string{"go.mod"}) ||
+		len(selection.Candidate.Deleted) != 0 || !slices.Contains(selection.Files, "a.go") {
 		t.Fatalf("selection = %+v", selection)
+	}
+}
+
+func TestCandidateDeltaStaysExactWhenAnalysisExpands(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	writeFile(t, repo.Root, "README.md", "# Project\n")
+	writeFile(t, repo.Root, "source.go", "package sample\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "base")
+	if err := os.Remove(filepath.Join(repo.Root, "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, repo.Root, "docs/guide.MARKDOWN", "# Guide\n")
+
+	selection, err := repo.Select("changes", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !selection.All || selection.PolicySensitive ||
+		!slices.Equal(selection.Candidate.AddedOrModified, []string{"docs/guide.MARKDOWN"}) ||
+		!slices.Equal(selection.Candidate.Deleted, []string{"README.md"}) ||
+		!slices.Equal(selection.Files, []string{"docs/guide.MARKDOWN", "source.go"}) {
+		t.Fatalf("selection = %+v", selection)
+	}
+	classification := repo.ClassifyDocumentationCandidate(selection)
+	if !classification.Ordinary || !strings.Contains(classification.Reason, "Markdown only") {
+		t.Fatalf("classification = %+v", classification)
 	}
 }
 
@@ -217,7 +240,8 @@ func TestChangedSelectionExpandsReleaseArtifactVersionFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Files, "a.go") {
+	if !selection.All || !selection.PolicySensitive ||
+		!slices.Equal(selection.Candidate.AddedOrModified, []string{"tools/tool-version.txt"}) || !slices.Contains(selection.Files, "a.go") {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -242,7 +266,10 @@ func TestSelectBaseIncludesCommittedWorkingTreeAndUntrackedChanges(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if selection.Base != base || selection.All || !slices.Equal(selection.Files, []string{"src/value.go", "src/working.go"}) {
+	if selection.Base != base || selection.All ||
+		!slices.Equal(selection.Candidate.AddedOrModified, []string{"src/value.go", "src/working.go"}) ||
+		len(selection.Candidate.Deleted) != 0 ||
+		!slices.Equal(selection.Files, []string{"src/value.go", "src/working.go"}) {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -261,7 +288,9 @@ func TestChangedSelectionExpandsNonRegularPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Files, "docs/linked.md") {
+	classification := repo.ClassifyDocumentationCandidate(selection)
+	if !selection.All || !slices.Contains(selection.Candidate.AddedOrModified, "docs/linked.md") ||
+		!slices.Contains(selection.Files, "docs/linked.md") || !classification.Ordinary {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -285,7 +314,8 @@ func TestStagedSelectionExpandsIndexSymlinkRemovedFromWorkingTree(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Files, "docs/index.md") {
+	if !selection.All || !slices.Equal(selection.Candidate.AddedOrModified, []string{"docs/linked.md"}) ||
+		!slices.Contains(selection.Files, "docs/index.md") {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -341,7 +371,7 @@ func TestDeletionExpandsChangedSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Files, "b.go") || !slices.Contains(selection.Deleted, "a.go") {
+	if !selection.All || !slices.Contains(selection.Files, "b.go") || !slices.Contains(selection.Candidate.Deleted, "a.go") {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -358,7 +388,8 @@ func TestRenameParticipatesAsDeletionAndExpandsSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.All || !slices.Contains(selection.Deleted, "a.go") || !slices.Contains(selection.Files, "moved.go") {
+	if !selection.All || !slices.Equal(selection.Candidate.AddedOrModified, []string{"moved.go"}) ||
+		!slices.Equal(selection.Candidate.Deleted, []string{"a.go"}) || !slices.Contains(selection.Files, "moved.go") {
 		t.Fatalf("selection = %+v", selection)
 	}
 }
@@ -366,12 +397,11 @@ func TestRenameParticipatesAsDeletionAndExpandsSelection(t *testing.T) {
 func TestPolicyControlPlaneTriggersFullSelection(t *testing.T) {
 	t.Parallel()
 	repo := Repository{}
-	// Which release governs the repository decides what every check means.
+
 	if !repo.policyInputChanged([]string{policy.LockFilename}) || !repo.policyInputChanged([]string{policy.ConfigFilename}) {
 		t.Fatal("the configuration and the release a target locks must trigger a full check")
 	}
-	// A submodule map is not how a target names a release, so it is an ordinary
-	// file rather than a policy input.
+
 	if repo.policyInputChanged([]string{".gitmodules"}) {
 		t.Fatal("a submodule map must not trigger a full check")
 	}
@@ -393,10 +423,63 @@ func TestAllDependencyAndContainerInputsTriggerFullSelection(t *testing.T) {
 func TestConditionalPolicyToolConfigsTriggerFullSelection(t *testing.T) {
 	t.Parallel()
 	repo := Repository{}
-	for _, path := range []string{"desktop/eslint.config.mjs", "desktop/knip.json", "desktop/.prettierrc.json", "desktop/tsconfig.node.json", "tools/ruff.toml", "osv-scanner.toml"} {
+	for _, path := range []string{"desktop/eslint.config.mjs", "desktop/knip.json", "desktop/.prettierrc.json", "desktop/tsconfig.node.json", "tools/ruff.toml", "services/ty.toml", "osv-scanner.toml"} {
 		if !repo.policyInputChanged([]string{path}) {
 			t.Fatalf("%s should trigger full selection", path)
 		}
+	}
+}
+
+func TestClassifyDocumentationCandidate(t *testing.T) {
+	t.Parallel()
+	repo := Repository{Config: policy.Config{Documentation: policy.Documentation{ProductInputs: []string{"docs/product.MD"}}}}
+	cases := map[string]struct {
+		candidate CandidateDelta
+		ordinary  bool
+		reason    string
+	}{
+		"ordinary additions deletions and mixed case extensions": {
+			candidate: CandidateDelta{AddedOrModified: []string{"README.MD", "docs/guide.markdown"}, Deleted: []string{"docs/removed.Md"}},
+			ordinary:  true,
+			reason:    "candidate contains ordinary Markdown only",
+		},
+		"empty": {
+			reason: "no candidate paths were detected",
+		},
+		"non markdown": {
+			candidate: CandidateDelta{AddedOrModified: []string{"docs/guide.md", "source.go"}},
+			reason:    `changed path "source.go" is not Markdown`,
+		},
+		"agent control document": {
+			candidate: CandidateDelta{AddedOrModified: []string{"docs/AGENTS.MD"}},
+			reason:    `changed path "docs/AGENTS.MD" is a documentation control input`,
+		},
+		"nested skills control document": {
+			candidate: CandidateDelta{AddedOrModified: []string{"plugins/skills/guide.MARKDOWN"}},
+			reason:    `changed path "plugins/skills/guide.MARKDOWN" is a documentation control input`,
+		},
+		"nested templates control document": {
+			candidate: CandidateDelta{Deleted: []string{"plugins/templates/guide.md"}},
+			reason:    `changed path "plugins/templates/guide.md" is a documentation control input`,
+		},
+		"declared product input": {
+			candidate: CandidateDelta{AddedOrModified: []string{"docs/product.MD"}},
+			reason:    `changed path "docs/product.MD" is a declared documentation product input`,
+		},
+		"different product input case remains ordinary": {
+			candidate: CandidateDelta{AddedOrModified: []string{"docs/product.md"}},
+			ordinary:  true,
+			reason:    "candidate contains ordinary Markdown only",
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			classification := repo.ClassifyDocumentationCandidate(Selection{Candidate: test.candidate})
+			if classification.Ordinary != test.ordinary || classification.Reason != test.reason {
+				t.Fatalf("classification = %+v", classification)
+			}
+		})
 	}
 }
 
@@ -458,6 +541,175 @@ func TestNestedGoModuleOwnershipUsesDeepestRoot(t *testing.T) {
 	if !found || module.Name != "nested.example" {
 		t.Fatalf("module = %+v, found=%v", module, found)
 	}
+}
+
+func TestDesignDocumentsPreferDirectSourceContextAndRemainStable(t *testing.T) {
+	t.Parallel()
+	repo := designDocumentRepository(t, []policy.Module{
+		{Name: "api", Paths: []string{"api/**"}},
+		{Name: "domain", Paths: []string{"domain/**"}},
+	}, []policy.DesignDocument{
+		{Path: "docs/design/domain.md", Module: "domain"},
+		{Path: "docs/design/api.md", Module: "api"},
+		{Path: "docs/design/entry.md", SourcePaths: []string{"domain/entry.go"}},
+	})
+	files := map[string]string{
+		"docs/design/domain.md": "# Domain\n",
+		"docs/design/api.md":    "# API\n",
+		"docs/design/entry.md":  "# Entry\n",
+		"api/handler.go":        "package api\n",
+		"domain/model.go":       "package domain\n",
+		"domain/entry.go":       "package domain\n",
+	}
+	for path, contents := range files {
+		writeFile(t, repo.Root, path, contents)
+	}
+	if findings := repo.DesignDocumentFindings(); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
+	}
+	if got, want := repo.DesignDocumentsForFiles([]string{"domain/entry.go", "api/handler.go", "domain/model.go", "domain/entry.go"}), []string{
+		"docs/design/api.md", "docs/design/domain.md", "docs/design/entry.md",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("file design documents = %v, want %v", got, want)
+	}
+	if got, err := repo.DesignDocumentsForModules([]string{"domain", "api"}); err != nil || !slices.Equal(got, []string{
+		"docs/design/api.md", "docs/design/domain.md", "docs/design/entry.md",
+	}) {
+		t.Fatalf("module design documents = %v, err = %v", got, err)
+	}
+	if _, err := repo.DesignDocumentsForModules([]string{"missing"}); err == nil || !strings.Contains(err.Error(), "unknown module") {
+		t.Fatalf("unknown module error = %v", err)
+	}
+}
+
+func TestDesignDocumentFindingsRejectInvalidCurrentMappings(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		configure func(*testing.T, Repository)
+		want      string
+	}{
+		"missing document": {
+			configure: func(_ *testing.T, _ Repository) {},
+			want:      "mapped document is missing",
+		},
+		"nonregular document": {
+			configure: func(t *testing.T, repo Repository) {
+				if err := os.MkdirAll(filepath.Join(repo.Root, "docs", "design", "domain.md"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "mapped document is missing, non-regular, or escapes the repository",
+		},
+		"escaped document": {
+			configure: func(t *testing.T, repo Repository) {
+				outside := filepath.Join(t.TempDir(), "outside.md")
+				if err := os.WriteFile(outside, []byte("# Outside\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(repo.Root, "docs", "design", "domain.md")
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(outside, path); err != nil {
+					t.Skipf("create design-document symlink: %v", err)
+				}
+			},
+			want: "mapped document is missing, non-regular, or escapes the repository",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := designDocumentRepository(t, []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}}, []policy.DesignDocument{{Path: "docs/design/domain.md", Module: "domain"}})
+			test.configure(t, repo)
+			findings := repo.DesignDocumentFindings()
+			if len(findings) != 1 || findings[0].Check != DesignDocumentationCheck || findings[0].Path != policy.ConfigFilename ||
+				findings[0].Subject != "docs/design/domain.md" || !strings.Contains(findings[0].Message, test.want) {
+				t.Fatalf("findings = %+v, want %q", findings, test.want)
+			}
+		})
+	}
+}
+
+func TestDesignDocumentFindingsRejectStaleOrAmbiguousSources(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		modules  []policy.Module
+		scope    policy.Scope
+		file     string
+		contents string
+		want     string
+	}{
+		"missing": {
+			modules: []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}},
+			file:    "domain/value.go",
+			want:    "mapped source path is missing",
+		},
+		"excluded": {
+			modules:  []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}},
+			scope:    policy.Scope{Exclude: []string{"domain/**"}},
+			file:     "domain/value.go",
+			contents: "package domain\n",
+			want:     "excluded from governed scope",
+		},
+		"not executable source": {
+			modules:  []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}},
+			file:     "domain/value.txt",
+			contents: "value\n",
+			want:     "not governed source",
+		},
+		"multiple owners": {
+			modules: []policy.Module{
+				{Name: "domain", Paths: []string{"domain/**"}},
+				{Name: "duplicate", Paths: []string{"domain/**"}},
+			},
+			file:     "domain/value.go",
+			contents: "package domain\n",
+			want:     "must belong to exactly one module",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := designDocumentRepository(t, test.modules, []policy.DesignDocument{{
+				Path: "docs/design/value.md", SourcePaths: []string{test.file},
+			}})
+			repo.Config.Scope = test.scope
+			writeFile(t, repo.Root, "docs/design/value.md", "# Value\n")
+			if test.contents != "" {
+				writeFile(t, repo.Root, test.file, test.contents)
+			}
+			findings := repo.DesignDocumentFindings()
+			if len(findings) != 1 || findings[0].Check != DesignDocumentationCheck || findings[0].Path != policy.ConfigFilename ||
+				findings[0].Subject != test.file || !strings.Contains(findings[0].Message, test.want) {
+				t.Fatalf("findings = %+v, want %q", findings, test.want)
+			}
+		})
+	}
+}
+
+func TestDesignDocumentFindingsAdmitEverySupportedSourceKind(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"view/style.css", "view/page.html", "view/tool.ps1"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			repo := designDocumentRepository(t, []policy.Module{{Name: "view", Paths: []string{"view/**"}}}, []policy.DesignDocument{{
+				Path: "docs/design/view.md", SourcePaths: []string{path},
+			}})
+			writeFile(t, repo.Root, "docs/design/view.md", "# View\n")
+			writeFile(t, repo.Root, path, "value\n")
+			if findings := repo.DesignDocumentFindings(); len(findings) != 0 {
+				t.Fatalf("findings = %+v", findings)
+			}
+		})
+	}
+}
+
+func designDocumentRepository(t *testing.T, modules []policy.Module, documents []policy.DesignDocument) Repository {
+	t.Helper()
+	return Repository{Root: t.TempDir(), Config: policy.Config{
+		Scope: policy.Scope{}, Modules: modules, Documentation: policy.Documentation{Design: documents},
+	}}
 }
 
 func newGitRepository(t *testing.T) Repository {

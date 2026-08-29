@@ -14,10 +14,6 @@ import (
 
 const maximumReleaseBundleBytes int64 = 4 << 30
 
-// InstallLocalBundle reads one locally built digest-pinned native zip, rejects
-// links and path traversal, verifies the complete release manifest, then
-// publishes both the immutable release directory and stable launcher within
-// one prefix.
 func InstallLocalBundle(source, expectedSHA256, prefix string) (Manifest, error) {
 	if !digestPattern.MatchString(expectedSHA256) {
 		return Manifest{}, errors.New("release bundle requires an exact SHA-256 digest")

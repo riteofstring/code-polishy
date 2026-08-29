@@ -9,9 +9,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-// ResourceLease owns every advisory lock acquired for a command. It is safe
-// to release more than once, which keeps callers' error paths small and makes
-// partial acquisition failure harmless.
 type ResourceLease struct {
 	files resourceLease
 }
@@ -22,14 +19,8 @@ type resourceLease interface {
 
 type resourceWaitObserverKey struct{}
 
-// ResourceWaitObserver receives periodic elapsed durations while a command is
-// blocked on an exclusive resource. It is intentionally carried by context so
-// the common runner remains the single locking boundary while direct and
-// managed execution can render terminal-safe progress.
 type ResourceWaitObserver func(time.Duration)
 
-// WithResourceWaitObserver attaches optional host-resource wait visibility to
-// one command execution.
 func WithResourceWaitObserver(ctx context.Context, observer ResourceWaitObserver) context.Context {
 	if observer == nil {
 		return ctx
@@ -53,9 +44,6 @@ func (lease *ResourceLease) Release() error {
 	return err
 }
 
-// AcquireExclusiveResources waits for the command's complete declared set.
-// A configuration parsed by policy is already normalized, but this defensive
-// boundary rejects malformed direct callers before a lock namespace is touched.
 func AcquireExclusiveResources(ctx context.Context, resources []string) (*ResourceLease, time.Duration, error) {
 	if err := policy.ValidateExclusiveResources(resources); err != nil {
 		return nil, 0, err

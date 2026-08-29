@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Write or verify the manifest of one installed Code Polishy release.
-#
-# Usage:
-#   release-manifest.sh write <release-dir> <source-revision>
-#   release-manifest.sh verify <release-dir>
-#
-# A release answers two different questions with two different digests.
-#
-# `releaseDigest` names which reviewed source and which exact pins the release
-# was built from. It is computed from nothing host specific, so the same commit
-# installed on another machine carries the same value and a target lock can name
-# the release it requires without naming a platform.
-#
-# `contentDigest` and the per-entry list name the exact installed bytes on this
-# host. `write` runs once, on the staged tree, before that tree becomes the
-# installed one; `verify` recomputes them from the installed files, so a release
-# that was truncated, changed, or copied from another host is rejected rather
-# than executed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 release_manifest_name="release-manifest.json"
-release_manifest_version=2
+release_manifest_version=3
 
-# The closed set of host-independent capabilities a target lock may require of a
-# release. A release carries all of them or it is not a release.
+
+
 release_features=(javascript-bundle)
 
-# The exact version of every executable a release carries, read from the release
-# itself rather than from the checkout that built it, so the manifest describes
-# the tree it was written into. The installer probes each of these against the
-# local executable before it stages one, so what a release records is what its
-# tools answer rather than what its files are named.
+
+
+
+
+
 release_pin_files=(
   "VERSION"
   "scripts/go_version.txt"
@@ -42,6 +42,7 @@ release_pin_files=(
   "tools/ruff-version.txt"
   "tools/shellcheck-version.txt"
   "tools/staticcheck-version.txt"
+  "tools/ty-version.txt"
 )
 
 case "$(uname -s)" in
@@ -121,10 +122,10 @@ read_pin() {
   printf '%s\n' "${value}"
 }
 
-# One carried tool's version, in the one form a release records it: the
-# distributions disagree about a leading `v`, and the installer's probes compare
-# against this same form. The Code Polishy version is not one of these: it names
-# the installed release directory, so it is recorded exactly as it is written.
+
+
+
+
 read_tool_pin() {
   local value
   value="$(read_pin "$1")"
@@ -140,10 +141,11 @@ pnpm_version="$(read_tool_pin "${release_pin_files[5]}")"
 ruff_version="$(read_tool_pin "${release_pin_files[6]}")"
 shellcheck_version="$(read_tool_pin "${release_pin_files[7]}")"
 staticcheck_version="$(read_tool_pin "${release_pin_files[8]}")"
+ty_version="$(read_tool_pin "${release_pin_files[9]}")"
 
-# Read one recorded scalar from an existing manifest. Every key this script
-# renders is unique across the document, so the first line whose first field is
-# the key is the value. A key that is absent is an error, never an empty value.
+
+
+
 manifest_field() {
   local key="$1"
   awk -v key="\"${key}\":" '
@@ -176,12 +178,12 @@ if [[ ! "${source_revision}" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-# Every installed entry except the release's own record at the root of the
-# release, digested and ordered by path, so the result depends on the installed
-# bytes rather than on how the tree was walked. A symlink contributes its exact
-# target: the sealed JavaScript bundle is linked together by pnpm's isolated
-# linker, so retargeting one link would otherwise swap the code a release runs
-# without changing an installed file.
+
+
+
+
+
+
 release_entries() {
   (
     cd "${release_dir}" || exit 1
@@ -203,9 +205,9 @@ content_digest="$(printf '%s\n' "${entries}" |
   LC_ALL=C "${release_digest_command[@]}" | awk '{print $1}')"
 entry_count="$(printf '%s\n' "${entries}" | wc -l | tr -d '[:space:]')"
 
-# An entry whose path or link target cannot be represented exactly is refused
-# rather than escaped, so what the manifest says and what the release contains
-# stay the same text.
+
+
+
 entry_json="$(printf '%s\n' "${entries}" | awk -F '\t' '
   {
     path = $1
@@ -230,8 +232,8 @@ entry_json="$(printf '%s\n' "${entries}" | awk -F '\t' '
   }
 ')"
 
-# The host-independent identity of the release: which reviewed commit, which
-# version, which capabilities, and which exact tool pins it was built from.
+
+
 release_identity() {
   local feature
   printf 'manifestVersion=%s\n' "${release_manifest_version}"
@@ -248,6 +250,7 @@ release_identity() {
   printf 'tool.ruff=%s\n' "${ruff_version}"
   printf 'tool.shellcheck=%s\n' "${shellcheck_version}"
   printf 'tool.staticcheck=%s\n' "${staticcheck_version}"
+  printf 'tool.ty=%s\n' "${ty_version}"
 }
 
 release_digest="$(release_identity |
@@ -282,7 +285,8 @@ $(render_features)
     "pnpm": "${pnpm_version}",
     "ruff": "${ruff_version}",
     "shellcheck": "${shellcheck_version}",
-    "staticcheck": "${staticcheck_version}"
+    "staticcheck": "${staticcheck_version}",
+    "ty": "${ty_version}"
   },
   "releaseDigest": "${release_digest}",
   "contentDigest": "${content_digest}",
@@ -304,6 +308,6 @@ if [[ "${mode}" == "verify" ]]; then
 fi
 
 render_manifest >"${manifest}"
-# The installer names the installed release by this digest, so `write` reports
-# it rather than making its caller read the manifest back.
+
+
 printf '%s\n' "${release_digest}"

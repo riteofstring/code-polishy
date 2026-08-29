@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Acquire the exact policy-owned JavaScript runtime: the pinned Node build and
-# the pinned pnpm release. Both are downloaded from their allowlisted origins,
-# verified against checked-in SHA-256 values, staged, and only then moved into
-# place with a same-directory rename.
-#
-# Nothing here resolves node, npm, npx, pnpm, or corepack from PATH, a user
-# cache, or a global installation. Every execution uses an absolute staged path
-# under a closed environment with a scratch HOME, so user configuration cannot
-# change what is installed. No package manager runs, so no dependency lifecycle
-# script executes during acquisition.
+
+
+
+
+
+
+
+
+
+
 
 # shellcheck source=tools/javascript-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-env.sh"
@@ -42,12 +42,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Nothing this installer runs may see the invoking user's configuration, and the
-# scratch home it uses instead disappears with the temporary directory.
+
+
 javascript_scratch_home="${temporary_dir}/home"
 
-# List every prebuilt binary artifact below a component root, as sorted paths
-# relative to that root.
+
+
 list_binary_artifacts() {
   (
     cd "$1" && find . -type f \
@@ -89,8 +89,8 @@ mv "${temporary_dir}/extract/node-v${node_version}-${platform_tag}" "${staging}/
 tar -xzf "${temporary_dir}/${pnpm_archive}" -C "${temporary_dir}/extract"
 mv "${temporary_dir}/extract/package" "${staging}/pnpm"
 
-# pnpm is the only supported package manager, so the package managers bundled
-# with the Node distribution are removed instead of shipped unused.
+
+
 rm -rf \
   "${staging}/node/bin/npm" \
   "${staging}/node/bin/npx" \
@@ -103,9 +103,9 @@ if [[ -n "${retained_managers}" ]]; then
   exit 1
 fi
 
-# The Node distribution ships no prebuilt binary beyond its own executable, and
-# the pinned pnpm release ships an exact, reviewed set. Any change to that set
-# must be reviewed before Code Polishy executes it.
+
+
+
 node_binaries="$(list_binary_artifacts "${staging}/node")"
 if [[ -n "${node_binaries}" ]]; then
   echo "Node ${node_version} shipped unexpected prebuilt binaries:" >&2

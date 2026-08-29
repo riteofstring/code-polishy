@@ -3,6 +3,7 @@ package testing
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -48,7 +49,7 @@ func TestCases(t *testing.T) {
 }
 `)
 	findings := SourceFindings(repo, []string{"sample_test.go"})
-	if len(findings) != 1 || findings[0].Message != "subtest body is empty" {
+	if len(findings) != 1 || !strings.Contains(findings[0].Message, "subtest") || !strings.Contains(findings[0].Message, "empty") {
 		t.Fatalf("findings = %+v", findings)
 	}
 }

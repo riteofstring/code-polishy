@@ -26,7 +26,7 @@ func TestInstallLocalBundlePublishesVerifiedReleaseAndLauncher(t *testing.T) {
 	if installed.ReleaseDigest != manifest.ReleaseDigest {
 		t.Fatalf("release=%s want=%s", installed.ReleaseDigest, manifest.ReleaseDigest)
 	}
-	target := Directory(prefix, LockFor(manifest))
+	target := filepath.Join(prefix, "releases", manifest.CodePolishyVersion+"-"+manifest.ReleaseDigest)
 	if err := manifest.Verify(target); err != nil {
 		t.Fatal(err)
 	}

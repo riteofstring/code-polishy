@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Offline contract tests for the pnpm-project operations of the sealed,
-# policy-owned JavaScript tool bundle.
-#
-# A pnpm project is asked about as a whole rather than as a selection of files:
-# its lockfile, its workspace settings, the licenses its installed dependencies
-# declare, and the advisories its native audit returns. Each is exercised here
-# against the installed bundle. The operations that read selected source, and
-# the protocol and launch contract every operation answers under, are covered by
-# scripts/test-javascript-runner.sh.
+
+
+
+
+
+
+
+
+
 
 javascript_test_name="test-javascript-project"
 # shellcheck source=scripts/javascript-runner-test-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-runner-test-env.sh"
 
-# pnpm workspace and lock facts are read from the lockfile and the manifests it
-# resolves. The operation reports what each side declared and what every
-# resolution came from; whether that is drift or an inadmissible source is a Go
-# decision this runner knows nothing about.
+runner_sources=("${bundle_source}"/*.mjs)
+node_version="$(javascript_test_node_version)"
+pnpm_version="$(javascript_test_pnpm_version)"
+
+
+
+
 packages_target="${fixture_root}/packages"
 host_os="${javascript_platform_tag%%-*}"
 host_cpu="${javascript_platform_tag#*-}"
@@ -158,15 +161,15 @@ snapshots:
 YAML
 
 packages_request() {
-  printf '{"protocolVersion":2,"operation":"packages","root":"%s","directory":"%s"}' \
+  printf '{"protocolVersion":3,"operation":"packages","root":"%s","directory":"%s"}' \
     "$1" "${2:-.}"
 }
 packages_response="${fixture_root}/packages.json"
 packages_request "${packages_target}" | run_runner >"${packages_response}" ||
   fail "the runner rejected a well-formed packages request"
 
-# The lock is also the workspace inventory: pnpm writes one importer per
-# workspace package, so a member it omits is one the target never installed.
+
+
 for importer in '"path":".","manifest":"package.json"' \
   '"path":"packages/app","manifest":"packages/app/package.json"' \
   '"path":"packages/lib","manifest":"packages/lib/package.json"'; do
@@ -180,27 +183,27 @@ expect_dependency() {
     fail "packages did not report $2: $(cat "${packages_response}")"
   fi
 }
-# What the manifest wrote and what the lock recorded are reported side by side,
-# so the same entry carries the drift and Go decides it.
+
+
 expect_dependency '"name":"react","scope":"runtime","declared":"19.0.0","specifier":"18.3.1"' \
   "a declaration the lock resolves differently"
 expect_dependency '"name":"undeclared","scope":"runtime","declared":"","specifier":"1.0.0"' \
   "a resolution no manifest declares"
-# An alias resolves under the name it really installs, and a workspace
-# dependency resolves to a sibling package rather than to a release.
+
+
 expect_dependency '"resolvedName":"left-pad","resolvedVersion":"1.3.0"' "an aliased dependency"
 expect_dependency '"name":"lib","scope":"runtime","declared":"workspace:*","specifier":"workspace:*","resolvedName":"","resolvedVersion":"","link":"packages/lib"' \
   "a workspace link"
-# A peer declaration is not resolved into a lock, so comparing one against it
-# would report every peer as drift. It is a manifest fact Go already reads.
+
+
 if grep -qF '"name":"vue"' "${packages_response}"; then
   fail "packages reported a peer declaration: $(cat "${packages_response}")"
 fi
-# Every resolution carries the kind of source it came from, decided by the
-# source the lock names rather than by the fields it carries: a download the
-# target chose is a tarball whether or not pnpm also recorded integrity over
-# those bytes, because integrity says they arrived unchanged and not that a
-# registry published them.
+
+
+
+
+
 for resolved in '"name":"react","version":"18.3.1","source":"registry"' \
   '"name":"@scope/peered","version":"2.0.0","source":"registry"' \
   '"name":"forked","version":"1.0.0","source":"tarball"' \
@@ -210,9 +213,9 @@ for resolved in '"name":"react","version":"18.3.1","source":"registry"' \
     fail "packages did not report ${resolved}: $(cat "${packages_response}")"
   fi
 done
-# A normal frozen install on Darwin or Linux omits this optional Windows-only
-# release. The package fact must say that its missing installed license metadata
-# is expected, rather than making the Go policy report false coverage.
+
+
+
 expect_dependency '"name":"foreign-optional","version":"1.0.0","source":"registry","licenseMetadata":"platform-excluded"' \
   "a foreign-platform optional release whose normal install is absent"
 expect_dependency '"name":"foreign-optional-child","version":"1.0.0","source":"registry","licenseMetadata":"platform-excluded"' \
@@ -227,10 +230,10 @@ expect_dependency '"name":"host-compatible-optional","version":"1.0.0","source":
   "a host-compatible optional release whose metadata remains required"
 expect_dependency '"name":"mixed-context","version":"1.0.0","source":"registry","licenseMetadata":"required"' \
   "a release reached through a required snapshot context"
-# libc is decided only by the policy-owned Node host. On Darwin both Linux-only
-# releases are excluded by os; on Linux a known libc makes the broad allowlist
-# required and its all-negative complement excluded, while an unavailable
-# runtime fact leaves both unknown instead of guessing.
+
+
+
+
 if [[ "${host_os}" == darwin ]]; then
   expect_dependency '"name":"libc-compatible-optional","version":"1.0.0","source":"registry","licenseMetadata":"platform-excluded"' \
     "a Linux libc-specific optional release on Darwin"
@@ -257,9 +260,9 @@ if [[ -e "${packages_target}/node_modules" ]]; then
   fail "reading pnpm facts wrote into the target tree"
 fi
 
-# A lock this operation cannot read is missing coverage rather than a project
-# that resolves nothing. Each reason is specific, and none of them is a guess at
-# what another lockfile format would have meant.
+
+
+
 expect_lock_unsupported() {
   local description="$1" contents="$2" reason="$3"
   printf '%s' "${contents}" >"${fixture_root}/packages/unread/pnpm-lock.yaml"
@@ -298,9 +301,9 @@ if ! grep -qF '"path":"absent/pnpm-lock.yaml","reason":"the file is unreadable' 
   fail "an absent lockfile was not reported as unreadable: $(cat "${fixture_root}/out")"
 fi
 
-# A scalar platform selector is not coerced into a one-element list. The
-# package fact remains explicitly unknown and the malformed lock declaration is
-# reported, so absent metadata cannot become a false platform exclusion.
+
+
+
 malformed_platform_target="${fixture_root}/malformed-platform"
 mkdir -p "${malformed_platform_target}"
 printf '{"name":"malformed","packageManager":"pnpm@%s"}\n' "${pnpm_version}" \
@@ -348,10 +351,10 @@ if grep -qF "${fixture_root}" "${fixture_root}/out"; then
   fail "a malformed platform result leaked a host path: $(cat "${fixture_root}/out")"
 fi
 
-# pnpm resolves under the settings its workspace file declares, so those are
-# read with the same parser too. Every setting crosses as the text it was
-# written as; which ones a pinned pnpm must carry, and what each has to be, is a
-# Go decision this runner knows nothing about.
+
+
+
+
 workspace_target="${fixture_root}/workspace"
 mkdir -p "${workspace_target}/nested"
 cat >"${workspace_target}/pnpm-workspace.yaml" <<'YAML'
@@ -369,7 +372,7 @@ catalog:
   react: 19.0.0
 YAML
 workspace_request() {
-  printf '{"protocolVersion":2,"operation":"workspace","root":"%s","paths":["%s"]}' \
+  printf '{"protocolVersion":3,"operation":"workspace","root":"%s","paths":["%s"]}' \
     "$1" "${2:-pnpm-workspace.yaml}"
 }
 workspace_response="${fixture_root}/workspace.json"
@@ -391,9 +394,9 @@ if ! grep -qF '"unsupported":[]' "${workspace_response}"; then
   fail "a well-formed workspace file reported missing coverage: $(cat "${workspace_response}")"
 fi
 
-# A settings file this operation cannot read is missing coverage rather than a
-# workspace that declared nothing, and a file declaring nothing at all is
-# reported as exactly that.
+
+
+
 expect_workspace_unsupported() {
   local description="$1" contents="$2" reason="$3"
   printf '%s' "${contents}" >"${workspace_target}/nested/pnpm-workspace.yaml"
@@ -418,20 +421,20 @@ if grep -qF "${fixture_root}" "${workspace_response}"; then
   fail "a workspace result leaked a host path: $(cat "${workspace_response}")"
 fi
 
-# This operation reads pnpm settings and nothing else, so it never becomes a way
-# to hand arbitrary target YAML to the policy engine.
+
+
 printf 'value: 1\n' >"${workspace_target}/other.yaml"
 expect_runner_rejected "a workspace request for another file" \
   "$(workspace_request "${workspace_target}" other.yaml)"
 expect_runner_rejected "a workspace request without a selection" \
-  '{"protocolVersion":2,"operation":"workspace","root":"'"${workspace_target}"'"}'
+  '{"protocolVersion":3,"operation":"workspace","root":"'"${workspace_target}"'"}'
 expect_runner_rejected "an uncontained workspace selection" \
   "$(workspace_request "${workspace_target}" ../pnpm-workspace.yaml)"
 
-# A lockfile records what a target installs, never what those packages are
-# licensed under, so license facts are read from the installed tree: pnpm keeps
-# one real directory per resolved release there, and every dependency of a
-# release is a link into the directory that really holds it.
+
+
+
+
 licenses_target="${fixture_root}/licenses"
 licenses_store="${licenses_target}/node_modules/.pnpm"
 write_installed_package() {
@@ -442,8 +445,8 @@ write_installed_package() {
 }
 write_installed_package example@1.2.3 example \
   '{"name":"example","version":"1.2.3","license":"MIT"}'
-# The same release is stored once per peer resolution, and every copy declares
-# the same license.
+
+
 write_installed_package 'example@1.2.3_react@19.0.0' example \
   '{"name":"example","version":"1.2.3","license":"MIT"}'
 write_installed_package '@scope+ui@0.1.0' '@scope/ui' \
@@ -452,14 +455,14 @@ write_installed_package quiet@2.0.0 quiet '{"name":"quiet","version":"2.0.0"}'
 write_installed_package legacy@4.0.0 legacy \
   '{"name":"legacy","version":"4.0.0","licenses":[{"type":"MIT"}]}'
 write_installed_package broken@3.0.0 broken '{'
-# Every dependency of a release is a link, including the hoisted ones, so no
-# release is read through the entry of something that merely depends on it.
+
+
 ln -s ../../quiet@2.0.0/node_modules/quiet "${licenses_store}/example@1.2.3/node_modules/quiet"
 mkdir -p "${licenses_store}/node_modules"
 ln -s ../quiet@2.0.0/node_modules/quiet "${licenses_store}/node_modules/quiet"
 ln -s .pnpm/example@1.2.3/node_modules/example "${licenses_target}/node_modules/example"
 licenses_request() {
-  printf '{"protocolVersion":2,"operation":"licenses","root":"%s","directory":"%s"}' \
+  printf '{"protocolVersion":3,"operation":"licenses","root":"%s","directory":"%s"}' \
     "$1" "${2:-.}"
 }
 licenses_response="${fixture_root}/licenses.json"
@@ -473,8 +476,8 @@ expect_license() {
 expect_license '{"name":"example","version":"1.2.3","license":"MIT"}' "a declared license"
 expect_license '{"name":"@scope/ui","version":"0.1.0","license":"Apache-2.0 WITH LLVM-exception"}' \
   "a scoped package"
-# A license written as anything but one string is not an SPDX expression, so it
-# is reported as declaring none rather than guessed at.
+
+
 expect_license '{"name":"quiet","version":"2.0.0","license":""}' "a package declaring no license"
 expect_license '{"name":"legacy","version":"4.0.0","license":""}' "a legacy license field"
 if [[ "$(grep -o '"name":"example"' "${licenses_response}" | wc -l)" -ne 1 ]]; then
@@ -483,16 +486,16 @@ fi
 if [[ "$(grep -o '"name":"quiet"' "${licenses_response}" | wc -l)" -ne 1 ]]; then
   fail "licenses read a release through a link to it: $(cat "${licenses_response}")"
 fi
-# A manifest this reader cannot use is missing coverage, named the way the
-# request named the tree, rather than a release with no license against it.
+
+
 expect_license '"path":"node_modules/.pnpm/broken@3.0.0/node_modules/broken/package.json","reason":"the manifest is not readable JSON' \
   "an unreadable manifest"
 if grep -qF "${fixture_root}" "${licenses_response}"; then
   fail "a licenses result leaked a host path: $(cat "${licenses_response}")"
 fi
 
-# A tree this operation cannot read at all is missing coverage too, and the
-# reason says which of the two it was.
+
+
 mkdir -p "${licenses_target}/hoisted/node_modules/example"
 licenses_request "${licenses_target}" hoisted | run_runner >"${fixture_root}/out" ||
   fail "an installed tree without a store was not reported"
@@ -506,17 +509,17 @@ if ! grep -qF '"reason":"the dependencies of this project are not installed' "${
 fi
 
 expect_runner_rejected "a licenses request without a directory" \
-  '{"protocolVersion":2,"operation":"licenses","root":"'"${licenses_target}"'"}'
+  '{"protocolVersion":3,"operation":"licenses","root":"'"${licenses_target}"'"}'
 expect_runner_rejected "an uncontained licenses directory" \
   "$(licenses_request "${licenses_target}" ../elsewhere)"
 expect_runner_rejected "a licenses request with a selection" \
-  '{"protocolVersion":2,"operation":"licenses","root":"'"${licenses_target}"'","directory":".","paths":[]}'
+  '{"protocolVersion":3,"operation":"licenses","root":"'"${licenses_target}"'","directory":".","paths":[]}'
 
-# The native audit is the one operation that runs another executable, and the
-# executable is the pinned pnpm installed beside the bundle. The fixture stands
-# up a bundle whose sibling runtime holds a stand-in pnpm, so what answers the
-# audit proves where the runner looked for it: nothing here is on PATH, and the
-# real pinned pnpm is installed somewhere else entirely.
+
+
+
+
+
 audit_bundle="${fixture_root}/audit/bundle"
 audit_pnpm="${fixture_root}/audit/${javascript_platform_tag}/pnpm/bin"
 mkdir -p "${audit_bundle}" "${audit_pnpm}" "${fixture_root}/audit/project" \
@@ -524,9 +527,9 @@ mkdir -p "${audit_bundle}" "${audit_pnpm}" "${fixture_root}/audit/project" \
 cp "${runner_sources[@]}" "${audit_bundle}/"
 ln -s "${javascript_bundle_dir}/node_modules" "${audit_bundle}/node_modules"
 printf '{"engines":{"node":"%s"}}\n' "${node_version}" >"${audit_bundle}/package.json"
-# The governed lock, and the target-owned files pnpm would read if it were ever
-# pointed at the project: settings that would redirect the audit, a hook file
-# that is target code, a manifest, and an installed package.
+
+
+
 audit_lock_source="${fixture_root}/audit/project/pnpm-lock.yaml"
 printf "lockfileVersion: '9.0'\n\nimporters:\n  .: {}\n" >"${audit_lock_source}"
 printf 'registry=https://registry.invalid/\n' >"${fixture_root}/audit/project/.npmrc"
@@ -593,12 +596,12 @@ process.stdout.write(
 process.exit(1);
 CJS
 audit_response="${fixture_root}/audit.json"
-printf '{"protocolVersion":2,"operation":"audit","root":"%s","directory":"%s"}' \
+printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" project | javascript_sealed_run "${javascript_node}" "${audit_bundle}/runner.mjs" \
   >"${audit_response}" || fail "the runner rejected a well-formed audit request"
-# The advisory Go decides is an identity, a package, a severity, and the exact
-# releases it was reported against. The registry's own advisory object, its
-# ranges, and its dependency paths never cross the protocol.
+
+
+
 for reported in '"id":"GHSA-abcd-1234-5678"' '"aliases":["npm:1100"]' \
   '"package":"example"' '"severity":"high"' '"versions":["1.2.3"]' \
   '"id":"npm:1200"' '"aliases":[]' '"versions":["2.0.0"]'; do
@@ -611,13 +614,13 @@ for native in 'vulnerable_versions' 'paths' 'metadata' '1.2.4'; do
     fail "audit leaked the native report field ${native}: $(cat "${audit_response}")"
   fi
 done
-# An advisory this reader cannot use is missing coverage, named against the lock
-# it was audited from, rather than a package with nothing reported against it.
+
+
 if ! grep -qF '{"path":"project/pnpm-lock.yaml","reason":"advisory '"'"'1300'"'"' omitted' "${audit_response}"; then
   fail "audit did not report an unusable advisory: $(cat "${audit_response}")"
 fi
-# The audit asks one policy-owned registry, and the threshold stays Go's: no
-# severity filter is ever passed to the tool.
+
+
 expect_audit_argument() {
   if ! grep -qxF -- "$1" "${audit_arguments}"; then
     fail "the audit did not invoke the pinned pnpm with $1: $(cat "${audit_arguments}")"
@@ -631,10 +634,10 @@ expect_audit_argument https://registry.npmjs.org/
 if grep -qF -- "--audit-level" "${audit_arguments}"; then
   fail "the audit let the tool decide the severity threshold: $(cat "${audit_arguments}")"
 fi
-# The audited directory is policy owned and holds exactly the governed lock. The
-# target directory is never handed to the tool, so the settings, hooks,
-# manifest, and installed packages beside its lock are not there to be read and
-# no target code can run: pnpm reads all of those from the directory it audits.
+
+
+
+
 if grep -qxF -- "${fixture_root}/audit/project" "${audit_arguments}"; then
   fail "the audit pointed the tool at the target directory: $(cat "${audit_arguments}")"
 fi
@@ -649,11 +652,11 @@ if [[ -e "${audited_directory}" ]]; then
   fail "the audit left its scratch directory behind at ${audited_directory}"
 fi
 
-# A lock the operation cannot read is missing coverage, and the tool is never
-# run at all: there is nothing governed to audit.
+
+
 rm -f "${audit_arguments}"
 mkdir -p "${fixture_root}/audit/unlocked"
-if ! printf '{"protocolVersion":2,"operation":"audit","root":"%s","directory":"%s"}' \
+if ! printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" unlocked | javascript_sealed_run "${javascript_node}" \
   "${audit_bundle}/runner.mjs" >"${fixture_root}/out"; then
   fail "an audit of a project without a lock failed instead of reporting coverage"
@@ -665,9 +668,9 @@ if [[ -e "${audit_arguments}" ]]; then
   fail "an audit without a governed lock still ran the tool"
 fi
 
-# A refusal reported by the tool is a failed operation, never a project with no
-# advisories against it.
-if printf '{"protocolVersion":2,"operation":"audit","root":"%s","directory":"%s"}' \
+
+
+if printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" refused | javascript_sealed_run "${javascript_node}" \
   "${audit_bundle}/runner.mjs" >"${fixture_root}/out" 2>&1; then
   fail "an audit the tool refused was accepted"
@@ -677,15 +680,15 @@ if ! grep -qF 'ERR_PNPM_AUDIT_NO_LOCKFILE' "${fixture_root}/out"; then
 fi
 
 expect_runner_rejected "an audit request without a directory" \
-  '{"protocolVersion":2,"operation":"audit","root":"'"${fixture_root}/audit"'"}'
+  '{"protocolVersion":3,"operation":"audit","root":"'"${fixture_root}/audit"'"}'
 expect_runner_rejected "an uncontained audit directory" \
-  '{"protocolVersion":2,"operation":"audit","root":"'"${fixture_root}/audit"'","directory":"../elsewhere"}'
+  '{"protocolVersion":3,"operation":"audit","root":"'"${fixture_root}/audit"'","directory":"../elsewhere"}'
 
 expect_runner_rejected "a packages request without a directory" \
-  '{"protocolVersion":2,"operation":"packages","root":"'"${packages_target}"'"}'
+  '{"protocolVersion":3,"operation":"packages","root":"'"${packages_target}"'"}'
 expect_runner_rejected "an uncontained packages directory" \
   "$(packages_request "${packages_target}" ../elsewhere)"
 expect_runner_rejected "a packages request with a selection" \
-  '{"protocolVersion":2,"operation":"packages","root":"'"${packages_target}"'","directory":".","paths":[]}'
+  '{"protocolVersion":3,"operation":"packages","root":"'"${packages_target}"'","directory":".","paths":[]}'
 
 echo "test-javascript-project: all checks passed"

@@ -15,8 +15,6 @@ const (
 	executionStatusNotStarted = "not-started"
 )
 
-// ExecutionCommand is the terminal-visible, policy-derived identity of one
-// command. It carries presentation facts separately from argv.
 type ExecutionCommand struct {
 	Name               string
 	Kind               string
@@ -28,7 +26,6 @@ type ExecutionCommand struct {
 	TimeoutSeconds     int
 }
 
-// ExecutionPlan is the visible plan for direct test execution.
 type ExecutionPlan struct {
 	Stage           string
 	Level           string
@@ -39,7 +36,6 @@ type ExecutionPlan struct {
 	Commands        []ExecutionCommand
 }
 
-// ExecutionResult is emitted only after a command reaches a terminal state.
 type ExecutionResult struct {
 	Status            string
 	ExecutionDuration time.Duration
@@ -47,8 +43,6 @@ type ExecutionResult struct {
 	ResourceWaitKnown bool
 }
 
-// ExecutionReporter is the terminal-safe renderer for test execution. Direct
-// commands use a concise human view unless the caller requests verbose output.
 type ExecutionReporter struct {
 	output  io.Writer
 	plan    ExecutionPlan
@@ -140,9 +134,6 @@ func executionTimeoutCeiling(plan ExecutionPlan) time.Duration {
 	return total
 }
 
-// CommandWaiting renders the exact current command before resource acquisition
-// begins. This keeps a blocked host resource visible instead of looking like a
-// silent hung test.
 func (reporter *ExecutionReporter) CommandWaiting(index int) {
 	command, ok := reporter.command(index)
 	if !ok {
@@ -162,8 +153,6 @@ func (reporter *ExecutionReporter) CommandWaiting(index int) {
 		terminalValue(strings.Join(command.ExclusiveResources, ",")), terminalValue(state))
 }
 
-// CommandResourceWaiting renders a periodic update while a command remains
-// blocked on one of its declared exclusive resources.
 func (reporter *ExecutionReporter) CommandResourceWaiting(index int, elapsed time.Duration) {
 	command, ok := reporter.command(index)
 	if !ok || len(command.ExclusiveResources) == 0 {
@@ -179,8 +168,6 @@ func (reporter *ExecutionReporter) CommandResourceWaiting(index int, elapsed tim
 		terminalValue(strings.Join(command.ExclusiveResources, ",")), terminalValue("waiting"), elapsed)
 }
 
-// CommandFinished renders final command timing and outcome after the process
-// completes or fails to start.
 func (reporter *ExecutionReporter) CommandFinished(index int, result ExecutionResult) {
 	command, ok := reporter.command(index)
 	if !ok {
@@ -202,8 +189,6 @@ func (reporter *ExecutionReporter) CommandFinished(index int, result ExecutionRe
 		index+1, len(reporter.plan.Commands), terminalValue(result.Status), result.ExecutionDuration, resourceWait, elapsed)
 }
 
-// CommandNotStarted records work deliberately suppressed after a failed
-// prerequisite. It is output as status rather than evidence of execution.
 func (reporter *ExecutionReporter) CommandNotStarted(index int) {
 	reporter.CommandFinished(index, ExecutionResult{Status: executionStatusNotStarted, ResourceWaitKnown: true})
 }

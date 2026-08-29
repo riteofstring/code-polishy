@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Development-only source runner for this checkout.
-#
-# It runs the engine straight from source with the pinned Go toolchain so a
-# change can be exercised without installing a release. It is not a release and
-# no target lock can name it, so it is not a supported way to govern another
-# repository; a target runs the installed `code-polishy` launcher instead.
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 caller_root="$(pwd -P)"

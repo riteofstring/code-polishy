@@ -37,6 +37,9 @@ when you need the operating contract or policy details behind it.
 
 - [Policy Engine Architecture](policy-engine-architecture.md) maps the runtime
   ownership boundaries and execution model.
+- [Source Comment Policy Design](design/source-comment-policy.md) explains the
+  default-preserving switch and the rationale for repositories that select the
+  strict no-comment boundary.
 - [Source Provenance](source-provenance.md) records public design references,
   toolchain origins, and implementation boundaries.
 - [Release Checklist](release-checklist.md) defines the immutable annotated-tag

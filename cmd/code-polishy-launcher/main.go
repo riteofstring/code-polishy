@@ -1,11 +1,3 @@
-// Command code-polishy-launcher is the stable installed entry point a target
-// repository runs as `code-polishy`.
-//
-// It selects nothing on its own. The target's .code-polishy.lock.json names one
-// exact installed release, and the launcher either hands control to that
-// release or reports which release the target requires and how to install it
-// locally. There is no channel, range, newest-wins rule, fallback release, or
-// download.
 package main
 
 import (
@@ -73,10 +65,6 @@ func run(executable string, arguments []string, stderr io.Writer, launcher func(
 	return status
 }
 
-// installPrefix is the directory the installed launcher lives under, resolved
-// from the launcher itself. A release store is found beside the launcher rather
-// than named by an environment variable, a configuration file, or the lock, so
-// nothing a target checks in can point Code Polishy at another store.
 func installPrefix(executable string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(executable)
 	if err != nil {
@@ -85,10 +73,6 @@ func installPrefix(executable string) (string, error) {
 	return filepath.Dir(filepath.Dir(resolved)), nil
 }
 
-// parseArguments reads the leading global options the launcher must act on and
-// forwards everything else untouched. --repo-root is resolved here and reissued
-// from the release, and --policy-root is refused: the lock decides which
-// release runs, so a target cannot point the launcher somewhere else.
 func parseArguments(arguments []string) (repoRoot string, forwarded []string, err error) {
 	working, err := os.Getwd()
 	if err != nil {
@@ -125,8 +109,6 @@ func parseArguments(arguments []string) (repoRoot string, forwarded []string, er
 	return repoRoot, forwarded, nil
 }
 
-// globalOption splits one leading global option into its name and any value
-// spelled with `=`. Anything else is where the caller's own command begins.
 func globalOption(argument string) (name, value string, spelledWithValue bool) {
 	for _, known := range []string{"--repo-root", "--policy-root", "--config"} {
 		if argument == known {

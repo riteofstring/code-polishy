@@ -14,10 +14,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// Check enforces declared module direction over the selected source. Each
-// language contributes its own import facts -- Go's parser for Go, the sealed
-// policy-owned bundle for JavaScript and TypeScript -- and the decision they
-// feed is the same one: a module may reach only what it declared it depends on.
 func Check(ctx context.Context, repo repository.Repository, selected []string) []policy.Finding {
 	allFiles, err := repo.AllFiles()
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -45,9 +44,6 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	return findings
 }
 
-// Advisories reports high-confidence portability risks without changing the
-// command exit status. It deliberately scans source, not ignored local
-// environment files; runtime resolution diagnostics remain target behavior.
 func Advisories(repo repository.Repository, files []string) []policy.Advisory {
 	advisories := []policy.Advisory{}
 	for _, path := range files {
@@ -60,8 +56,8 @@ func Advisories(repo repository.Repository, files []string) []policy.Advisory {
 		}
 		advisories = append(advisories, fileAdvisories(repo, path, data)...)
 	}
-	sort.Slice(advisories, func(left, right int) bool {
-		return advisoryKey(advisories[left]) < advisoryKey(advisories[right])
+	slices.SortFunc(advisories, func(left, right policy.Advisory) int {
+		return strings.Compare(advisoryKey(left), advisoryKey(right))
 	})
 	return advisories
 }
@@ -155,9 +151,9 @@ func siblingReference(line, value string) bool {
 	if !siblingSegmentPattern.MatchString(value) || strings.ContainsAny(value, "*$\n\r") {
 		return false
 	}
-	context := line
-	if valueIndex := strings.Index(line, value); valueIndex >= 0 {
-		context = line[:valueIndex]
+	context, _, found := strings.Cut(line, value)
+	if !found {
+		context = line
 	}
 	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(context))
 	for _, rootName := range []string{"rootdir", "reporoot", "repositoryroot", "projectroot", "process.cwd"} {

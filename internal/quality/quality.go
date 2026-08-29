@@ -46,9 +46,6 @@ func Check(ctx context.Context, repo repository.Repository, selection repository
 	return findings
 }
 
-// CheckCommands exposes the governed process commands that Check can run for
-// one selection. It shares the exact source-language, shell, and configured
-// command ordering with Check so a merge gate can validate its execution order.
 func CheckCommands(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
 	commands := []policy.Command{}
 	goFiles := languageFiles(repo, selection.Files, "go")
@@ -69,6 +66,9 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 }
 
 func Format(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner) []policy.Finding {
+	if repo.ClassifyDocumentationCandidate(selection).Ordinary {
+		return DocumentationFormatWrite(ctx, repo, selection.Candidate.AddedOrModified)
+	}
 	findings := []policy.Finding{}
 	goFiles := editableFiles(repo, languageFiles(repo, selection.Files, "go"))
 	if len(goFiles) > 0 {
@@ -100,9 +100,6 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 	return findings
 }
 
-// CommandsForProfiles selects the exact configured commands that a profile
-// would execute without running them. Planning and execution share this
-// selection boundary.
 func CommandsForProfiles(repo repository.Repository, selection repository.Selection, profiles ...string) []policy.Command {
 	commands := []policy.Command{}
 	for _, command := range repo.Config.Checks {
@@ -117,10 +114,6 @@ func CommandsForProfiles(repo repository.Repository, selection repository.Select
 	return commands
 }
 
-// NamedCommands resolves exact configured checks without broadening to a
-// profile. It is used by caller-authorized acceptance requirements, so an
-// unknown, duplicate, or inapplicable name is an error rather than a plausible
-// empty success.
 func NamedCommands(repo repository.Repository, names []string) ([]policy.Command, error) {
 	files, err := repo.AllFiles()
 	if err != nil {
@@ -219,6 +212,7 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
+	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)
 	findings = append(findings, customLanguageRuleFindings(repo, files)...)
 	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule)...)
 	findings = append(findings, builtInProviderFindings(repo, files)...)
@@ -292,16 +286,6 @@ func adapterCoverageFindings(config policy.Config, languagesByModule map[string]
 	return findings
 }
 
-// builtInProviderFindings refuses a configured check that stands in for a
-// checker Code Polishy already owns.
-//
-// A target may still declare a command for something no built-in checker can
-// honestly infer. It may not use that same surface to run its own formatter,
-// linter, type checker, complexity budget, dead-code analyzer, or architecture
-// rules over source the policy already decides: that would select another tool
-// and another configuration for exactly the source the sealed bundle and the Go
-// engine own. What the check covers is what decides it, so a command reaching
-// source no built-in checker decides remains the target's own.
 func builtInProviderFindings(repo repository.Repository, files []string) []policy.Finding {
 	formatted := map[string]bool{}
 	if bearsJavaScript(repo, files) {
@@ -311,8 +295,7 @@ func builtInProviderFindings(repo repository.Repository, files []string) []polic
 	}
 	findings := []policy.Finding{}
 	for _, command := range repo.Config.Checks {
-		// A managed command is Code Polishy running its own module, not a target
-		// selecting an implementation.
+
 		if command.Managed {
 			continue
 		}
@@ -334,10 +317,6 @@ func builtInProviderFindings(repo repository.Repository, files []string) []polic
 	return findings
 }
 
-// The source one configured check covers that a built-in checker for this
-// capability decides, and whether that is all of it. Generated files are absent
-// because no built-in checker decides them either. The reported path is one
-// example, so the finding names something exact without listing a tree.
 func builtInCoveredSource(repo repository.Repository, files []string, formatted map[string]bool, command policy.Command, capability string) (string, bool) {
 	example := ""
 	for _, path := range files {
@@ -345,13 +324,11 @@ func builtInCoveredSource(repo repository.Repository, files []string, formatted 
 			continue
 		}
 		language := repo.Language(path)
-		// Source a built-in checker decides differently makes the check the
-		// target's own.
+
 		if language != "" && !builtInCapability(language, capability) {
 			return "", false
 		}
-		// A file no built-in checker for this capability could decide says
-		// nothing about the check.
+
 		if !builtInDecides(formatted, path, language, capability) {
 			continue
 		}
@@ -362,11 +339,6 @@ func builtInCoveredSource(repo repository.Repository, files []string, formatted 
 	return example, example != ""
 }
 
-// Whether a built-in checker for this capability decides one exact file. A
-// language is not enough for JavaScript and TypeScript: the sealed bundle
-// prints one set of file types and parses a smaller one, so a single-file
-// component needs a framework compiler the bundle never runs and is decided by
-// nothing here, exactly like a file type the sealed formatter never prints.
 func builtInDecides(formatted map[string]bool, path, language, capability string) bool {
 	if language != "" && language != "typescript" {
 		return true
@@ -377,9 +349,6 @@ func builtInDecides(formatted map[string]bool, path, language, capability string
 	return language == "typescript" && javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))]
 }
 
-// Whether one file is part of the source a configured check covers. A check
-// naming neither paths nor modules covers the whole repository, exactly as it
-// runs against it.
 func commandCovers(repo repository.Repository, command policy.Command, path string) bool {
 	if len(command.Paths) == 0 && len(command.Modules) == 0 {
 		return true
@@ -473,6 +442,7 @@ func sourceChecks(repo repository.Repository, files []string) []policy.Finding {
 		}
 		findings = append(findings, checkTextFile(repo, path)...)
 	}
+	findings = append(findings, sourceCommentFindings(repo, files)...)
 	return findings
 }
 
@@ -717,11 +687,7 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 	if !isExecutable(wrapper) {
 		return commands, []policy.Finding{toolFinding("shellcheck", "pinned ShellCheck is unavailable; run ./tools/install-policy-tools.sh")}
 	}
-	// A script that declares where it sources from is read with that file, from
-	// the repository the path is written against. Otherwise what the check
-	// decides depends on the selection: the same script reads as clean when a
-	// file it sources happens to be selected too, and as a file full of unassigned
-	// variables when it is not.
+
 	arguments := []string{wrapper, "--external-sources"}
 	for _, path := range shellFiles {
 		arguments = append(arguments, filepath.Join(repo.Root, filepath.FromSlash(path)))
@@ -733,7 +699,7 @@ func commandApplies(repo repository.Repository, command policy.Command, selectio
 	if len(command.Paths) == 0 && len(command.Modules) == 0 {
 		return true
 	}
-	paths := append(append([]string{}, selection.Files...), selection.Deleted...)
+	paths := append(append([]string{}, selection.Files...), selection.Candidate.Deleted...)
 	for _, path := range paths {
 		if pathMatchesCommand(repo, path, command) {
 			return true
@@ -802,14 +768,8 @@ func requiredCapabilities(language string) []string {
 	}
 }
 
-// Every capability a built-in checker can own. A capability outside this list
-// is the target's to prove, so a check providing one is never a built-in
-// checker's replacement.
 var builtInCapabilities = []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}
 
-// Capabilities Code Polishy itself provides, so no target command has to. The
-// TypeScript entry is what the sealed JavaScript bundle supplies: a target
-// neither installs nor configures a formatter of its own.
 func builtInCapability(language, capability string) bool {
 	switch language {
 	case "go", "typescript":

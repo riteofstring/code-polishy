@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Write or verify the manifest of an installed policy-owned JavaScript tool
-# bundle.
-#
-# Usage: javascript-bundle-manifest.sh <write|verify> <bundle-dir>
-#
-# The manifest records which checked-in source the bundle was installed from,
-# the exact runtime and tool versions it carries, and one digest over every
-# installed byte. `write` runs once, on the staged tree, before that tree
-# becomes the installed one. `verify` recomputes the digest from the installed
-# files, so a bundle that changed after installation is rejected rather than
-# executed.
+
+
+
+
+
+
+
+
+
+
+
 
 # shellcheck source=tools/javascript-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-env.sh"
@@ -37,11 +37,11 @@ fi
 
 manifest="${bundle_dir}/${javascript_bundle_manifest_name}"
 
-# Every installed entry except the manifest, digested and ordered by path, so the
-# result depends on the installed bytes and not on how the tree was walked. A
-# symlink contributes its exact target: pnpm's isolated linker makes every
-# top-level tool a link into .pnpm, so retargeting one would otherwise swap the
-# code the runner loads without changing a single installed file.
+
+
+
+
+
 bundle_entry_digests() {
   (
     cd "${bundle_dir}" || exit 1
@@ -63,9 +63,9 @@ bundle_digest="$(printf '%s\n' "${entry_digests}" |
   LC_ALL=C "${javascript_digest_command[@]}" | awk '{print $1}')"
 entry_count="$(printf '%s\n' "${entry_digests}" | wc -l | tr -d '[:space:]')"
 
-# The tool inventory is the bundle's own exact pins. check-javascript-bundle.sh
-# reconciles those pins with the complete installed graph and its licenses; the
-# runner confirms each one against the package installed beside it.
+
+
+
 tools_json="$(awk '
   /"dependencies"/ { in_dependencies = 1; next }
   /^  }/ { in_dependencies = 0 }

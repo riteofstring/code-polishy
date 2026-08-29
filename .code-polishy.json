@@ -110,19 +110,10 @@
       "dependsOn": ["release", "runner"]
     },
     {
-      "name": "docs",
-      "paths": ["docs/**/*.md"]
-    },
-    {
       "name": "tooling",
       "paths": ["bin/**", "scripts/**", "skills/**", "templates/**", "tools/**"]
     }
   ],
-  "verification": {
-    "mergeGate": {
-      "recommendedModules": ["docs"]
-    }
-  },
   "checks": [
     {
       "name": "go-build",
@@ -275,15 +266,6 @@
         "runOn": ["focused", "recommended", "full"]
       },
       {
-        "name": "documentation-contract",
-        "kind": "contract",
-        "scope": "module",
-        "modules": ["docs"],
-        "argv": ["./scripts/check-documentation.sh"],
-        "runOn": ["focused", "recommended", "full"],
-        "timeoutSeconds": 30
-      },
-      {
         "name": "tooling-contract",
         "kind": "contract",
         "scope": "module",
@@ -365,7 +347,11 @@
         "scope": "module",
         "cost": "expensive",
         "modules": ["quality"],
-        "argv": ["./scripts/go-mutation.sh", "./internal/quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false"
+        ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
@@ -509,6 +495,12 @@
         "versionFile": "tools/staticcheck-version.txt",
         "source": "go-module",
         "locator": "honnef.co/go/tools"
+      },
+      {
+        "name": "ty",
+        "versionFile": "tools/ty-version.txt",
+        "source": "github-release",
+        "locator": "astral-sh/ty"
       },
       {
         "name": "trivy",

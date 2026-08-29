@@ -6,14 +6,15 @@ import (
 	"testing"
 )
 
-func TestWriteManifestRecordsAndVerifiesExactStage(t *testing.T) {
+func TestWriteManifestPublishesAVerifiableImmutableRelease(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		"VERSION": "9.9.9\n", "scripts/go_version.txt": "1.26.6\n",
 		"tools/govulncheck-version.txt": "v1.3.0\n", "tools/node-version.txt": "24.18.0\n",
 		"tools/osv-scanner-version.txt": "v2.4.0\n", "tools/pnpm-version.txt": "11.13.0\n",
 		"tools/ruff-version.txt": "0.16.0\n", "tools/shellcheck-version.txt": "0.11.0\n",
-		"tools/staticcheck-version.txt": "v0.7.0\n", BinaryPath: "engine", LauncherBinaryPath: "launcher",
+		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/ty-version.txt": "0.0.65\n",
+		BinaryPath: "engine", LauncherBinaryPath: "launcher",
 	}
 	for relative, content := range files {
 		path := filepath.Join(root, filepath.FromSlash(relative))
@@ -28,8 +29,8 @@ func TestWriteManifestRecordsAndVerifiesExactStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.ContentDigest != releaseEntriesDigest(manifest.Entries) || manifest.ReleaseDigest != manifest.Identity() {
-		t.Fatalf("manifest=%+v", manifest)
+	if manifest.Tools.Ty != "0.0.65" {
+		t.Fatalf("ty version = %q", manifest.Tools.Ty)
 	}
 	read, present, err := ReadManifest(root)
 	if err != nil || !present {

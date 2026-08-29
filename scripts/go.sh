@@ -21,9 +21,9 @@ version_for() {
   GOTOOLCHAIN=local "$1" version 2>/dev/null | awk '{print $3}'
 }
 
-# The pinned toolchain lives in one place. Nothing is taken from an ambient
-# PATH or an environment override, so this script runs the Go the checkout
-# carries or none at all.
+
+
+
 go_bin=""
 if [[ -n "${os_tag}" && -n "${arch_tag}" ]]; then
   go_bin="${repo_root}/.tools/go/${os_tag}-${arch_tag}/go/bin/go"

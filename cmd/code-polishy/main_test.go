@@ -31,6 +31,33 @@ func TestPrintReportLabelsNonBlockingAdvisory(t *testing.T) {
 	}
 }
 
+func TestPrintReportShowsTestQualityReminderBeforeOrdinaryDetails(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{
+		MergePolicy:         &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
+		TestQualityReminder: engine.NewTestQualityReminder([]string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"}),
+	}
+	printReportTo(stdout, stderr, report)
+	output := stdout.String()
+	lower := strings.ToLower(output)
+	for _, fact := range []string{"test quality reminder", "changed test files: 2", "tautological", "change-detector", "merge gate"} {
+		if !strings.Contains(lower, fact) {
+			t.Fatalf("test reminder omitted %q: %q", fact, output)
+		}
+	}
+	if strings.Index(lower, "test quality reminder") > strings.Index(lower, "merge gate") {
+		t.Fatalf("test reminder did not precede ordinary report details: %q", output)
+	}
+	if !strings.Contains(output, "PASS policy completed without findings") || engine.HasFindings(report) {
+		t.Fatalf("reminder changed successful report behavior: stdout=%q report=%+v", output, report)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestPrintReportLabelsReleaseAgeAssessmentSeparately(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
@@ -94,6 +121,62 @@ func TestParseSelectionRejectsMixedModes(t *testing.T) {
 	t.Parallel()
 	if _, _, err := parseSelection([]string{"--staged", "--all"}); err == nil {
 		t.Fatal("expected mixed-selection error")
+	}
+}
+
+func TestParseDesignContextOptionsSupportsStandardSelectors(t *testing.T) {
+	t.Parallel()
+	files, err := parseDesignContextOptions([]string{"--files", "src/value.go", "src/entry.go"})
+	if err != nil || files.mode != "files" || !slices.Equal(files.files, []string{"src/value.go", "src/entry.go"}) || len(files.modules) != 0 {
+		t.Fatalf("file options = %+v, err = %v", files, err)
+	}
+	modules, err := parseDesignContextOptions([]string{"--module=domain", "--module", "api"})
+	if err != nil || modules.mode != "changes" || !slices.Equal(modules.modules, []string{"domain", "api"}) || len(modules.files) != 0 {
+		t.Fatalf("module options = %+v, err = %v", modules, err)
+	}
+	defaults, err := parseDesignContextOptions(nil)
+	if err != nil || defaults.mode != "changes" || len(defaults.files) != 0 || len(defaults.modules) != 0 {
+		t.Fatalf("default options = %+v, err = %v", defaults, err)
+	}
+	for _, arguments := range [][]string{
+		{"--module", "domain", "--all"},
+		{"--files", "src/value.go", "--module", "domain"},
+		{"--files"},
+		{"--module"},
+		{"--unknown"},
+	} {
+		if _, err := parseDesignContextOptions(arguments); err == nil {
+			t.Fatalf("accepted invalid options %v", arguments)
+		}
+	}
+}
+
+func TestHandleDesignContextSurfacesRequestAndMappingFailures(t *testing.T) {
+	t.Parallel()
+	if _, err := handleDesignContext(t.Context(), &engine.Engine{}, []string{"--files"}); err == nil {
+		t.Fatal("missing file selection was accepted")
+	}
+	unknownModule := &engine.Engine{}
+	unknownModule.Repository.Root = t.TempDir()
+	if _, err := handleDesignContext(t.Context(), unknownModule, []string{"--module", "absent"}); err == nil {
+		t.Fatal("unknown module was accepted")
+	}
+	staleMapping := &engine.Engine{}
+	staleMapping.Repository.Root = t.TempDir()
+	staleMapping.Repository.Config = policy.Config{
+		Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}},
+		Documentation: policy.Documentation{Design: []policy.DesignDocument{{
+			Path: "docs/design/missing.md", Module: "application",
+		}}},
+	}
+	result, err := handleDesignContext(t.Context(), staleMapping, []string{"--module", "application"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.quiet || len(result.report.Findings) != 1 ||
+		result.report.Findings[0].Check != "policy.designDocumentation" ||
+		result.report.Findings[0].Subject != "docs/design/missing.md" {
+		t.Fatalf("result = %+v", result)
 	}
 }
 
@@ -229,25 +312,8 @@ func TestParseBaseOption(t *testing.T) {
 	}
 }
 
-func TestCommandHandlersExposeTestLevels(t *testing.T) {
+func TestDependencyReviewRequiresBase(t *testing.T) {
 	t.Parallel()
-	if _, exists := commandHandlers()["test-levels"]; !exists {
-		t.Fatal("test-levels handler is missing")
-	}
-}
-
-func TestCommandHandlersExposeMergeGate(t *testing.T) {
-	t.Parallel()
-	if _, exists := commandHandlers()["merge-gate"]; !exists {
-		t.Fatal("merge-gate handler is missing")
-	}
-}
-
-func TestCommandHandlersExposeDependencyReview(t *testing.T) {
-	t.Parallel()
-	if _, exists := commandHandlers()["dependency-review"]; !exists {
-		t.Fatal("dependency-review handler is missing")
-	}
 	if _, err := parseRequiredBaseOption("dependency-review", nil); err == nil {
 		t.Fatal("dependency-review accepted a missing base")
 	}
@@ -290,6 +356,18 @@ func TestPrintReportSummarizesMergePolicyForHumans(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "MERGE POLICY REASON") {
 		t.Fatalf("concise output leaked verbose receipt: %q", stdout.String())
+	}
+}
+
+func TestPrintReportSummarizesDocumentationMergePolicyForHumans(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{MergePolicy: &engine.MergePolicy{Level: "documentation", Base: "origin/main"}}
+	printReportTo(stdout, stderr, report)
+	wantPrefix := "MERGE GATE: DOCUMENTATION against origin/main\n"
+	if !strings.HasPrefix(stdout.String(), wantPrefix) {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
 
@@ -338,29 +416,6 @@ func TestPrintReportDisclosesTrustedChangeBoundary(t *testing.T) {
 	}
 }
 
-func TestPrintTableUsesStableASCIIColumns(t *testing.T) {
-	t.Parallel()
-	output := &bytes.Buffer{}
-	printTable(output, engine.Table{
-		Title:   "TEST LEVELS",
-		Columns: []string{"LEVEL", "AUTH"},
-		Rows:    [][]string{{"focused", "routine"}, {"full *", "choice"}},
-	})
-	want := "" +
-		"TEST LEVELS\n" +
-		"+---------+---------+\n" +
-		"| LEVEL   | AUTH    |\n" +
-		"+---------+---------+\n" +
-		"| focused | routine |\n" +
-		"| full *  | choice  |\n" +
-		"+---------+---------+\n"
-	if output.String() != want {
-		t.Fatalf("table = %q, want %q", output.String(), want)
-	}
-}
-
-// installedRelease writes the smallest tree that is a Code Polishy release: the
-// engine binary a launcher would run, and the manifest recording it.
 func installedRelease(t *testing.T, revision string) string {
 	t.Helper()
 	host, err := release.Host()
@@ -382,14 +437,13 @@ func installedRelease(t *testing.T, revision string) string {
 		Features: []string{"javascript-bundle"},
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Ty: "0.0.65",
 		},
 		Entries: []release.Entry{{Path: release.BinaryPath, SHA256: hex.EncodeToString(content[:])}},
 	}
 	manifest.EntryCount = len(manifest.Entries)
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
-	// A release is named by the release its own record describes, so a test
-	// release records the digest a real one would.
+
 	manifest.ReleaseDigest = manifest.Identity()
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
@@ -415,8 +469,11 @@ func TestLockWritesTheLockRequiringTheRunningRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the manifest: %v", err)
 	}
-	if err := manifest.Satisfies(written); err != nil {
-		t.Fatalf("the written lock does not select the release that wrote it: %v", err)
+	if written.LockVersion != release.LockVersion ||
+		written.CodePolishyVersion != manifest.CodePolishyVersion ||
+		written.ReleaseDigest != manifest.ReleaseDigest ||
+		!slices.Equal(written.Features, manifest.Features) {
+		t.Fatalf("written lock = %+v, manifest = %+v", written, manifest)
 	}
 }
 

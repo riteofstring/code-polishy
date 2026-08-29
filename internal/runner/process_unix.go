@@ -24,8 +24,7 @@ const (
 var errProcessGroupEscape = errors.New("governed command escaped its process group")
 
 func runHostCommand(ctx context.Context, specification HostCommand) (HostResult, error) {
-	// Unix reports ETXTBSY while an executable is still held open for writing.
-	// Retry only that pre-start condition, with fresh command and pipe state.
+
 	retryDeadline := time.Now().Add(executableBusyRetryTimeout)
 	for {
 		command, err := newHostExecCommand(specification)
@@ -75,17 +74,10 @@ func lookPathOnHost(name string) (string, error) {
 	return exec.LookPath(name)
 }
 
-// containProcess puts every governed command in a process group. The runner
-// cleans that group after the immediate command exits as well as when its
-// context cancels, so resource leases cover the whole process tree.
 func containProcess(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-// runContainedCommand gives non-file output writers explicit pipes so Cmd.Wait
-// can reap the immediate command before its descendants release inherited
-// output descriptors. The governed process group is then terminated and
-// awaited before the pipes are drained and the caller releases its resources.
 func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr io.Writer) (HostResult, error) {
 	streams := commandOutputStreams{}
 	stdoutPipe, err := streams.add(stdout)
@@ -140,10 +132,6 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 	return result, errors.Join(cancellationErr, waitErr, cleanupErr, witnessErr, streamErr)
 }
 
-// processTreeWitness is inherited as descriptor 3 by the direct command. Unix
-// fork/exec descendants retain it unless they deliberately discard the
-// runner's containment contract. Once the governed process group is quiet, an
-// open witness proves that a descendant moved to another process group.
 type processTreeWitness struct {
 	reader *os.File
 	writer *os.File
@@ -262,10 +250,6 @@ func (streams *commandOutputStreams) record(err error) {
 	streams.errs = append(streams.errs, err)
 }
 
-// cleanupProcessGroup terminates and waits for descendants left behind by a
-// command that has otherwise completed. It escalates after the one shared
-// grace deadline but still waits for quiescence: releasing an exclusive
-// resource while the group exists would permit overlapping governed work.
 func cleanupProcessGroup(processID int, deadline time.Time, witness *processTreeWitness) error {
 	if deadline.IsZero() {
 		deadline = time.Now().Add(commandCleanupDelay)
@@ -279,10 +263,7 @@ func cleanupProcessGroup(processID int, deadline time.Time, witness *processTree
 			return nil
 		}
 		if err != nil {
-			// Once the leader is reaped, its numeric process-group ID can be
-			// reused before this poll observes ESRCH. EPERM names that unrelated
-			// group, not a failure to clean the governed tree, when the inherited
-			// witness has already reached EOF.
+
 			if !retryableProcessGroupPermission(err, witness, deadline) {
 				return processGroupSignalError(err, witness)
 			}

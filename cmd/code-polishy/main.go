@@ -39,6 +39,7 @@ Commands:
   dependency-review --base REF
   artifact-security
   doctor [--strict]
+  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...])
   format [--git-changes|--staged|--all|--files PATH...]
   fix [selection options]
   list-files [selection options]
@@ -111,8 +112,7 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 	case "lock":
 		return handleLockMeta(invocation), true
 	case "install-bundle":
-		// scripts/install.ps1 invokes this from the locally built release. It is
-		// an installation implementation detail, not a public acquisition path.
+
 		return handleInstallBundleMeta(invocation), true
 	case "release-manifest":
 		return handleReleaseManifestMeta(invocation), true
@@ -215,11 +215,6 @@ func handleAgentsMeta(invocation invocation) int {
 	}
 }
 
-// requireLockedRelease keeps an installed release from governing a repository
-// that requires another one, so running a release binary directly is not a way
-// around the lock the launcher enforces. Exempt commands either establish or
-// report release identity before a repository has a usable lock, or operate
-// only on an explicit release tree without governing the target repository.
 func requireLockedRelease(invocation invocation) (int, bool) {
 	exempt := []string{"lock", "install-bundle", "release-manifest", "version", "--version", "help", "--help", "-h"}
 	if slices.Contains(exempt, invocation.command) {
@@ -231,9 +226,6 @@ func requireLockedRelease(invocation invocation) (int, bool) {
 	return 0, true
 }
 
-// handleLockMeta writes the lock that requires the running release. It is the
-// only operation that creates or changes a target lock: every other command
-// reads one.
 func handleLockMeta(invocation invocation) int {
 	if len(invocation.arguments) != 0 {
 		return usageError("lock does not accept options")
@@ -323,6 +315,7 @@ func commandHandlers() map[string]commandHandler {
 		"supply-chain":      handleSupplyChain,
 		"dependency-review": handleDependencyReview,
 		"artifact-security": handleArtifactSecurity,
+		"design-context":    handleDesignContext,
 	}
 }
 
@@ -387,6 +380,9 @@ func handleSelectionCommand(operation string) commandHandler {
 		}
 		switch operation {
 		case "check":
+			if mode == "changes" || mode == "staged" {
+				return commandResult{report: policyEngine.CheckChangeAware(ctx, selection, "check")}, nil
+			}
 			return commandResult{report: policyEngine.Check(ctx, selection, "check")}, nil
 		case "architecture":
 			return commandResult{report: policyEngine.Architecture(ctx, selection)}, nil
@@ -665,6 +661,7 @@ func printReportTo(stdout, stderr io.Writer, report engine.Report) {
 }
 
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
+	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
 	for _, finding := range report.Findings {
 		fmt.Fprintf(stderr, "FAIL %-34s %s [%s]\n     %s\n", finding.Check, finding.Path, finding.Subject, finding.Message)
@@ -703,6 +700,20 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	} else {
 		fmt.Fprintf(stderr, "FAILED with %d finding(s)\n", len(report.Findings))
 	}
+}
+
+func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityReminder) {
+	if reminder == nil || len(reminder.ChangedTestPaths) == 0 {
+		return
+	}
+	fmt.Fprintln(output, "============================================================")
+	fmt.Fprintln(output, "TEST QUALITY REMINDER")
+	fmt.Fprintf(output, "CHANGED TEST FILES: %d\n", len(reminder.ChangedTestPaths))
+	fmt.Fprintln(output, "")
+	fmt.Fprintln(output, "Make sure none of the tests (new or old) are tautological or change-detector tests.")
+	fmt.Fprintln(output, "Tautological: derives its expected result from the same production implementation being tested.")
+	fmt.Fprintln(output, "Change-detector: mirrors private source spelling, extracted helper text, or collaborator choreography and therefore breaks under a behavior-preserving implementation change.")
+	fmt.Fprintln(output, "============================================================")
 }
 
 func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {

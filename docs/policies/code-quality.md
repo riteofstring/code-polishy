@@ -11,6 +11,7 @@ The default policy is:
 | Measure                                                | Production | Tests |
 | ------------------------------------------------------ | ---------: | ----: |
 | Go cyclomatic complexity (fails at)                    |         12 |    20 |
+| Python cyclomatic complexity (fails at)                |         10 |    10 |
 | TypeScript/JavaScript cyclomatic complexity (fails at) |         10 |    10 |
 | TypeScript/JavaScript nesting depth (maximum)          |          4 |     8 |
 | TypeScript/JavaScript parameters (maximum)             |          5 |     8 |
@@ -24,12 +25,14 @@ direction checks. Project-specific generated paths belong in
 
 Markdown (`.md` and `.markdown`, case-insensitive) is excluded from the file
 length budget by default because document length is not evidence of a code
-monolith. Markdown still receives final-newline and trailing-whitespace checks.
+monolith. Markdown receives final-newline, trailing-whitespace, sealed-format,
+UTF-8, containment, regular-file, size, and local-link checks.
 
 Tests receive a higher Go complexity and file-size budget because table-driven
-fixtures and workflow setup are naturally larger. TypeScript/JavaScript tests
-keep the same complexity threshold because nested test orchestration becomes
-unreliable quickly, but receive explicit depth and parameter budgets instead of
+fixtures and workflow setup are naturally larger. Python and
+TypeScript/JavaScript tests keep the same complexity threshold as production
+because nested test orchestration becomes unreliable quickly. JavaScript and
+TypeScript tests receive explicit depth and parameter budgets instead of
 silently inheriting production values. Targets may lower `maxTestDepth` and
 `maxTestParams` independently.
 
@@ -62,17 +65,119 @@ Formatting is deterministic and has separate read and write operations.
 Run Go through the repository's pinned wrapper when one exists. Python uses the
 policy-owned Ruff module.
 
-A target that bears JavaScript or TypeScript has its JavaScript, TypeScript,
-JSON, CSS, HTML, Markdown, and YAML formatted by the sealed, policy-owned
-JavaScript bundle. Code Polishy owns that configuration completely: a target
+A target has its Markdown formatted by the sealed, policy-owned bundle even
+when it contains no JavaScript or TypeScript. A target that bears JavaScript or
+TypeScript also has its JavaScript, TypeScript, JSON, CSS, HTML, and YAML
+formatted by that bundle. Code Polishy owns the configuration completely: a target
 `.prettierrc`, `prettier.config.*`, or `.prettierignore` is never read and is
 reported as unsupported. Generated files and lockfiles are never rewritten,
 because their generator owns their bytes. A file the sealed formatter cannot
 decide — an unknown file type, a symlink, a path that really names a file
 outside the repository, a file that is not UTF-8 text, or one past the size
 bound — is a specific coverage finding, never a silent pass. A
-target without JavaScript or TypeScript never launches the bundle and formats
-its own remaining file types with a configured `format` provider.
+target without JavaScript or TypeScript launches the bundle only when Markdown
+is selected and formats its remaining file types with configured providers.
+
+## Source comments and docstrings
+
+`quality.allowComments` is a boolean and defaults to `true`. When it is omitted
+or `true`, Code Polishy emits neither `policy.sourceComment` nor
+`policy.sourceCommentCoverage`; formatting, lint, complexity, and every other
+quality check remain active. Set it to `false` to enable the strict source
+comment policy for the whole repository.
+
+The strict policy rejects prose comments and docstrings in governed handwritten
+source. It covers selected production source, tests, scripts, and styles.
+Generated source skips this edit-oriented check, and `scope.exclude` removes
+only inputs the scope policy permits outside governed selection; it cannot hide
+protected handwritten source. The built-in scanners cover Go,
+JavaScript/TypeScript, Python, shell, CSS, HTML, and PowerShell. An executable
+language without a supported scanner, or a selected source file the policy
+cannot read or parse, is never treated as clean.
+
+A prose annotation is a `policy.sourceComment` finding at its exact
+path-and-line-column subject. Missing scanner coverage is a
+`policy.sourceCommentCoverage` finding. Both fail closed while the strict policy
+is active and cannot be exempted: exceptions may not name any `policy.*` check,
+and a target cannot waive individual paths, directives, or suppressions. The
+single switch is the explicit repository-wide `quality.allowComments` choice.
+
+Only the following full annotations are allowed. The shown whitespace and
+delimiters are significant. A placeholder is one machine-consumed value
+validated by the named language or tool; it is never a place to append prose.
+Where a directive has a required location, matching its bytes alone is
+insufficient.
+
+- A first-byte shebang, `#!<non-empty command>`, where the source language
+  recognizes a shebang.
+- Python encoding declarations on line 1, or line 2 only when line 1 is blank
+  or begins with a comment. The entire comment must match one of these forms,
+  where the character classes are literal regular-expression syntax:
+
+  ```text
+  #[ \t]*coding[:=][ \t]*[-_.A-Za-z0-9]+[ \t]*
+  #[ \t]*-\*-[ \t]*coding[:=][ \t]*[-_.A-Za-z0-9]+[ \t]*-\*-[ \t]*
+  ```
+
+- A shell inclusion directive,
+  `# shellcheck source=<canonical repository-relative path>`. The path must be
+  a regular shell source file inside the repository, with no whitespace, and
+  the immediately following line must be a `source` or `.` command with an
+  operand. That operand may be dynamic; the directive supplies ShellCheck with
+  its exact canonical repository-relative target.
+- TypeScript triple-slash references before code, exactly one of
+  `/// <reference path="<value>" />`,
+  `/// <reference types="<value>" />`,
+  `/// <reference lib="<value>" />`, or
+  `/// <reference no-default-lib="true" />`; each `<value>` is non-empty,
+  single-line, and contains no double quote.
+- The first content in a recognized JavaScript or TypeScript test file may be
+  exactly `// @vitest-environment jsdom` or
+  `/* @vitest-environment jsdom */`.
+- Go directives:
+  - the Go comment group attached directly to `import "C"`, which is cgo's
+    preamble; an unaffiliated `#cgo` line or C snippet is not allowed;
+  - exactly one `//go:build <valid Go build expression>` before `package`,
+    separated from it by a blank line;
+  - `//go:embed <non-empty Go embed argument list>` attached to a variable;
+  - `//go:generate <non-empty command>` at line start, with no leading or
+    trailing whitespace;
+  - `//line <file>:<positive-line>[:<positive-column>]` at line start, with no
+    whitespace or colon in its non-empty file name;
+  - `//go:debug <name>=<value>` at line start before `package` in a `main`
+    package or Go test file, where `name` is `[A-Za-z][A-Za-z0-9_]*` and `value` is
+    `[A-Za-z0-9_.-]+`;
+  - `//go:linkname <TOKEN> [<TOKEN>]` attached to a function or variable,
+    `//go:wasmimport <TOKEN> <TOKEN>` attached to a bodyless function,
+    `//go:wasmexport <TOKEN>` attached to a function with a body, or
+    `//export <TOKEN>` attached to the same-named function in a file that
+    imports `C`, where `TOKEN` is `[A-Za-z_][A-Za-z0-9_./-]*`;
+  - exactly `//go:nointerface`, `//go:noescape`, `//go:nosplit`,
+    `//go:noinline`, `//go:norace`, `//go:nocheckptr`, `//go:nowritebarrier`,
+    `//go:nowritebarrierrec`, `//go:yeswritebarrierrec`, `//go:systemstack`,
+    `//go:cgo_unsafe_args`, `//go:uintptrescapes`, `//go:uintptrkeepalive`, or
+    `//go:registerparams` attached to a function; `//go:noescape` requires a
+    bodyless function.
+
+Lint, coverage, type-check, and test suppressions, TODO markers, commented-out
+code, explanatory headers, and near-misses of an allowed directive are prose
+violations. Python module, class, and function docstrings are prose comments.
+CSS and HTML have no allowed directive. A canonical HTML doctype remains markup,
+while a non-empty inline `script` or `style` body requires its owning source
+scanner and fails coverage in the HTML lane. Invalid directive grammar or
+placement is a source-comment finding; a scanner or parser that cannot decide
+the source at all produces coverage failure rather than an implicit allowance.
+
+Put durable non-local rationale in a current Markdown document selected through
+the optional `documentation.design` index. Each entry maps a file under
+`docs/design/` to exactly one module or bounded list of concrete source paths;
+direct source ownership replaces module ownership for that file. Before editing
+source, run `code-polishy design-context --files <path...>` or
+`code-polishy design-context --module <name...>`. The command prints stable
+repository-relative paths only and returns no more than one current document
+per selected file. It deliberately excludes plans, historical evidence, and
+superseded decisions; see [Adopting Code Polishy](../adoption.md#map-current-design-rationale)
+for the mapping schema.
 
 ## Lint, type checking, and syntax
 
@@ -81,8 +186,8 @@ its own remaining file types with a configured `format` provider.
   pins no ESLint, installs no plug-in, and declares no lint provider. Code
   Polishy owns the configuration completely, so an `eslint.config.*` or
   `.eslintrc*` file is never read and is reported as unsupported, and an inline
-  `eslint-disable` or `eslint-enable` comment never takes effect and is
-  reported. Except a specific finding through a Code Polishy exception instead.
+  `eslint-disable` or `eslint-enable` comment never takes effect. It also fails
+  the source-comment rule when `quality.allowComments` is `false`.
   The sealed configuration runs the shared complexity, depth, and parameter
   budgets, with production and test source held to their own. A file the linter
   cannot parse or does not analyze is a coverage finding, never a silent pass.
@@ -111,8 +216,9 @@ its own remaining file types with a configured `format` provider.
 - Go runs `go vet` with the pinned Go toolchain.
 - Shell runs `bash -n` and the policy-pinned ShellCheck.
 - Python automatically activates policy-owned Ruff formatting, correctness,
-  and unused-code checks. Python type checking and architecture, plus Rust,
-  Java, unknown frameworks, content schemas, SQL, protobuf, and other
+  unused-code, and C901 complexity checks. It also activates policy-owned `ty`
+  type checking with normal diagnostic severity. Python architecture, plus
+  Rust, Java, unknown frameworks, content schemas, SQL, protobuf, and other
   ecosystems use a target-native provider when no shared module exists.
 
 Do not call a repository type-safe because JavaScript syntax parses or because
@@ -129,11 +235,11 @@ Complexity budgets are tripwires. When a function crosses one:
 3. Avoid splitting branches into forwarding helpers merely to lower the score.
 4. Add an exception only for a specific path/subject with an owner and expiry.
 
-The policy uses "fails at" semantics: Go complexity 12 is a finding, not an
-allowed maximum. Code Polishy translates that semantic for the sealed JavaScript
-bundle itself, and a project-specific provider must translate it to its own
-native tool (for example, an ESLint maximum of 9 produces a finding at
-complexity 10).
+The policy uses "fails at" semantics: Go complexity 12 and Python or
+TypeScript/JavaScript complexity 10 are findings, not allowed maximums. Code
+Polishy translates that semantic for policy-owned tools itself: Python C901 and
+the sealed JavaScript bundle receive a native maximum of 9 to produce a finding
+at complexity 10. A project-specific provider must translate the same way.
 
 ## Dead code
 

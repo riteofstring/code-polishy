@@ -10,16 +10,6 @@ import (
 	"path/filepath"
 )
 
-// Verify confirms an installed release is exactly what it recorded: every
-// recorded file holds the recorded bytes, every recorded link points at the
-// recorded target, and nothing else is installed under it.
-//
-// The launcher runs this before handing a target to the engine, so a release
-// that was truncated, changed, or added to after it was installed fails before
-// any of it runs. Verifying at installation time cannot answer this, because
-// what a release is made of can change afterwards, and verifying only the
-// engine binary cannot either, because the engine reads the schema, templates,
-// pinned versions, workflow scripts, and sealed JavaScript bundle beside it.
 func (manifest Manifest) Verify(releaseDir string) error {
 	pending := make(map[string]Entry, len(manifest.Entries))
 	for _, entry := range manifest.Entries {
@@ -37,7 +27,7 @@ func (manifest Manifest) Verify(releaseDir string) error {
 			return fmt.Errorf("read the installed Code Polishy release: %w", err)
 		}
 		relative = filepath.ToSlash(relative)
-		// The release's own record is the one file it does not record.
+
 		if relative == ManifestFilename {
 			return nil
 		}
@@ -51,8 +41,7 @@ func (manifest Manifest) Verify(releaseDir string) error {
 	if err := filepath.WalkDir(releaseDir, walk); err != nil {
 		return err
 	}
-	// Reported in the order the release recorded them, so the same incomplete
-	// release always names the same missing entry.
+
 	for _, entry := range manifest.Entries {
 		if _, missing := pending[entry.Path]; missing {
 			return fmt.Errorf(
@@ -64,11 +53,6 @@ func (manifest Manifest) Verify(releaseDir string) error {
 	return nil
 }
 
-// verifyEntry confirms one installed path is the file or the link the release
-// recorded there. A link contributes its exact target: the sealed JavaScript
-// bundle is linked together by pnpm's isolated linker, so retargeting one link
-// would otherwise swap the code a release runs without changing an installed
-// file.
 func verifyEntry(installed string, found fs.DirEntry, recorded Entry) error {
 	if found.Type()&fs.ModeSymlink != 0 {
 		if recorded.Symlink == "" {

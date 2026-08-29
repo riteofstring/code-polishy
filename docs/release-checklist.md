@@ -15,11 +15,11 @@ pushes, or installs state.
    while preparing this commit; do not run the full gate against a dirty
    worktree as a separate release proof.
 2. Check out the exact candidate commit and verify it through the managed
-   lifecycle. After policy-selected ordinary acceptance passes, Code Polishy
-   automatically runs impact-relevant declared local supplemental mutation/risk
-   hardening. Credentialed, destructive, production-mutating, and live-provider
-   probes remain typed external approval gates. Run the full gate once for an
-   unchanged candidate when that is the selected ordinary profile.
+   lifecycle. Run the policy-selected merge gate once for the unchanged
+   candidate. Then run `code-polishy test --supplemental` as this repository's
+   separate release-hardening stage. Credentialed, destructive,
+   production-mutating, and live-provider probes remain typed external approval
+   gates.
    Fast-forwarding a branch, running preflight, creating the annotated tag,
    installing the release, or updating a target lock does
    not invalidate that result. Rerun the gate only after the candidate commit

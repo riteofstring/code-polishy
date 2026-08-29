@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Sourceable locations and execution helper shared by every script that touches
-# the policy-owned JavaScript runtime and tool bundle.
-#
-# Nothing here resolves node, npm, npx, pnpm, or corepack from PATH, a user
-# cache, or a global installation: every path is absolute and policy owned, and
-# every execution runs under a closed environment.
+
+
+
+
+
+
 
 javascript_policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -33,21 +33,19 @@ javascript_runtime_dir="${javascript_runtime_root}/${javascript_platform_tag}"
 javascript_node="${javascript_runtime_dir}/node/bin/node"
 javascript_pnpm="${javascript_runtime_dir}/pnpm/bin/pnpm.cjs"
 
-# The bundle admits no native package, so one materialized tree serves every
-# supported host and lives outside the per-platform runtime directory.
+
+
 javascript_bundle_source="${javascript_policy_root}/tools/javascript"
 javascript_bundle_dir="${javascript_runtime_root}/bundle"
 javascript_store="${javascript_runtime_root}/store"
 
-# The checked-in files that decide what an installed bundle contains, including
-# the fixed runner entry point Code Polishy launches and the modules it loads,
-# plus the one file installation generates: the manifest recording what was
-# installed.
+
+
+
+
 javascript_bundle_source_files=(package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc runner.mjs protocol.mjs audit.mjs deadcode.mjs imports.mjs licenses.mjs packages.mjs)
-# shellcheck disable=SC2034  # read by the scripts that source this file
-javascript_runner="${javascript_bundle_dir}/runner.mjs"
-# shellcheck disable=SC2034  # read by the scripts that source this file
-javascript_bundle_manifest_name="bundle-manifest.json"
+export javascript_runner="${javascript_bundle_dir}/runner.mjs"
+export javascript_bundle_manifest_name="bundle-manifest.json"
 
 if command -v shasum >/dev/null 2>&1; then
   javascript_digest_command=(shasum -a 256)
@@ -58,9 +56,9 @@ else
   exit 1
 fi
 
-# One digest over every checked-in file that determines what gets installed.
-# Changing the manifest, the lock, the pnpm settings, the registry origin, or
-# the runner invalidates an installed bundle.
+
+
+
 javascript_bundle_source_digest() {
   (
     cd "${javascript_bundle_source}" &&
@@ -69,10 +67,10 @@ javascript_bundle_source_digest() {
   )
 }
 
-# Run an absolute policy-owned executable with credentials, proxies, loaders,
-# package-manager settings, and user configuration removed. Callers set
-# javascript_scratch_home to a directory they clean up, so no policy execution
-# ever reads or writes the invoking user's home.
+
+
+
+
 javascript_sealed_run() {
   if [[ -z "${javascript_scratch_home:-}" ]]; then
     echo "javascript_scratch_home must name a caller-owned scratch directory." >&2
@@ -91,8 +89,8 @@ javascript_sealed_run() {
     "$@"
 }
 
-# Run the pinned pnpm against a bundle directory, always through the pinned Node
-# binary and always against the policy-owned store.
+
+
 javascript_sealed_pnpm() {
   local bundle_dir="$1"
   shift
@@ -108,8 +106,8 @@ javascript_sealed_pnpm() {
   )
 }
 
-# Copy the checked-in bundle source into a directory pnpm may write to. The
-# checked-in manifest, lock, and settings are never modified in place by a check.
+
+
 javascript_copy_bundle_source() {
   local target="$1"
   local source_file

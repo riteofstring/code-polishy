@@ -93,6 +93,66 @@ For Go, JavaScript, and TypeScript, Code Polishy extracts imports and enforces
 the graph itself. For other languages, connect a target-native architecture
 checker through `checks` with the `architecture` capability.
 
+### Map current design rationale
+
+Use the optional `documentation.design` index for concise, current rationale
+that a coding agent needs before changing a module or a particular source file.
+Each entry owns one Markdown file under `docs/design/` and selects exactly one
+module or a bounded set of exact source paths:
+
+```json
+{
+  "documentation": {
+    "design": [
+      {
+        "path": "docs/design/knowledge-domain.md",
+        "module": "knowledge-domain"
+      },
+      {
+        "path": "docs/design/knowledge-import.md",
+        "sourcePaths": ["internal/knowledge/import.go"]
+      }
+    ]
+  }
+}
+```
+
+Each document, module, and direct source path has one owner. A direct source
+mapping replaces its module mapping for that file, so an agent receives at
+most one current design document per selected file. Mapped files must be
+contained, regular Markdown; direct sources must be contained, regular,
+governed source owned by exactly one module.
+
+Resolve only the documents relevant to the work:
+
+```sh
+code-polishy design-context --files internal/knowledge/import.go
+code-polishy design-context --module knowledge-domain
+```
+
+The command prints stable repository-relative document paths and nothing else.
+An empty result is valid when the selected source has no non-local rationale.
+Plans, historical evidence, and superseded decisions stay outside this index;
+open them only when the task specifically requires them.
+
+Markdown that is consumed by the product, a build, a generator, a test fixture,
+or an agent prompt must not use the default documentation-only merge level.
+Declare each such exact input explicitly:
+
+```json
+{
+  "documentation": {
+    "productInputs": ["prompts/system.markdown", "content/runtime.md"]
+  }
+}
+```
+
+Entries are unique, contained, repository-relative Markdown file paths. They
+only escalate verification; they cannot add files to the documentation lane or
+weaken a check. `AGENTS.md`, `CLAUDE.md`, `SKILL.md`, and Markdown under any
+`skills` or `templates` directory are built-in control inputs and need no
+declaration.
+
 ### Declare external inputs
 
 Add `portability.externalInputs` for separately owned repositories,
@@ -175,8 +235,9 @@ code-polishy doctor --strict
 The inventory notes show which shared modules were detected and why. The
 standard conditional behavior is:
 
-- Python source activates policy-owned Ruff formatting, linting, and unused
-  checks.
+- Python source activates policy-owned Ruff formatting, linting, unused-code,
+  and C901 complexity checks plus policy-owned `ty` type checking. A target pins
+  and installs neither tool.
 - A target bearing JavaScript or TypeScript is formatted by the sealed,
   policy-owned JavaScript bundle; it pins and installs no formatter itself.
 - A target bearing JavaScript or TypeScript is linted by that same bundle
@@ -212,6 +273,10 @@ run a formatter, linter, type checker, or dead-code analyzer of your own: a
 check declaring one of those for source Code Polishy already decides is refused
 rather than run beside the built-in one. Each command declares what it proves,
 which modules it covers, and in which profile it may run:
+
+Remove target-selected Python complexity and typecheck providers when adopting
+this release. Ruff C901 and `ty` own those capabilities directly; no legacy
+provider or transition layer runs beside them.
 
 ```json
 {
@@ -405,6 +470,11 @@ code-polishy test --supplemental
 code-polishy merge-gate --base origin/main
 ```
 
+For a candidate containing only ordinary Markdown, run
+`code-polishy format --git-changes` and skip application tests. The final merge
+gate automatically selects the built-in documentation contract with zero
+application suites; it does not require target opt-in or user authorization.
+
 For unattended work, or when the caller explicitly requests isolation, let the
 caller choose writable modules before the worker starts and reuse one
 disposable session for setup, implementation, and all of those tests:
@@ -481,14 +551,16 @@ release the lock names:
   run: code-polishy gate
 ```
 
-Most repositories should keep that complete gate. A mixed content-and-code
-repository may instead opt in to `verification.mergeGate.recommendedModules`
-and run `code-polishy --verbose merge-gate --base "$TRUSTED_BASE_SHA"`. CI, not an
-agent, must derive that SHA from the pull-request base or push-before event.
-The command accepts no file list or requested level and automatically escalates
-policy, dependency, workflow, container, deletion, unowned, non-allowlisted,
-and broad-impact changes to the complete gate. Archive verbose output for audit
-and require the resulting status for merge.
+Every repository gets the documentation-only merge level by default. For other
+candidates, most repositories should keep the complete gate. A mixed
+content-and-code repository may opt in to
+`verification.mergeGate.recommendedModules` and run
+`code-polishy --verbose merge-gate --base "$TRUSTED_BASE_SHA"`. CI, not an agent,
+must derive that SHA from the pull-request base or push-before event. The
+command accepts no file list or requested level and automatically escalates
+control, product-input, mixed, policy, dependency, workflow, container,
+unowned, non-allowlisted, and broad-impact changes to the complete gate.
+Archive verbose output for audit and require the resulting status for merge.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen
@@ -497,16 +569,15 @@ exist.
 
 A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the checkpoint from `templates/AGENTS.md`: routine focused
-or changed tests during work, then resolve the trusted merge target and run one
-`merge-gate --base <merge-target>` for a merge-ready candidate. That command
-selects and executes recommended or full ordinary verification without making
-the selection a human approval prompt. `test-levels` remains a read-only
-diagnostic, and it lists supplemental quality separately.
-After ordinary managed acceptance passes, Code Polishy automatically runs the
-impact-relevant declared local supplemental hardening. Credentialed,
-destructive, production-mutating, and live-provider probes remain typed
-external approval gates. Direct profile commands always mean their complete
-declared profile, not a best-effort subset.
+or changed tests during source work, documentation formatting without
+application tests for ordinary Markdown, then resolve the trusted merge target
+and run one `merge-gate --base <merge-target>` for a merge-ready candidate.
+That command selects and executes documentation, recommended, or full ordinary
+verification without making the selection a human approval prompt.
+`test-levels` remains a read-only diagnostic, and it lists supplemental quality
+separately. Credentialed, destructive, production-mutating, and live-provider
+probes remain typed external approval gates. Direct profile commands always
+mean their complete declared profile, not a best-effort subset.
 
 ## 13. Upgrade intentionally
 

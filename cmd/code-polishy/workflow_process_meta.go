@@ -423,8 +423,7 @@ func publishPrivateArtifacts(directory string, artifacts []taskSessionArtifact, 
 	for _, artifact := range artifacts {
 		temporary := temporaryPaths[artifact.name]
 		path := filepath.Join(directory, artifact.name)
-		// Linking publishes a fully written file and, unlike Rename on POSIX,
-		// cannot replace a target created after the validation pass above.
+
 		if err := os.Link(temporary, path); err != nil {
 			removeArtifacts(committedPaths)
 			return err

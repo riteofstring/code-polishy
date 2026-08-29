@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// CopyTreeDereferenced materializes one closed input tree as regular files and
-// directories. Release ZIPs deliberately contain no links, so pnpm's internal
-// links are resolved only when they stay inside the selected bundle root.
 func CopyTreeDereferenced(source, destination string) error {
 	root, err := filepath.EvalSymlinks(source)
 	if err != nil {

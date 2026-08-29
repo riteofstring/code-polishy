@@ -12,11 +12,26 @@ allowed module and exact artifact path before the worker starts.
 
 ## Interactive work
 
-Run exact tests while editing and `code-polishy test --changed` when broader
-feedback is useful. At a merge checkpoint, run one
+Before changing governed source, run `code-polishy design-context --files` with
+the exact planned paths, or `code-polishy design-context --module` with the
+selected modules. Read only the returned current design documents. The command
+does not select plans, historical evidence, or superseded decisions; open those
+only when the task specifically requires them.
+
+For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
+documentation findings, and skip application tests without asking the user for
+authorization. Run exact tests while editing source and
+`code-polishy test --changed` when broader feedback is useful. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
 candidate. Run `code-polishy test --supplemental` only when the caller or a
 checked-in workflow requires that separate hardening stage.
+
+When added or modified test files are in the candidate, the default or
+change-aware checkpoints show one prominent, non-blocking test-quality reminder.
+Use it to check both new and existing tests for tautological and change-detector
+behavior. It neither changes the selected work nor requests authorization; see
+[Verification and Testing Policy](policies/verification.md#test-quality-reminder)
+for its exact trigger and quiet modes.
 
 Commit all completed task-owned changes after required verification unless the
 caller explicitly requests an uncommitted handoff. Keep each commit coherent

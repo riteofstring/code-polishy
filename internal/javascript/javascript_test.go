@@ -17,17 +17,13 @@ import (
 const wellFormedResult = `{"bundleDigest":"a1b2c3","node":"24.18.0","pnpm":"11.13.0","tools":{"prettier":"3.9.5","eslint":"9.39.5"}}`
 
 func wellFormedResponse(result string) string {
-	return `{"protocolVersion":2,"operation":"provenance","result":` + result + `}`
+	return `{"protocolVersion":3,"operation":"provenance","result":` + result + `}`
 }
 
-// respond builds a stand-in runner that answers with exactly one payload.
 func respond(payload string) string {
 	return "#!/bin/sh\nprintf '%s\\n' '" + payload + "'\n"
 }
 
-// fakeBundle installs a stand-in runtime and runner at the one policy-owned
-// path the adapter resolves. The stand-in Node runs the runner it is handed as
-// a shell script, so a test decides the exchange by writing that one file.
 func fakeBundle(t *testing.T, runnerScript string) Bundle {
 	t.Helper()
 	root := t.TempDir()
@@ -73,8 +69,6 @@ func TestProvenanceReportsWhatTheBundleAnswered(t *testing.T) {
 	}
 }
 
-// The request is exactly the closed protocol: one version, one operation, and
-// no field the runner would have to ignore.
 func TestTheRequestCarriesOnlyTheClosedProtocol(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+wellFormedResponse(wellFormedResult)+"'\n")
@@ -85,13 +79,11 @@ func TestTheRequestCarriesOnlyTheClosedProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	if string(request) != `{"protocolVersion":2,"operation":"provenance"}` {
+	if string(request) != `{"protocolVersion":3,"operation":"provenance"}` {
 		t.Fatalf("unexpected request %q", string(request))
 	}
 }
 
-// The child's environment is built rather than filtered, so nothing the
-// invoking process carries reaches a policy operation.
 func TestTheRunnerLaunchesUnderAClosedEnvironment(t *testing.T) {
 	t.Setenv("NODE_OPTIONS", "--require=/tmp/injected.js")
 	t.Setenv("NPM_TOKEN", "secret")
@@ -127,8 +119,6 @@ func TestTheRunnerLaunchesUnderAClosedEnvironment(t *testing.T) {
 	}
 }
 
-// The scratch tree is the only place an operation may write, and it does not
-// outlive the exchange.
 func TestTheScratchDirectoryDoesNotSurviveTheExchange(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "workdir.txt")
 	bundle := fakeBundle(t, "#!/bin/sh\necho \"${PWD}\" >"+observed+"\nprintf '%s\\n' '"+wellFormedResponse(wellFormedResult)+"'\n")
@@ -146,7 +136,7 @@ func TestTheScratchDirectoryDoesNotSurviveTheExchange(t *testing.T) {
 }
 
 func TestAStructuredRunnerErrorIsSurfaced(t *testing.T) {
-	bundle := fakeBundle(t, "#!/bin/sh\nprintf '%s\\n' '{\"protocolVersion\":2,\"error\":\"the request declares unsupported operation\"}'\nexit 1\n")
+	bundle := fakeBundle(t, "#!/bin/sh\nprintf '%s\\n' '{\"protocolVersion\":3,\"error\":\"the request declares unsupported operation\"}'\nexit 1\n")
 	expectFailure(t, bundle, "the request declares unsupported operation")
 }
 
@@ -161,7 +151,7 @@ func TestAnotherProtocolVersionIsRejected(t *testing.T) {
 }
 
 func TestAnUnknownResponseFieldIsRejected(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"provenance","warnings":[],"result":`+wellFormedResult+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"provenance","warnings":[],"result":`+wellFormedResult+`}`))
 	expectFailure(t, bundle, "unreadable provenance response")
 }
 
@@ -176,7 +166,7 @@ func TestTrailingContentIsRejected(t *testing.T) {
 }
 
 func TestAnAnsweredOperationMustBeTheRequestedOne(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"format","result":`+wellFormedResult+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format","result":`+wellFormedResult+`}`))
 	expectFailure(t, bundle, `answered the provenance request with "format"`)
 }
 
@@ -186,7 +176,7 @@ func TestIncompleteProvenanceIsRejected(t *testing.T) {
 }
 
 func TestAMissingResultIsRejected(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"provenance"}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"provenance"}`))
 	expectFailure(t, bundle, "returned no provenance result")
 }
 
@@ -204,8 +194,6 @@ func TestARelativeCheckoutPathIsRejected(t *testing.T) {
 	expectFailure(t, Bundle{PolicyRoot: "relative/checkout"}, "is not absolute")
 }
 
-// An operation that overruns its wall-time bound ends, and so does everything
-// it started: the descendant never gets to finish its work.
 func TestAnOperationThatOverrunsItsBoundIsCancelledCompletely(t *testing.T) {
 	survivor := filepath.Join(t.TempDir(), "survivor.txt")
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/sleep 1 && echo survived >"+survivor+"\n")
@@ -232,11 +220,9 @@ func TestACancelledContextStopsTheExchange(t *testing.T) {
 	}
 }
 
-// A file operation carries exactly the target root and the selected paths, so
-// the runner is told what to read rather than left to discover it.
 func TestAFormatRequestCarriesTheRootAndTheSelection(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":2,"operation":"format","result":{"changed":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"format","result":{"changed":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	if _, err := bundle.Format(context.Background(), "/target", []string{"src/a.ts"}); err != nil {
 		t.Fatalf("exchange format: %v", err)
@@ -245,7 +231,7 @@ func TestAFormatRequestCarriesTheRootAndTheSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"format","root":"/target","paths":["src/a.ts"]}`
+	want := `{"protocolVersion":3,"operation":"format","root":"/target","paths":["src/a.ts"]}`
 	if string(request) != want {
 		t.Fatalf("unexpected request %q", string(request))
 	}
@@ -253,7 +239,7 @@ func TestAFormatRequestCarriesTheRootAndTheSelection(t *testing.T) {
 
 func TestAFormatResultReportsChangedAndUnsupportedFiles(t *testing.T) {
 	result := `{"changed":["src/a.ts"],"unsupported":[{"path":"src/b.zz","reason":"no parser"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"format-write","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format-write","result":`+result+`}`))
 	reported, err := bundle.FormatWrite(context.Background(), "/target", []string{"src/a.ts", "src/b.zz"})
 	if err != nil {
 		t.Fatalf("exchange format-write: %v", err)
@@ -266,10 +252,8 @@ func TestAFormatResultReportsChangedAndUnsupportedFiles(t *testing.T) {
 	}
 }
 
-// Nothing outside the declared target root can be named, so a selection can
-// never reach another tree even if the caller built it wrongly.
 func TestAFileOperationRefusesAnUncontainedSelection(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"format","result":{"changed":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format","result":{"changed":[],"unsupported":[]}}`))
 	for _, test := range []struct {
 		name     string
 		root     string
@@ -297,7 +281,7 @@ func TestAnUnboundedSelectionIsRefused(t *testing.T) {
 	for index := range paths {
 		paths[index] = "src/file.ts"
 	}
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"format","result":{"changed":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format","result":{"changed":[],"unsupported":[]}}`))
 	if _, err := bundle.Format(context.Background(), "/target", paths); err == nil {
 		t.Fatal("expected an unbounded selection to be refused")
 	} else if !strings.Contains(err.Error(), "more than the 4096 limit") {
@@ -307,7 +291,7 @@ func TestAnUnboundedSelectionIsRefused(t *testing.T) {
 
 func TestAnUnknownFormatResultFieldIsRejected(t *testing.T) {
 	result := `{"changed":[],"unsupported":[],"durationMs":12}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"format","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format","result":`+result+`}`))
 	if _, err := bundle.Format(context.Background(), "/target", []string{"a.ts"}); err == nil {
 		t.Fatal("expected an unknown result field to be rejected")
 	} else if !strings.Contains(err.Error(), "unreadable format result") {
@@ -315,11 +299,9 @@ func TestAnUnknownFormatResultFieldIsRejected(t *testing.T) {
 	}
 }
 
-// A lint request carries the budgets and the activation it runs under, so the
-// bundle is told every policy decision rather than resolving one itself.
 func TestALintRequestCarriesTheBudgetsAndActivation(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":2,"operation":"lint","result":{"findings":[],"directives":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	limits := LintLimits{Complexity: 9, Depth: 4, Parameters: 5}
 	activation := LintActivation{ReactHooks: true}
@@ -330,7 +312,7 @@ func TestALintRequestCarriesTheBudgetsAndActivation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"lint","root":"/target","paths":["src/a.tsx"],` +
+	want := `{"protocolVersion":3,"operation":"lint","root":"/target","paths":["src/a.tsx"],` +
 		`"limits":{"complexity":9,"depth":4,"parameters":5},` +
 		`"activation":{"reactHooks":true,"jsxAccessibility":false}}`
 	if string(request) != want {
@@ -338,10 +320,8 @@ func TestALintRequestCarriesTheBudgetsAndActivation(t *testing.T) {
 	}
 }
 
-// A budget that is not a positive allowed maximum never reaches the bundle: a
-// zero or negative one would silently disable the rule it came from.
 func TestALintRequestRefusesAnUnusableBudget(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"lint","result":{"findings":[],"directives":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[],"unsupported":[]}}`))
 	for _, limits := range []LintLimits{
 		{Complexity: 0, Depth: 4, Parameters: 5},
 		{Complexity: 9, Depth: -1, Parameters: 5},
@@ -355,11 +335,11 @@ func TestALintRequestRefusesAnUnusableBudget(t *testing.T) {
 	}
 }
 
-func TestALintResultReportsViolationsDirectivesAndUnsupportedFiles(t *testing.T) {
+func TestALintResultReportsViolationsAndUnsupportedFiles(t *testing.T) {
 	result := `{"findings":[{"path":"a.ts","line":3,"column":7,"rule":"complexity","message":"too complex"}],` +
-		`"directives":[{"path":"a.ts","line":1}],` +
+		`"comments":[{"path":"a.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
 		`"unsupported":[{"path":"b.ts","reason":"line 2: Unexpected token"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"lint","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":`+result+`}`))
 	reported, err := bundle.Lint(context.Background(), "/target", []string{"a.ts", "b.ts"},
 		LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{})
 	if err != nil {
@@ -368,20 +348,58 @@ func TestALintResultReportsViolationsDirectivesAndUnsupportedFiles(t *testing.T)
 	if len(reported.Findings) != 1 || reported.Findings[0].Rule != "complexity" || reported.Findings[0].Line != 3 {
 		t.Fatalf("unexpected findings: %+v", reported.Findings)
 	}
-	if len(reported.Directives) != 1 || reported.Directives[0].Path != "a.ts" || reported.Directives[0].Line != 1 {
-		t.Fatalf("unexpected directives: %+v", reported.Directives)
+	if len(reported.Comments) != 1 || reported.Comments[0].Kind != "Line" || reported.Comments[0].Raw != "// prose" {
+		t.Fatalf("unexpected comments: %+v", reported.Comments)
 	}
 	if len(reported.Unsupported) != 1 || reported.Unsupported[0].Path != "b.ts" {
 		t.Fatalf("unexpected unsupported files: %+v", reported.Unsupported)
 	}
 }
 
-// A typecheck request names the one project the selection is checked under, so
-// the bundle is told which contained configuration governs rather than
-// searching the target for one itself.
+func TestALintResultRequiresParserCommentFacts(t *testing.T) {
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"unsupported":[]}}`))
+	if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
+		t.Fatal("expected missing comment facts to be rejected")
+	} else if !strings.Contains(err.Error(), "unreadable lint result") {
+		t.Fatalf("unexpected failure %q", err.Error())
+	}
+}
+
+func TestALintResultRejectsMalformedParserCommentFacts(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		comment string
+	}{
+		{name: "missing completeness", comment: `{"path":"a.ts","kind":"Line","raw":"// prose","line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
+		{name: "unknown kind", comment: `{"path":"a.ts","kind":"Directive","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
+		{name: "empty raw", comment: `{"path":"a.ts","kind":"Line","raw":"","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
+		{name: "nonpositive location", comment: `{"path":"a.ts","kind":"Line","raw":"// prose","complete":true,"line":0,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
+		{name: "uncontained path", comment: `{"path":"../a.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := `{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[` + test.comment + `],"unsupported":[]}}`
+			bundle := fakeBundle(t, respond(result))
+			if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
+				t.Fatal("expected malformed parser comment fact to be rejected")
+			} else if !strings.Contains(err.Error(), "unreadable lint result") {
+				t.Fatalf("unexpected failure %q", err.Error())
+			}
+		})
+	}
+}
+
+func TestALintResultRejectsLegacyDirectiveFields(t *testing.T) {
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"directives":[],"comments":[],"unsupported":[]}}`))
+	if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
+		t.Fatal("expected the legacy directive field to be rejected")
+	} else if !strings.Contains(err.Error(), "unreadable lint result") {
+		t.Fatalf("unexpected failure %q", err.Error())
+	}
+}
+
 func TestATypeCheckRequestCarriesItsProject(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":2,"operation":"typecheck","result":{"diagnostics":[],"covered":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"typecheck","result":{"diagnostics":[],"covered":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	if _, err := bundle.TypeCheck(context.Background(), "/target", "app/tsconfig.json", []string{"app/src/a.ts"}); err != nil {
 		t.Fatalf("exchange typecheck: %v", err)
@@ -390,17 +408,15 @@ func TestATypeCheckRequestCarriesItsProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"typecheck","root":"/target","paths":["app/src/a.ts"],` +
+	want := `{"protocolVersion":3,"operation":"typecheck","root":"/target","paths":["app/src/a.ts"],` +
 		`"project":"app/tsconfig.json"}`
 	if string(request) != want {
 		t.Fatalf("unexpected request %q", string(request))
 	}
 }
 
-// A project outside the target tree is refused for the same reason a selected
-// file outside it is: neither may name another tree.
 func TestATypeCheckRequestRefusesAnUncontainedProject(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"typecheck","result":{"diagnostics":[],"covered":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"typecheck","result":{"diagnostics":[],"covered":[],"unsupported":[]}}`))
 	for _, project := range []string{"../tsconfig.json", "/etc/tsconfig.json", "app/./tsconfig.json", ""} {
 		if _, err := bundle.TypeCheck(context.Background(), "/target", project, []string{"a.ts"}); err == nil {
 			t.Errorf("project %q was accepted", project)
@@ -414,7 +430,7 @@ func TestATypeCheckResultReportsDiagnosticsCoverageAndRefusals(t *testing.T) {
 	result := `{"diagnostics":[{"path":"a.ts","line":3,"column":7,"code":2322,"message":"Type 'string' is not assignable to type 'number'."}],` +
 		`"covered":["a.ts"],` +
 		`"unsupported":[{"path":"tsconfig.json","reason":"the project declares references, which the policy-owned type checker does not resolve"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"typecheck","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"typecheck","result":`+result+`}`))
 	reported, err := bundle.TypeCheck(context.Background(), "/target", "tsconfig.json", []string{"a.ts", "b.ts"})
 	if err != nil {
 		t.Fatalf("exchange typecheck: %v", err)
@@ -430,7 +446,7 @@ func TestATypeCheckResultReportsDiagnosticsCoverageAndRefusals(t *testing.T) {
 	}
 }
 
-const deadCodeResponse = `{"protocolVersion":2,"operation":"deadcode","result":` +
+const deadCodeResponse = `{"protocolVersion":3,"operation":"deadcode","result":` +
 	`{"unusedFiles":[],"unusedExports":[],"covered":[],"unsupported":[]}}`
 
 func deadCodePackages() []DeadCodeWorkspace {
@@ -450,7 +466,7 @@ func TestADeadCodeRequestCarriesTheTreeAndItsPackages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"deadcode","root":"/target","directory":".","workspaces":[` +
+	want := `{"protocolVersion":3,"operation":"deadcode","root":"/target","directory":".","workspaces":[` +
 		`{"root":".","entry":["src/index.ts"],"project":["src/index.ts","src/helper.ts"]},` +
 		`{"root":"packages/web","entry":[],"project":["packages/web/src/lib.ts"]}]}`
 	if string(request) != want {
@@ -458,8 +474,6 @@ func TestADeadCodeRequestCarriesTheTreeAndItsPackages(t *testing.T) {
 	}
 }
 
-// A package that declares no entry points declares an empty list rather than
-// nothing, so the runner never has to decide what an absent field meant.
 func TestADeadCodeRequestDeclaresEveryPackagesEntryPoints(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+deadCodeResponse+"'\n")
@@ -476,9 +490,6 @@ func TestADeadCodeRequestDeclaresEveryPackagesEntryPoints(t *testing.T) {
 	}
 }
 
-// Everything the analysis depends on is decided here, so a request that leaves
-// any of it open, or that names a tree it does not contain, never reaches the
-// bundle at all.
 func TestADeadCodeRequestRefusesAnIncompleteTree(t *testing.T) {
 	bundle := fakeBundle(t, respond(deadCodeResponse))
 	tests := []struct {
@@ -534,7 +545,7 @@ func TestADeadCodeResultReportsUnusedFilesExportsAndCoverage(t *testing.T) {
 		`"unusedExports":[{"path":"src/helper.ts","line":2,"column":14,"symbol":"unused","kind":"exports"}],` +
 		`"covered":["src/helper.ts","src/orphan.ts"],` +
 		`"unsupported":[{"path":"src/absent.ts","reason":"the file is unreadable"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"deadcode","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"deadcode","result":`+result+`}`))
 	reported, err := bundle.DeadCode(context.Background(), "/target", ".",
 		[]DeadCodeWorkspace{{Root: ".", Project: []string{"src/helper.ts", "src/orphan.ts", "src/absent.ts"}}})
 	if err != nil {
@@ -554,7 +565,7 @@ func TestADeadCodeResultReportsUnusedFilesExportsAndCoverage(t *testing.T) {
 
 func TestAnImportsRequestCarriesTheRootAndTheSelection(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":2,"operation":"imports","result":{"imports":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"imports","result":{"imports":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	if _, err := bundle.Imports(context.Background(), "/target", []string{"web/app.ts"}); err != nil {
 		t.Fatalf("exchange imports: %v", err)
@@ -563,20 +574,17 @@ func TestAnImportsRequestCarriesTheRootAndTheSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"imports","root":"/target","paths":["web/app.ts"]}`
+	want := `{"protocolVersion":3,"operation":"imports","root":"/target","paths":["web/app.ts"]}`
 	if string(request) != want {
 		t.Fatalf("unexpected request %q", string(request))
 	}
 }
 
-// A resolved import names a file the way the request named its selection. An
-// import of something the target tree does not contain resolves to nothing,
-// which is a fact rather than an error.
 func TestAnImportsResultReportsResolvedSpecifiersAndUnreadFiles(t *testing.T) {
 	result := `{"imports":[{"path":"web/app.ts","line":3,"specifier":"../domain/model.js","resolved":"domain/model.ts"},` +
 		`{"path":"web/app.ts","line":4,"specifier":"@scope/absent","resolved":""}],` +
 		`"unsupported":[{"path":"web/widget.tsx","reason":"the file is unreadable"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"imports","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"imports","result":`+result+`}`))
 	reported, err := bundle.Imports(context.Background(), "/target", []string{"web/app.ts", "web/widget.tsx"})
 	if err != nil {
 		t.Fatalf("exchange imports: %v", err)
@@ -596,16 +604,13 @@ func TestAnImportsResultReportsResolvedSpecifiersAndUnreadFiles(t *testing.T) {
 	}
 }
 
-// The package graph carries one closed host fact per resolved release. Its
-// exact values are validated at this boundary so later policy code never has to
-// guess whether a new runner state weakens license coverage.
 func TestAPackagesResultReportsClosedLicenseMetadata(t *testing.T) {
 	result := `{"lockfileVersion":"9.0","importers":[],"packages":[` +
 		`{"name":"foreign","version":"1.2.3","source":"registry","licenseMetadata":"platform-excluded"},` +
 		`{"name":"current","version":"2.3.4","source":"registry","licenseMetadata":"required"},` +
 		`{"name":"uncertain","version":"3.4.5","source":"registry","licenseMetadata":"unknown"}` +
 		`],"unsupported":[]}`
-	reported, err := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"packages","result":`+result+`}`)).Packages(context.Background(), "/target", ".")
+	reported, err := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"packages","result":`+result+`}`)).Packages(context.Background(), "/target", ".")
 	if err != nil {
 		t.Fatalf("exchange packages: %v", err)
 	}
@@ -634,7 +639,7 @@ func TestAPackagesResultRefusesAnUnclosedLicenseMetadataState(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := `{"lockfileVersion":"9.0","importers":[],"packages":[` +
 				test.entry + `],"unsupported":[]}`
-			_, err := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"packages","result":`+result+`}`)).Packages(context.Background(), "/target", ".")
+			_, err := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"packages","result":`+result+`}`)).Packages(context.Background(), "/target", ".")
 			if err == nil || !strings.Contains(err.Error(), "unreadable packages result") {
 				t.Fatalf("license metadata was accepted: %v", err)
 			}
@@ -642,15 +647,12 @@ func TestAPackagesResultRefusesAnUnclosedLicenseMetadataState(t *testing.T) {
 	}
 }
 
-// A pnpm setting crosses the boundary as the text it was written as, however it
-// was written: one scalar reports one value, a sequence reports each entry, and
-// a setting written with no scalar at all reports none.
 func TestAWorkspaceResultReportsEverySettingAsWrittenText(t *testing.T) {
 	result := `{"files":[{"path":"pnpm-workspace.yaml","settings":[` +
 		`{"name":"minimumReleaseAge","values":["43200"]},` +
 		`{"name":"minimumReleaseAgeExclude","values":["example@1.2.3","other@2.0.0"]},` +
 		`{"name":"onlyBuiltDependencies","values":[]}]}],"unsupported":[]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"workspace","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"workspace","result":`+result+`}`))
 	reported, err := bundle.Workspace(context.Background(), "/target", []string{"pnpm-workspace.yaml"})
 	if err != nil {
 		t.Fatalf("exchange workspace: %v", err)
@@ -670,11 +672,9 @@ func TestAWorkspaceResultReportsEverySettingAsWrittenText(t *testing.T) {
 	}
 }
 
-// A settings file the reader could not read is unsupported coverage rather than
-// a file that declared nothing.
 func TestAWorkspaceResultReportsAnUnreadableFileAsUnsupported(t *testing.T) {
 	result := `{"files":[],"unsupported":[{"path":"pnpm-workspace.yaml","reason":"end of the stream"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"workspace","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"workspace","result":`+result+`}`))
 	reported, err := bundle.Workspace(context.Background(), "/target", []string{"pnpm-workspace.yaml"})
 	if err != nil {
 		t.Fatalf("exchange workspace: %v", err)
@@ -688,7 +688,7 @@ func TestALicensesRequestCarriesTheProjectDirectory(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
 	result := `{"packages":[],"unsupported":[]}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+
-		`{"protocolVersion":2,"operation":"licenses","result":`+result+`}`+"'\n")
+		`{"protocolVersion":3,"operation":"licenses","result":`+result+`}`+"'\n")
 	if _, err := bundle.Licenses(context.Background(), "/target", "desktop"); err != nil {
 		t.Fatalf("exchange licenses: %v", err)
 	}
@@ -696,7 +696,7 @@ func TestALicensesRequestCarriesTheProjectDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the observed request: %v", err)
 	}
-	want := `{"protocolVersion":2,"operation":"licenses","root":"/target","directory":"desktop"}`
+	want := `{"protocolVersion":3,"operation":"licenses","root":"/target","directory":"desktop"}`
 	if string(request) != want {
 		t.Fatalf("unexpected request %q", string(request))
 	}
@@ -705,13 +705,11 @@ func TestALicensesRequestCarriesTheProjectDirectory(t *testing.T) {
 	}
 }
 
-// A release that declared no license is reported as declaring none, so the
-// absence stays a policy decision instead of becoming a reading failure.
 func TestALicensesResultReportsDeclaredExpressionsAndUnreadableMetadata(t *testing.T) {
 	result := `{"packages":[{"name":"example","version":"1.2.3","license":"MIT OR Apache-2.0"},` +
 		`{"name":"@scope/quiet","version":"0.1.0","license":""}],` +
 		`"unsupported":[{"path":"node_modules/.pnpm","reason":"the dependencies of this project are not installed"}]}`
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"licenses","result":`+result+`}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"licenses","result":`+result+`}`))
 	reported, err := bundle.Licenses(context.Background(), "/target", ".")
 	if err != nil {
 		t.Fatalf("exchange licenses: %v", err)
@@ -728,7 +726,7 @@ func TestALicensesResultReportsDeclaredExpressionsAndUnreadableMetadata(t *testi
 }
 
 func TestAuditCommandCarriesTheProjectDirectory(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":2,"operation":"audit","result":{"advisories":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"audit","result":{"advisories":[],"unsupported":[]}}`))
 	command, err := bundle.AuditCommand("/target", "desktop")
 	if err != nil {
 		t.Fatal(err)
@@ -736,7 +734,7 @@ func TestAuditCommandCarriesTheProjectDirectory(t *testing.T) {
 	if len(command.Argv) != 4 || command.Argv[2] != "--request-json" || command.Cwd != "." || !command.SealedEnvironment || command.TimeoutSeconds != 900 {
 		t.Fatalf("audit command = %+v", command)
 	}
-	want := `{"protocolVersion":2,"operation":"audit","root":"/target","directory":"desktop"}`
+	want := `{"protocolVersion":3,"operation":"audit","root":"/target","directory":"desktop"}`
 	if command.Argv[3] != want {
 		t.Fatalf("unexpected request %q", command.Argv[3])
 	}
@@ -749,7 +747,7 @@ func TestAnAuditResultReportsAdvisoriesAndUnreadableOnes(t *testing.T) {
 	result := `{"advisories":[{"id":"GHSA-abcd-1234-5678","aliases":["npm:1100"],"package":"example",` +
 		`"severity":"high","title":"unsafe example path","versions":["1.2.3","1.2.4"]}],` +
 		`"unsupported":[{"path":"pnpm-lock.yaml","reason":"advisory '1200' omitted the package"}]}`
-	reported, err := ParseAuditOutput([]byte(`{"protocolVersion":2,"operation":"audit","result":` + result + `}`))
+	reported, err := ParseAuditOutput([]byte(`{"protocolVersion":3,"operation":"audit","result":` + result + `}`))
 	if err != nil {
 		t.Fatalf("exchange audit: %v", err)
 	}

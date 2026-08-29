@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run the pinned ShellCheck the Code Polishy policy root carries.
-#
-# There is one binary. A release carries the ShellCheck version it pins, and so
-# does this repository's own checkout once the pinned tools are installed.
-# Nothing is taken from an ambient PATH, a host installation, or an environment
-# override, so what a shell check decided cannot depend on the machine it ran
-# on.
+
+
+
+
+
+
+
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 required_version="$(tr -d '[:space:]' <"${policy_root}/tools/shellcheck-version.txt")"

@@ -11,12 +11,14 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func TestPythonSourceActivatesPinnedRuffCommands(t *testing.T) {
+func TestPythonSourceActivatesPinnedRuffAndTyCommands(t *testing.T) {
 	root := t.TempDir()
 	writeModuleFile(t, root, "tools/pyproject.toml", "[tool.ruff]\n")
 	writeModuleFile(t, root, "tools/check.py", "print('ok')\n")
 	installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
 	pinPolicyTool(t, root, "ruff", "0.16.0")
+	installFakePolicyTool(t, root, "ty", "ty 0.0.65 (87de836df 2026-07-29)")
+	pinPolicyTool(t, root, "ty", "0.0.65")
 	repo := repository.Repository{
 		Root: root, PolicyRoot: root,
 		Config: policy.Config{
@@ -25,25 +27,116 @@ func TestPythonSourceActivatesPinnedRuffCommands(t *testing.T) {
 		},
 	}
 	resolution := Resolve(repo, []string{"tools/check.py", "tools/pyproject.toml"})
-	if got := activeNames(resolution.Active); !slices.Equal(got, []string{"ruff:tools"}) {
+	if got := activeNames(resolution.Active); len(got) != 2 || !slices.Contains(got, "ruff:tools") || !slices.Contains(got, "ty:tools") {
 		t.Fatalf("active = %v", got)
 	}
-	suffix := safeName("tools")
-	if got := commandNames(resolution.Commands); !slices.Equal(got, []string{"policy-ruff-format-" + suffix, "policy-ruff-lint-" + suffix, "policy-ruff-write-" + suffix}) {
-		t.Fatalf("commands = %v", got)
+	if hasToolFinding(resolution, "ty") {
+		t.Fatalf("ty finding = %+v", resolution.Findings)
 	}
 	for _, command := range resolution.Commands {
 		if !command.Managed || !command.PassFiles || !slices.Contains(command.Modules, "tools") {
 			t.Fatalf("command is not safely targeted: %+v", command)
 		}
 	}
+	complexity, found := commandProviding(resolution.Commands, "complexity")
+	if !found {
+		t.Fatalf("missing Ruff complexity command: %+v", resolution.Commands)
+	}
+	wantArguments := []string{
+		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", "C901", "--ignore-noqa",
+		"--config", "lint.mccabe.max-complexity = 9", "--",
+	}
+	if !slices.Equal(complexity.Provides, []string{"complexity"}) || !slices.Equal(complexity.Argv, wantArguments) {
+		t.Fatalf("complexity command = %+v", complexity)
+	}
+	typecheck, found := commandProviding(resolution.Commands, "typecheck")
+	if !found {
+		t.Fatalf("missing ty command: %+v", resolution.Commands)
+	}
+	wantTypecheck := []string{repo.PolicyTool("ty"), "check", "--config-file", filepath.Join(root, "tools", "ty.toml"), "--project", ".", "--"}
+	if !slices.Equal(typecheck.Provides, []string{"typecheck"}) || !slices.Equal(typecheck.Argv, wantTypecheck) ||
+		!slices.Equal(typecheck.RunOn, []string{"check", "gate"}) {
+		t.Fatalf("typecheck command = %+v", typecheck)
+	}
 }
 
-// A Node stack activates the framework policy its packages declare and
-// nothing else. Every generic JavaScript capability now comes from the sealed
-// bundle, so the resolution contributes no target command at all: the target
-// declares, pins, and installs no analyzer, and a checked-in analyzer
-// configuration activates nothing.
+func TestTyUsesNearestProjectBoundaryWithoutChangingRuffRoot(t *testing.T) {
+	root := t.TempDir()
+	writeModuleFile(t, root, "pyproject.toml", "[tool.ruff]\n")
+	writeModuleFile(t, root, "apps/pyproject.toml", "[tool.ty]\n")
+	writeModuleFile(t, root, "apps/service/ty.toml", "[rules]\n")
+	writeModuleFile(t, root, "apps/service/check.py", "print('ok')\n")
+	installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
+	pinPolicyTool(t, root, "ruff", "0.16.0")
+	installFakePolicyTool(t, root, "ty", "ty 0.0.65 (87de836df 2026-07-29)")
+	pinPolicyTool(t, root, "ty", "0.0.65")
+	repo := repository.Repository{Root: root, PolicyRoot: root}
+	files := []string{"pyproject.toml", "apps/pyproject.toml", "apps/service/ty.toml", "apps/service/check.py"}
+	resolution := Resolve(repo, files)
+	if got := activeNames(resolution.Active); len(got) != 2 || !slices.Contains(got, "ruff:.") || !slices.Contains(got, "ty:apps/service") {
+		t.Fatalf("active = %v", got)
+	}
+	typecheck, found := commandProviding(resolution.Commands, "typecheck")
+	if !found {
+		t.Fatalf("commands = %+v", resolution.Commands)
+	}
+	want := []string{repo.PolicyTool("ty"), "check", "--config-file", filepath.Join(root, "tools", "ty.toml"), "--project", ".", "--"}
+	if typecheck.Cwd != "apps/service" || !typecheck.PassFiles || !slices.Equal(typecheck.Argv, want) {
+		t.Fatalf("typecheck command = %+v", typecheck)
+	}
+}
+
+func TestTyUsesPolicyOwnedConfig(t *testing.T) {
+	targetRoot := t.TempDir()
+	policyRoot := t.TempDir()
+	writeModuleFile(t, targetRoot, "app/ty.toml", "[rules]\n")
+	writeModuleFile(t, targetRoot, "app/check.py", "print('ok')\n")
+	writeModuleFile(t, policyRoot, "tools/ty.toml", "[rules]\n")
+	installFakePolicyTool(t, policyRoot, "ty", "ty 0.0.65 (87de836df 2026-07-29)")
+	pinPolicyTool(t, policyRoot, "ty", "0.0.65")
+	repo := repository.Repository{
+		Root: targetRoot, PolicyRoot: policyRoot,
+		Config: policy.Config{
+			Modules:      []policy.Module{{Name: "app", Paths: []string{"app/**"}}},
+			ModuleByName: map[string]int{"app": 0},
+		},
+	}
+	resolution := Resolve(repo, []string{"app/ty.toml", "app/check.py"})
+	typecheck, found := commandProviding(resolution.Commands, "typecheck")
+	if !found {
+		t.Fatalf("commands = %+v", resolution.Commands)
+	}
+	want := []string{repo.PolicyTool("ty"), "check", "--config-file", filepath.Join(policyRoot, "tools", "ty.toml"), "--project", ".", "--"}
+	if !slices.Equal(typecheck.Argv, want) || slices.Contains(typecheck.Argv, filepath.Join(targetRoot, "app", "ty.toml")) {
+		t.Fatalf("typecheck argv = %v", typecheck.Argv)
+	}
+}
+
+func TestTyRequiresAnExactPolicyPin(t *testing.T) {
+	cases := []struct {
+		name, version, pin string
+	}{
+		{name: "missing pin", version: "ty 0.0.65 (87de836df 2026-07-29)"},
+		{name: "wrong pin", version: "ty 0.0.65 (87de836df 2026-07-29)", pin: "0.0.64"},
+		{name: "neighboring version", version: "ty 0.0.650 (87de836df 2026-07-29)", pin: "0.0.65"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeModuleFile(t, root, "app/ty.toml", "[rules]\n")
+			writeModuleFile(t, root, "app/check.py", "print('ok')\n")
+			installFakePolicyTool(t, root, "ty", test.version)
+			if test.pin != "" {
+				pinPolicyTool(t, root, "ty", test.pin)
+			}
+			resolution := Resolve(repository.Repository{Root: root, PolicyRoot: root}, []string{"app/ty.toml", "app/check.py"})
+			if !hasToolFinding(resolution, "ty") {
+				t.Fatalf("ty was accepted: %+v", resolution.Findings)
+			}
+		})
+	}
+}
+
 func TestNodeStackActivatesElectronReactAndOSVWithoutCommands(t *testing.T) {
 	root := t.TempDir()
 	packageJSON := `{
@@ -71,27 +164,23 @@ func TestNodeStackActivatesElectronReactAndOSVWithoutCommands(t *testing.T) {
 		"desktop/src/main/index.ts", "desktop/src/preload/index.ts", "desktop/src/renderer/App.tsx",
 	}
 	resolution := Resolve(repo, files)
-	wantActive := []string{"electron:desktop", "osv:.", "react:desktop"}
-	if got := activeNames(resolution.Active); !slices.Equal(got, wantActive) {
-		t.Fatalf("active = %v", got)
+	active := activeNames(resolution.Active)
+	if len(active) != 3 || !slices.Contains(active, "electron:desktop") || !slices.Contains(active, "osv:.") || !slices.Contains(active, "react:desktop") {
+		t.Fatalf("active = %v", active)
 	}
-	if got := commandNames(resolution.Commands); len(got) != 0 {
-		t.Fatalf("commands = %v", got)
+	if len(resolution.Commands) != 0 {
+		t.Fatalf("commands = %v", resolution.Commands)
 	}
 	if len(resolution.Findings) != 0 {
 		t.Fatalf("findings = %+v", resolution.Findings)
 	}
-	// Lint is not a target command at all: React activation resolves to rule
-	// activation the sealed bundle runs, and the target pins no lint tooling.
+
 	want := []policy.JavaScriptLintScope{{Root: "desktop", ReactHooks: true, JSXAccessibility: true}}
 	if !slices.Equal(resolution.LintScopes, want) {
 		t.Fatalf("lint scopes = %+v", resolution.LintScopes)
 	}
 }
 
-// A nested package inherits no tooling from an ancestor, because there is no
-// tooling for it to inherit: the sealed bundle owns the formatter, the linter,
-// the compiler, and the dead-code analyzer.
 func TestNestedPackageInheritsNoPolicyTooling(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -146,8 +235,6 @@ func TestDetectedModuleCanOnlyBeDisabledAtExactGovernedRoot(t *testing.T) {
 	}
 }
 
-// A React package that renders no DOM gets the Hooks rules and not the JSX
-// accessibility baseline, and neither activation asks the target for a plug-in.
 func TestReactWithoutDOMActivatesOnlyTheHooksRules(t *testing.T) {
 	root := t.TempDir()
 	writeModuleFile(t, root, "package.json", `{"packageManager":"npm@11.0.0","dependencies":{"react":"19.2.6"}}`+"\n")
@@ -166,10 +253,6 @@ func TestReactWithoutDOMActivatesOnlyTheHooksRules(t *testing.T) {
 	}
 }
 
-// The policy root's checked-in pin decides which version of a conditional tool
-// is required, because a release carries that file beside the tool it names. A
-// tool that reports another version is refused, and so is one in a policy root
-// that pins nothing: neither is the release's own record of what it carries.
 func TestConditionalToolMustBeTheVersionThePolicyRootPins(t *testing.T) {
 	t.Parallel()
 	for name, pin := range map[string]string{"another version": "0.17.0", "no pin at all": ""} {
@@ -219,17 +302,16 @@ func activeNames(active []policy.ActivePolicyModule) []string {
 	return result
 }
 
-func commandNames(commands []policy.Command) []string {
-	result := make([]string, 0, len(commands))
-	for _, command := range commands {
-		result = append(result, command.Name)
+func commandProviding(commands []policy.Command, capability string) (policy.Command, bool) {
+	index := slices.IndexFunc(commands, func(command policy.Command) bool {
+		return slices.Contains(command.Provides, capability)
+	})
+	if index < 0 {
+		return policy.Command{}, false
 	}
-	slices.Sort(result)
-	return result
+	return commands[index], true
 }
 
-// pinPolicyTool checks the version a policy root requires of one conditional
-// tool in beside it, the way a release carries the pin of every tool it does.
 func pinPolicyTool(t *testing.T, root, name, pin string) {
 	t.Helper()
 	writeModuleFile(t, root, "tools/"+name+"-version.txt", pin+"\n")

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The one authoritative reader of a Code Polishy `VERSION` file, run by both the
-# release preflight and the installer so what they accept as a release version
-# cannot drift apart.
-#
-# Usage: release-version.sh <version-file>
-#
-# On success the exact version is printed alone on stdout. The version is the
-# file's exact content minus at most one conventional trailing newline, and it
-# must be a strict MAJOR.MINOR.PATCH semantic version. Whitespace is never
-# deleted into a different value -- a file whose content only matches a version
-# after trimming records that whitespace, not the version -- so any other
-# content is refused with its exact remedy.
+
+
+
+
+
+
+
+
+
+
+
+
 
 usage() {
   echo "usage: release-version.sh <version-file>" >&2

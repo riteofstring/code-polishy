@@ -1,18 +1,7 @@
-// The dead-code operation of the sealed, policy-owned JavaScript tool bundle.
-//
-// It reports the governed source no entry point reaches and the exported
-// symbols nothing uses, across one tree of packages. Go decides everything the
-// analysis depends on: which packages the tree contains, which governed files
-// each contributes, and which of those files are entry points. Nothing is
-// discovered from the target, and nothing target-owned is executed.
-
 import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 
-// Resolved relative to this file rather than as a bare specifier, so the
-// compiler can only ever be the one installed beside the runner. The analyzer
-// resolves the same installed copy, so this is the object it reads through.
 import typescript from "./node_modules/typescript/lib/typescript.js";
 
 import {
@@ -27,13 +16,8 @@ import {
   unsupported,
 } from "./protocol.mjs";
 
-// One dead-code exchange reports bounded results, for the same reason the lint
-// and typecheck exchanges do.
 const MAXIMUM_DEADCODE_RESULTS = 5000;
 
-// The file types the sealed dead-code analyzer reads. They are the ones it
-// parses on its own; a single-file component needs a compiler, and a compiler
-// is target code, so a file of any other type is reported as uncovered.
 const DEADCODE_EXTENSIONS = [
   ".cjs",
   ".cts",
@@ -45,10 +29,6 @@ const DEADCODE_EXTENSIONS = [
   ".tsx",
 ];
 
-// The findings this operation reports. Every one of them is about a file or an
-// exported symbol nothing uses. The analyzer can also report dependency-graph
-// facts; those belong to the operations that own the package graph, so this one
-// neither asks for them nor answers with them.
 const DEADCODE_ISSUE_TYPES = [
   "files",
   "exports",
@@ -60,22 +40,14 @@ const DEADCODE_ISSUE_TYPES = [
   "duplicates",
 ];
 
-// A selected path reaches the analyzer as a pattern. One carrying a pattern
-// character would name something other than itself, so it is reported as
-// uncovered rather than matched against whatever it happens to expand to.
 const DEADCODE_PATTERN_CHARACTERS = /[*?[\]{}()!]/;
 
-// Whether one contained path names something inside a contained directory.
 function insideDirectory(directory, path) {
   return (
     directory === "." || path === directory || path.startsWith(`${directory}/`)
   );
 }
 
-// One package of the analyzed tree. Nothing about it may be left to the runner,
-// so a file cannot arrive without a package, an entry point cannot arrive
-// without being analyzed, and a package cannot name a tree the analysis does
-// not contain.
 function requireWorkspace(directory, workspace) {
   requireExactObject(workspace, "a dead-code workspace", [
     "root",
@@ -115,7 +87,6 @@ function requireWorkspace(directory, workspace) {
   }
 }
 
-// The packages one dead-code analysis covers.
 export function requireWorkspaces(directory, workspaces) {
   if (!Array.isArray(workspaces) || workspaces.length === 0) {
     fail("the request declares no dead-code workspaces");
@@ -139,9 +110,6 @@ export function requireWorkspaces(directory, workspaces) {
   }
 }
 
-// Where one path sits inside a directory that contains it. The protocol names
-// every path the way the repository does; the analyzer names a package relative
-// to the analyzed tree and a file relative to the package that owns it.
 function containedName(directory, path) {
   if (directory === path) {
     return ".";
@@ -149,9 +117,6 @@ function containedName(directory, path) {
   return directory === "." ? path : path.slice(directory.length + 1);
 }
 
-// The selected files one package contributes, and the reason for each one the
-// analyzer cannot address. A refused file is reported rather than dropped, so
-// Go sees exactly which governed source went unanalyzed.
 function workspaceFiles(request, workspace, unsupportedPaths) {
   const project = [];
   for (const path of workspace.project) {
@@ -179,8 +144,6 @@ function isRegularFile(absolute, path, unsupportedPaths) {
   try {
     info = lstatSync(absolute);
   } catch (error) {
-    // The runtime names the file absolutely; the reported reason names it the
-    // way the request did, so no host path crosses the protocol.
     unsupportedPaths.push(
       unsupported(
         path,
@@ -202,16 +165,6 @@ function isRegularFile(absolute, path, unsupportedPaths) {
   return true;
 }
 
-// The one configuration the analysis runs under. Code Polishy owns every part of
-// it: the packages, the exact governed files each one contributes, and which of
-// those files are entry points. Nothing is discovered, so a target knip.json,
-// .knip.json, or package.json#knip is never read.
-//
-// Every analyzer plug-in is disabled by name. A plug-in exists to learn a
-// framework's entry points from that framework's own configuration file, which
-// it does by loading that file -- target code this operation must never
-// execute. Code Polishy supplies the entry points instead, so the analyzer never
-// needs one.
 async function configurationFor(request, covered, unsupportedPaths) {
   const { pluginNames } =
     await import("./node_modules/knip/dist/types/PluginNames.js");
@@ -234,8 +187,6 @@ async function configurationFor(request, covered, unsupportedPaths) {
   return configuration;
 }
 
-// One unused export, member, or duplicate as a bounded fact: a target-relative
-// path, a position, the exact analyzer issue type, and the symbol it named.
 function unusedExport(root, kind, issue) {
   const path = insideRoot(root, issue.filePath);
   const symbol =
@@ -286,24 +237,12 @@ function reportedIssues(root, issues) {
   return { unusedFiles, unusedExports };
 }
 
-// Contain every source file the analyzer reads. It resolves imports itself and
-// reads each resolved file through the compiler's own system object, so a
-// selected file importing above the repository or through a link that lands
-// outside it would otherwise pull another tree into the analysis and let what
-// is written there decide whether target source is reachable. Reading is
-// answered only for what is really inside the target tree or inside the
-// bundle's own library declarations; anything else reads as absent, so a module
-// outside the repository contributes nothing and the source that only it
-// reaches is reported as unreachable rather than quietly kept alive.
 function containAnalyzerReads() {
   const readFile = typescript.sys.readFile;
   typescript.sys.readFile = (path, encoding) =>
     containedProgramRead(path) ? readFile(path, encoding) : undefined;
 }
 
-// Report the governed source no entry point reaches and the exported symbols
-// nothing uses. Go owns which of those is a failure; this reports only what the
-// analyzer found under the configuration Go decided.
 export async function deadcode(request) {
   containAnalyzerReads();
   const unsupportedPaths = [];
@@ -321,14 +260,9 @@ export async function deadcode(request) {
       unsupported: unsupportedPaths,
     };
   }
-  // Both the generated configuration and anything the analyzer would cache live
-  // in a scratch directory this process creates and deletes, so an analysis
-  // leaves nothing behind in the repository it read or the directory it was
-  // launched from.
+
   const scratch = mkdtempSync(join(tmpdir(), "code-polishy-deadcode-"));
   try {
-    // Awaited inside the block so the scratch directory outlives every read of
-    // the configuration written into it.
     return await analyze(
       request,
       configuration,
@@ -351,9 +285,7 @@ async function analyze(
   const configurationPath = join(scratch, "policy-knip.json");
   writeFileSync(configurationPath, JSON.stringify(configuration));
   const directory = join(request.root, request.directory);
-  // The analyzer reads its working directory and its configuration path from
-  // the command line of the process that loaded it, so both are set before it
-  // is imported, and it is imported only for this operation.
+
   process.argv = [
     process.argv[0],
     process.argv[1],
@@ -381,16 +313,13 @@ async function analyze(
   return { unusedFiles, unusedExports, covered, unsupported: unsupportedPaths };
 }
 
-// Every setting the analyzer runs under, stated rather than defaulted, so no
-// part of the run is decided by the analyzer's own conventions.
 function analyzerOptions(directory, scratch) {
   return {
     cacheLocation: join(scratch, "cache"),
     cwd: directory,
     excludedIssueTypes: [],
     fixTypes: [],
-    // Code Polishy already decided which files are governed, so the analyzer
-    // must not apply a second selection of its own.
+
     gitignore: false,
     includedIssueTypes: DEADCODE_ISSUE_TYPES,
     isCache: false,

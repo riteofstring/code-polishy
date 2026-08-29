@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// ApplyExceptions separates current, explicitly matching exceptions from the
-// findings that remain actionable. Expired records remain visible as their
-// own policy findings; they never silently weaken the original checks.
 func ApplyExceptions(findings []Finding, exceptions []Exception, now time.Time) ([]Finding, []Suppressed) {
 	currentDate := now.UTC().Truncate(24 * time.Hour)
 	kept := make([]Finding, 0, len(findings))

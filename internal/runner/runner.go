@@ -20,18 +20,11 @@ type Runner interface {
 	Run(context.Context, string, policy.Command) error
 }
 
-// Output is the command output a governed parser consumes after the common
-// runner has enforced its executable, environment, timeout, and resource
-// boundaries. It deliberately separates standard output from diagnostics so
-// structured reports never have to share a stream with error detail.
 type Output struct {
 	Stdout []byte
 	Stderr []byte
 }
 
-// OutputRunner extends Runner for governed commands whose successful output is
-// an input to a policy parser. Implementations must execute through the same
-// command boundary as Run, rather than opening a second process path.
 type OutputRunner interface {
 	Runner
 	RunWithOutput(context.Context, string, policy.Command) (Result, Output, error)
@@ -43,9 +36,6 @@ type OSRunner struct {
 	PathEntries []string
 }
 
-// Result is the observable execution evidence for one governed command. Lock
-// waiting is deliberately separate from process duration: a command timeout
-// applies once it owns its declared host resources.
 type Result struct {
 	ExitStatus        int
 	ExecutionDuration time.Duration
@@ -63,25 +53,15 @@ func (runner OSRunner) Run(parent context.Context, root string, specification po
 	return err
 }
 
-// RunWithStatus executes one already-validated argv command and preserves its
-// process exit status for machine evidence. A command that cannot start has no
-// process status and reports -1; a supervisor timeout reports 124.
 func (runner OSRunner) RunWithStatus(parent context.Context, root string, specification policy.Command) (int, error) {
 	result, err := runner.RunWithResult(parent, root, specification)
 	return result.ExitStatus, err
 }
 
-// RunWithResult executes a command only while it owns every declared host
-// resource. It acquires resources in their policy-normalized order and always
-// releases them before returning, including on context cancellation, timeout,
-// start failure, or a nonzero process result.
 func (runner OSRunner) RunWithResult(parent context.Context, root string, specification policy.Command) (Result, error) {
 	return runner.run(parent, root, specification, runner.Stdout, runner.Stderr)
 }
 
-// RunWithOutput executes a governed command through the same boundary as
-// RunWithResult while retaining a copy of each output stream for a policy
-// parser. Configured output writers still receive the command output.
 func (runner OSRunner) RunWithOutput(parent context.Context, root string, specification policy.Command) (Result, Output, error) {
 	stdout := &boundedOutput{limit: maximumStructuredOutputBytes}
 	stderr := &boundedOutput{limit: maximumStructuredDiagnosticBytes}
@@ -183,10 +163,6 @@ func commandFailureResult(hostResult HostResult, commandContext context.Context,
 	return result, fmt.Errorf("command %q failed: %w", name, runErr)
 }
 
-// boundedOutput keeps parser input and diagnostics within a fixed in-memory
-// boundary while continuing to stream the complete command output to any
-// configured writer. A truncation is returned as a command error so parsers
-// can never accept a prefix of a structured response.
 type boundedOutput struct {
 	limit     int
 	buffer    bytes.Buffer
@@ -301,14 +277,6 @@ func (buffer *lockedBuffer) bytes() []byte {
 	return append([]byte{}, buffer.buffer.Bytes()...)
 }
 
-// GoModuleVersion is the module version recorded inside one Go binary, read out
-// of the file with the pinned toolchain and reported without a leading `v`.
-//
-// The binary is read rather than asked what it is: `govulncheck -version`
-// contacts the vulnerability database, and which version of a pinned analyzer a
-// policy root carries is an offline question. A binary that records no module
-// version, or a toolchain that cannot read it, reports nothing, so the caller
-// refuses the tool rather than accepting whatever is installed.
 func GoModuleVersion(goTool, binary string) string {
 	output, err := ToolOutput(goTool, "version", "-m", binary)
 	if err != nil {

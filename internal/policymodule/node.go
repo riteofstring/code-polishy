@@ -27,10 +27,6 @@ func (pkg nodePackage) hasDependency(name string) bool {
 	return false
 }
 
-// The packages a repository declares. A package is read for the frameworks it
-// depends on, which is the only thing a conditional module still decides about
-// one: the sealed bundle owns every generic JavaScript tool, so no package
-// declares, pins, or installs an analyzer for Code Polishy to find.
 func discoverNodePackages(repo repository.Repository, files []string) ([]nodePackage, []policy.Finding) {
 	packages := []nodePackage{}
 	findings := []policy.Finding{}
@@ -73,9 +69,6 @@ func packageAt(packages []nodePackage, root string) (nodePackage, bool) {
 	return nodePackage{}, false
 }
 
-// React policy contributes rule activation, not tooling. The sealed bundle owns
-// ESLint, the Hooks plug-in, and the JSX accessibility plug-in, so the package
-// declares no lint dependency and ships no lint configuration for either.
 func applyReact(packages []nodePackage, active policy.ActivePolicyModule, resolution *Resolution) {
 	pkg, exists := packageAt(packages, active.Root)
 	if !exists || !pkg.hasDependency("react") {

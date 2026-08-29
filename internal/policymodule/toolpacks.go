@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -25,6 +26,10 @@ func applyRuff(repo repository.Repository, files []string, active policy.ActiveP
 	paths := rootedPatterns(active.Root, "**/*.py", "**/*.pyi")
 	modules := modulesFor(repo, files, active.Root, "python")
 	suffix := safeName(active.Root)
+	complexity := repo.Config.Quality.Complexity.Python
+	if complexity == 0 {
+		complexity = policy.MaxPythonComplexity
+	}
 	resolution.Commands = append(resolution.Commands,
 		policy.Command{
 			Name: "policy-ruff-format-" + suffix, Provides: []string{"format"},
@@ -37,11 +42,41 @@ func applyRuff(repo repository.Repository, files []string, active policy.ActiveP
 			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
 		},
 		policy.Command{
+			Name: "policy-ruff-complexity-" + suffix, Provides: []string{"complexity"},
+			Argv: []string{
+				ruff, "check", "--no-fix", "--isolated", "--select", "C901", "--ignore-noqa",
+				"--config", "lint.mccabe.max-complexity = " + strconv.Itoa(complexity-1), "--",
+			},
+			Cwd: ".", Paths: paths, Modules: modules,
+			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
+		},
+		policy.Command{
 			Name: "policy-ruff-write-" + suffix, Provides: []string{"format"},
 			Argv: []string{ruff, "format", "--"}, Cwd: ".", Paths: paths, Modules: modules,
 			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
 		},
 	)
+}
+
+func applyTy(repo repository.Repository, files []string, active policy.ActivePolicyModule, resolution *Resolution) {
+	pythonFiles := filesFor(repo, files, active.Root, "python")
+	if len(pythonFiles) == 0 {
+		resolution.Findings = append(resolution.Findings, finding("ty", active.Root, "python", "enabled ty policy did not find governed Python source at this root"))
+		return
+	}
+	ty := repo.PolicyTool("ty")
+	if pin := repo.ToolPin("ty"); pin == "" || !tyExecutableVersion(ty, pin) {
+		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ty", Message: "conditional Python policy requires the ty version tools/ty-version.txt pins; run ./tools/install-policy-tools.sh"})
+	}
+	paths := rootedPatterns(active.Root, "**/*.py", "**/*.pyi")
+	modules := modulesFor(repo, files, active.Root, "python")
+	suffix := safeName(active.Root)
+	resolution.Commands = append(resolution.Commands, policy.Command{
+		Name: "policy-ty-typecheck-" + suffix, Provides: []string{"typecheck"},
+		Argv: []string{ty, "check", "--config-file", filepath.Join(repo.PolicyRoot, "tools", "ty.toml"), "--project", ".", "--"},
+		Cwd:  active.Root, Paths: paths, Modules: modules,
+		RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
+	})
 }
 
 func applyOSV(repo repository.Repository, files []string, active policy.ActivePolicyModule, resolution *Resolution) {
@@ -75,6 +110,26 @@ func pythonRoots(repo repository.Repository, files []string) []string {
 	return result
 }
 
+func tyRoots(repo repository.Repository, files []string) []string {
+	fileSet := map[string]bool{}
+	for _, path := range files {
+		fileSet[path] = true
+	}
+	roots := map[string]bool{}
+	for _, path := range files {
+		if repo.Language(path) != "python" {
+			continue
+		}
+		roots[nearestTyRoot(path, fileSet)] = true
+	}
+	result := make([]string, 0, len(roots))
+	for root := range roots {
+		result = append(result, root)
+	}
+	sort.Strings(result)
+	return result
+}
+
 func nearestPythonRoot(repo repository.Repository, path string, files map[string]bool) string {
 	directory := filepath.ToSlash(filepath.Dir(path))
 	for {
@@ -88,6 +143,21 @@ func nearestPythonRoot(repo repository.Repository, path string, files map[string
 		if files[pyproject] {
 			data, err := repo.Read(pyproject)
 			if err == nil && strings.Contains(string(data), "[tool.ruff") {
+				return directory
+			}
+		}
+		if directory == "." {
+			return "."
+		}
+		directory = filepath.ToSlash(filepath.Dir(directory))
+	}
+}
+
+func nearestTyRoot(path string, files map[string]bool) string {
+	directory := filepath.ToSlash(filepath.Dir(path))
+	for {
+		for _, name := range []string{"ty.toml", "pyproject.toml"} {
+			if files[rootFile(directory, name)] {
 				return directory
 			}
 		}
@@ -130,6 +200,19 @@ func executableVersion(path string, acceptedLines ...string) bool {
 		}
 	}
 	return false
+}
+
+func tyExecutableVersion(path, pin string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+		return false
+	}
+	output, err := runner.ToolOutput(path, "--version")
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(string(output))
+	return len(fields) >= 2 && fields[0] == "ty" && fields[1] == pin
 }
 
 func hasDependencyGraph(repo repository.Repository, files []string) bool {

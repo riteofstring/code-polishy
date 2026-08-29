@@ -32,10 +32,6 @@ func Load(repoRoot, configPath string) (Config, error) {
 	return Parse(data, configPath)
 }
 
-// Parse compiles a complete policy configuration from trusted bytes. Callers
-// that read configuration from an immutable source, such as a Git commit, use
-// this entry point so candidate working-tree configuration cannot affect the
-// result.
 func Parse(data []byte, source string) (Config, error) {
 	if source == "" {
 		source = ConfigFilename
@@ -72,6 +68,7 @@ func applyDefaults(config *Config) {
 	defaultInt(&config.Quality.MaxTestFileLines, MaxTestFileLines)
 	defaultInt(&config.Quality.Complexity.Go, MaxGoComplexity)
 	defaultInt(&config.Quality.Complexity.GoTest, MaxGoTestComplexity)
+	defaultInt(&config.Quality.Complexity.Python, MaxPythonComplexity)
 	defaultInt(&config.Quality.Complexity.TypeScript, MaxTypeScriptComplexity)
 	defaultInt(&config.Quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity)
 	defaultInt(&config.Quality.MaxDepth, MaxTypeScriptDepth)
@@ -123,10 +120,7 @@ func defaultStrings(target *[]string, value []string) {
 }
 
 func suiteDefaults(suite *TestSuite) {
-	// Performance measurements are meaningful only when no other governed
-	// performance suite is competing for the host. This lease belongs to the
-	// shared baseline, so target configuration may add resources but cannot
-	// remove or replace it with an explicit empty or different list.
+
 	if suite.Kind == "performance" && !slices.Contains(suite.ExclusiveResources, "performance") {
 		suite.ExclusiveResources = append(suite.ExclusiveResources, "performance")
 	}
@@ -184,6 +178,9 @@ func validate(config *Config) error {
 		return err
 	}
 	if err := validateModules(config); err != nil {
+		return err
+	}
+	if err := validateDocumentation(config); err != nil {
 		return err
 	}
 	if err := validateVerification(config); err != nil {
@@ -340,10 +337,7 @@ func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) 
 }
 
 func validateBase(config *Config) error {
-	// The sealed runtime reads exactly one configuration version. A version-2
-	// file is the submodule-era shape, and it is refused rather than migrated:
-	// nothing here reads a field it no longer owns or guesses what an older
-	// target meant.
+
 	if config.Version != ConfigVersion {
 		return fmt.Errorf("unsupported policy version %d; expected %d", config.Version, ConfigVersion)
 	}
@@ -369,6 +363,7 @@ func validateQuality(quality Quality) error {
 		{"quality.maxTestFileLines", quality.MaxTestFileLines, MaxTestFileLines},
 		{"quality.complexity.go", quality.Complexity.Go, MaxGoComplexity},
 		{"quality.complexity.goTest", quality.Complexity.GoTest, MaxGoTestComplexity},
+		{"quality.complexity.python", quality.Complexity.Python, MaxPythonComplexity},
 		{"quality.complexity.typescript", quality.Complexity.TypeScript, MaxTypeScriptComplexity},
 		{"quality.complexity.typescriptTest", quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity},
 		{"quality.maxDepth", quality.MaxDepth, MaxTypeScriptDepth},
@@ -417,75 +412,6 @@ func validateLanguageRules(rules []LanguageRule) error {
 		}
 		if err := validatePatterns(rule.Paths, label+".paths", true); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-func validateModules(config *Config) error {
-	if len(config.Modules) == 0 {
-		return errors.New("modules must contain at least one named module")
-	}
-	config.ModuleByName = make(map[string]int, len(config.Modules))
-	for index, module := range config.Modules {
-		if err := validateModuleDefinition(module, index, config.ModuleByName); err != nil {
-			return err
-		}
-		config.ModuleByName[module.Name] = index
-	}
-	if err := validateModuleDependencies(config); err != nil {
-		return err
-	}
-	if err := validateArtifactTargetModules(config); err != nil {
-		return err
-	}
-	if cycle := moduleCycle(*config); len(cycle) > 0 {
-		return fmt.Errorf("module dependency graph must be acyclic: %s", strings.Join(cycle, " -> "))
-	}
-	return nil
-}
-
-func validateModuleDefinition(module Module, index int, existing map[string]int) error {
-	label := fmt.Sprintf("modules[%d]", index)
-	if err := identifier(module.Name, label+".name"); err != nil {
-		return err
-	}
-	if _, exists := existing[module.Name]; exists {
-		return fmt.Errorf("duplicate module name %q", module.Name)
-	}
-	if len(module.Paths) == 0 {
-		return fmt.Errorf("%s.paths must not be empty", label)
-	}
-	if err := validatePatterns(module.Paths, label+".paths", false); err != nil {
-		return err
-	}
-	if err := validateUniqueStrings(module.DependsOn, label+".dependsOn", true); err != nil {
-		return err
-	}
-	return validateUniqueStrings(module.Capabilities, label+".capabilities", true)
-}
-
-func validateArtifactTargetModules(config *Config) error {
-	for _, target := range config.SupplyChain.ArtifactSecurity.Targets {
-		if target.Module == "" {
-			continue
-		}
-		if _, exists := config.ModuleByName[target.Module]; !exists {
-			return fmt.Errorf("artifact security target %q references unknown module %q", target.Name, target.Module)
-		}
-	}
-	return nil
-}
-
-func validateModuleDependencies(config *Config) error {
-	for _, module := range config.Modules {
-		for _, dependency := range module.DependsOn {
-			if dependency == module.Name {
-				return fmt.Errorf("module %q cannot depend on itself", module.Name)
-			}
-			if _, exists := config.ModuleByName[dependency]; !exists {
-				return fmt.Errorf("module %q depends on unknown module %q", module.Name, dependency)
-			}
 		}
 	}
 	return nil
@@ -662,10 +588,6 @@ func validateCommand(config *Config, command *Command, label string, names map[s
 	return validateCommandModules(config, command.Modules, label)
 }
 
-// ValidateExclusiveResources proves the normalized resource identifiers a
-// command claims are safe to carry across the policy, runner, and receipt
-// boundary. Parsing sorts identifiers before this runs; duplicate identifiers
-// are rejected rather than silently changing a command's declared identity.
 func ValidateExclusiveResources(resources []string) error {
 	for index, resource := range resources {
 		if err := identifier(resource, fmt.Sprintf("resource[%d]", index)); err != nil {
@@ -758,7 +680,7 @@ func validatePolicyModules(modules PolicyModules) error {
 }
 
 func validatePolicyModuleIdentity(override PolicyModuleOverride, label string, seen map[string]bool) error {
-	if !slices.Contains([]string{"electron", "osv", "react", "ruff"}, override.Name) {
+	if !slices.Contains([]string{"electron", "osv", "react", "ruff", "ty"}, override.Name) {
 		return fmt.Errorf("%s.name is not a supported conditional policy module", label)
 	}
 	if err := repositoryPath(override.Root, label+".root", false); err != nil {
@@ -875,41 +797,6 @@ func suppressibleCheck(check string) bool {
 	return false
 }
 
-func moduleCycle(config Config) []string {
-	state := map[string]int{}
-	stack := []string{}
-	var visit func(string) []string
-	visit = func(name string) []string {
-		if state[name] == 1 {
-			for index, item := range stack {
-				if item == name {
-					return append(append([]string{}, stack[index:]...), name)
-				}
-			}
-		}
-		if state[name] == 2 {
-			return nil
-		}
-		state[name] = 1
-		stack = append(stack, name)
-		module := config.Modules[config.ModuleByName[name]]
-		for _, dependency := range module.DependsOn {
-			if cycle := visit(dependency); len(cycle) > 0 {
-				return cycle
-			}
-		}
-		stack = stack[:len(stack)-1]
-		state[name] = 2
-		return nil
-	}
-	for _, module := range config.Modules {
-		if cycle := visit(module.Name); len(cycle) > 0 {
-			return cycle
-		}
-	}
-	return nil
-}
-
 func validatePatterns(patterns []string, label string, rejectUniversal bool) error {
 	if err := validateUniqueStrings(patterns, label, false); err != nil {
 		return err
@@ -943,6 +830,16 @@ func repositoryPath(value, label string, allowGlob bool) error {
 	}
 	if !allowGlob && strings.ContainsAny(value, "*?[]") {
 		return fmt.Errorf("%s must be a concrete repository path", label)
+	}
+	return nil
+}
+
+func concreteRepositoryPath(value, label string) error {
+	if err := repositoryPath(value, label, false); err != nil {
+		return err
+	}
+	if strings.HasPrefix(value, "./") || pathpkg.Clean(value) != value {
+		return fmt.Errorf("%s must use one canonical repository-relative path", label)
 	}
 	return nil
 }

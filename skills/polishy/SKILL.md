@@ -39,6 +39,17 @@ Preserve unrelated user changes. Treat project-specific providers, builds, and
 tests declared in `.code-polishy.json` as part of the policy contract rather
 than generic code to delete.
 
+Before changing governed source, run `code-polishy design-context` for the
+exact files or modules in scope and read only the paths it prints. It resolves
+current mapped design rationale; plans, historical evidence, and superseded
+decisions remain deliberate task-specific inputs.
+
+Honor `quality.allowComments`. When it is false, keep governed handwritten
+source free of prose comments and docstrings and retain only exact
+machine-consumed directives. When it is true, preserve useful accurate comments
+and add one only when it conveys information the code cannot. Move current
+non-local rationale to the mapped design document that owns it.
+
 When the caller requests an enforced autonomous edit boundary, launch the
 worker before it starts through `code-polishy task-session`. The caller must
 select every allowed module; never infer an all-repository scope or let the
@@ -73,6 +84,9 @@ policy upgrade, and do not invent authoritative suite counts.
 
 - Treat focused (`test --changed`, `--module`, or exact `--suite`) as routine
   implementation feedback when repository guidance permits it.
+- Treat ordinary Markdown-only work as an automatic documentation lane. Run
+  `format --git-changes`, fix deterministic documentation findings, and run no
+  application tests. Never ask the user to authorize this lane.
 - Treat recommended and full as profiles whose ordinary merge selection belongs
   only to `merge-gate`, not as a question to return to the user.
 - Treat supplemental mutation and risk suites as a separate final-hardening
@@ -86,9 +100,9 @@ policy upgrade, and do not invent authoritative suite counts.
   not describe either as merely another test level.
 - At an ordinary merge checkpoint, resolve the trusted base and run
   `merge-gate --base <trusted-base>` without asking the user to choose
-  recommended or full. It alone selects the configured recommended merge
-  profile or the complete full gate and accepts no caller-supplied file, module,
-  suite, or quick-mode scope.
+  a level. It alone selects documentation, the configured recommended merge
+  profile, or the complete full gate and accepts no caller-supplied file,
+  module, suite, or quick-mode scope.
 
 Do not turn an ambiguous request such as "test it" into an ordinary merge
 checkpoint. A direct request for a scoped profile remains scoped feedback, not
@@ -143,6 +157,7 @@ caller explicitly requests an uncommitted handoff.
 | Treating a `PATH` miss as a missing installation  | Probe the caller-specified or default stable launcher paths                                      |
 | Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested               |
 | Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it |
+| Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically   |
 | Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                    |
 | Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                        |
 | Adding an exception to silence cleanup            | Fix the owner or make any necessary exception exact, owned, and expiring                         |
@@ -154,7 +169,7 @@ caller explicitly requests an uncommitted handoff.
 For a diagnostic level request, state whether the result is no-base advice or a
 trusted-base policy selection and explain the level and reasons. Show the
 terminal table only when requested. At an ordinary merge checkpoint, resolve
-the base and run `merge-gate` without a recommended-versus-full question. For
+the base and run `merge-gate` without asking the user to select a level. For
 execution or cleanup, lead with the outcome, report actionable findings, and
 name every required check that remains unrun. Include raw CLI output only when
 the caller requests it.

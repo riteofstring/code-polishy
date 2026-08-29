@@ -12,7 +12,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// A TypeScript import obeys the same declared direction a Go import does.
 func TestJavaScriptImportMustFollowDeclaredModuleDependency(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
@@ -36,10 +35,6 @@ func TestDeclaredJavaScriptModuleDependencyPasses(t *testing.T) {
 	}
 }
 
-// An import that names nothing in the repository crosses no declared boundary.
-// An external package resolves into an installed tree the repository does not
-// govern, and a package it has not installed resolves to nothing at all. A file
-// no manifest owns declares no dependencies either, so neither is decided here.
 func TestJavaScriptImportOutsideTheGovernedTreeIsNotAModuleEdge(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
@@ -51,8 +46,6 @@ func TestJavaScriptImportOutsideTheGovernedTreeIsNotAModuleEdge(t *testing.T) {
 	}
 }
 
-// A package reaches only the dependencies its own manifest declares. One it
-// declares nowhere is reached only because a neighbour happens to provide it.
 func TestJavaScriptImportOfAnUndeclaredPackageIsReported(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","dependencies":{"react":"19.2.0"}}`)
@@ -68,8 +61,6 @@ func TestJavaScriptImportOfAnUndeclaredPackageIsReported(t *testing.T) {
 	}
 }
 
-// A declared dependency passes whichever category admits it, and so does a
-// package importing itself by name through its own exports.
 func TestDeclaredJavaScriptPackageDependencyPasses(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","dependencies":{"react":"19.2.0"},`+
@@ -84,9 +75,6 @@ func TestDeclaredJavaScriptPackageDependencyPasses(t *testing.T) {
 	}
 }
 
-// An undeclared name that resolved to nothing is not evidence of an installed
-// package: a project's own path alias is written exactly like one, and this
-// reader resolves specifiers under policy-owned settings rather than a target's.
 func TestUnresolvedJavaScriptSpecifierIsNotAnUndeclaredDependency(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","dependencies":{}}`)
@@ -96,8 +84,6 @@ func TestUnresolvedJavaScriptSpecifierIsNotAnUndeclaredDependency(t *testing.T) 
 	}
 }
 
-// A development dependency is installed to build and exercise the product, not
-// to ship inside it, so shipped source may not reach one.
 func TestJavaScriptDevelopmentDependencyImportedByShippedSourceIsReported(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","devDependencies":{"vitest":"3.2.4"}}`)
@@ -113,8 +99,6 @@ func TestJavaScriptDevelopmentDependencyImportedByShippedSourceIsReported(t *tes
 	}
 }
 
-// Source that never ships may reach one. A test already never ships; the
-// configuration and harnesses that also do not are the target's own fact.
 func TestJavaScriptDevelopmentDependencyImportedByDevelopmentSourcePasses(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","devDependencies":{"vitest":"3.2.4"}}`)
@@ -128,8 +112,6 @@ func TestJavaScriptDevelopmentDependencyImportedByDevelopmentSourcePasses(t *tes
 	}
 }
 
-// The nearest manifest owns a file, so a workspace package answers for what it
-// reaches even when the project root declares the same dependency.
 func TestNearestJavaScriptManifestOwnsItsDependencies(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"root","dependencies":{"left-pad":"1.3.0"}}`)
@@ -143,8 +125,6 @@ func TestNearestJavaScriptManifestOwnsItsDependencies(t *testing.T) {
 	}
 }
 
-// A manifest that could not be read is missing coverage, once for the manifest
-// rather than once for every import decided against it.
 func TestUnreadableJavaScriptManifestIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, "{not json")
@@ -158,8 +138,6 @@ func TestUnreadableJavaScriptManifestIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// Governed source the reader cannot parse is missing coverage rather than a
-// file with no imports, and the bundle is never launched to learn that.
 func TestJavaScriptSourceTheReaderCannotParseIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
@@ -172,8 +150,6 @@ func TestJavaScriptSourceTheReaderCannotParseIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// An import the bundle could not read is missing coverage too: a boundary that
-// was never read is not a boundary that was respected.
 func TestUnreadJavaScriptImportIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
@@ -186,8 +162,6 @@ func TestUnreadJavaScriptImportIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// A target with no JavaScript never launches the bundle, so a Go-only
-// repository never has to install one to have its architecture checked.
 func TestGoOnlySelectionNeverLaunchesTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := architectureRepository(t, true)
@@ -197,8 +171,6 @@ func TestGoOnlySelectionNeverLaunchesTheBundle(t *testing.T) {
 	}
 }
 
-// A missing bundle fails closed: JavaScript module direction is never decided
-// by an ambient runtime or by assuming the source declares no imports.
 func TestJavaScriptArchitectureFailsClosedWithoutTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
@@ -225,8 +197,6 @@ func javascriptRepository(t *testing.T, allow bool) repository.Repository {
 	return repository.Repository{Root: root, Config: config}
 }
 
-// One repository whose source belongs to a Node package declaring exactly this
-// manifest.
 func nodePackageRepository(t *testing.T, manifest string) repository.Repository {
 	t.Helper()
 	repo := javascriptRepository(t, false)
@@ -244,9 +214,6 @@ func fakeImportBundle(t *testing.T, facts ...string) string {
 	return installImportBundle(t, `{"imports":[`+strings.Join(facts, ",")+`],"unsupported":[]}`)
 }
 
-// installImportBundle stands in for one installed policy checkout: a runtime and
-// a runner at the one policy-owned path, answering the closed protocol with
-// exactly these import facts.
 func installImportBundle(t *testing.T, result string) string {
 	t.Helper()
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
@@ -262,7 +229,7 @@ func installImportBundle(t *testing.T, result string) string {
 		"#!/bin/sh\nexec /bin/sh \"$1\"\n")
 	writeBundleFile(t, filepath.Join(installed, "bundle", "runner.mjs"),
 		"#!/bin/sh\n/bin/cat >/dev/null\n"+
-			`printf '{"protocolVersion":2,"operation":"imports","result":%s}\n' '`+result+"'\n")
+			`printf '{"protocolVersion":3,"operation":"imports","result":%s}\n' '`+result+"'\n")
 	return root
 }
 

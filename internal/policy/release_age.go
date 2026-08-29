@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// ApplyReleaseAgeAssessments removes only young-release findings whose full
-// observed identity matches a current assessment. Operational metadata errors
-// and vulnerability findings never carry this identity and cannot be waived.
 func ApplyReleaseAgeAssessments(
 	findings []Finding,
 	assessments []ReleaseAgeAssessment,

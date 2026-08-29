@@ -46,8 +46,9 @@ type Advice struct {
 }
 
 const (
-	MergeLevelRecommended = "recommended"
-	MergeLevelFull        = "full"
+	MergeLevelDocumentation = "documentation"
+	MergeLevelRecommended   = "recommended"
+	MergeLevelFull          = "full"
 )
 
 type MergeDecision struct {
@@ -56,6 +57,9 @@ type MergeDecision struct {
 }
 
 func BuildPlan(repo repository.Repository, request Request) (Plan, error) {
+	if plan, selected := documentationPlan(repo, request); selected {
+		return plan, nil
+	}
 	if request.Supplemental {
 		return Plan{
 			Suites: selectByRunOn(repo.Config.Tests.Suites, "supplemental"), Level: "supplemental",
@@ -86,7 +90,7 @@ func BuildPlan(repo repository.Repository, request Request) (Plan, error) {
 	if len(request.Modules) == 0 {
 		impacted = reverseClosure(repo.Config, direct)
 	}
-	changedPaths := append(append([]string{}, request.Changed.Files...), request.Changed.Deleted...)
+	changedPaths := analysisPaths(request.Changed)
 	profile := "focused"
 	reason := "direct focused selection"
 	if request.Recommended {
@@ -101,6 +105,19 @@ func BuildPlan(repo repository.Repository, request Request) (Plan, error) {
 		Suites: uniqueSuites(selected), ChangedModules: direct, ImpactedModules: impacted,
 		SelectionBase: request.Changed.Base, Level: profile, Reasons: []string{reason},
 	}, nil
+}
+
+func documentationPlan(repo repository.Repository, request Request) (Plan, bool) {
+	if request.Full || request.Recommended || request.Supplemental || len(request.Modules) > 0 || len(request.Suites) > 0 {
+		return Plan{}, false
+	}
+	classification := repo.ClassifyDocumentationCandidate(request.Changed)
+	if !classification.Ordinary {
+		return Plan{}, false
+	}
+	return Plan{
+		Level: MergeLevelDocumentation, SelectionBase: request.Changed.Base, Reasons: []string{classification.Reason},
+	}, true
 }
 
 func BuildAdvice(repo repository.Repository, selection repository.Selection) (Advice, error) {
@@ -120,7 +137,7 @@ func BuildAdvice(repo repository.Repository, selection repository.Selection) (Ad
 	if err != nil {
 		return Advice{}, err
 	}
-	changedPaths := append(append([]string{}, selection.Files...), selection.Deleted...)
+	changedPaths := analysisPaths(selection)
 	supplemental := suitesForProfile(repo.Config.Tests.Suites, "supplemental", recommended.ImpactedModules, changedPaths)
 	suggested, reasons := recommendScope(repo.Config, selection, recommended)
 	return Advice{
@@ -132,6 +149,10 @@ func BuildAdvice(repo repository.Repository, selection repository.Selection) (Ad
 }
 
 func BuildMergeDecision(repo repository.Repository, selection repository.Selection) (MergeDecision, error) {
+	classification := repo.ClassifyDocumentationCandidate(selection)
+	if classification.Ordinary {
+		return MergeDecision{Level: MergeLevelDocumentation, Reasons: []string{classification.Reason}}, nil
+	}
 	advice, err := BuildAdvice(repo, selection)
 	if err != nil {
 		return MergeDecision{}, err
@@ -149,7 +170,7 @@ func BuildMergeDecision(repo repository.Repository, selection repository.Selecti
 	for _, module := range mergeGate.RecommendedModules {
 		allowed[module] = true
 	}
-	changedPaths := uniqueStrings(append(append([]string{}, selection.Files...), selection.Deleted...))
+	changedPaths := selection.Candidate.Paths()
 	for _, path := range changedPaths {
 		modules := repo.ModuleNames(path)
 		if len(modules) != 1 {
@@ -193,7 +214,7 @@ func directModules(repo repository.Repository, request Request) []string {
 		return append([]string{}, request.Modules...)
 	}
 	direct := []string{}
-	for _, path := range append(append([]string{}, request.Changed.Files...), request.Changed.Deleted...) {
+	for _, path := range analysisPaths(request.Changed) {
 		direct = append(direct, repo.ModuleNames(path)...)
 	}
 	return direct
@@ -224,7 +245,7 @@ func suitesForProfile(suites []policy.TestSuite, profile string, impacted, chang
 }
 
 func recommendScope(config policy.Config, selection repository.Selection, plan Plan) (string, []string) {
-	changedPaths := uniqueStrings(append(append([]string{}, selection.Files...), selection.Deleted...))
+	changedPaths := analysisPaths(selection)
 	if len(changedPaths) == 0 {
 		return "recommended", []string{"no governed changes were detected, so no broader test run is warranted"}
 	}
@@ -244,14 +265,14 @@ func recommendScope(config policy.Config, selection repository.Selection, plan P
 	return "recommended", []string{fmt.Sprintf("the change is limited to %d governed paths and impacts %d of %d modules", len(changedPaths), len(plan.ImpactedModules), moduleCount)}
 }
 
+func analysisPaths(selection repository.Selection) []string {
+	return uniqueStrings(append(append([]string{}, selection.Files...), selection.Candidate.Deleted...))
+}
+
 func Run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
 	return run(ctx, repo, commandRunner, plan, reporter, false)
 }
 
-// RunUntilFailure executes suites in order and stops as soon as one fails.
-// Merge-gate acceptance uses this boundary so a rejected candidate cannot
-// start a later expensive suite. Direct test runs retain Run's complete
-// finding collection behavior.
 func RunUntilFailure(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
 	return run(ctx, repo, commandRunner, plan, reporter, true)
 }
@@ -306,9 +327,6 @@ func runSuite(ctx context.Context, root string, commandRunner runner.Runner, com
 	return runner.Result{ExecutionDuration: time.Since(started)}, false, err
 }
 
-// ExecutionPlanForDirectTest adapts a direct suite plan to the terminal
-// renderer. Direct commands operate on the working tree. SelectionBase records
-// the exact comparison revision for Git-based selection.
 func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {
 	commands := make([]ExecutionCommand, 0, len(plan.Suites))
 	for _, suite := range plan.Suites {
@@ -328,8 +346,6 @@ func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {
 	}
 }
 
-// NewDirectExecutionReporter keeps direct human output concise while retaining
-// the complete execution event stream in verbose mode.
 func NewDirectExecutionReporter(output io.Writer, plan Plan, verbose bool) *ExecutionReporter {
 	return newExecutionReporter(output, ExecutionPlanForDirectTest(plan), verbose)
 }

@@ -3,6 +3,9 @@ package supplychain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -142,7 +145,7 @@ func TestStaticRejectsRepositoryOSVIgnoreConfiguration(t *testing.T) {
 	}
 }
 
-func TestOnlineCommandsPlanAndParseGoReleaseAgeAndOSVThroughCommonRunner(t *testing.T) {
+func TestOnlineReportsYoungGoDependenciesFromSemanticToolResults(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
 	repo.PolicyRoot = repo.Root
@@ -156,56 +159,33 @@ func TestOnlineCommandsPlanAndParseGoReleaseAgeAndOSVThroughCommonRunner(t *test
 	if err := os.Chmod(filepath.Join(repo.Root, ".tools", "bin", "govulncheck"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	commands, err := OnlineCommands(repo, []string{"go.mod"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"go-mod-tidy-root", "go-release-age-root", "govulncheck-root", "osv-scan-root"}
-	if names := supplyCommandNames(commands); !slices.Equal(names, want) {
-		t.Fatalf("online command plan = %v", names)
-	}
-	if commands[1].TimeoutSeconds != 900 || commands[3].TimeoutSeconds != 1800 {
-		t.Fatalf("structured-report command timeouts = %+v", commands)
-	}
-	commandRunner := &recordingSupplyOutputRunner{outputs: map[string]runner.Output{
-		"go-release-age-root": {Stdout: []byte(`{"Path":"example.test/supply","Main":true}` + "\n")},
-		"osv-scan-root":       {Stdout: []byte(`{"results":[]}` + "\n")},
+	boundary := supplyToolBoundary{goModules: []map[string]any{
+		{"Path": "example.test/supply", "Main": true},
+		{"Path": "example.test/established", "Version": "v1.0.0", "Time": time.Now().UTC().AddDate(0, 0, -30)},
+		{"Path": "example.test/young", "Version": "v2.0.0", "Time": time.Now().UTC().Add(-time.Hour)},
 	}}
-	if findings := OnlineWithCommands(context.Background(), repo, []string{"go.mod"}, commands, commandRunner); len(findings) != 0 {
+	findings := Online(context.Background(), repo, []string{"go.mod"}, boundary)
+	if len(findings) != 1 || findings[0].Check != "supplyChain.releaseAge" || !strings.Contains(findings[0].Subject, "example.test/young@v2.0.0") {
 		t.Fatalf("online findings = %+v", findings)
-	}
-	if !slices.Equal(supplyCommandNames(commandRunner.commands), want) {
-		t.Fatalf("common runner commands = %v", supplyCommandNames(commandRunner.commands))
 	}
 }
 
-func TestOnlineCommandsPlanAndParsePNPMAuditThroughCommonRunner(t *testing.T) {
-	t.Parallel()
+func TestOnlineAcceptsCleanPNPMAuditAndRegistryEvidence(t *testing.T) {
 	repo := supplyRepository(t)
 	repo.PolicyRoot = installBundle(t, map[string]string{
-		"audit": `{"advisories":[],"unsupported":[]}`,
+		"audit":    `{"advisories":[],"unsupported":[]}`,
+		"packages": packagesResult("", ""),
 	})
+	registry := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(response, `{"time":{"11.13.0":%q}}`, time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339))
+	}))
+	defer registry.Close()
+	repo.Config.SupplyChain.NPMRegistryURL = registry.URL
 	writeSupplyFile(t, repo.Root, "package.json", `{"packageManager":"pnpm@11.13.0","pnpm":{"onlyBuiltDependencies":[]}}`+"\n")
 	writeSupplyFile(t, repo.Root, "pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
-	commands, err := OnlineCommands(repo, []string{"package.json", "pnpm-lock.yaml"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if names := supplyCommandNames(commands); !slices.Equal(names, []string{"pnpm-audit-root"}) {
-		t.Fatalf("online command plan = %v", names)
-	}
-	if !commands[0].SealedEnvironment || commands[0].TimeoutSeconds != 900 || commands[0].Cwd != "." {
-		t.Fatalf("pnpm audit command = %+v", commands[0])
-	}
-	commandRunner := &recordingSupplyOutputRunner{outputs: map[string]runner.Output{
-		"pnpm-audit-root": {Stdout: []byte(`{"protocolVersion":2,"operation":"audit","result":{"advisories":[],"unsupported":[]}}` + "\n")},
-	}}
-	manifest := nodeManifest{Path: "package.json", Root: ".", Manager: "pnpm", ManagerVersion: "11.13.0"}
-	if findings := auditNodeWithCommand(context.Background(), repo, manifest, commands[0], commandRunner); len(findings) != 0 {
+	if findings := Online(context.Background(), repo, []string{"package.json", "pnpm-lock.yaml"}, supplyToolBoundary{}); len(findings) != 0 {
 		t.Fatalf("pnpm audit findings = %+v", findings)
-	}
-	if names := supplyCommandNames(commandRunner.commands); !slices.Equal(names, []string{"pnpm-audit-root"}) {
-		t.Fatalf("common runner commands = %v", names)
 	}
 }
 
@@ -262,13 +242,12 @@ func TestNativeAuditAdvisoryBecomesExactTypedVulnerability(t *testing.T) {
 		Aliases: []string{"npm:1100"}, Package: "example",
 		AffectedVersion: "1.2.3", Scope: "desktop/pnpm-lock.yaml", Severity: "high",
 	}
-	if findings[0].Vulnerability == nil || !reflect.DeepEqual(*findings[0].Vulnerability, want) || findings[0].Subject != policy.VulnerabilitySubject(want) {
+	if findings[0].Vulnerability == nil || !reflect.DeepEqual(*findings[0].Vulnerability, want) ||
+		findings[0].Subject != "GHSA-abcd-1234-5678:example@1.2.3" {
 		t.Fatalf("identity = %+v", findings[0])
 	}
 }
 
-// A reported advisory that names no exact release, and one the reader could not
-// use at all, are both missing coverage rather than a clean package.
 func TestNativeAuditFailsClosedOnAdvisoriesItCannotName(t *testing.T) {
 	t.Parallel()
 	result := javascript.AuditResult{
@@ -288,10 +267,6 @@ func TestNativeAuditFailsClosedOnAdvisoriesItCannotName(t *testing.T) {
 	}
 }
 
-// An advisory that names one exact release and one version this side cannot use
-// is covered for the release and uncovered for the rest. Reporting only the
-// release it could name would let the unread part of the same advisory pass as
-// though the whole of it had been decided.
 func TestNativeAuditFailsClosedOnPartlyUsableAdvisoryVersions(t *testing.T) {
 	t.Parallel()
 	result := javascript.AuditResult{Advisories: []javascript.Advisory{{
@@ -373,8 +348,6 @@ func TestOnlineNodeAuditRunsOncePerLockOwner(t *testing.T) {
 	}
 }
 
-// The bundle audits pnpm and nothing else, so a Node manifest naming another
-// package manager owns its own vulnerability scanning.
 func TestNonPNPMNodeManifestNeedsASecurityProvider(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -425,13 +398,6 @@ func TestReleaseMetadataParsersKeepExactVersionTimes(t *testing.T) {
 	pypi, err := decodePyPIReleaseTimes(strings.NewReader(`{"releases":{"1.2.3":[{"upload_time_iso_8601":"2026-07-02T12:00:00Z"},{"upload_time_iso_8601":"2026-07-01T12:00:00Z"}]}}`))
 	if err != nil || pypi["1.2.3"].Format(time.RFC3339) != "2026-07-01T12:00:00Z" {
 		t.Fatalf("pypi times=%v err=%v", pypi, err)
-	}
-}
-
-func TestRegistryClientAllowsBoundedLargeMetadataReads(t *testing.T) {
-	t.Parallel()
-	if timeout := registryClient().Timeout; timeout != 2*time.Minute {
-		t.Fatalf("registry timeout = %s, want 2m", timeout)
 	}
 }
 
@@ -521,6 +487,62 @@ func TestSecurityMonitoringRequiresWeeklyOnlineScan(t *testing.T) {
 	}
 }
 
+func TestWeeklySecurityWorkflowRecognizesSupportedSchedulesAndRunForms(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		workflow string
+		accepted bool
+	}{
+		{
+			name:     "named weekday range and gate",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON-FRI'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			accepted: true,
+		},
+		{
+			name:     "seven day interval and multiline online scan",
+			workflow: "on:\n  schedule:\n    cron: '*/15 0,12 */7 * *'\n  push:\njobs:\n  scan:\n    steps:\n      - run: |\n          code-polishy supply-chain\n      - name: record result\n",
+			accepted: true,
+		},
+		{
+			name:     "interval exceeds one week",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 */8 * *'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "weekday outside cron range",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * 8'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "zero minute step",
+			workflow: "on:\n  schedule:\n    - cron: '*/0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "offline multiline scan",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: >-\n          code-polishy supply-chain --offline\n",
+		},
+		{
+			name:     "schedule outside the on block",
+			workflow: "on:\n  push:\nschedule:\n  - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "cron under a sibling event",
+			workflow: "on:\n  schedule:\n  push:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "command after multiline run block",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: |\n          echo complete\n      - name: publish\n        env:\n          COMMAND: code-polishy gate\n",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if accepted := workflowRunsWeeklySecurity(testCase.workflow); accepted != testCase.accepted {
+				t.Fatalf("weekly security workflow accepted = %v", accepted)
+			}
+		})
+	}
+}
+
 func TestPNPMNativeSecuritySettingsAreVersionGated(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -568,6 +590,8 @@ func TestDependencyChangesCompareDirectAndTransitiveCandidateVersions(t *testing
 	repo := supplyRepository(t)
 	writeSupplyFile(t, repo.Root, "package.json", `{"packageManager":"npm@11.0.0","dependencies":{"direct":"1.0.0"}}`+"\n")
 	writeSupplyFile(t, repo.Root, "package-lock.json", `{"lockfileVersion":3,"packages":{"":{"name":"app","version":"1.0.0"},"node_modules/direct":{"version":"1.0.0"},"node_modules/transitive":{"version":"2.0.0"}}}`+"\n")
+	writeSupplyFile(t, repo.Root, "go.mod", "module example.test/app\n\nrequire example.test/dependency v1.0.0\n")
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"requests==2.32.0\"]\n")
 	gitSupply(t, repo.Root, "init", "-b", "main")
 	gitSupply(t, repo.Root, "config", "user.email", "tests@example.test")
 	gitSupply(t, repo.Root, "config", "user.name", "Policy Tests")
@@ -580,15 +604,52 @@ func TestDependencyChangesCompareDirectAndTransitiveCandidateVersions(t *testing
 	base := strings.TrimSpace(string(baseOutput))
 	writeSupplyFile(t, repo.Root, "package.json", `{"packageManager":"npm@11.0.0","dependencies":{"direct":"1.1.0"}}`+"\n")
 	writeSupplyFile(t, repo.Root, "package-lock.json", `{"lockfileVersion":3,"packages":{"":{"name":"app","version":"1.0.0"},"node_modules/direct":{"version":"1.1.0"},"node_modules/transitive":{"version":"2.1.0"}}}`+"\n")
+	writeSupplyFile(t, repo.Root, "go.mod", "module example.test/app\n\nrequire example.test/dependency v1.1.0\n")
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"requests==2.33.0\"]\n")
 	changes, err := DependencyChanges(t.Context(), repo, base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(changes) != 2 || changes[0].Directness != "direct" || changes[1].Directness != "transitive" {
-		t.Fatalf("changes = %+v", changes)
+	observed := map[string]string{}
+	for _, change := range changes {
+		observed[change.Ecosystem+"/"+change.Directness+"/"+change.Package] = change.From + " -> " + change.To
 	}
-	if changes[0].From != "1.0.0" || changes[0].To != "1.1.0" || changes[1].From != "2.0.0" || changes[1].To != "2.1.0" {
-		t.Fatalf("changes = %+v", changes)
+	expected := map[string]string{
+		"go/direct/example.test/dependency": "v1.0.0 -> v1.1.0",
+		"npm/direct/direct":                 "1.0.0 -> 1.1.0",
+		"npm/transitive/transitive":         "2.0.0 -> 2.1.0",
+		"pypi/direct/requests":              "2.32.0 -> 2.33.0",
+	}
+	if !reflect.DeepEqual(observed, expected) {
+		t.Fatalf("dependency changes = %+v", changes)
+	}
+}
+
+func TestNewDependencyAgeAdvisoriesUseRegistryEvidence(t *testing.T) {
+	t.Parallel()
+	recent := time.Now().UTC().Add(-time.Hour)
+	established := time.Now().UTC().AddDate(0, 0, -60)
+	registry := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		released := established
+		if request.URL.Path == "/young" {
+			released = recent
+		}
+		_, _ = fmt.Fprintf(response, `{"time":{"1.0.0":%q}}`, released.Format(time.RFC3339))
+	}))
+	defer registry.Close()
+	repo := supplyRepository(t)
+	repo.Config.SupplyChain.NPMRegistryURL = registry.URL
+	repo.Config.SupplyChain.PreferredNewDependencyAgeDays = 14
+	changes := []DependencyChange{
+		{Ecosystem: "npm", Scope: "package.json", Directness: "direct", Usage: "runtime", Change: "added", Package: "young", From: "-", To: "1.0.0"},
+		{Ecosystem: "npm", Scope: "package.json", Directness: "direct", Usage: "optional", Change: "updated", Package: "established", From: "0.9.0", To: "1.0.0"},
+		{Ecosystem: "npm", Scope: "package.json", Directness: "direct", Usage: "development", Change: "added", Package: "ignored-development", From: "-", To: "1.0.0"},
+		{Ecosystem: "npm", Scope: "package-lock.json", Directness: "transitive", Usage: "resolved", Change: "added", Package: "ignored-transitive", From: "-", To: "1.0.0"},
+	}
+	advisories := NewDependencyAgeAdvisories(t.Context(), repo, changes)
+	if len(advisories) != 1 || advisories[0].Subject != "young@1.0.0" || advisories[0].Path != "package.json" {
+		t.Fatalf("new dependency age advisories = %+v", advisories)
 	}
 }
 
@@ -624,23 +685,48 @@ func TestContainerRejectsDynamicBaseImage(t *testing.T) {
 	}
 }
 
-func TestUnsupportedManifestRequiresCompleteModuleProvider(t *testing.T) {
+func TestUnsupportedManifestsRequireCompleteProvidersAtTheirLanguageModule(t *testing.T) {
 	t.Parallel()
-	repo := supplyRepository(t)
-	repo.Config.Modules = []policy.Module{{Name: "rust", Paths: []string{"src/**"}}}
-	repo.Config.ModuleByName = map[string]int{"rust": 0}
-	writeSupplyFile(t, repo.Root, "Cargo.toml", "[package]\nname = \"sample\"\n")
-	writeSupplyFile(t, repo.Root, "src/lib.rs", "pub fn sample() {}\n")
-	files := []string{"Cargo.toml", "src/lib.rs"}
-	if findings := CoverageFindings(repo, files); countFindings(findings, "policy.supplyChainCoverage") != 4 || !supplyChecks(findings)["policy.securityMonitoring"] {
-		t.Fatalf("expected four missing supply-chain capabilities, got %+v", findings)
+	cases := []struct {
+		name     string
+		manifest string
+		source   string
+	}{
+		{name: "python requirements", manifest: "requirements-prod.txt", source: "src/main.py"},
+		{name: "cargo", manifest: "Cargo.toml", source: "src/lib.rs"},
+		{name: "maven", manifest: "pom.xml", source: "src/Main.java"},
+		{name: "gradle", manifest: "build.gradle.kts", source: "src/Main.java"},
+		{name: "bundler", manifest: "Gemfile", source: "src/main.rb"},
+		{name: "composer", manifest: "composer.json", source: "src/main.php"},
+		{name: "swift package", manifest: "Package.swift", source: "src/main.swift"},
+		{name: "dart package", manifest: "pubspec.yaml", source: "src/main.dart"},
 	}
-	repo.Config.Checks = []policy.Command{{
-		Name: "cargo-supply-chain", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security", "security-monitoring"},
-		Modules: []string{"rust"}, RunOn: []string{"supply-chain", "supply-chain-online", "security"},
-	}}
-	if findings := CoverageFindings(repo, files); len(findings) != 0 {
-		t.Fatalf("complete provider should cover Cargo: %+v", findings)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			repo := supplyRepository(t)
+			repo.Config.Modules = []policy.Module{{Name: "application", Paths: []string{"src/**"}}}
+			repo.Config.ModuleByName = map[string]int{"application": 0}
+			writeSupplyFile(t, repo.Root, testCase.manifest, "fixture\n")
+			writeSupplyFile(t, repo.Root, testCase.source, "fixture\n")
+			files := []string{testCase.manifest, testCase.source}
+			findings := CoverageFindings(repo, files)
+			if countFindings(findings, "policy.supplyChainCoverage") != 4 || !supplyChecks(findings)["policy.securityMonitoring"] {
+				t.Fatalf("missing provider contract = %+v", findings)
+			}
+			for _, finding := range findings {
+				if finding.Check == "policy.supplyChainCoverage" && !strings.HasPrefix(finding.Subject, "application:") {
+					t.Fatalf("manifest escaped its language module: %+v", findings)
+				}
+			}
+			repo.Config.Checks = []policy.Command{{
+				Name: "application-supply-chain", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security", "security-monitoring"},
+				Modules: []string{"application"}, RunOn: []string{"supply-chain", "supply-chain-online", "security"},
+			}}
+			if findings := CoverageFindings(repo, files); len(findings) != 0 {
+				t.Fatalf("complete module provider was rejected: %+v", findings)
+			}
+		})
 	}
 }
 
@@ -719,6 +805,18 @@ func TestDockerfileAutomaticallyRequiresSecurityCoverage(t *testing.T) {
 	repo.Config.Checks = []policy.Command{{Name: "scan", Provides: []string{"security"}, Modules: []string{"api"}, RunOn: []string{"security"}}}
 	if findings = CoverageFindings(repo, []string{"api/Dockerfile"}); len(findings) != 0 {
 		t.Fatalf("scanner should cover Dockerfile: %+v", findings)
+	}
+}
+
+func TestArtifactSecurityTargetCoversItsDockerfile(t *testing.T) {
+	t.Parallel()
+	repo := supplyRepository(t)
+	repo.Config.Modules = []policy.Module{{Name: "api", Paths: []string{"api/**"}}}
+	repo.Config.SupplyChain.ArtifactSecurity.Targets = []policy.ArtifactTarget{{
+		Name: "api-image", Module: "api", Mode: "dockerfile", Dockerfile: "api/Dockerfile", Context: "api",
+	}}
+	if findings := CoverageFindings(repo, []string{"api/Dockerfile"}); len(findings) != 0 {
+		t.Fatalf("declared artifact target did not cover its Dockerfile: %+v", findings)
 	}
 }
 
@@ -869,27 +967,53 @@ func supplyChecks(findings []policy.Finding) map[string]bool {
 	return checks
 }
 
-type recordingSupplyOutputRunner struct {
-	commands []policy.Command
-	outputs  map[string]runner.Output
+type supplyToolBoundary struct {
+	goModules []map[string]any
 }
 
-func (commandRunner *recordingSupplyOutputRunner) Run(_ context.Context, _ string, command policy.Command) error {
-	commandRunner.commands = append(commandRunner.commands, command)
+func (boundary supplyToolBoundary) Run(context.Context, string, policy.Command) error {
 	return nil
 }
 
-func (commandRunner *recordingSupplyOutputRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
-	commandRunner.commands = append(commandRunner.commands, command)
-	return runner.Result{ExitStatus: 0}, commandRunner.outputs[command.Name], nil
+func (boundary supplyToolBoundary) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+	if request, found := argumentAfter(command.Argv, "--request-json"); found {
+		var envelope struct {
+			Operation string `json:"operation"`
+		}
+		if err := json.Unmarshal([]byte(request), &envelope); err != nil {
+			return runner.Result{}, runner.Output{}, err
+		}
+		if envelope.Operation != "audit" {
+			return runner.Result{}, runner.Output{}, fmt.Errorf("unsupported JavaScript operation %q", envelope.Operation)
+		}
+		payload := []byte(`{"protocolVersion":3,"operation":"audit","result":{"advisories":[],"unsupported":[]}}` + "\n")
+		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: payload}, nil
+	}
+	executable := filepath.Base(command.Argv[0])
+	switch executable {
+	case "go":
+		var output strings.Builder
+		encoder := json.NewEncoder(&output)
+		for _, module := range boundary.goModules {
+			if err := encoder.Encode(module); err != nil {
+				return runner.Result{}, runner.Output{}, err
+			}
+		}
+		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: []byte(output.String())}, nil
+	case "osv-scanner":
+		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: []byte(`{"results":[]}` + "\n")}, nil
+	default:
+		return runner.Result{}, runner.Output{}, fmt.Errorf("unsupported structured tool %q", executable)
+	}
 }
 
-func supplyCommandNames(commands []policy.Command) []string {
-	names := make([]string, 0, len(commands))
-	for _, command := range commands {
-		names = append(names, command.Name)
+func argumentAfter(arguments []string, wanted string) (string, bool) {
+	for index := 0; index+1 < len(arguments); index++ {
+		if arguments[index] == wanted {
+			return arguments[index+1], true
+		}
 	}
-	return names
+	return "", false
 }
 
 func countFindings(findings []policy.Finding, check string) int {

@@ -7,9 +7,9 @@
 - `.code-polishy.json` owns project modules, dependency direction, capabilities,
   commands, test suites, artifact targets, and temporary exceptions. Target
   configuration cannot weaken the locked shared baseline.
-- Talk to the user like a CEO with ADHD. Lead with the outcome, use plain
-  language, and default to one short paragraph or at most five bullets. Add
-  detail only when needed for action or safety.
+- Talk to the user like both you and the user are CEOs with ADHD. Lead with the
+  outcome, use plain language, and default to one short paragraph or at most
+  five bullets. Add detail only when needed for action or safety.
 - State conclusions positively and directly. Avoid rhetorical contrast formulas
   such as “not X, but Y.” Translate command output into plain language. Include
   raw banners, receipts, and machine-oriented output only when requested.
@@ -26,6 +26,14 @@
   coherent and fully cut over.
 - Keep one authoritative owner for each concept and generate downstream contract
   surfaces from it. Parse external data once at a boundary into validated types.
+- Before changing governed source, run `code-polishy design-context` for the
+  exact files or modules and read only the returned current design documents.
+  Plans, historical evidence, and superseded decisions require an explicit task
+  need; do not load them as routine source context.
+- Honor `quality.allowComments`. When it is false, keep governed handwritten
+  source free of prose comments and docstrings. When it is true, preserve useful
+  accurate comments and add one only when it conveys information the code
+  cannot. Put current non-local rationale in mapped design documents.
 - Keep domain modules independent of UI, HTTP, persistence, providers, and
   process details unless the checked-in architecture contract allows the edge.
 - Declare separately owned files, directories, repositories, and services as
@@ -41,33 +49,31 @@
   for normal setup. For a dependency update, generate the candidate lockfile
   without lifecycle scripts and run
   `code-polishy dependency-review --base <merge-target>` before installation.
-- Keep every exception exact, visible, owned, justified, and expiring. Keep
-  release-age, vulnerability, dependency-override, and general exceptions
-  separate; vulnerability assessments require distinct owner and approver
-  identities plus linked analysis, approval, and remediation.
+- Keep every exception exact, visible, owned, justified, and expiring.
 - Give every module a quick boundary suite. Test observable behavior with
-  temporary state. Reject tautological, no-op, pass-with-no-tests, and
-  coverage-only tests; checked-in Gherkin must execute.
+  temporary state. Reject tautological, change-detector, no-op,
+  pass-with-no-tests, and coverage-only tests; checked-in Gherkin must execute.
 - Run supplemental mutation or risk suites only when the caller or a checked-in
   workflow requires them. Keep credentialed, destructive, and live-provider
   probes in explicit external approval gates.
 
 ## Reviews and delivery
 
-- Bind a requested agent review to an explicit trusted base and exact candidate.
-  Include committed, staged, unstaged, and untracked changes when reviewing a
-  dirty worktree. Report actionable findings or one concise no-findings outcome.
-  Agent review cannot replace policy checks or human approval.
+- Agent review cannot replace policy checks or human approval.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
-  isolation; select its modules before the worker starts and never nest it.
-  The supervisor owns delegated scope, integration, commits, and quiescence.
-- Run exact tests while editing and `code-polishy test --changed` for broader
-  feedback. At a merge checkpoint, resolve the base from an explicit target,
-  checked-in guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
+  isolation.
+- For ordinary Markdown-only work, run `code-polishy format --git-changes` and
+  skip application tests. Fix documentation findings directly without asking
+  the user for authorization. Control and declared product-input Markdown
+  follow ordinary source verification.
+- Run exact tests while editing source and `code-polishy test --changed` for
+  broader feedback. At a merge checkpoint, resolve the base from an explicit
+  target, checked-in guidance, `origin/HEAD`, then `origin/main` or
+  `origin/master`.
 - Run `code-polishy merge-gate --base <merge-target>` once for the final
-  candidate. Let it select recommended or full without asking the user. Summarize
-  its result in plain language; keep detailed receipts in verbose logs.
+  candidate. Let it select documentation, recommended, or full without asking
+  the user. Summarize its result in plain language.
 - Commit all completed task-owned changes after required verification unless the
   caller explicitly requests an uncommitted handoff. Keep commits coherent and
   free of unrelated user work. Push, publish, and pull-request operations require

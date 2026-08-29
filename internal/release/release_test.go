@@ -16,9 +16,6 @@ const exampleDigest = "111111111111111111111111111111111111111111111111111111111
 const otherDigest = "2222222222222222222222222222222222222222222222222222222222222222"
 const exampleRevision = "0123456789abcdef0123456789abcdef01234567"
 
-// installedRelease writes a release whose manifest records exactly the files
-// and links it installs, under the digest its own record implies, so a test can
-// change one of them and see what is refused.
 func installedRelease(t *testing.T, files, links map[string]string) (string, Manifest) {
 	t.Helper()
 	host, err := Host()
@@ -52,7 +49,7 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Host: host, Features: []string{"javascript-bundle"},
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Ty: "0.0.65",
 		},
 		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
 	}
@@ -83,9 +80,6 @@ func TestReleaseHostMatrixRejectsIncompleteWindowsArm64Bundle(t *testing.T) {
 	}
 }
 
-// exampleRelease is a real release in miniature: the engine binary, a file
-// beside it that the engine reads, and one of the links the sealed JavaScript
-// bundle is assembled from.
 func exampleRelease(t *testing.T) (string, Manifest) {
 	t.Helper()
 	return installedRelease(t,
@@ -102,26 +96,19 @@ func render(t *testing.T, document any) []byte {
 	return encoded
 }
 
-func TestParseLockReadsTheCanonicalRendering(t *testing.T) {
-	t.Parallel()
-	lock := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
-	}
-	parsed, err := parseLock(RenderLock(lock), "")
-	if err != nil {
-		t.Fatalf("parse the rendered lock: %v", err)
-	}
-	if parsed.CodePolishyVersion != "9.9.9" || parsed.ReleaseDigest != exampleDigest ||
-		!slices.Equal(parsed.Features, []string{"javascript-bundle"}) {
-		t.Fatalf("parsed = %+v", parsed)
+func writeLockFixture(t *testing.T, path string, lock Lock) {
+	t.Helper()
+	document := struct {
+		LockVersion        int      `json:"lockVersion"`
+		CodePolishyVersion string   `json:"codePolishyVersion"`
+		ReleaseDigest      string   `json:"releaseDigest"`
+		Features           []string `json:"features"`
+	}{lock.LockVersion, lock.CodePolishyVersion, lock.ReleaseDigest, lock.Features}
+	if err := os.WriteFile(path, render(t, document), 0o644); err != nil {
+		t.Fatalf("write the lock fixture: %v", err)
 	}
 }
 
-// The rendered lock is exactly what the sealed central formatting
-// configuration prints for it. A target checks this file in, and Code Polishy
-// formats the JSON a target checks in, so any other spelling makes the lock a
-// release just wrote a formatting finding in the repository it governs.
 func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 	t.Parallel()
 	rendered := string(RenderLock(Lock{
@@ -204,11 +191,12 @@ func TestParseManifestRejectsACorruptedRecord(t *testing.T) {
 			broken.Entries = slices.DeleteFunc(broken.Entries, func(entry Entry) bool { return entry.Path == BinaryPath })
 			broken.EntryCount = len(broken.Entries)
 		},
-		"an unusable revision":     func(broken *Manifest) { broken.SourceRevision = "HEAD" },
-		"an unusable host":         func(broken *Manifest) { broken.Host = "Darwin/ARM64" },
-		"an unusable tool pin":     func(broken *Manifest) { broken.Tools.Node = "" },
-		"an unrecorded analyzer":   func(broken *Manifest) { broken.Tools.Staticcheck = "" },
-		"another manifest version": func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
+		"an unusable revision":       func(broken *Manifest) { broken.SourceRevision = "HEAD" },
+		"an unusable host":           func(broken *Manifest) { broken.Host = "Darwin/ARM64" },
+		"an unusable tool pin":       func(broken *Manifest) { broken.Tools.Node = "" },
+		"an unrecorded analyzer":     func(broken *Manifest) { broken.Tools.Staticcheck = "" },
+		"an unrecorded type checker": func(broken *Manifest) { broken.Tools.Ty = "" },
+		"another manifest version":   func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
 	}
 	for name, corrupt := range cases {
 		broken := manifest
@@ -247,8 +235,7 @@ func TestReadManifestSeparatesASourceCheckoutFromARelease(t *testing.T) {
 func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
-	// What the release was built from decides which release it is; what was
-	// installed on this host does not.
+
 	for _, elsewhere := range []func(*Manifest){
 		func(other *Manifest) { other.SourceRevision = strings.Repeat("a", 40) },
 		func(other *Manifest) { other.CodePolishyVersion = "9.9.10" },
@@ -260,9 +247,7 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 			t.Fatalf("%+v is the same release as %+v", other, manifest)
 		}
 	}
-	// A release records the exact version of every executable it carries, and a
-	// target lock names it by that record, so changing any one of them is a
-	// different release rather than the same one carrying another tool.
+
 	for _, carried := range []func(*Tools){
 		func(tools *Tools) { tools.Go = "1.26.7" },
 		func(tools *Tools) { tools.Govulncheck = "1.3.1" },
@@ -272,6 +257,7 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 		func(tools *Tools) { tools.Ruff = "0.16.1" },
 		func(tools *Tools) { tools.Shellcheck = "0.11.1" },
 		func(tools *Tools) { tools.Staticcheck = "0.7.1" },
+		func(tools *Tools) { tools.Ty = "0.0.66" },
 	} {
 		other := manifest
 		carried(&other.Tools)
@@ -290,7 +276,10 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 func TestSatisfiesRequiresTheExactLockedRelease(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
-	lock := LockFor(manifest)
+	lock := Lock{
+		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
+	}
 	if err := manifest.Satisfies(lock); err != nil {
 		t.Fatalf("the exact release did not satisfy its lock: %v", err)
 	}
@@ -320,30 +309,17 @@ func TestSatisfiesRequiresTheExactLockedRelease(t *testing.T) {
 	}
 }
 
-// A release built from another commit, recorded and installed under the digest
-// a target requires, is refused: the record still describes the release it
-// really is, and that is not the one the lock names.
 func TestSatisfiesRefusesAReleaseThatIsNotWhatItRecords(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
-	lock := LockFor(manifest)
+	lock := Lock{
+		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
+	}
 	claimed := manifest
 	claimed.SourceRevision = strings.Repeat("b", 40)
-	err := claimed.Satisfies(lock)
-	if err == nil || !strings.Contains(err.Error(), claimed.Identity()) {
-		t.Fatalf("a release under another release's digest was accepted: %v", err)
-	}
-}
-
-func TestLockForRequiresTheReleaseThatWroteIt(t *testing.T) {
-	t.Parallel()
-	_, manifest := exampleRelease(t)
-	parsed, err := parseLock(RenderLock(LockFor(manifest)), "")
-	if err != nil {
-		t.Fatalf("the written lock does not parse: %v", err)
-	}
-	if err := manifest.Satisfies(parsed); err != nil {
-		t.Fatalf("the written lock does not select its own release: %v", err)
+	if err := claimed.Satisfies(lock); err == nil {
+		t.Fatal("a release under another release's digest was accepted")
 	}
 }
 
@@ -362,24 +338,22 @@ func TestRequireLockedReleaseGovernsOnlyInstalledReleases(t *testing.T) {
 	}
 
 	lockPath := filepath.Join(repoRoot, LockFilename)
-	if err := os.WriteFile(lockPath, RenderLock(LockFor(manifest)), 0o644); err != nil {
-		t.Fatalf("write the lock: %v", err)
+	lock := Lock{
+		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
 	}
+	writeLockFixture(t, lockPath, lock)
 	if err := RequireLockedRelease(repoRoot, directory); err != nil {
 		t.Fatalf("the release the lock names was refused: %v", err)
 	}
 
-	otherRelease := LockFor(manifest)
+	otherRelease := lock
 	otherRelease.ReleaseDigest = otherDigest
-	if err := os.WriteFile(lockPath, RenderLock(otherRelease), 0o644); err != nil {
-		t.Fatalf("write the lock: %v", err)
-	}
+	writeLockFixture(t, lockPath, otherRelease)
 	if err := RequireLockedRelease(repoRoot, directory); err == nil {
 		t.Fatalf("a release the lock does not name governed the repository")
 	}
 
-	// The source runner is not a release, so no lock can name it and there is
-	// nothing for it to reconcile.
 	if err := RequireLockedRelease(repoRoot, sourceCheckout); err != nil {
 		t.Fatalf("the source runner was refused: %v", err)
 	}

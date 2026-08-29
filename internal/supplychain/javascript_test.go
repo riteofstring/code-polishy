@@ -14,9 +14,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-// The lock is the record of what a target installs, so a declaration it no
-// longer agrees with is drift Code Polishy owns rather than a check the target
-// has to supply.
 func TestPNPMLockDriftIsAFinding(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -34,9 +31,6 @@ func TestPNPMLockDriftIsAFinding(t *testing.T) {
 	}
 }
 
-// Drift runs in both directions: a declaration nothing resolved means the tree
-// is not what the manifest asks for, and a resolution nothing declared means
-// the target installs something it never asked for.
 func TestPNPMLockDriftCoversBothDirections(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -51,8 +45,6 @@ func TestPNPMLockDriftCoversBothDirections(t *testing.T) {
 	}
 }
 
-// A declaration and a resolution that agree are not drift, and a workspace link
-// resolves to no release at all.
 func TestPNPMLockThatMatchesItsManifestsIsClean(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -68,8 +60,6 @@ func TestPNPMLockThatMatchesItsManifestsIsClean(t *testing.T) {
 	}
 }
 
-// Only a registry resolution records the integrity installed bytes are checked
-// against, so a Git revision or a downloaded tarball is refused by name.
 func TestResolvedPackageWithoutRegistryIntegrityIsRefused(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -83,8 +73,6 @@ func TestResolvedPackageWithoutRegistryIntegrityIsRefused(t *testing.T) {
 	}
 }
 
-// A local directory is the dependency surface allowedDependencyProtocols
-// already governs, so it is admissible exactly when the target allowed it.
 func TestLocalDirectorySourceFollowsAllowedProtocols(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -99,8 +87,6 @@ func TestLocalDirectorySourceFollowsAllowedProtocols(t *testing.T) {
 	}
 }
 
-// A lock the reader could not read is missing coverage rather than a lock that
-// resolves nothing.
 func TestUnreadablePNPMLockIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -113,8 +99,6 @@ func TestUnreadablePNPMLockIsMissingCoverage(t *testing.T) {
 	}
 }
 
-// Only the registry releases reach the lanes that age and scan packages: a
-// source with no integrity is refused above rather than aged as if published.
 func TestResolvedPNPMPackagesKeepOnlyExactRegistryReleases(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -132,8 +116,6 @@ func TestResolvedPNPMPackagesKeepOnlyExactRegistryReleases(t *testing.T) {
 	}
 }
 
-// A lock the reader could not read resolves nothing at all, so the lanes that
-// age and scan packages fail rather than run over an empty graph.
 func TestUnreadablePNPMLockResolvesNoPackages(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -145,8 +127,6 @@ func TestUnreadablePNPMLockResolvesNoPackages(t *testing.T) {
 	}
 }
 
-// Code Polishy owns lock consistency and the native audit for a pnpm project, so
-// the target declares neither provider of its own.
 func TestPNPMManifestNeedsNoLockSyncOrSecurityProvider(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -161,10 +141,6 @@ func TestPNPMManifestNeedsNoLockSyncOrSecurityProvider(t *testing.T) {
 	}
 }
 
-// Deciding policy about a Node package needs no package manager on the host.
-// The manifest must still pin one exactly, and a target command that runs one
-// still reports it missing, but nothing Code Polishy itself runs is resolved
-// from an ambient installation.
 func TestNodeManifestRequiresNoAmbientPackageManager(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -175,8 +151,6 @@ func TestNodeManifestRequiresNoAmbientPackageManager(t *testing.T) {
 	}
 }
 
-// A missing bundle fails closed: lock facts are never decided by an ambient
-// runtime or by assuming the lock agrees with the manifests.
 func TestPNPMFactsFailClosedWithoutTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := pnpmRepository(t)
@@ -187,8 +161,6 @@ func TestPNPMFactsFailClosedWithoutTheBundle(t *testing.T) {
 	}
 }
 
-// A target with no pnpm lockfile never launches the bundle, so a Go-only
-// repository never has to install one to have its dependencies checked.
 func TestRepositoryWithoutPNPMNeverLaunchesTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -199,10 +171,6 @@ func TestRepositoryWithoutPNPMNeverLaunchesTheBundle(t *testing.T) {
 	}
 }
 
-// pnpm resolves under the settings its workspace file declares, so those
-// settings are read from the tree the run governs rather than from the files
-// the run happens to select: changing a manifest alone still reads the file
-// that governs it.
 func TestPNPMWorkspaceSettingsAreReadOutsideTheSelection(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -219,9 +187,6 @@ func TestPNPMWorkspaceSettingsAreReadOutsideTheSelection(t *testing.T) {
 	}
 }
 
-// A settings file the sealed reader could not read is missing coverage, never a
-// workspace that declared nothing: the lifecycle and native protections it
-// carries are unknown rather than absent.
 func TestUnreadablePNPMWorkspaceSettingsFailClosed(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -241,8 +206,6 @@ func TestUnreadablePNPMWorkspaceSettingsFailClosed(t *testing.T) {
 	}
 }
 
-// Two settings files in one tree have no single owner, so neither is read and
-// the ambiguity itself is the finding.
 func TestPNPMWorkspaceSettingsRejectTwoOwnerFiles(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -257,8 +220,6 @@ func TestPNPMWorkspaceSettingsRejectTwoOwnerFiles(t *testing.T) {
 	}
 }
 
-// A missing bundle fails closed here too: settings are never decided by an
-// ambient runtime or by assuming a workspace declared what it should have.
 func TestPNPMWorkspaceSettingsFailClosedWithoutTheBundle(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
@@ -300,11 +261,6 @@ func installPackagesBundle(t *testing.T, result string) string {
 	return installBundle(t, map[string]string{"packages": result})
 }
 
-// installBundle stands in for one installed policy checkout: a runtime and a
-// runner at the one policy-owned path, answering each named operation of the
-// closed protocol with exactly these facts. Every decision below the adapter is
-// therefore exercised against facts rather than against a tool run; what the
-// real bundle reports for real files is covered by the runner contract tests.
 func installBundle(t *testing.T, results map[string]string) string {
 	t.Helper()
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
@@ -320,7 +276,7 @@ func installBundle(t *testing.T, results map[string]string) string {
 		"#!/bin/sh\nexec /bin/sh \"$1\"\n")
 	runner := "#!/bin/sh\nrequest=$(/bin/cat)\ncase \"${request}\" in\n"
 	for _, operation := range slices.Sorted(maps.Keys(results)) {
-		runner += fmt.Sprintf("  *'\"operation\":\"%s\"'*) printf '{\"protocolVersion\":2,\"operation\":\"%s\",\"result\":%%s}\\n' '%s' ;;\n",
+		runner += fmt.Sprintf("  *'\"operation\":\"%s\"'*) printf '{\"protocolVersion\":3,\"operation\":\"%s\",\"result\":%%s}\\n' '%s' ;;\n",
 			operation, operation, results[operation])
 	}
 	runner += "  *) exit 1 ;;\nesac\n"
@@ -328,7 +284,6 @@ func installBundle(t *testing.T, results map[string]string) string {
 	return root
 }
 
-// workspaceResult is what the sealed reader reports for one pnpm settings file.
 func workspaceResult(path, settings string) string {
 	return `{"files":[{"path":"` + path + `","settings":[` + settings + `]}],"unsupported":[]}`
 }

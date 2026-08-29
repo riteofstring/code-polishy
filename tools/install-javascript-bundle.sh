@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Materialize the sealed, policy-owned JavaScript tool bundle.
-#
-# Acquisition is one explicit network step that fetches exactly the packages the
-# committed lock names from the npm registry into a policy-owned store.
-# Materialization then runs entirely offline from that store with lifecycle
-# scripts disabled, so nothing is resolved, downloaded, or executed while the
-# installed tree is built.
-#
-# The staged tree is verified and inventoried before it is installed. A rejected
-# bundle leaves the previously installed one untouched.
+
+
+
+
+
+
+
+
+
+
 
 # shellcheck source=tools/javascript-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-env.sh"

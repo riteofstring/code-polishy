@@ -34,10 +34,6 @@ type Engine struct {
 	PolicyModuleNotes    []string
 }
 
-// MergeGateExecutionPlan is the ordered governed-process portion of an
-// ordinary merge gate. Doctor, source, architecture, static, assessment, and
-// provider boundaries remain in Engine.MergeGate; this plan makes every
-// policy command those boundaries can start explicit before execution.
 type MergeGateExecutionPlan struct {
 	Level     string
 	Reasons   []string
@@ -54,15 +50,16 @@ type MergeGateExecutionCommand struct {
 }
 
 type Report struct {
-	MergePolicy    *MergePolicy
-	ChangeBoundary *ChangeBoundary
-	Findings       []policy.Finding
-	Advisories     []policy.Advisory
-	Suppressed     []policy.Suppressed
-	Assessed       []policy.AssessedVulnerability
-	ReleaseAges    []policy.AssessedReleaseAge
-	Tables         []Table
-	Notes          []string
+	MergePolicy         *MergePolicy
+	ChangeBoundary      *ChangeBoundary
+	TestQualityReminder *TestQualityReminder
+	Findings            []policy.Finding
+	Advisories          []policy.Advisory
+	Suppressed          []policy.Suppressed
+	Assessed            []policy.AssessedVulnerability
+	ReleaseAges         []policy.AssessedReleaseAge
+	Tables              []Table
+	Notes               []string
 }
 
 type MergePolicy struct {
@@ -76,6 +73,10 @@ type ChangeBoundary struct {
 	Modules  []string
 	Paths    []string
 	NewPaths []string
+}
+
+type TestQualityReminder struct {
+	ChangedTestPaths []string
 }
 
 type Table struct {
@@ -99,8 +100,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	}
 	moduleResolution := policymodule.Resolve(repo, files)
 	policymodule.Apply(&repo.Config, moduleResolution)
-	// Task-session writers and policy commands share the release-owned command
-	// environment. Governed tools always outrank ambient binaries.
+
 	pathEntries := repo.CommandEnvironment().PathEntries
 	commandRunner := runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr, PathEntries: pathEntries}
 	return &Engine{
@@ -110,9 +110,6 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	}, nil
 }
 
-// CheckChangeBoundary composes the immutable-base repository check without
-// opening candidate configuration. It is intentionally separate from Engine
-// construction so a candidate cannot affect the active task boundary.
 func CheckChangeBoundary(repoRoot, policyRoot, configPath, base string, modules, paths, newPaths []string) (Report, error) {
 	result, err := repository.CheckChangeBoundary(repoRoot, policyRoot, configPath, base, modules, paths, newPaths)
 	if err != nil {
@@ -143,6 +140,7 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 		return Report{}, err
 	}
 	findings := []policy.Finding{}
+	findings = append(findings, engine.Repository.DesignDocumentFindings()...)
 	if filepath.Clean(engine.Repository.Root) != filepath.Clean(engine.Repository.PolicyRoot) {
 		agentStatus := agentpolicy.Check(engine.Repository.Root, engine.Repository.PolicyRoot)
 		if !agentStatus.Current {
@@ -182,10 +180,14 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	findings = append(findings, architecture.Check(ctx, engine.Repository, selection.Files)...)
 	findings = append(findings, supplychain.Static(ctx, engine.Repository, selection.Files)...)
 	notes := []string{fmt.Sprintf("checked %d files", len(selection.Files))}
-	if len(selection.Deleted) > 0 {
-		notes = append(notes, fmt.Sprintf("%d deletions participated in command selection", len(selection.Deleted)))
+	if len(selection.Candidate.Deleted) > 0 {
+		notes = append(notes, fmt.Sprintf("%d deletions participated in command selection", len(selection.Candidate.Deleted)))
 	}
 	return engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, selection.Files), notes)
+}
+
+func (engine *Engine) CheckChangeAware(ctx context.Context, selection repository.Selection, profile string) Report {
+	return engine.withTestQualityReminder(engine.Check(ctx, selection, profile), selection.Candidate)
 }
 
 func (engine *Engine) CheckNamed(ctx context.Context, names []string) (Report, error) {
@@ -205,7 +207,8 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 	if err != nil {
 		return []policy.Finding{{Check: "policy.inventory", Path: "repository", Subject: "raw-files", Message: err.Error()}}
 	}
-	findings := hiddenInputFindings(engine.Repository, rawFiles)
+	findings := engine.Repository.DesignDocumentFindings()
+	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, portability.CoverageFindings(engine.Repository, files)...)
@@ -227,7 +230,15 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 }
 
 func (engine *Engine) Test(ctx context.Context, request testpolicy.Request) (Report, error) {
-	return engine.test(ctx, request, false)
+	report, err := engine.test(ctx, request, false)
+	if err != nil || !isChangedScopeTestRequest(request) {
+		return report, err
+	}
+	return engine.withTestQualityReminder(report, request.Changed.Candidate), nil
+}
+
+func isChangedScopeTestRequest(request testpolicy.Request) bool {
+	return !request.Full && !request.Recommended && !request.Supplemental && len(request.Modules) == 0 && len(request.Suites) == 0
 }
 
 func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stopAfterFailure bool) (Report, error) {
@@ -247,6 +258,9 @@ func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stop
 		notes = append(notes, "impacted modules: "+strings.Join(plan.ImpactedModules, ", "))
 	}
 	if len(plan.Suites) == 0 {
+		if plan.Level == testpolicy.MergeLevelDocumentation {
+			notes = append(notes, "documentation-only candidate selected zero application test suites")
+		}
 		notes = append(notes, "no test suites matched the requested scope")
 		return engine.finish(nil, notes), nil
 	}
@@ -295,13 +309,25 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 	report := engine.finish(nil, notes)
 	report.MergePolicy = mergePolicy
 	report.Tables = []Table{testLevelsTable(advice, selectedLevel, base != "")}
-	return report, nil
+	return engine.withTestQualityReminder(report, selection.Candidate), nil
 }
 
 func (engine *Engine) testPlanMergePolicy(
 	base string, selection repository.Selection, advice testpolicy.Advice,
 ) (string, *MergePolicy, []string, error) {
 	if base == "" {
+		decision, err := testpolicy.BuildMergeDecision(engine.Repository, selection)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if decision.Level == testpolicy.MergeLevelDocumentation {
+			notes := []string{"diagnostic documentation advice: " + decision.Level}
+			for _, reason := range decision.Reasons {
+				notes = append(notes, "reason: "+reason)
+			}
+			notes = append(notes, "resolve a trusted merge target before documentation merge verification")
+			return decision.Level, nil, notes, nil
+		}
 		notes := []string{"diagnostic ordinary advice: " + advice.Suggested}
 		for _, reason := range advice.Reasons {
 			notes = append(notes, "reason: "+reason)
@@ -316,7 +342,11 @@ func (engine *Engine) testPlanMergePolicy(
 	mergePolicy := &MergePolicy{
 		Level: decision.Level, Base: base, Reasons: append([]string{}, decision.Reasons...),
 	}
-	notes := []string{"ordinary merge execution: code-polishy merge-gate --base " + base}
+	execution := "ordinary"
+	if decision.Level == testpolicy.MergeLevelDocumentation {
+		execution = "documentation"
+	}
+	notes := []string{execution + " merge execution: code-polishy merge-gate --base " + base}
 	return decision.Level, mergePolicy, notes, nil
 }
 
@@ -365,15 +395,27 @@ func testLevelsTable(advice testpolicy.Advice, selectedLevel string, hasMergeBas
 		focusedExecution = "test --changed --base REF"
 		ordinaryStatus = "automatic"
 	}
+	rows := [][]string{
+		{"focused", suiteCostSummary(advice.Focused), "routine", focusedExecution},
+		{levelName("recommended"), suiteCostSummary(advice.Recommended), ordinaryStatus, recommendedExecution},
+		{levelName("full"), suiteCostSummary(advice.Full), ordinaryStatus, fullExecution},
+		{"supplemental", suiteCostSummary(advice.AllSupplemental), "separate", "test --supplemental"},
+	}
+	if selectedLevel == testpolicy.MergeLevelDocumentation {
+		documentationStatus := "advice"
+		documentationExecution := "merge target required"
+		if hasMergeBase {
+			documentationStatus = "automatic"
+			documentationExecution = "merge-gate --base REF"
+		}
+		rows = append([][]string{{
+			levelName(testpolicy.MergeLevelDocumentation), "0 application suites", documentationStatus, documentationExecution,
+		}}, rows...)
+	}
 	return Table{
 		Title:   "TEST LEVELS (q=quick, s=standard, e=expensive; *=" + marker + ")",
 		Columns: []string{"LEVEL", "SUITES", "STATUS", "EXECUTION"},
-		Rows: [][]string{
-			{"focused", suiteCostSummary(advice.Focused), "routine", focusedExecution},
-			{levelName("recommended"), suiteCostSummary(advice.Recommended), ordinaryStatus, recommendedExecution},
-			{levelName("full"), suiteCostSummary(advice.Full), ordinaryStatus, fullExecution},
-			{"supplemental", suiteCostSummary(advice.AllSupplemental), "separate", "test --supplemental"},
-		},
+		Rows:    rows,
 	}
 }
 
@@ -498,11 +540,15 @@ func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error
 	plannedEngine.Runner = plannedRunner
 	var report Report
 	var gateErr error
-	if plan.Level == testpolicy.MergeLevelFull {
+	switch plan.Level {
+	case testpolicy.MergeLevelFull:
 		report, gateErr = plannedEngine.fullGate(ctx)
-	} else {
+	case testpolicy.MergeLevelDocumentation:
+		report, gateErr = plannedEngine.documentationMergeGate(ctx, plan.Selection)
+	default:
 		report, gateErr = plannedEngine.recommendedMergeGate(ctx, plan.Selection)
 	}
+	report = engine.withTestQualityReminder(report, plan.Selection.Candidate)
 	if plannedRunner.err != nil {
 		return withMergePolicy(report, plan.Level, base, plan.Reasons), plannedRunner.err
 	}
@@ -514,8 +560,6 @@ func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error
 	return withMergePolicy(report, plan.Level, base, plan.Reasons), gateErr
 }
 
-// PlanMergeGateExecution derives every governed process from the repository
-// configuration and merge decision used by the gate itself.
 func (engine *Engine) PlanMergeGateExecution(base string) (MergeGateExecutionPlan, error) {
 	selection, err := engine.Repository.SelectBase(base)
 	if err != nil {
@@ -526,6 +570,10 @@ func (engine *Engine) PlanMergeGateExecution(base string) (MergeGateExecutionPla
 		return MergeGateExecutionPlan{}, err
 	}
 	plan := MergeGateExecutionPlan{Level: decision.Level, Reasons: append([]string{}, decision.Reasons...), Selection: selection}
+	if plan.Level == testpolicy.MergeLevelDocumentation {
+		plan.Tests, err = testpolicy.BuildPlan(engine.Repository, testpolicy.Request{Changed: selection})
+		return plan, err
+	}
 	checkSelection := selection
 	request := testpolicy.Request{Changed: selection, Recommended: true}
 	if plan.Level == testpolicy.MergeLevelFull {
@@ -616,9 +664,6 @@ func (commandRunner *mergeGatePlannedRunner) RunWithResult(ctx context.Context, 
 	return runner.Result{ExecutionDuration: time.Since(started)}, err
 }
 
-// RunWithOutput preserves merge-plan enforcement for structured-output
-// commands such as release-age and OSV scans. It never opens a bypass around
-// the common runner merely because a policy parser needs command output.
 func (commandRunner *mergeGatePlannedRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	if err := commandRunner.start(root, command); err != nil {
 		return runner.Result{ExitStatus: -1}, runner.Output{}, err
@@ -718,6 +763,11 @@ func (engine *Engine) recommendedMergeGate(ctx context.Context, selection reposi
 	return engine.combine(report, supply), err
 }
 
+func (engine *Engine) documentationMergeGate(ctx context.Context, selection repository.Selection) (Report, error) {
+	findings := quality.DocumentationFindings(ctx, engine.Repository, selection.Candidate.AddedOrModified, selection.Candidate.Deleted)
+	return engine.finish(findings, []string{"completed documentation contract with zero application test suites"}), nil
+}
+
 func withMergePolicy(report Report, level, base string, reasons []string) Report {
 	report.MergePolicy = &MergePolicy{Level: level, Base: base, Reasons: append([]string{}, reasons...)}
 	return report
@@ -770,6 +820,32 @@ func advisoryKey(advisory policy.Advisory) string {
 	return advisory.Check + "\x00" + advisory.Path + "\x00" + advisory.Subject + "\x00" + advisory.Message
 }
 
+func NewTestQualityReminder(paths []string) *TestQualityReminder {
+	ordered := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path != "" {
+			ordered = append(ordered, path)
+		}
+	}
+	sort.Strings(ordered)
+	ordered = slices.Compact(ordered)
+	if len(ordered) == 0 {
+		return nil
+	}
+	return &TestQualityReminder{ChangedTestPaths: ordered}
+}
+
+func combineTestQualityReminders(left, right *TestQualityReminder) *TestQualityReminder {
+	paths := []string{}
+	if left != nil {
+		paths = append(paths, left.ChangedTestPaths...)
+	}
+	if right != nil {
+		paths = append(paths, right.ChangedTestPaths...)
+	}
+	return NewTestQualityReminder(paths)
+}
+
 func mergeAdvisories(left, right []policy.Advisory) []policy.Advisory {
 	merged := append(append([]policy.Advisory{}, left...), right...)
 	sort.Slice(merged, func(leftIndex, rightIndex int) bool {
@@ -789,15 +865,20 @@ func mergeAdvisories(left, right []policy.Advisory) []policy.Advisory {
 
 func (engine *Engine) combine(left, right Report) Report {
 	return Report{
-		MergePolicy: combineMergePolicy(left.MergePolicy, right.MergePolicy),
-		Findings:    append(append([]policy.Finding{}, left.Findings...), right.Findings...),
-		Advisories:  mergeAdvisories(left.Advisories, right.Advisories),
-		Suppressed:  append(append([]policy.Suppressed{}, left.Suppressed...), right.Suppressed...),
-		Assessed:    append(append([]policy.AssessedVulnerability{}, left.Assessed...), right.Assessed...),
-		ReleaseAges: append(append([]policy.AssessedReleaseAge{}, left.ReleaseAges...), right.ReleaseAges...),
-		Tables:      append(append([]Table{}, left.Tables...), right.Tables...),
-		Notes:       append(append([]string{}, left.Notes...), right.Notes...),
+		MergePolicy:         combineMergePolicy(left.MergePolicy, right.MergePolicy),
+		TestQualityReminder: combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
+		Findings:            append(append([]policy.Finding{}, left.Findings...), right.Findings...),
+		Advisories:          mergeAdvisories(left.Advisories, right.Advisories),
+		Suppressed:          append(append([]policy.Suppressed{}, left.Suppressed...), right.Suppressed...),
+		Assessed:            append(append([]policy.AssessedVulnerability{}, left.Assessed...), right.Assessed...),
+		ReleaseAges:         append(append([]policy.AssessedReleaseAge{}, left.ReleaseAges...), right.ReleaseAges...),
+		Tables:              append(append([]Table{}, left.Tables...), right.Tables...),
+		Notes:               append(append([]string{}, left.Notes...), right.Notes...),
 	}
+}
+
+func (engine *Engine) withTestQualityReminder(report Report, candidate repository.CandidateDelta) Report {
+	return engine.combine(report, Report{TestQualityReminder: NewTestQualityReminder(testpolicy.ChangedTestPaths(engine.Repository, candidate))})
 }
 
 func combineMergePolicy(left, right *MergePolicy) *MergePolicy {
@@ -816,9 +897,9 @@ func hiddenInputFindings(repo repository.Repository, files []string) []policy.Fi
 		if !policy.MatchesAny(path, repo.Config.Scope.Exclude) {
 			continue
 		}
-		protected := repo.Language(path) != "" || supplychain.IsGovernedInput(path)
+		protected := repo.IsSourceCommentSource(path) || supplychain.IsGovernedInput(path)
 		if protected {
-			findings = append(findings, policy.Finding{Check: "policy.scope", Path: path, Subject: "exclude", Message: "target scope cannot exclude executable source, manifests, lockfiles, or workflows"})
+			findings = append(findings, policy.Finding{Check: "policy.scope", Path: path, Subject: "exclude", Message: "target scope cannot exclude protected source, manifests, lockfiles, or workflows"})
 		}
 	}
 	return findings

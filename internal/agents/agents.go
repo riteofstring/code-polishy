@@ -22,9 +22,6 @@ type Status struct {
 	Message string
 }
 
-// Install initializes both canonical guidance files from one locked release.
-// It plans the complete two-file result before replacing either target, so a
-// conflicting Claude file cannot leave a new AGENTS.md behind.
 func Install(repoRoot, policyRoot string) (string, error) {
 	return install(repoRoot, policyRoot, os.Rename)
 }
@@ -59,8 +56,6 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	return agentsMessage + "; " + claudeMessage, nil
 }
 
-// Sync replaces a stale AGENTS.md with the canonical file and creates a missing
-// Claude redirect only after both target files have passed validation.
 func Sync(repoRoot, policyRoot string) (string, error) {
 	return sync(repoRoot, policyRoot, os.Rename)
 }
@@ -95,9 +90,6 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	return agentsMessage + "; " + claudeMessage, nil
 }
 
-// Check requires canonical AGENTS.md content and the separate canonical
-// CLAUDE.md redirect. Git's whole-file CRLF materialization is equivalent to
-// the release-owned LF text; mixed endings and every other byte remain stale.
 func Check(repoRoot, policyRoot string) Status {
 	guidance, err := canonical(policyRoot)
 	if err != nil {
@@ -125,8 +117,6 @@ type canonicalGuidance struct {
 	claude []byte
 }
 
-// canonical reads both release-owned templates before a target is inspected.
-// Both files are byte-level contracts with no independently owned ranges.
 func canonical(policyRoot string) (canonicalGuidance, error) {
 	agentsPath := filepath.Join(policyRoot, filepath.FromSlash(agentsTemplateRelativePath))
 	claudePath := filepath.Join(policyRoot, filepath.FromSlash(claudeTemplateRelativePath))
@@ -256,8 +246,6 @@ func checkClaude(existing targetState, readErr error, template []byte) checkStat
 	return checkStatus{current: true, message: "CLAUDE.md redirect is current"}
 }
 
-// matchesCanonicalGuidance accepts only the release-owned LF bytes or the
-// uniform CRLF worktree materialization produced by Git's core.autocrlf.
 func matchesCanonicalGuidance(existing, template []byte) bool {
 	if bytes.Equal(existing, template) {
 		return true
@@ -276,9 +264,6 @@ type stagedMutation struct {
 	backup   string
 }
 
-// commitMutations writes every new file and every required rollback copy in
-// the repository root before replacing one target. A later replacement failure
-// restores every earlier target from its staged backup.
 func commitMutations(repoRoot string, mutations []mutation, replace replacement) error {
 	staged := make([]stagedMutation, 0, len(mutations))
 	for _, planned := range mutations {

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Verify that a materialized policy-owned JavaScript tool bundle carries nothing
-# Code Polishy refuses to execute.
-#
-# Usage: verify-javascript-bundle-tree.sh <bundle-dir>
-#
-# The bundle admits no native add-on and no downloaded executable, so one
-# materialized tree is valid on every supported host and contains only the
-# JavaScript, declarations, and data its packages published. pnpm already
-# refuses to build a dependency during installation; this proves the result.
+
+
+
+
+
+
+
+
+
 
 if [[ "$#" -ne 1 ]]; then
   echo "usage: verify-javascript-bundle-tree.sh <bundle-dir>" >&2
@@ -33,9 +33,9 @@ if [[ -n "${prebuilt_binaries}" ]]; then
   exit 1
 fi
 
-# pnpm's isolated linker resolves every package through a relative symlink inside
-# the bundle. A link that names an absolute path or climbs out of the bundle
-# would let a file no lock admitted be loaded as a policy tool.
+
+
+
 link_leaves_bundle() {
   local link="$1" target="$2" depth=0 segment
   case "${target}" in /*) return 0 ;; esac
@@ -68,9 +68,9 @@ if [[ -n "${escaping_links}" ]]; then
   exit 1
 fi
 
-# pnpm records what it installed, what it had to build, and what it left out.
-# The bundle admits no build and no skipped package, so the installed tree is
-# complete on every supported host rather than quietly host specific.
+
+
+
 metadata="${bundle_dir}/node_modules/.modules.yaml"
 if [[ ! -f "${metadata}" ]]; then
   echo "The JavaScript bundle at ${bundle_dir} records no installation metadata." >&2
