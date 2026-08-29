@@ -535,16 +535,12 @@ func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error
 	if err != nil {
 		return Report{}, err
 	}
-	if plan.Level != testpolicy.MergeLevelDocumentation && engine.behaviorReviewRequired() {
-		finding, validationErr := engine.behaviorReviewMergeReceiptFinding(ctx, plan.Selection.Base)
-		if validationErr != nil {
-			return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), validationErr
-		}
-		if finding != nil {
-			report := engine.finish([]policy.Finding{*finding}, nil)
-			report = engine.withTestQualityReminder(report, plan.Selection.Candidate)
-			return withMergePolicy(report, plan.Level, base, plan.Reasons), nil
-		}
+	reviewReport, reviewErr := engine.behaviorReviewMergeGateReport(ctx, plan)
+	if reviewErr != nil {
+		return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), reviewErr
+	}
+	if reviewReport != nil {
+		return withMergePolicy(*reviewReport, plan.Level, base, plan.Reasons), nil
 	}
 	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: engine.Runner, expected: plan.Commands}
 	plannedEngine := *engine
