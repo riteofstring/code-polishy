@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
@@ -101,8 +102,11 @@ func TestCheckpointGateRunsChangedScopeAndRecordsAcceptedCandidate(t *testing.T)
 		t.Fatal(err)
 	}
 	if len(report.Findings) != 0 || report.CheckpointPolicy == nil || report.CheckpointPolicy.Scope != behaviorreview.CheckpointScopeChanged ||
-		report.CheckpointPolicy.ReceiptPath != behaviorreview.CheckpointReceiptPath {
+		report.CheckpointPolicy.ReceiptPath != behaviorreview.CheckpointReceiptPath || report.GateRunPolicy == nil || report.GateRunPolicy.Status != "passed" {
 		t.Fatalf("report = %+v", report)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(report.GateRunPolicy.ReportPath))); err != nil {
+		t.Fatalf("checkpoint gate report is unavailable: %v", err)
 	}
 	if !slices.Equal(commandRunner.commands, []string{"content-check", "focused"}) {
 		t.Fatalf("checkpoint commands = %v", commandRunner.commands)
@@ -138,6 +142,7 @@ func TestCheckpointGateReplaysRegressionProofsBeforeChangedChecks(t *testing.T) 
 		commandRunner.events[2] != "planned:content-check" || commandRunner.events[3] != "planned:focused" {
 		t.Fatalf("checkpoint replay and verification order = %v", commandRunner.events)
 	}
+	assertBehaviorProofGateOutcome(t, root, report)
 }
 
 func TestCheckpointGateDoesNotRecordAfterChangedTestFailure(t *testing.T) {
@@ -153,7 +158,8 @@ func TestCheckpointGateDoesNotRecordAfterChangedTestFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 1 || report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" {
+	if len(report.Findings) != 1 || report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" ||
+		report.GateRunPolicy == nil || report.GateRunPolicy.Status != "failed" {
 		t.Fatalf("report = %+v", report)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
@@ -253,6 +259,43 @@ func TestMergeGateContinuesItsPlannedCommandsAfterAValidPreservedBehaviorReviewR
 	}
 }
 
+func TestMergeGateResumeReusesOnlyPassedOrdinaryTestsFromIdenticalFailedRun(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	failedRunner := &failingEngineRunner{failure: "offline-supply"}
+	policyEngine.Runner = failedRunner
+	failed, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.GateRunPolicy == nil || failed.GateRunPolicy.Status != "failed" || len(failed.Findings) == 0 {
+		t.Fatalf("failed report = %+v", failed)
+	}
+
+	resumedRunner := &recordingEngineRunner{}
+	policyEngine.Runner = resumedRunner
+	resumed, err := policyEngine.MergeGateWithOptions(t.Context(), "main", MergeGateOptions{Resume: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed.Findings) != 0 || resumed.GateRunPolicy == nil || resumed.GateRunPolicy.Status != "passed" ||
+		!slices.Equal(resumed.GateRunPolicy.ReusedPhases, []string{"focused"}) {
+		t.Fatalf("resumed report = %+v", resumed)
+	}
+	if slices.Contains(resumedRunner.commands, "focused") {
+		t.Fatalf("resumed ordinary test executed again: %v", resumedRunner.commands)
+	}
+	for _, command := range []string{"content-check", "content-build", "offline-supply"} {
+		if !slices.Contains(resumedRunner.commands, command) {
+			t.Fatalf("resume skipped non-reusable %q: %v", command, resumedRunner.commands)
+		}
+	}
+}
+
 func TestMergeGateReplaysRequestedBehaviorReviewProofBeforePlannedCommands(t *testing.T) {
 	root := requiredBehaviorReviewCandidate(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -277,6 +320,27 @@ func TestMergeGateReplaysRequestedBehaviorReviewProofBeforePlannedCommands(t *te
 	if !slices.ContainsFunc(commandRunner.events[2:], func(event string) bool { return strings.HasPrefix(event, "planned:") }) {
 		t.Fatalf("replay did not continue to planned commands: %v", commandRunner.events)
 	}
+	assertBehaviorProofGateOutcome(t, root, report)
+}
+
+func assertBehaviorProofGateOutcome(t *testing.T, root string, report Report) {
+	t.Helper()
+	if report.GateRunPolicy == nil || report.GateRunPolicy.ReportPath == "" {
+		t.Fatalf("gate run policy = %+v", report.GateRunPolicy)
+	}
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(report.GateRunPolicy.ReportPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifact gaterun.Report
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(artifact.Commands, func(outcome gaterun.CommandOutcome) bool {
+		return outcome.Category == gaterun.BehaviorProof && outcome.Status == gaterun.Passed && !outcome.Reused
+	}) {
+		t.Fatalf("behavior proof outcome is absent: %+v", artifact.Commands)
+	}
 }
 
 func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) {
@@ -288,7 +352,7 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 	commandRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1}
 	policyEngine.Runner = commandRunner
 	prepareRequestedBehaviorReviewReceipt(t, policyEngine, root, commandRunner, forgeBehaviorReviewProofRecord)
-	if _, err := policyEngine.validateBehaviorReviewGateReceipt(t.Context(), "main"); err != nil {
+	if _, err := behaviorreview.ValidateGateReceipt(t.Context(), policyEngine.Repository, behaviorreview.ValidateGateReceiptOptions{Base: "main"}); err != nil {
 		t.Fatalf("forged proof record was not statically valid: %v", err)
 	}
 	commandRunner.events = nil

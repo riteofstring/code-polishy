@@ -340,6 +340,16 @@ func TestMergeGateRequiresBaseAndRejectsDownscoping(t *testing.T) {
 	if _, err := parseRequiredBaseOption("merge-gate", []string{"--base", "main", "--base", "HEAD"}); err == nil {
 		t.Fatal("expected duplicate base to be rejected")
 	}
+	options, err := parseMergeGateOptions([]string{"--base", "origin/main", "--resume"})
+	if err != nil || options.base != "origin/main" || !options.resume {
+		t.Fatalf("options=%+v err=%v", options, err)
+	}
+	if _, err := parseMergeGateOptions([]string{"--base", "origin/main", "--resume", "--resume"}); err == nil {
+		t.Fatal("expected duplicate resume to be rejected")
+	}
+	if _, err := parseMergeGateOptions([]string{"--base", "origin/main", "--files", "content/a.json"}); err == nil {
+		t.Fatal("expected merge-gate downscoping to be rejected")
+	}
 }
 
 func TestCheckpointGateRequiresBaseAndRejectsDownscoping(t *testing.T) {
@@ -367,6 +377,30 @@ func TestPrintReportSummarizesAcceptedCheckpointForHumans(t *testing.T) {
 	want := "CHECKPOINT GATE: CHANGED against HEAD~1\nCHECKPOINT ACCEPTED: " + strings.Repeat("a", 40) + "\n"
 	if !strings.HasPrefix(stdout.String(), want) || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestPrintReportShowsGateArtifactAndBothTestReminderScopes(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{
+		GateRunPolicy: &engine.GateRunPolicy{
+			Status: "failed", ReportPath: ".code-polishy-reports/merge-gate/run/report.json", ReusedPhases: []string{"unit"},
+		},
+		TestQualityReminder: &engine.TestQualityReminder{
+			ChangedTestPaths: []string{"tests/all_test.go"}, TaskBase: "checkpoint-sha", TaskChangedTestPaths: []string{"tests/task_test.go"},
+		},
+		Findings: []policy.Finding{{Check: "test.unit", Path: "repository", Subject: "unit", Message: "failed"}},
+	}
+	printReportTo(stdout, stderr, report)
+	for _, want := range []string{
+		"MERGE-TARGET CHANGED TEST FILES: 1", "LATEST TASK CHANGED TEST FILES: 1 since checkpoint-sha",
+		"GATE RUN: FAILED", "GATE REPORT: .code-polishy-reports/merge-gate/run/report.json", "REUSED TEST PHASES: unit",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
 	}
 }
 

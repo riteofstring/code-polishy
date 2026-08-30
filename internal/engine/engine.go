@@ -35,24 +35,10 @@ type Engine struct {
 	PolicyModuleNotes    []string
 }
 
-type MergeGateExecutionPlan struct {
-	Level     string
-	Reasons   []string
-	Selection repository.Selection
-	Tests     testpolicy.Plan
-	Commands  []MergeGateExecutionCommand
-}
-
-type MergeGateExecutionCommand struct {
-	Kind    string
-	Scope   string
-	Cost    string
-	Command policy.Command
-}
-
 type Report struct {
 	MergePolicy         *MergePolicy
 	CheckpointPolicy    *CheckpointPolicy
+	GateRunPolicy       *GateRunPolicy
 	ChangeBoundary      *ChangeBoundary
 	ChangedTestScope    *ChangedTestScope
 	TestQualityReminder *TestQualityReminder
@@ -78,6 +64,12 @@ type CheckpointPolicy struct {
 	Base        string
 	Candidate   string
 	ReceiptPath string
+}
+
+type GateRunPolicy struct {
+	Status       string
+	ReportPath   string
+	ReusedPhases []string
 }
 
 type ChangeBoundary struct {
@@ -554,267 +546,6 @@ func (engine *Engine) ArtifactSecurity(ctx context.Context) Report {
 	return engine.finishWithAssessments(result.Findings, result.Notes, false)
 }
 
-func (engine *Engine) Gate(ctx context.Context) (Report, error) {
-	report, err := engine.fullGate(ctx)
-	return withMergePolicy(report, testpolicy.MergeLevelFull, "", []string{"complete gate requested"}), err
-}
-
-func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error) {
-	plan, err := engine.PlanMergeGateExecution(base)
-	if err != nil {
-		return Report{}, err
-	}
-	_, reviewReport, reviewErr := engine.behaviorReviewGateReport(ctx, plan)
-	if reviewErr != nil {
-		report := engine.withMergeGateTestQualityReminder(ctx, Report{}, plan.Selection)
-		return withMergePolicy(report, plan.Level, base, plan.Reasons), reviewErr
-	}
-	if reviewReport != nil {
-		report := engine.withMergeGateTestQualityReminder(ctx, *reviewReport, plan.Selection)
-		return withMergePolicy(report, plan.Level, base, plan.Reasons), nil
-	}
-	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: engine.Runner, expected: plan.Commands}
-	plannedEngine := *engine
-	plannedEngine.Runner = plannedRunner
-	var report Report
-	var gateErr error
-	switch plan.Level {
-	case testpolicy.MergeLevelFull:
-		report, gateErr = plannedEngine.fullGate(ctx)
-	case testpolicy.MergeLevelDocumentation:
-		report, gateErr = plannedEngine.documentationMergeGate(ctx, plan.Selection)
-	default:
-		report, gateErr = plannedEngine.recommendedMergeGate(ctx, plan.Selection)
-	}
-	report = engine.withMergeGateTestQualityReminder(ctx, report, plan.Selection)
-	if plannedRunner.err != nil {
-		return withMergePolicy(report, plan.Level, base, plan.Reasons), plannedRunner.err
-	}
-	if gateErr == nil && len(report.Findings) == 0 && plannedRunner.next != len(plan.Commands) {
-		return withMergePolicy(report, plan.Level, base, plan.Reasons), fmt.Errorf(
-			"merge gate completed before planned command %d of %d", plannedRunner.next+1, len(plan.Commands),
-		)
-	}
-	return withMergePolicy(report, plan.Level, base, plan.Reasons), gateErr
-}
-
-func (engine *Engine) PlanMergeGateExecution(base string) (MergeGateExecutionPlan, error) {
-	selection, err := engine.Repository.SelectBase(base)
-	if err != nil {
-		return MergeGateExecutionPlan{}, err
-	}
-	decision, err := testpolicy.BuildMergeDecision(engine.Repository, selection)
-	if err != nil {
-		return MergeGateExecutionPlan{}, err
-	}
-	plan := MergeGateExecutionPlan{Level: decision.Level, Reasons: append([]string{}, decision.Reasons...), Selection: selection}
-	if plan.Level == testpolicy.MergeLevelDocumentation {
-		plan.Tests, err = testpolicy.BuildPlan(engine.Repository, testpolicy.Request{Changed: selection})
-		return plan, err
-	}
-	checkSelection := selection
-	request := testpolicy.Request{Changed: selection, Recommended: true}
-	if plan.Level == testpolicy.MergeLevelFull {
-		checkSelection, err = engine.Repository.Select("all", nil)
-		if err != nil {
-			return MergeGateExecutionPlan{}, err
-		}
-		request = testpolicy.Request{Full: true}
-	}
-	plan.Tests, err = testpolicy.BuildPlan(engine.Repository, request)
-	if err != nil {
-		return MergeGateExecutionPlan{}, err
-	}
-	plan.Commands = append(plan.Commands, mergeGateCheckCommands(quality.CheckCommands(engine.Repository, checkSelection, "gate"))...)
-	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(plan.Tests.Suites)...)
-	plan.Commands = append(plan.Commands, mergeGateCheckCommands(quality.CommandsForProfiles(engine.Repository, checkSelection, "build"))...)
-	supplySelection, err := engine.Repository.Select("all", nil)
-	if err != nil {
-		return MergeGateExecutionPlan{}, err
-	}
-	if plan.Level == testpolicy.MergeLevelFull {
-		onlineCommands, onlineErr := supplychain.OnlineCommands(engine.Repository, supplySelection.Files)
-		if onlineErr != nil {
-			return MergeGateExecutionPlan{}, onlineErr
-		}
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(onlineCommands)...)
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain", "supply-chain-online", "security"))...)
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(artifactsecurity.PlannedCommands(engine.Repository))...)
-	} else {
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain"))...)
-	}
-	return plan, nil
-}
-
-func mergeGateCheckCommands(commands []policy.Command) []MergeGateExecutionCommand {
-	result := make([]MergeGateExecutionCommand, 0, len(commands))
-	for _, command := range commands {
-		scope := "repository"
-		if len(command.Modules) == 1 {
-			scope = "module"
-		}
-		result = append(result, MergeGateExecutionCommand{Kind: "check", Scope: scope, Cost: "standard", Command: command})
-	}
-	return result
-}
-
-func mergeGateSuiteCommands(suites []policy.TestSuite) []MergeGateExecutionCommand {
-	result := make([]MergeGateExecutionCommand, 0, len(suites))
-	for _, suite := range suites {
-		result = append(result, MergeGateExecutionCommand{Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost, Command: suiteCommand(suite)})
-	}
-	return result
-}
-
-func suiteCommand(suite policy.TestSuite) policy.Command {
-	return policy.Command{
-		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
-		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
-		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
-		TimeoutSeconds: suite.TimeoutSeconds,
-	}
-}
-
-type mergeGatePlannedRunner struct {
-	root     string
-	delegate runner.Runner
-	expected []MergeGateExecutionCommand
-	next     int
-	err      error
-}
-
-func (commandRunner *mergeGatePlannedRunner) TestDiagnosticRunner() runner.Runner {
-	return commandRunner.delegate
-}
-
-func (commandRunner *mergeGatePlannedRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, err
-	}
-	if observed, ok := commandRunner.delegate.(interface {
-		RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-	}); ok {
-		return observed.RunWithResult(ctx, root, command)
-	}
-	started := time.Now()
-	err := commandRunner.delegate.Run(ctx, root, command)
-	return runner.Result{ExecutionDuration: time.Since(started)}, err
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, runner.Output{}, err
-	}
-	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, root, command)
-	}
-	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture output for %q", command.Name)
-}
-
-func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.Command) error {
-	if commandRunner.err != nil {
-		return commandRunner.err
-	}
-	if root != commandRunner.root || commandRunner.next >= len(commandRunner.expected) {
-		commandRunner.err = fmt.Errorf("merge gate started a command outside its execution plan at position %d", commandRunner.next+1)
-		return commandRunner.err
-	}
-	if samePolicyCommand(commandRunner.expected[commandRunner.next].Command, command) {
-		commandRunner.next++
-		return nil
-	}
-	if artifactsecurity.IsCleanupCommand(command) {
-		for index := commandRunner.next + 1; index < len(commandRunner.expected); index++ {
-			if samePolicyCommand(commandRunner.expected[index].Command, command) {
-				commandRunner.next = index + 1
-				return nil
-			}
-		}
-	}
-	commandRunner.err = fmt.Errorf("merge gate started a command outside its execution plan at position %d", commandRunner.next+1)
-	return commandRunner.err
-}
-
-func samePolicyCommand(expected, actual policy.Command) bool {
-	if artifactsecurity.MatchesPlannedCommand(expected, actual) {
-		return true
-	}
-	return samePolicyCommandIdentity(expected, actual) && samePolicyCommandCollections(expected, actual)
-}
-
-func samePolicyCommandIdentity(expected, actual policy.Command) bool {
-	return expected.Name == actual.Name && expected.Cwd == actual.Cwd && expected.TimeoutSeconds == actual.TimeoutSeconds &&
-		expected.Managed == actual.Managed && expected.PassFiles == actual.PassFiles && expected.SealedEnvironment == actual.SealedEnvironment
-}
-
-func samePolicyCommandCollections(expected, actual policy.Command) bool {
-	return slices.Equal(expected.Argv, actual.Argv) && slices.Equal(expected.Provides, actual.Provides) &&
-		slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
-		slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.Environment, actual.Environment) &&
-		slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths)
-}
-
-func (engine *Engine) fullGate(ctx context.Context) (Report, error) {
-	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
-		return doctor, err
-	}
-	selection, err := engine.Repository.Select("all", nil)
-	if err != nil {
-		return Report{}, err
-	}
-	checked := engine.Check(ctx, selection, "gate")
-	if len(checked.Findings) > 0 {
-		return engine.combine(doctor, checked), nil
-	}
-	verified, err := engine.verify(ctx, false, true)
-	if err != nil || len(verified.Findings) > 0 {
-		return engine.combine(engine.combine(doctor, checked), verified), err
-	}
-	supply, err := engine.SupplyChain(ctx, false)
-	return engine.combine(engine.combine(engine.combine(doctor, checked), verified), supply), err
-}
-
-func (engine *Engine) recommendedMergeGate(ctx context.Context, selection repository.Selection) (Report, error) {
-	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
-		return doctor, err
-	}
-	checked := engine.Check(ctx, selection, "gate")
-	report := engine.combine(doctor, checked)
-	if len(checked.Findings) > 0 {
-		return report, nil
-	}
-	verified, err := engine.test(ctx, testpolicy.Request{Recommended: true, Changed: selection}, true)
-	report = engine.combine(report, verified)
-	if err != nil || len(verified.Findings) > 0 {
-		return report, err
-	}
-	buildFindings := quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "build")
-	built := engine.finish(buildFindings, []string{"completed applicable build profile"})
-	report = engine.combine(report, built)
-	if len(built.Findings) > 0 {
-		return report, nil
-	}
-	supply, err := engine.SupplyChain(ctx, true)
-	return engine.combine(report, supply), err
-}
-
-func (engine *Engine) documentationMergeGate(ctx context.Context, selection repository.Selection) (Report, error) {
-	findings := quality.DocumentationFindings(ctx, engine.Repository, selection.Candidate.AddedOrModified, selection.Candidate.Deleted)
-	return engine.finish(findings, []string{"completed documentation contract with zero application test suites"}), nil
-}
-
-func withMergePolicy(report Report, level, base string, reasons []string) Report {
-	report.MergePolicy = &MergePolicy{Level: level, Base: base, Reasons: append([]string{}, reasons...)}
-	return report
-}
-
 func withCheckpointPolicy(report Report, scope, base, candidate, receiptPath string) Report {
 	report.CheckpointPolicy = &CheckpointPolicy{Scope: scope, Base: base, Candidate: candidate, ReceiptPath: receiptPath}
 	return report
@@ -935,6 +666,7 @@ func (engine *Engine) combine(left, right Report) Report {
 	return Report{
 		MergePolicy:         combineMergePolicy(left.MergePolicy, right.MergePolicy),
 		CheckpointPolicy:    combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
+		GateRunPolicy:       combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
 		ChangedTestScope:    combineChangedTestScope(left.ChangedTestScope, right.ChangedTestScope),
 		TestQualityReminder: combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		TestCommands:        append(append([]TestCommandEvidence{}, left.TestCommands...), right.TestCommands...),
@@ -947,6 +679,13 @@ func (engine *Engine) combine(left, right Report) Report {
 		Tables:              append(append([]Table{}, left.Tables...), right.Tables...),
 		Notes:               append(append([]string{}, left.Notes...), right.Notes...),
 	}
+}
+
+func combineGateRunPolicy(left, right *GateRunPolicy) *GateRunPolicy {
+	if right != nil {
+		return right
+	}
+	return left
 }
 
 func combineCheckpointPolicy(left, right *CheckpointPolicy) *CheckpointPolicy {

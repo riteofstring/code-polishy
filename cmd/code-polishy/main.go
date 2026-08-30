@@ -13,7 +13,6 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/agents"
 	"github.com/riteofstring/code-polishy/internal/engine"
-	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
@@ -30,7 +29,7 @@ Commands:
   check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
   gate
   checkpoint-gate --base REF
-  merge-gate --base REF
+  merge-gate --base REF [--resume]
   behavior-review prepare --base REF --intent-file PATH
   behavior-review finalize --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
@@ -67,15 +66,26 @@ func run(arguments []string) int {
 	if status, handled := handleContextualHelp(invocation); handled {
 		return status
 	}
+	if status := validateInvocation(invocation); status != 0 {
+		return status
+	}
+	if status, handled := handleMetaCommand(invocation); handled {
+		return status
+	}
+	return runPolicyCommand(invocation)
+}
+
+func validateInvocation(invocation invocation) int {
 	if _, known := commandHelpFor(invocation.command); !known {
 		return commandUsageError("", "unknown command "+invocation.command)
 	}
 	if status, governed := requireLockedRelease(invocation); !governed {
 		return status
 	}
-	if status, handled := handleMetaCommand(invocation); handled {
-		return status
-	}
+	return 0
+}
+
+func runPolicyCommand(invocation invocation) int {
 	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
@@ -87,6 +97,10 @@ func run(arguments []string) int {
 		return commandUsageError("", "unknown command "+invocation.command)
 	}
 	result, err := handler(context.Background(), policyEngine, invocation.arguments)
+	return renderCommandResult(invocation, result, err)
+}
+
+func renderCommandResult(invocation invocation, result commandResult, err error) int {
 	if err != nil {
 		if isCommandInputError(err) {
 			return commandUsageErrorForInvocation(invocation, err.Error())
@@ -387,11 +401,11 @@ func handleGate(ctx context.Context, policyEngine *engine.Engine, arguments []st
 }
 
 func handleMergeGate(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	base, err := parseRequiredBaseOption("merge-gate", arguments)
+	options, err := parseMergeGateOptions(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	report, err := policyEngine.MergeGate(ctx, base)
+	report, err := policyEngine.MergeGateWithOptions(ctx, options.base, engine.MergeGateOptions{Resume: options.resume})
 	return commandResult{report: report}, err
 }
 
@@ -677,6 +691,41 @@ func parseRequiredBaseOption(command string, arguments []string) (string, error)
 	return base, nil
 }
 
+type mergeGateOptions struct {
+	base   string
+	resume bool
+}
+
+func parseMergeGateOptions(arguments []string) (mergeGateOptions, error) {
+	baseOptions := 0
+	resumeOptions := 0
+	for _, argument := range arguments {
+		if argument == "--base" || strings.HasPrefix(argument, "--base=") {
+			baseOptions++
+		}
+		if argument == "--resume" {
+			resumeOptions++
+		}
+	}
+	if baseOptions != 1 {
+		return mergeGateOptions{}, fmt.Errorf("merge-gate requires exactly one --base REF")
+	}
+	if resumeOptions > 1 {
+		return mergeGateOptions{}, fmt.Errorf("merge-gate accepts --resume at most once")
+	}
+	flags := flag.NewFlagSet("merge-gate", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	base := flags.String("base", "", "compare with the merge base of this Git ref")
+	resume := flags.Bool("resume", false, "reuse eligible ordinary-test receipts from an identical failed run")
+	if err := flags.Parse(arguments); err != nil {
+		return mergeGateOptions{}, err
+	}
+	if flags.NArg() != 0 || *base == "" {
+		return mergeGateOptions{}, fmt.Errorf("merge-gate requires exactly one --base REF and accepts only --resume")
+	}
+	return mergeGateOptions{base: *base, resume: *resume}, nil
+}
+
 type stringList []string
 
 func (values *stringList) String() string { return strings.Join(*values, ",") }
@@ -700,52 +749,27 @@ func printReportTo(stdout, stderr io.Writer, report engine.Report) {
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
-	for _, finding := range report.Findings {
-		fmt.Fprintf(stderr, "FAIL %-34s %s [%s]\n     %s\n", finding.Check, finding.Path, finding.Subject, finding.Message)
-	}
-	for _, suppressed := range report.Suppressed {
-		fmt.Fprintf(stdout, "WAIVED %-32s %s [%s] by %s\n", suppressed.Finding.Check, suppressed.Finding.Path, suppressed.Finding.Subject, suppressed.Exception.ID)
-	}
-	for _, assessed := range report.Assessed {
-		observedSeverity := "unknown"
-		if assessed.Finding.Vulnerability != nil {
-			observedSeverity = policy.NormalizeVulnerabilitySeverity(assessed.Finding.Vulnerability.Severity)
-		}
-		fmt.Fprintf(
-			stdout, "VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, approved by %s, expires %s)\n",
-			assessed.Finding.Check, assessed.Finding.Path, assessed.Finding.Subject, assessed.Assessment.ID,
-			observedSeverity, assessed.Assessment.Severity, assessed.Assessment.Status, assessed.Assessment.Basis, assessed.Assessment.ApprovedBy,
-			assessed.Assessment.Expires.Format("2006-01-02"),
-		)
-	}
-	for _, assessed := range report.ReleaseAges {
-		fmt.Fprintf(stdout, "AGE-EXCEPTION %-25s %s [%s] by %s (%s)\n", assessed.Finding.Check, assessed.Finding.Path, assessed.Finding.Subject, assessed.Assessment.ID, assessed.Assessment.Category)
-	}
-	for _, advisory := range report.Advisories {
-		fmt.Fprintf(stdout, "WARN %-34s %s [%s]\n     %s\n", advisory.Check, advisory.Path, advisory.Subject, advisory.Message)
-	}
-	for _, table := range report.Tables {
-		printTable(stdout, table)
-	}
-	if verbose {
-		for _, note := range report.Notes {
-			fmt.Fprintln(stdout, "NOTE", note)
-		}
-	}
-	if len(report.Findings) == 0 {
-		fmt.Fprintln(stdout, "PASS policy completed without findings")
-	} else {
-		fmt.Fprintf(stderr, "FAILED with %d finding(s)\n", len(report.Findings))
-	}
+	printFindings(stderr, report.Findings)
+	printTestFailureEvidence(stderr, report.TestCommands, report.TestDiagnostics)
+	printSuppressedFindings(stdout, report.Suppressed)
+	printVulnerabilityAssessments(stdout, report.Assessed)
+	printReleaseAgeAssessments(stdout, report.ReleaseAges)
+	printAdvisories(stdout, report.Advisories)
+	printReportTables(stdout, report.Tables)
+	printReportNotes(stdout, report.Notes, verbose)
+	printReportCompletion(stdout, stderr, report)
 }
 
 func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityReminder) {
-	if reminder == nil || len(reminder.ChangedTestPaths) == 0 {
+	if reminder == nil || len(reminder.ChangedTestPaths) == 0 && reminder.TaskBase == "" {
 		return
 	}
 	fmt.Fprintln(output, "============================================================")
 	fmt.Fprintln(output, "TEST QUALITY REMINDER")
-	fmt.Fprintf(output, "CHANGED TEST FILES: %d\n", len(reminder.ChangedTestPaths))
+	fmt.Fprintf(output, "MERGE-TARGET CHANGED TEST FILES: %d\n", len(reminder.ChangedTestPaths))
+	if reminder.TaskBase != "" {
+		fmt.Fprintf(output, "LATEST TASK CHANGED TEST FILES: %d since %s\n", len(reminder.TaskChangedTestPaths), reminder.TaskBase)
+	}
 	fmt.Fprintln(output, "")
 	fmt.Fprintln(output, "Make sure none of the tests (new or old) are tautological or change-detector tests.")
 	fmt.Fprintln(output, "Tautological: derives its expected result from the same production implementation being tested.")
@@ -763,8 +787,39 @@ func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
 	if report.CheckpointPolicy != nil {
 		printCheckpointPolicyForMode(output, report.CheckpointPolicy, verbose)
 	}
+	if report.GateRunPolicy != nil {
+		printGateRunPolicy(output, report.GateRunPolicy)
+	}
 	if report.ChangeBoundary != nil {
 		printChangeBoundaryTo(output, report.ChangeBoundary)
+	}
+}
+
+func printGateRunPolicy(output io.Writer, gateRun *engine.GateRunPolicy) {
+	fmt.Fprintln(output, "GATE RUN:", strings.ToUpper(gateRun.Status))
+	if gateRun.ReportPath != "" {
+		fmt.Fprintln(output, "GATE REPORT:", gateRun.ReportPath)
+	}
+	if len(gateRun.ReusedPhases) > 0 {
+		fmt.Fprintln(output, "REUSED TEST PHASES:", strings.Join(gateRun.ReusedPhases, ", "))
+	}
+}
+
+func printTestFailureEvidence(output io.Writer, commands []engine.TestCommandEvidence, diagnostics []engine.TestFailureDiagnostic) {
+	for _, command := range commands {
+		if command.FailureMessage == "" {
+			continue
+		}
+		fmt.Fprintf(output, "TEST EVIDENCE %s attempt=%d category=%s exit=%d\n", command.Name, command.Attempt, command.FailureCategory, command.Result.ExitStatus)
+		if len(command.ChangedModuleOverlap) > 0 || len(command.ImpactedModuleOverlap) > 0 {
+			fmt.Fprintf(output, "     overlap changed=%s impacted=%s\n", strings.Join(command.ChangedModuleOverlap, ","), strings.Join(command.ImpactedModuleOverlap, ","))
+		}
+		if command.LogPath != "" {
+			fmt.Fprintln(output, "     log", command.LogPath)
+		}
+	}
+	for _, diagnostic := range diagnostics {
+		fmt.Fprintf(output, "TEST DIAGNOSIS %s %s\n", diagnostic.Suite, diagnostic.State)
 	}
 }
 
