@@ -209,7 +209,8 @@ workflows. Inspect the result:
 code-polishy list-files --all
 ```
 
-Install the canonical agent guidance once after writing the lock:
+Install the canonical agent guidance and workspace hygiene once after writing
+the lock:
 
 ```sh
 code-polishy agents install
@@ -218,11 +219,14 @@ code-polishy agents install
 The locked release owns the entire `AGENTS.md`. Installation creates a missing
 canonical file or accepts an exact existing copy idempotently; it preserves and
 reports a conflict for any existing noncanonical file. It also installs the
-release's exact one-line `CLAUDE.md` redirect when absent. A differing redirect
-is preserved as an explicit conflict, so no planned guidance change is written.
-On policy upgrades, run `agents sync`; it requires an existing `AGENTS.md` and
-replaces all stale bytes with the new canonical file. `doctor --strict` rejects
-a missing, stale, or conflicting guidance surface.
+release's exact one-line `CLAUDE.md` redirect when absent and appends the exact
+`/.code-polishy-reports/` rule to the root `.gitignore` when needed, preserving
+all existing rules, line endings, and file mode. A differing redirect or a
+non-regular target is preserved as an explicit conflict, so no planned adoption
+change is written. On policy upgrades, run `agents sync`; it requires an
+existing `AGENTS.md`, replaces all stale guidance bytes, and repairs a missing
+report-artifact rule in the same transaction. `doctor --strict` rejects a
+missing, stale, or conflicting adoption surface.
 
 ## 6. Inspect conditional policy modules
 

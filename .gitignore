@@ -1,5 +1,6 @@
 .DS_Store
 .tools/
+/.code-polishy-reports/
 __pycache__/
 *.py[cod]
 .pytest_cache/

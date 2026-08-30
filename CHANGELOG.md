@@ -18,6 +18,12 @@
   again.
 - Add command-local `--help`, `-h`, and `help COMMAND` pages with syntax,
   selectors, side effects, exits, examples, and targeted usage corrections.
+- Make the `agents` workflow preserve project-owned ignore rules while
+  transactionally installing `/.code-polishy-reports/`; make its check and
+  `doctor --strict` reject a missing report-artifact rule.
+- Keep canonical `AGENTS.md` focused on durable decisions, route command
+  procedures to the release-owned skill and permanent docs, and enforce a
+  persistent prompt-size budget.
 
 ## 0.19.0 - 2026-08-28
 

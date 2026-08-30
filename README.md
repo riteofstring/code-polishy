@@ -79,8 +79,10 @@ commit, runs affected checks and tests, then records the passing HEAD. The merge
 gate chooses how much final validation the whole branch needs. Fix any finding,
 rerun the narrowest useful check, and rerun the applicable gate. Both gates keep
 bounded command logs and a machine-readable run report under
-`.code-polishy-reports`; resume never reuses checks, builds, security work, or
-behavior proofs.
+`.code-polishy-reports`. `agents install` and `agents sync` keep that workspace
+artifact root in the repository's `.gitignore`; CI retains required evidence
+through an explicit artifact handoff. Resume never reuses checks, builds,
+security work, or behavior proofs.
 
 ## Languages
 

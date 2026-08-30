@@ -166,7 +166,8 @@ finalization, and the applicable gate. A multi-job CI workflow may transfer it
 only as an explicit trusted artifact, preserving the exact candidate and base
 it names. The accepted checkpoint receipt lives separately below
 `.code-polishy-reports/checkpoint-gate`; both report directories are excluded
-from candidate selection.
+from candidate selection. `agents install` and `agents sync` maintain the exact
+root `.gitignore` rule that keeps the shared report root workspace-local.
 
 Intent and subagent-instruction inputs are limited to 64 KiB. A review result
 and each mapped design document are limited to 256 KiB; artifact reads are

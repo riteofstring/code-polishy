@@ -46,15 +46,15 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "agents",
-		summary: "Install, synchronize, or verify generated AI-agent guidance.",
+		summary: "Install, synchronize, or verify generated AI-agent guidance and report-artifact hygiene.",
 		syntax:  []string{"code-polishy agents <install|sync|check>"},
 		selectors: []string{
-			"install creates the guidance files.",
-			"sync refreshes existing generated guidance.",
-			"check verifies that generated guidance is current.",
+			"install creates guidance files and the report-artifact ignore rule.",
+			"sync refreshes generated guidance and repairs the ignore rule.",
+			"check verifies that all managed adoption surfaces are current.",
 		},
-		sideEffects: []string{"install and sync write guidance files in the repository; check only reads them."},
-		exits:       []string{"0 guidance installed, synchronized, or current", "1 check found stale guidance", "2 invalid usage or operational failure"},
+		sideEffects: []string{"install and sync transactionally write guidance files and the root .gitignore report-artifact rule; check only reads them."},
+		exits:       []string{"0 adoption surfaces installed, synchronized, or current", "1 check found a stale adoption surface", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy agents sync", "code-polishy agents check"},
 	},
 	{

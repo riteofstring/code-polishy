@@ -155,15 +155,17 @@ Never create a broad, ownerless, or non-expiring exception to make a run green.
 If a deliberate exception is necessary, explain its exact subject, owner,
 reason, and expiry before adding it.
 
-### 6. Maintain Canonical Guidance
+### 6. Maintain Adoption Surfaces
 
 After an intentional Code Polishy lock upgrade, run `agents check`, then
 `agents sync` when stale. Treat the entire `AGENTS.md` as release-owned:
 `agents install` must preserve and report a conflict for a noncanonical existing
 file, while `agents sync` requires an existing file and replaces all stale bytes
-with the canonical version. Review the resulting whole-file policy change. Keep
-canonical guidance limited to durable rules used across tasks; put command
-procedures, rationale, and edge cases in this skill or the permanent docs.
+with the canonical version. Both commands preserve project-owned `.gitignore`
+content while ensuring the exact root `/.code-polishy-reports/` rule exists.
+Review the resulting whole-file policy change. Keep canonical guidance limited
+to durable rules used across tasks; put command procedures, rationale, and edge
+cases in this skill or the permanent docs.
 After required verification, commit all completed task-owned changes unless the
 caller explicitly requests an uncommitted handoff.
 

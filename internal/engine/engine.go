@@ -150,7 +150,11 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	if filepath.Clean(engine.Repository.Root) != filepath.Clean(engine.Repository.PolicyRoot) {
 		agentStatus := agentpolicy.Check(engine.Repository.Root, engine.Repository.PolicyRoot)
 		if !agentStatus.Current {
-			findings = append(findings, policy.Finding{Check: "policy.agentGuidance", Path: "AGENTS.md", Subject: "canonical-guidance", Message: agentStatus.Message})
+			for _, issue := range agentStatus.Issues {
+				findings = append(findings, policy.Finding{
+					Check: issue.Check, Path: issue.Path, Subject: issue.Subject, Message: issue.Message,
+				})
+			}
 		}
 	}
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)

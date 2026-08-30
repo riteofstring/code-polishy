@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	agentpolicy "github.com/riteofstring/code-polishy/internal/agents"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -85,6 +86,29 @@ func TestCheckpointGateReportsMissingBehaviorReviewBeforeCommands(t *testing.T) 
 	}
 	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("missing receipt recorded a checkpoint: %v", statErr)
+	}
+}
+
+func TestDoctorReportsMissingReportArtifactIgnoreAtTheOwnedPath(t *testing.T) {
+	root := contentRepository(t, nil)
+	policyRoot := enginePolicyRoot(t)
+	installBehaviorReviewTestGuidance(t, root)
+	if err := os.Remove(filepath.Join(root, ".gitignore")); err != nil {
+		t.Fatal(err)
+	}
+	policyEngine, err := Open(root, policyRoot, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := policyEngine.Doctor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.reportArtifacts" && finding.Path == ".gitignore" &&
+			finding.Subject == "workspace-ignore" && strings.Contains(finding.Message, "agents sync")
+	}) {
+		t.Fatalf("findings = %+v", report.Findings)
 	}
 }
 
@@ -438,16 +462,8 @@ func requiredBehaviorReviewCandidate(t *testing.T) string {
 
 func installBehaviorReviewTestGuidance(t *testing.T, root string) {
 	t.Helper()
-	policyRoot := enginePolicyRoot(t)
-	for target, source := range map[string]string{
-		"AGENTS.md": filepath.Join(policyRoot, "templates", "AGENTS.md"),
-		"CLAUDE.md": filepath.Join(policyRoot, "templates", "CLAUDE.md"),
-	} {
-		data, err := os.ReadFile(source)
-		if err != nil {
-			t.Fatal(err)
-		}
-		writeEngineFile(t, root, target, string(data), 0o600)
+	if _, err := agentpolicy.Install(root, enginePolicyRoot(t)); err != nil {
+		t.Fatal(err)
 	}
 }
 

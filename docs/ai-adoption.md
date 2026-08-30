@@ -401,7 +401,7 @@ optional local hardening and, when declared, follows the same separate direct
 execution. Credentialed, destructive, production-mutating, and live-provider
 probes remain external approval gates. Do not keep decorative Gherkin.
 
-## 7. Install canonical agent guidance
+## 7. Install canonical agent guidance and workspace hygiene
 
 Install the canonical guidance once:
 
@@ -415,10 +415,13 @@ rewrite. A noncanonical existing file is preserved and reported as a conflict.
 It also creates the release's exact one-line `CLAUDE.md` redirect when absent,
 keeping `AGENTS.md` as the single guidance authority. If `CLAUDE.md` differs,
 the command preserves its bytes and changes neither guidance file; resolve that
-explicit conflict before retrying. Use `agents sync` after later Code Polishy
-upgrades; it requires an existing file and replaces the entire stale
-`AGENTS.md` while preserving its mode. Do not hand-copy or duplicate the
-canonical policy text.
+explicit conflict before retrying. The same validated transaction appends the
+exact `/.code-polishy-reports/` rule to the repository's root `.gitignore` when
+needed while preserving existing project rules, line endings, and file mode.
+Use `agents sync` after later Code Polishy upgrades; it requires an existing
+file, replaces the entire stale `AGENTS.md`, and repairs a missing report ignore
+rule. `agents check` and `doctor --strict` reject a missing rule. Do not
+hand-copy or duplicate the canonical policy text.
 
 Keep canonical guidance compact and limited to durable rules used across tasks.
 The release-owned `polishy` skill and permanent docs carry command procedures,

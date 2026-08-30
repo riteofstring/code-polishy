@@ -14,12 +14,22 @@ const (
 	claudeTemplateRelativePath = "templates/CLAUDE.md"
 	agentsTargetFilename       = "AGENTS.md"
 	claudeTargetFilename       = "CLAUDE.md"
+	ignoreTargetFilename       = ".gitignore"
+	reportsIgnorePattern       = "/.code-polishy-reports/"
 	claudeRedirect             = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 )
+
+type Issue struct {
+	Check   string
+	Path    string
+	Subject string
+	Message string
+}
 
 type Status struct {
 	Current bool
 	Message string
+	Issues  []Issue
 }
 
 func Install(repoRoot, policyRoot string) (string, error) {
@@ -31,7 +41,7 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	agentsTarget, claudeTarget, err := readTargets(repoRoot)
+	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
 	if err != nil {
 		return "", err
 	}
@@ -43,17 +53,21 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	mutations := make([]mutation, 0, 2)
+	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget)
+	mutations := make([]mutation, 0, 3)
 	if writesAgents {
 		mutations = append(mutations, agentsMutation)
 	}
 	if writesClaude {
 		mutations = append(mutations, claudeMutation)
 	}
+	if writesIgnore {
+		mutations = append(mutations, ignoreMutation)
+	}
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage, nil
+	return agentsMessage + "; " + claudeMessage + "; " + ignoreMessage, nil
 }
 
 func Sync(repoRoot, policyRoot string) (string, error) {
@@ -65,7 +79,7 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	agentsTarget, claudeTarget, err := readTargets(repoRoot)
+	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
 	if err != nil {
 		return "", err
 	}
@@ -77,39 +91,52 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	mutations := make([]mutation, 0, 2)
+	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget)
+	mutations := make([]mutation, 0, 3)
 	if writesAgents {
 		mutations = append(mutations, agentsMutation)
 	}
 	if writesClaude {
 		mutations = append(mutations, claudeMutation)
 	}
+	if writesIgnore {
+		mutations = append(mutations, ignoreMutation)
+	}
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage, nil
+	return agentsMessage + "; " + claudeMessage + "; " + ignoreMessage, nil
 }
 
 func Check(repoRoot, policyRoot string) Status {
 	guidance, err := canonical(policyRoot)
 	if err != nil {
-		return Status{Message: err.Error()}
+		message := err.Error()
+		return Status{Message: message, Issues: []Issue{{
+			Check: "policy.agentGuidance", Path: agentsTargetFilename, Subject: "canonical-guidance", Message: message,
+		}}}
 	}
 	agentsTarget, agentsErr := readTarget(filepath.Join(repoRoot, agentsTargetFilename), agentsTargetFilename)
 	claudeTarget, claudeErr := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
+	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
 	agentsStatus := checkAgents(agentsTarget, agentsErr, guidance.agents)
 	claudeStatus := checkClaude(claudeTarget, claudeErr, guidance.claude)
-	if agentsStatus.current && claudeStatus.current {
-		return Status{Current: true, Message: agentsStatus.message + "; " + claudeStatus.message}
+	ignoreStatus := checkReportIgnore(ignoreTarget, ignoreErr)
+	statuses := []checkStatus{agentsStatus, claudeStatus, ignoreStatus}
+	if agentsStatus.current && claudeStatus.current && ignoreStatus.current {
+		return Status{Current: true, Message: joinStatusMessages(statuses)}
 	}
-	issues := make([]string, 0, 2)
-	if !agentsStatus.current {
-		issues = append(issues, agentsStatus.message)
+	issues := make([]Issue, 0, 3)
+	for _, status := range statuses {
+		if !status.current {
+			issues = append(issues, status.issue)
+		}
 	}
-	if !claudeStatus.current {
-		issues = append(issues, claudeStatus.message)
+	messages := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		messages = append(messages, issue.Message)
 	}
-	return Status{Message: strings.Join(issues, "; ")}
+	return Status{Message: strings.Join(messages, "; "), Issues: issues}
 }
 
 type canonicalGuidance struct {
@@ -146,16 +173,20 @@ type targetState struct {
 	mode     os.FileMode
 }
 
-func readTargets(repoRoot string) (targetState, targetState, error) {
+func readTargets(repoRoot string) (targetState, targetState, targetState, error) {
 	agentsTarget, agentsErr := readTarget(filepath.Join(repoRoot, agentsTargetFilename), agentsTargetFilename)
 	claudeTarget, claudeErr := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
+	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
 	if agentsErr != nil {
-		return targetState{}, targetState{}, agentsErr
+		return targetState{}, targetState{}, targetState{}, agentsErr
 	}
 	if claudeErr != nil {
-		return targetState{}, targetState{}, claudeErr
+		return targetState{}, targetState{}, targetState{}, claudeErr
 	}
-	return agentsTarget, claudeTarget, nil
+	if ignoreErr != nil {
+		return targetState{}, targetState{}, targetState{}, ignoreErr
+	}
+	return agentsTarget, claudeTarget, ignoreTarget, nil
 }
 
 func readTarget(path, name string) (targetState, error) {
@@ -218,32 +249,91 @@ func planClaude(existing targetState, template []byte) (mutation, bool, string, 
 	return mutation{}, false, "", errors.New("CLAUDE.md conflicts with the canonical redirect; its bytes were preserved")
 }
 
+func planReportIgnore(existing targetState) (mutation, bool, string) {
+	if reportArtifactsIgnored(existing.contents) {
+		return mutation{}, false, ".gitignore report-artifact rule is already current"
+	}
+	mode := existing.mode
+	if !existing.exists {
+		mode = 0o644
+	}
+	return mutation{
+		path: ignoreTargetFilename, contents: appendReportIgnore(existing.contents), mode: mode, previous: existing,
+	}, true, "installed .gitignore report-artifact rule"
+}
+
+func reportArtifactsIgnored(contents []byte) bool {
+	for _, line := range bytes.Split(contents, []byte("\n")) {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if bytes.Equal(line, []byte(reportsIgnorePattern)) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendReportIgnore(contents []byte) []byte {
+	lineEnding := []byte("\n")
+	if bytes.Contains(contents, []byte("\r\n")) {
+		lineEnding = []byte("\r\n")
+	}
+	updated := append([]byte{}, contents...)
+	if len(updated) > 0 && !bytes.HasSuffix(updated, []byte("\n")) {
+		updated = append(updated, lineEnding...)
+	}
+	updated = append(updated, []byte(reportsIgnorePattern)...)
+	return append(updated, lineEnding...)
+}
+
 type checkStatus struct {
 	current bool
 	message string
+	issue   Issue
 }
 
 func checkAgents(existing targetState, readErr error, template []byte) checkStatus {
 	if readErr != nil || !existing.exists {
-		return checkStatus{message: "AGENTS.md is missing or unreadable; run `code-polishy agents install`"}
+		return failedStatus("policy.agentGuidance", agentsTargetFilename, "canonical-guidance", "AGENTS.md is missing or unreadable; run `code-polishy agents install`")
 	}
 	if !matchesCanonicalGuidance(existing.contents, template) {
-		return checkStatus{message: "AGENTS.md canonical guidance is stale; run `code-polishy agents sync`"}
+		return failedStatus("policy.agentGuidance", agentsTargetFilename, "canonical-guidance", "AGENTS.md canonical guidance is stale; run `code-polishy agents sync`")
 	}
 	return checkStatus{current: true, message: "AGENTS.md canonical guidance is current"}
 }
 
 func checkClaude(existing targetState, readErr error, template []byte) checkStatus {
 	if readErr != nil {
-		return checkStatus{message: "CLAUDE.md conflicts with the canonical redirect or is unreadable; preserve its bytes and resolve the conflict"}
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md conflicts with the canonical redirect or is unreadable; preserve its bytes and resolve the conflict")
 	}
 	if !existing.exists {
-		return checkStatus{message: "CLAUDE.md is missing; run `code-polishy agents sync` after AGENTS.md is current"}
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md is missing; run `code-polishy agents sync` after AGENTS.md is current")
 	}
 	if !matchesCanonicalGuidance(existing.contents, template) {
-		return checkStatus{message: "CLAUDE.md conflicts with the canonical redirect; preserve its bytes and resolve the conflict"}
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md conflicts with the canonical redirect; preserve its bytes and resolve the conflict")
 	}
 	return checkStatus{current: true, message: "CLAUDE.md redirect is current"}
+}
+
+func checkReportIgnore(existing targetState, readErr error) checkStatus {
+	if readErr != nil {
+		return failedStatus("policy.reportArtifacts", ignoreTargetFilename, "workspace-ignore", ".gitignore is unreadable or non-regular; preserve its bytes and resolve the conflict")
+	}
+	if !existing.exists || !reportArtifactsIgnored(existing.contents) {
+		return failedStatus("policy.reportArtifacts", ignoreTargetFilename, "workspace-ignore", "Code Polishy report artifacts are not ignored; run `code-polishy agents sync`")
+	}
+	return checkStatus{current: true, message: ".gitignore report-artifact rule is current"}
+}
+
+func failedStatus(check, path, subject, message string) checkStatus {
+	return checkStatus{message: message, issue: Issue{Check: check, Path: path, Subject: subject, Message: message}}
+}
+
+func joinStatusMessages(statuses []checkStatus) string {
+	messages := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		messages = append(messages, status.message)
+	}
+	return strings.Join(messages, "; ")
 }
 
 func matchesCanonicalGuidance(existing, template []byte) bool {

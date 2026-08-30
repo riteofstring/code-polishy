@@ -1,9 +1,7 @@
 ## Authority and communication
 
-- Run the locally installed `code-polishy`; `.code-polishy.lock.json` names the
-  exact release this repository requires. Treat a release change as a deliberate,
-  reviewed change. If the command is unavailable on `PATH`, check the stable
-  launcher under the caller-specified or default installation prefix.
+- Run the locally installed `code-polishy` release named by
+  `.code-polishy.lock.json`. Treat a release change as a reviewed change.
 - `.code-polishy.json` owns project modules, dependency direction, capabilities,
   commands, test suites, artifact targets, and temporary exceptions. Target
   configuration cannot weaken the locked shared baseline.
@@ -30,10 +28,9 @@
   exact files or modules and read only the returned current design documents.
   Plans, historical evidence, and superseded decisions require an explicit task
   need; do not load them as routine source context.
-- Honor `quality.allowComments`. When it is false, keep governed handwritten
-  source free of prose comments and docstrings. When it is true, preserve useful
-  accurate comments and add one only when it conveys information the code
-  cannot. Put current non-local rationale in mapped design documents.
+- Honor `quality.allowComments`. Preserve useful comments when allowed; when it
+  is false, keep governed handwritten source free of prose comments and
+  docstrings. Put non-local rationale in mapped design documents.
 - Keep domain modules independent of UI, HTTP, persistence, providers, and
   process details unless the checked-in architecture contract allows the edge.
 - Declare separately owned files, directories, repositories, and services as
@@ -45,10 +42,9 @@
 
 ## Dependencies and tests
 
-- Pin direct dependencies and the package manager exactly. Use frozen lockfiles
-  for normal setup. For a dependency update, generate the candidate lockfile
-  without lifecycle scripts and run
-  `code-polishy dependency-review --base <merge-target>` before installation.
+- Pin direct dependencies and the package manager exactly, use frozen lockfiles
+  for normal setup, and follow the governed dependency-update workflow before
+  installing a candidate.
 - Keep every exception exact, visible, owned, justified, and expiring.
 - Give every module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
@@ -57,43 +53,20 @@
   workflow requires them. Keep credentialed, destructive, and live-provider
   probes in explicit external approval gates.
 
-## Reviews and delivery
+## Delivery
 
 - Agent review cannot replace policy checks or human approval.
-- For every non-documentation checkpoint or merge candidate, commit the change
-  and run `code-polishy behavior-review prepare`. Start a review subagent with
-  no inherited conversation and give it only the generated packet. If the
-  harness cannot start subagents, use a separate clean AI invocation with only
-  that packet. Prove each requested behavior red on its pre-fix base and green
-  on the candidate, then finalize the review receipt. Both gates independently
-  replay those proofs. Keep
-  `.code-polishy-reports/behavior-review` in the same workspace or move it only
-  through an explicit trusted CI artifact handoff.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
   isolation.
-- For ordinary Markdown-only work, run `code-polishy format --git-changes` and
-  skip application tests. Fix documentation findings directly without asking
-  the user for authorization. Control and declared product-input Markdown
-  follow ordinary source verification.
 - Run exact tests while editing source and `code-polishy test --changed` for
-  broader feedback. Use `code-polishy test --changed --base TASK_BASE` when a
-  task-bound comparison is needed; it compares `merge-base(TASK_BASE, HEAD)`
-  plus the working tree. After each completed code-changing task on a
-  long-lived branch, run `code-polishy checkpoint-gate --base <previous-checkpoint>`.
-  It requires the finalized behavior receipt, replays cited proofs, runs
-  affected checks and focused tests, then records the accepted HEAD. Do not run
-  it for conversational or read-only requests; an unchanged invocation is a
-  no-op. At a merge checkpoint, resolve the base from an explicit target,
-  checked-in guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
-- Run `code-polishy merge-gate --base <merge-target>` once for the final
-  candidate. Use `--resume` only to retry a failed merge gate with the same
-  content identity; it can reuse eligible successful ordinary test suites, and
-  it reruns all other phases. Gate output shows concise progress and failure
-  tails. Use the managed JSON report and bounded logs below
-  `.code-polishy-reports/<gate>/` for detailed evidence. Let merge-gate select
-  documentation, recommended, or full without asking the user. Summarize its
-  result in plain language.
+  broader feedback. Follow the release-owned `polishy` skill and checked-in
+  workflow for documentation-only validation, dependency review, checkpoints,
+  merge gates, retries, and evidence custody.
+- For every non-documentation checkpoint or merge candidate, commit first, give
+  a clean review agent only the generated behavior packet, prove requested
+  behavior red on the base and green on the candidate, and let both gates replay
+  the proofs independently.
 - Commit all completed task-owned changes after required verification unless the
   caller explicitly requests an uncommitted handoff. Keep commits coherent and
   free of unrelated user work. Push, publish, and pull-request operations require

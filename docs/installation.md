@@ -288,7 +288,8 @@ other.
 Development still runs the source runner. This repository's `AGENTS.md` is the
 same exact canonical file every target receives, so the installed release
 governs the checkout without a guidance exception. `agents sync` replaces that
-whole file when a later locked release changes the canonical contract.
+whole file when a later locked release changes the canonical contract and
+repairs the root `.gitignore` rule that keeps report artifacts workspace-local.
 
 ## Exercising an installed release
 
