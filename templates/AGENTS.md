@@ -60,12 +60,13 @@
 ## Reviews and delivery
 
 - Agent review cannot replace policy checks or human approval.
-- Behavior review is mandatory and not configurable. A non-documentation
-  candidate must be clean and committed, prepared into a packet for a fresh
-  reviewer, proved red on the pre-fix base and green on the candidate for every
-  requested behavior, then finalized into a receipt. Both checkpoint and merge
-  gates independently replay those proofs. The supervising runtime must enforce
-  the reviewer's fresh packet-only context. Keep
+- For every non-documentation checkpoint or merge candidate, commit the change
+  and run `code-polishy behavior-review prepare`. Start a review subagent with
+  no inherited conversation and give it only the generated packet. If the
+  harness cannot start subagents, use a separate clean AI invocation with only
+  that packet. Prove each requested behavior red on its pre-fix base and green
+  on the candidate, then finalize the review receipt. Both gates independently
+  replay those proofs. Keep
   `.code-polishy-reports/behavior-review` in the same workspace or move it only
   through an explicit trusted CI artifact handoff.
 - Use the caller's checkout for ordinary interactive work. Use

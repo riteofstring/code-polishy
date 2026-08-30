@@ -95,9 +95,9 @@ mappings describe repository facts; declare them whenever those facts exist.
 Conditional policy modules and their exact, expiring overrides are policy
 mechanisms, not setup preferences. Agent reviews and task sessions remain
 optional workflows selected only when requested or operationally applicable.
-Behavior-regression evidence is a mandatory shared control for applicable
-non-documentation checkpoints and merge candidates. It is not a setup choice,
-and `verification.behaviorReview` is invalid configuration.
+Applicable non-documentation checkpoint and merge gates expect
+behavior-regression evidence, so the adoption wizard does not present it as a
+setup choice.
 
 For a repair or upgrade, preserve every explicit choice. Ask only about a newly
 introduced material choice that the existing configuration does not already
@@ -440,10 +440,10 @@ The resulting guidance should make these execution boundaries clear:
   so Code Polishy selects documentation, recommended, or full execution without
   a user choice, and they do not immediately precede it with `test --changed`
   for the same candidate;
-- non-documentation candidates always use the packet-only fresh-reviewer,
-  red/green proof, and receipt workflow before either checkpoint or merge gate;
-  both gates independently rerun cited proofs, and the runtime enforces reviewer
-  isolation and report custody;
+- non-documentation candidates use a review subagent with no inherited
+  conversation, red/green proofs, and a receipt before either checkpoint or
+  merge gate; both gates independently rerun cited proofs, and the primary agent
+  or harness keeps the subagent packet-only and preserves report custody;
 - local supplemental mutation and risk work runs through its separate direct
   stage after ordinary acceptance; only credentialed, destructive,
   production-mutating, and live-provider probes remain external approval

@@ -10,8 +10,8 @@ Use the release named by the target repository's `.code-polishy.lock.json` as
 the source of truth. Keep inspection read-only until the user asks for a change.
 Use the caller's checkout for ordinary interactive work. Use one caller-scoped
 `task-session` for unattended work or when the caller explicitly requests an
-isolated boundary. A supervising agent may assign bounded work to its native
-subagents and remains responsible for integration and verification.
+isolated boundary. The primary agent may assign bounded work to subagents and
+remains responsible for integration and verification.
 
 ## Core Principles
 
@@ -99,7 +99,7 @@ policy upgrade, and do not invent authoritative suite counts.
   policy, ordinary verification, build, and online supply-chain workflow. Do
   not describe either as merely another test level.
 - After a completed, clean, committed task on a long-lived branch, run
-  `checkpoint-gate --base <previous-checkpoint>`. It replays mandatory behavior
+  `checkpoint-gate --base <previous-checkpoint>`. It replays behavior
   evidence, runs affected checks and focused tests, and records the accepted
   HEAD. Do not run it for conversational or read-only requests; an unchanged
   invocation is a no-op.
@@ -108,16 +108,17 @@ policy upgrade, and do not invent authoritative suite counts.
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
-- Behavior review is mandatory and has no target configuration switch. Prepare
-  every clean, committed non-documentation candidate before a checkpoint or
-  merge gate. Give only the generated packet to a fresh native reviewer. Record
-  red-on-pre-fix and green-on-candidate `regression-proof` evidence for every
-  behavior it classifies as requested, save its strict result, and run
+- Prepare every clean, committed non-documentation candidate before a checkpoint
+  or merge gate. Start a review subagent with no inherited conversation and give
+  it only the generated packet. If the harness cannot start subagents, use a
+  separate clean AI invocation with only that packet. Record red-on-pre-fix and
+  green-on-candidate `regression-proof` evidence for every behavior it
+  classifies as requested, save its strict result, and run
   `behavior-review finalize`. Both gates independently replay cited proofs. Keep
   `.code-polishy-reports/behavior-review` in the same workspace
-  or move it only as an explicit trusted CI artifact. The supervising agent's
-  existing context is not a fresh review, and local artifacts cannot
-  authenticate reviewer identity or context.
+  or move it only as an explicit trusted CI artifact. The primary agent's
+  existing context is not a clean-context subagent review, and local artifacts
+  cannot authenticate subagent identity or context.
 
 Do not turn an ambiguous request such as "test it" into an ordinary merge
 checkpoint. A direct request for a scoped profile remains scoped feedback, not
@@ -175,7 +176,7 @@ caller explicitly requests an uncommitted handoff.
 | Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested                     |
 | Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it       |
 | Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically         |
-| Skipping mandatory behavior evidence              | Prepare the clean candidate, use a packet-only fresh reviewer, prove requested behavior, and finalize  |
+| Skipping behavior evidence                        | Prepare the clean candidate, use a packet-only review subagent, prove requested behavior, and finalize |
 | Letting completed branch tasks accumulate         | Run `checkpoint-gate` against the previous accepted commit before starting the next code-changing task |
 | Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                          |
 | Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                              |

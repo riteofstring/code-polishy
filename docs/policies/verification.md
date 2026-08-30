@@ -203,7 +203,7 @@ module, suite, or profile downscope.
 An unchanged candidate prints `CHECKPOINT GATE: UNCHANGED` and performs no
 review, checks, tests, or receipt write. An ordinary Markdown-only candidate
 runs the documentation contract without behavior review. Every other candidate
-must first satisfy the mandatory behavior-review receipt and proof replay. The
+must first satisfy the behavior-review receipt and proof replay. The
 gate then runs the normal change-aware policy check for the selected files and
 focused suites for changed modules plus reverse dependents. It stops after a
 failed phase and never runs merge-only builds, supply-chain work, full suites,
@@ -296,12 +296,10 @@ telemetry, and report notes. CI may archive that output and should make the
 resulting status required for merge. Human handoffs should summarize the
 outcome and concrete failures rather than repeat the receipt.
 
-## Mandatory behavior regression review receipt
+## Behavior regression review receipt
 
 Every non-documentation checkpoint or merge candidate requires a
-behavior-regression receipt. The shared policy owns this requirement; there is
-no `verification.behaviorReview` setting, and either `required: true` or
-`required: false` is rejected as unknown configuration.
+behavior-regression receipt.
 
 Both `checkpoint-gate` and `merge-gate` validate the current clean candidate's
 receipt against the resolved base and replay every cited red/green proof before
@@ -309,9 +307,10 @@ further work. A missing, stale, malformed, unresolved, under-proved, or
 non-reproducible review becomes a `policy.behaviorReview` finding. An unchanged
 checkpoint and the built-in documentation level bypass this receipt.
 
-The receipt comes from a packet-only review plus red/green regression proof for
-each requested behavior. The agent runtime must supply and isolate the fresh
-reviewer; local artifacts cannot authenticate reviewer identity or context. The
+The receipt comes from a review subagent with no inherited conversation plus
+red/green regression proof for each requested behavior. If the harness cannot
+start subagents, use a separate clean AI invocation with only the generated
+packet. Local artifacts cannot authenticate subagent identity or context. The
 receipt is additional merge evidence, not a replacement for ordinary tests,
 policy checks, human approval, or supplemental hardening. Follow the
 [Behavior Regression Review Policy](behavior-review.md) for the required

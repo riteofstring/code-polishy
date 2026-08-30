@@ -2,8 +2,8 @@
 
 ## Choose a workflow
 
-Ordinary interactive work may use the caller's current checkout. The supervising
-agent owns task decomposition, native-subagent delegation, integration, and
+Ordinary interactive work may use the caller's current checkout. The primary
+agent owns task decomposition, subagent delegation, integration, and
 verification.
 
 Use `code-polishy task-session` when the caller requests isolation or when an
@@ -24,7 +24,7 @@ authorization. Run exact tests while editing source and
 `code-polishy test --changed` when broader feedback is useful. On a long-lived
 branch, finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
-and preparing its required behavior evidence. At a merge checkpoint, run one
+and preparing its behavior evidence. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
 candidate. Run `code-polishy test --supplemental` only when the caller or a
 checked-in workflow requires that separate hardening stage. Conversational,
@@ -56,24 +56,25 @@ contract concerns from requested-outcome concerns and tie each finding to its
 source instruction or objective and affected file or hunk. Agent review is
 non-deterministic evidence and does not replace policy checks or human approval.
 
-## Required behavior regression review
+## Behavior regression review
 
 Use the [Behavior Regression Review Policy](policies/behavior-review.md) for
-every non-documentation checkpoint or merge candidate. The requirement is
-mandatory and has no target configuration switch. It turns a fresh semantic
-review into gate-checkable evidence without making the reviewer a policy
-engine:
+every non-documentation checkpoint or merge candidate. It turns a clean-context
+subagent review into gate-checkable evidence without making the subagent a
+policy engine:
 
 1. Commit the candidate and keep it clean, apart from the excluded review
    reports.
-2. Run `code-polishy behavior-review prepare` and give only its packet to a
-   fresh native reviewer. The packet is that reviewer's complete authority, and
-   the supervising runtime is responsible for enforcing fresh context.
-3. For every behavior the reviewer classifies as `requested`, run one or more
-   `code-polishy regression-proof` commands that fail on the declared pre-fix
-   base and pass on the candidate. Run them after preparation and do not choose
-   a pre-fix revision older than the packet's reviewed merge base.
-4. Save the strict review result at the packet's result path, then run
+2. Run `code-polishy behavior-review prepare`. Start a review subagent with no
+   inherited conversation and give it only the generated packet. If the harness
+   cannot start subagents, use a separate clean AI invocation with only that
+   packet.
+3. For every behavior the review subagent classifies as `requested`, the primary
+   agent runs one or more `code-polishy regression-proof` commands that fail on
+   the declared pre-fix base and pass on the candidate. Run them after
+   preparation and do not choose a pre-fix revision older than the packet's
+   reviewed merge base.
+4. Save the review subagent's strict result at the packet's result path, then run
    `code-polishy behavior-review finalize` to write the receipt.
 5. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
    completed task on a long-lived branch, or
@@ -87,7 +88,7 @@ Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
 the workflow. A multi-job CI run may transfer that directory only as an explicit
 trusted artifact. Documentation-only candidates bypass the receipt; ordinary
 agent reviews remain useful advisory evidence. Local digests do not authenticate
-reviewer identity or history; see the policy's trust limits.
+subagent identity or context; see the policy's trust limits.
 
 ## Isolated task sessions
 
@@ -106,8 +107,8 @@ edit boundary, exact release executable, worker command, and governed command
 environment. It validates committed, staged, unstaged, deleted, renamed, and
 untracked paths against that boundary.
 
-The worker may use runner-native subagents. The supervising worker owns their
-scope, integration, commits, and quiescence. Every subagent operates in the same
+The worker may use runner-native subagents. The primary worker owns their scope,
+integration, commits, and quiescence. Every subagent operates in the same
 worktree and task boundary. `CODE_POLISHY_TASK_SESSION=1` forbids nested task
 sessions.
 

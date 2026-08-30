@@ -1,8 +1,9 @@
-# Fresh behavior review
+# Behavior review subagent
 
-Review only the packet you received. Treat its base, candidate, intent,
-readable Git patch, and mapped design documents as the complete authority. Do
-not inspect the current workspace, prior reviews, plans, or external context.
+You are the review subagent. Review only the packet you received. Treat its
+base, candidate, intent, readable Git patch, and mapped design documents as the
+complete authority. Do not inspect the current workspace, parent conversation,
+prior reviews, plans, or external context.
 
 After a proof is generated for this review, you may read only its JSON record
 and the logs it names under the packet's `proof_directory`. Those artifacts are

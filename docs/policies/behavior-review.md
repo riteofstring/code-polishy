@@ -1,21 +1,16 @@
 # Behavior Regression Review
 
-Behavior regression review is mandatory for every non-documentation checkpoint
-and merge gate. The agent runtime supplies the fresh reviewer. Code Polishy
-prepares the exact packet, records red/green proofs, validates the structured
-result, and replays every cited proof whenever either gate runs.
+Every non-documentation checkpoint and merge gate uses a behavior review
+subagent. The primary agent is the agent implementing the change. Code Polishy
+does not launch AI agents; it prepares the exact packet, records red/green
+proofs, validates the structured result, and replays every cited proof whenever
+either gate runs.
 
 Ordinary agent reviews remain useful advisory evidence and can inspect a dirty
 working tree; this workflow is deliberately bound to one clean committed
 candidate.
 
-## Mandatory policy
-
-The requirement has no configuration switch. Do not add
-`verification.behaviorReview`; both `required: true` and `required: false` are
-unknown configuration and fail closed. A target can configure its modules,
-commands, test suites, and merge-gate allowlist, but it cannot weaken this
-shared behavior-evidence prerequisite.
+## When it runs
 
 The receipt is required for every non-documentation `checkpoint-gate` and for
 recommended and full `merge-gate` candidates. An unchanged checkpoint is a
@@ -43,16 +38,16 @@ bypass behavior review.
    `.code-polishy-reports/behavior-review/packet.json` plus `prepare.json`,
    which binds that prepared packet to its review ID, base, and candidate.
 
-4. Give only that packet to a fresh native reviewer. The supervising runtime
-   must keep that reviewer from reading the current workspace, prior reviews,
-   plans, or external context. The packet contains the original intent,
-   resolved base and candidate, binary-safe Git patch, current mapped design
-   documents, a random review ID, and the canonical review instructions. After
-   a proof exists, the reviewer may read only that proof's JSON record and named
-   logs below the packet's proof directory.
-5. The reviewer describes every material observable behavior as `requested`,
-   `preserved`, `unintended`, or `unknown`. For every `requested` behavior,
-   create at least one proof ID:
+4. Start a review subagent with no inherited conversation and give it only the
+   generated packet. If the harness cannot start subagents, use a separate clean
+   AI invocation with only that packet. The review subagent must not inspect the
+   current workspace, parent conversation, prior reviews, plans, or external
+   context. The packet contains the original intent, resolved base and
+   candidate, binary-safe Git patch, current mapped design documents, a random
+   review ID, and the canonical review instructions.
+5. The review subagent describes every material observable behavior as
+   `requested`, `preserved`, `unintended`, or `unknown`. For every `requested`
+   behavior, the primary agent creates at least one proof ID:
 
    ```sh
    code-polishy regression-proof \
@@ -67,8 +62,11 @@ bypass behavior review.
    `--evidence` for each evidence file. Use `--red-exit STATUS` only when the
    expected baseline failure is not status `1`.
 
-6. Save the reviewer's exact JSON result at the packet's `result_path`, with no
-   surrounding prose, and finalize it:
+   After a proof exists, the review subagent may read only that proof's JSON
+   record and named logs below the packet's proof directory.
+
+6. Save the review subagent's exact JSON result at the packet's `result_path`,
+   with no surrounding prose, and finalize it:
 
    ```sh
    code-polishy behavior-review finalize --base REVIEW_BASE
@@ -163,18 +161,19 @@ it names. The accepted checkpoint receipt lives separately below
 `.code-polishy-reports/checkpoint-gate`; both report directories are excluded
 from candidate selection.
 
-Intent and reviewer-instruction inputs are limited to 64 KiB. A review result
+Intent and subagent-instruction inputs are limited to 64 KiB. A review result
 and each mapped design document are limited to 256 KiB; artifact reads are
 limited to 8 MiB. Intent is a non-empty regular UTF-8 file; artifact targets
-and evidence paths remain contained. These limits keep the reviewer packet
+and evidence paths remain contained. These limits keep the review packet
 bounded and prevent artifacts from becoming a second ungoverned source tree.
 
 Digests and re-derivation detect stale or individually edited artifacts; they
 are not signatures. Code Polishy can bind artifacts to exact Git revisions and
 independently replay executable proofs. It cannot authenticate which model or
-session wrote the review, prove that the reviewer had fresh context, or stop a
-writer with artifact access from replacing a complete self-consistent artifact
-set. The supervising runtime and CI custody boundary must enforce those parts.
+session wrote the review, prove that the review subagent started without
+inherited context, or stop a writer with artifact access from replacing a
+complete self-consistent artifact set. The primary agent or harness and the CI
+custody boundary must enforce those parts.
 
 The receipt adds gate evidence. It does not replace ordinary policy checks,
 configured tests, human approval, or separate supplemental test-strength work.

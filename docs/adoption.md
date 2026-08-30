@@ -563,18 +563,18 @@ control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
 Archive verbose output for audit and require the resulting status for merge.
 
-### Keep mandatory behavior-regression evidence in custody
+### Keep behavior-regression evidence in custody
 
-Fresh semantic review and executable red/green evidence are mandatory before
-every non-documentation checkpoint or merge gate. There is no target setting;
-adding `verification.behaviorReview` with either `required: true` or
-`required: false` is invalid configuration. CI must retain
+Before every non-documentation checkpoint or merge gate, start a review
+subagent with no inherited conversation and give it only the generated packet.
+If the harness cannot start subagents, use a separate clean AI invocation with
+only that packet. CI must retain
 `.code-polishy-reports/behavior-review` in the same workspace as preparation,
 proof, finalization, and the applicable gate, or transfer it between jobs as an
 explicit trusted artifact. Both checkpoint and merge gates replay every cited
-proof; the agent runtime must separately enforce fresh-reviewer isolation. See
-[Behavior Regression Review](policies/behavior-review.md) before relying on the
-workflow.
+proof; the primary agent or harness must keep the review subagent packet-only.
+See [Behavior Regression Review](policies/behavior-review.md) before relying on
+the workflow.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen

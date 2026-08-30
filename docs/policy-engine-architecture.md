@@ -34,10 +34,10 @@ clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
 review-result and receipt validation, candidate-material re-derivation,
 behavior-proof records, disposable baseline/candidate replay, and the atomic
 accepted-checkpoint receipt. It depends only on policy, repository, and runner.
-The agent runtime supplies and isolates a fresh reviewer; this module gives that
-reviewer a bounded packet and gives both checkpoint and merge gates
-candidate-bound executable evidence. Local artifacts do not authenticate
-reviewer identity or context.
+The primary agent or harness starts a review subagent with no inherited
+conversation and gives it the bounded packet. The module gives both checkpoint
+and merge gates candidate-bound executable evidence. Local artifacts do not
+authenticate subagent identity or context.
 
 `internal/runner` is the subprocess boundary for target-declared commands. It
 accepts argument arrays, resolves working directories and checked-in
@@ -163,9 +163,9 @@ execution.
 one report. Merge-gate reports also carry the selected policy level, trusted
 base label, and deterministic reasons; the CLI renders that disclosure before
 findings. Checkpoint reports carry their scope, supplied base, exact candidate,
-and acceptance-receipt path. Behavior-regression review is mandatory before
-ordinary non-documentation checkpoint or merge work. The CLI translates
-reports to exit statuses:
+and acceptance-receipt path. Behavior-regression review runs before ordinary
+non-documentation checkpoint or merge work. The CLI translates reports to exit
+statuses:
 
 - `0`: the requested profile completed without findings;
 - `1`: policy or behavior findings;
@@ -211,13 +211,13 @@ merge-base delta ---> impacted modules + matching standard suites
 
 merge-gate delta ---> exact candidate classifier
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> mandatory behavior-review receipt validation
+                 ---> other candidate ---> behavior-review receipt validation
                                       ---> shared escalation rules + target module allowlist
                                       ---> recommended pipeline OR complete full gate
 
 checkpoint delta ---> unchanged ---> no-op
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> mandatory behavior-review receipt + proof replay
+                 ---> other candidate ---> behavior-review receipt + proof replay
                                       ---> affected checks + focused changed tests
                  ---> complete pass ---> accepted-HEAD receipt
 
@@ -255,7 +255,7 @@ adaptive configuration selects the existing complete gate.
 `checkpoint-gate` is a separate task boundary. It requires an explicit previous
 checkpoint and a clean committed candidate. Unchanged work is a no-op;
 documentation runs the same built-in contract; other changes validate and
-replay mandatory behavior evidence before the normal change-aware check and
+replay behavior evidence before the normal change-aware check and
 focused impacted tests. Only a finding-free run with an unchanged HEAD writes
 the accepted-checkpoint receipt. The receipt records state but does not select
 the next base automatically.
