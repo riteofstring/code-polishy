@@ -82,7 +82,15 @@ if [[ ! -f "${lock}" ]]; then
 fi
 
 lock_field() {
-  awk -v key="\"$2\":" '$1 == key { value = $2; gsub(/[,\"]/, "", value); print value; exit }' "$1"
+  awk -v key="$2" '
+    $0 ~ "^  \"" key "\": \"" {
+      value = $0
+      sub("^  \"" key "\": \"", "", value)
+      sub("\",?$", "", value)
+      print value
+      exit
+    }
+  ' "$1"
 }
 
 locked_version="$(lock_field "${lock}" codePolishyVersion)"
