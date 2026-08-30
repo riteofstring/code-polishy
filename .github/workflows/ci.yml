@@ -188,6 +188,7 @@ jobs:
           & $launcher --repo-root $target task-session --module application -- pwsh -NoProfile -NonInteractive -Command 'exit 0'
           if ($LASTEXITCODE -ne 0) { throw 'Installed native task session failed.' }
 
+          $behaviorStarted = Get-Date
           $behaviorBase = (& git.exe -C $target rev-parse HEAD).Trim()
           $intent = Join-Path $env:RUNNER_TEMP 'windows-behavior-intent.txt'
           Set-Content -LiteralPath $intent -Value 'Change the Windows fixture state to candidate and keep it covered.'
@@ -238,3 +239,7 @@ jobs:
           Complete-BehaviorReview
           & $launcher --repo-root $target merge-gate --base $behaviorBase
           if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior merge failed.' }
+          $behaviorArtifacts = Join-Path $target '.code-polishy-reports\behavior-review'
+          $artifactBytes = (Get-ChildItem -LiteralPath $behaviorArtifacts -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          $durationSeconds = [math]::Round(((Get-Date) - $behaviorStarted).TotalSeconds)
+          Write-Output "DOGFOOD SUMMARY repo=windows-native completed=true duration_seconds=$durationSeconds corrective_attempts=0 artifact_bytes=$artifactBytes"

@@ -131,6 +131,14 @@ set -euo pipefail
 if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
   printf '%s\n' "$(basename "$0")" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
 fi
+if [[ "$(basename "$0")" == "build.sh" ]]; then
+  transient_marker="$(git rev-parse --git-dir)/code-polishy-fail-build-once"
+  if [[ -f "${transient_marker}" ]]; then
+    rm -f -- "${transient_marker}"
+    echo "simulated transient late build failure" >&2
+    exit 1
+  fi
+fi
 exit 0
 EOF
     chmod +x "${target}/scripts/${name}.sh"

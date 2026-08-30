@@ -83,8 +83,31 @@ dogfood_pass() {
   shift 3
   local started=${SECONDS}
   expect_pass "${target}" "${description} ${phase}" "$@"
-  printf 'DOGFOOD PASS repo=%s phase=%s duration_seconds=%d\n' \
+  printf 'DOGFOOD PASS repo=%s phase=%s duration_seconds=%d corrective_attempts=0\n' \
     "${description}" "${phase}" "$((SECONDS - started))"
+}
+
+dogfood_resume_pass() {
+  local target="$1" description="$2" base="$3" output_path="$4"
+  local started=${SECONDS}
+  expect_pass "${target}" "${description} resumed merge" \
+    merge-gate --base "${base}" --resume
+  grep -q '^REUSED TEST PHASES:' "${output_path}" ||
+    fail "${description}: resumed merge reused no ordinary test phase: $(excerpt)"
+  printf 'DOGFOOD PASS repo=%s phase=resume duration_seconds=%d corrective_attempts=1\n' \
+    "${description}" "$((SECONDS - started))"
+}
+
+dogfood_summary() {
+  local target="$1" description="$2"
+  local artifact_bytes
+  artifact_bytes="$(find "${target}/.code-polishy-reports/behavior-review" \
+    -type f -exec wc -c {} + | awk 'END { print $1 }')"
+  if [[ ! "${artifact_bytes}" =~ ^[0-9]+$ ]]; then
+    fail "${description}: behavior review artifact size was unavailable"
+  fi
+  printf 'DOGFOOD SUMMARY repo=%s completed=true corrective_attempts=1 artifact_bytes=%s\n' \
+    "${description}" "${artifact_bytes}"
 }
 
 record_requested_behavior_review() {
@@ -178,8 +201,14 @@ EOF
   write_multi_task_review_result "${target}" greeting-change
   dogfood_pass "${target}" "${description}" finalize-multi-task \
     behavior-review finalize --base "${base}"
-  dogfood_pass "${target}" "${description}" merge-multi-task \
+  touch "${target}/.git/code-polishy-fail-build-once"
+  expect_findings "${target}" "${description} transient late build" \
     merge-gate --base "${base}"
+  grep -q 'simulated transient late build failure' "${output_path}" ||
+    fail "${description}: late build failure was unclear: $(excerpt)"
+  printf 'DOGFOOD PASS repo=%s phase=late-build-failure duration_seconds=0 corrective_attempts=0\n' \
+    "${description}"
+  dogfood_resume_pass "${target}" "${description}" "${base}" "${output_path}"
 
   unintended_base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
   printf '%s\n' 'Rename the internal prefix without changing behavior.' >"${unintended_intent}"
@@ -206,5 +235,7 @@ EOF
   fi
   grep -q 'reviewer classified a behavior as unintended' "${output_path}" ||
     fail "${description}: unintended review did not explain the block: $(excerpt)"
-  printf 'DOGFOOD PASS repo=%s phase=unintended-change-blocked duration_seconds=0\n' "${description}"
+  printf 'DOGFOOD PASS repo=%s phase=unintended-change-blocked duration_seconds=0 corrective_attempts=0\n' \
+    "${description}"
+  dogfood_summary "${target}" "${description}"
 }
