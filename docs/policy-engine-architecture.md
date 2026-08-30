@@ -262,8 +262,10 @@ checkpoint and a clean committed candidate. Unchanged work is a no-op;
 documentation runs the same built-in contract; other changes validate and
 replay behavior evidence before the normal change-aware check and
 focused impacted tests. Only a finding-free run with an unchanged HEAD writes
-the accepted-checkpoint receipt. The receipt records state but does not select
-the next base automatically.
+the accepted-checkpoint receipt. A two-phase publication binds that receipt to
+the exact passed run identity, execution, and report digest; the receipt is
+accepted only while the report remains current and validates. The receipt
+records state but does not select the next base automatically.
 
 The gate-run owner gives checkpoint and merge execution a single durable
 artifact contract. It binds the exact candidate, base, loaded policy, locked
@@ -271,7 +273,9 @@ release, platform, effective command environment, and complete command plan to
 bounded logs and a versioned report. A normal run executes every phase. An
 explicit merge resume may reuse only a validated passed ordinary-test receipt
 from an otherwise identical failed run; behavior proofs, checks, builds,
-supply-chain work, and artifact security remain fresh.
+supply-chain work, and artifact security remain fresh. A reused suite receives
+a receipt in the current execution with validated provenance to the original
+executed suite, preserving safe chained retries after repeated late failures.
 
 ## Fail-closed planning
 

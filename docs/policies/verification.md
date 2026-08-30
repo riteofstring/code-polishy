@@ -227,9 +227,11 @@ executed command below `.code-polishy-reports/checkpoint-gate/`. The report
 binds the requested and exact base, candidate, selected policy level, release
 and configuration identity, command outcomes, failure evidence, log paths, and
 final status. The checkpoint receipt records the exact merge base, accepted
-candidate, scope, and behavior-review ID when applicable. It is an audit
-record, not an implicit base: the next invocation still supplies the accepted
-commit explicitly.
+candidate, scope, behavior-review ID when applicable, and the exact passed run
+identity, execution, and report digest. Readers require that report to remain
+the current validated passed checkpoint report. It is an audit record, not an
+implicit base: the next invocation still supplies the accepted commit
+explicitly.
 
 The terminal shows `RUN`, `PASS`, or `FAIL` phase progress. A failure prints a
 bounded tail and the managed log path; the report and log remain the durable
@@ -285,8 +287,11 @@ structured findings, and final status. It records command failure categories
 from runner facts only: `command-exit`, `timeout`, `canceled`, `environment`,
 `resource`, or `operational`. Test evidence also identifies suite ownership,
 changed and impacted overlap, exit status, attempt count, and log path.
-Candidate retries and exact-base replays may add observed diagnostic states;
-they never turn the original gate failure into a pass.
+Before an exact-base replay, Code Polishy loads the base release and
+configuration and requires the named base suite to match the candidate suite
+definition. An unavailable or changed suite reports `baseline-unavailable`
+instead of guessing. Candidate retries and exact-base replays may add observed
+diagnostic states; they never turn the original gate failure into a pass.
 
 After documentation classification, recommended is selected only when every
 changed path maps to exactly one allowlisted module and the existing impact
@@ -332,6 +337,11 @@ again. A normal `merge-gate` run never reuses receipts. Resume does not reduce
 scope, and final clean-candidate validation still applies. Local receipt
 digests establish content identity rather than a signature; CI may keep the
 report directory in a stronger custody boundary.
+
+Every reused suite gets a new receipt inside the current execution. That
+receipt carries validated provenance back to the original executed suite, so a
+second identical retry after another late failure remains loadable without
+mistaking reused work for a fresh execution.
 
 Default human output keeps the decision to one line:
 

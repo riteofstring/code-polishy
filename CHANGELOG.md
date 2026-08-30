@@ -8,12 +8,14 @@
 - Add `checkpoint-gate --base REF` for accepting one completed task on a
   long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
   contract for documentation-only work, otherwise validates behavior evidence,
-  runs affected checks and focused tests, and records the passing HEAD.
+  runs affected checks and focused tests, and binds the accepted HEAD to the
+  exact durable passed run report.
 - Add durable checkpoint and merge run reports with bounded command logs,
-  fact-based failure evidence, explicit changed-test comparisons, and
-  merge-wide plus latest-task test reminders. Add `merge-gate --resume` to
-  reuse only validated ordinary-test receipts from an identical failed run;
-  every proof, check, build, and security phase runs again.
+  fact-based failure evidence derived from matching exact-base suites, explicit
+  changed-test comparisons, and merge-wide plus latest-task test reminders.
+  Add `merge-gate --resume` to reuse only validated ordinary-test receipts from
+  an identical failed run; every proof, check, build, and security phase runs
+  again.
 - Add command-local `--help`, `-h`, and `help COMMAND` pages with syntax,
   selectors, side effects, exits, examples, and targeted usage corrections.
 

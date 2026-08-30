@@ -22,8 +22,8 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
 - Uses a [review subagent](docs/policies/behavior-review.md) to compare behavior
-  before and after each non-documentation candidate, then independently replays
-  its red/green regression proofs at checkpoint and merge gates.
+  before and after each non-documentation checkpoint or merge candidate, then
+  independently replays its red/green regression proofs at the applicable gate.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.

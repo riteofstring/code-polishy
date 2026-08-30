@@ -102,13 +102,15 @@ code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 ```
 
 The command runs changed-scope policy checks and focused tests after behavior
-evidence passes, then atomically writes
-`.code-polishy-reports/checkpoint-gate/receipt.json` with the accepted HEAD. It
-writes no acceptance receipt after any finding or operational failure. When the
-base yields no governed candidate paths, it reports an unchanged no-op and
-writes nothing. This makes an always-invoked wrapper harmless after a
-conversational or read-only request, although agent guidance should invoke the
-command only after a completed committed task.
+evidence passes. It prepares the exact passed run report, writes
+`.code-polishy-reports/checkpoint-gate/receipt.json` bound to that report's
+identity, execution, and digest, then publishes the report. The receipt is
+accepted only while that exact passed report remains current. A receipt or
+report publication failure is operational and leaves no readable acceptance.
+When the base yields no governed candidate paths, the command reports an
+unchanged no-op and writes nothing. This makes an always-invoked wrapper
+harmless after a conversational or read-only request, although agent guidance
+should invoke the command only after a completed committed task.
 
 Use the accepted candidate commit as the next task's `PREVIOUS_CHECKPOINT`. The
 checkpoint receipt records that fact for audit; the next invocation still

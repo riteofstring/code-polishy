@@ -49,6 +49,11 @@ that executes work writes a versioned JSON report and bounded command logs
 below `.code-polishy-reports/<gate>/`. Use those files for durable evidence and
 machine inspection instead of parsing terminal output.
 
+An accepted checkpoint receipt binds the exact passed run identity, execution,
+and report digest. It remains valid only while that report is the current,
+fully validated checkpoint report. Receipt or report publication failures are
+operational failures and cannot leave readable checkpoint acceptance.
+
 A merge reminder always preserves the merge-target-wide changed-test count. If
 a valid checkpoint receipt is bound to the candidate, it also names the latest
 task slice and its base. This advisory data never changes merge selection.
