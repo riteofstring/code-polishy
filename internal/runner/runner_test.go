@@ -58,6 +58,32 @@ func TestOSRunnerCapturesStructuredOutputThroughTheCommonBoundary(t *testing.T) 
 	}
 }
 
+func TestOSRunnerRunWithWritersUsesOnlyTheRequestedDestinations(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	script := filepath.Join(root, "redirect.sh")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nprintf 'report'\nprintf 'diagnostic' >&2\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var configuredStdout, configuredStderr, requestedStdout, requestedStderr bytes.Buffer
+	result, err := (OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}).RunWithWriters(
+		context.Background(),
+		root,
+		policy.Command{Name: "redirect", Argv: []string{"./redirect.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds},
+		&requestedStdout,
+		&requestedStderr,
+	)
+	if err != nil || result.ExitStatus != 0 {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	if requestedStdout.String() != "report" || requestedStderr.String() != "diagnostic" {
+		t.Fatalf("requested output stdout=%q stderr=%q", requestedStdout.String(), requestedStderr.String())
+	}
+	if configuredStdout.Len() != 0 || configuredStderr.Len() != 0 {
+		t.Fatalf("configured output stdout=%q stderr=%q", configuredStdout.String(), configuredStderr.String())
+	}
+}
+
 func TestOSRunnerBoundsStructuredOutputCapture(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "large-report.sh")

@@ -30,6 +30,11 @@ type OutputRunner interface {
 	RunWithOutput(context.Context, string, policy.Command) (Result, Output, error)
 }
 
+type StreamRunner interface {
+	Runner
+	RunWithWriters(context.Context, string, policy.Command, io.Writer, io.Writer) (Result, error)
+}
+
 type OSRunner struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
@@ -108,6 +113,10 @@ func (runner OSRunner) RunWithStatus(parent context.Context, root string, specif
 
 func (runner OSRunner) RunWithResult(parent context.Context, root string, specification policy.Command) (Result, error) {
 	return runner.run(parent, root, specification, runner.Stdout, runner.Stderr)
+}
+
+func (runner OSRunner) RunWithWriters(parent context.Context, root string, specification policy.Command, stdout, stderr io.Writer) (Result, error) {
+	return runner.run(parent, root, specification, stdout, stderr)
 }
 
 func (runner OSRunner) RunWithOutput(parent context.Context, root string, specification policy.Command) (Result, Output, error) {
