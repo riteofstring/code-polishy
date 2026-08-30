@@ -87,7 +87,7 @@ type ProveResult struct {
 	ProofPath string
 }
 
-type ValidateMergeReceiptOptions struct {
+type ValidateGateReceiptOptions struct {
 	Base string
 }
 
@@ -96,7 +96,7 @@ type ProofReference struct {
 	SHA256 string `json:"sha256"`
 }
 
-type MergeReceipt struct {
+type GateReceipt struct {
 	Version       int              `json:"version"`
 	ReviewID      string           `json:"review_id"`
 	Base          string           `json:"base"`
@@ -146,12 +146,12 @@ func Prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	return prove(ctx, repo, commandRunner, options)
 }
 
-func ValidateMergeReceipt(ctx context.Context, repo repository.Repository, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
-	return validateMergeReceipt(ctx, repo, options)
+func ValidateGateReceipt(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReceipt, error) {
+	return validateGateReceipt(ctx, repo, options)
 }
 
-func ReplayMergeReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
-	return replayMergeReceipt(ctx, repo, commandRunner, options)
+func ReplayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
+	return replayGateReceipt(ctx, repo, commandRunner, options)
 }
 
 func RecordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {

@@ -242,6 +242,8 @@ expect_no_target_commands() {
 exercise_documentation_lane() {
   local target="$1" description="$2"
   local command_log="${target}/.git/code-polishy-command-log"
+  local previous_checkpoint
+  previous_checkpoint="$("${real_git}" -C "${target}" rev-parse HEAD)"
   write_file "${target}/README.md" <<'EOF'
 # Documentation lane
 
@@ -255,17 +257,26 @@ EOF
   expect_no_target_commands "${target}" "${description} unformatted documentation gate"
   expect_pass "${target}" "${description} documentation format" format --git-changes
   expect_no_target_commands "${target}" "${description} documentation format"
+  "${real_git}" -C "${target}" add README.md
+  "${real_git}" -C "${target}" commit --quiet -m "documentation candidate"
   : >"${command_log}"
-  expect_pass "${target}" "${description} documentation merge gate" merge-gate --base HEAD
-  grep -q '^MERGE GATE: DOCUMENTATION against HEAD$' "${output}" ||
+  expect_pass "${target}" "${description} documentation checkpoint" checkpoint-gate --base "${previous_checkpoint}"
+  grep -q "^CHECKPOINT GATE: DOCUMENTATION against ${previous_checkpoint}$" "${output}" ||
+    fail "${description}: checkpoint gate did not disclose the documentation lane: $(excerpt)"
+  grep -Eq '^CHECKPOINT ACCEPTED: [0-9a-f]{40,64}$' "${output}" ||
+    fail "${description}: checkpoint gate did not record accepted HEAD: $(excerpt)"
+  expect_no_target_commands "${target}" "${description} documentation checkpoint"
+  : >"${command_log}"
+  expect_pass "${target}" "${description} documentation merge gate" merge-gate --base "${previous_checkpoint}"
+  grep -q "^MERGE GATE: DOCUMENTATION against ${previous_checkpoint}$" "${output}" ||
     fail "${description}: merge gate did not disclose the documentation lane: $(excerpt)"
   expect_no_target_commands "${target}" "${description} documentation merge gate"
-  expect_pass "${target}" "${description} documentation levels" test-levels --base HEAD
+  expect_pass "${target}" "${description} documentation levels" test-levels --base "${previous_checkpoint}"
   grep -Eq '^\| documentation \* +\| 0 application suites +\| automatic +\| merge-gate --base REF +\|$' "${output}" ||
     fail "${description}: test-levels did not disclose zero application suites: $(excerpt)"
   expect_no_target_commands "${target}" "${description} documentation levels"
   : >"${command_log}"
-  expect_pass "${target}" "${description} changed tests" test --changed --base HEAD
+  expect_pass "${target}" "${description} changed tests" test --changed --base "${previous_checkpoint}"
   expect_no_target_commands "${target}" "${description} changed tests"
 }
 

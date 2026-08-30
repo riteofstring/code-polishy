@@ -33,11 +33,11 @@ func (engine *Engine) ProveRegression(ctx context.Context, base, suite string, e
 	return behaviorreview.ProveResult{}, fmt.Errorf("regression-proof requires a runner that captures command output")
 }
 
-func (engine *Engine) validateBehaviorReviewMergeReceipt(ctx context.Context, base string) (behaviorreview.MergeReceipt, error) {
-	return behaviorreview.ValidateMergeReceipt(ctx, engine.Repository, behaviorreview.ValidateMergeReceiptOptions{Base: base})
+func (engine *Engine) validateBehaviorReviewGateReceipt(ctx context.Context, base string) (behaviorreview.GateReceipt, error) {
+	return behaviorreview.ValidateGateReceipt(ctx, engine.Repository, behaviorreview.ValidateGateReceiptOptions{Base: base})
 }
 
-func (engine *Engine) replayBehaviorReviewMergeReceipt(ctx context.Context, base string, receipt behaviorreview.MergeReceipt) error {
+func (engine *Engine) replayBehaviorReviewGateReceipt(ctx context.Context, base string, receipt behaviorreview.GateReceipt) error {
 	if len(receipt.Proofs) == 0 {
 		return nil
 	}
@@ -45,11 +45,11 @@ func (engine *Engine) replayBehaviorReviewMergeReceipt(ctx context.Context, base
 	if !ok {
 		return fmt.Errorf("%w: behavior review proof replay requires a runner that captures command output", behaviorreview.ErrOperational)
 	}
-	_, err := behaviorreview.ReplayMergeReceipt(ctx, engine.Repository, commandRunner, behaviorreview.ValidateMergeReceiptOptions{Base: base})
+	_, err := behaviorreview.ReplayGateReceipt(ctx, engine.Repository, commandRunner, behaviorreview.ValidateGateReceiptOptions{Base: base})
 	return err
 }
 
-func behaviorReviewMergeReceiptFinding(err error) (*policy.Finding, error) {
+func behaviorReviewGateReceiptFinding(err error) (*policy.Finding, error) {
 	if err == nil {
 		return nil, nil
 	}
@@ -57,28 +57,28 @@ func behaviorReviewMergeReceiptFinding(err error) (*policy.Finding, error) {
 		return nil, err
 	}
 	return &policy.Finding{
-		Check: "policy.behaviorReview", Path: ".code-polishy-reports/behavior-review/receipt.json", Subject: "merge-receipt", Message: err.Error(),
+		Check: "policy.behaviorReview", Path: ".code-polishy-reports/behavior-review/receipt.json", Subject: "gate-receipt", Message: err.Error(),
 	}, nil
 }
 
-func (engine *Engine) behaviorReviewGateReport(ctx context.Context, plan MergeGateExecutionPlan) (behaviorreview.MergeReceipt, *Report, error) {
+func (engine *Engine) behaviorReviewGateReport(ctx context.Context, plan MergeGateExecutionPlan) (behaviorreview.GateReceipt, *Report, error) {
 	if plan.Level == testpolicy.MergeLevelDocumentation {
-		return behaviorreview.MergeReceipt{}, nil, nil
+		return behaviorreview.GateReceipt{}, nil, nil
 	}
-	receipt, err := engine.validateBehaviorReviewMergeReceipt(ctx, plan.Selection.Base)
+	receipt, err := engine.validateBehaviorReviewGateReceipt(ctx, plan.Selection.Base)
 	if err != nil {
 		report, reportErr := engine.behaviorReviewGateFailureReport(plan, err)
-		return behaviorreview.MergeReceipt{}, report, reportErr
+		return behaviorreview.GateReceipt{}, report, reportErr
 	}
-	if err := engine.replayBehaviorReviewMergeReceipt(ctx, plan.Selection.Base, receipt); err != nil {
+	if err := engine.replayBehaviorReviewGateReceipt(ctx, plan.Selection.Base, receipt); err != nil {
 		report, reportErr := engine.behaviorReviewGateFailureReport(plan, err)
-		return behaviorreview.MergeReceipt{}, report, reportErr
+		return behaviorreview.GateReceipt{}, report, reportErr
 	}
 	return receipt, nil, nil
 }
 
 func (engine *Engine) behaviorReviewGateFailureReport(plan MergeGateExecutionPlan, reviewErr error) (*Report, error) {
-	finding, err := behaviorReviewMergeReceiptFinding(reviewErr)
+	finding, err := behaviorReviewGateReceiptFinding(reviewErr)
 	if err != nil || finding == nil {
 		return nil, err
 	}

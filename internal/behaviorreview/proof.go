@@ -87,28 +87,28 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	return ProveResult{ID: inputs.id, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name, ProofPath: artifactDisplayPath(proofArtifactName(inputs.id, ".json"))}, nil
 }
 
-func replayMergeReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
+func replayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
 	ctx = reviewContext(ctx)
 	if commandRunner == nil {
-		return MergeReceipt{}, fmt.Errorf("%w: proof replay requires an output-capturing runner", ErrInvalidInput)
+		return GateReceipt{}, fmt.Errorf("%w: proof replay requires an output-capturing runner", ErrInvalidInput)
 	}
-	receipt, err := validateMergeReceipt(ctx, repo, options)
+	receipt, err := validateGateReceipt(ctx, repo, options)
 	if err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	root, packet, err := replayPacket(repo, receipt)
 	if err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	for _, reference := range receipt.Proofs {
 		if err := replayProof(ctx, repo, commandRunner, root, packet, receipt.Candidate, reference); err != nil {
-			return MergeReceipt{}, err
+			return GateReceipt{}, err
 		}
 	}
 	return receipt, nil
 }
 
-func replayPacket(repo repository.Repository, receipt MergeReceipt) (string, reviewPacket, error) {
+func replayPacket(repo repository.Repository, receipt GateReceipt) (string, reviewPacket, error) {
 	root, err := existingBehaviorReviewRoot(repo)
 	if err != nil {
 		return "", reviewPacket{}, staleReceipt("prepared packet is unavailable for replay", err)

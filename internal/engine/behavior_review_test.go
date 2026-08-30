@@ -288,7 +288,7 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 	commandRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1}
 	policyEngine.Runner = commandRunner
 	prepareRequestedBehaviorReviewReceipt(t, policyEngine, root, commandRunner, forgeBehaviorReviewProofRecord)
-	if _, err := policyEngine.validateBehaviorReviewMergeReceipt(t.Context(), "main"); err != nil {
+	if _, err := policyEngine.validateBehaviorReviewGateReceipt(t.Context(), "main"); err != nil {
 		t.Fatalf("forged proof record was not statically valid: %v", err)
 	}
 	commandRunner.events = nil
@@ -486,7 +486,7 @@ func assertBehaviorReviewGateFindingAtLevel(t *testing.T, report Report, level, 
 	}
 	finding := report.Findings[0]
 	if finding.Check != "policy.behaviorReview" || finding.Path != ".code-polishy-reports/behavior-review/receipt.json" ||
-		finding.Subject != "merge-receipt" || !strings.Contains(finding.Message, message) {
+		finding.Subject != "gate-receipt" || !strings.Contains(finding.Message, message) {
 		t.Fatalf("finding = %+v", finding)
 	}
 }
@@ -498,7 +498,7 @@ func assertCheckpointBehaviorReviewFinding(t *testing.T, report Report, message 
 	}
 	finding := report.Findings[0]
 	if finding.Check != "policy.behaviorReview" || finding.Path != ".code-polishy-reports/behavior-review/receipt.json" ||
-		finding.Subject != "merge-receipt" || !strings.Contains(finding.Message, message) {
+		finding.Subject != "gate-receipt" || !strings.Contains(finding.Message, message) {
 		t.Fatalf("finding = %+v", finding)
 	}
 }

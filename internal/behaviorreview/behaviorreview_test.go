@@ -80,7 +80,7 @@ func TestPrepareRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
 	}
 }
 
-func TestFinalizeAndValidateMergeReceipt(t *testing.T) {
+func TestFinalizeAndValidateGateReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -95,7 +95,7 @@ func TestFinalizeAndValidateMergeReceipt(t *testing.T) {
 	if finalized.ReceiptPath != artifactDisplayPath(receiptFilename) || finalized.ReviewID != prepared.ReviewID {
 		t.Fatalf("finalize result = %+v", finalized)
 	}
-	receipt, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"})
+	receipt, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestFinalizeRejectsStrictStaleAndBlockingResults(t *testing.T) {
 	}
 }
 
-func TestValidateMergeReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
+func TestValidateGateReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -164,25 +164,25 @@ func TestValidateMergeReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 	}
 	root := behaviorRoot(t, repo)
 	writeBehaviorFile(t, root, packetFilename, "{}\n")
-	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
 		t.Fatalf("packet change validation error = %v, want stale receipt", err)
 	}
 	prepareReview(t, repo)
 	writeBehaviorFile(t, repo.Root, "app.txt", "changed outside commit\n")
-	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, repository.ErrDirtyCandidate) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, repository.ErrDirtyCandidate) {
 		t.Fatalf("candidate change validation error = %v, want dirty candidate", err)
 	}
 }
 
-func TestValidateMergeReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
+func TestValidateGateReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	path := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact root before validation = %v, want missing", err)
 	}
-	_, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"})
+	_, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
 	if !errors.Is(err, ErrMissingReceipt) {
-		t.Fatalf("ValidateMergeReceipt() error = %v, want missing receipt", err)
+		t.Fatalf("ValidateGateReceipt() error = %v, want missing receipt", err)
 	}
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact root after validation = %v, want missing", err)
@@ -226,7 +226,7 @@ func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
 	}
 }
 
-func TestValidateMergeReceiptBindsPrepareMarker(t *testing.T) {
+func TestValidateGateReceiptBindsPrepareMarker(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	prepared, receipt := finalizedPreservedReview(t, repo)
 	root := behaviorRoot(t, repo)
@@ -240,8 +240,8 @@ func TestValidateMergeReceiptBindsPrepareMarker(t *testing.T) {
 	if sha256Hex(packetData) == receipt.PacketSHA256 || sha256Hex(markerData) == receipt.PrepareSHA256 || packet.IntentSHA256 == prepared.IntentSHA256 {
 		t.Fatal("tampered packet did not change receipt-bound values")
 	}
-	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
-		t.Fatalf("ValidateMergeReceipt() error = %v, want stale receipt", err)
+	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+		t.Fatalf("ValidateGateReceipt() error = %v, want stale receipt", err)
 	}
 }
 
@@ -278,8 +278,8 @@ func assertReceiptRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)
 	receipt.PacketSHA256 = sha256Hex(packetData)
 	receipt.PrepareSHA256 = sha256Hex(markerData)
 	writeReceiptRecord(t, root, receipt)
-	if _, err := ValidateMergeReceipt(context.Background(), repo, ValidateMergeReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
-		t.Fatalf("ValidateMergeReceipt() error = %v, want stale receipt", err)
+	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+		t.Fatalf("ValidateGateReceipt() error = %v, want stale receipt", err)
 	}
 }
 
@@ -444,7 +444,7 @@ func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
 	}
 }
 
-func TestReplayMergeReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T) {
+func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -456,7 +456,7 @@ func TestReplayMergeReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T
 	beforeReceipt := readBehaviorArtifact(t, root, receiptFilename)
 	beforeProof := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".json"))
 	beforeLog := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".candidate.log"))
-	receipt, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ValidateMergeReceiptOptions{Base: "main"})
+	receipt, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ValidateGateReceiptOptions{Base: "main"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,19 +468,19 @@ func TestReplayMergeReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T
 	}
 }
 
-func TestReplayMergeReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *testing.T) {
+func TestReplayGateReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *testing.T) {
 	t.Run("semantic failure", func(t *testing.T) {
 		repo, _ := finalizedRequestedReview(t)
-		_, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, ValidateMergeReceiptOptions{Base: "main"})
+		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, ValidateGateReceiptOptions{Base: "main"})
 		if !errors.Is(err, ErrInvalidEvidence) {
-			t.Fatalf("ReplayMergeReceipt() error = %v, want invalid evidence", err)
+			t.Fatalf("ReplayGateReceipt() error = %v, want invalid evidence", err)
 		}
 	})
 	t.Run("candidate worktree mutation", func(t *testing.T) {
 		repo, _ := finalizedRequestedReview(t)
-		_, err := ReplayMergeReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateReplayCandidate: true}, ValidateMergeReceiptOptions{Base: "main"})
+		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateReplayCandidate: true}, ValidateGateReceiptOptions{Base: "main"})
 		if !errors.Is(err, ErrCandidateChanged) {
-			t.Fatalf("ReplayMergeReceipt() error = %v, want changed candidate", err)
+			t.Fatalf("ReplayGateReceipt() error = %v, want changed candidate", err)
 		}
 		if _, err := repo.CleanHead(); err != nil {
 			t.Fatalf("primary candidate changed during replay: %v", err)
@@ -749,7 +749,7 @@ func assertBoundProof(t *testing.T, proof regressionProof, prepared PrepareResul
 	}
 }
 
-func finalizedPreservedReview(t *testing.T, repo repository.Repository) (PrepareResult, MergeReceipt) {
+func finalizedPreservedReview(t *testing.T, repo repository.Repository) (PrepareResult, GateReceipt) {
 	t.Helper()
 	prepared := prepareReview(t, repo)
 	writePreservedResult(t, repo, prepared)
@@ -814,7 +814,7 @@ func writePacketAndMarker(t *testing.T, root string, packet reviewPacket) ([]byt
 	return data, marker
 }
 
-func writeReceiptRecord(t *testing.T, root string, receipt MergeReceipt) {
+func writeReceiptRecord(t *testing.T, root string, receipt GateReceipt) {
 	t.Helper()
 	data, err := marshalArtifact(receipt)
 	if err != nil {

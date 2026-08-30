@@ -96,7 +96,7 @@ type receiptState struct {
 	root      string
 	base      string
 	candidate string
-	receipt   MergeReceipt
+	receipt   GateReceipt
 }
 
 func prepare(ctx context.Context, repo repository.Repository, options PrepareOptions) (PrepareResult, error) {
@@ -241,7 +241,7 @@ func finalize(ctx context.Context, repo repository.Repository, options FinalizeO
 	if err := writeFinalizedReview(state); err != nil {
 		return FinalizeResult{}, err
 	}
-	if err := writeMergeReceipt(state); err != nil {
+	if err := writeGateReceipt(state); err != nil {
 		return FinalizeResult{}, err
 	}
 	return FinalizeResult{ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate, ReceiptPath: artifactDisplayPath(receiptFilename)}, nil
@@ -390,8 +390,8 @@ func writeFinalizedReview(state finalizationState) error {
 	return writeArtifactAtomic(artifactPath(state.root, finalReviewFilename), state.reviewData)
 }
 
-func writeMergeReceipt(state finalizationState) error {
-	receipt := MergeReceipt{
+func writeGateReceipt(state finalizationState) error {
+	receipt := GateReceipt{
 		Version: artifactVersion, ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate,
 		IntentSHA256: state.packet.IntentSHA256, PacketSHA256: sha256Hex(state.packetData), PrepareSHA256: sha256Hex(state.markerData), ReviewSHA256: sha256Hex(state.reviewData), Proofs: state.proofs,
 	}
@@ -402,21 +402,21 @@ func writeMergeReceipt(state finalizationState) error {
 	return writeArtifactAtomic(artifactPath(state.root, receiptFilename), data)
 }
 
-func validateMergeReceipt(ctx context.Context, repo repository.Repository, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
+func validateGateReceipt(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReceipt, error) {
 	state, err := currentReceiptState(reviewContext(ctx), repo, options.Base)
 	if err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	packet, err := validateReceiptPacket(repo, state)
 	if err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	review, err := validateReceiptReview(state, packet)
 	if err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	if err := validateReceiptProofs(repo, state, packet, review); err != nil {
-		return MergeReceipt{}, err
+		return GateReceipt{}, err
 	}
 	return state.receipt, nil
 }
@@ -518,14 +518,14 @@ func readPacket(root string) (reviewPacket, []byte, error) {
 	return packet, data, nil
 }
 
-func readReceipt(root string) (MergeReceipt, error) {
+func readReceipt(root string) (GateReceipt, error) {
 	data, err := readArtifact(artifactPath(root, receiptFilename), maximumArtifactReadByte)
 	if err != nil {
-		return MergeReceipt{}, fmt.Errorf("%w: behavior review receipt is unavailable", ErrMissingReceipt)
+		return GateReceipt{}, fmt.Errorf("%w: behavior review receipt is unavailable", ErrMissingReceipt)
 	}
-	var receipt MergeReceipt
+	var receipt GateReceipt
 	if err := decodeStrict(data, &receipt); err != nil {
-		return MergeReceipt{}, staleReceipt("receipt JSON is invalid", err)
+		return GateReceipt{}, staleReceipt("receipt JSON is invalid", err)
 	}
 	return receipt, nil
 }
@@ -716,7 +716,7 @@ func requestedProofIDs(review ReviewResult) []string {
 	return result
 }
 
-func validateReceipt(receipt MergeReceipt) error {
+func validateReceipt(receipt GateReceipt) error {
 	if !validReceiptHeader(receipt) {
 		return errors.New("receipt fields are malformed")
 	}
@@ -726,7 +726,7 @@ func validateReceipt(receipt MergeReceipt) error {
 	return validateReceiptProofReferences(receipt.Proofs)
 }
 
-func validReceiptHeader(receipt MergeReceipt) bool {
+func validReceiptHeader(receipt GateReceipt) bool {
 	return allValid(
 		receipt.Version == artifactVersion,
 		validIdentifier(receipt.ReviewID),

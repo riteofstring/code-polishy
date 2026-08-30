@@ -125,7 +125,7 @@ func TestBehaviorReviewCLIHelpAndFailuresUsePublicExitContract(t *testing.T) {
 	}
 }
 
-func TestBehaviorReviewCLIExecutesPrepareProofAndFinalizeWorkflow(t *testing.T) {
+func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *testing.T) {
 	repositoryRoot, intent := newBehaviorReviewCLIRepository(t)
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
 	common := []string{"--repo-root", repositoryRoot, "--policy-root", policyRoot}
@@ -169,14 +169,25 @@ func TestBehaviorReviewCLIExecutesPrepareProofAndFinalizeWorkflow(t *testing.T) 
 	if status != 0 || stderr != "" || !strings.Contains(stdout, "Behavior review finalized: .code-polishy-reports/behavior-review/receipt.json") {
 		t.Fatalf("finalize status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
+
+	assertBehaviorReviewCLICheckpoint(t, common)
 	for _, path := range []string{
 		".code-polishy-reports/behavior-review/packet.json",
 		".code-polishy-reports/behavior-review/proofs/value-change.json",
 		".code-polishy-reports/behavior-review/receipt.json",
+		".code-polishy-reports/checkpoint-gate/receipt.json",
 	} {
 		if info, statErr := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(path))); statErr != nil || !info.Mode().IsRegular() {
 			t.Fatalf("artifact %s: info=%v err=%v", path, info, statErr)
 		}
+	}
+}
+
+func assertBehaviorReviewCLICheckpoint(t *testing.T, common []string) {
+	t.Helper()
+	status, stdout, stderr := runBehaviorReviewCLI(t, append(append([]string{}, common...), "checkpoint-gate", "--base", "main"))
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "CHECKPOINT GATE: CHANGED against main") || !strings.Contains(stdout, "CHECKPOINT ACCEPTED:") {
+		t.Fatalf("checkpoint status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 }
 
@@ -276,9 +287,15 @@ func newBehaviorReviewCLIRepository(t *testing.T) (string, string) {
   "quality": {},
   "portability": {},
   "modules": [{"name": "application", "paths": ["**"]}],
-  "checks": [],
+  "checks": [
+    {"name": "build", "provides": ["build"], "modules": ["application"], "argv": ["true"], "runOn": ["build"]},
+    {"name": "monitor", "provides": ["security-monitoring"], "argv": ["true"], "runOn": ["security"]}
+  ],
   "tests": {"suites": [{
-    "name": "regression", "kind": "unit", "scope": "repository",
+    "name": "regression", "kind": "unit", "scope": "module", "modules": ["application"],
+    "cost": "quick", "argv": ["go", "test", "./..."], "runOn": ["focused", "recommended", "full"]
+  }, {
+    "name": "full", "kind": "integration", "scope": "repository",
     "argv": ["go", "test", "./..."], "runOn": ["full"]
   }]},
   "supplyChain": {},
