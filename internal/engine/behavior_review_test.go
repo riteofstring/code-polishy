@@ -648,11 +648,23 @@ func assertCheckpointBehaviorReviewFinding(t *testing.T, report Report, message 
 
 func enginePolicyRoot(t *testing.T) string {
 	t.Helper()
-	workingDirectory, err := os.Getwd()
+	goExecutable, err := exec.LookPath("go")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("resolve governed Go executable: %v", err)
 	}
-	return filepath.Clean(filepath.Join(workingDirectory, "..", ".."))
+	current := filepath.Dir(goExecutable)
+	for {
+		version, versionErr := os.Stat(filepath.Join(current, "VERSION"))
+		schema, schemaErr := os.Stat(filepath.Join(current, "schema", "code-polishy.schema.json"))
+		if versionErr == nil && schemaErr == nil && version.Mode().IsRegular() && schema.Mode().IsRegular() {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			t.Fatalf("governed Go executable is outside a Code Polishy policy root: %s", goExecutable)
+		}
+		current = parent
+	}
 }
 
 func gitBehaviorReview(t *testing.T, root string, arguments ...string) {
