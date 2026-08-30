@@ -1,0 +1,518 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type commandHelpPage struct {
+	name        string
+	summary     string
+	syntax      []string
+	selectors   []string
+	sideEffects []string
+	exits       []string
+	examples    []string
+}
+
+type commandArgumentError struct{ cause error }
+
+func (err commandArgumentError) Error() string { return err.cause.Error() }
+func (err commandArgumentError) Unwrap() error { return err.cause }
+
+func commandInputError(err error) error {
+	return commandArgumentError{cause: err}
+}
+
+func isCommandInputError(err error) bool {
+	var inputError commandArgumentError
+	return errors.As(err, &inputError)
+}
+
+var commandHelpPages = []commandHelpPage{
+	{
+		name:    "version",
+		summary: "Print the running Code Polishy release version.",
+		syntax:  []string{"code-polishy version"},
+		selectors: []string{
+			"No command options or positional arguments.",
+		},
+		sideEffects: []string{"Reads VERSION from the policy root."},
+		exits:       []string{"0 version printed", "2 invalid usage or version read failure"},
+		examples:    []string{"code-polishy version"},
+	},
+	{
+		name:    "agents",
+		summary: "Install, synchronize, or verify generated AI-agent guidance.",
+		syntax:  []string{"code-polishy agents <install|sync|check>"},
+		selectors: []string{
+			"install creates the guidance files.",
+			"sync refreshes existing generated guidance.",
+			"check verifies that generated guidance is current.",
+		},
+		sideEffects: []string{"install and sync write guidance files in the repository; check only reads them."},
+		exits:       []string{"0 guidance installed, synchronized, or current", "1 check found stale guidance", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy agents sync", "code-polishy agents check"},
+	},
+	{
+		name:    "lock",
+		summary: "Record the installed Code Polishy release required by this repository.",
+		syntax:  []string{"code-polishy lock"},
+		selectors: []string{
+			"No command options or positional arguments.",
+		},
+		sideEffects: []string{"Writes .code-polishy.lock.json at the repository root."},
+		exits:       []string{"0 lock written", "2 invalid usage or release validation failure"},
+		examples:    []string{"code-polishy lock"},
+	},
+	{
+		name:    "install-bundle",
+		summary: "Install a locally built native release bundle.",
+		syntax:  []string{"code-polishy install-bundle --source PATH --sha256 DIGEST --prefix PATH"},
+		selectors: []string{
+			"--source PATH is the local release zip.",
+			"--sha256 DIGEST is the expected release zip SHA-256.",
+			"--prefix PATH is the installation prefix.",
+		},
+		sideEffects: []string{"Writes an installed release tree below --prefix."},
+		exits:       []string{"0 release installed", "2 invalid usage or installation failure"},
+		examples:    []string{"code-polishy install-bundle --source ./release.zip --sha256 DIGEST --prefix /opt/code-polishy"},
+	},
+	{
+		name:    "release-manifest",
+		summary: "Write, verify, or materialize a release manifest and release tree.",
+		syntax: []string{
+			"code-polishy release-manifest write --root PATH --source-revision COMMIT",
+			"code-polishy release-manifest verify --root PATH",
+			"code-polishy release-manifest materialize --source PATH --destination PATH",
+		},
+		selectors: []string{
+			"write records a manifest for a staged or installed release root.",
+			"verify validates the existing manifest at --root.",
+			"materialize copies a closed source tree to a new dereferenced destination.",
+			"This command accepts no global --config option.",
+		},
+		sideEffects: []string{"write updates the manifest; materialize creates the destination tree; verify only reads."},
+		exits:       []string{"0 requested release operation completed", "2 invalid usage or release validation failure"},
+		examples:    []string{"code-polishy release-manifest verify --root ./dist/code-polishy"},
+	},
+	{
+		name:    "change-boundary",
+		summary: "Verify that current changes stay inside a declared task boundary.",
+		syntax:  []string{"code-polishy change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]"},
+		selectors: []string{
+			"--base COMMIT and at least one --module NAME are required.",
+			"--allow-path PATH permits an exact tracked non-control path.",
+			"--allow-new-path PATH permits an exact new regular non-control path.",
+		},
+		sideEffects: []string{"Reads the repository and configuration; does not write project files."},
+		exits:       []string{"0 boundary satisfied", "1 changed paths fall outside the boundary", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy change-boundary --base HEAD~1 --module cli --allow-path docs/guide.md"},
+	},
+	{
+		name:    "task-session",
+		summary: "Run one task command in a disposable Git worktree with a frozen authority boundary.",
+		syntax:  []string{"code-polishy task-session --module NAME... [--repo-root PATH] [--config PATH] [--allow-path PATH...] [--allow-new-path PATH...] [--output-dir PATH] [--promote] -- COMMAND [ARG...]"},
+		selectors: []string{
+			"At least one --module NAME and a command after -- are required.",
+			"--allow-path and --allow-new-path extend the declared boundary with exact paths.",
+			"--promote fast-forwards the original branch after successful validation.",
+			"Place task-session options after task-session; its --repo-root and --config are not global options.",
+		},
+		sideEffects: []string{"Creates and removes a disposable worktree, writes external session artifacts, and may promote the original branch."},
+		exits:       []string{"0 session completed", "worker or policy failure uses its reported nonzero status", "2 invalid usage"},
+		examples:    []string{"code-polishy task-session --module cli -- ./scripts/test.sh ./cmd/code-polishy/..."},
+	},
+	{
+		name:    "task-session-artifacts",
+		summary: "Freeze or validate the private artifacts used by a task-session workflow.",
+		syntax: []string{
+			"code-polishy task-session-artifacts freeze --output-dir PATH [--config PATH] --module NAME... [--allow-path PATH...] [--allow-new-path PATH...] -- COMMAND [ARG...]",
+			"code-polishy task-session-artifacts validate --output-dir PATH --scope-digest SHA256 --command-digest SHA256",
+		},
+		selectors: []string{
+			"freeze requires scope options and a command after --.",
+			"validate accepts only the exact expected digests.",
+		},
+		sideEffects: []string{"freeze writes private scope and command artifacts; validate only reads them."},
+		exits:       []string{"0 artifacts frozen or validated", "2 invalid usage or artifact failure"},
+		examples:    []string{"code-polishy task-session-artifacts validate --output-dir /tmp/session --scope-digest SHA256 --command-digest SHA256"},
+	},
+	{
+		name:    "task-session-receipt",
+		summary: "Write the private receipt for a completed task-session workflow.",
+		syntax:  []string{"code-polishy task-session-receipt --output-dir PATH --status VALUE --source-root PATH --source-branch NAME --trusted-base COMMIT --candidate-head COMMIT --config PATH --promote VALUE --policy-binary PATH --policy-digest SHA256 --environment-receipt PATH --environment-digest SHA256 --environment-paths PATH --environment-paths-digest SHA256 --scope-digest SHA256 --workspace PATH --command-digest SHA256 --module NAME... [--exact-path PATH...] [--new-path PATH...]"},
+		selectors: []string{
+			"Every listed single-value option is required exactly once.",
+			"At least one --module NAME is required; --exact-path and --new-path may repeat.",
+		},
+		sideEffects: []string{"Writes the private session receipt in --output-dir."},
+		exits:       []string{"0 receipt written", "2 invalid usage or receipt write failure"},
+		examples:    []string{"code-polishy task-session-receipt --help"},
+	},
+	{
+		name:    "governed-environment",
+		summary: "Freeze the governed command environment into a private receipt.",
+		syntax:  []string{"code-polishy governed-environment --output PATH"},
+		selectors: []string{
+			"--output PATH is required and no positional arguments are accepted.",
+		},
+		sideEffects: []string{"Writes a private environment receipt at --output."},
+		exits:       []string{"0 environment receipt written", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy governed-environment --output /tmp/environment.json"},
+	},
+	{
+		name:    "check",
+		summary: "Run configured policy checks over one file selection or named checks.",
+		syntax: []string{
+			"code-polishy check [--git-changes|--staged|--all|--files PATH...]",
+			"code-polishy check --name NAME...",
+		},
+		selectors: []string{
+			"File selectors are mutually exclusive; --git-changes is the default.",
+			"--name NAME may repeat and cannot be combined with file selectors.",
+		},
+		sideEffects: []string{"Reads the configuration and selected files; runs configured checks."},
+		exits:       []string{"0 no findings", "1 policy findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy check --git-changes", "code-polishy check --name content-check"},
+	},
+	{
+		name:    "gate",
+		summary: "Run the configured standard policy gate.",
+		syntax:  []string{"code-polishy gate"},
+		selectors: []string{
+			"No command options or positional arguments.",
+		},
+		sideEffects: []string{"Runs the configured gate checks and reads their declared project inputs."},
+		exits:       []string{"0 no findings", "1 policy findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy gate"},
+	},
+	{
+		name:    "checkpoint-gate",
+		summary: "Run the checkpoint gate against a declared task boundary.",
+		syntax:  []string{"code-polishy checkpoint-gate --base REF"},
+		selectors: []string{
+			"Exactly one --base REF is required.",
+		},
+		sideEffects: []string{"Runs checkpoint policy, writes managed logs and a JSON run report below .code-polishy-reports/checkpoint-gate/, and records checkpoint evidence on success."},
+		exits:       []string{"0 gate passed", "1 policy findings or failed gate command", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT"},
+	},
+	{
+		name:    "merge-gate",
+		summary: "Run the final merge gate against a declared merge target.",
+		syntax:  []string{"code-polishy merge-gate --base REF [--resume]"},
+		selectors: []string{
+			"Exactly one --base REF is required.",
+			"--resume explicitly reuses only eligible successful ordinary test suites from a content-matching failed merge gate; it does not reduce gate scope.",
+		},
+		sideEffects: []string{"Runs merge policy and writes managed logs and a JSON run report below .code-polishy-reports/merge-gate/."},
+		exits:       []string{"0 gate passed", "1 policy findings or failed gate command", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy merge-gate --base origin/main", "code-polishy merge-gate --base origin/main --resume"},
+	},
+	{
+		name:    "behavior-review",
+		summary: "Prepare evidence for, or finalize, a clean-context behavior review.",
+		syntax: []string{
+			"code-polishy behavior-review prepare --base REF --intent-file PATH",
+			"code-polishy behavior-review finalize --base REF",
+		},
+		selectors: []string{
+			"prepare requires exactly one --base REF and --intent-file PATH.",
+			"finalize requires exactly one --base REF.",
+		},
+		sideEffects: []string{"prepare writes a review packet; finalize writes the corresponding review receipt."},
+		exits:       []string{"0 requested review operation completed", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy behavior-review prepare --base TASK_BASE --intent-file docs/intent.md"},
+	},
+	{
+		name:    "regression-proof",
+		summary: "Record an executable regression proof for a behavior review.",
+		syntax:  []string{"code-polishy regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]"},
+		selectors: []string{
+			"--base, --suite, and --id are each required exactly once.",
+			"At least one unique --evidence PATH is required.",
+			"--red-exit STATUS is an optional integer from 1 through 255.",
+		},
+		sideEffects: []string{"Runs the named proof suite and writes a regression-proof record on success."},
+		exits:       []string{"0 proof recorded", "1 proof did not establish the requested behavior", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy regression-proof --base TASK_BASE --suite cli-contract --evidence cmd/code-polishy/help_test.go --id contextual-help"},
+	},
+	{
+		name:    "test",
+		summary: "Run one configured test selection.",
+		syntax: []string{
+			"code-polishy test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental|--module NAME...|--suite NAME...]",
+		},
+		selectors: []string{
+			"Choose at most one of --changed, --recommended, --all, --supplemental, --module, or --suite.",
+			"Without a selector, tests affected by working-tree changes are selected.",
+			"--base REF requires --changed or --recommended and compares against merge-base(REF, HEAD) plus working-tree changes.",
+		},
+		sideEffects: []string{"Runs configured test commands with their normal streaming output; does not create gate-run artifacts."},
+		exits:       []string{"0 selected suites passed", "1 selected suite failed", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy test --changed --base TASK_BASE", "code-polishy test --suite cli-contract"},
+	},
+	{
+		name:    "test-plan",
+		summary: "Show the impact-based test plan for a working tree or task base.",
+		syntax:  []string{"code-polishy test-plan [--base REF]"},
+		selectors: []string{
+			"--base REF is optional; without it the working tree is compared with HEAD.",
+		},
+		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files."},
+		exits:       []string{"0 plan produced", "1 policy findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy test-plan --base TASK_BASE"},
+	},
+	{
+		name:    "test-levels",
+		summary: "Show the configured test levels for a working tree or task base.",
+		syntax:  []string{"code-polishy test-levels [--base REF]"},
+		selectors: []string{
+			"--base REF is optional; without it the working tree is compared with HEAD.",
+		},
+		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files."},
+		exits:       []string{"0 levels produced", "1 policy findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy test-levels --base TASK_BASE"},
+	},
+	{
+		name:    "verify",
+		summary: "Run the configured verification workflow.",
+		syntax:  []string{"code-polishy verify [--tests-only]"},
+		selectors: []string{
+			"--tests-only limits verification to configured test commands.",
+		},
+		sideEffects: []string{"Runs configured verification commands and reads their declared project inputs."},
+		exits:       []string{"0 verification passed", "1 policy findings or verification failure", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy verify --tests-only"},
+	},
+	{
+		name:    "architecture",
+		summary: "Check architecture policy over one file selection.",
+		syntax:  []string{"code-polishy architecture [--git-changes|--staged|--all|--files PATH...]"},
+		selectors: []string{
+			"File selectors are mutually exclusive; --git-changes is the default.",
+		},
+		sideEffects: []string{"Reads the configuration and selected files; does not write project files."},
+		exits:       []string{"0 no findings", "1 architecture findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy architecture --files internal/engine/engine.go"},
+	},
+	{
+		name:    "supply-chain",
+		summary: "Run configured supply-chain checks.",
+		syntax:  []string{"code-polishy supply-chain [--offline]"},
+		selectors: []string{
+			"--offline disables online dependency and vulnerability lookups.",
+		},
+		sideEffects: []string{"Runs supply-chain checks; the default mode may contact configured package and vulnerability sources."},
+		exits:       []string{"0 no findings", "1 supply-chain findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy supply-chain --offline"},
+	},
+	{
+		name:    "dependency-review",
+		summary: "Review dependency-input changes against a declared base.",
+		syntax:  []string{"code-polishy dependency-review --base REF"},
+		selectors: []string{
+			"Exactly one --base REF is required.",
+		},
+		sideEffects: []string{"Reads dependency inputs and runs the configured dependency review; does not write project files."},
+		exits:       []string{"0 review passed", "1 dependency findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy dependency-review --base origin/main"},
+	},
+	{
+		name:    "artifact-security",
+		summary: "Check declared build artifacts for security-policy findings.",
+		syntax:  []string{"code-polishy artifact-security"},
+		selectors: []string{
+			"No command options or positional arguments.",
+		},
+		sideEffects: []string{"Reads declared artifact targets and their inputs; does not write project files."},
+		exits:       []string{"0 no findings", "1 artifact-security findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy artifact-security"},
+	},
+	{
+		name:    "doctor",
+		summary: "Inspect the configured policy environment and command discovery.",
+		syntax:  []string{"code-polishy doctor [--strict]"},
+		selectors: []string{
+			"--strict enables the stricter environment checks.",
+		},
+		sideEffects: []string{"Reads configuration and environment state; does not write project files."},
+		exits:       []string{"0 no findings", "1 environment findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy doctor --strict"},
+	},
+	{
+		name:    "design-context",
+		summary: "Print the current design documents that govern planned source changes.",
+		syntax: []string{
+			"code-polishy design-context --module NAME...",
+			"code-polishy design-context [--git-changes|--staged|--all|--files PATH...]",
+		},
+		selectors: []string{
+			"Choose either one or more --module NAME selectors or one file selector.",
+			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Use --files PATH... for explicit paths; positional paths are not accepted.",
+		},
+		sideEffects: []string{"Reads configuration and design-document mappings; prints matching current design-document paths."},
+		exits:       []string{"0 mappings printed", "1 mapping-policy findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy design-context --files cmd/code-polishy/main.go", "code-polishy design-context --module cli"},
+	},
+	{
+		name:    "format",
+		summary: "Check or apply configured formatting over one file selection.",
+		syntax:  []string{"code-polishy format [--git-changes|--staged|--all|--files PATH...]"},
+		selectors: []string{
+			"File selectors are mutually exclusive; --git-changes is the default.",
+		},
+		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
+		exits:       []string{"0 formatting completed without findings", "1 formatting findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy format --git-changes", "code-polishy format --files cmd/code-polishy/main.go"},
+	},
+	{
+		name:    "fix",
+		summary: "Apply configured formatting fixes over one file selection.",
+		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...]"},
+		selectors: []string{
+			"File selectors are mutually exclusive; --git-changes is the default.",
+		},
+		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
+		exits:       []string{"0 fixes completed without findings", "1 remaining findings", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy fix --git-changes"},
+	},
+	{
+		name:    "list-files",
+		summary: "List the files in one resolved file selection.",
+		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...]"},
+		selectors: []string{
+			"File selectors are mutually exclusive; --git-changes is the default.",
+		},
+		sideEffects: []string{"Reads repository state and prints selected paths; does not write project files."},
+		exits:       []string{"0 paths listed", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy list-files --all"},
+	},
+}
+
+func commandHelpFor(command string) (commandHelpPage, bool) {
+	if command == "--version" {
+		command = "version"
+	}
+	for _, page := range commandHelpPages {
+		if page.name == command {
+			return page, true
+		}
+	}
+	return commandHelpPage{}, false
+}
+
+func printCommandHelp(output io.Writer, command string) bool {
+	page, found := commandHelpFor(command)
+	if !found {
+		return false
+	}
+	page.writeTo(output)
+	return true
+}
+
+func (page commandHelpPage) writeTo(output io.Writer) {
+	writeHelpSection(output, "Usage", page.syntax)
+	fmt.Fprintf(output, "\n%s\n", page.summary)
+	writeHelpSection(output, "Selectors and arguments", page.selectors)
+	writeHelpSection(output, "Side effects", page.sideEffects)
+	writeHelpSection(output, "Exit status", page.exits)
+	writeHelpSection(output, "Examples", page.examples)
+}
+
+func writeHelpSection(output io.Writer, heading string, lines []string) {
+	fmt.Fprintf(output, "\n%s:\n", heading)
+	for _, line := range lines {
+		fmt.Fprintf(output, "  %s\n", line)
+	}
+}
+
+func handleContextualHelp(invocation invocation) (int, bool) {
+	switch invocation.command {
+	case "--help", "-h":
+		fmt.Print(usage)
+		return 0, true
+	case "help":
+		return handleNamedHelp(invocation.arguments), true
+	}
+	if !helpRequested(invocation.arguments) {
+		return 0, false
+	}
+	if printCommandHelp(os.Stdout, invocation.command) {
+		return 0, true
+	}
+	return commandUsageError("", "unknown command "+invocation.command), true
+}
+
+func handleNamedHelp(arguments []string) int {
+	if len(arguments) == 0 || len(arguments) == 1 && (arguments[0] == "--help" || arguments[0] == "-h") {
+		fmt.Print(usage)
+		return 0
+	}
+	if len(arguments) != 1 {
+		return commandUsageError("", "help requires exactly one command")
+	}
+	if printCommandHelp(os.Stdout, arguments[0]) {
+		return 0
+	}
+	return commandUsageError("", "unknown command "+arguments[0])
+}
+
+func helpRequested(arguments []string) bool {
+	for _, argument := range arguments {
+		if argument == "--help" || argument == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+func commandUsageError(command, message string) int {
+	return commandUsageErrorWithCorrection(command, message, "")
+}
+
+func commandUsageErrorForInvocation(invocation invocation, message string) int {
+	return commandUsageErrorWithCorrection(invocation.command, message, commandCorrection(invocation))
+}
+
+func commandUsageErrorWithCorrection(command, message, correction string) int {
+	fmt.Fprintln(os.Stderr, "usage error:", message)
+	if correction != "" {
+		fmt.Fprintln(os.Stderr, correction)
+	}
+	if !printCommandHelp(os.Stderr, command) {
+		fmt.Fprint(os.Stderr, usage)
+	}
+	return 2
+}
+
+func commandCorrection(invocation invocation) string {
+	if invocation.command == "design-context" && len(invocation.arguments) > 0 && !strings.HasPrefix(invocation.arguments[0], "-") {
+		paths := []string{}
+		for _, argument := range invocation.arguments {
+			if strings.HasPrefix(argument, "-") {
+				break
+			}
+			paths = append(paths, argument)
+		}
+		return "Did you mean: code-polishy design-context --files " + strings.Join(paths, " ") + "?"
+	}
+	if invocation.command == "test" && containsOption(invocation.arguments, "--base") && !containsOption(invocation.arguments, "--changed") && !containsOption(invocation.arguments, "--recommended") {
+		return "Use --changed or --recommended with --base; for changed tests: code-polishy test --changed --base REF"
+	}
+	return ""
+}
+
+func containsOption(arguments []string, option string) bool {
+	for _, argument := range arguments {
+		if argument == option || strings.HasPrefix(argument, option+"=") {
+			return true
+		}
+	}
+	return false
+}

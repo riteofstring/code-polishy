@@ -68,7 +68,7 @@ type taskSessionReceiptOptions struct {
 func handleTaskSessionReceiptMeta(invocation invocation) int {
 	options, err := parseTaskSessionReceiptOptions(invocation.arguments)
 	if err != nil {
-		return usageError(err.Error())
+		return commandUsageError("task-session-receipt", err.Error())
 	}
 	if err := writeTaskSessionReceipt(options); err != nil {
 		return operationalError(err)

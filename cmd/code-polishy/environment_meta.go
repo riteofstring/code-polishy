@@ -14,10 +14,10 @@ func handleGovernedEnvironmentMeta(invocation invocation) int {
 	flags.SetOutput(os.Stderr)
 	output := flags.String("output", "", "external environment receipt path")
 	if err := flags.Parse(invocation.arguments); err != nil {
-		return 2
+		return commandUsageError("governed-environment", err.Error())
 	}
 	if flags.NArg() != 0 || *output == "" {
-		return usageError("governed-environment requires --output and no positional arguments")
+		return commandUsageError("governed-environment", "governed-environment requires --output and no positional arguments")
 	}
 	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
 	if err != nil {

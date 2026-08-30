@@ -29,7 +29,7 @@ var regressionProofOptionNames = []string{"--base", "--suite", "--evidence", "--
 func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	options, err := parseBehaviorReviewOptions(arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	switch options.action {
 	case "prepare":
@@ -51,7 +51,7 @@ func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, argu
 func handleRegressionProof(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	options, err := parseRegressionProofOptions(arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	result, err := policyEngine.ProveRegression(ctx, options.base, options.suite, options.evidence, options.id, options.redExit)
 	if err != nil {

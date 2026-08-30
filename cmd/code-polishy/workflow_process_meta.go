@@ -29,14 +29,14 @@ type taskSessionWorkflowOptions struct {
 
 func handleTaskSessionWorkflowMeta(invocation invocation) int {
 	if invocation.configPath != "" {
-		return usageError("task-session runs a workflow supervisor rather than reading the configuration; spell --config after the command")
+		return commandUsageError("task-session", "task-session runs a workflow supervisor rather than reading the configuration; spell --config after the command")
 	}
 	options, err := parseTaskSessionWorkflowOptions(invocation.repoRoot, invocation.arguments)
 	if err != nil {
-		return usageError(err.Error())
+		return commandUsageError("task-session", err.Error())
 	}
 	if options.showHelp {
-		fmt.Print(taskSessionHelp)
+		printCommandHelp(os.Stdout, "task-session")
 		return 0
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -57,22 +57,6 @@ func handleTaskSessionWorkflowMeta(invocation invocation) int {
 	fmt.Printf("Task session %s; disposable worktree removed. Artifacts: %s\n", result.Status, result.OutputDir)
 	return 0
 }
-
-const taskSessionHelp = `Usage: code-polishy task-session --module NAME... [options] -- COMMAND [ARG...]
-
-Runs one task command in a disposable Git worktree, freezes its authority and
-governed environment, and validates every change before optional promotion.
-
-Options:
-  --repo-root PATH       Clean target Git worktree. Default: current directory.
-  --config PATH          Target config path. Default: .code-polishy.json.
-  --module NAME          Allowed module. Repeat as needed.
-  --allow-path PATH      Allowed exact tracked path. Repeat as needed.
-  --allow-new-path PATH  Allowed exact new path. Repeat as needed.
-  --output-dir PATH      New external artifact directory.
-  --promote              Fast-forward the original branch to verified commits.
-  --help                 Show this help.
-`
 
 func parseTaskSessionWorkflowOptions(defaultRoot string, arguments []string) (taskSessionWorkflowOptions, error) {
 	working, err := os.Getwd()
@@ -214,7 +198,7 @@ func (option taskSessionScopeOption) Set(value string) error {
 func handleTaskSessionArtifactsMeta(invocation invocation) int {
 	options, err := parseTaskSessionArtifactOptions(invocation.arguments)
 	if err != nil {
-		return usageError(err.Error())
+		return commandUsageError("task-session-artifacts", err.Error())
 	}
 	switch options.operation {
 	case "freeze":

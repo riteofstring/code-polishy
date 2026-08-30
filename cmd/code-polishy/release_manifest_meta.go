@@ -12,7 +12,7 @@ type releaseManifestOptions struct{ root, revision, source, destination string }
 
 func handleReleaseManifestMeta(invocation invocation) int {
 	if invocation.configPath != "" || len(invocation.arguments) == 0 {
-		return usageError("release-manifest requires write or verify and accepts no global configuration")
+		return commandUsageError("release-manifest", "release-manifest requires write or verify and accepts no global configuration")
 	}
 	mode := invocation.arguments[0]
 	flags := flag.NewFlagSet("release-manifest "+mode, flag.ContinueOnError)
@@ -23,10 +23,10 @@ func handleReleaseManifestMeta(invocation invocation) int {
 	flags.StringVar(&options.source, "source", "", "closed source tree to materialize")
 	flags.StringVar(&options.destination, "destination", "", "new dereferenced destination tree")
 	if err := flags.Parse(invocation.arguments[1:]); err != nil {
-		return 2
+		return commandUsageError("release-manifest", err.Error())
 	}
 	if flags.NArg() != 0 {
-		return usageError("release-manifest accepts no positional arguments after its mode")
+		return commandUsageError("release-manifest", "release-manifest accepts no positional arguments after its mode")
 	}
 	switch mode {
 	case "write":
@@ -36,13 +36,13 @@ func handleReleaseManifestMeta(invocation invocation) int {
 	case "materialize":
 		return materializeReleaseManifest(options)
 	default:
-		return usageError("release-manifest requires write or verify")
+		return commandUsageError("release-manifest", "release-manifest requires write or verify")
 	}
 }
 
 func writeReleaseManifest(options releaseManifestOptions) int {
 	if options.root == "" || options.revision == "" || options.source != "" || options.destination != "" {
-		return usageError("release-manifest write requires --root PATH and --source-revision COMMIT")
+		return commandUsageError("release-manifest", "release-manifest write requires --root PATH and --source-revision COMMIT")
 	}
 	manifest, err := release.WriteManifest(options.root, options.revision)
 	if err != nil {
@@ -54,7 +54,7 @@ func writeReleaseManifest(options releaseManifestOptions) int {
 
 func verifyReleaseManifest(options releaseManifestOptions) int {
 	if options.root == "" || options.revision != "" || options.source != "" || options.destination != "" {
-		return usageError("release-manifest verify requires only --root PATH")
+		return commandUsageError("release-manifest", "release-manifest verify requires only --root PATH")
 	}
 	manifest, present, err := release.ReadManifest(options.root)
 	if err != nil {
@@ -72,7 +72,7 @@ func verifyReleaseManifest(options releaseManifestOptions) int {
 
 func materializeReleaseManifest(options releaseManifestOptions) int {
 	if options.source == "" || options.destination == "" || options.root != "" || options.revision != "" {
-		return usageError("release-manifest materialize requires --source PATH and --destination PATH")
+		return commandUsageError("release-manifest", "release-manifest materialize requires --source PATH and --destination PATH")
 	}
 	if err := release.CopyTreeDereferenced(options.source, options.destination); err != nil {
 		return operationalError(err)

@@ -16,10 +16,10 @@ func handleInstallBundleMeta(invocation invocation) int {
 	digest := flags.String("sha256", "", "expected release zip SHA-256")
 	prefix := flags.String("prefix", "", "installation prefix")
 	if err := flags.Parse(invocation.arguments); err != nil {
-		return 2
+		return commandUsageError("install-bundle", err.Error())
 	}
 	if flags.NArg() != 0 || *source == "" || *digest == "" || *prefix == "" {
-		return usageError("install-bundle requires --source, --sha256, and --prefix")
+		return commandUsageError("install-bundle", "install-bundle requires --source, --sha256, and --prefix")
 	}
 	manifest, err := release.InstallLocalBundle(*source, *digest, *prefix)
 	if err != nil {

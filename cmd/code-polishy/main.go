@@ -64,6 +64,12 @@ func run(arguments []string) int {
 	if status != 0 {
 		return status
 	}
+	if status, handled := handleContextualHelp(invocation); handled {
+		return status
+	}
+	if _, known := commandHelpFor(invocation.command); !known {
+		return commandUsageError("", "unknown command "+invocation.command)
+	}
 	if status, governed := requireLockedRelease(invocation); !governed {
 		return status
 	}
@@ -78,10 +84,13 @@ func run(arguments []string) int {
 	policyEngine.Verbose = invocation.verbose
 	handler, exists := commandHandlers()[invocation.command]
 	if !exists {
-		return usageError("unknown command " + invocation.command)
+		return commandUsageError("", "unknown command "+invocation.command)
 	}
 	result, err := handler(context.Background(), policyEngine, invocation.arguments)
 	if err != nil {
+		if isCommandInputError(err) {
+			return commandUsageErrorForInvocation(invocation, err.Error())
+		}
 		printOperationalReportHeaders(os.Stdout, result.report, invocation.verbose)
 		return operationalError(err)
 	}
@@ -155,10 +164,10 @@ func handleWorkflowMetaCommand(invocation invocation) (int, bool) {
 func handleChangeBoundaryMeta(invocation invocation) int {
 	options, err := parseChangeBoundaryOptions(invocation.arguments)
 	if err != nil {
-		return usageError(err.Error())
+		return commandUsageError("change-boundary", err.Error())
 	}
 	if options.base == "" || len(options.modules) == 0 {
-		return usageError("change-boundary requires --base COMMIT and at least one --module NAME")
+		return commandUsageError("change-boundary", "change-boundary requires --base COMMIT and at least one --module NAME")
 	}
 	report, err := engine.CheckChangeBoundary(
 		invocation.repoRoot, invocation.policyRoot, invocation.configPath, options.base, options.modules, options.paths, options.newPaths,
@@ -199,7 +208,7 @@ func parseChangeBoundaryOptions(arguments []string) (changeBoundaryOptions, erro
 
 func handleAgentsMeta(invocation invocation) int {
 	if len(invocation.arguments) != 1 {
-		return usageError("agents requires exactly one of install, sync, or check")
+		return commandUsageError("agents", "agents requires exactly one of install, sync, or check")
 	}
 	switch invocation.arguments[0] {
 	case "install":
@@ -225,7 +234,7 @@ func handleAgentsMeta(invocation invocation) int {
 		fmt.Println("PASS", status.Message)
 		return 0
 	default:
-		return usageError("agents requires exactly one of install, sync, or check")
+		return commandUsageError("agents", "agents requires exactly one of install, sync, or check")
 	}
 }
 
@@ -242,7 +251,7 @@ func requireLockedRelease(invocation invocation) (int, bool) {
 
 func handleLockMeta(invocation invocation) int {
 	if len(invocation.arguments) != 0 {
-		return usageError("lock does not accept options")
+		return commandUsageError("lock", "lock does not accept options")
 	}
 	manifest, installed, err := release.ReadManifest(invocation.policyRoot)
 	if err != nil {
@@ -265,7 +274,7 @@ func handleLockMeta(invocation invocation) int {
 
 func printVersion(invocation invocation) int {
 	if len(invocation.arguments) != 0 {
-		return usageError("version does not accept options")
+		return commandUsageError("version", "version does not accept options")
 	}
 	data, err := os.ReadFile(filepath.Join(invocation.policyRoot, "VERSION"))
 	if err != nil {
@@ -352,10 +361,10 @@ func handleCheck(ctx context.Context, policyEngine *engine.Engine, arguments []s
 	names := []string{}
 	flags.Var((*stringList)(&names), "name", "run one exact configured check")
 	if err := flags.Parse(arguments); err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	if flags.NArg() != 0 || len(names) == 0 {
-		return commandResult{}, errors.New("check --name requires at least one configured check name and no selection options")
+		return commandResult{}, commandInputError(errors.New("check --name requires at least one configured check name and no selection options"))
 	}
 	report, err := policyEngine.CheckNamed(ctx, names)
 	return commandResult{report: report}, err
@@ -363,7 +372,7 @@ func handleCheck(ctx context.Context, policyEngine *engine.Engine, arguments []s
 
 func handleDoctor(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	if !onlyAllowed(arguments, "--strict") {
-		return commandResult{}, fmt.Errorf("doctor accepts only --strict")
+		return commandResult{}, commandInputError(fmt.Errorf("doctor accepts only --strict"))
 	}
 	report, err := policyEngine.Doctor(ctx)
 	return commandResult{report: report}, err
@@ -371,7 +380,7 @@ func handleDoctor(ctx context.Context, policyEngine *engine.Engine, arguments []
 
 func handleGate(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	if len(arguments) != 0 {
-		return commandResult{}, fmt.Errorf("gate does not accept options")
+		return commandResult{}, commandInputError(fmt.Errorf("gate does not accept options"))
 	}
 	report, err := policyEngine.Gate(ctx)
 	return commandResult{report: report}, err
@@ -380,7 +389,7 @@ func handleGate(ctx context.Context, policyEngine *engine.Engine, arguments []st
 func handleMergeGate(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	base, err := parseRequiredBaseOption("merge-gate", arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.MergeGate(ctx, base)
 	return commandResult{report: report}, err
@@ -389,7 +398,7 @@ func handleMergeGate(ctx context.Context, policyEngine *engine.Engine, arguments
 func handleCheckpointGate(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	base, err := parseRequiredBaseOption("checkpoint-gate", arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.CheckpointGate(ctx, base)
 	return commandResult{report: report}, err
@@ -399,7 +408,7 @@ func handleSelectionCommand(operation string) commandHandler {
 	return func(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 		mode, files, err := parseSelection(arguments)
 		if err != nil {
-			return commandResult{}, err
+			return commandResult{}, commandInputError(err)
 		}
 		selection, err := policyEngine.Select(mode, files)
 		if err != nil {
@@ -436,7 +445,7 @@ func handleTest(ctx context.Context, policyEngine *engine.Engine, arguments []st
 func handleTestPlan(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	base, err := parseBaseOption("test-plan", arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.TestPlan(base)
 	return commandResult{report: report}, err
@@ -445,7 +454,7 @@ func handleTestPlan(_ context.Context, policyEngine *engine.Engine, arguments []
 func handleTestLevels(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	base, err := parseBaseOption("test-levels", arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.TestPlan(base)
 	return commandResult{report: report}, err
@@ -453,7 +462,7 @@ func handleTestLevels(_ context.Context, policyEngine *engine.Engine, arguments 
 
 func handleVerify(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	if !onlyAllowed(arguments, "--tests-only") {
-		return commandResult{}, fmt.Errorf("verify accepts only --tests-only")
+		return commandResult{}, commandInputError(fmt.Errorf("verify accepts only --tests-only"))
 	}
 	report, err := policyEngine.Verify(ctx, len(arguments) == 1)
 	return commandResult{report: report}, err
@@ -461,7 +470,7 @@ func handleVerify(ctx context.Context, policyEngine *engine.Engine, arguments []
 
 func handleSupplyChain(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	if !onlyAllowed(arguments, "--offline") {
-		return commandResult{}, fmt.Errorf("supply-chain accepts only --offline")
+		return commandResult{}, commandInputError(fmt.Errorf("supply-chain accepts only --offline"))
 	}
 	report, err := policyEngine.SupplyChain(ctx, len(arguments) == 1)
 	return commandResult{report: report}, err
@@ -470,7 +479,7 @@ func handleSupplyChain(ctx context.Context, policyEngine *engine.Engine, argumen
 func handleDependencyReview(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	base, err := parseRequiredBaseOption("dependency-review", arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.DependencyReview(ctx, base)
 	return commandResult{report: report}, err
@@ -478,7 +487,7 @@ func handleDependencyReview(ctx context.Context, policyEngine *engine.Engine, ar
 
 func handleArtifactSecurity(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	if len(arguments) != 0 {
-		return commandResult{}, fmt.Errorf("artifact-security does not accept options")
+		return commandResult{}, commandInputError(fmt.Errorf("artifact-security does not accept options"))
 	}
 	return commandResult{report: policyEngine.ArtifactSecurity(ctx)}, nil
 }
@@ -548,10 +557,10 @@ func selectionMode(option string) (string, bool) {
 func parseTestRequest(policyEngine *engine.Engine, arguments []string) (testpolicy.Request, error) {
 	options, err := parseTestOptions(arguments)
 	if err != nil {
-		return options.request, err
+		return options.request, commandInputError(err)
 	}
 	if err := validateTestOptions(options); err != nil {
-		return options.request, err
+		return options.request, commandInputError(err)
 	}
 	if !testRequestNeedsChanges(options.request) {
 		return options.request, nil
@@ -625,6 +634,7 @@ func testRequestNeedsChanges(request testpolicy.Request) bool {
 
 func withTestChanges(policyEngine *engine.Engine, request testpolicy.Request, base string) (testpolicy.Request, error) {
 	if base != "" {
+		request.RequestedBase = base
 		selection, err := policyEngine.SelectBase(base)
 		request.Changed = selection
 		return request, err
@@ -744,6 +754,9 @@ func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityRemi
 }
 
 func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
+	if report.ChangedTestScope != nil {
+		printChangedTestScope(output, report.ChangedTestScope, verbose)
+	}
 	if report.MergePolicy != nil {
 		printMergePolicyForMode(output, report.MergePolicy, verbose)
 	}
@@ -753,6 +766,24 @@ func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
 	if report.ChangeBoundary != nil {
 		printChangeBoundaryTo(output, report.ChangeBoundary)
 	}
+}
+
+func printChangedTestScope(output io.Writer, scope *engine.ChangedTestScope, verbose bool) {
+	if verbose {
+		fmt.Fprintln(output, "TEST SCOPE COMPARISON:", strings.ToUpper(scope.Comparison))
+		if scope.RequestedBase != "" {
+			fmt.Fprintln(output, "TEST SCOPE REQUESTED BASE:", scope.RequestedBase)
+		}
+		fmt.Fprintln(output, "TEST SCOPE EXACT BASE:", scope.ExactBase)
+		fmt.Fprintln(output, "TEST SCOPE CANDIDATE:", scope.Candidate)
+		fmt.Fprintln(output, "TEST SCOPE GOVERNED PATHS:", scope.GovernedPathCount)
+		return
+	}
+	if scope.Comparison == engine.ChangedTestComparisonMergeBase {
+		fmt.Fprintf(output, "TEST SCOPE: merge-base(%s, HEAD) = %s plus working tree (%d governed paths)\n", scope.RequestedBase, scope.ExactBase, scope.GovernedPathCount)
+		return
+	}
+	fmt.Fprintf(output, "TEST SCOPE: working tree against HEAD (%d governed paths)\n", scope.GovernedPathCount)
 }
 
 func printCheckpointPolicyForMode(output io.Writer, checkpoint *engine.CheckpointPolicy, verbose bool) {
@@ -853,12 +884,6 @@ func tableCell(row []string, index int) string {
 		return ""
 	}
 	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(row[index])
-}
-
-func usageError(message string) int {
-	fmt.Fprintln(os.Stderr, "usage error:", message)
-	fmt.Fprint(os.Stderr, usage)
-	return 2
 }
 
 func operationalError(err error) int {

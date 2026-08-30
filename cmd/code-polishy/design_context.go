@@ -12,7 +12,7 @@ import (
 func handleDesignContext(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	options, err := parseDesignContextOptions(arguments)
 	if err != nil {
-		return commandResult{}, err
+		return commandResult{}, commandInputError(err)
 	}
 	documents, findings, err := policyEngine.DesignContext(options.mode, options.files, options.modules)
 	if err != nil {
