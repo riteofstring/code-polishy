@@ -60,16 +60,14 @@
 ## Reviews and delivery
 
 - Agent review cannot replace policy checks or human approval.
-- Unless the trusted base explicitly sets
-  `verification.behaviorReview.required` to `false`, a non-documentation
+- Behavior review is mandatory and not configurable. A non-documentation
   candidate must be clean and committed, prepared into a packet for a fresh
   reviewer, proved red on the pre-fix base and green on the candidate for every
-  requested behavior, then finalized into a receipt. On a long-lived branch,
-  repeat this workflow against the previous accepted checkpoint before starting
-  the next task. `merge-gate` independently replays those proofs. The
-  supervising runtime must enforce the reviewer's fresh packet-only context.
-  Keep `.code-polishy-reports/behavior-review` in the same workspace or move it
-  only through an explicit trusted CI artifact handoff.
+  requested behavior, then finalized into a receipt. Both checkpoint and merge
+  gates independently replay those proofs. The supervising runtime must enforce
+  the reviewer's fresh packet-only context. Keep
+  `.code-polishy-reports/behavior-review` in the same workspace or move it only
+  through an explicit trusted CI artifact handoff.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
   isolation.
@@ -78,9 +76,13 @@
   the user for authorization. Control and declared product-input Markdown
   follow ordinary source verification.
 - Run exact tests while editing source and `code-polishy test --changed` for
-  broader feedback. At a merge checkpoint, resolve the base from an explicit
-  target, checked-in guidance, `origin/HEAD`, then `origin/main` or
-  `origin/master`.
+  broader feedback. After each completed code-changing task on a long-lived
+  branch, run `code-polishy checkpoint-gate --base <previous-checkpoint>`. It
+  requires the finalized behavior receipt, replays cited proofs, runs affected
+  checks and focused tests, then records the accepted HEAD. Do not run it for
+  conversational or read-only requests; an unchanged invocation is a no-op. At
+  a merge checkpoint, resolve the base from an explicit target, checked-in
+  guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
 - Run `code-polishy merge-gate --base <merge-target>` once for the final
   candidate. Let it select documentation, recommended, or full without asking
   the user. Summarize its result in plain language.

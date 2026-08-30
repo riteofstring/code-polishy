@@ -1,7 +1,7 @@
 ---
 name: polishy
 description: >-
-  Operate a repository through the Code Polishy release its lock names: inspect policy health, clean up concrete findings, display testing diagnostics, run policy-selected ordinary merge verification, synchronize canonical agent guidance, and enforce caller-scoped task sessions. Use when the user invokes /polishy or $polishy, asks what tests or verification level to run, asks whether a repository is policy-ready, or requests a Code Polishy cleanup, merge gate, or AGENTS sync. Triggers on repository policy, policy check, cleanup, test levels, test plan, recommended tests, full tests, supplemental tests, behavior review, regression proof, merge gate, gate, doctor, task session, and AGENTS sync.
+  Operate a repository through the Code Polishy release its lock names: inspect policy health, clean up concrete findings, display testing diagnostics, run task checkpoints and policy-selected merge verification, synchronize canonical agent guidance, and enforce caller-scoped task sessions. Use when the user invokes /polishy or $polishy, asks what tests or verification level to run, asks whether a repository is policy-ready, or requests a Code Polishy cleanup, checkpoint gate, merge gate, or AGENTS sync. Triggers on repository policy, policy check, cleanup, test levels, test plan, recommended tests, full tests, supplemental tests, behavior review, regression proof, checkpoint gate, merge gate, gate, doctor, task session, and AGENTS sync.
 ---
 
 # Operate Code Polishy
@@ -98,20 +98,22 @@ policy upgrade, and do not invent authoritative suite counts.
 - Treat `verify` as full ordinary tests plus builds, and `gate` as the complete
   policy, ordinary verification, build, and online supply-chain workflow. Do
   not describe either as merely another test level.
+- After a completed, clean, committed task on a long-lived branch, run
+  `checkpoint-gate --base <previous-checkpoint>`. It replays mandatory behavior
+  evidence, runs affected checks and focused tests, and records the accepted
+  HEAD. Do not run it for conversational or read-only requests; an unchanged
+  invocation is a no-op.
 - At an ordinary merge checkpoint, resolve the trusted base and run
   `merge-gate --base <trusted-base>` without asking the user to choose
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
-- Unless the trusted base explicitly sets
-  `verification.behaviorReview.required` to `false`, prepare every clean,
-  committed non-documentation candidate before that merge gate. Give only the
-  generated packet to a fresh native reviewer. Record red-on-pre-fix and
-  green-on-candidate `regression-proof` evidence for every behavior it
-  classifies as requested, save its strict result, and run `behavior-review
-finalize`. On a long-lived branch, repeat the workflow against the previous
-  accepted checkpoint before starting the next task. The merge gate
-  independently replays cited proofs. Keep
+- Behavior review is mandatory and has no target configuration switch. Prepare
+  every clean, committed non-documentation candidate before a checkpoint or
+  merge gate. Give only the generated packet to a fresh native reviewer. Record
+  red-on-pre-fix and green-on-candidate `regression-proof` evidence for every
+  behavior it classifies as requested, save its strict result, and run
+  `behavior-review finalize`. Both gates independently replay cited proofs. Keep
   `.code-polishy-reports/behavior-review` in the same workspace
   or move it only as an explicit trusted CI artifact. The supervising agent's
   existing context is not a fresh review, and local artifacts cannot
@@ -123,11 +125,13 @@ an alternative way to select the merge policy.
 
 ### 4. Run the Appropriate Scope
 
-Use exact focused selectors for implementation feedback. At an ordinary merge
-checkpoint, run `code-polishy merge-gate --base <trusted-base>` rather than
-selecting a profile from `test-levels`. On failure, diagnose and rerun the exact
-failing suite or narrow package first. Do not repeatedly restart a broad run
-while its known failure remains.
+Use exact focused selectors for implementation feedback. Use
+`checkpoint-gate --base <previous-checkpoint>` only to accept a completed task
+on a long-lived branch. At an ordinary merge checkpoint, run
+`code-polishy merge-gate --base <trusted-base>` rather than selecting a profile
+from `test-levels`. On failure, diagnose and rerun the exact failing suite or
+narrow package first. Do not repeatedly restart a broad run while its known
+failure remains.
 
 Report pass/fail in plain language, actionable findings, and anything required
 that was not run. Never claim that a skipped or unavailable check passed.
@@ -164,19 +168,20 @@ caller explicitly requests an uncommitted handoff.
 
 ## Common Mistakes
 
-| Mistake                                           | Correction                                                                                            |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Running a sibling checkout or another release     | Use `code-polishy`, which runs the release the lock names                                             |
-| Treating a `PATH` miss as a missing installation  | Probe the caller-specified or default stable launcher paths                                           |
-| Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested                    |
-| Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it      |
-| Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically        |
-| Skipping an enabled behavior-review receipt       | Prepare the clean candidate, use a packet-only fresh reviewer, prove requested behavior, and finalize |
-| Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                         |
-| Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                             |
-| Adding an exception to silence cleanup            | Fix the owner or make any necessary exception exact, owned, and expiring                              |
-| Starting autonomous work without selected modules | Require the caller to select modules before creating the task session                                 |
-| Leaving completed verified changes uncommitted    | Commit task-owned changes unless the caller requests an uncommitted handoff                           |
+| Mistake                                           | Correction                                                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Running a sibling checkout or another release     | Use `code-polishy`, which runs the release the lock names                                              |
+| Treating a `PATH` miss as a missing installation  | Probe the caller-specified or default stable launcher paths                                            |
+| Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested                     |
+| Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it       |
+| Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically         |
+| Skipping mandatory behavior evidence              | Prepare the clean candidate, use a packet-only fresh reviewer, prove requested behavior, and finalize  |
+| Letting completed branch tasks accumulate         | Run `checkpoint-gate` against the previous accepted commit before starting the next code-changing task |
+| Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                          |
+| Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                              |
+| Adding an exception to silence cleanup            | Fix the owner or make any necessary exception exact, owned, and expiring                               |
+| Starting autonomous work without selected modules | Require the caller to select modules before creating the task session                                  |
+| Leaving completed verified changes uncommitted    | Commit task-owned changes unless the caller requests an uncommitted handoff                            |
 
 ## Output Format
 
@@ -184,6 +189,7 @@ For a diagnostic level request, state whether the result is no-base advice or a
 trusted-base policy selection and explain the level and reasons. Show the
 terminal table only when requested. At an ordinary merge checkpoint, resolve
 the base and run `merge-gate` without asking the user to select a level. For
-execution or cleanup, lead with the outcome, report actionable findings, and
-name every required check that remains unrun. Include raw CLI output only when
-the caller requests it.
+completed long-lived branch tasks, report whether `checkpoint-gate` recorded
+the accepted HEAD. For execution or cleanup, lead with the outcome, report
+actionable findings, and name every required check that remains unrun. Include
+raw CLI output only when the caller requests it.

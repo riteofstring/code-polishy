@@ -79,7 +79,6 @@ Present at least these choices:
 | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source comments (`quality.allowComments`)                                     | `true`                                            | Keep `true` for human-written code or carefully curated existing comments. Recommend `false` only for a repository whose code is written and read entirely by AI and whose durable rationale belongs in mapped design documents. State that choosing `false` makes existing prose comments blocking before changing them. |
 | Adaptive application merge gate (`verification.mergeGate.recommendedModules`) | Omitted, so application changes use the full gate | Configure it only when read-only inventory identifies clearly bounded content modules that can safely use the recommended lane; shared escalation rules still force full when impact expands.                                                                                                                             |
-| Behavior-regression receipt (`verification.behaviorReview.required`)          | Required (`true`)                                 | Keep the default when applicable checkpoints can isolate a fresh packet-only reviewer and keep its reports under trusted custody. Set `false` only as a deliberate repository opt-out; the gate replays cited proofs but cannot authenticate reviewer identity or context.                                                |
 | Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost.                                                                                                                                                                  |
 | Gherkin methodology                                                           | Do not introduce it                               | Preserve and execute existing governed `.feature` files. Recommend adding Gherkin only when the owner wants executable behavior specifications as a working method.                                                                                                                                                       |
 
@@ -96,9 +95,9 @@ mappings describe repository facts; declare them whenever those facts exist.
 Conditional policy modules and their exact, expiring overrides are policy
 mechanisms, not setup preferences. Agent reviews and task sessions remain
 optional workflows selected only when requested or operationally applicable.
-The behavior-regression receipt is required by default for applicable
-non-documentation candidates. `required: false` is a deliberate repository
-opt-out.
+Behavior-regression evidence is a mandatory shared control for applicable
+non-documentation checkpoints and merge candidates. It is not a setup choice,
+and `verification.behaviorReview` is invalid configuration.
 
 For a repair or upgrade, preserve every explicit choice. Ask only about a newly
 introduced material choice that the existing configuration does not already
@@ -434,15 +433,17 @@ The resulting guidance should make these execution boundaries clear:
   coherent verified commit; task sessions are for requested isolation or
   unattended work;
 - `test-levels` (and the `test-plan` compatibility alias) is read-only;
+- after each completed committed task on a long-lived branch, agents run
+  `checkpoint-gate --base <previous-checkpoint>`; conversational and read-only
+  requests do not create checkpoints, and an unchanged invocation is a no-op;
 - agents resolve a trusted merge target and run `merge-gate --base <merge-target>`
   so Code Polishy selects documentation, recommended, or full execution without
   a user choice, and they do not immediately precede it with `test --changed`
   for the same candidate;
-- unless the trusted base explicitly disables behavior review,
-  non-documentation candidates use the packet-only fresh-reviewer, red/green
-  proof, and receipt workflow before `merge-gate`; long-lived branches repeat
-  it against their previous accepted checkpoint, the gate independently reruns
-  cited proofs, and the runtime enforces reviewer isolation and report custody;
+- non-documentation candidates always use the packet-only fresh-reviewer,
+  red/green proof, and receipt workflow before either checkpoint or merge gate;
+  both gates independently rerun cited proofs, and the runtime enforces reviewer
+  isolation and report custody;
 - local supplemental mutation and risk work runs through its separate direct
   stage after ordinary acceptance; only credentialed, destructive,
   production-mutating, and live-provider probes remain external approval

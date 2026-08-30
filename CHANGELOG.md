@@ -2,10 +2,13 @@
 
 ## Unreleased
 
-- Add a default-on behavior-regression merge prerequisite that binds a prepared
-  packet-only review to the clean candidate, supports explicit repository
-  opt-out without candidate-side weakening, and independently replays every
-  requested-behavior red/green proof at merge or branch checkpoint.
+- Make behavior-regression review a mandatory, non-configurable prerequisite
+  for non-documentation gates, binding a packet-only review and independently
+  replayed red/green proofs to the clean candidate.
+- Add `checkpoint-gate --base REF` for accepting one completed task on a
+  long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
+  contract for documentation-only work, otherwise runs mandatory behavior
+  evidence plus affected checks and focused tests, and records the passing HEAD.
 
 ## 0.19.0 - 2026-08-28
 

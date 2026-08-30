@@ -22,8 +22,8 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
 - Requires a [fresh behavior review](docs/policies/behavior-review.md) and
-  independently replayed red/green regression proof by default before
-  non-documentation merges.
+  independently replayed red/green regression proof before every
+  non-documentation checkpoint or merge gate.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.
@@ -64,13 +64,17 @@ code-polishy test --changed
 # Review dependency risk before accepting an update
 code-polishy dependency-review --base origin/main
 
+# Accept one completed task on a long-lived branch
+code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
+
 # Enforce the policy before merge
 code-polishy merge-gate --base origin/main
 ```
 
-The merge gate chooses how much validation the change needs. Fix any finding,
-rerun the narrowest useful check, and run the gate again when the final code is
-ready.
+The checkpoint gate validates one committed task against the previous accepted
+commit, runs affected checks and tests, then records the passing HEAD. The merge
+gate chooses how much final validation the whole branch needs. Fix any finding,
+rerun the narrowest useful check, and rerun the applicable gate.
 
 ## Languages
 

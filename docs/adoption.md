@@ -467,6 +467,7 @@ code-polishy test-levels --base origin/main
 code-polishy test --recommended --base origin/main
 code-polishy test --all
 code-polishy test --supplemental
+code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 code-polishy merge-gate --base origin/main
 ```
 
@@ -562,30 +563,16 @@ control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
 Archive verbose output for audit and require the resulting status for merge.
 
-### Keep behavior-regression proof on by default
+### Keep mandatory behavior-regression evidence in custody
 
-Fresh semantic review and executable red/green evidence are required before a
-non-documentation merge without additional configuration. The equivalent
-explicit setting is:
-
-```json
-{
-  "verification": {
-    "behaviorReview": {
-      "required": true
-    }
-  }
-}
-```
-
-Set `required` to `false` only when the repository deliberately opts out. Once
-the resolved merge base requires the receipt, a candidate cannot disable it;
-the opt-out change needs one final receipt before the new setting becomes the
-trusted base. CI must retain
+Fresh semantic review and executable red/green evidence are mandatory before
+every non-documentation checkpoint or merge gate. There is no target setting;
+adding `verification.behaviorReview` with either `required: true` or
+`required: false` is invalid configuration. CI must retain
 `.code-polishy-reports/behavior-review` in the same workspace as preparation,
-proof, finalization, and `merge-gate`, or transfer it between jobs as an
-explicit trusted artifact. The merge gate replays every cited proof; the agent
-runtime must separately enforce fresh-reviewer isolation. See
+proof, finalization, and the applicable gate, or transfer it between jobs as an
+explicit trusted artifact. Both checkpoint and merge gates replay every cited
+proof; the agent runtime must separately enforce fresh-reviewer isolation. See
 [Behavior Regression Review](policies/behavior-review.md) before relying on the
 workflow.
 
@@ -595,11 +582,13 @@ inputs before strict doctor, because doctor verifies that declared executables
 exist.
 
 A repository may reserve direct profile commands for explicit non-merge
-workflows. Install the checkpoint from `templates/AGENTS.md`: routine focused
-or changed tests during source work, documentation formatting without
-application tests for ordinary Markdown, then resolve the trusted merge target
-and run one `merge-gate --base <merge-target>` for a merge-ready candidate.
-That command selects and executes documentation, recommended, or full ordinary
+workflows. Install the guidance from `templates/AGENTS.md`: routine focused or
+changed tests during source work; `checkpoint-gate --base PREVIOUS_CHECKPOINT`
+after each completed committed task on a long-lived branch; documentation
+formatting without application tests for ordinary Markdown; then one
+`merge-gate --base MERGE_TARGET` for the final candidate.
+Checkpoint gate runs changed-scope verification and records the accepted HEAD.
+Merge gate selects and executes documentation, recommended, or full ordinary
 verification without making the selection a human approval prompt.
 `test-levels` remains a read-only diagnostic, and it lists supplemental quality
 separately. Credentialed, destructive, production-mutating, and live-provider

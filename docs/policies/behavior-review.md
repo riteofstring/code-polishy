@@ -1,54 +1,41 @@
 # Behavior Regression Review
 
-Behavior regression review is the default merge prerequisite for changes that
-need both a fresh semantic review and executable regression evidence. The agent
-runtime supplies the fresh reviewer. Code Polishy prepares the exact packet,
-records red/green proofs, validates the structured result, and replays every
-cited proof at the merge gate.
+Behavior regression review is mandatory for every non-documentation checkpoint
+and merge gate. The agent runtime supplies the fresh reviewer. Code Polishy
+prepares the exact packet, records red/green proofs, validates the structured
+result, and replays every cited proof whenever either gate runs.
 
 Ordinary agent reviews remain useful advisory evidence and can inspect a dirty
 working tree; this workflow is deliberately bound to one clean committed
 candidate.
 
-## Default and explicit opt-out
+## Mandatory policy
 
-No configuration is needed to require the receipt. This explicit setting has
-the same behavior as omission:
+The requirement has no configuration switch. Do not add
+`verification.behaviorReview`; both `required: true` and `required: false` are
+unknown configuration and fail closed. A target can configure its modules,
+commands, test suites, and merge-gate allowlist, but it cannot weaken this
+shared behavior-evidence prerequisite.
 
-```json
-{
-  "verification": {
-    "behaviorReview": {
-      "required": true
-    }
-  }
-}
-```
-
-`required` defaults to `true` when either the property or the whole
-`behaviorReview` object is omitted. A repository that cannot use this workflow
-may explicitly opt out with `"required": false`. Malformed values and unknown
-properties remain invalid configuration.
-
-The receipt is required when either the resolved merge base or the candidate
-requires it. A candidate therefore cannot weaken a required base by adding an
-opt-out. The opt-out change itself needs one final valid receipt; after that
-change reaches the trusted base, candidates that retain `false` are exempt.
-
-The receipt is required for recommended and full merge candidates. Ordinary
-Markdown-only candidates use the documentation merge level and bypass it.
+The receipt is required for every non-documentation `checkpoint-gate` and for
+recommended and full `merge-gate` candidates. An unchanged checkpoint is a
+no-op. Ordinary Markdown-only candidates run the documentation contract and
+bypass behavior review.
 
 ## Required workflow
 
-1. Stabilize and commit the candidate. Its tracked, staged, unstaged, and
+1. Choose one review base and use it unchanged throughout the workflow. For a
+   long-lived branch checkpoint, this is the previous accepted commit. For the
+   final merge gate, this is the actual merge target.
+2. Stabilize and commit the candidate. Its tracked, staged, unstaged, and
    untracked candidate files must be clean. The excluded report directory is
    the only workflow output that may remain untracked.
-2. Put the original request and acceptance criteria in a non-empty regular
+3. Put the original request and acceptance criteria in a non-empty regular
    UTF-8 intent file, then prepare the packet:
 
    ```sh
    code-polishy behavior-review prepare \
-     --base origin/main \
+     --base REVIEW_BASE \
      --intent-file .code-polishy-reports/behavior-review/intent.txt
    ```
 
@@ -56,14 +43,14 @@ Markdown-only candidates use the documentation merge level and bypass it.
    `.code-polishy-reports/behavior-review/packet.json` plus `prepare.json`,
    which binds that prepared packet to its review ID, base, and candidate.
 
-3. Give only that packet to a fresh native reviewer. The supervising runtime
+4. Give only that packet to a fresh native reviewer. The supervising runtime
    must keep that reviewer from reading the current workspace, prior reviews,
    plans, or external context. The packet contains the original intent,
    resolved base and candidate, binary-safe Git patch, current mapped design
    documents, a random review ID, and the canonical review instructions. After
    a proof exists, the reviewer may read only that proof's JSON record and named
    logs below the packet's proof directory.
-4. The reviewer describes every material observable behavior as `requested`,
+5. The reviewer describes every material observable behavior as `requested`,
    `preserved`, `unintended`, or `unknown`. For every `requested` behavior,
    create at least one proof ID:
 
@@ -80,11 +67,11 @@ Markdown-only candidates use the documentation merge level and bypass it.
    `--evidence` for each evidence file. Use `--red-exit STATUS` only when the
    expected baseline failure is not status `1`.
 
-5. Save the reviewer's exact JSON result at the packet's `result_path`, with no
+6. Save the reviewer's exact JSON result at the packet's `result_path`, with no
    surrounding prose, and finalize it:
 
    ```sh
-   code-polishy behavior-review finalize --base origin/main
+   code-polishy behavior-review finalize --base REVIEW_BASE
    ```
 
    Finalization re-derives the patch, instructions, and mapped design documents
@@ -92,33 +79,45 @@ Markdown-only candidates use the documentation merge level and bypass it.
    candidate, base, and cited proofs; then atomically writes
    `.code-polishy-reports/behavior-review/receipt.json`.
 
-6. Run the normal merge checkpoint:
+7. Run the applicable gate with that same base:
 
    ```sh
-   code-polishy merge-gate --base origin/main
+   code-polishy checkpoint-gate --base REVIEW_BASE
+   # Or, for the final candidate:
+   code-polishy merge-gate --base REVIEW_BASE
    ```
 
-   For a non-documentation candidate, the gate validates the receipt and reruns
-   every cited proof in disposable baseline and candidate worktrees before it
-   runs ordinary recommended or full verification. Recorded success or edited
-   logs alone cannot satisfy the gate.
+   Run only the command appropriate to the checkpoint. For a non-documentation
+   candidate, either gate validates the receipt and reruns every cited proof in
+   disposable baseline and candidate worktrees before further verification.
+   Recorded success or edited logs alone cannot satisfy the gate.
 
 ## Long-lived branch checkpoints
 
 Do not wait for a merge into the main branch when an AI is making a sequence of
 changes on one long-lived branch. After each accepted task, use the previous
 known-good commit as the base and run the same preparation, review, proof,
-finalization, and gate workflow:
+finalization, and checkpoint workflow:
 
 ```sh
-code-polishy merge-gate --base PREVIOUS_CHECKPOINT
+code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 ```
 
-Only record the current commit as the next checkpoint after that gate passes.
-This keeps the review packet focused on the latest task and reruns durable
-regression tests before the next change begins. The final merge checkpoint must
-still repeat the workflow against the actual merge target; a receipt bound to a
-branch checkpoint cannot satisfy a gate against a different base.
+The command runs changed-scope policy checks and focused tests after behavior
+evidence passes, then atomically writes
+`.code-polishy-reports/checkpoint-gate/receipt.json` with the accepted HEAD. It
+writes no acceptance receipt after any finding or operational failure. When the
+base yields no governed candidate paths, it reports an unchanged no-op and
+writes nothing. This makes an always-invoked wrapper harmless after a
+conversational or read-only request, although agent guidance should invoke the
+command only after a completed committed task.
+
+Use the accepted candidate commit as the next task's `PREVIOUS_CHECKPOINT`. The
+checkpoint receipt records that fact for audit; the next invocation still
+requires an explicit base. The final merge checkpoint must repeat preparation,
+review, proof, and finalization against the actual merge target before
+`merge-gate`; a receipt bound to a branch checkpoint cannot satisfy a gate
+against a different base.
 
 ## What makes a result valid
 
@@ -145,11 +144,12 @@ unique, contained, regular, and classified as development or test material.
 Code Polishy builds a binary patch from only those evidence files, applies it in
 a disposable worktree at the pre-fix base, and runs the suite there. That run
 must exit with the expected non-zero status, which defaults to `1`. It then runs
-the same suite on the candidate, which must exit `0`. The merge gate
-independently repeats both executions from the recorded patch and configured
-suite. The source candidate and replay candidate must remain the same clean
-commit throughout. Failed patch application, timeout, invalid evidence,
-candidate mutation, or worktree cleanup failure is an error, never proof.
+the same suite on the candidate, which must exit `0`. Both checkpoint and merge
+gates independently repeat both executions from the recorded patch and
+configured suite. The source candidate and replay candidate must remain the
+same clean commit throughout. Failed patch application, timeout, invalid
+evidence, candidate mutation, or worktree cleanup failure is an error, never
+proof.
 
 ## Artifact boundary and limits
 
@@ -157,8 +157,11 @@ All preparation-marker, packet, result, proof, log, worktree, and receipt
 artifacts live below `.code-polishy-reports/behavior-review`. The directory is
 excluded from candidate selection, so report updates cannot change merge
 classification. Keep it in the same workspace for preparation, proof, review,
-finalization, and merge-gate. A multi-job CI workflow may transfer it only as an
-explicit trusted artifact, preserving the exact candidate and base it names.
+finalization, and the applicable gate. A multi-job CI workflow may transfer it
+only as an explicit trusted artifact, preserving the exact candidate and base
+it names. The accepted checkpoint receipt lives separately below
+`.code-polishy-reports/checkpoint-gate`; both report directories are excluded
+from candidate selection.
 
 Intent and reviewer-instruction inputs are limited to 64 KiB. A review result
 and each mapped design document are limited to 256 KiB; artifact reads are
@@ -173,5 +176,5 @@ session wrote the review, prove that the reviewer had fresh context, or stop a
 writer with artifact access from replacing a complete self-consistent artifact
 set. The supervising runtime and CI custody boundary must enforce those parts.
 
-The receipt adds merge evidence. It does not replace ordinary policy checks,
+The receipt adds gate evidence. It does not replace ordinary policy checks,
 configured tests, human approval, or separate supplemental test-strength work.

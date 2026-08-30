@@ -158,11 +158,12 @@ workflow.
 
 ## Review questions for meaningful tests
 
-An opted-in [behavior regression review](behavior-review.md) adds separate
+Mandatory [behavior regression review](behavior-review.md) adds separate
 receipt evidence for a requested behavioral change: every requested behavior
 needs a candidate-bound proof that is red on its declared pre-fix base and green
 on the candidate. It uses eligible ordinary suites and does not turn
-supplemental, live, credentialed, or destructive hardening into merge evidence.
+supplemental, live, credentialed, or destructive hardening into checkpoint or
+merge evidence.
 
 For each material behavior, reviewers and AI collaborators should be able to
 answer:

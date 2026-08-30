@@ -73,6 +73,7 @@ code-polishy test --all
 code-polishy test --supplemental
 code-polishy verify [--tests-only]
 code-polishy gate
+code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 code-polishy merge-gate --base MERGE_TARGET
 ```
 
@@ -105,6 +106,11 @@ code-polishy merge-gate --base MERGE_TARGET
 - `gate` adds strict coverage, repository-wide code health, and online
   supply-chain enforcement. Neither `verify` nor `gate` silently runs
   supplemental suites.
+- `checkpoint-gate` accepts one clean committed task on a long-lived branch.
+  It no-ops when the supplied base yields no governed candidate paths, runs the
+  documentation contract for ordinary Markdown, and otherwise requires
+  behavior evidence before affected checks and focused changed-scope tests.
+  Only a complete pass records the accepted HEAD.
 - `merge-gate` is the executable ordinary merge policy. Given a trusted base,
   it selects the documentation contract, an impact-scoped recommended profile,
   or the complete full gate. Default output gives a concise level/base summary;
@@ -120,7 +126,7 @@ checkpoints:
 - the default `check`, `check --git-changes`, and `check --staged`;
 - the default changed-scope `test` command and `test --changed`;
 - `test-levels` and its `test-plan` compatibility alias; and
-- `merge-gate`.
+- `checkpoint-gate` and `merge-gate`.
 
 The reminder says: “Make sure none of the tests (new or old) are tautological
 or change-detector tests.” A tautological test derives its expected result from
@@ -186,6 +192,40 @@ Default output is:
 ```text
 MERGE GATE: DOCUMENTATION against origin/main
 ```
+
+## Long-lived branch checkpoint gate
+
+`checkpoint-gate --base REF` is the task boundary for a branch that will keep
+receiving AI changes before merge. `REF` is the previous accepted commit, and
+the candidate must be one clean committed HEAD. The command accepts no file,
+module, suite, or profile downscope.
+
+An unchanged candidate prints `CHECKPOINT GATE: UNCHANGED` and performs no
+review, checks, tests, or receipt write. An ordinary Markdown-only candidate
+runs the documentation contract without behavior review. Every other candidate
+must first satisfy the mandatory behavior-review receipt and proof replay. The
+gate then runs the normal change-aware policy check for the selected files and
+focused suites for changed modules plus reverse dependents. It stops after a
+failed phase and never runs merge-only builds, supply-chain work, full suites,
+or supplemental suites.
+
+After a complete pass, Code Polishy verifies that HEAD stayed unchanged and
+atomically writes `.code-polishy-reports/checkpoint-gate/receipt.json`. The
+receipt records the exact merge base, accepted candidate, scope, and behavior
+review ID when applicable. It is an audit record, not an implicit base:
+the next invocation still supplies the accepted commit explicitly.
+
+Default successful output is:
+
+```text
+CHECKPOINT GATE: CHANGED against PREVIOUS_CHECKPOINT
+CHECKPOINT ACCEPTED: 0123456789abcdef0123456789abcdef01234567
+```
+
+This command does not hook an AI harness or run after every chat turn. Checked-in
+agent guidance invokes it after a completed code-changing task. A generic
+wrapper may invoke it more broadly if it supplies the last accepted commit;
+the unchanged path makes conversational and read-only turns harmless.
 
 ## Optional adaptive application merge gate
 
@@ -256,30 +296,18 @@ telemetry, and report notes. CI may archive that output and should make the
 resulting status required for merge. Human handoffs should summarize the
 outcome and concrete failures rather than repeat the receipt.
 
-## Default behavior regression review receipt
+## Mandatory behavior regression review receipt
 
-Non-documentation merge candidates require a behavior-regression receipt by
-default. Omission is equivalent to:
+Every non-documentation checkpoint or merge candidate requires a
+behavior-regression receipt. The shared policy owns this requirement; there is
+no `verification.behaviorReview` setting, and either `required: true` or
+`required: false` is rejected as unknown configuration.
 
-```json
-{
-  "verification": {
-    "behaviorReview": {
-      "required": true
-    }
-  }
-}
-```
-
-Both an omitted `behaviorReview` object and an omitted `required` property
-default to `true`. Set `required: false` only as an explicit repository opt-out.
-The requirement applies when either the resolved merge base or the candidate
-enables it, so a candidate cannot disable an existing gate. With the requirement
-active, `merge-gate` validates the current clean candidate's receipt against the
-resolved base and replays every cited red/green proof before it starts ordinary
-recommended or full work. A missing, stale, malformed, unresolved,
-under-proved, or non-reproducible review becomes a `policy.behaviorReview`
-finding. The built-in documentation level bypasses this receipt.
+Both `checkpoint-gate` and `merge-gate` validate the current clean candidate's
+receipt against the resolved base and replay every cited red/green proof before
+further work. A missing, stale, malformed, unresolved, under-proved, or
+non-reproducible review becomes a `policy.behaviorReview` finding. An unchanged
+checkpoint and the built-in documentation level bypass this receipt.
 
 The receipt comes from a packet-only review plus red/green regression proof for
 each requested behavior. The agent runtime must supply and isolate the fresh
@@ -299,23 +327,28 @@ An AI collaborator should treat the levels differently:
    approval.
 3. While iterating on application source, run `test --changed` for affected modules and reverse
    dependents when exact focused tests are no longer enough.
-4. At an ordinary merge checkpoint, resolve a trusted merge target. Optionally
+4. After a completed code-changing task on a long-lived branch, commit the
+   candidate, complete behavior review against the previous accepted commit,
+   and run `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task
+   only after it records the accepted HEAD.
+5. At an ordinary merge checkpoint, resolve a trusted merge target. Optionally
    run `test-levels --base MERGE_TARGET` (or the compatibility alias
    `test-plan`) for its read-only diagnostic output.
-5. At a genuine merge checkpoint, run `merge-gate --base MERGE_TARGET` without
+6. At a genuine merge checkpoint, run `merge-gate --base MERGE_TARGET` without
    asking the user to choose a level. It subsumes changed-impact
    validation, so do not run `test --changed` immediately beforehand for the
    same candidate. Report only pass/fail and actionable findings to the user;
    detailed receipts remain in command logs or task artifacts.
-6. Run `test --supplemental` after a green ordinary gate when the caller or
+7. Run `test --supplemental` after a green ordinary gate when the caller or
    checked-in workflow requires local hardening. Focused, recommended, full,
    `verify`, `gate`, and `merge-gate` exclude supplemental execution.
 
-Do not ask after every edit, and do not silently turn a request for focused
-feedback into an ordinary merge checkpoint, `verify`, or `gate`. An explicit
-request for a scoped command remains scoped feedback. Credentialed,
-destructive, and live-provider checks remain typed external gates. CI may run
-its checked-in merge workflow.
+Do not run a checkpoint after every edit or chat turn, and do not silently turn
+a request for focused feedback into an ordinary merge checkpoint, `verify`, or
+`gate`. A checkpoint closes a completed committed task; conversational,
+read-only, and status requests close nothing. An explicit request for a scoped
+command remains scoped feedback. Credentialed, destructive, and live-provider
+checks remain typed external gates. CI may run its checked-in merge workflow.
 
 ## Test stable interfaces
 

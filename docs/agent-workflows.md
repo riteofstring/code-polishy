@@ -21,10 +21,15 @@ only when the task specifically requires them.
 For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
 documentation findings, and skip application tests without asking the user for
 authorization. Run exact tests while editing source and
-`code-polishy test --changed` when broader feedback is useful. At a merge checkpoint, run one
+`code-polishy test --changed` when broader feedback is useful. On a long-lived
+branch, finish each completed code-changing task with
+`code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
+and preparing its required behavior evidence. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
 candidate. Run `code-polishy test --supplemental` only when the caller or a
-checked-in workflow requires that separate hardening stage.
+checked-in workflow requires that separate hardening stage. Conversational,
+read-only, and status requests do not create checkpoints; an invoked
+checkpoint with no changes is a no-op.
 
 When added or modified test files are in the candidate, the default or
 change-aware checkpoints show one prominent, non-blocking test-quality reminder.
@@ -53,11 +58,11 @@ non-deterministic evidence and does not replace policy checks or human approval.
 
 ## Required behavior regression review
 
-Unless the trusted base explicitly sets
-`verification.behaviorReview.required` to `false`, use the
-[Behavior Regression Review Policy](policies/behavior-review.md) for every
-non-documentation merge candidate. It turns a fresh semantic review into a
-merge-checkable receipt without making the reviewer a policy engine:
+Use the [Behavior Regression Review Policy](policies/behavior-review.md) for
+every non-documentation checkpoint or merge candidate. The requirement is
+mandatory and has no target configuration switch. It turns a fresh semantic
+review into gate-checkable evidence without making the reviewer a policy
+engine:
 
 1. Commit the candidate and keep it clean, apart from the excluded review
    reports.
@@ -70,15 +75,19 @@ merge-checkable receipt without making the reviewer a policy engine:
    a pre-fix revision older than the packet's reviewed merge base.
 4. Save the strict review result at the packet's result path, then run
    `code-polishy behavior-review finalize` to write the receipt.
-5. Run `code-polishy merge-gate --base <merge-target>`. It validates the
-   receipt and independently reruns every cited proof before its normal
-   recommended or full work.
+5. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
+   completed task on a long-lived branch, or
+   `code-polishy merge-gate --base <merge-target>` for the final candidate.
+   Either gate validates the receipt and independently reruns every cited
+   proof. The checkpoint gate then runs changed-scope checks and focused tests
+   and records the accepted HEAD; the merge gate runs its selected
+   documentation, recommended, or full workflow.
 
 Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
 the workflow. A multi-job CI run may transfer that directory only as an explicit
 trusted artifact. Documentation-only candidates bypass the receipt; ordinary
-agent reviews remain available for work that does not opt in. Local digests do
-not authenticate reviewer identity or history; see the policy's trust limits.
+agent reviews remain useful advisory evidence. Local digests do not authenticate
+reviewer identity or history; see the policy's trust limits.
 
 ## Isolated task sessions
 

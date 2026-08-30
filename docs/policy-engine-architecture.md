@@ -32,11 +32,12 @@ clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
 
 `internal/behaviorreview` owns packet preparation and its marker, strict
 review-result and receipt validation, candidate-material re-derivation,
-behavior-proof records, and disposable baseline/candidate replay. It depends
-only on policy, repository, and runner. The agent runtime supplies and isolates
-a fresh reviewer; this module gives that reviewer a bounded packet and gives the
-merge gate candidate-bound executable evidence. Local artifacts do not
-authenticate reviewer identity or context.
+behavior-proof records, disposable baseline/candidate replay, and the atomic
+accepted-checkpoint receipt. It depends only on policy, repository, and runner.
+The agent runtime supplies and isolates a fresh reviewer; this module gives that
+reviewer a bounded packet and gives both checkpoint and merge gates
+candidate-bound executable evidence. Local artifacts do not authenticate
+reviewer identity or context.
 
 `internal/runner` is the subprocess boundary for target-declared commands. It
 accepts argument arrays, resolves working directories and checked-in
@@ -161,9 +162,10 @@ execution.
 `internal/engine` composes checks, applies exceptions exactly once, and returns
 one report. Merge-gate reports also carry the selected policy level, trusted
 base label, and deterministic reasons; the CLI renders that disclosure before
-findings. When behavior-regression review is enabled, it validates the receipt
-before ordinary non-documentation merge work. The CLI translates reports to exit
-statuses:
+findings. Checkpoint reports carry their scope, supplied base, exact candidate,
+and acceptance-receipt path. Behavior-regression review is mandatory before
+ordinary non-documentation checkpoint or merge work. The CLI translates
+reports to exit statuses:
 
 - `0`: the requested profile completed without findings;
 - `1`: policy or behavior findings;
@@ -209,9 +211,15 @@ merge-base delta ---> impacted modules + matching standard suites
 
 merge-gate delta ---> exact candidate classifier
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> optional behavior-review receipt validation
+                 ---> other candidate ---> mandatory behavior-review receipt validation
                                       ---> shared escalation rules + target module allowlist
                                       ---> recommended pipeline OR complete full gate
+
+checkpoint delta ---> unchanged ---> no-op
+                 ---> ordinary Markdown ---> built-in documentation contract
+                 ---> other candidate ---> mandatory behavior-review receipt + proof replay
+                                      ---> affected checks + focused changed tests
+                 ---> complete pass ---> accepted-HEAD receipt
 
 full profile ---> every suite marked full
 
@@ -234,15 +242,23 @@ delta separately from any repository-wide analysis expansion.
 `internal/testing.BuildMergeDecision` makes the deterministic level decision
 from that selection and compiled policy; `internal/engine` owns the three
 orchestration branches. The documentation branch runs only the built-in
-Markdown contract and bypasses behavior-review receipt validation. For an opted
-in non-documentation candidate, the engine first validates a receipt bound to
-the exact base and clean candidate; report artifacts are excluded from the
-candidate delta so they cannot change its classification. The recommended branch
-runs strict doctor, applicable gate checks and builds, recommended tests, and
-offline supply-chain verification. For non-documentation candidates, any
+Markdown contract and bypasses behavior-review receipt validation. For every
+non-documentation candidate, the engine first validates a receipt bound to the
+exact base and clean candidate; report artifacts are excluded from the
+candidate delta so they cannot change its classification. The recommended
+branch runs strict doctor, applicable gate checks and builds, recommended tests,
+and offline supply-chain verification. For non-documentation candidates, any
 repository-wide expansion,
 path-ownership failure, non-allowlisted module, broad planner impact, or missing
-opt-in selects the existing complete gate.
+adaptive configuration selects the existing complete gate.
+
+`checkpoint-gate` is a separate task boundary. It requires an explicit previous
+checkpoint and a clean committed candidate. Unchanged work is a no-op;
+documentation runs the same built-in contract; other changes validate and
+replay mandatory behavior evidence before the normal change-aware check and
+focused impacted tests. Only a finding-free run with an unchanged HEAD writes
+the accepted-checkpoint receipt. The receipt records state but does not select
+the next base automatically.
 
 ## Fail-closed planning
 

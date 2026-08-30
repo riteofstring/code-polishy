@@ -6,10 +6,10 @@ not inspect the current workspace, prior reviews, plans, or external context.
 
 After a proof is generated for this review, you may read only its JSON record
 and the logs it names under the packet's `proof_directory`. Those artifacts are
-candidate-bound red/green evidence that the merge gate will independently
-replay. Do not use any other logs or workspace files. Judge whether each red
-failure actually represents the behavior stated in that item's `before` value
-before citing its proof ID.
+candidate-bound red/green evidence that checkpoint and merge gates will
+independently replay. Do not use any other logs or workspace files. Judge
+whether each red failure actually represents the behavior stated in that
+item's `before` value before citing its proof ID.
 
 Describe every material observable behavior represented by the candidate. For
 each behavior, state what happens before the change and after the change, then
