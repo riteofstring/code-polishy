@@ -10,15 +10,17 @@ import (
 )
 
 var (
-	ErrInvalidInput     = errors.New("invalid behavior review input")
-	ErrInvalidReview    = errors.New("invalid behavior review result")
-	ErrInvalidEvidence  = errors.New("invalid regression proof evidence")
-	ErrMissingReceipt   = errors.New("missing behavior review receipt")
-	ErrStaleReceipt     = errors.New("stale behavior review receipt")
-	ErrStaleReview      = errors.New("stale behavior review result")
-	ErrCandidateChanged = errors.New("candidate changed during behavior review")
-	ErrOperational      = errors.New("behavior review operational failure")
-	ErrCleanup          = errors.New("behavior review cleanup failure")
+	ErrInvalidInput      = errors.New("invalid behavior review input")
+	ErrInvalidReview     = errors.New("invalid behavior review result")
+	ErrInvalidEvidence   = errors.New("invalid regression proof evidence")
+	ErrMissingReceipt    = errors.New("missing behavior review receipt")
+	ErrStaleReceipt      = errors.New("stale behavior review receipt")
+	ErrStaleReview       = errors.New("stale behavior review result")
+	ErrCandidateChanged  = errors.New("candidate changed during behavior review")
+	ErrMissingCheckpoint = errors.New("missing checkpoint receipt")
+	ErrStaleCheckpoint   = errors.New("stale checkpoint receipt")
+	ErrOperational       = errors.New("behavior review operational failure")
+	ErrCleanup           = errors.New("behavior review cleanup failure")
 )
 
 type OperationalError struct {
@@ -156,4 +158,8 @@ func ReplayGateReceipt(ctx context.Context, repo repository.Repository, commandR
 
 func RecordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {
 	return recordCheckpoint(ctx, repo, options)
+}
+
+func ReadCheckpoint(ctx context.Context, repo repository.Repository) (CheckpointReceipt, error) {
+	return readCheckpoint(ctx, repo)
 }

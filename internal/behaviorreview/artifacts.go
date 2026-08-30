@@ -83,6 +83,31 @@ func existingBehaviorReviewRoot(repo repository.Repository) (string, error) {
 	return resolved, nil
 }
 
+func existingCheckpointRoot(repo repository.Repository) (string, error) {
+	root, candidate, err := managedArtifactCandidate(repo, checkpointDirectory)
+	if err != nil {
+		return "", err
+	}
+	if err := validateOutputAncestor(root, candidate, "checkpoint gate"); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(candidate)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("%w: checkpoint artifacts are unavailable", ErrMissingCheckpoint)
+	}
+	if err != nil {
+		return "", operational("inspect checkpoint artifact root", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: checkpoint artifact root is not a directory", ErrInvalidInput)
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil || !pathInside(root, resolved) {
+		return "", fmt.Errorf("%w: checkpoint artifact root resolves outside the repository", ErrInvalidInput)
+	}
+	return resolved, nil
+}
+
 func behaviorReviewCandidate(repo repository.Repository) (string, string, error) {
 	return managedArtifactCandidate(repo, artifactDirectory)
 }

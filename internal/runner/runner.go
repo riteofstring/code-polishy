@@ -40,6 +40,54 @@ type Result struct {
 	ExitStatus        int
 	ExecutionDuration time.Duration
 	ResourceWait      time.Duration
+	FailureCategory   FailureCategory
+}
+
+type FailureCategory string
+
+const (
+	FailureCommandExit FailureCategory = "command-exit"
+	FailureTimeout     FailureCategory = "timeout"
+	FailureCanceled    FailureCategory = "canceled"
+	FailureEnvironment FailureCategory = "environment"
+	FailureResource    FailureCategory = "resource"
+	FailureOperational FailureCategory = "operational"
+)
+
+func FailureCategoryFor(ctx context.Context, result Result, err error) FailureCategory {
+	if err == nil {
+		return ""
+	}
+	if validFailureCategory(result.FailureCategory) {
+		return result.FailureCategory
+	}
+	if category := contextFailureCategory(ctx); category != "" {
+		return category
+	}
+	if result.ExitStatus > 0 {
+		return FailureCommandExit
+	}
+	return FailureOperational
+}
+
+func validFailureCategory(category FailureCategory) bool {
+	switch category {
+	case FailureCommandExit, FailureTimeout, FailureCanceled, FailureEnvironment, FailureResource, FailureOperational:
+		return true
+	default:
+		return false
+	}
+}
+
+func contextFailureCategory(ctx context.Context) FailureCategory {
+	switch ctx.Err() {
+	case context.DeadlineExceeded:
+		return FailureTimeout
+	case context.Canceled:
+		return FailureCanceled
+	default:
+		return ""
+	}
 }
 
 const (
@@ -68,6 +116,7 @@ func (runner OSRunner) RunWithOutput(parent context.Context, root string, specif
 	result, err := runner.run(parent, root, specification, appendOutputWriter(runner.Stdout, stdout), appendOutputWriter(runner.Stderr, stderr))
 	if stdout.truncated || stderr.truncated {
 		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
+		result.FailureCategory = FailureCategoryFor(parent, result, err)
 	}
 	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
 }
@@ -89,11 +138,15 @@ func appendOutputWriter(configured io.Writer, captured io.Writer) io.Writer {
 func (runner OSRunner) run(parent context.Context, root string, specification policy.Command, stdout, stderr io.Writer) (Result, error) {
 	workingDirectory, argv, err := runner.commandInvocation(root, specification)
 	if err != nil {
-		return Result{ExitStatus: -1}, err
+		return Result{ExitStatus: -1, FailureCategory: FailureEnvironment}, err
 	}
 	lease, resourceWait, err := AcquireExclusiveResources(parent, specification.ExclusiveResources)
 	if err != nil {
-		return Result{ExitStatus: -1, ResourceWait: resourceWait}, fmt.Errorf("acquire exclusive resources for command %q: %w", specification.Name, err)
+		category := contextFailureCategory(parent)
+		if category == "" {
+			category = FailureResource
+		}
+		return Result{ExitStatus: -1, ResourceWait: resourceWait, FailureCategory: category}, fmt.Errorf("acquire exclusive resources for command %q: %w", specification.Name, err)
 	}
 	defer lease.Release()
 	return runner.runLeasedCommand(parent, specification, workingDirectory, argv, resourceWait, stdout, stderr)
@@ -138,7 +191,7 @@ func (runner OSRunner) runLeasedCommand(parent context.Context, specification po
 	defer cancel()
 	environment, cleanupEnvironment, err := commandEnvironment(specification, runner.PathEntries)
 	if err != nil {
-		return Result{ExitStatus: -1, ExecutionDuration: time.Since(started), ResourceWait: resourceWait}, err
+		return Result{ExitStatus: -1, ExecutionDuration: time.Since(started), ResourceWait: resourceWait, FailureCategory: FailureEnvironment}, err
 	}
 	defer cleanupEnvironment()
 	hostResult, runErr := Run(contextWithTimeout, HostCommand{
@@ -155,10 +208,22 @@ func commandFailureResult(hostResult HostResult, commandContext context.Context,
 	result := Result{ExitStatus: -1, ExecutionDuration: time.Since(started), ResourceWait: resourceWait}
 	if commandContext.Err() == context.DeadlineExceeded {
 		result.ExitStatus = 124
+		result.FailureCategory = FailureTimeout
 		return result, fmt.Errorf("command %q timed out after %s", name, timeout)
+	}
+	if commandContext.Err() == context.Canceled {
+		result.FailureCategory = FailureCanceled
+		return result, fmt.Errorf("command %q was canceled", name)
 	}
 	if hostResult.Started {
 		result.ExitStatus = hostResult.ExitStatus
+	}
+	if hostResult.Started && hostResult.ExitStatus != 0 {
+		result.FailureCategory = FailureCommandExit
+	} else if !hostResult.Started {
+		result.FailureCategory = FailureEnvironment
+	} else {
+		result.FailureCategory = FailureOperational
 	}
 	return result, fmt.Errorf("command %q failed: %w", name, runErr)
 }

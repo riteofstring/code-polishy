@@ -16,12 +16,13 @@ import (
 )
 
 type Request struct {
-	Full         bool
-	Recommended  bool
-	Supplemental bool
-	Modules      []string
-	Suites       []string
-	Changed      repository.Selection
+	Full          bool
+	Recommended   bool
+	Supplemental  bool
+	Modules       []string
+	Suites        []string
+	Changed       repository.Selection
+	RequestedBase string
 }
 
 type Plan struct {
@@ -31,6 +32,24 @@ type Plan struct {
 	SelectionBase   string
 	Level           string
 	Reasons         []string
+}
+
+type RunResult struct {
+	Findings   []policy.Finding
+	Executions []SuiteExecution
+}
+
+type SuiteExecution struct {
+	Suite           policy.TestSuite
+	Result          runner.Result
+	ResultKnown     bool
+	FailureCategory runner.FailureCategory
+	FailureMessage  string
+	Attempt         int
+}
+
+func (execution SuiteExecution) Failed() bool {
+	return execution.FailureMessage != ""
 }
 
 type Advice struct {
@@ -270,21 +289,24 @@ func analysisPaths(selection repository.Selection) []string {
 }
 
 func Run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
-	return run(ctx, repo, commandRunner, plan, reporter, false)
+	return RunWithEvidence(ctx, repo, commandRunner, plan, reporter).Findings
 }
 
 func RunUntilFailure(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
+	return RunUntilFailureWithEvidence(ctx, repo, commandRunner, plan, reporter).Findings
+}
+
+func RunWithEvidence(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) RunResult {
+	return run(ctx, repo, commandRunner, plan, reporter, false)
+}
+
+func RunUntilFailureWithEvidence(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) RunResult {
 	return run(ctx, repo, commandRunner, plan, reporter, true)
 }
 
-func run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter, stopAfterFailure bool) []policy.Finding {
-	findings := []policy.Finding{}
+func run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter, stopAfterFailure bool) RunResult {
+	runResult := RunResult{}
 	for index, suite := range plan.Suites {
-		command := policy.Command{
-			Name: suite.Name, Argv: suite.Argv, Cwd: suite.Cwd,
-			Paths: suite.Paths, Modules: suite.Modules, Environment: suite.Environment,
-			ExclusiveResources: suite.ExclusiveResources, TimeoutSeconds: suite.TimeoutSeconds,
-		}
 		runContext := ctx
 		if reporter != nil {
 			reporter.CommandWaiting(index)
@@ -292,25 +314,61 @@ func run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 				reporter.CommandResourceWaiting(index, elapsed)
 			})
 		}
-		result, resourceWaitKnown, err := runSuite(runContext, repo.Root, commandRunner, command)
+		execution := ExecuteSuite(runContext, repo.Root, commandRunner, suite, 1)
+		runResult.Executions = append(runResult.Executions, execution)
 		if reporter != nil {
 			status := executionStatusPassed
-			if err != nil {
+			if execution.Failed() {
 				status = executionStatusFailed
 			}
 			reporter.CommandFinished(index, ExecutionResult{
-				Status: status, ExecutionDuration: result.ExecutionDuration,
-				ResourceWait: result.ResourceWait, ResourceWaitKnown: resourceWaitKnown,
+				Status: status, ExecutionDuration: execution.Result.ExecutionDuration,
+				ResourceWait: execution.Result.ResourceWait, ResourceWaitKnown: execution.ResultKnown,
 			})
 		}
-		if err != nil {
-			findings = append(findings, policy.Finding{Check: "test." + suite.Kind, Path: "repository", Subject: suite.Name, Message: err.Error()})
+		if execution.Failed() {
+			runResult.Findings = append(runResult.Findings, policy.Finding{Check: "test." + suite.Kind, Path: "repository", Subject: suite.Name, Message: execution.FailureMessage})
 			if stopAfterFailure {
-				return findings
+				return runResult
 			}
 		}
 	}
-	return findings
+	return runResult
+}
+
+func ExecuteSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int) SuiteExecution {
+	result, resultKnown, err := runSuite(ctx, root, commandRunner, suiteCommand(suite))
+	category := runner.FailureCategoryFor(ctx, result, err)
+	if err != nil {
+		result.FailureCategory = category
+	}
+	execution := SuiteExecution{
+		Suite: cloneSuite(suite), Result: result, ResultKnown: resultKnown,
+		FailureCategory: category, Attempt: attempt,
+	}
+	if err != nil {
+		execution.FailureMessage = err.Error()
+	}
+	return execution
+}
+
+func suiteCommand(suite policy.TestSuite) policy.Command {
+	return policy.Command{
+		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
+		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
+		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
+		TimeoutSeconds: suite.TimeoutSeconds,
+	}
+}
+
+func cloneSuite(suite policy.TestSuite) policy.TestSuite {
+	suite.Modules = append([]string{}, suite.Modules...)
+	suite.Argv = append([]string{}, suite.Argv...)
+	suite.Paths = append([]string{}, suite.Paths...)
+	suite.RunOn = append([]string{}, suite.RunOn...)
+	suite.Environment = append([]string{}, suite.Environment...)
+	suite.ExclusiveResources = append([]string{}, suite.ExclusiveResources...)
+	return suite
 }
 
 type resultRunner interface {

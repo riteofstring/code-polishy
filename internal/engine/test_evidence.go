@@ -1,0 +1,236 @@
+package engine
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
+)
+
+const (
+	ChangedTestComparisonWorkingTree = "working-tree-vs-head"
+	ChangedTestComparisonMergeBase   = "working-tree-vs-merge-base"
+
+	TestDiagnosticIntermittentObserved = "intermittent-observed"
+	TestDiagnosticCandidateRegression  = "candidate-regression"
+	TestDiagnosticBaselineReproduced   = "baseline-reproduced"
+	TestDiagnosticBaselineUnavailable  = "baseline-unavailable"
+)
+
+type ChangedTestScope struct {
+	Comparison        string
+	RequestedBase     string
+	ExactBase         string
+	Candidate         string
+	GovernedPathCount int
+}
+
+type TestCommandEvidence struct {
+	Name                  string
+	Kind                  string
+	Scope                 string
+	Cost                  string
+	Target                string
+	SuiteModules          []string
+	SuitePaths            []string
+	ChangedModules        []string
+	ImpactedModules       []string
+	ChangedModuleOverlap  []string
+	ImpactedModuleOverlap []string
+	ChangedPathOverlap    []string
+	Result                runner.Result
+	FailureCategory       runner.FailureCategory
+	FailureMessage        string
+	Attempt               int
+	LogPath               string
+}
+
+type TestFailureDiagnostic struct {
+	Suite          string
+	State          string
+	CandidateRetry *TestCommandEvidence
+	BaselineReplay *TestCommandEvidence
+}
+
+type TestDiagnosticRunnerProvider interface {
+	TestDiagnosticRunner() runner.Runner
+}
+
+func NewChangedTestScope(request testpolicy.Request) *ChangedTestScope {
+	comparison := ChangedTestComparisonWorkingTree
+	if request.RequestedBase != "" {
+		comparison = ChangedTestComparisonMergeBase
+	}
+	return &ChangedTestScope{
+		Comparison: comparison, RequestedBase: request.RequestedBase, ExactBase: request.Changed.Base,
+		Candidate: "working-tree", GovernedPathCount: len(request.Changed.Candidate.Paths()),
+	}
+}
+
+func (engine *Engine) testCommandEvidence(plan testpolicy.Plan, selection repository.Selection, executions []testpolicy.SuiteExecution, target string) []TestCommandEvidence {
+	changedPaths := selection.Candidate.Paths()
+	result := make([]TestCommandEvidence, 0, len(executions))
+	for _, execution := range executions {
+		suite := execution.Suite
+		evidence := TestCommandEvidence{
+			Name: suite.Name, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost, Target: target,
+			SuiteModules: sortedUniqueStrings(suite.Modules), SuitePaths: sortedUniqueStrings(suite.Paths),
+			ChangedModules: sortedUniqueStrings(plan.ChangedModules), ImpactedModules: sortedUniqueStrings(plan.ImpactedModules),
+			ChangedModuleOverlap:  stringIntersection(suite.Modules, plan.ChangedModules),
+			ImpactedModuleOverlap: stringIntersection(suite.Modules, plan.ImpactedModules),
+			ChangedPathOverlap:    engine.suiteChangedPathOverlap(suite, changedPaths),
+			Result:                execution.Result, FailureCategory: execution.FailureCategory, FailureMessage: execution.FailureMessage,
+			Attempt: execution.Attempt,
+		}
+		result = append(result, evidence)
+	}
+	return result
+}
+
+func (engine *Engine) suiteChangedPathOverlap(suite policy.TestSuite, changedPaths []string) []string {
+	paths := []string{}
+	for _, path := range changedPaths {
+		if suite.Scope == "repository" {
+			if len(suite.Paths) == 0 || policy.MatchesAny(path, suite.Paths) {
+				paths = append(paths, path)
+			}
+			continue
+		}
+		if len(stringIntersection(engine.Repository.ModuleNames(path), suite.Modules)) > 0 {
+			paths = append(paths, path)
+		}
+	}
+	return sortedUniqueStrings(paths)
+}
+
+func (engine *Engine) testFailureDiagnostics(ctx context.Context, plan testpolicy.Plan, selection repository.Selection, executions []testpolicy.SuiteExecution) ([]TestFailureDiagnostic, []TestCommandEvidence) {
+	if plan.Level == "supplemental" {
+		return nil, nil
+	}
+	diagnostics := []TestFailureDiagnostic{}
+	evidence := []TestCommandEvidence{}
+	commandRunner := testDiagnosticRunner(engine.Runner)
+	for _, original := range executions {
+		if !original.Failed() {
+			continue
+		}
+		retry := testpolicy.ExecuteSuite(ctx, engine.Repository.Root, commandRunner, original.Suite, original.Attempt+1)
+		retryEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{retry}, "working-tree")[0]
+		evidence = append(evidence, retryEvidence)
+		diagnostic := TestFailureDiagnostic{Suite: original.Suite.Name, CandidateRetry: &retryEvidence}
+		if !retry.Failed() {
+			diagnostic.State = TestDiagnosticIntermittentObserved
+			diagnostics = append(diagnostics, diagnostic)
+			continue
+		}
+		if retry.FailureCategory != runner.FailureCommandExit {
+			diagnostic.State = TestDiagnosticBaselineUnavailable
+			diagnostics = append(diagnostics, diagnostic)
+			continue
+		}
+		baseline, available := engine.replayTestBaseline(ctx, selection.Base, commandRunner, original.Suite, original.Attempt+2)
+		if baseline != nil {
+			baselineEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{*baseline}, selection.Base)[0]
+			evidence = append(evidence, baselineEvidence)
+			diagnostic.BaselineReplay = &baselineEvidence
+		}
+		if !available || baseline == nil {
+			diagnostic.State = TestDiagnosticBaselineUnavailable
+		} else if !baseline.Failed() {
+			diagnostic.State = TestDiagnosticCandidateRegression
+		} else if baseline.FailureCategory == runner.FailureCommandExit {
+			diagnostic.State = TestDiagnosticBaselineReproduced
+		} else {
+			diagnostic.State = TestDiagnosticBaselineUnavailable
+		}
+		diagnostics = append(diagnostics, diagnostic)
+	}
+	return diagnostics, evidence
+}
+
+func testDiagnosticRunner(commandRunner runner.Runner) runner.Runner {
+	if provider, ok := commandRunner.(TestDiagnosticRunnerProvider); ok {
+		if diagnosticRunner := provider.TestDiagnosticRunner(); diagnosticRunner != nil {
+			return diagnosticRunner
+		}
+	}
+	return commandRunner
+}
+
+func (engine *Engine) replayTestBaseline(ctx context.Context, base string, commandRunner runner.Runner, suite policy.TestSuite, attempt int) (*testpolicy.SuiteExecution, bool) {
+	if base == "" {
+		return nil, false
+	}
+	parent, err := os.MkdirTemp("", "code-polishy-test-diagnostic-")
+	if err != nil {
+		return nil, false
+	}
+	worktree := filepath.Join(parent, "baseline")
+	if err := engine.Repository.AddDetachedWorktree(ctx, worktree, base); err != nil {
+		_ = os.Remove(parent)
+		return nil, false
+	}
+	execution := testpolicy.ExecuteSuite(ctx, worktree, commandRunner, suite, attempt)
+	if err := engine.Repository.RemoveWorktree(context.Background(), worktree); err != nil {
+		return &execution, false
+	}
+	if err := os.Remove(parent); err != nil {
+		return &execution, false
+	}
+	return &execution, true
+}
+
+func AttachTestCommandLogPath(report *Report, name string, attempt int, logPath string) bool {
+	if report == nil || name == "" || attempt < 1 || logPath == "" {
+		return false
+	}
+	matched := false
+	for index := range report.TestCommands {
+		if report.TestCommands[index].Name == name && report.TestCommands[index].Attempt == attempt {
+			report.TestCommands[index].LogPath = logPath
+			matched = true
+		}
+	}
+	for index := range report.TestDiagnostics {
+		attachDiagnosticLogPath(report.TestDiagnostics[index].CandidateRetry, name, attempt, logPath)
+		attachDiagnosticLogPath(report.TestDiagnostics[index].BaselineReplay, name, attempt, logPath)
+	}
+	return matched
+}
+
+func attachDiagnosticLogPath(evidence *TestCommandEvidence, name string, attempt int, logPath string) {
+	if evidence != nil && evidence.Name == name && evidence.Attempt == attempt {
+		evidence.LogPath = logPath
+	}
+}
+
+func sortedUniqueStrings(values []string) []string {
+	ordered := append([]string{}, values...)
+	sort.Strings(ordered)
+	result := make([]string, 0, len(ordered))
+	for _, value := range ordered {
+		if value != "" && (len(result) == 0 || result[len(result)-1] != value) {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func stringIntersection(left, right []string) []string {
+	rightSet := map[string]bool{}
+	for _, value := range right {
+		rightSet[value] = true
+	}
+	result := []string{}
+	for _, value := range left {
+		if rightSet[value] {
+			result = append(result, value)
+		}
+	}
+	return sortedUniqueStrings(result)
+}

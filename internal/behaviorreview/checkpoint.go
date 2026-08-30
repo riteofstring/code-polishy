@@ -1,0 +1,94 @@
+package behaviorreview
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/riteofstring/code-polishy/internal/repository"
+)
+
+func readCheckpoint(ctx context.Context, repo repository.Repository) (CheckpointReceipt, error) {
+	if err := ctx.Err(); err != nil {
+		return CheckpointReceipt{}, operational("read checkpoint receipt", err)
+	}
+	root, err := existingCheckpointRoot(repo)
+	if err != nil {
+		return CheckpointReceipt{}, checkpointReadError("checkpoint artifacts are invalid", err)
+	}
+	receipt, err := readCheckpointReceipt(root)
+	if err != nil {
+		return CheckpointReceipt{}, err
+	}
+	if err := validateCheckpointReceipt(receipt); err != nil {
+		return CheckpointReceipt{}, staleCheckpoint("receipt structure is invalid", err)
+	}
+	candidate, err := repo.CleanHead()
+	if err != nil {
+		if errors.Is(err, repository.ErrGitOperation) {
+			return CheckpointReceipt{}, operational("read checkpoint candidate", err)
+		}
+		return CheckpointReceipt{}, staleCheckpoint("receipt does not match a clean current candidate", err)
+	}
+	if receipt.Candidate != candidate {
+		return CheckpointReceipt{}, staleCheckpoint("receipt does not match the current candidate", nil)
+	}
+	ancestor, err := repo.IsAncestor(receipt.Base, receipt.Candidate)
+	if err != nil {
+		return CheckpointReceipt{}, operational("validate checkpoint ancestry", err)
+	}
+	if !ancestor {
+		return CheckpointReceipt{}, staleCheckpoint("receipt base is not an ancestor of its candidate", nil)
+	}
+	return receipt, nil
+}
+
+func checkpointReadError(message string, err error) error {
+	if errors.Is(err, ErrMissingCheckpoint) || errors.Is(err, ErrOperational) {
+		return err
+	}
+	return staleCheckpoint(message, err)
+}
+
+func readCheckpointReceipt(root string) (CheckpointReceipt, error) {
+	path := artifactPath(root, receiptFilename)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return CheckpointReceipt{}, fmt.Errorf("%w: checkpoint receipt is unavailable", ErrMissingCheckpoint)
+	}
+	if err != nil {
+		return CheckpointReceipt{}, operational("inspect checkpoint receipt", err)
+	}
+	if !info.Mode().IsRegular() {
+		return CheckpointReceipt{}, staleCheckpoint("receipt is not a regular file", nil)
+	}
+	data, err := readArtifact(path, maximumArtifactReadByte)
+	if err != nil {
+		if errors.Is(err, ErrOperational) {
+			return CheckpointReceipt{}, err
+		}
+		return CheckpointReceipt{}, staleCheckpoint("receipt is unreadable", err)
+	}
+	var receipt CheckpointReceipt
+	if err := decodeStrict(data, &receipt); err != nil {
+		return CheckpointReceipt{}, staleCheckpoint("receipt JSON is invalid", err)
+	}
+	return receipt, nil
+}
+
+func validateCheckpointReceipt(receipt CheckpointReceipt) error {
+	if receipt.Version != artifactVersion {
+		return fmt.Errorf("receipt version must be %d", artifactVersion)
+	}
+	return validateCheckpointFields(RecordCheckpointOptions{
+		Base: receipt.Base, Candidate: receipt.Candidate, Scope: receipt.Scope, BehaviorReviewID: receipt.BehaviorReviewID,
+	})
+}
+
+func staleCheckpoint(message string, cause error) error {
+	if cause == nil {
+		return fmt.Errorf("%w: %s", ErrStaleCheckpoint, message)
+	}
+	return fmt.Errorf("%w: %s: %v", ErrStaleCheckpoint, message, cause)
+}

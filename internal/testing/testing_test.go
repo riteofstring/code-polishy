@@ -3,6 +3,7 @@ package testing
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestRunPreservesSuiteExclusiveResources(t *testing.T) {
@@ -25,6 +27,29 @@ func TestRunPreservesSuiteExclusiveResources(t *testing.T) {
 	}
 	if !slices.Equal(recorder.command.ExclusiveResources, []string{"database", "performance"}) {
 		t.Fatalf("command resources = %v", recorder.command.ExclusiveResources)
+	}
+}
+
+func TestRunWithEvidencePreservesSuiteAttemptAndObservedFailure(t *testing.T) {
+	t.Parallel()
+	repo := repository.Repository{Root: t.TempDir()}
+	suite := policy.TestSuite{
+		Name: "domain-unit", Kind: "unit", Scope: "module", Cost: "quick", Modules: []string{"domain"}, Paths: []string{"domain/**"},
+		Argv: []string{"false"}, Cwd: ".", TimeoutSeconds: 30,
+	}
+	run := RunUntilFailureWithEvidence(context.Background(), repo, &evidenceTestingRunner{
+		result: runner.Result{ExitStatus: 17, FailureCategory: runner.FailureCommandExit}, err: errors.New("suite failed"),
+	}, Plan{Suites: []policy.TestSuite{suite}}, nil)
+	if len(run.Findings) != 1 || run.Findings[0].Subject != suite.Name {
+		t.Fatalf("findings = %+v", run.Findings)
+	}
+	if len(run.Executions) != 1 {
+		t.Fatalf("executions = %+v", run.Executions)
+	}
+	execution := run.Executions[0]
+	if execution.Attempt != 1 || execution.FailureCategory != runner.FailureCommandExit || execution.Result.ExitStatus != 17 ||
+		!slices.Equal(execution.Suite.Modules, suite.Modules) || !slices.Equal(execution.Suite.Paths, suite.Paths) || !execution.Failed() {
+		t.Fatalf("execution = %+v", execution)
 	}
 }
 
@@ -600,4 +625,17 @@ type recordingTestingRunner struct {
 func (runner *recordingTestingRunner) Run(_ context.Context, _ string, command policy.Command) error {
 	runner.command = command
 	return nil
+}
+
+type evidenceTestingRunner struct {
+	result runner.Result
+	err    error
+}
+
+func (testRunner *evidenceTestingRunner) Run(_ context.Context, _ string, _ policy.Command) error {
+	return testRunner.err
+}
+
+func (testRunner *evidenceTestingRunner) RunWithResult(_ context.Context, _ string, _ policy.Command) (runner.Result, error) {
+	return testRunner.result, testRunner.err
 }

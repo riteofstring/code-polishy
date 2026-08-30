@@ -13,8 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
@@ -170,6 +172,80 @@ func TestCombinedReportsDeduplicateTestQualityReminder(t *testing.T) {
 	}
 }
 
+func TestTaskAwareTestQualityReminderPreservesMergeWideAndTaskSlices(t *testing.T) {
+	t.Parallel()
+	reminder := NewTaskAwareTestQualityReminder(
+		[]string{"internal/engine/engine_test.go", "cmd/code-polishy/main_test.go"}, "task-base",
+		[]string{"internal/engine/engine_test.go"},
+	)
+	if reminder == nil || reminder.TaskBase != "task-base" ||
+		!slices.Equal(reminder.ChangedTestPaths, []string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"}) ||
+		!slices.Equal(reminder.TaskChangedTestPaths, []string{"internal/engine/engine_test.go"}) {
+		t.Fatalf("reminder = %+v", reminder)
+	}
+}
+
+func TestAttachTestCommandLogPathKeepsDiagnosticEvidenceInSync(t *testing.T) {
+	t.Parallel()
+	retry := TestCommandEvidence{Name: "focused", Attempt: 2}
+	baseline := TestCommandEvidence{Name: "focused", Attempt: 3}
+	report := Report{
+		TestCommands:    []TestCommandEvidence{{Name: "focused", Attempt: 1}, retry, baseline},
+		TestDiagnostics: []TestFailureDiagnostic{{Suite: "focused", CandidateRetry: &retry, BaselineReplay: &baseline}},
+	}
+	if !AttachTestCommandLogPath(&report, "focused", 2, ".code-polishy-reports/merge-gate/focused-retry.log") ||
+		report.TestCommands[1].LogPath == "" || report.TestDiagnostics[0].CandidateRetry.LogPath == "" ||
+		report.TestDiagnostics[0].BaselineReplay.LogPath != "" {
+		t.Fatalf("report = %+v", report)
+	}
+	if AttachTestCommandLogPath(&report, "absent", 1, "log") {
+		t.Fatalf("unexpected match: %+v", report)
+	}
+}
+
+func TestMergeReminderAddsOnlyAValidCurrentCheckpointTaskSlice(t *testing.T) {
+	root := contentRepository(t, nil)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "content/previous_test.go", "package content\n", 0o600)
+	commitEngineCandidate(t, root, "previous task")
+	checkpointBase := gitEngineOutput(t, root, "rev-parse", "HEAD")
+	writeEngineFile(t, root, "content/latest_test.go", "package content\n", 0o600)
+	gitBehaviorReview(t, root, "add", "--all")
+	gitBehaviorReview(t, root, "commit", "-m", "latest task")
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := policyEngine.Repository.CleanHead()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := behaviorreview.RecordCheckpoint(t.Context(), policyEngine.Repository, behaviorreview.RecordCheckpointOptions{
+		Base: checkpointBase, Candidate: candidate, Scope: behaviorreview.CheckpointScopeChanged, BehaviorReviewID: "review-123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	selection, err := policyEngine.SelectBase("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := policyEngine.withMergeGateTestQualityReminder(t.Context(), Report{}, selection)
+	reminder := report.TestQualityReminder
+	if reminder == nil || reminder.TaskBase != checkpointBase ||
+		!slices.Equal(reminder.ChangedTestPaths, []string{"content/latest_test.go", "content/previous_test.go"}) ||
+		!slices.Equal(reminder.TaskChangedTestPaths, []string{"content/latest_test.go"}) {
+		t.Fatalf("reminder = %+v", reminder)
+	}
+
+	writeEngineFile(t, root, behaviorreview.CheckpointReceiptPath, "{\"version\":1}\n", 0o600)
+	report = policyEngine.withMergeGateTestQualityReminder(t.Context(), Report{}, selection)
+	reminder = report.TestQualityReminder
+	if reminder == nil || reminder.TaskBase != "" || len(reminder.TaskChangedTestPaths) != 0 ||
+		!slices.Equal(reminder.ChangedTestPaths, []string{"content/latest_test.go", "content/previous_test.go"}) {
+		t.Fatalf("malformed receipt reminder = %+v", reminder)
+	}
+}
+
 func TestChangeAwareCheckAddsTestQualityReminderFromItsCandidate(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
@@ -242,6 +318,160 @@ func TestDirectChangedTestAddsReminderAndExplicitScopesStayQuiet(t *testing.T) {
 				return
 			}
 			assertTestQualityReminderPaths(t, report, nil)
+		})
+	}
+}
+
+func TestChangedTestReportDisclosesWorkingTreeAndMergeBaseScopes(t *testing.T) {
+	for _, testCase := range []struct {
+		name          string
+		requestedBase string
+		recommended   bool
+		selectChanges func(*Engine) (repository.Selection, error)
+		comparison    string
+	}{
+		{
+			name: "working tree against head",
+			selectChanges: func(policyEngine *Engine) (repository.Selection, error) {
+				return policyEngine.Select("changes", nil)
+			},
+			comparison: ChangedTestComparisonWorkingTree,
+		},
+		{
+			name:          "working tree against merge base",
+			requestedBase: "TASK_BASE",
+			selectChanges: func(policyEngine *Engine) (repository.Selection, error) {
+				return policyEngine.SelectBase("main")
+			},
+			comparison: ChangedTestComparisonMergeBase,
+		},
+		{
+			name:          "recommended working tree against merge base",
+			requestedBase: "TASK_BASE",
+			recommended:   true,
+			selectChanges: func(policyEngine *Engine) (repository.Selection, error) {
+				return policyEngine.SelectBase("main")
+			},
+			comparison: ChangedTestComparisonMergeBase,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := contentRepository(t, nil)
+			initializeEngineGitRepository(t, root)
+			writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+			policyEngine, err := Open(root, root, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			policyEngine.Runner = &recordingEngineRunner{}
+			selection, err := testCase.selectChanges(policyEngine)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err := policyEngine.Test(t.Context(), testpolicy.Request{Changed: selection, RequestedBase: testCase.requestedBase, Recommended: testCase.recommended})
+			if err != nil {
+				t.Fatal(err)
+			}
+			scope := report.ChangedTestScope
+			if scope == nil || scope.Comparison != testCase.comparison || scope.RequestedBase != testCase.requestedBase ||
+				scope.ExactBase != selection.Base || scope.Candidate != "working-tree" || scope.GovernedPathCount != 1 {
+				t.Fatalf("changed test scope = %+v", scope)
+			}
+		})
+	}
+}
+
+func TestDirectChangedTestPreservesCommandEvidenceWithoutDiagnosticRetry(t *testing.T) {
+	root := contentRepository(t, nil)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &diagnosticEngineRunner{candidateRoot: policyEngine.Repository.Root, candidateFailures: 1}
+	policyEngine.Runner = commandRunner
+	selection, err := policyEngine.Select("changes", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := policyEngine.Test(t.Context(), testpolicy.Request{Changed: selection})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 1 || len(report.TestDiagnostics) != 0 || commandRunner.candidateRuns != 1 || len(report.TestCommands) != 1 {
+		t.Fatalf("report=%+v candidate runs=%d", report, commandRunner.candidateRuns)
+	}
+	evidence := report.TestCommands[0]
+	if evidence.Name != "focused" || evidence.FailureCategory != runner.FailureCommandExit || evidence.Result.ExitStatus != 17 || evidence.Attempt != 1 ||
+		!slices.Equal(evidence.SuiteModules, []string{"content"}) || !slices.Equal(evidence.ChangedModules, []string{"content"}) ||
+		!slices.Equal(evidence.ImpactedModules, []string{"content"}) || !slices.Equal(evidence.ChangedModuleOverlap, []string{"content"}) ||
+		!slices.Equal(evidence.ChangedPathOverlap, []string{"content/data.json"}) {
+		t.Fatalf("command evidence = %+v", evidence)
+	}
+}
+
+func TestGateStyleTestFailureDiagnosticsStayFactBasedAndKeepOriginalFinding(t *testing.T) {
+	for _, testCase := range []struct {
+		name              string
+		candidateFailures int
+		candidateCategory runner.FailureCategory
+		baselineFailure   bool
+		wantState         string
+		wantCommands      int
+	}{
+		{
+			name: "intermittent observed", candidateFailures: 1,
+			wantState: TestDiagnosticIntermittentObserved, wantCommands: 2,
+		},
+		{
+			name: "candidate regression", candidateFailures: 2,
+			wantState: TestDiagnosticCandidateRegression, wantCommands: 3,
+		},
+		{
+			name: "baseline reproduced", candidateFailures: 2, baselineFailure: true,
+			wantState: TestDiagnosticBaselineReproduced, wantCommands: 3,
+		},
+		{
+			name: "baseline unavailable", candidateFailures: 2, candidateCategory: runner.FailureEnvironment,
+			wantState: TestDiagnosticBaselineUnavailable, wantCommands: 2,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := contentRepository(t, nil)
+			initializeEngineGitRepository(t, root)
+			writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+			commitEngineCandidate(t, root, "candidate")
+			policyEngine, err := Open(root, root, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			commandRunner := &diagnosticEngineRunner{
+				candidateRoot: policyEngine.Repository.Root, candidateFailures: testCase.candidateFailures, candidateCategory: testCase.candidateCategory,
+				baselineFailure: testCase.baselineFailure,
+			}
+			policyEngine.Runner = commandRunner
+			selection, err := policyEngine.SelectBase("main")
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err := policyEngine.test(t.Context(), testpolicy.Request{Changed: selection}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(report.Findings) != 1 || len(report.TestDiagnostics) != 1 || report.TestDiagnostics[0].State != testCase.wantState ||
+				len(report.TestCommands) != testCase.wantCommands {
+				t.Fatalf("report=%+v", report)
+			}
+			diagnostic := report.TestDiagnostics[0]
+			if diagnostic.CandidateRetry == nil || diagnostic.CandidateRetry.Attempt != 2 {
+				t.Fatalf("diagnostic=%+v", diagnostic)
+			}
+			if testCase.wantCommands == 3 {
+				if diagnostic.BaselineReplay == nil || diagnostic.BaselineReplay.Attempt != 3 || diagnostic.BaselineReplay.Target != selection.Base {
+					t.Fatalf("diagnostic=%+v", diagnostic)
+				}
+			}
 		})
 	}
 }
@@ -1166,4 +1396,35 @@ func (runner *failingEngineRunner) Run(_ context.Context, _ string, command poli
 func (runner *recordingEngineRunner) Run(_ context.Context, _ string, command policy.Command) error {
 	runner.commands = append(runner.commands, command.Name)
 	return nil
+}
+
+type diagnosticEngineRunner struct {
+	candidateRoot     string
+	candidateFailures int
+	candidateCategory runner.FailureCategory
+	baselineFailure   bool
+	candidateRuns     int
+}
+
+func (testRunner *diagnosticEngineRunner) Run(ctx context.Context, root string, command policy.Command) error {
+	_, err := testRunner.RunWithResult(ctx, root, command)
+	return err
+}
+
+func (testRunner *diagnosticEngineRunner) RunWithResult(_ context.Context, root string, _ policy.Command) (runner.Result, error) {
+	if root == testRunner.candidateRoot {
+		testRunner.candidateRuns++
+		if testRunner.candidateRuns <= testRunner.candidateFailures {
+			category := testRunner.candidateCategory
+			if category == "" {
+				category = runner.FailureCommandExit
+			}
+			return runner.Result{ExitStatus: 17, FailureCategory: category}, errors.New("candidate suite failed")
+		}
+		return runner.Result{ExitStatus: 0}, nil
+	}
+	if testRunner.baselineFailure {
+		return runner.Result{ExitStatus: 17, FailureCategory: runner.FailureCommandExit}, errors.New("baseline suite failed")
+	}
+	return runner.Result{ExitStatus: 0}, nil
 }

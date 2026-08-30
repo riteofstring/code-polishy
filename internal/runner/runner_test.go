@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,6 +99,62 @@ func TestOSRunnerTimesOut(t *testing.T) {
 	status, err := (OSRunner{}).RunWithStatus(context.Background(), root, policy.Command{Name: "wait", Argv: []string{"./wait.sh"}, Cwd: ".", TimeoutSeconds: 1})
 	if err == nil || status != 124 || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("status=%d error=%v", status, err)
+	}
+}
+
+func TestOSRunnerClassifiesObservedFailures(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "failure.sh"), []byte("#!/bin/sh\nexit 17\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "wait.sh"), []byte("#!/bin/sh\nsleep 5\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cases := []struct {
+		name     string
+		ctx      context.Context
+		command  policy.Command
+		category FailureCategory
+	}{
+		{
+			name: "command exit", ctx: context.Background(),
+			command: policy.Command{Name: "exit", Argv: []string{"./failure.sh"}, Cwd: ".", TimeoutSeconds: 5}, category: FailureCommandExit,
+		},
+		{
+			name: "timeout", ctx: context.Background(),
+			command: policy.Command{Name: "timeout", Argv: []string{"./wait.sh"}, Cwd: ".", TimeoutSeconds: 1}, category: FailureTimeout,
+		},
+		{
+			name: "canceled", ctx: canceled,
+			command: policy.Command{Name: "canceled", Argv: []string{"./failure.sh"}, Cwd: ".", TimeoutSeconds: 5}, category: FailureCanceled,
+		},
+		{
+			name: "environment", ctx: context.Background(),
+			command: policy.Command{Name: "environment", Argv: []string{"./absent.sh"}, Cwd: ".", TimeoutSeconds: 5}, category: FailureEnvironment,
+		},
+		{
+			name: "resource", ctx: context.Background(),
+			command: policy.Command{Name: "resource", Argv: []string{"./failure.sh"}, Cwd: ".", ExclusiveResources: []string{"z", "a"}, TimeoutSeconds: 5}, category: FailureResource,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := (OSRunner{}).RunWithResult(testCase.ctx, root, testCase.command)
+			if err == nil || result.FailureCategory != testCase.category || FailureCategoryFor(testCase.ctx, result, err) != testCase.category {
+				t.Fatalf("result=%+v error=%v category=%q", result, err, FailureCategoryFor(testCase.ctx, result, err))
+			}
+		})
+	}
+}
+
+func TestFailureCategoryForFallsBackOnlyToObservedFacts(t *testing.T) {
+	if category := FailureCategoryFor(context.Background(), Result{ExitStatus: 3}, errors.New("failed")); category != FailureCommandExit {
+		t.Fatalf("exit category = %q", category)
+	}
+	if category := FailureCategoryFor(context.Background(), Result{}, errors.New("failed")); category != FailureOperational {
+		t.Fatalf("unknown category = %q", category)
 	}
 }
 

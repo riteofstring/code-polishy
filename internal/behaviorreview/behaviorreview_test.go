@@ -566,6 +566,92 @@ func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T)
 	}
 }
 
+func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
+	repo, base, candidate := newBehaviorRepository(t)
+	written, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := ReadCheckpoint(context.Background(), repo)
+	if err != nil || read != written.Receipt {
+		t.Fatalf("checkpoint=%+v error=%v want=%+v", read, err, written.Receipt)
+	}
+}
+
+func TestReadCheckpointMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	if _, err := ReadCheckpoint(context.Background(), repo); !errors.Is(err, ErrMissingCheckpoint) {
+		t.Fatalf("ReadCheckpoint() error = %v, want missing checkpoint", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo.Root, filepath.FromSlash(checkpointDirectory))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing checkpoint read created artifacts: %v", err)
+	}
+}
+
+func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testing.T) {
+	cases := []struct {
+		name    string
+		prepare func(*testing.T, repository.Repository, string, string)
+		want    error
+	}{
+		{
+			name:    "missing",
+			prepare: func(_ *testing.T, _ repository.Repository, _ string, _ string) {},
+			want:    ErrMissingCheckpoint,
+		},
+		{
+			name: "malformed",
+			prepare: func(t *testing.T, repo repository.Repository, _ string, _ string) {
+				writeBehaviorFile(t, repo.Root, CheckpointReceiptPath, "{\"version\":1}\n")
+			},
+			want: ErrStaleCheckpoint,
+		},
+		{
+			name: "stale candidate",
+			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
+				if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+				}); err != nil {
+					t.Fatal(err)
+				}
+				gitBehavior(t, repo.Root, "commit", "--allow-empty", "-m", "next candidate")
+			},
+			want: ErrStaleCheckpoint,
+		},
+		{
+			name: "diverged base",
+			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
+				result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				unrelated := strings.TrimSpace(gitBehavior(t, repo.Root, "commit-tree", candidate+"^{tree}", "-m", "unrelated"))
+				result.Receipt.Base = unrelated
+				data, err := marshalArtifact(result.Receipt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				writeBehaviorBytes(t, repo.Root, CheckpointReceiptPath, data)
+			},
+			want: ErrStaleCheckpoint,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			repo, base, candidate := newBehaviorRepository(t)
+			testCase.prepare(t, repo, base, candidate)
+			_, err := ReadCheckpoint(context.Background(), repo)
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("ReadCheckpoint() error=%v, want %v", err, testCase.want)
+			}
+		})
+	}
+}
+
 func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testing.T) {
 	for name, mutate := range map[string]func(*testing.T, repository.Repository, string, string) RecordCheckpointOptions{
 		"missing review": func(_ *testing.T, _ repository.Repository, base, candidate string) RecordCheckpointOptions {
