@@ -75,7 +75,7 @@ type prepareInputs struct {
 }
 
 type finalizationState struct {
-	root       string
+	root       *artifactHandle
 	base       string
 	candidate  string
 	packet     reviewPacket
@@ -93,7 +93,7 @@ type preparedPacketState struct {
 }
 
 type receiptState struct {
-	root      string
+	root      *artifactHandle
 	base      string
 	candidate string
 	receipt   GateReceipt
@@ -108,6 +108,7 @@ func prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 	if err != nil {
 		return PrepareResult{}, err
 	}
+	defer root.Close()
 	packet, err := packetFromInputs(inputs)
 	if err != nil {
 		return PrepareResult{}, err
@@ -116,7 +117,7 @@ func prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	if err := writeArtifactAtomic(artifactPath(root, packetFilename), data); err != nil {
+	if err := root.writeArtifactAtomic(packetFilename, data); err != nil {
 		return PrepareResult{}, err
 	}
 	if err := writePrepareMarker(root, packet, data); err != nil {
@@ -125,7 +126,7 @@ func prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 	return PrepareResult{ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate, IntentSHA256: packet.IntentSHA256, PacketPath: artifactDisplayPath(packetFilename)}, nil
 }
 
-func writePrepareMarker(root string, packet reviewPacket, packetData []byte) error {
+func writePrepareMarker(root *artifactHandle, packet reviewPacket, packetData []byte) error {
 	marker := prepareMarker{
 		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate, PacketSHA256: sha256Hex(packetData),
 	}
@@ -133,7 +134,7 @@ func writePrepareMarker(root string, packet reviewPacket, packetData []byte) err
 	if err != nil {
 		return err
 	}
-	return writeArtifactAtomic(artifactPath(root, prepareMarkerFilename), data)
+	return root.writeArtifactAtomic(prepareMarkerFilename, data)
 }
 
 func collectPrepareInputs(ctx context.Context, repo repository.Repository, options PrepareOptions) (prepareInputs, error) {
@@ -182,7 +183,7 @@ func cleanCandidateAtMergeBase(repo repository.Repository, reference string) (st
 }
 
 func prepareTextInputs(repo repository.Repository, intentPath string) ([]byte, []byte, error) {
-	intent, err := readRegularUTF8(intentPath, maximumIntentBytes, true, "intent file")
+	intent, err := readExternalRegularUTF8(intentPath, maximumIntentBytes, true, "intent file")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -222,7 +223,7 @@ func packetFromInputs(inputs prepareInputs) (reviewPacket, error) {
 
 func readCanonicalInstructions(repo repository.Repository) ([]byte, error) {
 	path := filepath.Join(repo.PolicyRoot, "templates", "behavior-review.md")
-	return readRegularUTF8(path, maximumTemplateBytes, true, "behavior review instructions")
+	return readExternalRegularUTF8(path, maximumTemplateBytes, true, "behavior review instructions")
 }
 
 func newReviewID() (string, error) {
@@ -238,6 +239,7 @@ func finalize(ctx context.Context, repo repository.Repository, options FinalizeO
 	if err != nil {
 		return FinalizeResult{}, err
 	}
+	defer state.root.Close()
 	if err := writeFinalizedReview(state); err != nil {
 		return FinalizeResult{}, err
 	}
@@ -252,6 +254,12 @@ func loadFinalization(ctx context.Context, repo repository.Repository, options F
 	if err != nil {
 		return finalizationState{}, err
 	}
+	success := false
+	defer func() {
+		if !success {
+			_ = root.Close()
+		}
+	}()
 	prepared, err := preparedPacketFor(repo, root, base, candidate)
 	if err != nil {
 		return finalizationState{}, err
@@ -264,25 +272,26 @@ func loadFinalization(ctx context.Context, repo repository.Repository, options F
 	if err != nil {
 		return finalizationState{}, err
 	}
+	success = true
 	return finalizationState{root: root, base: base, candidate: candidate, packet: prepared.packet, packetData: prepared.packetData, markerData: prepared.markerData, review: review, reviewData: reviewData, proofs: proofs}, nil
 }
 
-func finalizationIdentity(ctx context.Context, repo repository.Repository, reference string) (string, string, string, error) {
+func finalizationIdentity(ctx context.Context, repo repository.Repository, reference string) (*artifactHandle, string, string, error) {
 	if err := ctx.Err(); err != nil {
-		return "", "", "", operational("finalize behavior review", err)
+		return nil, "", "", operational("finalize behavior review", err)
 	}
 	base, candidate, err := cleanCandidateAtMergeBase(repo, reference)
 	if err != nil {
-		return "", "", "", err
+		return nil, "", "", err
 	}
 	root, err := behaviorReviewRoot(repo)
 	if err != nil {
-		return "", "", "", err
+		return nil, "", "", err
 	}
 	return root, base, candidate, nil
 }
 
-func preparedPacketFor(repo repository.Repository, root, base, candidate string) (preparedPacketState, error) {
+func preparedPacketFor(repo repository.Repository, root *artifactHandle, base, candidate string) (preparedPacketState, error) {
 	packet, data, err := readPacket(root)
 	if err != nil {
 		return preparedPacketState{}, err
@@ -300,8 +309,8 @@ func preparedPacketFor(repo repository.Repository, root, base, candidate string)
 	return preparedPacketState{packet: packet, packetData: data, markerData: markerData}, nil
 }
 
-func validatePrepareMarker(root string, packet reviewPacket, packetData []byte) ([]byte, error) {
-	data, err := readArtifact(artifactPath(root, prepareMarkerFilename), maximumArtifactReadByte)
+func validatePrepareMarker(root *artifactHandle, packet reviewPacket, packetData []byte) ([]byte, error) {
+	data, err := root.readArtifact(prepareMarkerFilename, maximumArtifactReadByte)
 	if err != nil {
 		return nil, fmt.Errorf("%w: prepare marker is unavailable", ErrStaleReview)
 	}
@@ -356,8 +365,8 @@ func samePacketDocuments(left, right []packetDesignDocument) bool {
 	return true
 }
 
-func finalizedReviewInput(root string, packet reviewPacket, candidate string) (ReviewResult, []byte, error) {
-	data, err := readRegularUTF8(artifactPath(root, defaultResultFilename), maximumResultBytes, true, "behavior review result")
+func finalizedReviewInput(root *artifactHandle, packet reviewPacket, candidate string) (ReviewResult, []byte, error) {
+	data, err := root.readRegularUTF8(defaultResultFilename, maximumResultBytes, true, "behavior review result")
 	if err != nil {
 		return ReviewResult{}, nil, err
 	}
@@ -387,7 +396,7 @@ func reviewMatchesPacket(review ReviewResult, packet reviewPacket, candidate str
 }
 
 func writeFinalizedReview(state finalizationState) error {
-	return writeArtifactAtomic(artifactPath(state.root, finalReviewFilename), state.reviewData)
+	return state.root.writeArtifactAtomic(finalReviewFilename, state.reviewData)
 }
 
 func writeGateReceipt(state finalizationState) error {
@@ -399,7 +408,7 @@ func writeGateReceipt(state finalizationState) error {
 	if err != nil {
 		return err
 	}
-	return writeArtifactAtomic(artifactPath(state.root, receiptFilename), data)
+	return state.root.writeArtifactAtomic(receiptFilename, data)
 }
 
 func validateGateReceipt(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReceipt, error) {
@@ -407,6 +416,7 @@ func validateGateReceipt(ctx context.Context, repo repository.Repository, option
 	if err != nil {
 		return GateReceipt{}, err
 	}
+	defer state.root.Close()
 	packet, err := validateReceiptPacket(repo, state)
 	if err != nil {
 		return GateReceipt{}, err
@@ -433,6 +443,12 @@ func currentReceiptState(ctx context.Context, repo repository.Repository, refere
 	if err != nil {
 		return receiptState{}, err
 	}
+	success := false
+	defer func() {
+		if !success {
+			_ = root.Close()
+		}
+	}()
 	receipt, err := readReceipt(root)
 	if err != nil {
 		return receiptState{}, err
@@ -443,6 +459,7 @@ func currentReceiptState(ctx context.Context, repo repository.Repository, refere
 	if receipt.Base != base || receipt.Candidate != candidate {
 		return receiptState{}, staleReceipt("receipt does not match the current base and candidate", nil)
 	}
+	success = true
 	return receiptState{root: root, base: base, candidate: candidate, receipt: receipt}, nil
 }
 
@@ -469,7 +486,7 @@ func packetMatchesReceipt(packet reviewPacket, data, markerData []byte, state re
 }
 
 func validateReceiptReview(state receiptState, packet reviewPacket) (ReviewResult, error) {
-	data, err := readArtifact(artifactPath(state.root, finalReviewFilename), maximumResultBytes)
+	data, err := state.root.readArtifact(finalReviewFilename, maximumResultBytes)
 	if err != nil {
 		return ReviewResult{}, staleReceipt("finalized review is unavailable", err)
 	}
@@ -503,8 +520,8 @@ func validateReceiptProofs(repo repository.Repository, state receiptState, packe
 	return nil
 }
 
-func readPacket(root string) (reviewPacket, []byte, error) {
-	data, err := readArtifact(artifactPath(root, packetFilename), maximumArtifactReadByte)
+func readPacket(root *artifactHandle) (reviewPacket, []byte, error) {
+	data, err := root.readArtifact(packetFilename, maximumArtifactReadByte)
 	if err != nil {
 		return reviewPacket{}, nil, fmt.Errorf("%w: prepared behavior review packet is unavailable: %v", ErrInvalidReview, err)
 	}
@@ -518,8 +535,8 @@ func readPacket(root string) (reviewPacket, []byte, error) {
 	return packet, data, nil
 }
 
-func readReceipt(root string) (GateReceipt, error) {
-	data, err := readArtifact(artifactPath(root, receiptFilename), maximumArtifactReadByte)
+func readReceipt(root *artifactHandle) (GateReceipt, error) {
+	data, err := root.readArtifact(receiptFilename, maximumArtifactReadByte)
 	if err != nil {
 		return GateReceipt{}, fmt.Errorf("%w: behavior review receipt is unavailable", ErrMissingReceipt)
 	}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -25,8 +26,7 @@ func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	if prepared.Base != base || prepared.Candidate != candidate || !strings.HasPrefix(prepared.ReviewID, "review-") || prepared.PacketPath != artifactDisplayPath(packetFilename) {
 		t.Fatalf("prepare result = %+v", prepared)
 	}
-	root := behaviorRoot(t, repo)
-	packet, data, err := readPacket(root)
+	packet, data, err := readPacket(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	root := behaviorRoot(t, repo)
-	packet, _, err := readPacket(root)
+	packet, _, err := readPacket(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestValidateGateReceiptBindsPrepareMarker(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	prepared, receipt := finalizedPreservedReview(t, repo)
 	root := behaviorRoot(t, repo)
-	packet, _, err := readPacket(root)
+	packet, _, err := readPacket(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func assertFinalizeRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket
 	prepared := prepareReview(t, repo)
 	writePreservedResult(t, repo, prepared)
 	root := behaviorRoot(t, repo)
-	packet, _, err := readPacket(root)
+	packet, _, err := readPacket(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func assertReceiptRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)
 	repo, _, _ := newBehaviorRepository(t)
 	_, receipt := finalizedPreservedReview(t, repo)
 	root := behaviorRoot(t, repo)
-	packet, _, err := readPacket(root)
+	packet, _, err := readPacket(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 		t.Fatalf("proof result = %+v", result)
 	}
 	root := behaviorRoot(t, repo)
-	proof, _, err := readProof(root, "proof-1")
+	proof, _, err := readProof(behaviorArtifact(t, repo), "proof-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestProveAllowsAnExistingReproducerWithAnEmptyEvidencePatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proof, _, err := readProof(behaviorRoot(t, repo), result.ID)
+	proof, _, err := readProof(behaviorArtifact(t, repo), result.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
 			prepared := prepareReview(t, repo)
 			proofResult := proveReview(t, repo, "proof-1", 1)
 			root := behaviorRoot(t, repo)
-			proof, _, err := readProof(root, proofResult.ID)
+			proof, _, err := readProof(behaviorArtifact(t, repo), proofResult.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -465,6 +465,66 @@ func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T)
 	}
 	if string(beforeReceipt) != string(readBehaviorArtifact(t, root, receiptFilename)) || string(beforeProof) != string(readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".json"))) || string(beforeLog) != string(readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".candidate.log"))) {
 		t.Fatal("replay changed recorded proof artifacts")
+	}
+}
+
+func TestReplayPlanReturnsStableClonedValidatedProofPhasesWithoutExecution(t *testing.T) {
+	repo, proof := finalizedRequestedReview(t)
+	before := gitBehavior(t, repo.Root, "worktree", "list", "--porcelain")
+	plan, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Proofs) != 1 {
+		t.Fatalf("replay phases = %+v", plan.Proofs)
+	}
+	phase := plan.Proofs[0]
+	wantCommand := suiteCommand(repo.Config.Tests.Suites[0])
+	if phase.ProofID != proof.ID || phase.ProofSHA256 != plan.Receipt.Proofs[0].SHA256 || !reflect.DeepEqual(phase.Baseline, wantCommand) || !reflect.DeepEqual(phase.Candidate, wantCommand) {
+		t.Fatalf("replay phase = %+v, want proof %q and command %+v", phase, proof.ID, wantCommand)
+	}
+	phase.Baseline.Argv[0] = "changed"
+	if phase.Candidate.Argv[0] == "changed" {
+		t.Fatal("baseline and candidate commands share mutable data")
+	}
+	first, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := json.Marshal(again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) == string(second) {
+		t.Fatal("mutating a returned plan altered its deterministic replay representation")
+	}
+	clean, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanData, err := json.Marshal(clean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(second) != string(cleanData) {
+		t.Fatal("replay plan is not deterministic")
+	}
+	after := gitBehavior(t, repo.Root, "worktree", "list", "--porcelain")
+	if after != before {
+		t.Fatalf("ReplayPlan created or removed a worktree:\n before=%q\n after=%q", before, after)
+	}
+}
+
+func TestReplayPlanRejectsTamperedProofArtifacts(t *testing.T) {
+	repo, proof := finalizedRequestedReview(t)
+	root := behaviorRoot(t, repo)
+	writeBehaviorFile(t, root, proofArtifactName(proof.ID, ".candidate.log"), "tampered\n")
+	if _, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+		t.Fatalf("ReplayPlan() error = %v, want stale receipt", err)
 	}
 }
 
@@ -531,6 +591,69 @@ func TestBehaviorReviewArtifactRootRejectsEscapingSymlink(t *testing.T) {
 	}
 }
 
+func TestArtifactHandleKeepsReadsAndWritesInsideHeldRootAfterSymlinkSwap(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	root, err := behaviorReviewRoot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := root.writeArtifactAtomic(packetFilename, []byte("original\n")); err != nil {
+		t.Fatal(err)
+	}
+	held := root.path
+	moved := held + ".held"
+	if err := os.Rename(held, moved); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, held); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	data, err := root.readArtifact(packetFilename, maximumArtifactReadByte)
+	if err != nil || string(data) != "original\n" {
+		t.Fatalf("held artifact read = %q, %v", data, err)
+	}
+	if err := root.ensureDirectory(proofDirectory, "regression proof"); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.writeArtifactAtomic(proofArtifactName("proof-1", ".candidate.log"), []byte("held\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, proofDirectory, "proof-1.candidate.log")); err != nil {
+		t.Fatalf("held artifact was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, proofDirectory, "proof-1.candidate.log")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("symlink target received artifact: %v", err)
+	}
+}
+
+func TestArtifactHandleRejectsSymlinkArtifactTarget(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	root, err := behaviorReviewRoot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	outside := filepath.Join(t.TempDir(), "receipt.json")
+	if err := os.WriteFile(outside, []byte("outside\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root.path, receiptFilename)); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	if _, err := root.readArtifact(receiptFilename, maximumArtifactReadByte); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("read symlink artifact error = %v, want invalid input", err)
+	}
+	if err := root.writeArtifactAtomic(receiptFilename, []byte("replacement\n")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("replace symlink artifact error = %v, want invalid input", err)
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "outside\n" {
+		t.Fatalf("outside target = %q, %v", data, err)
+	}
+}
+
 func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
@@ -577,6 +700,33 @@ func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 	read, err := ReadCheckpoint(context.Background(), repo)
 	if err != nil || read != written.Receipt {
 		t.Fatalf("checkpoint=%+v error=%v want=%+v", read, err, written.Receipt)
+	}
+}
+
+func TestReadCheckpointRejectsSymlinkReceiptWithoutFollowingIt(t *testing.T) {
+	repo, base, candidate := newBehaviorRepository(t)
+	if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo.Root, filepath.FromSlash(CheckpointReceiptPath))
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "receipt.json")
+	if err := os.WriteFile(outside, []byte("outside\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, path); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	if _, err := ReadCheckpoint(context.Background(), repo); !errors.Is(err, ErrStaleCheckpoint) {
+		t.Fatalf("ReadCheckpoint() error = %v, want stale checkpoint", err)
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "outside\n" {
+		t.Fatalf("outside target = %q, %v", data, err)
 	}
 }
 
@@ -842,7 +992,7 @@ func finalizedPreservedReview(t *testing.T, repo repository.Repository) (Prepare
 	if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	receipt, err := readReceipt(behaviorRoot(t, repo))
+	receipt, err := readReceipt(behaviorArtifact(t, repo))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -890,14 +1040,14 @@ func writePacketAndMarker(t *testing.T, root string, packet reviewPacket) ([]byt
 		t.Fatal(err)
 	}
 	writeBehaviorBytes(t, root, packetFilename, data)
-	if err := writePrepareMarker(root, packet, data); err != nil {
-		t.Fatal(err)
-	}
-	marker, err := readArtifact(artifactPath(root, prepareMarkerFilename), maximumArtifactReadByte)
+	markerData, err := marshalArtifact(prepareMarker{
+		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate, PacketSHA256: sha256Hex(data),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return data, marker
+	writeBehaviorBytes(t, root, prepareMarkerFilename, markerData)
+	return data, markerData
 }
 
 func writeReceiptRecord(t *testing.T, root string, receipt GateReceipt) {
@@ -911,7 +1061,7 @@ func writeReceiptRecord(t *testing.T, root string, receipt GateReceipt) {
 
 func readBehaviorArtifact(t *testing.T, root, name string) []byte {
 	t.Helper()
-	data, err := readArtifact(artifactPath(root, name), maximumArtifactReadByte)
+	data, err := os.ReadFile(artifactPath(root, name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -950,6 +1100,23 @@ func behaviorRoot(t *testing.T, repo repository.Repository) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return root.path
+}
+
+func behaviorArtifact(t *testing.T, repo repository.Repository) *artifactHandle {
+	t.Helper()
+	root, err := behaviorReviewRoot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	return root
 }
 

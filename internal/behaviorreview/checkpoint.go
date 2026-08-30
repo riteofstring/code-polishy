@@ -17,6 +17,7 @@ func readCheckpoint(ctx context.Context, repo repository.Repository) (Checkpoint
 	if err != nil {
 		return CheckpointReceipt{}, checkpointReadError("checkpoint artifacts are invalid", err)
 	}
+	defer root.Close()
 	receipt, err := readCheckpointReceipt(root)
 	if err != nil {
 		return CheckpointReceipt{}, err
@@ -51,19 +52,11 @@ func checkpointReadError(message string, err error) error {
 	return staleCheckpoint(message, err)
 }
 
-func readCheckpointReceipt(root string) (CheckpointReceipt, error) {
-	path := artifactPath(root, receiptFilename)
-	info, err := os.Lstat(path)
+func readCheckpointReceipt(root *artifactHandle) (CheckpointReceipt, error) {
+	data, err := root.readArtifact(receiptFilename, maximumArtifactReadByte)
 	if errors.Is(err, os.ErrNotExist) {
 		return CheckpointReceipt{}, fmt.Errorf("%w: checkpoint receipt is unavailable", ErrMissingCheckpoint)
 	}
-	if err != nil {
-		return CheckpointReceipt{}, operational("inspect checkpoint receipt", err)
-	}
-	if !info.Mode().IsRegular() {
-		return CheckpointReceipt{}, staleCheckpoint("receipt is not a regular file", nil)
-	}
-	data, err := readArtifact(path, maximumArtifactReadByte)
 	if err != nil {
 		if errors.Is(err, ErrOperational) {
 			return CheckpointReceipt{}, err

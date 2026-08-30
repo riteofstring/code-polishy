@@ -3,6 +3,7 @@ package behaviorreview
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -32,121 +33,98 @@ const (
 	maximumArtifactReadByte = 8 << 20
 )
 
-func behaviorReviewRoot(repo repository.Repository) (string, error) {
+var (
+	errUnsafeArtifactPath  = errors.New("unsafe behavior review artifact path")
+	errMissingArtifactRoot = errors.New("behavior review artifact root is missing")
+)
+
+type artifactHandle struct {
+	path  string
+	file  *os.File
+	roots []*os.Root
+}
+
+func (directory *artifactHandle) Close() error {
+	if directory == nil {
+		return nil
+	}
+	if directory.file != nil {
+		return directory.file.Close()
+	}
+	if len(directory.roots) > 0 {
+		var result error
+		for index := len(directory.roots) - 1; index >= 0; index-- {
+			result = errors.Join(result, directory.roots[index].Close())
+		}
+		return result
+	}
+	return nil
+}
+
+func behaviorReviewRoot(repo repository.Repository) (*artifactHandle, error) {
 	return managedArtifactRoot(repo, artifactDirectory, "behavior review")
 }
 
-func checkpointRoot(repo repository.Repository) (string, error) {
+func checkpointRoot(repo repository.Repository) (*artifactHandle, error) {
 	return managedArtifactRoot(repo, checkpointDirectory, "checkpoint gate")
 }
 
-func managedArtifactRoot(repo repository.Repository, directory, label string) (string, error) {
-	root, candidate, err := managedArtifactCandidate(repo, directory)
+func managedArtifactRoot(repo repository.Repository, directory, label string) (*artifactHandle, error) {
+	root, err := openArtifactRoot(repo.Root, artifactComponents(directory), true)
 	if err != nil {
-		return "", err
+		return nil, artifactRootError(label, err, nil)
 	}
-	if err := validateOutputAncestor(root, candidate, label); err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(candidate, 0o700); err != nil {
-		return "", operational("create "+label+" artifact root", err)
-	}
-	resolved, err := filepath.EvalSymlinks(candidate)
-	if err != nil || !pathInside(root, resolved) {
-		return "", fmt.Errorf("%w: %s artifact root resolves outside the repository", ErrInvalidInput, label)
-	}
-	return resolved, nil
+	return root, nil
 }
 
-func existingBehaviorReviewRoot(repo repository.Repository) (string, error) {
-	root, candidate, err := behaviorReviewCandidate(repo)
+func existingBehaviorReviewRoot(repo repository.Repository) (*artifactHandle, error) {
+	root, err := openArtifactRoot(repo.Root, artifactComponents(artifactDirectory), false)
 	if err != nil {
-		return "", err
+		return nil, artifactRootError("behavior review", err, ErrMissingReceipt)
 	}
-	if err := validateOutputAncestor(root, candidate, "behavior review"); err != nil {
-		return "", err
-	}
-	info, err := os.Lstat(candidate)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("%w: behavior review artifacts are unavailable", ErrMissingReceipt)
-	}
-	if err != nil {
-		return "", operational("inspect behavior review artifact root", err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%w: behavior review artifact root is not a directory", ErrInvalidInput)
-	}
-	resolved, err := filepath.EvalSymlinks(candidate)
-	if err != nil || !pathInside(root, resolved) {
-		return "", fmt.Errorf("%w: behavior review artifact root resolves outside the repository", ErrInvalidInput)
-	}
-	return resolved, nil
+	return root, nil
 }
 
-func existingCheckpointRoot(repo repository.Repository) (string, error) {
-	root, candidate, err := managedArtifactCandidate(repo, checkpointDirectory)
+func existingCheckpointRoot(repo repository.Repository) (*artifactHandle, error) {
+	root, err := openArtifactRoot(repo.Root, artifactComponents(checkpointDirectory), false)
 	if err != nil {
-		return "", err
+		return nil, artifactRootError("checkpoint gate", err, ErrMissingCheckpoint)
 	}
-	if err := validateOutputAncestor(root, candidate, "checkpoint gate"); err != nil {
-		return "", err
-	}
-	info, err := os.Lstat(candidate)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("%w: checkpoint artifacts are unavailable", ErrMissingCheckpoint)
-	}
-	if err != nil {
-		return "", operational("inspect checkpoint artifact root", err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%w: checkpoint artifact root is not a directory", ErrInvalidInput)
-	}
-	resolved, err := filepath.EvalSymlinks(candidate)
-	if err != nil || !pathInside(root, resolved) {
-		return "", fmt.Errorf("%w: checkpoint artifact root resolves outside the repository", ErrInvalidInput)
-	}
-	return resolved, nil
+	return root, nil
 }
 
-func behaviorReviewCandidate(repo repository.Repository) (string, string, error) {
-	return managedArtifactCandidate(repo, artifactDirectory)
+func artifactRootError(label string, err, missing error) error {
+	if missing != nil && errors.Is(err, errMissingArtifactRoot) {
+		return fmt.Errorf("%w: %s artifacts are unavailable", missing, label)
+	}
+	if errors.Is(err, errUnsafeArtifactPath) {
+		return fmt.Errorf("%w: %s artifact root is not a contained directory", ErrInvalidInput, label)
+	}
+	return operational("open "+label+" artifact root", err)
 }
 
-func managedArtifactCandidate(repo repository.Repository, directory string) (string, string, error) {
-	root, err := filepath.EvalSymlinks(repo.Root)
+func artifactComponents(name string) []string {
+	components, err := artifactNameComponents(name)
 	if err != nil {
-		return "", "", operational("resolve repository root", err)
+		panic("invalid behavior review artifact path")
 	}
-	candidate := filepath.Join(root, filepath.FromSlash(directory))
-	if !pathInside(root, candidate) {
-		return "", "", fmt.Errorf("%w: behavior review artifact root escapes the repository", ErrInvalidInput)
-	}
-	return root, candidate, nil
+	return components
 }
 
-func validateOutputAncestor(root, candidate, label string) error {
-	ancestor := candidate
-	for {
-		info, err := os.Lstat(ancestor)
-		if err == nil {
-			if !info.IsDir() && ancestor == candidate {
-				return fmt.Errorf("%w: %s artifact root is not a directory", ErrInvalidInput, label)
-			}
-			resolved, resolveErr := filepath.EvalSymlinks(ancestor)
-			if resolveErr != nil || !pathInside(root, resolved) {
-				return fmt.Errorf("%w: %s artifact root has an escaping symlink ancestor", ErrInvalidInput, label)
-			}
-			return nil
+func artifactNameComponents(name string) ([]string, error) {
+	if filepath.IsAbs(name) || strings.Contains(name, "\\") {
+		return nil, errUnsafeArtifactPath
+	}
+	components := strings.Split(filepath.ToSlash(name), "/")
+	if len(components) == 0 {
+		return nil, errUnsafeArtifactPath
+	}
+	for _, component := range components {
+		if component == "" || component == "." || component == ".." {
+			return nil, errUnsafeArtifactPath
 		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return operational("inspect behavior review artifact root", err)
-		}
-		parent := filepath.Dir(ancestor)
-		if parent == ancestor {
-			return fmt.Errorf("%w: %s artifact root has no contained ancestor", ErrInvalidInput, label)
-		}
-		ancestor = parent
 	}
+	return components, nil
 }
 
 func recordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {
@@ -165,7 +143,8 @@ func recordCheckpoint(ctx context.Context, repo repository.Repository, options R
 	if err != nil {
 		return RecordCheckpointResult{}, err
 	}
-	if err := writeArtifactAtomic(artifactPath(root, receiptFilename), data); err != nil {
+	defer root.Close()
+	if err := root.writeArtifactAtomic(receiptFilename, data); err != nil {
 		return RecordCheckpointResult{}, err
 	}
 	return RecordCheckpointResult{Receipt: receipt, ReceiptPath: CheckpointReceiptPath}, nil
@@ -218,11 +197,6 @@ func validateCheckpointCandidate(repo repository.Repository, options RecordCheck
 	return nil
 }
 
-func pathInside(root, candidate string) bool {
-	relative, err := filepath.Rel(root, candidate)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
-}
-
 func artifactPath(root, name string) string {
 	return filepath.Join(root, filepath.FromSlash(name))
 }
@@ -235,57 +209,24 @@ func proofArtifactName(id, suffix string) string {
 	return filepath.ToSlash(filepath.Join(proofDirectory, id+suffix))
 }
 
-func writeArtifactAtomic(path string, data []byte) error {
-	if err := rejectUnsafeArtifactTarget(path); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".behavior-review-*")
-	if err != nil {
-		return operational("create behavior review artifact", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
-		return operational("set behavior review artifact permissions", err)
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return operational("write behavior review artifact", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return operational("sync behavior review artifact", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return operational("close behavior review artifact", err)
-	}
-	if err := replaceAtomicFile(temporaryPath, path); err != nil {
-		return operational("replace behavior review artifact", err)
-	}
-	return nil
+func (directory *artifactHandle) writeArtifactAtomic(name string, data []byte) error {
+	return writeArtifactAtomicAt(directory, name, data)
 }
 
-func rejectUnsafeArtifactTarget(path string) error {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return operational("inspect behavior review artifact", err)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
-	}
-	return nil
+func (directory *artifactHandle) ensureDirectory(name, label string) error {
+	return ensureArtifactDirectoryAt(directory, name, label)
 }
 
-func readArtifact(path string, limit int) ([]byte, error) {
-	return readRegularFile(path, limit, false, "behavior review artifact")
+func (directory *artifactHandle) reserveDirectory(parent, prefix string) (string, error) {
+	return reserveArtifactDirectoryAt(directory, parent, prefix)
 }
 
-func readRegularUTF8(path string, limit int, requireContent bool, label string) ([]byte, error) {
-	data, err := readRegularFile(path, limit, requireContent, label)
+func (directory *artifactHandle) readArtifact(name string, limit int) ([]byte, error) {
+	return directory.readRegularFile(name, limit, false, "behavior review artifact")
+}
+
+func (directory *artifactHandle) readRegularUTF8(name string, limit int, requireContent bool, label string) ([]byte, error) {
+	data, err := directory.readRegularFile(name, limit, requireContent, label)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +236,53 @@ func readRegularUTF8(path string, limit int, requireContent bool, label string) 
 	return data, nil
 }
 
-func readRegularFile(path string, limit int, requireContent bool, label string) ([]byte, error) {
+func (directory *artifactHandle) readRegularFile(name string, limit int, requireContent bool, label string) ([]byte, error) {
+	file, err := openArtifactFile(directory, name)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %w: %s is missing", ErrInvalidInput, os.ErrNotExist, label)
+	}
+	if errors.Is(err, errUnsafeArtifactPath) {
+		return nil, fmt.Errorf("%w: %s must be a regular file", ErrInvalidInput, label)
+	}
+	if err != nil {
+		return nil, operational("open "+label, err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, operational("inspect "+label, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s must be a regular file", ErrInvalidInput, label)
+	}
+	if info.Size() > int64(limit) {
+		return nil, fmt.Errorf("%w: %s exceeds %d bytes", ErrInvalidInput, label, limit)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	if err != nil {
+		return nil, operational("read "+label, err)
+	}
+	if len(data) > limit {
+		return nil, fmt.Errorf("%w: %s exceeds %d bytes", ErrInvalidInput, label, limit)
+	}
+	if requireContent && strings.TrimSpace(string(data)) == "" {
+		return nil, fmt.Errorf("%w: %s must not be empty", ErrInvalidInput, label)
+	}
+	return data, nil
+}
+
+func readExternalRegularUTF8(path string, limit int, requireContent bool, label string) ([]byte, error) {
+	data, err := readExternalRegularFile(path, limit, requireContent, label)
+	if err != nil {
+		return nil, err
+	}
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("%w: %s must be valid UTF-8", ErrInvalidInput, label)
+	}
+	return data, nil
+}
+
+func readExternalRegularFile(path string, limit int, requireContent bool, label string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s is missing", ErrInvalidInput, label)
@@ -356,6 +343,14 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
+func temporaryArtifactName() (string, error) {
+	data := make([]byte, 16)
+	if _, err := cryptorand.Read(data); err != nil {
+		return "", err
+	}
+	return ".behavior-review-" + hex.EncodeToString(data), nil
+}
+
 func operational(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -377,7 +372,7 @@ func readCurrentDesignDocuments(repo repository.Repository, paths []string) ([]p
 		if err != nil {
 			return nil, fmt.Errorf("%w: resolve mapped design document %q: %v", ErrInvalidInput, path, err)
 		}
-		data, err := readRegularUTF8(resolved, maximumDesignBytes, true, "mapped design document "+path)
+		data, err := readExternalRegularUTF8(resolved, maximumDesignBytes, true, "mapped design document "+path)
 		if err != nil {
 			return nil, err
 		}

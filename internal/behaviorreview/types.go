@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
@@ -110,6 +111,18 @@ type GateReceipt struct {
 	Proofs        []ProofReference `json:"proofs"`
 }
 
+type GateReplayPlan struct {
+	Receipt GateReceipt        `json:"receipt"`
+	Proofs  []ReplayProofPhase `json:"proofs"`
+}
+
+type ReplayProofPhase struct {
+	ProofID     string         `json:"proof_id"`
+	ProofSHA256 string         `json:"proof_sha256"`
+	Baseline    policy.Command `json:"baseline"`
+	Candidate   policy.Command `json:"candidate"`
+}
+
 const (
 	CheckpointScopeChanged       = "changed"
 	CheckpointScopeDocumentation = "documentation"
@@ -154,6 +167,10 @@ func ValidateGateReceipt(ctx context.Context, repo repository.Repository, option
 
 func ReplayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
 	return replayGateReceipt(ctx, repo, commandRunner, options)
+}
+
+func ReplayPlan(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReplayPlan, error) {
+	return replayPlan(ctx, repo, options)
 }
 
 func RecordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {
