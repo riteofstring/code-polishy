@@ -65,6 +65,11 @@ bypass behavior review.
    After a proof exists, the review subagent may read only that proof's JSON
    record and named logs below the packet's proof directory.
 
+   Proof suites execute from disposable Git worktrees. Their commands must use
+   checked-in inputs and executables supplied by the governed command
+   environment. An untracked dependency or tool directory that exists only in
+   the caller's checkout is unavailable inside a proof worktree.
+
 6. Save the review subagent's exact JSON result at the packet's `result_path`,
    with no surrounding prose, and finalize it:
 

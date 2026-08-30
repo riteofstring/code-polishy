@@ -173,119 +173,119 @@
         "kind": "unit",
         "scope": "module",
         "modules": ["policy"],
-        "argv": ["./scripts/test.sh", "./internal/policy/..."]
+        "argv": ["go", "test", "-count=1", "./internal/policy/..."]
       },
       {
         "name": "repository-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["repository"],
-        "argv": ["./scripts/test.sh", "./internal/repository/..."]
+        "argv": ["go", "test", "-count=1", "./internal/repository/..."]
       },
       {
         "name": "runner-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["runner"],
-        "argv": ["./scripts/test.sh", "./internal/runner/..."]
+        "argv": ["go", "test", "-count=1", "./internal/runner/..."]
       },
       {
         "name": "gaterun-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["gaterun"],
-        "argv": ["./scripts/test.sh", "./internal/gaterun/..."]
+        "argv": ["go", "test", "-count=1", "./internal/gaterun/..."]
       },
       {
         "name": "behaviorreview-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["behaviorreview"],
-        "argv": ["./scripts/test.sh", "./internal/behaviorreview/..."]
+        "argv": ["go", "test", "-count=1", "./internal/behaviorreview/..."]
       },
       {
         "name": "agents-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["agents"],
-        "argv": ["./scripts/test.sh", "./internal/agents/..."]
+        "argv": ["go", "test", "-count=1", "./internal/agents/..."]
       },
       {
         "name": "release-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["release"],
-        "argv": ["./scripts/test.sh", "./internal/release/..."]
+        "argv": ["go", "test", "-count=1", "./internal/release/..."]
       },
       {
         "name": "javascript-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["javascript"],
-        "argv": ["./scripts/test.sh", "./internal/javascript/..."]
+        "argv": ["go", "test", "-count=1", "./internal/javascript/..."]
       },
       {
         "name": "quality-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["quality"],
-        "argv": ["./scripts/test.sh", "./internal/quality/..."]
+        "argv": ["go", "test", "-count=1", "./internal/quality/..."]
       },
       {
         "name": "architecture-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["architecture"],
-        "argv": ["./scripts/test.sh", "./internal/architecture/..."]
+        "argv": ["go", "test", "-count=1", "./internal/architecture/..."]
       },
       {
         "name": "testing-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["testing"],
-        "argv": ["./scripts/test.sh", "./internal/testing/..."]
+        "argv": ["go", "test", "-count=1", "./internal/testing/..."]
       },
       {
         "name": "supplychain-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["supplychain"],
-        "argv": ["./scripts/test.sh", "./internal/supplychain/..."]
+        "argv": ["go", "test", "-count=1", "./internal/supplychain/..."]
       },
       {
         "name": "artifactsecurity-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["artifactsecurity"],
-        "argv": ["./scripts/test.sh", "./internal/artifactsecurity/..."]
+        "argv": ["go", "test", "-count=1", "./internal/artifactsecurity/..."]
       },
       {
         "name": "policymodule-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["policymodule"],
-        "argv": ["./scripts/test.sh", "./internal/policymodule/..."]
+        "argv": ["go", "test", "-count=1", "./internal/policymodule/..."]
       },
       {
         "name": "portability-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["portability"],
-        "argv": ["./scripts/test.sh", "./internal/portability/..."]
+        "argv": ["go", "test", "-count=1", "./internal/portability/..."]
       },
       {
         "name": "engine-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["engine"],
-        "argv": ["./scripts/test.sh", "./internal/engine/..."]
+        "argv": ["go", "test", "-count=1", "./internal/engine/..."]
       },
       {
         "name": "cli-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["cli"],
-        "argv": ["./scripts/test.sh", "./cmd/code-polishy/..."],
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy/..."],
         "runOn": ["focused", "recommended", "full"]
       },
       {
@@ -293,7 +293,7 @@
         "kind": "contract",
         "scope": "module",
         "modules": ["launcher"],
-        "argv": ["./scripts/test.sh", "./cmd/code-polishy-launcher/..."],
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy-launcher/..."],
         "runOn": ["focused", "recommended", "full"]
       },
       {
@@ -309,7 +309,7 @@
         "kind": "contract",
         "scope": "repository",
         "cost": "standard",
-        "argv": ["./scripts/test.sh", "./..."],
+        "argv": ["go", "test", "-count=1", "./..."],
         "runOn": ["full"]
       },
       {
