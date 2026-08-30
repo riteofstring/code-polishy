@@ -1,39 +1,83 @@
 package gaterun
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 )
 
 type boundedBuffer struct {
 	mutex     sync.Mutex
-	limit     int
-	buffer    bytes.Buffer
+	headLimit int
+	tailLimit int
+	head      []byte
+	tail      []byte
+	total     int64
+}
+
+type capturedStream struct {
+	head      []byte
+	tail      []byte
+	total     int64
 	truncated bool
+}
+
+func newBoundedBuffer(limit int) *boundedBuffer {
+	headLimit := limit / 2
+	return &boundedBuffer{headLimit: headLimit, tailLimit: limit - headLimit, head: []byte{}, tail: []byte{}}
 }
 
 func (buffer *boundedBuffer) Write(data []byte) (int, error) {
 	buffer.mutex.Lock()
 	defer buffer.mutex.Unlock()
-	remaining := buffer.limit - buffer.buffer.Len()
-	if remaining <= 0 {
-		buffer.truncated = buffer.truncated || len(data) > 0
-		return len(data), nil
-	}
-	if len(data) > remaining {
-		buffer.buffer.Write(data[:remaining])
-		buffer.truncated = true
-		return len(data), nil
-	}
-	buffer.buffer.Write(data)
+	buffer.total += int64(len(data))
+	buffer.appendTail(data[buffer.appendHead(data):])
 	return len(data), nil
 }
 
-func (buffer *boundedBuffer) snapshot() ([]byte, bool) {
+func (buffer *boundedBuffer) appendHead(data []byte) int {
+	remaining := buffer.headLimit - len(buffer.head)
+	if remaining <= 0 {
+		return 0
+	}
+	if len(data) > remaining {
+		data = data[:remaining]
+	}
+	buffer.head = append(buffer.head, data...)
+	return len(data)
+}
+
+func (buffer *boundedBuffer) appendTail(data []byte) {
+	if buffer.tailLimit == 0 || len(data) == 0 {
+		return
+	}
+	if len(data) >= buffer.tailLimit {
+		buffer.tail = append(buffer.tail[:0], data[len(data)-buffer.tailLimit:]...)
+		return
+	}
+	overflow := len(buffer.tail) + len(data) - buffer.tailLimit
+	if overflow > 0 {
+		buffer.tail = append(buffer.tail[:0], buffer.tail[overflow:]...)
+	}
+	buffer.tail = append(buffer.tail, data...)
+}
+
+func (buffer *boundedBuffer) snapshot() capturedStream {
 	buffer.mutex.Lock()
 	defer buffer.mutex.Unlock()
-	return append([]byte{}, buffer.buffer.Bytes()...), buffer.truncated
+	head := append([]byte{}, buffer.head...)
+	tail := append([]byte{}, buffer.tail...)
+	return capturedStream{head: head, tail: tail, total: buffer.total, truncated: buffer.total > int64(buffer.headLimit+buffer.tailLimit)}
+}
+
+func (stream capturedStream) rendered() []byte {
+	if !stream.truncated {
+		return append(append([]byte{}, stream.head...), stream.tail...)
+	}
+	omitted := stream.total - int64(len(stream.head)+len(stream.tail))
+	marker := []byte(fmt.Sprintf("\n[... %d bytes omitted; terminal output follows ...]\n", omitted))
+	output := append([]byte{}, stream.head...)
+	output = append(output, marker...)
+	return append(output, stream.tail...)
 }
 
 type commandLogDocument struct {
@@ -41,6 +85,10 @@ type commandLogDocument struct {
 	StreamLimit     int    `json:"stream_limit"`
 	Stdout          []byte `json:"stdout"`
 	Stderr          []byte `json:"stderr"`
+	StdoutTail      []byte `json:"stdout_tail"`
+	StderrTail      []byte `json:"stderr_tail"`
+	StdoutBytes     int64  `json:"stdout_bytes"`
+	StderrBytes     int64  `json:"stderr_bytes"`
 	StdoutTruncated bool   `json:"stdout_truncated"`
 	StderrTruncated bool   `json:"stderr_truncated"`
 }
@@ -68,17 +116,15 @@ func (run *Run) OpenCommandLog(index int, options LogOptions) (*CommandLog, erro
 		return nil, err
 	}
 	attempt := len(entry.Attempts) + 1
-	path, display, err := run.logPath(reference.SHA256, attempt, true)
+	file, display, err := run.logPath(reference.SHA256, attempt, true)
 	if err != nil {
 		return nil, err
 	}
 	run.openLogs[index] = true
-	log := &CommandLog{
-		stdout: &boundedBuffer{limit: limit}, stderr: &boundedBuffer{limit: limit},
-	}
+	log := &CommandLog{stdout: newBoundedBuffer(limit), stderr: newBoundedBuffer(limit)}
 	log.close = func(closed *CommandLog) (LogResult, error) {
 		defer delete(run.openLogs, index)
-		return writeCommandLog(path, display, limit, closed)
+		return writeCommandLog(file, display, limit, closed)
 	}
 	return log, nil
 }
@@ -93,39 +139,40 @@ func streamLimit(options LogOptions) (int, error) {
 	return options.StreamLimit, nil
 }
 
-func writeCommandLog(path, display string, limit int, log *CommandLog) (LogResult, error) {
-	stdout, stdoutTruncated := log.stdout.snapshot()
-	stderr, stderrTruncated := log.stderr.snapshot()
+func writeCommandLog(file artifactFile, display string, limit int, log *CommandLog) (LogResult, error) {
+	stdout := log.stdout.snapshot()
+	stderr := log.stderr.snapshot()
 	document := commandLogDocument{
-		Version: Version, StreamLimit: limit, Stdout: stdout, Stderr: stderr,
-		StdoutTruncated: stdoutTruncated, StderrTruncated: stderrTruncated,
+		Version: Version, StreamLimit: limit, Stdout: stdout.head, Stderr: stderr.head, StdoutTail: stdout.tail, StderrTail: stderr.tail,
+		StdoutBytes: stdout.total, StderrBytes: stderr.total, StdoutTruncated: stdout.truncated, StderrTruncated: stderr.truncated,
 	}
 	data, err := marshalArtifact(document, "encode gate command log")
 	if err != nil {
 		return LogResult{}, err
 	}
-	if err := writeArtifactAtomic(path, data); err != nil {
+	if err := writeArtifactAtomic(file, data); err != nil {
 		return LogResult{}, err
 	}
 	return LogResult{
-		Path: display, SHA256: ContentSHA256(data), Stdout: stdout, Stderr: stderr,
-		StdoutTruncated: stdoutTruncated, StderrTruncated: stderrTruncated, StreamLimit: limit,
+		Path: display, SHA256: ContentSHA256(data), Stdout: stdout.rendered(), Stderr: stderr.rendered(),
+		StdoutTail: stdout.tail, StderrTail: stderr.tail, StdoutBytes: stdout.total, StderrBytes: stderr.total,
+		StdoutTruncated: stdout.truncated, StderrTruncated: stderr.truncated, StreamLimit: limit,
 	}, nil
 }
 
-func (run *Run) logPath(commandSHA256 string, attempt int, create bool) (string, string, error) {
+func (run *Run) logPath(commandSHA256 string, attempt int, create bool) (artifactFile, string, error) {
 	if !validSHA256(commandSHA256) || attempt < 1 {
-		return "", "", fmt.Errorf("%w: command log identity is invalid", ErrInvalidInput)
+		return artifactFile{}, "", fmt.Errorf("%w: command log identity is invalid", ErrInvalidInput)
 	}
-	directory, err := secureRunSubdirectory(run.repositoryRoot, run.directory, logsDirectory, create)
+	directory, err := secureRunSubdirectory(run.directory, logsDirectory, create)
 	if err != nil {
-		return "", "", err
+		return artifactFile{}, "", err
 	}
-	return artifactFilePath(run.repositoryRoot, directory, commandSHA256+fmt.Sprintf("-%d.json", attempt))
+	return artifactFilePath(directory, commandSHA256+fmt.Sprintf("-%d.json", attempt))
 }
 
-func readCommandLog(path string) (commandLogDocument, []byte, error) {
-	data, err := readArtifact(path, maximumCommandLogBytes(), "gate command log")
+func readCommandLog(file artifactFile) (commandLogDocument, []byte, error) {
+	data, err := readArtifact(file, maximumCommandLogBytes(), "gate command log")
 	if err != nil {
 		return commandLogDocument{}, nil, err
 	}
@@ -133,15 +180,33 @@ func readCommandLog(path string) (commandLogDocument, []byte, error) {
 	if err := decodeStrict(data, &document, "gate command log"); err != nil {
 		return commandLogDocument{}, nil, err
 	}
-	if document.Version != Version || document.StreamLimit < 1 || document.StreamLimit > MaximumStreamLimit ||
-		len(document.Stdout) > document.StreamLimit || len(document.Stderr) > document.StreamLimit {
+	if !validCommandLogDocument(document) {
 		return commandLogDocument{}, nil, fmt.Errorf("%w: gate command log is malformed", ErrInvalidArtifact)
 	}
 	return document, data, nil
 }
 
+func validCommandLogDocument(document commandLogDocument) bool {
+	if document.Version != Version || document.StreamLimit < 1 || document.StreamLimit > MaximumStreamLimit {
+		return false
+	}
+	return validCapturedStream(document.Stdout, document.StdoutTail, document.StdoutBytes, document.StdoutTruncated, document.StreamLimit) &&
+		validCapturedStream(document.Stderr, document.StderrTail, document.StderrBytes, document.StderrTruncated, document.StreamLimit)
+}
+
+func validCapturedStream(head, tail []byte, total int64, truncated bool, limit int) bool {
+	headLimit := limit / 2
+	if len(head) > headLimit || len(tail) > limit-headLimit || total < int64(len(head)+len(tail)) {
+		return false
+	}
+	if truncated {
+		return total > int64(limit)
+	}
+	return total == int64(len(head)+len(tail))
+}
+
 func maximumCommandLogBytes() int {
-	return encodedBytesMaximum(MaximumStreamLimit)*2 + maximumLogHeaderBytes
+	return encodedBytesMaximum(MaximumStreamLimit)*2 + maximumLogHeaderBytes + 16
 }
 
 func encodedBytesMaximum(size int) int {

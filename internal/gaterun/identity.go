@@ -59,11 +59,15 @@ func identityFromInput(input IdentityInput) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
+	ambient, err := fingerprintAmbientEnvironment(input.AmbientEnvironment)
+	if err != nil {
+		return Identity{}, err
+	}
 	return Identity{
 		Version: Version, Gate: input.Gate, RequestedBase: input.RequestedBase,
 		ExactBase: input.ExactBase, Candidate: input.Candidate, PolicyLevel: input.PolicyLevel,
 		Release: input.Release, ConfigurationSHA256: input.ConfigurationSHA256,
-		Platform: input.Platform, Commands: cloneCommands(input.Commands), Environment: environment,
+		Platform: input.Platform, Commands: cloneCommands(input.Commands), Environment: environment, AmbientEnvironment: ambient,
 	}, nil
 }
 
@@ -82,6 +86,21 @@ func fingerprintEnvironment(commands []CommandSpec, inputs []EnvironmentInput) (
 		return nil, fmt.Errorf("%w: declared environment values do not match the command plan", ErrInvalidInput)
 	}
 	return fingerprintsForNames(declared, provided)
+}
+
+func fingerprintAmbientEnvironment(inputs []EnvironmentInput) ([]EnvironmentFingerprint, error) {
+	provided := map[string]EnvironmentInput{}
+	for _, input := range inputs {
+		if err := addEnvironmentInput(provided, input); err != nil {
+			return nil, err
+		}
+	}
+	names := make([]string, 0, len(provided))
+	for name := range provided {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return fingerprintsForNames(names, provided)
 }
 
 func addEnvironmentInput(provided map[string]EnvironmentInput, input EnvironmentInput) error {
@@ -153,13 +172,16 @@ func validateIdentityContext(identity Identity) error {
 }
 
 func validateIdentityPlan(identity Identity) error {
-	if identity.Commands == nil || identity.Environment == nil {
+	if identity.Commands == nil || identity.Environment == nil || identity.AmbientEnvironment == nil {
 		return fmt.Errorf("%w: gate identity collections are missing", ErrInvalidInput)
 	}
 	if err := validateCommands(identity.Commands); err != nil {
 		return err
 	}
-	return validateEnvironmentFingerprints(identity.Commands, identity.Environment)
+	if err := validateEnvironmentFingerprints(identity.Commands, identity.Environment); err != nil {
+		return err
+	}
+	return validateAmbientEnvironmentFingerprints(identity.AmbientEnvironment)
 }
 
 func validateCommands(commands []CommandSpec) error {
@@ -216,6 +238,17 @@ func validateEnvironmentFingerprints(commands []CommandSpec, fingerprints []Envi
 		if fingerprint.Name != declared[index] || fingerprint.Present && !validSHA256(fingerprint.SHA256) || !fingerprint.Present && fingerprint.SHA256 != "" {
 			return fmt.Errorf("%w: environment fingerprint %d is invalid", ErrInvalidInput, index)
 		}
+	}
+	return nil
+}
+
+func validateAmbientEnvironmentFingerprints(fingerprints []EnvironmentFingerprint) error {
+	previous := ""
+	for index, fingerprint := range fingerprints {
+		if !validEnvironmentName(fingerprint.Name) || fingerprint.Name <= previous || fingerprint.Present && !validSHA256(fingerprint.SHA256) || !fingerprint.Present && fingerprint.SHA256 != "" {
+			return fmt.Errorf("%w: ambient environment fingerprint %d is invalid", ErrInvalidInput, index)
+		}
+		previous = fingerprint.Name
 	}
 	return nil
 }

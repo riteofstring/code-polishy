@@ -2,6 +2,8 @@ package gaterun
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +15,9 @@ import (
 
 const (
 	reportsDirectory      = ".code-polishy-reports"
+	executionsDirectory   = "executions"
 	reportFilename        = "report.json"
+	latestFilename        = "latest.json"
 	logsDirectory         = "logs"
 	receiptsDirectory     = "receipts"
 	maximumReportBytes    = 8 << 20
@@ -21,230 +25,217 @@ const (
 	maximumLogHeaderBytes = 32 << 10
 )
 
-func newRunDirectory(repositoryRoot string, identity Identity) (string, string, error) {
-	runSHA256, err := identity.Digest()
-	if err != nil {
-		return "", "", err
-	}
-	return managedRunDirectory(repositoryRoot, identity.Gate, runSHA256, true)
+var errUnsafeArtifact = errors.New("unsafe gate run artifact")
+
+type artifactRoot struct {
+	path   string
+	handle artifactRootHandle
 }
 
-func existingRunDirectory(repositoryRoot string, identity Identity) (string, string, error) {
+type artifactDirectory struct {
+	root       artifactRoot
+	components []string
+}
+
+type artifactFile struct {
+	directory artifactDirectory
+	name      string
+}
+
+func newRunDirectory(repositoryRoot string, identity Identity) (artifactRoot, artifactDirectory, artifactDirectory, string, error) {
 	runSHA256, err := identity.Digest()
 	if err != nil {
-		return "", "", err
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, "", err
+	}
+	root, directory, err := managedRunDirectory(repositoryRoot, identity.Gate, runSHA256, true)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, "", err
+	}
+	executions, err := secureRunSubdirectory(directory, executionsDirectory, true)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, "", err
+	}
+	execution, executionID, err := newExecutionDirectory(executions)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, "", err
+	}
+	return root, directory, execution, executionID, nil
+}
+
+func existingRunDirectory(repositoryRoot string, identity Identity) (artifactRoot, artifactDirectory, error) {
+	runSHA256, err := identity.Digest()
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, err
 	}
 	return managedRunDirectory(repositoryRoot, identity.Gate, runSHA256, false)
 }
 
-func managedRunDirectory(repositoryRoot string, gate GateKind, runSHA256 string, create bool) (string, string, error) {
+func managedRunDirectory(repositoryRoot string, gate GateKind, runSHA256 string, create bool) (artifactRoot, artifactDirectory, error) {
 	if !validGate(gate) || !validSHA256(runSHA256) {
-		return "", "", fmt.Errorf("%w: gate run path is invalid", ErrInvalidInput)
+		return artifactRoot{}, artifactDirectory{}, fmt.Errorf("%w: gate run path is invalid", ErrInvalidInput)
 	}
 	root, err := resolveRepositoryRoot(repositoryRoot)
 	if err != nil {
-		return "", "", err
+		return artifactRoot{}, artifactDirectory{}, err
 	}
 	directory, err := secureChildDirectory(root, []string{reportsDirectory, string(gate), runSHA256}, create)
 	if err != nil {
-		return "", "", err
-	}
-	if create {
-		if err := os.Chmod(filepath.Join(root, reportsDirectory, string(gate)), 0o700); err != nil {
-			return "", "", operational("restrict gate artifact directory", err)
-		}
-		if err := os.Chmod(directory, 0o700); err != nil {
-			return "", "", operational("restrict gate run directory", err)
-		}
+		return artifactRoot{}, artifactDirectory{}, err
 	}
 	return root, directory, nil
 }
 
-func resolveRepositoryRoot(repositoryRoot string) (string, error) {
+func resolveRepositoryRoot(repositoryRoot string) (artifactRoot, error) {
 	if strings.TrimSpace(repositoryRoot) == "" {
-		return "", fmt.Errorf("%w: repository root is required", ErrInvalidInput)
+		return artifactRoot{}, fmt.Errorf("%w: repository root is required", ErrInvalidInput)
 	}
 	abs, err := filepath.Abs(repositoryRoot)
 	if err != nil {
-		return "", operational("resolve gate repository root", err)
+		return artifactRoot{}, operational("resolve gate repository root", err)
 	}
-	root, err := filepath.EvalSymlinks(abs)
+	path, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return "", operational("resolve gate repository root", err)
+		return artifactRoot{}, operational("resolve gate repository root", err)
 	}
-	info, err := os.Lstat(root)
+	handle, err := makeArtifactRoot(path)
 	if err != nil {
-		return "", operational("inspect gate repository root", err)
+		if errors.Is(err, errUnsafeArtifact) {
+			return artifactRoot{}, fmt.Errorf("%w: repository root is not a directory", ErrInvalidInput)
+		}
+		return artifactRoot{}, operational("open gate repository root", err)
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%w: repository root is not a directory", ErrInvalidInput)
-	}
-	return root, nil
+	return artifactRoot{path: path, handle: handle}, nil
 }
 
-func secureChildDirectory(root string, components []string, create bool) (string, error) {
-	current := root
-	for _, component := range components {
-		if !validArtifactComponent(component) {
-			return "", fmt.Errorf("%w: gate artifact path component is invalid", ErrInvalidInput)
-		}
-		current = filepath.Join(current, component)
-		if !pathInside(root, current) {
-			return "", fmt.Errorf("%w: gate artifact path escapes the repository", ErrInvalidArtifact)
-		}
-		if err := ensureDirectory(current, create); err != nil {
-			return "", err
-		}
-		resolved, err := filepath.EvalSymlinks(current)
-		if err != nil || !pathInside(root, resolved) {
-			return "", fmt.Errorf("%w: gate artifact directory resolves outside the repository", ErrInvalidArtifact)
-		}
+func secureChildDirectory(root artifactRoot, components []string, create bool) (artifactDirectory, error) {
+	if len(components) == 0 || !validArtifactComponents(components) {
+		return artifactDirectory{}, fmt.Errorf("%w: gate artifact path component is invalid", ErrInvalidInput)
 	}
-	return current, nil
+	directory := artifactDirectory{root: root, components: append([]string{}, components...)}
+	if err := ensureArtifactDirectory(directory, create); err != nil {
+		return artifactDirectory{}, err
+	}
+	return directory, nil
 }
 
-func ensureDirectory(path string, create bool) error {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		if !create {
-			return fmt.Errorf("%w: gate artifact directory is unavailable", ErrMissingArtifact)
-		}
-		if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return operational("create gate artifact directory", err)
-		}
-		info, err = os.Lstat(path)
+func secureRunSubdirectory(parent artifactDirectory, name string, create bool) (artifactDirectory, error) {
+	if !validArtifactComponent(name) || len(parent.components) == 0 {
+		return artifactDirectory{}, fmt.Errorf("%w: gate artifact directory is invalid", ErrInvalidArtifact)
 	}
-	if err != nil {
-		return operational("inspect gate artifact directory", err)
+	components := append(append([]string{}, parent.components...), name)
+	directory := artifactDirectory{root: parent.root, components: components}
+	if err := ensureArtifactDirectory(directory, create); err != nil {
+		return artifactDirectory{}, err
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%w: gate artifact directory is not a contained directory", ErrInvalidArtifact)
+	return directory, nil
+}
+
+func ensureArtifactDirectory(directory artifactDirectory, create bool) error {
+	if err := platformEnsureArtifactDirectory(directory, create); err != nil {
+		return classifyArtifactError("open gate artifact directory", "gate artifact directory", err)
 	}
 	return nil
 }
 
-func secureRunSubdirectory(root, directory, name string, create bool) (string, error) {
-	if !pathInside(root, directory) || !validArtifactComponent(name) {
-		return "", fmt.Errorf("%w: gate artifact directory is invalid", ErrInvalidArtifact)
+func newExecutionDirectory(parent artifactDirectory) (artifactDirectory, string, error) {
+	for range 32 {
+		executionID, err := newExecutionID()
+		if err != nil {
+			return artifactDirectory{}, "", err
+		}
+		directory := artifactDirectory{
+			root: parent.root, components: append(append([]string{}, parent.components...), executionID),
+		}
+		err = platformCreateArtifactDirectory(directory)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return artifactDirectory{}, "", classifyArtifactError("create gate execution directory", "gate execution directory", err)
+		}
+		return directory, executionID, nil
 	}
-	if err := ensureDirectory(directory, false); err != nil {
+	return artifactDirectory{}, "", fmt.Errorf("%w: could not allocate a gate execution directory", ErrOperational)
+}
+
+func newExecutionID() (string, error) {
+	data := make([]byte, 16)
+	if _, err := rand.Read(data); err != nil {
+		return "", operational("generate gate execution identity", err)
+	}
+	return "run-" + hex.EncodeToString(data), nil
+}
+
+func temporaryArtifactName() (string, error) {
+	identifier, err := newExecutionID()
+	if err != nil {
 		return "", err
 	}
-	resolved, err := filepath.EvalSymlinks(directory)
-	if err != nil || !pathInside(root, resolved) {
-		return "", fmt.Errorf("%w: gate run directory resolves outside the repository", ErrInvalidArtifact)
-	}
-	child := filepath.Join(directory, name)
-	if !pathInside(directory, child) {
-		return "", fmt.Errorf("%w: gate artifact path escapes its run directory", ErrInvalidArtifact)
-	}
-	if err := ensureDirectory(child, create); err != nil {
-		return "", err
-	}
-	if create {
-		if err := os.Chmod(child, 0o700); err != nil {
-			return "", operational("restrict gate artifact subdirectory", err)
+	return ".gaterun-" + identifier, nil
+}
+
+func validExecutionID(value string) bool {
+	return len(value) == len("run-")+32 && strings.HasPrefix(value, "run-") && validHexadecimal(value[len("run-"):])
+}
+
+func validArtifactComponents(values []string) bool {
+	for _, value := range values {
+		if !validArtifactComponent(value) {
+			return false
 		}
 	}
-	return child, nil
+	return true
 }
 
 func validArtifactComponent(value string) bool {
 	return value != "" && value != "." && value != ".." && !strings.ContainsAny(value, "/\\\x00")
 }
 
-func pathInside(root, candidate string) bool {
-	relative, err := filepath.Rel(root, candidate)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+func artifactFilePath(directory artifactDirectory, name string) (artifactFile, string, error) {
+	if !validArtifactComponent(name) {
+		return artifactFile{}, "", fmt.Errorf("%w: gate artifact file path is invalid", ErrInvalidInput)
+	}
+	file := artifactFile{directory: directory, name: name}
+	return file, file.display(), nil
 }
 
-func artifactFilePath(root, directory, relative string) (string, string, error) {
-	if relative == "" || filepath.IsAbs(relative) || strings.Contains(relative, "\\") {
-		return "", "", fmt.Errorf("%w: gate artifact file path is invalid", ErrInvalidInput)
-	}
-	path := filepath.Join(directory, filepath.FromSlash(relative))
-	if !pathInside(directory, path) || !pathInside(root, path) {
-		return "", "", fmt.Errorf("%w: gate artifact file path escapes its run directory", ErrInvalidArtifact)
-	}
-	display, err := filepath.Rel(root, path)
-	if err != nil {
-		return "", "", operational("render gate artifact path", err)
-	}
-	return path, filepath.ToSlash(display), nil
+func (directory artifactDirectory) display() string {
+	return strings.Join(directory.components, "/")
 }
 
-func writeArtifactAtomic(path string, data []byte) error {
-	if err := rejectUnsafeFileTarget(path); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".gaterun-*")
-	if err != nil {
-		return operational("create gate artifact", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
-		return operational("restrict gate artifact", err)
-	}
-	if _, err := temporary.Write(data); err != nil {
-		_ = temporary.Close()
-		return operational("write gate artifact", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return operational("sync gate artifact", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return operational("close gate artifact", err)
-	}
-	if err := replaceAtomicFile(temporaryPath, path); err != nil {
-		return operational("replace gate artifact", err)
+func (file artifactFile) display() string {
+	return file.directory.display() + "/" + file.name
+}
+
+func writeArtifactAtomic(file artifactFile, data []byte) error {
+	if err := platformWriteArtifactAtomic(file, data); err != nil {
+		return classifyArtifactError("write gate artifact", "gate artifact", err)
 	}
 	return nil
 }
 
-func rejectUnsafeFileTarget(path string) error {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+func readArtifact(file artifactFile, maximum int, label string) ([]byte, error) {
+	if maximum < 1 {
+		return nil, fmt.Errorf("%w: %s size limit is invalid", ErrInvalidInput, label)
 	}
+	data, err := platformReadArtifact(file, maximum)
 	if err != nil {
-		return operational("inspect gate artifact", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("%w: gate artifact target is not a restrictive regular file", ErrInvalidArtifact)
-	}
-	return nil
-}
-
-func readArtifact(path string, maximum int, label string) ([]byte, error) {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("%w: %s is missing", ErrMissingArtifact, label)
-	}
-	if err != nil {
-		return nil, operational("inspect "+label, err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("%w: %s is not a restrictive regular file", ErrInvalidArtifact, label)
-	}
-	if info.Size() > int64(maximum) {
-		return nil, fmt.Errorf("%w: %s exceeds its size limit", ErrInvalidArtifact, label)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, operational("open "+label, err)
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, int64(maximum)+1))
-	if err != nil {
-		return nil, operational("read "+label, err)
-	}
-	if len(data) > maximum {
-		return nil, fmt.Errorf("%w: %s grew beyond its size limit", ErrInvalidArtifact, label)
+		return nil, classifyArtifactError("read "+label, label, err)
 	}
 	return data, nil
+}
+
+func classifyArtifactError(operation, label string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errUnsafeArtifact) {
+		return fmt.Errorf("%w: %s is not a contained restrictive artifact", ErrInvalidArtifact, label)
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: %s is missing", ErrMissingArtifact, label)
+	}
+	return operational(operation, err)
 }
 
 func marshalArtifact(value any, operation string) ([]byte, error) {

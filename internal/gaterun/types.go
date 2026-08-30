@@ -139,6 +139,7 @@ type IdentityInput struct {
 	Platform            Platform
 	Commands            []CommandSpec
 	Environment         []EnvironmentInput
+	AmbientEnvironment  []EnvironmentInput
 }
 
 type Identity struct {
@@ -153,6 +154,7 @@ type Identity struct {
 	Platform            Platform                 `json:"platform"`
 	Commands            []CommandSpec            `json:"commands"`
 	Environment         []EnvironmentFingerprint `json:"environment"`
+	AmbientEnvironment  []EnvironmentFingerprint `json:"ambient_environment"`
 }
 
 type CommandRef struct {
@@ -173,6 +175,7 @@ type AttemptInput struct {
 	ExitStatus      int
 	Duration        time.Duration
 	ResourceWait    time.Duration
+	Diagnostic      bool
 }
 
 type Attempt struct {
@@ -186,6 +189,7 @@ type Attempt struct {
 	LogSHA256                string          `json:"log_sha256"`
 	StdoutTruncated          bool            `json:"stdout_truncated"`
 	StderrTruncated          bool            `json:"stderr_truncated"`
+	Diagnostic               bool            `json:"diagnostic"`
 }
 
 type CommandOutcome struct {
@@ -208,29 +212,63 @@ type Finding struct {
 }
 
 type Report struct {
-	Version        int              `json:"version"`
-	Identity       Identity         `json:"identity"`
-	IdentitySHA256 string           `json:"identity_sha256"`
-	Status         RunStatus        `json:"status"`
-	StartedAt      time.Time        `json:"started_at"`
-	CompletedAt    time.Time        `json:"completed_at"`
-	Commands       []CommandOutcome `json:"commands"`
-	Findings       []Finding        `json:"findings"`
-	Notes          []string         `json:"notes"`
-	SHA256         string           `json:"sha256"`
+	Version         int              `json:"version"`
+	Identity        Identity         `json:"identity"`
+	IdentitySHA256  string           `json:"identity_sha256"`
+	ExecutionID     string           `json:"execution_id"`
+	Status          RunStatus        `json:"status"`
+	StartedAt       time.Time        `json:"started_at"`
+	CompletedAt     time.Time        `json:"completed_at"`
+	Commands        []CommandOutcome `json:"commands"`
+	Findings        []Finding        `json:"findings"`
+	Notes           []string         `json:"notes"`
+	TestEvidence    []TestEvidence   `json:"test_evidence"`
+	TestDiagnostics []TestDiagnostic `json:"test_diagnostics"`
+	SHA256          string           `json:"sha256"`
+}
+
+type TestEvidence struct {
+	Name                  string          `json:"name"`
+	Kind                  string          `json:"kind"`
+	Scope                 string          `json:"scope"`
+	Cost                  string          `json:"cost"`
+	Target                string          `json:"target"`
+	SuiteModules          []string        `json:"suite_modules"`
+	SuitePaths            []string        `json:"suite_paths"`
+	ChangedModules        []string        `json:"changed_modules"`
+	ImpactedModules       []string        `json:"impacted_modules"`
+	ChangedModuleOverlap  []string        `json:"changed_module_overlap"`
+	ImpactedModuleOverlap []string        `json:"impacted_module_overlap"`
+	ChangedPathOverlap    []string        `json:"changed_path_overlap"`
+	Status                CommandStatus   `json:"status"`
+	FailureCategory       FailureCategory `json:"failure_category,omitempty"`
+	FailureMessage        string          `json:"failure_message,omitempty"`
+	Attempt               int             `json:"attempt"`
+	LogPath               string          `json:"log_path,omitempty"`
+	Diagnostic            bool            `json:"diagnostic"`
+}
+
+type TestDiagnostic struct {
+	Suite          string        `json:"suite"`
+	State          string        `json:"state"`
+	CandidateRetry *TestEvidence `json:"candidate_retry,omitempty"`
+	BaselineReplay *TestEvidence `json:"baseline_replay,omitempty"`
 }
 
 type FinalizeOptions struct {
-	Status      RunStatus
-	Findings    []Finding
-	Notes       []string
-	CompletedAt time.Time
+	Status          RunStatus
+	Findings        []Finding
+	Notes           []string
+	TestEvidence    []TestEvidence
+	TestDiagnostics []TestDiagnostic
+	CompletedAt     time.Time
 }
 
 type Receipt struct {
 	Version       int             `json:"version"`
 	Gate          GateKind        `json:"gate"`
 	RunSHA256     string          `json:"run_sha256"`
+	ExecutionID   string          `json:"execution_id"`
 	CommandSHA256 string          `json:"command_sha256"`
 	Category      CommandCategory `json:"category"`
 	Status        CommandStatus   `json:"status"`
@@ -252,6 +290,10 @@ type LogResult struct {
 	SHA256          string
 	Stdout          []byte
 	Stderr          []byte
+	StdoutTail      []byte
+	StderrTail      []byte
+	StdoutBytes     int64
+	StderrBytes     int64
 	StdoutTruncated bool
 	StderrTruncated bool
 	StreamLimit     int
@@ -285,8 +327,11 @@ func (log *CommandLog) Close() (LogResult, error) {
 
 type Run struct {
 	repositoryRoot string
-	directory      string
+	runDirectory   artifactDirectory
+	directory      artifactDirectory
+	report         artifactFile
 	reportPath     string
+	executionID    string
 	identity       Identity
 	runSHA256      string
 	startedAt      time.Time

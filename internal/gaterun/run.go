@@ -3,24 +3,26 @@ package gaterun
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"time"
 )
+
+type reportPointer struct {
+	Version      int    `json:"version"`
+	ExecutionID  string `json:"execution_id"`
+	ReportSHA256 string `json:"report_sha256"`
+}
 
 func Start(options StartOptions) (*Run, error) {
 	if err := validateIdentity(options.Identity); err != nil {
 		return nil, err
 	}
-	root, directory, err := newRunDirectory(options.RepositoryRoot, options.Identity)
+	root, runDirectory, directory, executionID, err := newRunDirectory(options.RepositoryRoot, options.Identity)
 	if err != nil {
 		return nil, err
 	}
-	reportPath, _, err := artifactFilePath(root, directory, reportFilename)
+	report, display, err := artifactFilePath(directory, reportFilename)
 	if err != nil {
-		return nil, err
-	}
-	if err := rejectUnsafeFileTarget(reportPath); err != nil {
 		return nil, err
 	}
 	runSHA256, err := options.Identity.Digest()
@@ -32,8 +34,8 @@ func Start(options StartOptions) (*Run, error) {
 		startedAt = time.Now().UTC()
 	}
 	return &Run{
-		repositoryRoot: root, directory: directory, reportPath: reportPath,
-		identity: cloneIdentity(options.Identity), runSHA256: runSHA256, startedAt: startedAt,
+		repositoryRoot: root.path, runDirectory: runDirectory, directory: directory, report: report, reportPath: display,
+		executionID: executionID, identity: cloneIdentity(options.Identity), runSHA256: runSHA256, startedAt: startedAt,
 		commands: map[int]CommandOutcome{}, openLogs: map[int]bool{},
 	}, nil
 }
@@ -46,14 +48,10 @@ func (run *Run) Identity() Identity {
 }
 
 func (run *Run) ReportPath() string {
-	if run == nil || run.reportPath == "" {
+	if run == nil {
 		return ""
 	}
-	relative, err := filepath.Rel(run.repositoryRoot, run.reportPath)
-	if err != nil {
-		return ""
-	}
-	return filepath.ToSlash(relative)
+	return run.reportPath
 }
 
 func (run *Run) RecordAttempt(index int, input AttemptInput, log LogResult) (CommandOutcome, error) {
@@ -66,16 +64,18 @@ func (run *Run) RecordAttempt(index int, input AttemptInput, log LogResult) (Com
 		return CommandOutcome{}, err
 	}
 	entry.Attempts = append(entry.Attempts, attempt)
-	entry.Status = input.Status
-	entry.ReceiptPath = ""
-	entry.ReceiptSHA256 = ""
-	if input.Status == Passed && reference.Spec.Category == OrdinaryTest {
-		receipt, path, err := run.writePassedReceipt(reference, attempt)
-		if err != nil {
-			return CommandOutcome{}, err
+	if !input.Diagnostic {
+		entry.Status = input.Status
+		entry.ReceiptPath = ""
+		entry.ReceiptSHA256 = ""
+		if input.Status == Passed && reference.Spec.Category == OrdinaryTest {
+			receipt, path, receiptErr := run.writePassedReceipt(reference, attempt)
+			if receiptErr != nil {
+				return CommandOutcome{}, receiptErr
+			}
+			entry.ReceiptPath = path
+			entry.ReceiptSHA256 = receipt.SHA256
 		}
-		entry.ReceiptPath = path
-		entry.ReceiptSHA256 = receipt.SHA256
 	}
 	run.commands[index] = entry
 	return cloneCommandOutcome(entry), nil
@@ -95,11 +95,34 @@ func (run *Run) prepareAttempt(index int, input AttemptInput) (CommandOutcome, C
 	if err := validateAttemptInput(input); err != nil {
 		return CommandOutcome{}, CommandRef{}, err
 	}
+	if err := validateDiagnosticInput(entry, input); err != nil {
+		return CommandOutcome{}, CommandRef{}, err
+	}
 	reference, err := run.identity.Command(index)
 	if err != nil {
 		return CommandOutcome{}, CommandRef{}, err
 	}
 	return entry, reference, nil
+}
+
+func validateDiagnosticInput(entry CommandOutcome, input AttemptInput) error {
+	if !input.Diagnostic {
+		return nil
+	}
+	planned, found := latestPlannedAttempt(entry.Attempts)
+	if !found || planned.Status != Failed {
+		return fmt.Errorf("%w: diagnostic attempt requires a failed planned command", ErrInvalidInput)
+	}
+	return nil
+}
+
+func latestPlannedAttempt(attempts []Attempt) (Attempt, bool) {
+	for index := len(attempts) - 1; index >= 0; index-- {
+		if !attempts[index].Diagnostic {
+			return attempts[index], true
+		}
+	}
+	return Attempt{}, false
 }
 
 func (run *Run) commandAvailable(index int) bool {
@@ -147,7 +170,10 @@ func (run *Run) Finalize(options FinalizeOptions) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	if err := writeArtifactAtomic(run.reportPath, data); err != nil {
+	if err := writeArtifactAtomic(run.report, data); err != nil {
+		return Report{}, err
+	}
+	if err := run.writeLatestReportPointer(report); err != nil {
 		return Report{}, err
 	}
 	run.finalized = true
@@ -160,9 +186,10 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 		return Report{}, err
 	}
 	report := Report{
-		Version: Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256,
+		Version: Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256, ExecutionID: run.executionID,
 		Status: options.Status, StartedAt: run.startedAt, CompletedAt: completedAt,
 		Commands: commands, Findings: cloneFindings(options.Findings), Notes: cloneStrings(options.Notes),
+		TestEvidence: cloneTestEvidence(options.TestEvidence), TestDiagnostics: cloneTestDiagnostics(options.TestDiagnostics),
 	}
 	if err := validateReport(report, run.identity); err != nil {
 		return Report{}, err
@@ -173,6 +200,19 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 	}
 	report.SHA256 = digest
 	return report, nil
+}
+
+func (run *Run) writeLatestReportPointer(report Report) error {
+	file, _, err := artifactFilePath(run.runDirectory, latestFilename)
+	if err != nil {
+		return err
+	}
+	pointer := reportPointer{Version: Version, ExecutionID: report.ExecutionID, ReportSHA256: report.SHA256}
+	data, err := marshalArtifact(pointer, "encode gate run report pointer")
+	if err != nil {
+		return err
+	}
+	return writeArtifactAtomic(file, data)
 }
 
 func (run *Run) finalizationState(options FinalizeOptions) ([]CommandOutcome, time.Time, error) {
@@ -247,14 +287,14 @@ func validFailureCategory(category FailureCategory) bool {
 }
 
 func (run *Run) validatedAttempt(reference CommandRef, number int, input AttemptInput, result LogResult) (Attempt, error) {
-	path, display, err := run.logPath(reference.SHA256, number, false)
+	file, display, err := run.logPath(reference.SHA256, number, false)
 	if err != nil {
 		return Attempt{}, err
 	}
 	if result.Path != display || !validSHA256(result.SHA256) {
 		return Attempt{}, fmt.Errorf("%w: command log does not match its planned path", ErrInvalidArtifact)
 	}
-	document, data, err := readCommandLog(path)
+	document, data, err := readCommandLog(file)
 	if err != nil {
 		return Attempt{}, err
 	}
@@ -265,25 +305,29 @@ func (run *Run) validatedAttempt(reference CommandRef, number int, input Attempt
 		Number: number, Status: input.Status, FailureCategory: input.FailureCategory, ExitStatus: input.ExitStatus,
 		DurationMilliseconds: input.Duration.Milliseconds(), ResourceWaitMilliseconds: input.ResourceWait.Milliseconds(),
 		LogPath: display, LogSHA256: result.SHA256, StdoutTruncated: document.StdoutTruncated, StderrTruncated: document.StderrTruncated,
+		Diagnostic: input.Diagnostic,
 	}, nil
 }
 
 func sameLogResult(document commandLogDocument, result LogResult) bool {
-	return document.StreamLimit == result.StreamLimit && document.StdoutTruncated == result.StdoutTruncated &&
-		document.StderrTruncated == result.StderrTruncated && string(document.Stdout) == string(result.Stdout) && string(document.Stderr) == string(result.Stderr)
+	stdout := capturedStream{head: document.Stdout, tail: document.StdoutTail, total: document.StdoutBytes, truncated: document.StdoutTruncated}
+	stderr := capturedStream{head: document.Stderr, tail: document.StderrTail, total: document.StderrBytes, truncated: document.StderrTruncated}
+	return document.StreamLimit == result.StreamLimit && document.StdoutTruncated == result.StdoutTruncated && document.StderrTruncated == result.StderrTruncated &&
+		document.StdoutBytes == result.StdoutBytes && document.StderrBytes == result.StderrBytes && string(stdout.rendered()) == string(result.Stdout) &&
+		string(stderr.rendered()) == string(result.Stderr) && string(document.StdoutTail) == string(result.StdoutTail) && string(document.StderrTail) == string(result.StderrTail)
 }
 
 func (run *Run) writePassedReceipt(reference CommandRef, attempt Attempt) (Receipt, string, error) {
-	directory, err := secureRunSubdirectory(run.repositoryRoot, run.directory, receiptsDirectory, true)
+	directory, err := secureRunSubdirectory(run.directory, receiptsDirectory, true)
 	if err != nil {
 		return Receipt{}, "", err
 	}
-	path, display, err := artifactFilePath(run.repositoryRoot, directory, reference.SHA256+".json")
+	file, display, err := artifactFilePath(directory, reference.SHA256+".json")
 	if err != nil {
 		return Receipt{}, "", err
 	}
 	receipt := Receipt{
-		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, CommandSHA256: reference.SHA256,
+		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
 		Category: OrdinaryTest, Status: Passed, LogSHA256: attempt.LogSHA256,
 	}
 	digest, err := receiptDigest(receipt)
@@ -295,18 +339,18 @@ func (run *Run) writePassedReceipt(reference CommandRef, attempt Attempt) (Recei
 	if err != nil {
 		return Receipt{}, "", err
 	}
-	if err := writeArtifactAtomic(path, data); err != nil {
+	if err := writeArtifactAtomic(file, data); err != nil {
 		return Receipt{}, "", err
 	}
 	return receipt, display, nil
 }
 
-func (run *Run) receiptPath(reference CommandRef, create bool) (string, string, error) {
-	directory, err := secureRunSubdirectory(run.repositoryRoot, run.directory, receiptsDirectory, create)
+func (run *Run) receiptFile(reference CommandRef, create bool) (artifactFile, string, error) {
+	directory, err := secureRunSubdirectory(run.directory, receiptsDirectory, create)
 	if err != nil {
-		return "", "", err
+		return artifactFile{}, "", err
 	}
-	return artifactFilePath(run.repositoryRoot, directory, reference.SHA256+".json")
+	return artifactFilePath(directory, reference.SHA256+".json")
 }
 
 func (run *Run) validateReusableReceipt(reference CommandRef, reusable ReusableReceipt) error {

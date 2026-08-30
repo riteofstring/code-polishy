@@ -68,6 +68,46 @@ func TestIdentityRequiresExactDeclaredEnvironmentValues(t *testing.T) {
 	}
 }
 
+func TestIdentityBindsAmbientEnvironmentSeparately(t *testing.T) {
+	input := testIdentityInput([]CommandSpec{testCommand(OrdinaryTest, "unit", "FOO")})
+	input.Environment = []EnvironmentInput{{Name: "FOO", Value: "declared", Present: true}}
+	input.AmbientEnvironment = []EnvironmentInput{{Name: "PATH", Value: "/managed/bin", Present: true}}
+	identity, err := NewIdentity(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(identity.Environment) != 1 || identity.Environment[0].Name != "FOO" || len(identity.AmbientEnvironment) != 1 || identity.AmbientEnvironment[0].Name != "PATH" {
+		t.Fatalf("identity environment separation = %+v", identity)
+	}
+	baseline, err := identity.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := cloneIdentityInput(input)
+	changed.AmbientEnvironment[0].Value = "/other/bin"
+	updated, err := NewIdentity(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := updated.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest == baseline {
+		t.Fatal("ambient environment did not change the identity digest")
+	}
+	for _, invalid := range [][]EnvironmentInput{
+		{{Name: "PATH", Value: "one", Present: true}, {Name: "PATH", Value: "two", Present: true}},
+		{{Name: "PATH", Value: "value", Present: false}},
+	} {
+		changed := cloneIdentityInput(input)
+		changed.AmbientEnvironment = invalid
+		if _, err := NewIdentity(changed); err == nil {
+			t.Fatalf("NewIdentity accepted ambient environment %+v", invalid)
+		}
+	}
+}
+
 func testIdentityInput(commands []CommandSpec) IdentityInput {
 	return IdentityInput{
 		Gate: MergeGate, RequestedBase: "origin/main", ExactBase: strings.Repeat("a", 40), Candidate: strings.Repeat("b", 40),
@@ -88,5 +128,6 @@ func testCommand(category CommandCategory, name string, environment ...string) C
 func cloneIdentityInput(input IdentityInput) IdentityInput {
 	input.Commands = cloneCommands(input.Commands)
 	input.Environment = append([]EnvironmentInput{}, input.Environment...)
+	input.AmbientEnvironment = append([]EnvironmentInput{}, input.AmbientEnvironment...)
 	return input
 }
