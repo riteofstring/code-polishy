@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
@@ -175,14 +177,53 @@ func (engine *Engine) replayTestBaseline(ctx context.Context, base string, comma
 		_ = os.Remove(parent)
 		return nil, false
 	}
-	execution := testpolicy.ExecuteSuite(ctx, worktree, commandRunner, suite, attempt)
+	execution, available := engine.executeBaselineSuite(ctx, worktree, commandRunner, suite, attempt)
 	if err := engine.Repository.RemoveWorktree(context.Background(), worktree); err != nil {
-		return &execution, false
+		return execution, false
 	}
 	if err := os.Remove(parent); err != nil {
-		return &execution, false
+		return execution, false
 	}
+	return execution, available
+}
+
+func (engine *Engine) executeBaselineSuite(ctx context.Context, worktree string, commandRunner runner.Runner, candidate policy.TestSuite, attempt int) (*testpolicy.SuiteExecution, bool) {
+	baseline, available := engine.baselineSuite(worktree, candidate)
+	if !available {
+		return nil, false
+	}
+	execution := testpolicy.ExecuteSuite(ctx, worktree, commandRunner, baseline, attempt)
 	return &execution, true
+}
+
+func (engine *Engine) baselineSuite(worktree string, candidate policy.TestSuite) (policy.TestSuite, bool) {
+	if err := release.RequireLockedRelease(worktree, engine.Repository.PolicyRoot); err != nil {
+		return policy.TestSuite{}, false
+	}
+	baselineEngine, err := Open(worktree, engine.Repository.PolicyRoot, "")
+	if err != nil || len(baselineEngine.PolicyModuleFindings) != 0 {
+		return policy.TestSuite{}, false
+	}
+	plan, err := testpolicy.BuildPlan(baselineEngine.Repository, testpolicy.Request{Suites: []string{candidate.Name}})
+	if err != nil || len(plan.Suites) != 1 || !sameTestSuiteSemantics(candidate, plan.Suites[0]) {
+		return policy.TestSuite{}, false
+	}
+	return plan.Suites[0], true
+}
+
+func sameTestSuiteSemantics(candidate, baseline policy.TestSuite) bool {
+	return sameTestSuiteIdentity(candidate, baseline) && sameTestSuiteCollections(candidate, baseline)
+}
+
+func sameTestSuiteIdentity(candidate, baseline policy.TestSuite) bool {
+	return candidate.Name == baseline.Name && candidate.Kind == baseline.Kind && candidate.Scope == baseline.Scope &&
+		candidate.Cost == baseline.Cost && candidate.Cwd == baseline.Cwd && candidate.TimeoutSeconds == baseline.TimeoutSeconds
+}
+
+func sameTestSuiteCollections(candidate, baseline policy.TestSuite) bool {
+	return slices.Equal(candidate.Modules, baseline.Modules) && slices.Equal(candidate.Argv, baseline.Argv) &&
+		slices.Equal(candidate.Paths, baseline.Paths) && slices.Equal(candidate.RunOn, baseline.RunOn) &&
+		slices.Equal(candidate.Environment, baseline.Environment) && slices.Equal(candidate.ExclusiveResources, baseline.ExclusiveResources)
 }
 
 func AttachTestCommandLogPath(report *Report, name string, attempt int, logPath string) bool {
