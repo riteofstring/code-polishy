@@ -19,9 +19,8 @@ import (
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
-func TestMergeGateBypassesDefaultBehaviorReviewForDocumentationCandidates(t *testing.T) {
+func TestMergeGateBypassesBehaviorReviewForDocumentationCandidates(t *testing.T) {
 	root := documentationRepository(t)
-	clearBehaviorReviewSetting(t, root)
 	initializeEngineGitRepository(t, root)
 	writeEngineFile(t, root, "README.md", "# Updated\n", 0o600)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -64,123 +63,6 @@ func TestMergeGateReportsMissingRequiredBehaviorReviewReceiptBeforeCommands(t *t
 	}
 	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("missing receipt validation created behavior-review artifacts: %v", statErr)
-	}
-}
-
-func TestMergeGateRetainsTrustedBaseBehaviorReviewRequirement(t *testing.T) {
-	root := contentRepository(t, nil)
-	setBehaviorReviewRequired(t, root, true)
-	initializeEngineGitRepository(t, root)
-	gitBehaviorReview(t, root, "switch", "-c", "remove-requirement")
-	setBehaviorReviewRequired(t, root, false)
-	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
-	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
-	gitBehaviorReview(t, root, "commit", "-m", "remove behavior review requirement")
-
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine.Runner = commandRunner
-	report, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertBehaviorReviewGateFindingAtLevel(t, report, testpolicy.MergeLevelFull, "missing behavior review receipt")
-	if len(commandRunner.commands) != 0 {
-		t.Fatalf("trusted-base requirement ran commands: %v", commandRunner.commands)
-	}
-}
-
-func TestMergeGateRequiresReceiptWhenCandidateAddsDefaultBehaviorReviewConfig(t *testing.T) {
-	root := contentRepository(t, nil)
-	configPath := filepath.Join(root, policy.ConfigFilename)
-	config, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(configPath); err != nil {
-		t.Fatal(err)
-	}
-	initializeEngineGitRepository(t, root)
-	gitBehaviorReview(t, root, "switch", "-c", "add-requirement")
-	writeEngineFile(t, root, policy.ConfigFilename, string(config), 0o600)
-	clearBehaviorReviewSetting(t, root)
-	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
-	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
-	gitBehaviorReview(t, root, "commit", "-m", "add behavior review requirement")
-
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine.Runner = commandRunner
-	report, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertBehaviorReviewGateFindingAtLevel(t, report, testpolicy.MergeLevelFull, "missing behavior review receipt")
-	if len(commandRunner.commands) != 0 {
-		t.Fatalf("candidate requirement ran commands: %v", commandRunner.commands)
-	}
-}
-
-func TestMergeGateDoesNotRequireReceiptWhenBothConfigurationsExplicitlyDisableBehaviorReview(t *testing.T) {
-	root := contentRepository(t, nil)
-	setBehaviorReviewRequired(t, root, false)
-	initializeEngineGitRepository(t, root)
-	gitBehaviorReview(t, root, "switch", "-c", "no-requirement")
-	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
-	gitBehaviorReview(t, root, "add", "content/data.json")
-	gitBehaviorReview(t, root, "commit", "-m", "candidate")
-
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine.Runner = commandRunner
-	report, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.MergePolicy == nil || report.MergePolicy.Level != testpolicy.MergeLevelRecommended ||
-		slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool { return finding.Check == "policy.behaviorReview" }) {
-		t.Fatalf("report = %+v", report)
-	}
-	if len(commandRunner.commands) == 0 {
-		t.Fatal("disabled behavior review skipped planned commands")
-	}
-}
-
-func TestMergeGateFailsWhenTrustedBaseBehaviorReviewConfigIsInvalid(t *testing.T) {
-	root := contentRepository(t, nil)
-	configPath := filepath.Join(root, policy.ConfigFilename)
-	config, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeEngineFile(t, root, policy.ConfigFilename, "{\n", 0o600)
-	initializeEngineGitRepository(t, root)
-	gitBehaviorReview(t, root, "switch", "-c", "repair-config")
-	writeEngineFile(t, root, policy.ConfigFilename, string(config), 0o600)
-	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
-	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
-	gitBehaviorReview(t, root, "commit", "-m", "repair configuration")
-
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine.Runner = commandRunner
-	if _, err := policyEngine.MergeGate(t.Context(), "main"); err == nil || !strings.Contains(err.Error(), "parse behavior-review configuration") {
-		t.Fatalf("MergeGate() error = %v, want trusted-base configuration parse failure", err)
-	}
-	if len(commandRunner.commands) != 0 {
-		t.Fatalf("invalid trusted-base configuration ran commands: %v", commandRunner.commands)
 	}
 }
 
@@ -287,7 +169,6 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 func requiredBehaviorReviewCandidate(t *testing.T) string {
 	t.Helper()
 	root := contentRepository(t, nil)
-	clearBehaviorReviewSetting(t, root)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "behavior-review")
@@ -295,53 +176,6 @@ func requiredBehaviorReviewCandidate(t *testing.T) string {
 	gitBehaviorReview(t, root, "add", "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "candidate")
 	return root
-}
-
-func setBehaviorReviewRequired(t *testing.T, root string, required bool) {
-	t.Helper()
-	path := filepath.Join(root, ".code-polishy.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document map[string]any
-	if err := json.Unmarshal(data, &document); err != nil {
-		t.Fatal(err)
-	}
-	verification, _ := document["verification"].(map[string]any)
-	if verification == nil {
-		verification = map[string]any{}
-		document["verification"] = verification
-	}
-	verification["behaviorReview"] = map[string]any{"required": required}
-	updated, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeEngineFile(t, root, ".code-polishy.json", string(updated)+"\n", 0o600)
-}
-
-func clearBehaviorReviewSetting(t *testing.T, root string) {
-	t.Helper()
-	path := filepath.Join(root, policy.ConfigFilename)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document map[string]any
-	if err := json.Unmarshal(data, &document); err != nil {
-		t.Fatal(err)
-	}
-	verification, ok := document["verification"].(map[string]any)
-	if !ok {
-		return
-	}
-	delete(verification, "behaviorReview")
-	updated, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeEngineFile(t, root, policy.ConfigFilename, string(updated)+"\n", 0o600)
 }
 
 func installBehaviorReviewTestGuidance(t *testing.T, root string) {

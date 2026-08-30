@@ -38,7 +38,7 @@ func Parse(data []byte, source string) (Config, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	config := Config{Verification: Verification{BehaviorReview: &BehaviorReview{Required: true}}}
+	config := Config{}
 	if err := decoder.Decode(&config); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", source, err)
 	}
@@ -209,9 +209,6 @@ func validateVerification(config *Config) error {
 		if strings.TrimSpace(target) != target || strings.HasPrefix(target, "-") || strings.ContainsAny(target, " \t\r\n\x00") {
 			return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
 		}
-	}
-	if config.Verification.BehaviorReview == nil {
-		return errors.New("verification.behaviorReview must be an object when configured")
 	}
 	mergeGate := config.Verification.MergeGate
 	if mergeGate == nil {

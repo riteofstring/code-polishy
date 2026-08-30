@@ -2,7 +2,6 @@ package policy
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -426,56 +425,13 @@ func TestLoadAcceptsConfiguredMergeGate(t *testing.T) {
 	}
 }
 
-func TestLoadDefaultsBehaviorReviewToRequired(t *testing.T) {
+func TestLoadRejectsBehaviorReviewConfiguration(t *testing.T) {
 	t.Parallel()
-	for name, configText := range map[string]string{
-		"verification omitted": minimalConfig(),
-		"review omitted":       strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{},"checks":[]`, 1),
-		"required omitted":     strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":{}},"checks":[]`, 1),
-	} {
+	for name, setting := range map[string]string{"required": `{"required":true}`, "disabled": `{"required":false}`} {
 		t.Run(name, func(t *testing.T) {
-			config, err := Load(writeConfig(t, configText), "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if config.Verification.BehaviorReview == nil || !config.Verification.BehaviorReview.Required {
-				t.Fatalf("behavior review = %+v, want required", config.Verification.BehaviorReview)
-			}
-		})
-	}
-}
-
-func TestLoadAcceptsExplicitBehaviorReviewSetting(t *testing.T) {
-	t.Parallel()
-	for name, required := range map[string]bool{"required": true, "disabled": false} {
-		t.Run(name, func(t *testing.T) {
-			setting := fmt.Sprintf(`{"required":%t}`, required)
 			configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":`+setting+`},"checks":[]`, 1)
-			config, err := Load(writeConfig(t, configText), "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if config.Verification.BehaviorReview == nil || config.Verification.BehaviorReview.Required != required {
-				t.Fatalf("behavior review = %+v, want required=%t", config.Verification.BehaviorReview, required)
-			}
-		})
-	}
-}
-
-func TestLoadRejectsInvalidBehaviorReview(t *testing.T) {
-	t.Parallel()
-	for name, test := range map[string]struct {
-		behaviorReview string
-		want           string
-	}{
-		"unknown field":   {behaviorReview: `{"required":true,"typo":true}`, want: "unknown field"},
-		"malformed value": {behaviorReview: `{"required":"true"}`, want: "cannot unmarshal"},
-		"null object":     {behaviorReview: `null`, want: "behaviorReview"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":`+test.behaviorReview+`},"checks":[]`, 1)
-			if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("expected %q behavior-review validation error, got %v", test.want, err)
+			if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), "unknown field") {
+				t.Fatalf("expected behaviorReview to be rejected as an unknown field, got %v", err)
 			}
 		})
 	}

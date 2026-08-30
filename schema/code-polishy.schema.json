@@ -229,7 +229,7 @@
     },
     "verification": {
       "type": "object",
-      "description": "Merge-gate selection facts, default-required behavior review, and optional checked-in merge-target guidance.",
+      "description": "Merge-gate selection facts and optional checked-in merge-target guidance.",
       "additionalProperties": false,
       "properties": {
         "trustedMergeTarget": {
@@ -238,19 +238,7 @@
           "pattern": "^[^\\s\\u0000]+$",
           "description": "Optional checked-in trusted merge target used when the caller supplies no explicit target."
         },
-        "behaviorReview": {
-          "$ref": "#/$defs/behaviorReview",
-          "default": { "required": true }
-        },
         "mergeGate": { "$ref": "#/$defs/mergeGate" }
-      }
-    },
-    "behaviorReview": {
-      "type": "object",
-      "description": "Requires behavior-review evidence by default; set required to false only as an explicit repository opt-out.",
-      "additionalProperties": false,
-      "properties": {
-        "required": { "type": "boolean", "default": true }
       }
     },
     "mergeGate": {

@@ -312,11 +312,22 @@ func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T)
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			root := testCase.root(t)
+			if testCase.level != testpolicy.MergeLevelDocumentation {
+				installBehaviorReviewTestGuidance(t, root)
+			}
 			initializeEngineGitRepository(t, root)
 			path := testCase.change(t, root)
-			policyEngine, err := Open(root, root, "")
+			policyRoot := root
+			if testCase.level != testpolicy.MergeLevelDocumentation {
+				commitEngineCandidate(t, root, "candidate")
+				policyRoot = enginePolicyRoot(t)
+			}
+			policyEngine, err := Open(root, policyRoot, "")
 			if err != nil {
 				t.Fatal(err)
+			}
+			if testCase.level != testpolicy.MergeLevelDocumentation {
+				prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 			}
 			policyEngine.Runner = &recordingEngineRunner{}
 			report, err := policyEngine.MergeGate(t.Context(), "main")
@@ -628,12 +639,15 @@ func TestVerifyDoesNotRunSupplementalSuites(t *testing.T) {
 func TestMergeGateRunsRecommendedPipelineForConfiguredContentChange(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
-	policyEngine, err := Open(root, root, "")
+	commitEngineCandidate(t, root, "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 	commandRunner := &recordingEngineRunner{}
 	policyEngine.Runner = commandRunner
 	report, err := policyEngine.MergeGate(context.Background(), "main")
@@ -863,6 +877,7 @@ func TestDocumentationChangedTestRunsZeroApplicationSuites(t *testing.T) {
 func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	contents, err := os.ReadFile(configPath)
@@ -872,10 +887,12 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 	if err := os.WriteFile(configPath, append(contents, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	policyEngine, err := Open(root, root, "")
+	commitEngineCandidate(t, root, "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 	commandRunner := &recordingEngineRunner{}
 	policyEngine.Runner = commandRunner
 	report, err := policyEngine.MergeGate(context.Background(), "main")
@@ -895,6 +912,7 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 func TestMergeGateDoesNotStartLaterSuitesAfterSuiteFailure(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	contents, err := os.ReadFile(configPath)
@@ -902,10 +920,12 @@ func TestMergeGateDoesNotStartLaterSuitesAfterSuiteFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeEngineFile(t, root, policy.ConfigFilename, string(contents)+"\n", 0o600)
-	policyEngine, err := Open(root, root, "")
+	commitEngineCandidate(t, root, "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 	commandRunner := &failingEngineRunner{failure: "focused"}
 	policyEngine.Runner = commandRunner
 	report, err := policyEngine.MergeGate(context.Background(), "main")
@@ -1006,7 +1026,6 @@ func contentRepository(t *testing.T, excludes []string) string {
   "quality": {},
   "modules": [{"name":"content","paths":["content/**"]}],
   "verification": {
-    "behaviorReview": {"required": false},
     "mergeGate":{"recommendedModules":["content"]}
   },
   "checks": [
@@ -1036,7 +1055,6 @@ func documentationRepository(t *testing.T) string {
   "scope": {},
   "quality": {},
   "documentation": {"productInputs": ["docs/product-input.md"]},
-  "verification": {"behaviorReview": {"required": false}},
   "modules": [
     {"name": "docs", "paths": ["docs/**/*.md"]},
     {"name": "tooling", "paths": ["templates/**", "skills/**"]},
@@ -1095,6 +1113,13 @@ func initializeEngineGitRepository(t *testing.T, root string) {
 			t.Fatalf("git %v: %v\n%s", arguments, err, output)
 		}
 	}
+}
+
+func commitEngineCandidate(t *testing.T, root, message string) {
+	t.Helper()
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	gitBehaviorReview(t, root, "add", "--all")
+	gitBehaviorReview(t, root, "commit", "-m", message)
 }
 
 func writeEngineFile(t *testing.T, root, path, contents string, mode os.FileMode) {
