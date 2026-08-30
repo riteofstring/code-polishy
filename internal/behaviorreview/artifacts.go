@@ -27,7 +27,9 @@ const (
 	finalReviewFilename     = "review.json"
 	receiptFilename         = "receipt.json"
 	proofDirectory          = "proofs"
+	intentJournalFilename   = "intent-journal.json"
 	maximumIntentBytes      = 64 << 10
+	maximumIntentJournal    = 4 << 20
 	maximumTemplateBytes    = 64 << 10
 	maximumResultBytes      = 256 << 10
 	maximumDesignBytes      = 256 << 10

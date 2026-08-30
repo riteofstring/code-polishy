@@ -30,7 +30,8 @@ Commands:
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
-  behavior-review prepare --base REF --intent-file PATH
+  behavior-review capture-intent --intent-file PATH
+  behavior-review prepare --base REF
   behavior-review finalize --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
   test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental|--module NAME...|--suite NAME...]

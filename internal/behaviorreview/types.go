@@ -52,8 +52,19 @@ func (err *CleanupError) Unwrap() error {
 }
 
 type PrepareOptions struct {
-	Base       string
+	Base string
+}
+
+type CaptureIntentOptions struct {
 	IntentPath string
+}
+
+type CaptureIntentResult struct {
+	ID            string
+	Commit        string
+	IntentSHA256  string
+	JournalSHA256 string
+	JournalPath   string
 }
 
 type PrepareResult struct {
@@ -155,6 +166,10 @@ type RecordCheckpointResult struct {
 
 func Prepare(ctx context.Context, repo repository.Repository, options PrepareOptions) (PrepareResult, error) {
 	return prepare(ctx, repo, options)
+}
+
+func CaptureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
+	return captureIntent(ctx, repo, options)
 }
 
 func Finalize(ctx context.Context, repo repository.Repository, options FinalizeOptions) (FinalizeResult, error) {

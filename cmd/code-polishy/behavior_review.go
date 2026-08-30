@@ -32,8 +32,14 @@ func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, argu
 		return commandResult{}, commandInputError(err)
 	}
 	switch options.action {
+	case "capture-intent":
+		result, captureErr := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile)
+		if captureErr != nil {
+			return commandResult{}, captureErr
+		}
+		return commandResult{quiet: true, messages: []string{behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID)}}, nil
 	case "prepare":
-		result, prepareErr := policyEngine.PrepareBehaviorReview(ctx, options.base, options.intentFile)
+		result, prepareErr := policyEngine.PrepareBehaviorReview(ctx, options.base)
 		if prepareErr != nil {
 			return commandResult{}, prepareErr
 		}
@@ -64,6 +70,10 @@ func behaviorReviewPreparedMessage(packetPath, reviewID string) string {
 	return fmt.Sprintf("Behavior review prepared: %s (review %s)", packetPath, reviewID)
 }
 
+func behaviorReviewIntentCapturedMessage(journalPath, captureID string) string {
+	return fmt.Sprintf("Behavior review intent captured: %s (intent %s)", journalPath, captureID)
+}
+
 func behaviorReviewFinalizedMessage(receiptPath, reviewID string) string {
 	return fmt.Sprintf("Behavior review finalized: %s (review %s)", receiptPath, reviewID)
 }
@@ -74,10 +84,14 @@ func regressionProofMessage(proofPath, proofID string) string {
 
 func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, error) {
 	if len(arguments) == 0 {
-		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires prepare or finalize")
+		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, prepare, or finalize")
 	}
 	options := behaviorReviewOptions{action: arguments[0]}
 	switch options.action {
+	case "capture-intent":
+		if err := parseBehaviorReviewCaptureIntent(&options, arguments[1:]); err != nil {
+			return behaviorReviewOptions{}, err
+		}
 	case "prepare":
 		if err := parseBehaviorReviewPrepare(&options, arguments[1:]); err != nil {
 			return behaviorReviewOptions{}, err
@@ -90,6 +104,27 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 		return behaviorReviewOptions{}, fmt.Errorf("unknown behavior-review action %q", options.action)
 	}
 	return options, nil
+}
+
+func parseBehaviorReviewCaptureIntent(options *behaviorReviewOptions, arguments []string) error {
+	for index := 0; index < len(arguments); {
+		value, consumed, matched, err := namedOptionValue(arguments[index:], "--intent-file")
+		if !matched {
+			return fmt.Errorf("unknown behavior-review capture-intent option %q", arguments[index])
+		}
+		if err != nil {
+			return err
+		}
+		if options.intentFile != "" {
+			return errorsDuplicateOption("behavior-review capture-intent", "--intent-file")
+		}
+		options.intentFile = value
+		index += consumed
+	}
+	if options.intentFile == "" {
+		return fmt.Errorf("behavior-review capture-intent requires exactly one --intent-file PATH")
+	}
+	return nil
 }
 
 func parseBehaviorReviewPrepare(options *behaviorReviewOptions, arguments []string) error {
@@ -106,22 +141,10 @@ func parseBehaviorReviewPrepare(options *behaviorReviewOptions, arguments []stri
 			index += consumed
 			continue
 		}
-		value, consumed, matched, err = namedOptionValue(arguments[index:], "--intent-file")
-		if matched {
-			if err != nil {
-				return err
-			}
-			if options.intentFile != "" {
-				return errorsDuplicateOption("behavior-review prepare", "--intent-file")
-			}
-			options.intentFile = value
-			index += consumed
-			continue
-		}
 		return fmt.Errorf("unknown behavior-review prepare option %q", arguments[index])
 	}
-	if options.base == "" || options.intentFile == "" {
-		return fmt.Errorf("behavior-review prepare requires exactly one --base REF and --intent-file PATH")
+	if options.base == "" {
+		return fmt.Errorf("behavior-review prepare requires exactly one --base REF")
 	}
 	return nil
 }

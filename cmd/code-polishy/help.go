@@ -215,18 +215,23 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "behavior-review",
-		summary: "Prepare evidence for, or finalize, a clean-context behavior review.",
+		summary: "Capture intent, prepare evidence, or finalize a clean-context behavior review.",
 		syntax: []string{
-			"code-polishy behavior-review prepare --base REF --intent-file PATH",
+			"code-polishy behavior-review capture-intent --intent-file PATH",
+			"code-polishy behavior-review prepare --base REF",
 			"code-polishy behavior-review finalize --base REF",
 		},
 		selectors: []string{
-			"prepare requires exactly one --base REF and --intent-file PATH.",
+			"capture-intent requires exactly one --intent-file PATH and a clean committed task base.",
+			"prepare requires exactly one --base REF and uses intent captured before implementation.",
 			"finalize requires exactly one --base REF.",
 		},
-		sideEffects: []string{"prepare writes a review packet; finalize writes the corresponding review receipt."},
+		sideEffects: []string{"capture-intent appends to the managed intent journal; prepare writes a review packet; finalize writes the corresponding review receipt."},
 		exits:       []string{"0 requested review operation completed", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy behavior-review prepare --base TASK_BASE --intent-file docs/intent.md"},
+		examples: []string{
+			"code-polishy behavior-review capture-intent --intent-file request.md",
+			"code-polishy behavior-review prepare --base TASK_BASE",
+		},
 	},
 	{
 		name:    "regression-proof",

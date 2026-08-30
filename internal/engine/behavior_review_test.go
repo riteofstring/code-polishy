@@ -63,8 +63,8 @@ func TestMergeGateReportsMissingRequiredBehaviorReviewReceiptBeforeCommands(t *t
 	if len(commandRunner.commands) != 0 {
 		t.Fatalf("missing receipt ran commands: %v", commandRunner.commands)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("missing receipt validation created behavior-review artifacts: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review", "receipt.json")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("missing receipt validation created a receipt: %v", statErr)
 	}
 }
 
@@ -454,6 +454,17 @@ func requiredBehaviorReviewCandidate(t *testing.T) string {
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "behavior-review")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intentPath := filepath.Join(t.TempDir(), "intent.md")
+	if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+		t.Fatal(err)
+	}
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	gitBehaviorReview(t, root, "add", "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "candidate")
@@ -469,16 +480,12 @@ func installBehaviorReviewTestGuidance(t *testing.T, root string) {
 
 func prepareValidBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, root string) {
 	t.Helper()
-	intentPath := filepath.Join(t.TempDir(), "intent.md")
-	if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main", intentPath)
+	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main")
 	if err != nil {
 		t.Fatal(err)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 1, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 2, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "preserved", ProofIDs: []string{},
 		}}, Findings: []string{},
@@ -498,15 +505,18 @@ func prepareValidBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, root 
 
 func prepareRequestedBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, root string, commandRunner *behaviorReviewReplayRunner, forge func(*testing.T, string, string)) {
 	t.Helper()
-	evidence := "content/behavior.test.txt"
-	writeEngineFile(t, root, evidence, "behavior evidence\n", 0o600)
-	gitBehaviorReview(t, root, "add", evidence)
-	gitBehaviorReview(t, root, "commit", "-m", "add behavior evidence")
 	intentPath := filepath.Join(t.TempDir(), "intent.md")
 	if err := os.WriteFile(intentPath, []byte("Change the content behavior.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main", intentPath)
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+		t.Fatal(err)
+	}
+	evidence := "content/behavior.test.txt"
+	writeEngineFile(t, root, evidence, "behavior evidence\n", 0o600)
+	gitBehaviorReview(t, root, "add", evidence)
+	gitBehaviorReview(t, root, "commit", "-m", "add behavior evidence")
+	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +528,7 @@ func prepareRequestedBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, r
 		forge(t, root, proof.ID)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 1, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 2, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "requested", ProofIDs: []string{proof.ID},
 		}}, Findings: []string{},
@@ -664,6 +674,22 @@ func assertCheckpointBehaviorReviewFinding(t *testing.T, report Report, message 
 
 func enginePolicyRoot(t *testing.T) string {
 	t.Helper()
+	workingDirectory, err := os.Getwd()
+	if err == nil {
+		current := workingDirectory
+		for {
+			version, versionErr := os.Stat(filepath.Join(current, "VERSION"))
+			schema, schemaErr := os.Stat(filepath.Join(current, "schema", "code-polishy.schema.json"))
+			if versionErr == nil && schemaErr == nil && version.Mode().IsRegular() && schema.Mode().IsRegular() {
+				return current
+			}
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
+			current = parent
+		}
+	}
 	goExecutable, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatalf("resolve governed Go executable: %v", err)

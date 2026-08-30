@@ -571,6 +571,9 @@ func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T)
 				installBehaviorReviewTestGuidance(t, root)
 			}
 			initializeEngineGitRepository(t, root)
+			if testCase.level != testpolicy.MergeLevelDocumentation {
+				captureEngineBehaviorIntent(t, root)
+			}
 			path := testCase.change(t, root)
 			policyRoot := root
 			if testCase.level != testpolicy.MergeLevelDocumentation {
@@ -896,6 +899,7 @@ func TestMergeGateRunsRecommendedPipelineForConfiguredContentChange(t *testing.T
 	root := contentRepository(t, nil)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
+	captureEngineBehaviorIntent(t, root)
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	commitEngineCandidate(t, root, "candidate")
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -1134,6 +1138,7 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 	root := contentRepository(t, nil)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
+	captureEngineBehaviorIntent(t, root)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	contents, err := os.ReadFile(configPath)
 	if err != nil {
@@ -1169,6 +1174,7 @@ func TestMergeGateDoesNotStartLaterSuitesAfterSuiteFailure(t *testing.T) {
 	root := contentRepository(t, nil)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
+	captureEngineBehaviorIntent(t, root)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	contents, err := os.ReadFile(configPath)
 	if err != nil {
@@ -1375,6 +1381,21 @@ func commitEngineCandidate(t *testing.T, root, message string) {
 	gitBehaviorReview(t, root, "switch", "-c", "candidate")
 	gitBehaviorReview(t, root, "add", "--all")
 	gitBehaviorReview(t, root, "commit", "-m", message)
+}
+
+func captureEngineBehaviorIntent(t *testing.T, root string) {
+	t.Helper()
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intentPath := filepath.Join(t.TempDir(), "intent.md")
+	if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeEngineFile(t *testing.T, root, path, contents string, mode os.FileMode) {

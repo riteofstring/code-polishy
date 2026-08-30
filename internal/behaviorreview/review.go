@@ -14,7 +14,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const artifactVersion = 1
+const artifactVersion = 2
 
 const prepareMarkerFilename = "prepare.json"
 
@@ -29,7 +29,7 @@ type reviewPacket struct {
 	ReviewID        string                 `json:"review_id"`
 	Base            string                 `json:"base"`
 	Candidate       string                 `json:"candidate"`
-	Intent          string                 `json:"intent"`
+	Intents         []intentCapture        `json:"intents"`
 	IntentSHA256    string                 `json:"intent_sha256"`
 	Patch           string                 `json:"patch"`
 	PatchSHA256     string                 `json:"patch_sha256"`
@@ -67,7 +67,8 @@ type ReviewResult struct {
 type prepareInputs struct {
 	base         string
 	candidate    string
-	intent       []byte
+	intents      []intentCapture
+	intentSHA256 string
 	instructions []byte
 	patch        []byte
 	documents    []packetDesignDocument
@@ -100,15 +101,15 @@ type receiptState struct {
 }
 
 func prepare(ctx context.Context, repo repository.Repository, options PrepareOptions) (PrepareResult, error) {
-	inputs, err := collectPrepareInputs(reviewContext(ctx), repo, options)
-	if err != nil {
-		return PrepareResult{}, err
-	}
 	root, err := behaviorReviewRoot(repo)
 	if err != nil {
 		return PrepareResult{}, err
 	}
 	defer root.Close()
+	inputs, err := collectPrepareInputs(reviewContext(ctx), repo, root, options)
+	if err != nil {
+		return PrepareResult{}, err
+	}
 	packet, err := packetFromInputs(inputs)
 	if err != nil {
 		return PrepareResult{}, err
@@ -137,7 +138,7 @@ func writePrepareMarker(root *artifactHandle, packet reviewPacket, packetData []
 	return root.writeArtifactAtomic(prepareMarkerFilename, data)
 }
 
-func collectPrepareInputs(ctx context.Context, repo repository.Repository, options PrepareOptions) (prepareInputs, error) {
+func collectPrepareInputs(ctx context.Context, repo repository.Repository, root *artifactHandle, options PrepareOptions) (prepareInputs, error) {
 	if err := validatePrepareRequest(ctx, options); err != nil {
 		return prepareInputs{}, err
 	}
@@ -145,7 +146,15 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, optio
 	if err != nil {
 		return prepareInputs{}, err
 	}
-	intent, instructions, err := prepareTextInputs(repo, options.IntentPath)
+	journal, err := readIntentJournal(repo, root, false)
+	if err != nil {
+		return prepareInputs{}, err
+	}
+	intents, intentSHA256, err := selectIntentCaptures(repo, journal, base, candidate)
+	if err != nil {
+		return prepareInputs{}, err
+	}
+	instructions, err := readCanonicalInstructions(repo)
 	if err != nil {
 		return prepareInputs{}, err
 	}
@@ -157,15 +166,18 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, optio
 	if err != nil {
 		return prepareInputs{}, operational("generate behavior review identifier", err)
 	}
-	return prepareInputs{base: base, candidate: candidate, intent: intent, instructions: instructions, patch: patch, documents: documents, reviewID: reviewID}, nil
+	return prepareInputs{
+		base: base, candidate: candidate, intents: intents, intentSHA256: intentSHA256,
+		instructions: instructions, patch: patch, documents: documents, reviewID: reviewID,
+	}, nil
 }
 
 func validatePrepareRequest(ctx context.Context, options PrepareOptions) error {
 	if err := ctx.Err(); err != nil {
 		return operational("prepare behavior review", err)
 	}
-	if strings.TrimSpace(options.IntentPath) == "" {
-		return fmt.Errorf("%w: intent path is required", ErrInvalidInput)
+	if strings.TrimSpace(options.Base) == "" {
+		return fmt.Errorf("%w: base is required", ErrInvalidInput)
 	}
 	return nil
 }
@@ -180,18 +192,6 @@ func cleanCandidateAtMergeBase(repo repository.Repository, reference string) (st
 		return "", "", err
 	}
 	return base, candidate, nil
-}
-
-func prepareTextInputs(repo repository.Repository, intentPath string) ([]byte, []byte, error) {
-	intent, err := readExternalRegularUTF8(intentPath, maximumIntentBytes, true, "intent file")
-	if err != nil {
-		return nil, nil, err
-	}
-	instructions, err := readCanonicalInstructions(repo)
-	if err != nil {
-		return nil, nil, err
-	}
-	return intent, instructions, nil
 }
 
 func prepareCandidateMaterial(repo repository.Repository, base, candidate string) ([]byte, []packetDesignDocument, error) {
@@ -216,7 +216,8 @@ func packetFromInputs(inputs prepareInputs) (reviewPacket, error) {
 	}
 	return reviewPacket{
 		Version: artifactVersion, ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate,
-		Intent: string(inputs.intent), IntentSHA256: sha256Hex(inputs.intent), Patch: string(inputs.patch), PatchSHA256: sha256Hex(inputs.patch),
+		Intents: append([]intentCapture{}, inputs.intents...), IntentSHA256: inputs.intentSHA256,
+		Patch: string(inputs.patch), PatchSHA256: sha256Hex(inputs.patch),
 		DesignDocuments: inputs.documents, Instructions: string(inputs.instructions), ResultPath: artifactDisplayPath(defaultResultFilename), ProofDirectory: artifactDisplayPath(proofDirectory),
 	}, nil
 }
@@ -303,7 +304,7 @@ func preparedPacketFor(repo repository.Repository, root *artifactHandle, base, c
 	if err != nil {
 		return preparedPacketState{}, err
 	}
-	if err := validatePacketMaterial(repo, packet); err != nil {
+	if err := validatePacketMaterial(repo, root, packet); err != nil {
 		return preparedPacketState{}, err
 	}
 	return preparedPacketState{packet: packet, packetData: data, markerData: markerData}, nil
@@ -338,7 +339,7 @@ func markerMatchesPacket(marker prepareMarker, packet reviewPacket, packetData [
 	)
 }
 
-func validatePacketMaterial(repo repository.Repository, packet reviewPacket) error {
+func validatePacketMaterial(repo repository.Repository, root *artifactHandle, packet reviewPacket) error {
 	patch, documents, err := prepareCandidateMaterial(repo, packet.Base, packet.Candidate)
 	if err != nil {
 		return err
@@ -347,7 +348,16 @@ func validatePacketMaterial(repo repository.Repository, packet reviewPacket) err
 	if err != nil {
 		return err
 	}
-	if packet.Patch != string(patch) || packet.Instructions != string(instructions) || !samePacketDocuments(packet.DesignDocuments, documents) {
+	journal, err := readIntentJournal(repo, root, false)
+	if err != nil {
+		return fmt.Errorf("%w: prepared intent journal is unavailable", ErrStaleReview)
+	}
+	intents, intentSHA256, err := selectIntentCaptures(repo, journal, packet.Base, packet.Candidate)
+	if err != nil {
+		return fmt.Errorf("%w: prepared intent journal differs from the bound candidate", ErrStaleReview)
+	}
+	if packet.Patch != string(patch) || packet.Instructions != string(instructions) ||
+		!samePacketDocuments(packet.DesignDocuments, documents) || !sameIntentCaptures(packet.Intents, intents) || packet.IntentSHA256 != intentSHA256 {
 		return fmt.Errorf("%w: prepared packet material differs from the bound candidate", ErrStaleReview)
 	}
 	return nil
@@ -554,7 +564,7 @@ func validatePacket(packet reviewPacket) error {
 	if !validPacketIdentifiers(packet) {
 		return fmt.Errorf("%w: packet identifiers are malformed", ErrInvalidReview)
 	}
-	if err := validatePacketIntent(packet); err != nil {
+	if err := validatePacketIntents(packet); err != nil {
 		return err
 	}
 	if err := validatePacketPatch(packet); err != nil {
@@ -570,14 +580,37 @@ func validPacketIdentifiers(packet reviewPacket) bool {
 	return allValid(validIdentifier(packet.ReviewID), validRevision(packet.Base), validRevision(packet.Candidate))
 }
 
-func validatePacketIntent(packet reviewPacket) error {
-	if strings.TrimSpace(packet.Intent) == "" || !utf8.ValidString(packet.Intent) {
-		return fmt.Errorf("%w: packet intent is invalid", ErrInvalidReview)
+func validatePacketIntents(packet reviewPacket) error {
+	if !validPacketIntentBoundary(packet) {
+		return fmt.Errorf("%w: packet intents are invalid", ErrInvalidReview)
 	}
-	if !validSHA256(packet.IntentSHA256) || sha256Hex([]byte(packet.Intent)) != packet.IntentSHA256 {
+	seen := map[string]bool{}
+	expectedPrevious := packet.Intents[0].PreviousSHA256
+	if expectedPrevious != "" && !validSHA256(expectedPrevious) {
+		return fmt.Errorf("%w: packet intent chain is invalid", ErrInvalidReview)
+	}
+	for index, entry := range packet.Intents {
+		if err := validateIntentCapture(entry, expectedPrevious, seen); err != nil {
+			return fmt.Errorf("%w: packet intent %d is invalid", ErrInvalidReview, index+1)
+		}
+		seen[entry.ID] = true
+		expectedPrevious = entry.EntrySHA256
+	}
+	digest, err := intentSelectionDigest(packet.Intents)
+	if err != nil || !validSHA256(packet.IntentSHA256) || digest != packet.IntentSHA256 {
 		return fmt.Errorf("%w: packet intent digest is invalid", ErrInvalidReview)
 	}
 	return nil
+}
+
+func validPacketIntentBoundary(packet reviewPacket) bool {
+	if len(packet.Intents) == 0 {
+		return false
+	}
+	return allValid(
+		packet.Intents[0].CapturedAtCommit == packet.Base,
+		packet.Intents[len(packet.Intents)-1].CapturedAtCommit != packet.Candidate,
+	)
 }
 
 func validatePacketPatch(packet reviewPacket) error {

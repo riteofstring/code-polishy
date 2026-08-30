@@ -11,10 +11,14 @@ import (
 	"testing"
 )
 
-func TestParseBehaviorReviewOptionsAcceptsStrictPrepareAndFinalizeRequests(t *testing.T) {
+func TestParseBehaviorReviewOptionsAcceptsStrictCapturePrepareAndFinalizeRequests(t *testing.T) {
 	t.Parallel()
-	prepare, err := parseBehaviorReviewOptions([]string{"prepare", "--intent-file=intent.md", "--base", "origin/main"})
-	if err != nil || prepare.action != "prepare" || prepare.base != "origin/main" || prepare.intentFile != "intent.md" {
+	capture, err := parseBehaviorReviewOptions([]string{"capture-intent", "--intent-file=intent.md"})
+	if err != nil || capture.action != "capture-intent" || capture.intentFile != "intent.md" || capture.base != "" {
+		t.Fatalf("capture=%+v err=%v", capture, err)
+	}
+	prepare, err := parseBehaviorReviewOptions([]string{"prepare", "--base", "origin/main"})
+	if err != nil || prepare.action != "prepare" || prepare.base != "origin/main" || prepare.intentFile != "" {
 		t.Fatalf("prepare=%+v err=%v", prepare, err)
 	}
 	finalize, err := parseBehaviorReviewOptions([]string{"finalize", "--base=origin/main"})
@@ -28,10 +32,13 @@ func TestParseBehaviorReviewOptionsRejectsIncompleteDuplicateAndUnknownRequests(
 	for _, arguments := range [][]string{
 		nil,
 		{"unknown"},
-		{"prepare", "--base", "origin/main"},
+		{"capture-intent"},
+		{"capture-intent", "--intent-file", "intent.md", "--intent-file", "other.md"},
+		{"capture-intent", "--base", "origin/main"},
+		{"prepare"},
 		{"prepare", "--intent-file", "intent.md"},
-		{"prepare", "--base", "origin/main", "--base", "HEAD", "--intent-file", "intent.md"},
-		{"prepare", "--base", "origin/main", "--intent-file", "intent.md", "extra"},
+		{"prepare", "--base", "origin/main", "--base", "HEAD"},
+		{"prepare", "--base", "origin/main", "extra"},
 		{"finalize"},
 		{"finalize", "--base", "origin/main", "--intent-file", "intent.md"},
 		{"finalize", "--base="},
@@ -80,6 +87,7 @@ func TestParseRegressionProofOptionsDefaultsRedExitAndRejectsInvalidRequests(t *
 func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *testing.T) {
 	t.Parallel()
 	for name, message := range map[string]string{
+		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123"),
 		"prepare":  behaviorReviewPreparedMessage(".code-polishy-reports/behavior-review/packet.json", "review-123"),
 		"finalize": behaviorReviewFinalizedMessage(".code-polishy-reports/behavior-review/receipt.json", "review-123"),
 		"proof":    regressionProofMessage(".code-polishy-reports/behavior-review/proofs/login.json", "login"),
@@ -93,18 +101,20 @@ func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *tes
 func TestBehaviorReviewCLIHelpAndFailuresUsePublicExitContract(t *testing.T) {
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
 	status, stdout, stderr := runBehaviorReviewCLI(t, []string{"--policy-root", policyRoot, "help"})
-	if status != 0 || stderr != "" || !strings.Contains(stdout, "behavior-review prepare --base REF --intent-file PATH") ||
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "behavior-review capture-intent --intent-file PATH") ||
+		!strings.Contains(stdout, "behavior-review prepare --base REF") ||
 		!strings.Contains(stdout, "regression-proof --base REF --suite NAME --evidence PATH... --id ID") {
 		t.Fatalf("help status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 
-	repositoryRoot, intent := newBehaviorReviewCLIRepository(t)
+	repositoryRoot, _ := newBehaviorReviewCLIBaseRepository(t)
+	commitBehaviorReviewCLICandidate(t, repositoryRoot)
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"behavior-review", "prepare", "--base", "main",
 	})
-	if status != 2 || stdout != "" || !strings.Contains(stderr, "--intent-file") {
-		t.Fatalf("missing prepare option status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	if status != 2 || stdout != "" || !strings.Contains(stderr, "capture the original request") {
+		t.Fatalf("missing intent capture status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
@@ -113,9 +123,18 @@ func TestBehaviorReviewCLIHelpAndFailuresUsePublicExitContract(t *testing.T) {
 	if status != 2 || stdout != "" || !strings.Contains(stderr, "only once") {
 		t.Fatalf("duplicate proof option status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
+	repositoryRoot, intent := newBehaviorReviewCLIBaseRepository(t)
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
-		"behavior-review", "prepare", "--base", "missing-base", "--intent-file", intent,
+		"behavior-review", "capture-intent", "--intent-file", intent,
+	})
+	if status != 0 || stderr != "" {
+		t.Fatalf("capture status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	commitBehaviorReviewCLICandidate(t, repositoryRoot)
+	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
+		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
+		"behavior-review", "prepare", "--base", "missing-base",
 	})
 	if status != 2 || stdout != "" || !strings.Contains(stderr, "operational error:") {
 		t.Fatalf("prepare operational failure status=%d stdout=%q stderr=%q", status, stdout, stderr)
@@ -126,11 +145,13 @@ func TestBehaviorReviewCLIHelpAndFailuresUsePublicExitContract(t *testing.T) {
 }
 
 func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *testing.T) {
-	repositoryRoot, intent := newBehaviorReviewCLIRepository(t)
+	repositoryRoot, intent := newBehaviorReviewCLIBaseRepository(t)
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
 	common := []string{"--repo-root", repositoryRoot, "--policy-root", policyRoot}
 
-	status, stdout, stderr := runBehaviorReviewCLI(t, append(append([]string{}, common...), "behavior-review", "prepare", "--base", "main", "--intent-file", intent))
+	captureBehaviorReviewCLIIntentAndCommit(t, common, repositoryRoot, intent)
+
+	status, stdout, stderr := runBehaviorReviewCLI(t, append(append([]string{}, common...), "behavior-review", "prepare", "--base", "main"))
 	if status != 0 || stderr != "" || !strings.Contains(stdout, "Behavior review prepared: .code-polishy-reports/behavior-review/packet.json") {
 		t.Fatalf("prepare status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
@@ -146,7 +167,7 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 		t.Fatalf("proof statuses = baseline %d candidate %d", proof.Baseline.ExitStatus, proof.CandidateExecution.ExitStatus)
 	}
 	result := map[string]any{
-		"version":       1,
+		"version":       2,
 		"review_id":     packet.ReviewID,
 		"base":          packet.Base,
 		"candidate":     packet.Candidate,
@@ -171,12 +192,27 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 	}
 
 	assertBehaviorReviewCLICheckpoint(t, common)
-	for _, path := range []string{
+	assertBehaviorReviewCLIArtifacts(t, repositoryRoot, []string{
+		".code-polishy-reports/behavior-review/intent-journal.json",
 		".code-polishy-reports/behavior-review/packet.json",
 		".code-polishy-reports/behavior-review/proofs/value-change.json",
 		".code-polishy-reports/behavior-review/receipt.json",
 		".code-polishy-reports/checkpoint-gate/receipt.json",
-	} {
+	})
+}
+
+func captureBehaviorReviewCLIIntentAndCommit(t *testing.T, common []string, repositoryRoot, intent string) {
+	t.Helper()
+	status, stdout, stderr := runBehaviorReviewCLI(t, append(append([]string{}, common...), "behavior-review", "capture-intent", "--intent-file", intent))
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "Behavior review intent captured: .code-polishy-reports/behavior-review/intent-journal.json") {
+		t.Fatalf("capture status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	commitBehaviorReviewCLICandidate(t, repositoryRoot)
+}
+
+func assertBehaviorReviewCLIArtifacts(t *testing.T, repositoryRoot string, paths []string) {
+	t.Helper()
+	for _, path := range paths {
 		if info, statErr := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(path))); statErr != nil || !info.Mode().IsRegular() {
 			t.Fatalf("artifact %s: info=%v err=%v", path, info, statErr)
 		}
@@ -279,6 +315,13 @@ func runBehaviorReviewCLI(t *testing.T, arguments []string) (int, string, string
 
 func newBehaviorReviewCLIRepository(t *testing.T) (string, string) {
 	t.Helper()
+	root, intent := newBehaviorReviewCLIBaseRepository(t)
+	commitBehaviorReviewCLICandidate(t, root)
+	return root, intent
+}
+
+func newBehaviorReviewCLIBaseRepository(t *testing.T) (string, string) {
+	t.Helper()
 	root := t.TempDir()
 	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", `{
   "version": 3,
@@ -309,16 +352,26 @@ func newBehaviorReviewCLIRepository(t *testing.T) (string, string) {
 	gitBehaviorReviewCLI(t, root, "add", ".")
 	gitBehaviorReviewCLI(t, root, "commit", "-m", "base")
 	gitBehaviorReviewCLI(t, root, "switch", "-c", "feature")
-	writeBehaviorReviewCLIFile(t, root, "value.go", "package behaviorreviewcli\n\nfunc Value() string { return \"new\" }\n")
-	writeBehaviorReviewCLIFile(t, root, "evidence_test.go", "package behaviorreviewcli\n\nimport \"testing\"\n\nfunc TestValue(t *testing.T) {\n\tif Value() != \"new\" {\n\t\tt.Fatalf(\"Value() = %q\", Value())\n\t}\n}\n")
-	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go")
-	gitBehaviorReviewCLI(t, root, "commit", "-m", "candidate")
 	intent := writeBehaviorReviewCLIFile(t, t.TempDir(), "intent.md", "Change Value to return new.\n")
 	return root, intent
 }
 
+func commitBehaviorReviewCLICandidate(t *testing.T, root string) {
+	t.Helper()
+	writeBehaviorReviewCLIFile(t, root, "value.go", "package behaviorreviewcli\n\nfunc Value() string { return \"new\" }\n")
+	writeBehaviorReviewCLIFile(t, root, "evidence_test.go", "package behaviorreviewcli\n\nimport \"testing\"\n\nfunc TestValue(t *testing.T) {\n\tif Value() != \"new\" {\n\t\tt.Fatalf(\"Value() = %q\", Value())\n\t}\n}\n")
+	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go")
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "candidate")
+}
+
 func behaviorReviewCLIPolicyRoot(t *testing.T) string {
 	t.Helper()
+	workingDirectory, err := os.Getwd()
+	if err == nil {
+		if root, found := findPolicyRoot(workingDirectory); found {
+			return root
+		}
+	}
 	goExecutable, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatalf("resolve governed Go executable: %v", err)

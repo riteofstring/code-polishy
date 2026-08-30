@@ -19,8 +19,7 @@ import (
 
 func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
-	intent := writeBehaviorFile(t, t.TempDir(), "request.txt", "Change the value to new.\n")
-	prepared, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", IntentPath: intent})
+	prepared, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +30,8 @@ func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if packet.ReviewID != prepared.ReviewID || packet.Intent != "Change the value to new.\n" || packet.ResultPath != artifactDisplayPath(defaultResultFilename) ||
+	if packet.ReviewID != prepared.ReviewID || len(packet.Intents) != 1 || packet.Intents[0].Intent != "Set the application value to new.\n" ||
+		packet.Intents[0].CapturedAtCommit != base || packet.ResultPath != artifactDisplayPath(defaultResultFilename) ||
 		packet.ProofDirectory != artifactDisplayPath(proofDirectory) || packet.PatchSHA256 == "" || !strings.Contains(packet.Patch, "diff --git") || len(data) == 0 {
 		t.Fatalf("packet = %+v", packet)
 	}
@@ -40,7 +40,7 @@ func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	}
 }
 
-func TestPrepareRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
+func TestCaptureIntentRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	cases := []struct {
 		name    string
@@ -66,7 +66,7 @@ func TestPrepareRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			path := test.prepare(t)
-			_, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", IntentPath: path})
+			_, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: path})
 			if !errors.Is(err, test.want) {
 				t.Fatalf("Prepare() error = %v, want %v", err, test.want)
 			}
@@ -75,9 +75,153 @@ func TestPrepareRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
 	}
 	intent := writeBehaviorFile(t, t.TempDir(), "request.txt", "request\n")
 	writeBehaviorFile(t, repo.Root, "dirty.txt", "dirty\n")
-	_, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", IntentPath: intent})
+	_, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent})
 	if !errors.Is(err, repository.ErrDirtyCandidate) {
 		t.Fatalf("dirty Prepare() error = %v, want dirty candidate", err)
+	}
+}
+
+func TestPrepareSelectsOneTaskOrTheWholeIntentChain(t *testing.T) {
+	repo, base, firstCandidate := newBehaviorRepository(t)
+	second := captureReviewIntent(t, repo, "Also write the selected value to a second file.\n")
+	if second.Commit != firstCandidate {
+		t.Fatalf("second capture commit = %s, want %s", second.Commit, firstCandidate)
+	}
+	writeBehaviorFile(t, repo.Root, "second.txt", "new\n")
+	gitBehavior(t, repo.Root, "add", "second.txt")
+	gitBehavior(t, repo.Root, "commit", "-m", "second task")
+	secondCandidate := strings.TrimSpace(gitBehavior(t, repo.Root, "rev-parse", "HEAD"))
+
+	task, err := Prepare(context.Background(), repo, PrepareOptions{Base: firstCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskPacket, _, err := readPacket(behaviorArtifact(t, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Base != firstCandidate || task.Candidate != secondCandidate || len(taskPacket.Intents) != 1 ||
+		taskPacket.Intents[0].ID != second.ID || taskPacket.Intents[0].Intent != "Also write the selected value to a second file.\n" {
+		t.Fatalf("task packet = %+v", taskPacket)
+	}
+
+	merge, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergePacket, _, err := readPacket(behaviorArtifact(t, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merge.Base != base || merge.Candidate != secondCandidate || len(mergePacket.Intents) != 2 ||
+		mergePacket.Intents[1].ID != second.ID || mergePacket.IntentSHA256 == taskPacket.IntentSHA256 {
+		t.Fatalf("merge packet = %+v", mergePacket)
+	}
+}
+
+func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
+	repo, _, candidate := newBehaviorRepository(t)
+	root := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+		!strings.Contains(err.Error(), "capture the original request") {
+		t.Fatalf("missing intent Prepare() error = %v", err)
+	}
+	late := captureReviewIntent(t, repo, "Retell the request after implementation.\n")
+	if late.Commit != candidate {
+		t.Fatalf("late capture commit = %s, want %s", late.Commit, candidate)
+	}
+	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+		!strings.Contains(err.Error(), "review base before implementation") {
+		t.Fatalf("late intent Prepare() error = %v", err)
+	}
+
+	repo, _, candidate = newBehaviorRepository(t)
+	late = captureReviewIntent(t, repo, "Add an inaccurate summary after implementation.\n")
+	if late.Commit != candidate {
+		t.Fatalf("second late capture commit = %s, want %s", late.Commit, candidate)
+	}
+	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+		!strings.Contains(err.Error(), "intent must be captured before implementation") {
+		t.Fatalf("after-the-fact intent Prepare() error = %v", err)
+	}
+}
+
+func TestCaptureIntentRejectsStagedUnstagedAndUntrackedChanges(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*testing.T, repository.Repository)
+	}{
+		{name: "staged", change: func(t *testing.T, repo repository.Repository) {
+			writeBehaviorFile(t, repo.Root, "app.txt", "staged\n")
+			gitBehavior(t, repo.Root, "add", "app.txt")
+		}},
+		{name: "unstaged", change: func(t *testing.T, repo repository.Repository) {
+			writeBehaviorFile(t, repo.Root, "app.txt", "unstaged\n")
+		}},
+		{name: "untracked", change: func(t *testing.T, repo repository.Repository) {
+			writeBehaviorFile(t, repo.Root, "untracked.txt", "untracked\n")
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo, _, _ := newBehaviorRepository(t)
+			test.change(t, repo)
+			intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Next request.\n")
+			if _, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent}); !errors.Is(err, repository.ErrDirtyCandidate) {
+				t.Fatalf("CaptureIntent() error = %v, want dirty candidate", err)
+			}
+		})
+	}
+}
+
+func TestPrepareRejectsEditedRemovedAndReorderedIntentEntries(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*intentJournal)
+	}{
+		{name: "edited", mutate: func(journal *intentJournal) { journal.Entries[0].Intent = "edited\n" }},
+		{name: "removed", mutate: func(journal *intentJournal) { journal.Entries = journal.Entries[1:] }},
+		{name: "reordered", mutate: func(journal *intentJournal) {
+			journal.Entries[0], journal.Entries[1] = journal.Entries[1], journal.Entries[0]
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo, _, _ := newBehaviorRepository(t)
+			captureReviewIntent(t, repo, "Second request.\n")
+			writeBehaviorFile(t, repo.Root, "second.txt", "second\n")
+			gitBehavior(t, repo.Root, "add", "second.txt")
+			gitBehavior(t, repo.Root, "commit", "-m", "second task")
+			root := behaviorArtifact(t, repo)
+			journal, err := readIntentJournal(repo, root, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(&journal)
+			data, err := marshalArtifact(journal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := root.writeArtifactAtomic(intentJournalFilename, data); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("Prepare() error = %v, want invalid input", err)
+			}
+		})
+	}
+}
+
+func TestCaptureRejectsAJournalFromADivergedBranch(t *testing.T) {
+	repo, _, candidate := newBehaviorRepository(t)
+	captureReviewIntent(t, repo, "Continue the feature.\n")
+	gitBehavior(t, repo.Root, "switch", "main")
+	gitBehavior(t, repo.Root, "switch", "-c", "other")
+	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Unrelated request.\n")
+	_, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent})
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "one history") {
+		t.Fatalf("CaptureIntent() error = %v, want diverged journal rejection from %s", err, candidate)
 	}
 }
 
@@ -113,7 +257,7 @@ func TestFinalizeRejectsStrictStaleAndBlockingResults(t *testing.T) {
 	}{
 		{
 			name: "unknown field", result: func(prepared PrepareResult, base, candidate string) string {
-				return `{"version":1,"review_id":"` + prepared.ReviewID + `","base":"` + base + `","candidate":"` + candidate + `","intent_sha256":"` + prepared.IntentSHA256 + `","behaviors":[],"findings":[],"extra":true}`
+				return `{"version":2,"review_id":"` + prepared.ReviewID + `","base":"` + base + `","candidate":"` + candidate + `","intent_sha256":"` + prepared.IntentSHA256 + `","behaviors":[],"findings":[],"extra":true}`
 			}, want: ErrInvalidReview,
 		},
 		{
@@ -178,6 +322,9 @@ func TestValidateGateReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 func TestValidateGateReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	path := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
+	if err := os.RemoveAll(path); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact root before validation = %v, want missing", err)
 	}
@@ -215,7 +362,7 @@ func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet.Intent = "Different requested change.\n"
+	packet.Intents[0].Intent = "Different requested change.\n"
 	refreshPacketDigests(&packet)
 	data, err := marshalArtifact(packet)
 	if err != nil {
@@ -235,7 +382,7 @@ func TestValidateGateReceiptBindsPrepareMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet.Intent = "Different requested change.\n"
+	packet.Intents[0].Intent = "Different requested change.\n"
 	refreshPacketDigests(&packet)
 	packetData, markerData := writePacketAndMarker(t, root, packet)
 	if sha256Hex(packetData) == receipt.PacketSHA256 || sha256Hex(markerData) == receipt.PrepareSHA256 || packet.IntentSHA256 == prepared.IntentSHA256 {
@@ -898,6 +1045,7 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 	writeBehaviorFile(t, root, "docs/design.md", "Application design.\n")
 	writeBehaviorFile(t, root, "app.txt", "old\n")
 	writeBehaviorFile(t, root, "README.md", "# Test\n")
+	writeBehaviorFile(t, root, ".gitignore", ".code-polishy-reports/\n")
 	gitBehavior(t, root, "init", "-b", "main")
 	gitBehavior(t, root, "config", "user.email", "test@example.com")
 	gitBehavior(t, root, "config", "user.name", "Test")
@@ -905,20 +1053,15 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 	gitBehavior(t, root, "commit", "-m", "base")
 	gitBehavior(t, root, "commit", "--allow-empty", "-m", "review base")
 	base := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
+	repo := repository.Repository{Root: root, PolicyRoot: root, Config: behaviorTestConfig()}
 	gitBehavior(t, root, "switch", "-c", "feature")
+	captureReviewIntent(t, repo, "Set the application value to new.\n")
 	writeBehaviorFile(t, root, "app.txt", "new\n")
 	writeBehaviorFile(t, root, "evidence_test.go", "expect-new\n")
 	gitBehavior(t, root, "add", ".")
 	gitBehavior(t, root, "commit", "-m", "candidate")
 	candidate := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
-	config := policy.Config{
-		Modules:       []policy.Module{{Name: "app", Paths: []string{"**"}}},
-		Documentation: policy.Documentation{Design: []policy.DesignDocument{{Path: "docs/design.md", Module: "app"}}},
-		Tests: policy.Testing{Suites: []policy.TestSuite{{
-			Name: "unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30,
-		}}},
-	}
-	return repository.Repository{Root: root, PolicyRoot: root, Config: config}, base, candidate
+	return repo, base, candidate
 }
 
 func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, candidate string) gaterun.ExecutionEvidence {
@@ -958,6 +1101,7 @@ func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string,
 	writeBehaviorFile(t, root, "docs/design.md", "Application design.\n")
 	writeBehaviorFile(t, root, "app.txt", "old\n")
 	writeBehaviorFile(t, root, "evidence_test.go", "expect-new\n")
+	writeBehaviorFile(t, root, ".gitignore", ".code-polishy-reports/\n")
 	gitBehavior(t, root, "init", "-b", "main")
 	gitBehavior(t, root, "config", "user.email", "test@example.com")
 	gitBehavior(t, root, "config", "user.name", "Test")
@@ -965,25 +1109,39 @@ func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string,
 	gitBehavior(t, root, "commit", "-m", "base")
 	gitBehavior(t, root, "commit", "--allow-empty", "-m", "review base")
 	base := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
+	repo := repository.Repository{Root: root, PolicyRoot: root, Config: behaviorTestConfig()}
 	gitBehavior(t, root, "switch", "-c", "feature")
+	captureReviewIntent(t, repo, "Set the application value to new.\n")
 	writeBehaviorFile(t, root, "app.txt", "new\n")
 	gitBehavior(t, root, "add", "app.txt")
 	gitBehavior(t, root, "commit", "-m", "candidate")
 	candidate := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
-	config := policy.Config{
+	return repo, base, candidate
+}
+
+func behaviorTestConfig() policy.Config {
+	return policy.Config{
 		Modules:       []policy.Module{{Name: "app", Paths: []string{"**"}}},
 		Documentation: policy.Documentation{Design: []policy.DesignDocument{{Path: "docs/design.md", Module: "app"}}},
 		Tests: policy.Testing{Suites: []policy.TestSuite{{
 			Name: "unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30,
 		}}},
 	}
-	return repository.Repository{Root: root, PolicyRoot: root, Config: config}, base, candidate
 }
 
 func prepareReview(t *testing.T, repo repository.Repository) PrepareResult {
 	t.Helper()
-	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Set the application value to new.\n")
-	result, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", IntentPath: intent})
+	result, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func captureReviewIntent(t *testing.T, repo repository.Repository, contents string) CaptureIntentResult {
+	t.Helper()
+	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", contents)
+	result, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1110,7 +1268,22 @@ func cleanupAttachedWorktree(t *testing.T, repo repository.Repository, worktree 
 }
 
 func refreshPacketDigests(packet *reviewPacket) {
-	packet.IntentSHA256 = sha256Hex([]byte(packet.Intent))
+	previous := packet.Intents[0].PreviousSHA256
+	for index := range packet.Intents {
+		packet.Intents[index].PreviousSHA256 = previous
+		packet.Intents[index].IntentSHA256 = sha256Hex([]byte(packet.Intents[index].Intent))
+		digest, err := intentEntryDigest(packet.Intents[index])
+		if err != nil {
+			panic(err)
+		}
+		packet.Intents[index].EntrySHA256 = digest
+		previous = digest
+	}
+	intentSHA256, err := intentSelectionDigest(packet.Intents)
+	if err != nil {
+		panic(err)
+	}
+	packet.IntentSHA256 = intentSHA256
 	packet.PatchSHA256 = sha256Hex([]byte(packet.Patch))
 	for index := range packet.DesignDocuments {
 		packet.DesignDocuments[index].SHA256 = sha256Hex([]byte(packet.DesignDocuments[index].Content))

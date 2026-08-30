@@ -30,8 +30,12 @@ type checkpointGateExecution struct {
 	reviewErr     error
 }
 
-func (engine *Engine) PrepareBehaviorReview(ctx context.Context, base, intentPath string) (behaviorreview.PrepareResult, error) {
-	return behaviorreview.Prepare(ctx, engine.Repository, behaviorreview.PrepareOptions{Base: base, IntentPath: intentPath})
+func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string) (behaviorreview.CaptureIntentResult, error) {
+	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{IntentPath: intentPath})
+}
+
+func (engine *Engine) PrepareBehaviorReview(ctx context.Context, base string) (behaviorreview.PrepareResult, error) {
+	return behaviorreview.Prepare(ctx, engine.Repository, behaviorreview.PrepareOptions{Base: base})
 }
 
 func (engine *Engine) FinalizeBehaviorReview(ctx context.Context, base string) (behaviorreview.FinalizeResult, error) {
