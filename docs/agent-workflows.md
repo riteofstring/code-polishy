@@ -18,6 +18,18 @@ selected modules. Read only the returned current design documents. The command
 does not select plans, historical evidence, or superseded decisions; open those
 only when the task specifically requires them.
 
+Before implementing a non-documentation request, have the harness save the
+user's original request and supplied acceptance criteria to a bounded UTF-8
+file, then run this command from the clean task-base commit:
+
+```sh
+code-polishy behavior-review capture-intent --intent-file PATH
+```
+
+Code Polishy copies that text into its managed journal. If implementation has
+already started without a capture at the task base, stop and report the missing
+boundary instead of writing a new summary of the request.
+
 For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
 documentation findings, and skip application tests without asking the user for
 authorization. Run exact tests while editing source and
@@ -91,20 +103,22 @@ every non-documentation checkpoint or merge candidate. It turns a clean-context
 subagent review into gate-checkable evidence without making the subagent a
 policy engine:
 
-1. Commit the candidate and keep it clean, apart from the excluded review
+1. Before implementation, run `code-polishy behavior-review capture-intent`
+   from the clean task base with the exact user request supplied by the harness.
+2. Commit the candidate and keep it clean, apart from the excluded review
    reports.
-2. Run `code-polishy behavior-review prepare`. Start a review subagent with no
-   inherited conversation and give it only the generated packet. If the harness
-   cannot start subagents, use a separate clean AI invocation with only that
-   packet.
-3. For every behavior the review subagent classifies as `requested`, the primary
+3. Run `code-polishy behavior-review prepare --base REVIEW_BASE`. Start a
+   review subagent with no inherited conversation and give it only the generated
+   packet. If the harness cannot start subagents, use a separate clean AI
+   invocation with only that packet.
+4. For every behavior the review subagent classifies as `requested`, the primary
    agent runs one or more `code-polishy regression-proof` commands that fail on
    the declared pre-fix base and pass on the candidate. Run them after
    preparation and do not choose a pre-fix revision older than the packet's
    reviewed merge base.
-4. Save the review subagent's strict result at the packet's result path, then run
+5. Save the review subagent's strict result at the packet's result path, then run
    `code-polishy behavior-review finalize` to write the receipt.
-5. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
+6. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
    completed task on a long-lived branch, or
    `code-polishy merge-gate --base <merge-target>` for the final candidate.
    Either gate validates the receipt and independently reruns every cited
@@ -113,11 +127,12 @@ policy engine:
    documentation, recommended, or full workflow. The report and logs record
    the executed phases separately from the behavior-review receipt.
 
-Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
-the workflow. A multi-job CI run may transfer that directory only as an explicit
-trusted artifact. Documentation-only candidates bypass the receipt; ordinary
-agent reviews remain useful advisory evidence. Local digests do not authenticate
-subagent identity or context; see the policy's trust limits.
+Keep `.code-polishy-reports/behavior-review` in the same workspace from intent
+capture through the gate. A multi-job CI run may transfer the complete
+directory only as an explicit trusted artifact. Documentation-only candidates
+bypass the receipt; ordinary agent reviews remain useful advisory evidence.
+Local digests do not authenticate the source of the request, subagent identity,
+or subagent context; see the policy's trust limits.
 
 ## Isolated task sessions
 

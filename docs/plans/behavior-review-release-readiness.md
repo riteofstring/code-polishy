@@ -12,7 +12,7 @@ request and acceptance criteria. Code Polishy records that input before code
 changes, binds it to the repository state, and refuses stale or incomplete
 evidence later.
 
-## Current gaps
+## Starting gaps
 
 - The current `prepare` command accepts a prose intent file after coding. An
   agent can therefore write an inaccurate summary and review against it.

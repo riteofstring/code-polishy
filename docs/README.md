@@ -19,7 +19,7 @@ when you need the operating contract or policy details behind it.
 - [Isolated Task Sessions](task-sessions.md) specifies disposable-worktree
   boundaries, promotion, and artifacts.
 - [Artifact Security](artifact-security.md) documents shared container scanning,
-  producer contracts, OpenVEX, and retained evidence.
+  producer contracts, OpenVEX, and behavior-review evidence custody.
 
 ## Policy reference
 

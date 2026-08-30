@@ -15,9 +15,14 @@ pushes, or installs state.
    while preparing this commit; do not run the full gate against a dirty
    worktree as a separate release proof.
 2. Check out the exact candidate commit and verify it through the managed
-   lifecycle. Run the policy-selected merge gate once for the unchanged
-   candidate. Then run `code-polishy test --supplemental` as this repository's
-   separate release-hardening stage. Credentialed, destructive,
+   lifecycle. The agent harness must have captured each original user request
+   at its clean task base before implementation. Prepare and finalize one fresh
+   behavior review against the merge target, then run the policy-selected merge
+   gate once for the unchanged candidate. Follow the
+   [behavior-review workflow](policies/behavior-review.md) rather than creating
+   an intent summary during release preparation. Then run
+   `code-polishy test --supplemental` as this repository's separate
+   release-hardening stage. Credentialed, destructive,
    production-mutating, and live-provider probes remain typed external approval
    gates.
    Fast-forwarding a branch, running preflight, creating the annotated tag,
@@ -25,9 +30,9 @@ pushes, or installs state.
    not invalidate that result. Rerun the gate only after the candidate commit
    changes.
    The unchanged candidate must also pass the native CI lanes on Ubuntu, macOS,
-   and Windows. Windows runs the executable and process-containment tests in
-   PowerShell without WSL or Bash. Retain the CI run URL with the release
-   evidence.
+   and Windows. Windows runs the executable, process-containment, and complete
+   installed behavior-review workflow in PowerShell without WSL or Bash. Retain
+   the CI run URL with the release evidence.
 3. Run `./scripts/release-preflight.sh <candidate-commit-id>`, naming the
    candidate with Git's canonical lowercase full commit object ID, exactly as
    `git rev-parse HEAD` prints it; a symbolic, abbreviated, or uppercase
@@ -61,11 +66,14 @@ pushes, or installs state.
    identity while its manifest carries the correct host-specific entries. The
    unchanged candidate's native CI run is acceptable Windows evidence; retain
    its URL with the release evidence. No release asset publication step exists.
-7. Move each consuming repository's `.code-polishy.lock.json` to the installed
-   release with `<release>/bin/code-polishy lock`, as that repository's own
-   reviewed change. For this repository, then run
-   `./scripts/test-installed-release.sh`, which proves the locked release
-   against target shapes this repository is not one of.
+7. Prove an installed candidate before the public lock cutover by writing a
+   temporary lock with its release engine, then run
+   `./scripts/test-installed-release.sh --prefix PREFIX --lock LOCK`. This
+   exercises the complete behavior-review workflow and the other target shapes
+   this repository is not one of. After publication, move each consuming
+   repository's `.code-polishy.lock.json` to the installed release with
+   `<release>/bin/code-polishy lock`, as that repository's own reviewed change.
+   Rerun the script with its default lock for this repository.
 
 The source is licensed under Apache-2.0. Pushing the version tag, changing
 visibility, or changing branch and tag protection remains an explicit

@@ -19,33 +19,46 @@ bypass behavior review.
 
 ## Required workflow
 
-1. Choose one review base and use it unchanged throughout the workflow. For a
-   long-lived branch checkpoint, this is the previous accepted commit. For the
-   final merge gate, this is the actual merge target.
-2. Stabilize and commit the candidate. Its tracked, staged, unstaged, and
-   untracked candidate files must be clean. The excluded report directory is
-   the only workflow output that may remain untracked.
-3. Put the original request and acceptance criteria in a non-empty regular
-   UTF-8 intent file, then prepare the packet:
+1. Choose the task base before implementation. For a long-lived branch task,
+   this is the previous accepted commit. The repository must be clean and
+   committed at that exact starting point.
+2. Have the agent harness write the user's original request and any supplied
+   acceptance criteria to a non-empty regular UTF-8 file. Capture it before
+   changing code:
 
    ```sh
-   code-polishy behavior-review prepare \
-     --base REVIEW_BASE \
-     --intent-file .code-polishy-reports/behavior-review/intent.txt
+   code-polishy behavior-review capture-intent --intent-file PATH
    ```
 
-   The command resolves the base, freezes the exact candidate, and writes
-   `.code-polishy-reports/behavior-review/packet.json` plus `prepare.json`,
-   which binds that prepared packet to its review ID, base, and candidate.
+   The command copies the exact bytes into the managed intent journal and binds
+   that entry to the current commit. It rejects a dirty repository. Do not
+   recreate or paraphrase the request after implementation. If the user adds a
+   separate request later, reach a clean committed boundary and capture that
+   request before implementing it.
 
-4. Start a review subagent with no inherited conversation and give it only the
+3. Implement the request, then commit the candidate. Its tracked, staged,
+   unstaged, and untracked candidate files must be clean. The excluded report
+   directory is the only workflow output that may remain untracked.
+4. Prepare the packet against the task base:
+
+   ```sh
+   code-polishy behavior-review prepare --base REVIEW_BASE
+   ```
+
+   Preparation selects the captured requests from the reviewed history,
+   resolves the base, freezes the exact candidate, and writes
+   `.code-polishy-reports/behavior-review/packet.json` plus `prepare.json`.
+   Missing or after-the-fact intent capture fails instead of accepting a new
+   account of what the user asked for.
+
+5. Start a review subagent with no inherited conversation and give it only the
    generated packet. If the harness cannot start subagents, use a separate clean
    AI invocation with only that packet. The review subagent must not inspect the
    current workspace, parent conversation, prior reviews, plans, or external
-   context. The packet contains the original intent, resolved base and
+   context. The packet contains the ordered original requests, resolved base and
    candidate, binary-safe Git patch, current mapped design documents, a random
    review ID, and the canonical review instructions.
-5. The review subagent describes every material observable behavior as
+6. The review subagent describes every material observable behavior as
    `requested`, `preserved`, `unintended`, or `unknown`. For every `requested`
    behavior, the primary agent creates at least one proof ID:
 
@@ -70,7 +83,7 @@ bypass behavior review.
    environment. An untracked dependency or tool directory that exists only in
    the caller's checkout is unavailable inside a proof worktree.
 
-6. Save the review subagent's exact JSON result at the packet's `result_path`,
+7. Save the review subagent's exact JSON result at the packet's `result_path`,
    with no surrounding prose, and finalize it:
 
    ```sh
@@ -82,7 +95,7 @@ bypass behavior review.
    candidate, base, and cited proofs; then atomically writes
    `.code-polishy-reports/behavior-review/receipt.json`.
 
-7. Run the applicable gate with that same base:
+8. Run the applicable gate with that same base:
 
    ```sh
    code-polishy checkpoint-gate --base REVIEW_BASE
@@ -98,9 +111,10 @@ bypass behavior review.
 ## Long-lived branch checkpoints
 
 Do not wait for a merge into the main branch when an AI is making a sequence of
-changes on one long-lived branch. After each accepted task, use the previous
-known-good commit as the base and run the same preparation, review, proof,
-finalization, and checkpoint workflow:
+changes on one long-lived branch. Capture each new request at the previous
+accepted commit before implementing it. After implementation, use that commit
+as the base and run the same preparation, review, proof, finalization, and
+checkpoint workflow:
 
 ```sh
 code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
@@ -121,8 +135,10 @@ Use the accepted candidate commit as the next task's `PREVIOUS_CHECKPOINT`. The
 checkpoint receipt records that fact for audit; the next invocation still
 requires an explicit base. The final merge checkpoint must repeat preparation,
 review, proof, and finalization against the actual merge target before
-`merge-gate`; a receipt bound to a branch checkpoint cannot satisfy a gate
-against a different base.
+`merge-gate`. Preparation selects the ordered request entries beginning at that
+merge base, so a long-lived branch is reviewed against all captured tasks. A
+receipt bound to a branch checkpoint cannot satisfy a gate against a different
+base.
 
 ## What makes a result valid
 
@@ -158,30 +174,33 @@ proof.
 
 ## Artifact boundary and limits
 
-All preparation-marker, packet, result, proof, log, worktree, and receipt
-artifacts live below `.code-polishy-reports/behavior-review`. The directory is
-excluded from candidate selection, so report updates cannot change merge
-classification. Keep it in the same workspace for preparation, proof, review,
-finalization, and the applicable gate. A multi-job CI workflow may transfer it
-only as an explicit trusted artifact, preserving the exact candidate and base
-it names. The accepted checkpoint receipt lives separately below
+The intent journal, preparation marker, packet, result, proof, log, worktree,
+and receipt artifacts live below `.code-polishy-reports/behavior-review`. The
+directory is excluded from candidate selection, so report updates cannot change
+merge classification. Keep it in the same workspace from intent capture through
+the applicable gate. A multi-job CI workflow may transfer the complete
+directory only as an explicit trusted artifact, preserving the exact candidate
+and base it names. The accepted checkpoint receipt lives separately below
 `.code-polishy-reports/checkpoint-gate`; both report directories are excluded
 from candidate selection. `agents install` and `agents sync` maintain the exact
 root `.gitignore` rule that keeps the shared report root workspace-local.
 
-Intent and subagent-instruction inputs are limited to 64 KiB. A review result
-and each mapped design document are limited to 256 KiB; artifact reads are
-limited to 8 MiB. Intent is a non-empty regular UTF-8 file; artifact targets
+Each captured request and the subagent instructions are limited to 64 KiB. The
+strict journal allows at most 128 entries and 4 MiB. A review result and each
+mapped design document are limited to 256 KiB; artifact reads are limited to
+8 MiB. Request input must be a non-empty regular UTF-8 file; artifact targets
 and evidence paths remain contained. These limits keep the review packet
 bounded and prevent artifacts from becoming a second ungoverned source tree.
 
-Digests and re-derivation detect stale or individually edited artifacts; they
-are not signatures. Code Polishy can bind artifacts to exact Git revisions and
-independently replay executable proofs. It cannot authenticate which model or
-session wrote the review, prove that the review subagent started without
-inherited context, or stop a writer with artifact access from replacing a
-complete self-consistent artifact set. The primary agent or harness and the CI
-custody boundary must enforce those parts.
+The harness owns capture timing and source fidelity. Code Polishy binds the
+captured bytes and their commit boundaries through preparation, finalization,
+and gate replay. Digests and re-derivation detect stale or individually edited
+artifacts; they are not signatures. Code Polishy cannot authenticate which user
+or provider supplied the captured text, which model or session wrote the
+review, prove that the review subagent started without inherited context, or
+stop a writer with artifact access from replacing a complete self-consistent
+artifact set. The agent harness and CI custody boundary must enforce those
+parts.
 
 The receipt adds gate evidence. It does not replace ordinary policy checks,
 configured tests, human approval, or separate supplemental test-strength work.

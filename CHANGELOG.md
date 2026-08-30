@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- Add behavior-regression review for non-documentation gates, binding a
-  clean-context review subagent and independently replayed red/green proofs to
-  the clean candidate.
+- Add pre-implementation intent capture and behavior-regression review for
+  non-documentation gates, binding the original requests, a clean-context
+  review subagent, and independently replayed red/green proofs to the clean
+  candidate.
 - Add `checkpoint-gate --base REF` for accepting one completed task on a
   long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
   contract for documentation-only work, otherwise validates behavior evidence,
@@ -21,9 +22,6 @@
 - Make the `agents` workflow preserve project-owned ignore rules while
   transactionally installing `/.code-polishy-reports/`; make its check and
   `doctor --strict` reject a missing report-artifact rule.
-- Keep canonical `AGENTS.md` focused on durable decisions, route command
-  procedures to the release-owned skill and permanent docs, and enforce a
-  persistent prompt-size budget.
 
 ## 0.19.0 - 2026-08-28
 

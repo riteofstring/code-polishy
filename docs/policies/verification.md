@@ -359,6 +359,12 @@ and actionable failures; report paths provide the detailed evidence.
 Every non-documentation checkpoint or merge candidate requires a
 behavior-regression receipt.
 
+Before implementation, the agent harness supplies the user's original request
+and acceptance criteria to `behavior-review capture-intent` at the clean task
+base. Preparation later selects those captured requests from the reviewed Git
+history. It refuses a missing capture or one made only after the candidate was
+implemented.
+
 Both `checkpoint-gate` and `merge-gate` validate the current clean candidate's
 receipt against the resolved base and replay every cited red/green proof before
 further work. A missing, stale, malformed, unresolved, under-proved, or
@@ -378,7 +384,10 @@ sequence, artifact boundary, replay behavior, and limits.
 
 An AI collaborator should treat the levels differently:
 
-1. During implementation, run exact named or module tests as useful.
+1. Before implementing a non-documentation request, capture the exact
+   harness-supplied request at the clean task base with
+   `behavior-review capture-intent`. During implementation, run exact named or
+   module tests as useful.
 2. For ordinary Markdown-only work, run `format --git-changes`, fix the built-in
    documentation findings, and run no application tests. This needs no user
    approval.

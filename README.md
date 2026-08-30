@@ -21,9 +21,9 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Makes "done" include the tests, builds, and project checks your repo requires.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
-- Uses a [review subagent](docs/policies/behavior-review.md) to compare behavior
-  before and after each non-documentation checkpoint or merge candidate, then
-  independently replays its red/green regression proofs at the applicable gate.
+- Captures what the user asked for before coding, then uses a
+  [review subagent](docs/policies/behavior-review.md) to catch behavior changes
+  the request did not call for.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.
@@ -58,6 +58,9 @@ See the [agent setup guide](docs/ai-adoption.md) or the
 A coding agent runs these commands as it works:
 
 ```sh
+# Save the user's request before changing code
+code-polishy behavior-review capture-intent --intent-file REQUEST_FILE
+
 # Check the code you changed
 code-polishy test --changed
 
@@ -74,15 +77,12 @@ code-polishy merge-gate --base origin/main
 code-polishy merge-gate --base origin/main --resume
 ```
 
-The checkpoint gate validates one committed task against the previous accepted
-commit, runs affected checks and tests, then records the passing HEAD. The merge
-gate chooses how much final validation the whole branch needs. Fix any finding,
-rerun the narrowest useful check, and rerun the applicable gate. Both gates keep
-bounded command logs and a machine-readable run report under
-`.code-polishy-reports`. `agents install` and `agents sync` keep that workspace
-artifact root in the repository's `.gitignore`; CI retains required evidence
-through an explicit artifact handoff. Resume never reuses checks, builds,
-security work, or behavior proofs.
+Before coding, Code Polishy binds the original request to the starting commit.
+The checkpoint gate validates one completed task, and the merge gate validates
+the whole branch. Both catch behavior changes that were not requested, rerun
+the relevant tests, and keep a machine-readable report under
+`.code-polishy-reports`. Resume never reuses checks, builds, security work, or
+behavior proofs.
 
 ## Languages
 

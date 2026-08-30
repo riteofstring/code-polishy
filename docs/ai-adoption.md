@@ -11,7 +11,7 @@ findings. The policy engine decides whether the result is complete.
 
 ## Invocation
 
-The one bootstrap request appears in the root [README](../README.md#get-running).
+The one bootstrap request appears in the root [README](../README.md#set-it-up).
 After adoption, the installed `AGENTS.md` owns recurring operating guidance; a
 user does not need to repeat Code Polishy instructions in later prompts.
 

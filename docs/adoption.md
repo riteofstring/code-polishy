@@ -585,12 +585,16 @@ gate does not reuse prior work.
 
 ### Keep behavior-regression evidence in custody
 
-Before every non-documentation checkpoint or merge gate, start a review
-subagent with no inherited conversation and give it only the generated packet.
-If the harness cannot start subagents, use a separate clean AI invocation with
-only that packet. CI must retain
-`.code-polishy-reports/behavior-review` in the same workspace as preparation,
-proof, finalization, and the applicable gate, or transfer it between jobs as an
+At the start of every non-documentation task, the agent harness must pass the
+user's original request and supplied acceptance criteria to
+`behavior-review capture-intent` at the clean task-base commit. After the
+candidate is committed, start a review subagent with no inherited conversation
+and give it only the generated packet. If the harness cannot start subagents,
+use a separate clean AI invocation with only that packet.
+
+CI must retain the complete `.code-polishy-reports/behavior-review` directory
+in the same workspace from intent capture through preparation, proof,
+finalization, and the applicable gate, or transfer it between jobs as an
 explicit trusted artifact. Both checkpoint and merge gates replay every cited
 proof; the primary agent or harness must keep the review subagent packet-only.
 See [Behavior Regression Review](policies/behavior-review.md) before relying on

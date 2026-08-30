@@ -10,7 +10,7 @@ makes that release acceptable to run. Target configuration is covered in
 ## Agent-first workflow
 
 The normal user experience starts with the one bootstrap request in the root
-[README](../README.md#get-running). After adoption, the installed `AGENTS.md`
+[README](../README.md#set-it-up). After adoption, the installed `AGENTS.md`
 owns recurring operating guidance.
 
 The agent follows [AI-Agent Setup and Adoption](ai-adoption.md). It preserves an
@@ -297,15 +297,20 @@ Self-hosting covers one target shape: a Go repository that also owns the sealed
 bundle's source. `./scripts/test-installed-release.sh` covers the others. It
 builds disposable repositories — Go with no JavaScript, a pnpm application, a
 pnpm workspace, TypeScript, and React — gives each the lock this checkout
-requires, and governs them with the installed launcher.
+requires, and governs them with the installed launcher. The Go target also runs
+the complete non-documentation flow: pre-coding intent capture, review
+preparation, red/green proof, finalization, checkpoint, and merge. It verifies
+requested and preserved changes and confirms that an unintended change blocks.
 
 Each target is first brought to a clean pass, then given one defect and
 required to produce the exact finding for it, because a pass that no defect can
 disturb is a check that did not run. The script installs nothing and reaches no
-network; it needs only a release this checkout's lock names, and `--prefix`
-selects the store it was installed under.
+network; it needs an installed release named by the selected lock. `--prefix`
+selects the release store, and `--lock` can select a temporary candidate lock
+without changing this repository's checked-in lock.
 
-What it proves is the release this checkout's lock names, so refresh that lock
-from a newly installed release before running it against one. It is not part of
-the ordinary test suite, because a release store is outside the checkout and CI
-builds the engine from source rather than installing a release.
+What it proves is the release the selected lock names. By default that is this
+checkout's lock, which must be refreshed before validating a newly published
+release. A temporary lock can name a clean installed candidate before the public
+cutover. The script is not part of the ordinary test suite because a release
+store is outside the checkout and CI normally builds the engine from source.

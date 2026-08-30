@@ -30,14 +30,16 @@ segment-aware globs, containment, language detection, module ownership,
 immutable-base change boundaries, nested Go module discovery, and the exact
 clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
 
-`internal/behaviorreview` owns packet preparation and its marker, strict
-review-result and receipt validation, candidate-material re-derivation,
-behavior-proof records, disposable baseline/candidate replay, and the atomic
-accepted-checkpoint receipt. It depends only on policy, repository, and runner.
-The primary agent or harness starts a review subagent with no inherited
-conversation and gives it the bounded packet. The module gives both checkpoint
-and merge gates candidate-bound executable evidence. Local artifacts do not
-authenticate subagent identity or context.
+`internal/behaviorreview` owns the pre-implementation intent journal, packet
+preparation and its marker, strict review-result and receipt validation,
+candidate-material re-derivation, behavior-proof records, disposable
+baseline/candidate replay, and the atomic accepted-checkpoint receipt. It
+depends only on policy, repository, and runner. The agent harness supplies the
+user's request at a clean task boundary, then later starts a review subagent
+with no inherited conversation and gives it the bounded packet. The module
+gives both checkpoint and merge gates candidate-bound executable evidence.
+Local artifacts bind bytes and commits; they do not authenticate the request's
+source, subagent identity, or context.
 
 `internal/runner` is the subprocess boundary for target-declared commands. It
 accepts argument arrays, resolves working directories and checked-in

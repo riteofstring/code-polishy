@@ -44,6 +44,20 @@ exact files or modules in scope and read only the paths it prints. It resolves
 current mapped design rationale; plans, historical evidence, and superseded
 decisions remain deliberate task-specific inputs.
 
+Before implementing a non-documentation request, have the harness write the
+user's original request and any acceptance criteria the user supplied to a
+bounded UTF-8 file. From the clean task-base commit, run:
+
+```sh
+code-polishy behavior-review capture-intent --intent-file PATH
+```
+
+The command copies those exact bytes into the managed intent journal. Never
+write a replacement summary after implementation has started. If the task was
+not captured at its base, report the missing boundary. Capture a later request
+only after reaching another clean committed boundary and before implementing
+that request.
+
 Honor `quality.allowComments`. When it is false, keep governed handwritten
 source free of prose comments and docstrings and retain only exact
 machine-consumed directives. When it is true, preserve useful accurate comments
@@ -108,17 +122,20 @@ policy upgrade, and do not invent authoritative suite counts.
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
-- Prepare every clean, committed non-documentation candidate before a checkpoint
-  or merge gate. Start a review subagent with no inherited conversation and give
-  it only the generated packet. If the harness cannot start subagents, use a
-  separate clean AI invocation with only that packet. Record red-on-pre-fix and
-  green-on-candidate `regression-proof` evidence for every behavior it
+- For every clean, committed non-documentation candidate, run
+  `behavior-review prepare --base <review-base>` after the request was captured
+  at its task base. Start a review subagent with no inherited conversation and
+  give it only the generated packet. If the harness cannot start subagents, use
+  a separate clean AI invocation with only that packet. Record red-on-pre-fix
+  and green-on-candidate `regression-proof` evidence for every behavior it
   classifies as requested, save its strict result, and run
-  `behavior-review finalize`. Both gates independently replay cited proofs. Keep
-  `.code-polishy-reports/behavior-review` in the same workspace
-  or move it only as an explicit trusted CI artifact. The primary agent's
-  existing context is not a clean-context subagent review, and local artifacts
-  cannot authenticate subagent identity or context.
+  `behavior-review finalize --base <review-base>`. Both gates independently
+  replay cited proofs. Keep the complete
+  `.code-polishy-reports/behavior-review` directory in the same workspace from
+  capture through the gate, or move it only as an explicit trusted CI artifact.
+  The primary agent's existing context is not a clean-context subagent review,
+  and local artifacts cannot authenticate the request's source, subagent
+  identity, or context.
 
 Do not turn an ambiguous request such as "test it" into an ordinary merge
 checkpoint. A direct request for a scoped profile remains scoped feedback, not
@@ -178,7 +195,7 @@ caller explicitly requests an uncommitted handoff.
 | Pasting planner output without a request          | Explain its level and reasons in plain language; show the raw table when requested                     |
 | Treating supplemental as part of full             | Run `test --supplemental` as a separate stage when the caller or checked-in workflow requires it       |
 | Running application tests for ordinary Markdown   | Format it, fix documentation findings, and let `merge-gate` select documentation automatically         |
-| Skipping behavior evidence                        | Prepare the clean candidate, use a packet-only review subagent, prove requested behavior, and finalize |
+| Skipping behavior evidence                        | Capture the request before coding, then prepare, review, prove requested behavior, and finalize        |
 | Letting completed branch tasks accumulate         | Run `checkpoint-gate` against the previous accepted commit before starting the next code-changing task |
 | Running `gate` after scoped feedback              | Keep scoped feedback scoped; use `merge-gate` at an ordinary merge checkpoint                          |
 | Repeating an entire failed broad run              | Isolate and rerun the failing suite first                                                              |

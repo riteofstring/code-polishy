@@ -126,3 +126,19 @@ The focused command runs configured artifact targets only. The online
 supply-chain profile and gate include the same module. A Docker CLI and server
 are required only when artifact targets exist; Trivy itself is policy-owned and
 does not become a target manifest dependency.
+
+## Behavior review evidence
+
+Behavior-review files use a separate local artifact boundary under
+`.code-polishy-reports/behavior-review`. The directory starts with the request
+captured before implementation and later holds the prepared packet, review,
+proofs, logs, and receipt. Keep the complete directory together through the
+applicable gate; if CI splits the workflow across jobs, transfer it as one
+trusted artifact.
+
+Its hashes bind the same captured bytes, commits, packet, and proof records
+through the workflow. They are integrity checks, not signatures. The agent
+harness remains responsible for supplying the actual user request and isolating
+the review subagent. See the
+[Behavior Regression Review Policy](policies/behavior-review.md) for the exact
+workflow and limits.
