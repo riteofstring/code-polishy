@@ -354,7 +354,7 @@ func createDetachedProofWorktree(ctx context.Context, repo repository.Repository
 
 func proofWorktreeDirectory(root string) (string, error) {
 	directory := artifactPath(root, worktreeDirectory)
-	if err := validateOutputAncestor(root, directory); err != nil {
+	if err := validateOutputAncestor(root, directory, "regression proof worktree"); err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
@@ -523,7 +523,7 @@ func suiteLog(result runner.Result, output runner.Output, runErr error) []byte {
 
 func ensureProofDirectory(root string) error {
 	directory := artifactPath(root, proofDirectory)
-	if err := validateOutputAncestor(root, directory); err != nil {
+	if err := validateOutputAncestor(root, directory, "regression proof"); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {

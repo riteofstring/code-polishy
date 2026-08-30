@@ -29,6 +29,7 @@ Commands:
   task-session --module NAME... [options] -- COMMAND [ARG...]
   check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
   gate
+  checkpoint-gate --base REF
   merge-gate --base REF
   behavior-review prepare --base REF --intent-file PATH
   behavior-review finalize --base REF
@@ -81,9 +82,7 @@ func run(arguments []string) int {
 	}
 	result, err := handler(context.Background(), policyEngine, invocation.arguments)
 	if err != nil {
-		if result.report.MergePolicy != nil {
-			printMergePolicyForMode(os.Stdout, result.report.MergePolicy, invocation.verbose)
-		}
+		printOperationalReportHeaders(os.Stdout, result.report, invocation.verbose)
 		return operationalError(err)
 	}
 	for _, message := range result.messages {
@@ -97,6 +96,15 @@ func run(arguments []string) int {
 		return 1
 	}
 	return 0
+}
+
+func printOperationalReportHeaders(output io.Writer, report engine.Report, verbose bool) {
+	if report.MergePolicy != nil {
+		printMergePolicyForMode(output, report.MergePolicy, verbose)
+	}
+	if report.CheckpointPolicy != nil {
+		printCheckpointPolicyForMode(output, report.CheckpointPolicy, verbose)
+	}
 }
 
 func handleMetaCommand(invocation invocation) (int, bool) {
@@ -309,6 +317,7 @@ func commandHandlers() map[string]commandHandler {
 	return map[string]commandHandler{
 		"doctor":            handleDoctor,
 		"gate":              handleGate,
+		"checkpoint-gate":   handleCheckpointGate,
 		"merge-gate":        handleMergeGate,
 		"behavior-review":   handleBehaviorReview,
 		"regression-proof":  handleRegressionProof,
@@ -374,6 +383,15 @@ func handleMergeGate(ctx context.Context, policyEngine *engine.Engine, arguments
 		return commandResult{}, err
 	}
 	report, err := policyEngine.MergeGate(ctx, base)
+	return commandResult{report: report}, err
+}
+
+func handleCheckpointGate(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
+	base, err := parseRequiredBaseOption("checkpoint-gate", arguments)
+	if err != nil {
+		return commandResult{}, err
+	}
+	report, err := policyEngine.CheckpointGate(ctx, base)
 	return commandResult{report: report}, err
 }
 
@@ -729,8 +747,27 @@ func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
 	if report.MergePolicy != nil {
 		printMergePolicyForMode(output, report.MergePolicy, verbose)
 	}
+	if report.CheckpointPolicy != nil {
+		printCheckpointPolicyForMode(output, report.CheckpointPolicy, verbose)
+	}
 	if report.ChangeBoundary != nil {
 		printChangeBoundaryTo(output, report.ChangeBoundary)
+	}
+}
+
+func printCheckpointPolicyForMode(output io.Writer, checkpoint *engine.CheckpointPolicy, verbose bool) {
+	if verbose {
+		fmt.Fprintln(output, "CHECKPOINT GATE SCOPE:", strings.ToUpper(checkpoint.Scope))
+		fmt.Fprintln(output, "CHECKPOINT GATE BASE:", checkpoint.Base)
+		fmt.Fprintln(output, "CHECKPOINT GATE CANDIDATE:", checkpoint.Candidate)
+		if checkpoint.ReceiptPath != "" {
+			fmt.Fprintln(output, "CHECKPOINT GATE RECEIPT:", checkpoint.ReceiptPath)
+		}
+		return
+	}
+	fmt.Fprintf(output, "CHECKPOINT GATE: %s against %s\n", strings.ToUpper(checkpoint.Scope), checkpoint.Base)
+	if checkpoint.ReceiptPath != "" {
+		fmt.Fprintln(output, "CHECKPOINT ACCEPTED:", checkpoint.Candidate)
 	}
 }
 

@@ -51,6 +51,7 @@ type MergeGateExecutionCommand struct {
 
 type Report struct {
 	MergePolicy         *MergePolicy
+	CheckpointPolicy    *CheckpointPolicy
 	ChangeBoundary      *ChangeBoundary
 	TestQualityReminder *TestQualityReminder
 	Findings            []policy.Finding
@@ -66,6 +67,13 @@ type MergePolicy struct {
 	Level   string
 	Base    string
 	Reasons []string
+}
+
+type CheckpointPolicy struct {
+	Scope       string
+	Base        string
+	Candidate   string
+	ReceiptPath string
 }
 
 type ChangeBoundary struct {
@@ -535,7 +543,7 @@ func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error
 	if err != nil {
 		return Report{}, err
 	}
-	reviewReport, reviewErr := engine.behaviorReviewMergeGateReport(ctx, plan)
+	_, reviewReport, reviewErr := engine.behaviorReviewGateReport(ctx, plan)
 	if reviewErr != nil {
 		return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), reviewErr
 	}
@@ -780,6 +788,11 @@ func withMergePolicy(report Report, level, base string, reasons []string) Report
 	return report
 }
 
+func withCheckpointPolicy(report Report, scope, base, candidate, receiptPath string) Report {
+	report.CheckpointPolicy = &CheckpointPolicy{Scope: scope, Base: base, Candidate: candidate, ReceiptPath: receiptPath}
+	return report
+}
+
 func (engine *Engine) finish(findings []policy.Finding, notes []string) Report {
 	return engine.finishWithAdvisories(findings, nil, notes)
 }
@@ -873,6 +886,7 @@ func mergeAdvisories(left, right []policy.Advisory) []policy.Advisory {
 func (engine *Engine) combine(left, right Report) Report {
 	return Report{
 		MergePolicy:         combineMergePolicy(left.MergePolicy, right.MergePolicy),
+		CheckpointPolicy:    combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
 		TestQualityReminder: combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		Findings:            append(append([]policy.Finding{}, left.Findings...), right.Findings...),
 		Advisories:          mergeAdvisories(left.Advisories, right.Advisories),
@@ -882,6 +896,13 @@ func (engine *Engine) combine(left, right Report) Report {
 		Tables:              append(append([]Table{}, left.Tables...), right.Tables...),
 		Notes:               append(append([]string{}, left.Notes...), right.Notes...),
 	}
+}
+
+func combineCheckpointPolicy(left, right *CheckpointPolicy) *CheckpointPolicy {
+	if right != nil {
+		return right
+	}
+	return left
 }
 
 func (engine *Engine) withTestQualityReminder(report Report, candidate repository.CandidateDelta) Report {

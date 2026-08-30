@@ -108,6 +108,32 @@ type MergeReceipt struct {
 	Proofs        []ProofReference `json:"proofs"`
 }
 
+const (
+	CheckpointScopeChanged       = "changed"
+	CheckpointScopeDocumentation = "documentation"
+	CheckpointReceiptPath        = ".code-polishy-reports/checkpoint-gate/receipt.json"
+)
+
+type RecordCheckpointOptions struct {
+	Base             string
+	Candidate        string
+	Scope            string
+	BehaviorReviewID string
+}
+
+type CheckpointReceipt struct {
+	Version          int    `json:"version"`
+	Base             string `json:"base"`
+	Candidate        string `json:"candidate"`
+	Scope            string `json:"scope"`
+	BehaviorReviewID string `json:"behavior_review_id,omitempty"`
+}
+
+type RecordCheckpointResult struct {
+	Receipt     CheckpointReceipt
+	ReceiptPath string
+}
+
 func Prepare(ctx context.Context, repo repository.Repository, options PrepareOptions) (PrepareResult, error) {
 	return prepare(ctx, repo, options)
 }
@@ -126,4 +152,8 @@ func ValidateMergeReceipt(ctx context.Context, repo repository.Repository, optio
 
 func ReplayMergeReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateMergeReceiptOptions) (MergeReceipt, error) {
 	return replayMergeReceipt(ctx, repo, commandRunner, options)
+}
+
+func RecordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {
+	return recordCheckpoint(ctx, repo, options)
 }

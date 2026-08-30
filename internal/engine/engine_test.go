@@ -1029,7 +1029,7 @@ func contentRepository(t *testing.T, excludes []string) string {
     "mergeGate":{"recommendedModules":["content"]}
   },
   "checks": [
-    {"name":"content-check","provides":["content-validation"],"argv":["true"],"modules":["content"],"runOn":["gate"]},
+    {"name":"content-check","provides":["content-validation"],"argv":["true"],"modules":["content"],"runOn":["check","gate"]},
     {"name":"content-build","provides":["content-build"],"argv":["true"],"modules":["content"],"runOn":["build"]},
     {"name":"offline-supply","provides":["content-integrity"],"argv":["true"],"runOn":["supply-chain"]}
   ],

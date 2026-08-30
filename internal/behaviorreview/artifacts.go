@@ -2,6 +2,7 @@ package behaviorreview
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 
 const (
 	artifactDirectory       = ".code-polishy-reports/behavior-review"
+	checkpointDirectory     = ".code-polishy-reports/checkpoint-gate"
 	packetFilename          = "packet.json"
 	defaultResultFilename   = "result.json"
 	finalReviewFilename     = "review.json"
@@ -31,19 +33,27 @@ const (
 )
 
 func behaviorReviewRoot(repo repository.Repository) (string, error) {
-	root, candidate, err := behaviorReviewCandidate(repo)
+	return managedArtifactRoot(repo, artifactDirectory, "behavior review")
+}
+
+func checkpointRoot(repo repository.Repository) (string, error) {
+	return managedArtifactRoot(repo, checkpointDirectory, "checkpoint gate")
+}
+
+func managedArtifactRoot(repo repository.Repository, directory, label string) (string, error) {
+	root, candidate, err := managedArtifactCandidate(repo, directory)
 	if err != nil {
 		return "", err
 	}
-	if err := validateOutputAncestor(root, candidate); err != nil {
+	if err := validateOutputAncestor(root, candidate, label); err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(candidate, 0o700); err != nil {
-		return "", operational("create behavior review artifact root", err)
+		return "", operational("create "+label+" artifact root", err)
 	}
 	resolved, err := filepath.EvalSymlinks(candidate)
 	if err != nil || !pathInside(root, resolved) {
-		return "", fmt.Errorf("%w: behavior review artifact root resolves outside the repository", ErrInvalidInput)
+		return "", fmt.Errorf("%w: %s artifact root resolves outside the repository", ErrInvalidInput, label)
 	}
 	return resolved, nil
 }
@@ -53,7 +63,7 @@ func existingBehaviorReviewRoot(repo repository.Repository) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := validateOutputAncestor(root, candidate); err != nil {
+	if err := validateOutputAncestor(root, candidate, "behavior review"); err != nil {
 		return "", err
 	}
 	info, err := os.Lstat(candidate)
@@ -74,28 +84,32 @@ func existingBehaviorReviewRoot(repo repository.Repository) (string, error) {
 }
 
 func behaviorReviewCandidate(repo repository.Repository) (string, string, error) {
+	return managedArtifactCandidate(repo, artifactDirectory)
+}
+
+func managedArtifactCandidate(repo repository.Repository, directory string) (string, string, error) {
 	root, err := filepath.EvalSymlinks(repo.Root)
 	if err != nil {
 		return "", "", operational("resolve repository root", err)
 	}
-	candidate := filepath.Join(root, filepath.FromSlash(artifactDirectory))
+	candidate := filepath.Join(root, filepath.FromSlash(directory))
 	if !pathInside(root, candidate) {
 		return "", "", fmt.Errorf("%w: behavior review artifact root escapes the repository", ErrInvalidInput)
 	}
 	return root, candidate, nil
 }
 
-func validateOutputAncestor(root, candidate string) error {
+func validateOutputAncestor(root, candidate, label string) error {
 	ancestor := candidate
 	for {
 		info, err := os.Lstat(ancestor)
 		if err == nil {
 			if !info.IsDir() && ancestor == candidate {
-				return fmt.Errorf("%w: behavior review artifact root is not a directory", ErrInvalidInput)
+				return fmt.Errorf("%w: %s artifact root is not a directory", ErrInvalidInput, label)
 			}
 			resolved, resolveErr := filepath.EvalSymlinks(ancestor)
 			if resolveErr != nil || !pathInside(root, resolved) {
-				return fmt.Errorf("%w: behavior review artifact root has an escaping symlink ancestor", ErrInvalidInput)
+				return fmt.Errorf("%w: %s artifact root has an escaping symlink ancestor", ErrInvalidInput, label)
 			}
 			return nil
 		}
@@ -104,10 +118,79 @@ func validateOutputAncestor(root, candidate string) error {
 		}
 		parent := filepath.Dir(ancestor)
 		if parent == ancestor {
-			return fmt.Errorf("%w: behavior review artifact root has no contained ancestor", ErrInvalidInput)
+			return fmt.Errorf("%w: %s artifact root has no contained ancestor", ErrInvalidInput, label)
 		}
 		ancestor = parent
 	}
+}
+
+func recordCheckpoint(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) (RecordCheckpointResult, error) {
+	if err := validateCheckpointOptions(ctx, repo, options); err != nil {
+		return RecordCheckpointResult{}, err
+	}
+	receipt := CheckpointReceipt{
+		Version: artifactVersion, Base: options.Base, Candidate: options.Candidate,
+		Scope: options.Scope, BehaviorReviewID: options.BehaviorReviewID,
+	}
+	data, err := marshalArtifact(receipt)
+	if err != nil {
+		return RecordCheckpointResult{}, err
+	}
+	root, err := checkpointRoot(repo)
+	if err != nil {
+		return RecordCheckpointResult{}, err
+	}
+	if err := writeArtifactAtomic(artifactPath(root, receiptFilename), data); err != nil {
+		return RecordCheckpointResult{}, err
+	}
+	return RecordCheckpointResult{Receipt: receipt, ReceiptPath: CheckpointReceiptPath}, nil
+}
+
+func validateCheckpointOptions(ctx context.Context, repo repository.Repository, options RecordCheckpointOptions) error {
+	if err := ctx.Err(); err != nil {
+		return operational("record checkpoint gate receipt", err)
+	}
+	if err := validateCheckpointFields(options); err != nil {
+		return err
+	}
+	return validateCheckpointCandidate(repo, options)
+}
+
+func validateCheckpointFields(options RecordCheckpointOptions) error {
+	if !validRevision(options.Base) || !validRevision(options.Candidate) {
+		return fmt.Errorf("%w: checkpoint revisions are malformed", ErrInvalidInput)
+	}
+	switch options.Scope {
+	case CheckpointScopeChanged:
+		if !validIdentifier(options.BehaviorReviewID) {
+			return fmt.Errorf("%w: checkpoint behavior review is invalid", ErrInvalidInput)
+		}
+	case CheckpointScopeDocumentation:
+		if options.BehaviorReviewID != "" {
+			return fmt.Errorf("%w: checkpoint behavior review is invalid", ErrInvalidInput)
+		}
+	default:
+		return fmt.Errorf("%w: checkpoint scope is invalid", ErrInvalidInput)
+	}
+	return nil
+}
+
+func validateCheckpointCandidate(repo repository.Repository, options RecordCheckpointOptions) error {
+	candidate, err := repo.CleanHead()
+	if err != nil {
+		return err
+	}
+	if candidate != options.Candidate {
+		return fmt.Errorf("%w: checkpoint candidate does not match clean HEAD", ErrCandidateChanged)
+	}
+	ancestor, err := repo.IsAncestor(options.Base, options.Candidate)
+	if err != nil {
+		return operational("validate checkpoint ancestry", err)
+	}
+	if !ancestor {
+		return fmt.Errorf("%w: checkpoint base is not an ancestor of the candidate", ErrInvalidInput)
+	}
+	return nil
 }
 
 func pathInside(root, candidate string) bool {

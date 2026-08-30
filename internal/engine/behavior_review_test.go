@@ -66,6 +66,144 @@ func TestMergeGateReportsMissingRequiredBehaviorReviewReceiptBeforeCommands(t *t
 	}
 }
 
+func TestCheckpointGateReportsMissingBehaviorReviewBeforeCommands(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCheckpointBehaviorReviewFinding(t, report, "missing behavior review receipt")
+	if len(commandRunner.commands) != 0 {
+		t.Fatalf("missing receipt ran commands: %v", commandRunner.commands)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("missing receipt recorded a checkpoint: %v", statErr)
+	}
+}
+
+func TestCheckpointGateRunsChangedScopeAndRecordsAcceptedCandidate(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || report.CheckpointPolicy == nil || report.CheckpointPolicy.Scope != behaviorreview.CheckpointScopeChanged ||
+		report.CheckpointPolicy.ReceiptPath != behaviorreview.CheckpointReceiptPath {
+		t.Fatalf("report = %+v", report)
+	}
+	if !slices.Equal(commandRunner.commands, []string{"content-check", "focused"}) {
+		t.Fatalf("checkpoint commands = %v", commandRunner.commands)
+	}
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt behaviorreview.CheckpointReceipt
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Candidate != report.CheckpointPolicy.Candidate || receipt.Scope != behaviorreview.CheckpointScopeChanged || receipt.BehaviorReviewID == "" {
+		t.Fatalf("checkpoint receipt = %+v", receipt)
+	}
+}
+
+func TestCheckpointGateReplaysRegressionProofsBeforeChangedChecks(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1}
+	policyEngine.Runner = commandRunner
+	prepareRequestedBehaviorReviewReceipt(t, policyEngine, root, commandRunner, nil)
+	commandRunner.events = nil
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil || len(report.Findings) != 0 {
+		t.Fatalf("report = %+v, error = %v", report, err)
+	}
+	if len(commandRunner.events) < 4 || commandRunner.events[0] != "replay:focused" || commandRunner.events[1] != "replay:focused" ||
+		commandRunner.events[2] != "planned:content-check" || commandRunner.events[3] != "planned:focused" {
+		t.Fatalf("checkpoint replay and verification order = %v", commandRunner.events)
+	}
+}
+
+func TestCheckpointGateDoesNotRecordAfterChangedTestFailure(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	commandRunner := &failingEngineRunner{failure: "focused"}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 1 || report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" {
+		t.Fatalf("report = %+v", report)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("failed checkpoint recorded a receipt: %v", statErr)
+	}
+}
+
+func TestCheckpointGateRecordsDocumentationWithoutBehaviorReview(t *testing.T) {
+	root := documentationRepository(t)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "README.md", "# Updated\n", 0o600)
+	commitEngineCandidate(t, root, "documentation candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || report.CheckpointPolicy == nil || report.CheckpointPolicy.Scope != behaviorreview.CheckpointScopeDocumentation ||
+		report.CheckpointPolicy.ReceiptPath != behaviorreview.CheckpointReceiptPath || len(commandRunner.commands) != 0 {
+		t.Fatalf("report = %+v commands = %v", report, commandRunner.commands)
+	}
+}
+
+func TestCheckpointGateTreatsUnchangedCandidateAsNoOp(t *testing.T) {
+	root := contentRepository(t, nil)
+	initializeEngineGitRepository(t, root)
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || report.CheckpointPolicy == nil || report.CheckpointPolicy.Scope != "unchanged" ||
+		report.CheckpointPolicy.ReceiptPath != "" || len(commandRunner.commands) != 0 {
+		t.Fatalf("report = %+v commands = %v", report, commandRunner.commands)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("unchanged checkpoint wrote a receipt: %v", statErr)
+	}
+}
+
 func TestMergeGateReportsStaleBehaviorReviewReceiptBeforeCommands(t *testing.T) {
 	root := requiredBehaviorReviewCandidate(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -345,6 +483,18 @@ func assertBehaviorReviewGateFindingAtLevel(t *testing.T, report Report, level, 
 	t.Helper()
 	if report.MergePolicy == nil || report.MergePolicy.Level != level || len(report.Findings) != 1 {
 		t.Fatalf("merge policy = %+v findings = %+v", report.MergePolicy, report.Findings)
+	}
+	finding := report.Findings[0]
+	if finding.Check != "policy.behaviorReview" || finding.Path != ".code-polishy-reports/behavior-review/receipt.json" ||
+		finding.Subject != "merge-receipt" || !strings.Contains(finding.Message, message) {
+		t.Fatalf("finding = %+v", finding)
+	}
+}
+
+func assertCheckpointBehaviorReviewFinding(t *testing.T, report Report, message string) {
+	t.Helper()
+	if report.CheckpointPolicy == nil || report.CheckpointPolicy.Scope != behaviorreview.CheckpointScopeChanged || len(report.Findings) != 1 {
+		t.Fatalf("checkpoint policy = %+v findings = %+v", report.CheckpointPolicy, report.Findings)
 	}
 	finding := report.Findings[0]
 	if finding.Check != "policy.behaviorReview" || finding.Path != ".code-polishy-reports/behavior-review/receipt.json" ||

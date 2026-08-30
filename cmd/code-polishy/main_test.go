@@ -342,6 +342,48 @@ func TestMergeGateRequiresBaseAndRejectsDownscoping(t *testing.T) {
 	}
 }
 
+func TestCheckpointGateRequiresBaseAndRejectsDownscoping(t *testing.T) {
+	t.Parallel()
+	if _, err := parseRequiredBaseOption("checkpoint-gate", nil); err == nil {
+		t.Fatal("expected a missing-base error")
+	}
+	if base, err := parseRequiredBaseOption("checkpoint-gate", []string{"--base", "HEAD~1"}); err != nil || base != "HEAD~1" {
+		t.Fatalf("base=%q err=%v", base, err)
+	}
+	if _, err := parseRequiredBaseOption("checkpoint-gate", []string{"--base", "HEAD~1", "--all"}); err == nil {
+		t.Fatal("expected downscoping option to be rejected")
+	}
+}
+
+func TestPrintReportSummarizesAcceptedCheckpointForHumans(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{CheckpointPolicy: &engine.CheckpointPolicy{
+		Scope: "changed", Base: "HEAD~1", Candidate: strings.Repeat("a", 40),
+		ReceiptPath: ".code-polishy-reports/checkpoint-gate/receipt.json",
+	}}
+	printReportTo(stdout, stderr, report)
+	want := "CHECKPOINT GATE: CHANGED against HEAD~1\nCHECKPOINT ACCEPTED: " + strings.Repeat("a", 40) + "\n"
+	if !strings.HasPrefix(stdout.String(), want) || stderr.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestPrintReportDoesNotAcceptFailedCheckpoint(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{
+		CheckpointPolicy: &engine.CheckpointPolicy{Scope: "changed", Base: "HEAD~1", Candidate: strings.Repeat("a", 40)},
+		Findings:         []policy.Finding{{Check: "policy.behaviorReview", Path: "receipt.json", Subject: "receipt", Message: "missing"}},
+	}
+	printReportTo(stdout, stderr, report)
+	if strings.Contains(stdout.String(), "CHECKPOINT ACCEPTED") || !strings.HasPrefix(stdout.String(), "CHECKPOINT GATE: CHANGED against HEAD~1\n") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
 func TestPrintReportSummarizesMergePolicyForHumans(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}

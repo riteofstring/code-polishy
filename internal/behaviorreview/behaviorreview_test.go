@@ -531,6 +531,81 @@ func TestBehaviorReviewArtifactRootRejectsEscapingSymlink(t *testing.T) {
 	}
 }
 
+func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
+	repo, base, candidate := newBehaviorRepository(t)
+	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ReceiptPath != CheckpointReceiptPath || result.Receipt.Base != base || result.Receipt.Candidate != candidate ||
+		result.Receipt.Scope != CheckpointScopeChanged || result.Receipt.BehaviorReviewID != "review-123" {
+		t.Fatalf("checkpoint result = %+v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(repo.Root, filepath.FromSlash(CheckpointReceiptPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt CheckpointReceipt
+	if err := decodeStrict(data, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt != result.Receipt {
+		t.Fatalf("checkpoint receipt = %+v, want %+v", receipt, result.Receipt)
+	}
+}
+
+func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T) {
+	repo, base, candidate := newBehaviorRepository(t)
+	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation,
+	})
+	if err != nil || result.Receipt.BehaviorReviewID != "" {
+		t.Fatalf("checkpoint result = %+v, error = %v", result, err)
+	}
+}
+
+func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testing.T) {
+	for name, mutate := range map[string]func(*testing.T, repository.Repository, string, string) RecordCheckpointOptions{
+		"missing review": func(_ *testing.T, _ repository.Repository, base, candidate string) RecordCheckpointOptions {
+			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged}
+		},
+		"dirty candidate": func(t *testing.T, repo repository.Repository, base, candidate string) RecordCheckpointOptions {
+			writeBehaviorFile(t, repo.Root, "dirty.txt", "dirty\n")
+			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, base, candidate := newBehaviorRepository(t)
+			_, err := RecordCheckpoint(context.Background(), repo, mutate(t, repo, base, candidate))
+			if err == nil {
+				t.Fatal("invalid checkpoint was accepted")
+			}
+			if _, statErr := os.Stat(filepath.Join(repo.Root, filepath.FromSlash(checkpointDirectory))); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("invalid checkpoint created artifacts: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestCheckpointArtifactRootRejectsEscapingSymlink(t *testing.T) {
+	repo, base, candidate := newBehaviorRepository(t)
+	if err := os.MkdirAll(filepath.Join(repo.Root, ".code-polishy-reports"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(repo.Root, ".code-polishy-reports", "checkpoint-gate")); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	_, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("checkpoint artifact root error = %v, want invalid input", err)
+	}
+}
+
 type behaviorRunner struct {
 	candidateRoot          string
 	baselineStatus         int
