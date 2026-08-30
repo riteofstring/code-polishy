@@ -9,6 +9,13 @@
   long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
   contract for documentation-only work, otherwise validates behavior evidence,
   runs affected checks and focused tests, and records the passing HEAD.
+- Add durable checkpoint and merge run reports with bounded command logs,
+  fact-based failure evidence, explicit changed-test comparisons, and
+  merge-wide plus latest-task test reminders. Add `merge-gate --resume` to
+  reuse only validated ordinary-test receipts from an identical failed run;
+  every proof, check, build, and security phase runs again.
+- Add command-local `--help`, `-h`, and `help COMMAND` pages with syntax,
+  selectors, side effects, exits, examples, and targeted usage corrections.
 
 ## 0.19.0 - 2026-08-28
 

@@ -21,8 +21,11 @@ only when the task specifically requires them.
 For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
 documentation findings, and skip application tests without asking the user for
 authorization. Run exact tests while editing source and
-`code-polishy test --changed` when broader feedback is useful. On a long-lived
-branch, finish each completed code-changing task with
+`code-polishy test --changed --base TASK_BASE` when broader feedback needs to
+cover a completed task boundary. Without `--base`, changed-scope tests compare
+the working tree with `HEAD`; with `TASK_BASE`, they compare
+`merge-base(TASK_BASE, HEAD)` plus the working tree. On a long-lived branch,
+finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
 and preparing its behavior evidence. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
@@ -37,6 +40,26 @@ Use it to check both new and existing tests for tautological and change-detector
 behavior. It neither changes the selected work nor requests authorization; see
 [Verification and Testing Policy](policies/verification.md#test-quality-reminder)
 for its exact trigger and quiet modes.
+
+## Gate evidence and retries
+
+Checkpoint and merge gates keep terminal output short: phase progress, a final
+result, and, on failure, a bounded tail with the managed log path. Each gate
+that executes work writes a versioned JSON report and bounded command logs
+below `.code-polishy-reports/<gate>/`. Use those files for durable evidence and
+machine inspection instead of parsing terminal output.
+
+A merge reminder always preserves the merge-target-wide changed-test count. If
+a valid checkpoint receipt is bound to the candidate, it also names the latest
+task slice and its base. This advisory data never changes merge selection.
+
+Use `code-polishy merge-gate --base <merge-target> --resume` only to retry a
+failed merge gate. It can reuse a successful ordinary test suite with a valid
+receipt from the same content identity. Changes to the exact base, candidate,
+release, configuration, command plan, platform, or declared command environment
+prevent reuse. All non-test phases, behavior-proof replays, failed commands,
+and commands without valid receipts run again; a normal merge gate does not
+reuse prior work.
 
 Commit all completed task-owned changes after required verification unless the
 caller explicitly requests an uncommitted handoff. Keep each commit coherent
@@ -82,7 +105,8 @@ policy engine:
    Either gate validates the receipt and independently reruns every cited
    proof. The checkpoint gate then runs changed-scope checks and focused tests
    and records the accepted HEAD; the merge gate runs its selected
-   documentation, recommended, or full workflow.
+   documentation, recommended, or full workflow. The report and logs record
+   the executed phases separately from the behavior-review receipt.
 
 Keep `.code-polishy-reports/behavior-review` in the same workspace throughout
 the workflow. A multi-job CI run may transfer that directory only as an explicit

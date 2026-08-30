@@ -219,7 +219,12 @@ checkpoint delta ---> unchanged ---> no-op
                  ---> ordinary Markdown ---> built-in documentation contract
                  ---> other candidate ---> behavior-review receipt + proof replay
                                       ---> affected checks + focused changed tests
+                 ---> gate-run owner ---> bounded command logs + versioned JSON report
                  ---> complete pass ---> accepted-HEAD receipt
+
+merge execution ---> gate-run owner ---> immutable command attempts + failure evidence
+                                      ---> explicit resume ---> matching passed ordinary tests only
+                                      ---> proofs/checks/builds/security always execute
 
 full profile ---> every suite marked full
 
@@ -259,6 +264,14 @@ replay behavior evidence before the normal change-aware check and
 focused impacted tests. Only a finding-free run with an unchanged HEAD writes
 the accepted-checkpoint receipt. The receipt records state but does not select
 the next base automatically.
+
+The gate-run owner gives checkpoint and merge execution a single durable
+artifact contract. It binds the exact candidate, base, loaded policy, locked
+release, platform, effective command environment, and complete command plan to
+bounded logs and a versioned report. A normal run executes every phase. An
+explicit merge resume may reuse only a validated passed ordinary-test receipt
+from an otherwise identical failed run; behavior proofs, checks, builds,
+supply-chain work, and artifact security remain fresh.
 
 ## Fail-closed planning
 

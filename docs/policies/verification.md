@@ -64,11 +64,11 @@ hosted service can both be `visual`. The target owns how evidence is produced.
 
 ```sh
 code-polishy test --module MODULE
-code-polishy test --changed [--base MERGE_TARGET]
+code-polishy test --changed [--base TASK_BASE]
 code-polishy test --suite SUITE
-code-polishy test-levels [--base MERGE_TARGET]
-code-polishy test-plan [--base MERGE_TARGET]
-code-polishy test --recommended [--base MERGE_TARGET]
+code-polishy test-levels [--base TASK_BASE]
+code-polishy test-plan [--base TASK_BASE]
+code-polishy test --recommended [--base TASK_BASE]
 code-polishy test --all
 code-polishy test --supplemental
 code-polishy verify [--tests-only]
@@ -82,8 +82,11 @@ code-polishy merge-gate --base MERGE_TARGET
 - `--changed` maps changed and deleted paths to modules, computes reverse
   dependents from the module DAG, and runs their focused suites. A change to a
   foundation therefore tests its consumers. An ordinary Markdown-only delta
-  selects zero application suites. With `--base`, selection includes committed
-  branch changes plus the current working tree.
+  selects zero application suites. Without `--base`, it compares the working
+  tree with `HEAD`. With `--base TASK_BASE`, it compares
+  `merge-base(TASK_BASE, HEAD)` plus the current working tree. The report
+  records the requested base, resolved exact base, candidate, and governed path
+  count.
 - `--suite` runs exact named suites for diagnosis or an authorized special
   workflow.
 - `test-levels` and its compatibility alias `test-plan` execute no tests. They
@@ -95,9 +98,9 @@ code-polishy merge-gate --base MERGE_TARGET
   only.
 - `--recommended` runs focused suites for impacted modules plus repository
   suites marked recommended whose `paths` match the change. Without `--base`,
-  it uses uncommitted changes from `HEAD`. With `--base`, it uses the merge base
-  with `HEAD`, all committed branch changes, current worktree changes, and
-  untracked files.
+  it uses the working tree compared with `HEAD`. With `--base TASK_BASE`, it
+  uses `merge-base(TASK_BASE, HEAD)`, all committed branch changes, current
+  worktree changes, and untracked files.
 - `--all` runs every suite marked `full`; it does not include supplemental
   test-strength work.
 - `--supplemental` runs every separately declared supplemental suite. Use an
@@ -110,12 +113,13 @@ code-polishy merge-gate --base MERGE_TARGET
   It no-ops when the supplied base yields no governed candidate paths, runs the
   documentation contract for ordinary Markdown, and otherwise requires
   behavior evidence before affected checks and focused changed-scope tests.
-  Only a complete pass records the accepted HEAD.
+  Only a complete pass records the accepted HEAD and checkpoint receipt.
 - `merge-gate` is the executable ordinary merge policy. Given a trusted base,
   it selects the documentation contract, an impact-scoped recommended profile,
-  or the complete full gate. Default output gives a concise level/base summary;
-  `--verbose` adds the detailed selection reasons, execution plan, progress
-  events, timings, and report notes.
+  or the complete full gate. Gate output shows concise phase progress and a
+  final result. On failure it prints a bounded failure tail and the path to the
+  corresponding managed log; direct `test` commands keep their normal
+  streaming output.
 
 ## Test-quality reminder
 
@@ -139,6 +143,13 @@ checks, request authorization, or need configuration. It stays quiet for
 deleted-only test paths, production-only or other unrelated changes,
 `check --all`, `check --files`, or `check --name`, and explicit suite, module,
 full, recommended, or supplemental test runs.
+
+For a checkpoint gate, the changed-test count is the slice since its explicit
+previous checkpoint. A merge gate always keeps its merge-target-wide changed
+test count. When a valid checkpoint receipt is bound to the current candidate,
+the merge reminder also identifies the latest task slice and its base. Missing,
+stale, or malformed checkpoint evidence is ignored for this advisory display;
+it never changes merge selection or gate scope.
 
 Without a base, the diagnostic planner advises full when an application
 selection expands to the whole repository, when at least 20 governed paths
@@ -210,10 +221,20 @@ failed phase and never runs merge-only builds, supply-chain work, full suites,
 or supplemental suites.
 
 After a complete pass, Code Polishy verifies that HEAD stayed unchanged and
-atomically writes `.code-polishy-reports/checkpoint-gate/receipt.json`. The
-receipt records the exact merge base, accepted candidate, scope, and behavior
-review ID when applicable. It is an audit record, not an implicit base:
-the next invocation still supplies the accepted commit explicitly.
+records checkpoint evidence for the accepted candidate. A checkpoint that runs
+gate work also writes a versioned JSON run report and one bounded log for each
+executed command below `.code-polishy-reports/checkpoint-gate/`. The report
+binds the requested and exact base, candidate, selected policy level, release
+and configuration identity, command outcomes, failure evidence, log paths, and
+final status. The checkpoint receipt records the exact merge base, accepted
+candidate, scope, and behavior-review ID when applicable. It is an audit
+record, not an implicit base: the next invocation still supplies the accepted
+commit explicitly.
+
+The terminal shows `RUN`, `PASS`, or `FAIL` phase progress. A failure prints a
+bounded tail and the managed log path; the report and log remain the durable
+machine-readable evidence. An artifact-write failure is operational failure,
+so the gate cannot report success.
 
 Default successful output is:
 
@@ -257,6 +278,16 @@ the current staged, unstaged, and untracked work. It exposes no `--files`,
 trusted PR base SHA or push-before SHA; a missing, option-like, or invalid base
 fails instead of guessing.
 
+Each merge gate writes a versioned JSON run report and bounded per-command logs
+below `.code-polishy-reports/merge-gate/`. The report is the machine-readable
+record of the selected command plan, attempts, durations, reuse decisions,
+structured findings, and final status. It records command failure categories
+from runner facts only: `command-exit`, `timeout`, `canceled`, `environment`,
+`resource`, or `operational`. Test evidence also identifies suite ownership,
+changed and impacted overlap, exit status, attempt count, and log path.
+Candidate retries and exact-base replays may add observed diagnostic states;
+they never turn the original gate failure into a pass.
+
 After documentation classification, recommended is selected only when every
 changed path maps to exactly one allowlisted module and the existing impact
 planner recommends it. Full is forced when:
@@ -284,17 +315,34 @@ from every ordinary level. `test --supplemental` runs them as a separate local
 stage. Credentialed, destructive, and live-provider work remains an external
 gate.
 
+### Resume a failed merge gate
+
+`merge-gate --base REF --resume` is an explicit retry mode. It may reuse only a
+successful ordinary test-suite command from a prior failed merge-gate report
+with the same content identity and a valid local receipt. The identity binds
+the exact merge base and candidate, locked Code Polishy release, loaded
+configuration, full command plan, platform, and declared command environment
+inputs. A candidate, base, policy level, release, configuration, command-plan,
+platform, environment, failed-command, or invalid-receipt change prevents
+reuse.
+
+Checks, builds, supply-chain commands, artifact-security commands, behavior
+proof replays, failed commands, and commands without valid receipts always run
+again. A normal `merge-gate` run never reuses receipts. Resume does not reduce
+scope, and final clean-candidate validation still applies. Local receipt
+digests establish content identity rather than a signature; CI may keep the
+report directory in a stronger custody boundary.
+
 Default human output keeps the decision to one line:
 
 ```text
 MERGE GATE: RECOMMENDED against origin/main
 ```
 
-For debugging or machine audit logs, run `code-polishy --verbose merge-gate`.
-Verbose mode retains the stable `MERGE POLICY` receipt, complete execution
-telemetry, and report notes. CI may archive that output and should make the
-resulting status required for merge. Human handoffs should summarize the
-outcome and concrete failures rather than repeat the receipt.
+Use `code-polishy --verbose merge-gate --base REF` for additional selection and
+report detail. CI that needs retention stores the managed JSON report and logs,
+not parsed or archived terminal output. Human handoffs summarize the outcome
+and actionable failures; report paths provide the detailed evidence.
 
 ## Behavior regression review receipt
 
@@ -330,14 +378,15 @@ An AI collaborator should treat the levels differently:
    candidate, complete behavior review against the previous accepted commit,
    and run `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task
    only after it records the accepted HEAD.
-5. At an ordinary merge checkpoint, resolve a trusted merge target. Optionally
-   run `test-levels --base MERGE_TARGET` (or the compatibility alias
-   `test-plan`) for its read-only diagnostic output.
+5. During a task, use `test --changed --base TASK_BASE` or
+   `test-levels --base TASK_BASE` (or the compatibility alias `test-plan`) to
+   inspect changes since the task boundary. At an ordinary merge checkpoint,
+   resolve a trusted merge target separately.
 6. At a genuine merge checkpoint, run `merge-gate --base MERGE_TARGET` without
    asking the user to choose a level. It subsumes changed-impact
    validation, so do not run `test --changed` immediately beforehand for the
    same candidate. Report only pass/fail and actionable findings to the user;
-   detailed receipts remain in command logs or task artifacts.
+   managed report and log paths retain the detailed evidence.
 7. Run `test --supplemental` after a green ordinary gate when the caller or
    checked-in workflow requires local hardening. Focused, recommended, full,
    `verify`, `gate`, and `merge-gate` exclude supplemental execution.

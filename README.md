@@ -69,12 +69,18 @@ code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 
 # Enforce the policy before merge
 code-polishy merge-gate --base origin/main
+
+# After a failed merge gate, reuse only matching passed ordinary tests
+code-polishy merge-gate --base origin/main --resume
 ```
 
 The checkpoint gate validates one committed task against the previous accepted
 commit, runs affected checks and tests, then records the passing HEAD. The merge
 gate chooses how much final validation the whole branch needs. Fix any finding,
-rerun the narrowest useful check, and rerun the applicable gate.
+rerun the narrowest useful check, and rerun the applicable gate. Both gates keep
+bounded command logs and a machine-readable run report under
+`.code-polishy-reports`; resume never reuses checks, builds, security work, or
+behavior proofs.
 
 ## Languages
 

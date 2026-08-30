@@ -77,16 +77,23 @@
   the user for authorization. Control and declared product-input Markdown
   follow ordinary source verification.
 - Run exact tests while editing source and `code-polishy test --changed` for
-  broader feedback. After each completed code-changing task on a long-lived
-  branch, run `code-polishy checkpoint-gate --base <previous-checkpoint>`. It
-  requires the finalized behavior receipt, replays cited proofs, runs affected
-  checks and focused tests, then records the accepted HEAD. Do not run it for
-  conversational or read-only requests; an unchanged invocation is a no-op. At
-  a merge checkpoint, resolve the base from an explicit target, checked-in
-  guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
+  broader feedback. Use `code-polishy test --changed --base TASK_BASE` when a
+  task-bound comparison is needed; it compares `merge-base(TASK_BASE, HEAD)`
+  plus the working tree. After each completed code-changing task on a
+  long-lived branch, run `code-polishy checkpoint-gate --base <previous-checkpoint>`.
+  It requires the finalized behavior receipt, replays cited proofs, runs
+  affected checks and focused tests, then records the accepted HEAD. Do not run
+  it for conversational or read-only requests; an unchanged invocation is a
+  no-op. At a merge checkpoint, resolve the base from an explicit target,
+  checked-in guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
 - Run `code-polishy merge-gate --base <merge-target>` once for the final
-  candidate. Let it select documentation, recommended, or full without asking
-  the user. Summarize its result in plain language.
+  candidate. Use `--resume` only to retry a failed merge gate with the same
+  content identity; it can reuse eligible successful ordinary test suites, and
+  it reruns all other phases. Gate output shows concise progress and failure
+  tails. Use the managed JSON report and bounded logs below
+  `.code-polishy-reports/<gate>/` for detailed evidence. Let merge-gate select
+  documentation, recommended, or full without asking the user. Summarize its
+  result in plain language.
 - Commit all completed task-owned changes after required verification unless the
   caller explicitly requests an uncommitted handoff. Keep commits coherent and
   free of unrelated user work. Push, publish, and pull-request operations require

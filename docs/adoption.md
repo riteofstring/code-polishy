@@ -556,12 +556,28 @@ Every repository gets the documentation-only merge level by default. For other
 candidates, most repositories should keep the complete gate. A mixed
 content-and-code repository may opt in to
 `verification.mergeGate.recommendedModules` and run
-`code-polishy --verbose merge-gate --base "$TRUSTED_BASE_SHA"`. CI, not an agent,
+`code-polishy merge-gate --base "$TRUSTED_BASE_SHA"`. CI, not an agent,
 must derive that SHA from the pull-request base or push-before event. The
 command accepts no file list or requested level and automatically escalates
 control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
-Archive verbose output for audit and require the resulting status for merge.
+Require the resulting status for merge.
+
+Each checkpoint or merge gate that executes work writes a managed versioned JSON
+report and bounded command logs below `.code-polishy-reports/<gate>/`. The
+report is the durable record of the command plan, exact base and candidate,
+release/configuration identity, structured outcomes, findings, and final
+status. Terminal output stays concise: phase progress, a bounded failure tail,
+and the affected log path. Retain the JSON report and logs when CI needs audit
+evidence; do not make archived verbose terminal output the audit surface.
+
+`merge-gate --base REF --resume` is available only after a failed merge-gate
+report with the same content identity. It reuses eligible successful ordinary
+test suites only. Checks, builds, supply-chain and artifact-security phases,
+behavior-proof replays, failed phases, and phases without a valid receipt run
+again. A changed exact base, candidate, release, configuration, command plan,
+platform, or declared command environment invalidates reuse. A normal merge
+gate does not reuse prior work.
 
 ### Keep behavior-regression evidence in custody
 
@@ -583,13 +599,16 @@ exist.
 
 A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the guidance from `templates/AGENTS.md`: routine focused or
-changed tests during source work; `checkpoint-gate --base PREVIOUS_CHECKPOINT`
-after each completed committed task on a long-lived branch; documentation
-formatting without application tests for ordinary Markdown; then one
-`merge-gate --base MERGE_TARGET` for the final candidate.
-Checkpoint gate runs changed-scope verification and records the accepted HEAD.
-Merge gate selects and executes documentation, recommended, or full ordinary
-verification without making the selection a human approval prompt.
+changed tests during source work; `test --changed --base TASK_BASE` for a
+task-bound comparison; `checkpoint-gate --base PREVIOUS_CHECKPOINT` after each
+completed committed task on a long-lived branch; documentation formatting
+without application tests for ordinary Markdown; then one
+`merge-gate --base MERGE_TARGET` for the final candidate. A checkpoint gate
+runs changed-scope verification and records the accepted HEAD. A merge gate
+selects and executes documentation, recommended, or full ordinary verification
+without making the selection a human approval prompt. Its test reminder keeps
+the merge-wide count and, when the current candidate has a valid checkpoint
+receipt, also shows the latest task slice and its base.
 `test-levels` remains a read-only diagnostic, and it lists supplemental quality
 separately. Credentialed, destructive, production-mutating, and live-provider
 probes remain typed external approval gates. Direct profile commands always
