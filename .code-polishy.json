@@ -30,6 +30,10 @@
       "dependsOn": ["policy"]
     },
     {
+      "name": "gaterun",
+      "paths": ["internal/gaterun/**"]
+    },
+    {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
       "dependsOn": ["policy", "repository", "runner"]
@@ -91,6 +95,7 @@
         "architecture",
         "artifactsecurity",
         "behaviorreview",
+        "gaterun",
         "policy",
         "policymodule",
         "portability",
@@ -132,6 +137,7 @@
         "policy",
         "repository",
         "runner",
+        "gaterun",
         "behaviorreview",
         "agents",
         "release",
@@ -181,6 +187,13 @@
         "scope": "module",
         "modules": ["runner"],
         "argv": ["./scripts/test.sh", "./internal/runner/..."]
+      },
+      {
+        "name": "gaterun-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["gaterun"],
+        "argv": ["./scripts/test.sh", "./internal/gaterun/..."]
       },
       {
         "name": "behaviorreview-unit",
@@ -325,6 +338,16 @@
         "cost": "expensive",
         "modules": ["runner"],
         "argv": ["./scripts/go-mutation.sh", "./internal/runner"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "gaterun-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["gaterun"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/gaterun"],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
