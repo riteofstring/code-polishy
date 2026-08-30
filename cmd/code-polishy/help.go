@@ -465,6 +465,9 @@ func handleNamedHelp(arguments []string) int {
 
 func helpRequested(arguments []string) bool {
 	for _, argument := range arguments {
+		if argument == "--" {
+			return false
+		}
 		if argument == "--help" || argument == "-h" {
 			return true
 		}

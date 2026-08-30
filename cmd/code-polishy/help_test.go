@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"flag"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -73,6 +75,38 @@ func TestEveryCatalogCommandSupportsEarlyHelp(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTaskSessionForwardsChildHelpAfterCommandBoundary(t *testing.T) {
+	repositoryRoot, _ := newBehaviorReviewCLIRepository(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODE_POLISHY_TEST_TASK_SESSION_HELP_CHILD", "1")
+	status, stdout, stderr := captureRunOutput(t, []string{
+		"--repo-root", repositoryRoot, "--policy-root", behaviorReviewCLIPolicyRoot(t),
+		"task-session", "--module", "application", "--", executable,
+		"-test.run=^TestTaskSessionChildHelp$", "--", "--help",
+	})
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "CHILD HELP FORWARDED") ||
+		!strings.Contains(stdout, "Task session passed") {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	if strings.Contains(stdout, "Run one task command in a disposable Git worktree") {
+		t.Fatalf("task-session contextual help intercepted the child: %q", stdout)
+	}
+}
+
+func TestTaskSessionChildHelp(t *testing.T) {
+	if os.Getenv("CODE_POLISHY_TEST_TASK_SESSION_HELP_CHILD") != "1" {
+		return
+	}
+	arguments := flag.Args()
+	if len(arguments) != 1 || arguments[0] != "--help" {
+		t.Fatalf("child arguments = %q", arguments)
+	}
+	fmt.Fprintln(os.Stdout, "CHILD HELP FORWARDED")
 }
 
 func TestDesignContextUsageSuggestsExplicitFiles(t *testing.T) {
