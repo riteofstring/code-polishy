@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -222,6 +223,7 @@ func TestMergeReminderAddsOnlyAValidCurrentCheckpointTaskSlice(t *testing.T) {
 	}
 	if _, err := behaviorreview.RecordCheckpoint(t.Context(), policyEngine.Repository, behaviorreview.RecordCheckpointOptions{
 		Base: checkpointBase, Candidate: candidate, Scope: behaviorreview.CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		GateRun: finalizedCheckpointGateEvidence(t, policyEngine.Repository, checkpointBase, candidate),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -243,6 +245,29 @@ func TestMergeReminderAddsOnlyAValidCurrentCheckpointTaskSlice(t *testing.T) {
 	if reminder == nil || reminder.TaskBase != "" || len(reminder.TaskChangedTestPaths) != 0 ||
 		!slices.Equal(reminder.ChangedTestPaths, []string{"content/latest_test.go", "content/previous_test.go"}) {
 		t.Fatalf("malformed receipt reminder = %+v", reminder)
+	}
+}
+
+func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, base, candidate string) gaterun.ExecutionEvidence {
+	t.Helper()
+	identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
+		Gate: gaterun.CheckpointGate, RequestedBase: "main", ExactBase: base, Candidate: candidate, PolicyLevel: behaviorreview.CheckpointScopeChanged,
+		Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
+		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := gaterun.Start(gaterun.StartOptions{RepositoryRoot: repo.Root, Identity: identity})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gaterun.ExecutionEvidence{
+		Gate: gaterun.CheckpointGate, IdentitySHA256: report.IdentitySHA256, ExecutionID: report.ExecutionID, ReportSHA256: report.SHA256,
 	}
 }
 

@@ -30,6 +30,63 @@ func LoadReusableReceipt(repositoryRoot string, identity Identity, index int) (R
 	return loadReusableReceipt(loaded, reference, outcome)
 }
 
+func ValidateExecutionEvidence(evidence ExecutionEvidence) error {
+	if !validGate(evidence.Gate) || !validSHA256(evidence.IdentitySHA256) || !validExecutionID(evidence.ExecutionID) || !validSHA256(evidence.ReportSHA256) {
+		return fmt.Errorf("%w: gate execution evidence is invalid", ErrInvalidInput)
+	}
+	return nil
+}
+
+func ValidatePassedExecution(repositoryRoot string, evidence ExecutionEvidence) error {
+	_, err := LoadPassedExecution(repositoryRoot, evidence)
+	return err
+}
+
+func LoadPassedExecution(repositoryRoot string, evidence ExecutionEvidence) (Report, error) {
+	if err := ValidateExecutionEvidence(evidence); err != nil {
+		return Report{}, err
+	}
+	root, runDirectory, directory, err := locateExecutionEvidence(repositoryRoot, evidence)
+	if err != nil {
+		return Report{}, err
+	}
+	report, err := readExecutionEvidenceReport(directory, evidence.ExecutionID)
+	if err != nil {
+		return Report{}, err
+	}
+	if !matchesPassedExecution(report, evidence) {
+		return Report{}, fmt.Errorf("%w: gate execution does not match its passed evidence", ErrStaleArtifact)
+	}
+	if err := validateStoredReportArtifacts(root, runDirectory, directory, report); err != nil {
+		return Report{}, err
+	}
+	return cloneReport(report), nil
+}
+
+func locateExecutionEvidence(repositoryRoot string, evidence ExecutionEvidence) (artifactRoot, artifactDirectory, artifactDirectory, error) {
+	root, runDirectory, err := managedRunDirectory(repositoryRoot, evidence.Gate, evidence.IdentitySHA256, false)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
+	}
+	pointer, err := loadLatestReportPointer(runDirectory)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
+	}
+	if pointer.ExecutionID != evidence.ExecutionID || pointer.ReportSHA256 != evidence.ReportSHA256 {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, fmt.Errorf("%w: gate execution is not the latest report", ErrStaleArtifact)
+	}
+	directory, err := existingExecutionDirectory(runDirectory, evidence.ExecutionID)
+	if err != nil {
+		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
+	}
+	return root, runDirectory, directory, nil
+}
+
+func matchesPassedExecution(report Report, evidence ExecutionEvidence) bool {
+	return report.Identity.Gate == evidence.Gate && report.IdentitySHA256 == evidence.IdentitySHA256 &&
+		report.SHA256 == evidence.ReportSHA256 && report.Status == RunPassed
+}
+
 func loadStoredReport(repositoryRoot string, expected Identity) (loadedReport, error) {
 	if err := validateIdentity(expected); err != nil {
 		return loadedReport{}, err
@@ -50,32 +107,54 @@ func loadPointedReport(root artifactRoot, runDirectory artifactDirectory, pointe
 	if err != nil {
 		return loadedReport{}, err
 	}
-	file, _, err := artifactFilePath(directory, reportFilename)
+	report, err := readStoredReport(directory, expected, pointer.ExecutionID)
 	if err != nil {
 		return loadedReport{}, err
 	}
-	data, err := readArtifact(file, maximumReportBytes, "gate run report")
-	if err != nil {
-		return loadedReport{}, err
-	}
-	var report Report
-	if err := decodeStrict(data, &report, "gate run report"); err != nil {
-		return loadedReport{}, err
-	}
-	if err := validateReport(report, expected); err != nil {
-		return loadedReport{}, err
-	}
-	digest, err := reportDigest(report)
-	if err != nil {
-		return loadedReport{}, err
-	}
-	if report.SHA256 != digest || pointer.ReportSHA256 != report.SHA256 || report.ExecutionID != pointer.ExecutionID {
+	if pointer.ReportSHA256 != report.SHA256 {
 		return loadedReport{}, fmt.Errorf("%w: gate run report digest does not match its execution pointer", ErrStaleArtifact)
 	}
-	if err := validateStoredReportArtifacts(root, directory, report); err != nil {
+	if err := validateStoredReportArtifacts(root, runDirectory, directory, report); err != nil {
 		return loadedReport{}, err
 	}
 	return loadedReport{root: root, directory: directory, report: cloneReport(report)}, nil
+}
+
+func readStoredReport(directory artifactDirectory, expected Identity, executionID string) (Report, error) {
+	report, err := readExecutionEvidenceReport(directory, executionID)
+	if err != nil {
+		return Report{}, err
+	}
+	if err := validateReport(report, expected); err != nil {
+		return Report{}, err
+	}
+	return report, nil
+}
+
+func readExecutionEvidenceReport(directory artifactDirectory, executionID string) (Report, error) {
+	file, _, err := artifactFilePath(directory, reportFilename)
+	if err != nil {
+		return Report{}, err
+	}
+	data, err := readArtifact(file, maximumReportBytes, "gate run report")
+	if err != nil {
+		return Report{}, err
+	}
+	var report Report
+	if err := decodeStrict(data, &report, "gate run report"); err != nil {
+		return Report{}, err
+	}
+	if err := validateReport(report, report.Identity); err != nil {
+		return Report{}, err
+	}
+	digest, err := reportDigest(report)
+	if err != nil {
+		return Report{}, err
+	}
+	if report.SHA256 != digest || report.ExecutionID != executionID {
+		return Report{}, fmt.Errorf("%w: gate run report digest does not match its execution", ErrStaleArtifact)
+	}
+	return report, nil
 }
 
 func loadLatestReportPointer(directory artifactDirectory) (reportPointer, error) {
@@ -134,7 +213,7 @@ func reusableReceiptOutcome(repositoryRoot string, identity Identity, index int)
 }
 
 func eligibleReusableOutcome(found bool, outcome CommandOutcome) bool {
-	return found && outcome.Status == Passed && !outcome.Reused && outcome.ReceiptPath != ""
+	return found && outcome.Status == Passed && outcome.ReceiptPath != ""
 }
 
 func loadReusableReceipt(loaded loadedReport, reference CommandRef, outcome CommandOutcome) (ReusableReceipt, error) {
@@ -159,7 +238,14 @@ func loadReusableReceipt(loaded loadedReport, reference CommandRef, outcome Comm
 	if err := validateReceipt(reference, run.identity.Gate, run.runSHA256, run.executionID, receipt); err != nil {
 		return ReusableReceipt{}, err
 	}
+	if receiptProvenanceMismatch(outcome, receipt) {
+		return ReusableReceipt{}, fmt.Errorf("%w: receipt provenance does not match its command outcome", ErrStaleArtifact)
+	}
 	return ReusableReceipt{Receipt: receipt, Path: display}, nil
+}
+
+func receiptProvenanceMismatch(outcome CommandOutcome, receipt Receipt) bool {
+	return outcome.Reused != receiptHasSource(receipt)
 }
 
 func validateReport(report Report, expected Identity) error {
@@ -422,9 +508,9 @@ func validArtifactDisplayPath(path string) bool {
 	return len(components) > 1 && validArtifactComponents(components)
 }
 
-func validateStoredReportArtifacts(root artifactRoot, directory artifactDirectory, report Report) error {
+func validateStoredReportArtifacts(root artifactRoot, runDirectory, directory artifactDirectory, report Report) error {
 	run := &Run{
-		repositoryRoot: root.path, directory: directory, identity: report.Identity,
+		repositoryRoot: root.path, runDirectory: runDirectory, directory: directory, identity: report.Identity,
 		runSHA256: report.IdentitySHA256, executionID: report.ExecutionID,
 	}
 	for _, outcome := range report.Commands {
@@ -441,8 +527,12 @@ func validateStoredReportArtifacts(root artifactRoot, directory artifactDirector
 
 func validateStoredOutcomeArtifacts(run *Run, reference CommandRef, outcome CommandOutcome) error {
 	if outcome.Reused {
-		return validateStoredReceipt(run, reference, outcome, "")
+		return validateStoredReusedReceipt(run, reference, outcome)
 	}
+	return validateStoredExecutedOutcome(run, reference, outcome)
+}
+
+func validateStoredExecutedOutcome(run *Run, reference CommandRef, outcome CommandOutcome) error {
 	for _, attempt := range outcome.Attempts {
 		if err := validateStoredAttempt(run, reference, attempt); err != nil {
 			return err
@@ -455,7 +545,75 @@ func validateStoredOutcomeArtifacts(run *Run, reference CommandRef, outcome Comm
 	if err != nil || !found {
 		return fmt.Errorf("%w: passed ordinary test has no planned attempt", ErrInvalidArtifact)
 	}
-	return validateStoredReceipt(run, reference, outcome, last.LogSHA256)
+	receipt, err := validateStoredReceipt(run, reference, outcome, last.LogSHA256)
+	if err != nil {
+		return err
+	}
+	if receiptHasSource(receipt) {
+		return fmt.Errorf("%w: executed command receipt has unexpected provenance", ErrStaleArtifact)
+	}
+	return nil
+}
+
+func validateStoredReusedReceipt(run *Run, reference CommandRef, outcome CommandOutcome) error {
+	receipt, err := validateStoredReceipt(run, reference, outcome, "")
+	if err != nil {
+		return err
+	}
+	if !receiptHasSource(receipt) {
+		return fmt.Errorf("%w: reused command receipt has no provenance", ErrStaleArtifact)
+	}
+	return validateReusedReceiptProvenance(run, reference, receipt)
+}
+
+func validateReusedReceiptProvenance(run *Run, reference CommandRef, receipt Receipt) error {
+	sourceDirectory, sourceReport, err := reusedReceiptSource(run, receipt)
+	if err != nil {
+		return err
+	}
+	sourceOutcome, found := outcomeAt(sourceReport.Commands, reference.Index)
+	if !validReusedSourceOutcome(sourceReport, found, sourceOutcome, receipt) {
+		return fmt.Errorf("%w: reused command receipt provenance is stale", ErrStaleArtifact)
+	}
+	sourceRun := sourceExecutionRun(run, sourceDirectory, sourceReport)
+	if err := validateStoredExecutedOutcome(sourceRun, reference, sourceOutcome); err != nil {
+		return err
+	}
+	return validateReusedSourceLog(sourceOutcome, receipt)
+}
+
+func reusedReceiptSource(run *Run, receipt Receipt) (artifactDirectory, Report, error) {
+	if receipt.SourceExecutionID == run.executionID {
+		return artifactDirectory{}, Report{}, fmt.Errorf("%w: reused command receipt points to its current execution", ErrStaleArtifact)
+	}
+	directory, err := existingExecutionDirectory(run.runDirectory, receipt.SourceExecutionID)
+	if err != nil {
+		return artifactDirectory{}, Report{}, err
+	}
+	report, err := readStoredReport(directory, run.identity, receipt.SourceExecutionID)
+	if err != nil {
+		return artifactDirectory{}, Report{}, err
+	}
+	return directory, report, nil
+}
+
+func validReusedSourceOutcome(report Report, found bool, outcome CommandOutcome, receipt Receipt) bool {
+	return report.Status == RunFailed && found && !outcome.Reused && outcome.Status == Passed && outcome.ReceiptSHA256 == receipt.SourceReceiptSHA256
+}
+
+func sourceExecutionRun(run *Run, directory artifactDirectory, report Report) *Run {
+	return &Run{
+		repositoryRoot: run.repositoryRoot, runDirectory: run.runDirectory, directory: directory, identity: report.Identity,
+		runSHA256: report.IdentitySHA256, executionID: report.ExecutionID,
+	}
+}
+
+func validateReusedSourceLog(outcome CommandOutcome, receipt Receipt) error {
+	attempt, found, err := validatedPlannedAttempt(outcome.Attempts)
+	if err != nil || !found || attempt.LogSHA256 != receipt.LogSHA256 {
+		return fmt.Errorf("%w: reused command receipt does not match its source log", ErrStaleArtifact)
+	}
+	return nil
 }
 
 func validateStoredAttempt(run *Run, reference CommandRef, attempt Attempt) error {
@@ -476,28 +634,28 @@ func validateStoredAttempt(run *Run, reference CommandRef, attempt Attempt) erro
 	return nil
 }
 
-func validateStoredReceipt(run *Run, reference CommandRef, outcome CommandOutcome, expectedLogSHA256 string) error {
+func validateStoredReceipt(run *Run, reference CommandRef, outcome CommandOutcome, expectedLogSHA256 string) (Receipt, error) {
 	file, display, err := run.receiptFile(reference, false)
 	if err != nil {
-		return err
+		return Receipt{}, err
 	}
 	if outcome.ReceiptPath != display {
-		return fmt.Errorf("%w: receipt path does not match its identity", ErrStaleArtifact)
+		return Receipt{}, fmt.Errorf("%w: receipt path does not match its identity", ErrStaleArtifact)
 	}
 	receipt, err := readReceipt(file)
 	if err != nil {
-		return err
+		return Receipt{}, err
 	}
 	if receipt.SHA256 != outcome.ReceiptSHA256 {
-		return fmt.Errorf("%w: receipt does not match its report", ErrStaleArtifact)
+		return Receipt{}, fmt.Errorf("%w: receipt does not match its report", ErrStaleArtifact)
 	}
 	if err := validateReceipt(reference, run.identity.Gate, run.runSHA256, run.executionID, receipt); err != nil {
-		return err
+		return Receipt{}, err
 	}
 	if expectedLogSHA256 != "" && receipt.LogSHA256 != expectedLogSHA256 {
-		return fmt.Errorf("%w: receipt does not match its passed command log", ErrStaleArtifact)
+		return Receipt{}, fmt.Errorf("%w: receipt does not match its passed command log", ErrStaleArtifact)
 	}
-	return nil
+	return receipt, nil
 }
 
 func readReceipt(file artifactFile) (Receipt, error) {
@@ -520,15 +678,36 @@ func readReceipt(file artifactFile) (Receipt, error) {
 }
 
 func validateReceipt(reference CommandRef, gate GateKind, runSHA256, executionID string, receipt Receipt) error {
-	if receipt.Version != Version || receipt.Gate != gate || receipt.RunSHA256 != runSHA256 || receipt.ExecutionID != executionID ||
-		receipt.CommandSHA256 != reference.SHA256 || receipt.Category != OrdinaryTest || receipt.Status != Passed ||
-		!validSHA256(receipt.LogSHA256) || !validSHA256(receipt.SHA256) {
+	if !receiptMatchesRun(receipt, gate, runSHA256, executionID) || !receiptMatchesCommand(receipt, reference) {
 		return fmt.Errorf("%w: gate run receipt does not match its eligible command", ErrStaleArtifact)
 	}
 	if reference.Spec.Category != OrdinaryTest {
 		return fmt.Errorf("%w: receipt belongs to a non-test command", ErrIneligible)
 	}
+	if !validReceiptSource(receipt) {
+		return fmt.Errorf("%w: gate run receipt provenance is invalid", ErrStaleArtifact)
+	}
 	return nil
+}
+
+func receiptMatchesRun(receipt Receipt, gate GateKind, runSHA256, executionID string) bool {
+	return receipt.Version == Version && receipt.Gate == gate && receipt.RunSHA256 == runSHA256 && receipt.ExecutionID == executionID
+}
+
+func receiptMatchesCommand(receipt Receipt, reference CommandRef) bool {
+	return receipt.CommandSHA256 == reference.SHA256 && receipt.Category == OrdinaryTest && receipt.Status == Passed &&
+		validSHA256(receipt.LogSHA256) && validSHA256(receipt.SHA256)
+}
+
+func receiptHasSource(receipt Receipt) bool {
+	return receipt.SourceExecutionID != "" || receipt.SourceReceiptSHA256 != ""
+}
+
+func validReceiptSource(receipt Receipt) bool {
+	if !receiptHasSource(receipt) {
+		return true
+	}
+	return validExecutionID(receipt.SourceExecutionID) && validSHA256(receipt.SourceReceiptSHA256)
 }
 
 func outcomeAt(outcomes []CommandOutcome, index int) (CommandOutcome, bool) {

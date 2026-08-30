@@ -36,7 +36,7 @@
     {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["gaterun", "policy", "repository", "runner"]
     },
     {
       "name": "agents",

@@ -112,6 +112,18 @@ func platformReadArtifact(artifact artifactFile, maximum int) ([]byte, error) {
 	return readRootRestrictiveArtifact(file, maximum)
 }
 
+func platformRemoveArtifact(artifact artifactFile) error {
+	root, closeDirectory, err := openRootArtifactDirectory(artifact.directory, false)
+	if err != nil {
+		return err
+	}
+	defer closeDirectory()
+	if err := validateRootReplacementTarget(root, artifact.name); err != nil {
+		return err
+	}
+	return root.Remove(artifact.name)
+}
+
 func openRootArtifactDirectory(directory artifactDirectory, create bool) (*os.Root, func() error, error) {
 	root, err := os.OpenRoot(directory.root.path)
 	if err != nil {

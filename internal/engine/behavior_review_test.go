@@ -122,6 +122,10 @@ func TestCheckpointGateRunsChangedScopeAndRecordsAcceptedCandidate(t *testing.T)
 	if receipt.Candidate != report.CheckpointPolicy.Candidate || receipt.Scope != behaviorreview.CheckpointScopeChanged || receipt.BehaviorReviewID == "" {
 		t.Fatalf("checkpoint receipt = %+v", receipt)
 	}
+	accepted, err := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository)
+	if err != nil || accepted != receipt {
+		t.Fatalf("ReadCheckpoint() receipt = %+v, error = %v, want %+v", accepted, err, receipt)
+	}
 }
 
 func TestCheckpointGateReplaysRegressionProofsBeforeChangedChecks(t *testing.T) {
@@ -164,6 +168,58 @@ func TestCheckpointGateDoesNotRecordAfterChangedTestFailure(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("failed checkpoint recorded a receipt: %v", statErr)
+	}
+}
+
+func TestCheckpointGateDoesNotRecordWhenGateArtifactFinalizationFails(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	policyEngine.Runner = &checkpointArtifactFailureRunner{root: root}
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err == nil {
+		t.Fatal("checkpoint gate unexpectedly succeeded")
+	}
+	if report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" || report.GateRunPolicy == nil ||
+		report.GateRunPolicy.Status != string(gaterun.RunOperational) {
+		t.Fatalf("report = %+v, error = %v", report, err)
+	}
+	if report.GateRunPolicy.ReportPath != "" {
+		t.Fatalf("failed gate retained a current report path: %+v", report.GateRunPolicy)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); statErr != nil {
+		t.Fatalf("bound receipt is unavailable: %v", statErr)
+	}
+	if _, readErr := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository); !errors.Is(readErr, behaviorreview.ErrStaleCheckpoint) {
+		t.Fatalf("ReadCheckpoint() error = %v, want stale checkpoint", readErr)
+	}
+}
+
+func TestCheckpointGateFinalizesOperationalWhenReceiptPublicationFails(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	path := filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	policyEngine.Runner = &recordingEngineRunner{}
+	report, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err == nil {
+		t.Fatal("checkpoint gate unexpectedly succeeded")
+	}
+	if report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" || report.GateRunPolicy == nil ||
+		report.GateRunPolicy.Status != string(gaterun.RunOperational) || report.GateRunPolicy.ReportPath == "" {
+		t.Fatalf("report = %+v, error = %v", report, err)
+	}
+	if _, readErr := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository); !errors.Is(readErr, behaviorreview.ErrStaleCheckpoint) {
+		t.Fatalf("ReadCheckpoint() error = %v, want stale checkpoint", readErr)
 	}
 }
 
@@ -519,6 +575,29 @@ type behaviorReviewReplayRunner struct {
 	candidateRoot  string
 	baselineStatus int
 	events         []string
+}
+
+type checkpointArtifactFailureRunner struct {
+	root      string
+	sabotaged bool
+}
+
+func (runner *checkpointArtifactFailureRunner) Run(_ context.Context, _ string, _ policy.Command) error {
+	if runner.sabotaged {
+		return nil
+	}
+	paths, err := filepath.Glob(filepath.Join(runner.root, ".code-polishy-reports", string(gaterun.CheckpointGate), "*"))
+	if err != nil {
+		return err
+	}
+	if len(paths) != 1 {
+		return errors.New("checkpoint gate artifact directory is unavailable")
+	}
+	if err := os.Mkdir(filepath.Join(paths[0], "latest.json"), 0o700); err != nil {
+		return err
+	}
+	runner.sabotaged = true
+	return nil
 }
 
 func (commandRunner *behaviorReviewReplayRunner) Run(_ context.Context, _ string, command policy.Command) error {

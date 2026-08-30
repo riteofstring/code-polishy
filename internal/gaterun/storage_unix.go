@@ -111,6 +111,21 @@ func platformReadArtifact(artifact artifactFile, maximum int) ([]byte, error) {
 	return readRestrictiveArtifact(file, maximum)
 }
 
+func platformRemoveArtifact(artifact artifactFile) error {
+	fd, err := openArtifactDirectory(artifact.directory, false)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	if err := validateReplacementTarget(fd, artifact.name); err != nil {
+		return err
+	}
+	if err := unix.Unlinkat(fd, artifact.name, 0); err != nil {
+		return normalizeArtifactUnixError(err)
+	}
+	return nil
+}
+
 func openArtifactDirectory(directory artifactDirectory, create bool) (int, error) {
 	fd, err := openArtifactRoot(directory.root)
 	if err != nil {

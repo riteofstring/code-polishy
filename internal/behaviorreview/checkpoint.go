@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -42,7 +43,24 @@ func readCheckpoint(ctx context.Context, repo repository.Repository) (Checkpoint
 	if !ancestor {
 		return CheckpointReceipt{}, staleCheckpoint("receipt base is not an ancestor of its candidate", nil)
 	}
+	if err := validateCheckpointGateRun(repo, receipt); err != nil {
+		return CheckpointReceipt{}, err
+	}
 	return receipt, nil
+}
+
+func validateCheckpointGateRun(repo repository.Repository, receipt CheckpointReceipt) error {
+	report, err := gaterun.LoadPassedExecution(repo.Root, receipt.GateRun)
+	if err != nil {
+		if errors.Is(err, gaterun.ErrOperational) {
+			return operational("validate checkpoint gate evidence", err)
+		}
+		return staleCheckpoint("receipt does not bind a passed checkpoint gate run", err)
+	}
+	if report.Identity.Gate != gaterun.CheckpointGate || report.Identity.ExactBase != receipt.Base || report.Identity.Candidate != receipt.Candidate {
+		return staleCheckpoint("receipt does not match its checkpoint gate run", nil)
+	}
+	return nil
 }
 
 func checkpointReadError(message string, err error) error {
@@ -71,11 +89,11 @@ func readCheckpointReceipt(root *artifactHandle) (CheckpointReceipt, error) {
 }
 
 func validateCheckpointReceipt(receipt CheckpointReceipt) error {
-	if receipt.Version != artifactVersion {
-		return fmt.Errorf("receipt version must be %d", artifactVersion)
+	if receipt.Version != checkpointReceiptVersion {
+		return fmt.Errorf("receipt version must be %d", checkpointReceiptVersion)
 	}
 	return validateCheckpointFields(RecordCheckpointOptions{
-		Base: receipt.Base, Candidate: receipt.Candidate, Scope: receipt.Scope, BehaviorReviewID: receipt.BehaviorReviewID,
+		Base: receipt.Base, Candidate: receipt.Candidate, Scope: receipt.Scope, BehaviorReviewID: receipt.BehaviorReviewID, GateRun: receipt.GateRun,
 	})
 }
 

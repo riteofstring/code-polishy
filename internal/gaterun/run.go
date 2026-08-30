@@ -2,6 +2,7 @@ package gaterun
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -130,54 +131,173 @@ func (run *Run) commandAvailable(index int) bool {
 }
 
 func (run *Run) RecordReuse(index int, reusable ReusableReceipt) (CommandOutcome, error) {
-	if run == nil || run.finalized || run.openLogs[index] {
-		return CommandOutcome{}, fmt.Errorf("%w: gate run command is unavailable", ErrInvalidInput)
-	}
-	if run.identity.Gate != MergeGate {
-		return CommandOutcome{}, fmt.Errorf("%w: only merge gate runs can reuse receipts", ErrIneligible)
-	}
-	entry, err := run.commandOutcome(index)
+	entry, reference, err := run.reusableEntry(index)
 	if err != nil {
 		return CommandOutcome{}, err
-	}
-	if len(entry.Attempts) != 0 || entry.Reused {
-		return CommandOutcome{}, fmt.Errorf("%w: command %d already has an outcome", ErrInvalidInput, index)
-	}
-	reference, err := run.identity.Command(index)
-	if err != nil {
-		return CommandOutcome{}, err
-	}
-	if reference.Spec.Category != OrdinaryTest {
-		return CommandOutcome{}, fmt.Errorf("%w: command %q is not an ordinary test", ErrIneligible, reference.Spec.Name)
 	}
 	if err := run.validateReusableReceipt(reference, reusable); err != nil {
 		return CommandOutcome{}, err
 	}
+	receipt, path, err := run.writeReusedReceipt(reference, reusable)
+	if err != nil {
+		return CommandOutcome{}, err
+	}
 	entry.Status = Passed
 	entry.Reused = true
-	entry.ReceiptPath = reusable.Path
-	entry.ReceiptSHA256 = reusable.Receipt.SHA256
+	entry.ReceiptPath = path
+	entry.ReceiptSHA256 = receipt.SHA256
 	run.commands[index] = entry
 	return cloneCommandOutcome(entry), nil
 }
 
+func (run *Run) reusableEntry(index int) (CommandOutcome, CommandRef, error) {
+	if err := run.reuseAvailabilityError(index); err != nil {
+		return CommandOutcome{}, CommandRef{}, err
+	}
+	if run.identity.Gate != MergeGate {
+		return CommandOutcome{}, CommandRef{}, fmt.Errorf("%w: only merge gate runs can reuse receipts", ErrIneligible)
+	}
+	entry, err := run.commandOutcome(index)
+	if err != nil {
+		return CommandOutcome{}, CommandRef{}, err
+	}
+	if len(entry.Attempts) != 0 || entry.Reused {
+		return CommandOutcome{}, CommandRef{}, fmt.Errorf("%w: command %d already has an outcome", ErrInvalidInput, index)
+	}
+	reference, err := run.identity.Command(index)
+	if err != nil {
+		return CommandOutcome{}, CommandRef{}, err
+	}
+	if reference.Spec.Category != OrdinaryTest {
+		return CommandOutcome{}, CommandRef{}, fmt.Errorf("%w: command %q is not an ordinary test", ErrIneligible, reference.Spec.Name)
+	}
+	return entry, reference, nil
+}
+
+func (run *Run) reuseAvailabilityError(index int) error {
+	if run == nil {
+		return fmt.Errorf("%w: gate run command is unavailable", ErrInvalidInput)
+	}
+	if run.finalized || run.openLogs[index] {
+		return fmt.Errorf("%w: gate run command is unavailable", ErrInvalidInput)
+	}
+	return nil
+}
+
 func (run *Run) Finalize(options FinalizeOptions) (Report, error) {
+	prepared, err := run.PrepareFinalization(options)
+	if err != nil {
+		return Report{}, err
+	}
+	report, err := prepared.Commit()
+	if err != nil {
+		return Report{}, errors.Join(err, prepared.Discard())
+	}
+	return report, nil
+}
+
+func (run *Run) PrepareFinalization(options FinalizeOptions) (*PreparedFinalization, error) {
 	report, err := run.finalReport(options)
 	if err != nil {
+		return nil, err
+	}
+	prepared := &PreparedFinalization{run: run, report: report}
+	run.preparation = prepared
+	return prepared, nil
+}
+
+func (prepared *PreparedFinalization) Evidence() ExecutionEvidence {
+	if prepared == nil {
+		return ExecutionEvidence{}
+	}
+	return ExecutionEvidence{
+		Gate: prepared.report.Identity.Gate, IdentitySHA256: prepared.report.IdentitySHA256,
+		ExecutionID: prepared.report.ExecutionID, ReportSHA256: prepared.report.SHA256,
+	}
+}
+
+func (prepared *PreparedFinalization) Commit() (Report, error) {
+	if err := prepared.active(); err != nil {
 		return Report{}, err
 	}
-	data, err := marshalArtifact(report, "encode gate run report")
+	data, err := marshalArtifact(prepared.report, "encode gate run report")
 	if err != nil {
 		return Report{}, err
 	}
-	if err := writeArtifactAtomic(run.report, data); err != nil {
+	if err := writeArtifactAtomic(prepared.run.report, data); err != nil {
 		return Report{}, err
 	}
-	if err := run.writeLatestReportPointer(report); err != nil {
+	if err := prepared.run.writeLatestReportPointer(prepared.report); err != nil {
 		return Report{}, err
 	}
-	run.finalized = true
-	return cloneReport(report), nil
+	prepared.complete()
+	return cloneReport(prepared.report), nil
+}
+
+func (prepared *PreparedFinalization) Abort() error {
+	if err := prepared.active(); err != nil {
+		return err
+	}
+	prepared.release()
+	return nil
+}
+
+func (prepared *PreparedFinalization) Discard() error {
+	if err := prepared.active(); err != nil {
+		return err
+	}
+	prepared.release()
+	return errors.Join(prepared.removeCurrentPointer(), prepared.removeCurrentReport())
+}
+
+func (prepared *PreparedFinalization) active() error {
+	if prepared == nil || prepared.run == nil || prepared.completed || prepared.run.preparation != prepared {
+		return fmt.Errorf("%w: gate run finalization is unavailable", ErrInvalidInput)
+	}
+	return nil
+}
+
+func (prepared *PreparedFinalization) complete() {
+	prepared.run.preparation = nil
+	prepared.run.finalized = true
+	prepared.completed = true
+}
+
+func (prepared *PreparedFinalization) release() {
+	prepared.run.preparation = nil
+	prepared.completed = true
+}
+
+func (prepared *PreparedFinalization) removeCurrentPointer() error {
+	file, _, err := artifactFilePath(prepared.run.runDirectory, latestFilename)
+	if err != nil {
+		return err
+	}
+	pointer, err := loadLatestReportPointer(prepared.run.runDirectory)
+	if errors.Is(err, ErrMissingArtifact) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if pointer.ExecutionID != prepared.report.ExecutionID || pointer.ReportSHA256 != prepared.report.SHA256 {
+		return nil
+	}
+	return removeArtifact(file)
+}
+
+func (prepared *PreparedFinalization) removeCurrentReport() error {
+	stored, err := readStoredReport(prepared.run.directory, prepared.run.identity, prepared.run.executionID)
+	if errors.Is(err, ErrMissingArtifact) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if stored.SHA256 != prepared.report.SHA256 {
+		return fmt.Errorf("%w: gate run report changed during finalization cleanup", ErrStaleArtifact)
+	}
+	return removeArtifact(prepared.run.report)
 }
 
 func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
@@ -216,7 +336,7 @@ func (run *Run) writeLatestReportPointer(report Report) error {
 }
 
 func (run *Run) finalizationState(options FinalizeOptions) ([]CommandOutcome, time.Time, error) {
-	if run == nil || run.finalized || len(run.openLogs) != 0 {
+	if run == nil || run.finalized || run.preparation != nil || len(run.openLogs) != 0 {
 		return nil, time.Time{}, fmt.Errorf("%w: gate run cannot finalize", ErrInvalidInput)
 	}
 	if !validRunStatus(options.Status) {
@@ -318,6 +438,31 @@ func sameLogResult(document commandLogDocument, result LogResult) bool {
 }
 
 func (run *Run) writePassedReceipt(reference CommandRef, attempt Attempt) (Receipt, string, error) {
+	receipt := Receipt{
+		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
+		Category: OrdinaryTest, Status: Passed, LogSHA256: attempt.LogSHA256,
+	}
+	return run.writeReceipt(reference, receipt)
+}
+
+func (run *Run) writeReusedReceipt(reference CommandRef, reusable ReusableReceipt) (Receipt, string, error) {
+	sourceExecutionID, sourceReceiptSHA256 := sourceReceiptIdentity(reusable.Receipt)
+	receipt := Receipt{
+		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
+		Category: OrdinaryTest, Status: Passed, LogSHA256: reusable.Receipt.LogSHA256,
+		SourceExecutionID: sourceExecutionID, SourceReceiptSHA256: sourceReceiptSHA256,
+	}
+	return run.writeReceipt(reference, receipt)
+}
+
+func sourceReceiptIdentity(receipt Receipt) (string, string) {
+	if receipt.SourceExecutionID != "" {
+		return receipt.SourceExecutionID, receipt.SourceReceiptSHA256
+	}
+	return receipt.ExecutionID, receipt.SHA256
+}
+
+func (run *Run) writeReceipt(reference CommandRef, receipt Receipt) (Receipt, string, error) {
 	directory, err := secureRunSubdirectory(run.directory, receiptsDirectory, true)
 	if err != nil {
 		return Receipt{}, "", err
@@ -325,10 +470,6 @@ func (run *Run) writePassedReceipt(reference CommandRef, attempt Attempt) (Recei
 	file, display, err := artifactFilePath(directory, reference.SHA256+".json")
 	if err != nil {
 		return Receipt{}, "", err
-	}
-	receipt := Receipt{
-		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
-		Category: OrdinaryTest, Status: Passed, LogSHA256: attempt.LogSHA256,
 	}
 	digest, err := receiptDigest(receipt)
 	if err != nil {

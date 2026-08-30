@@ -225,6 +225,13 @@ func readArtifact(file artifactFile, maximum int, label string) ([]byte, error) 
 	return data, nil
 }
 
+func removeArtifact(file artifactFile) error {
+	if err := platformRemoveArtifact(file); err != nil {
+		return classifyArtifactError("remove gate artifact", "gate artifact", err)
+	}
+	return nil
+}
+
 func classifyArtifactError(operation, label string, err error) error {
 	if err == nil {
 		return nil

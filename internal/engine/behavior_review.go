@@ -165,8 +165,7 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
 	report, gateErr := engine.documentationMergeGate(ctx, execution.selection)
 	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
-	report, gateErr = engine.finishCheckpointGate(ctx, report, gateErr, execution.state)
-	return execution.controller.finalize(engine, report, gateErr)
+	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
 
 func (engine *Engine) finalizeCheckpointReplayFailure(execution checkpointGateExecution, replayErr error) (Report, error) {
@@ -188,8 +187,7 @@ func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, executio
 	}
 	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
 	gateErr := checkpointPlannedRunnerError(plannedRunner, report, execution.commands)
-	report, gateErr = engine.finishCheckpointGate(ctx, report, gateErr, execution.state)
-	return execution.controller.finalize(engine, report, gateErr)
+	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
 
 func (engine *Engine) checkpointChecksAndTests(ctx context.Context, plannedEngine Engine, selection repository.Selection) (Report, error) {
@@ -225,16 +223,26 @@ func (engine *Engine) checkpointGateCommands(selection repository.Selection, doc
 	return commands, tests, nil
 }
 
-func (engine *Engine) finishCheckpointGate(ctx context.Context, report Report, gateErr error, state checkpointGateState) (Report, error) {
-	if gateErr != nil || len(report.Findings) > 0 {
-		return withCheckpointPolicy(report, state.Scope, state.Base, state.Candidate, ""), gateErr
+func (engine *Engine) finalizeAcceptedCheckpointGate(ctx context.Context, controller *gateRunController, report Report, gateErr error, state checkpointGateState) (Report, error) {
+	report = checkpointGateReport(report, state)
+	if gateErr != nil || len(report.Findings) != 0 {
+		return controller.finalize(engine, report, gateErr)
+	}
+	prepared, err := controller.preparePassed(engine, &report)
+	if err != nil {
+		return controller.finalizeOperational(report, err)
 	}
 	recorded, err := behaviorreview.RecordCheckpoint(ctx, engine.Repository, behaviorreview.RecordCheckpointOptions{
-		Base: state.ExactBase, Candidate: state.Candidate, Scope: state.Scope, BehaviorReviewID: state.ReviewID,
+		Base: state.ExactBase, Candidate: state.Candidate, Scope: state.Scope, BehaviorReviewID: state.ReviewID, GateRun: prepared.Evidence(),
 	})
 	if err != nil {
-		return withCheckpointPolicy(report, state.Scope, state.Base, state.Candidate, ""), err
+		return controller.finalizeOperational(report, errors.Join(err, prepared.Abort()))
 	}
+	final, err := prepared.Commit()
+	if err != nil {
+		return controller.finalizeOperational(report, errors.Join(err, prepared.Discard()))
+	}
+	report.GateRunPolicy = controller.gateRunPolicy(gaterun.RunPassed, final)
 	report.Notes = append(report.Notes, "recorded accepted checkpoint "+state.Candidate)
 	return withCheckpointPolicy(report, state.Scope, state.Base, state.Candidate, recorded.ReceiptPath), nil
 }

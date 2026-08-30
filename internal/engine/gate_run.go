@@ -284,6 +284,25 @@ func (controller *gateRunController) finalize(engine *Engine, report Report, gat
 	return report, errors.Join(gateErr, operationalErr)
 }
 
+func (controller *gateRunController) preparePassed(engine *Engine, report *Report) (*gaterun.PreparedFinalization, error) {
+	controller.attachTestLogPaths(report)
+	if err := errors.Join(controller.runner.err, controller.candidateIntegrityError(engine)); err != nil {
+		return nil, err
+	}
+	return controller.run.PrepareFinalization(controller.finalizeOptions(gaterun.RunPassed, *report))
+}
+
+func (controller *gateRunController) finalizeOperational(report Report, cause error) (Report, error) {
+	controller.attachTestLogPaths(&report)
+	final, err := controller.run.Finalize(controller.finalizeOptions(gaterun.RunOperational, report))
+	if err != nil {
+		report.GateRunPolicy = controller.gateRunPolicy(gaterun.RunOperational, gaterun.Report{})
+		return report, errors.Join(cause, err)
+	}
+	report.GateRunPolicy = controller.gateRunPolicy(gaterun.RunOperational, final)
+	return report, cause
+}
+
 func (controller *gateRunController) attachTestLogPaths(report *Report) {
 	for key, path := range controller.runner.logPaths {
 		AttachTestCommandLogPath(report, key.name, key.attempt, path)
@@ -323,10 +342,14 @@ func gateRunStatus(report Report, gateErr, operationalErr error) gaterun.RunStat
 }
 
 func (controller *gateRunController) finalizeArtifact(status gaterun.RunStatus, report Report) (gaterun.Report, error) {
-	return controller.run.Finalize(gaterun.FinalizeOptions{
+	return controller.run.Finalize(controller.finalizeOptions(status, report))
+}
+
+func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, report Report) gaterun.FinalizeOptions {
+	return gaterun.FinalizeOptions{
 		Status: status, Findings: gateRunFindings(report.Findings), TestEvidence: gateRunTestEvidence(report.TestCommands),
 		TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics),
-	})
+	}
 }
 
 func gateRunFindings(findings []policy.Finding) []gaterun.Finding {
@@ -344,7 +367,11 @@ func (controller *gateRunController) gateRunPolicy(status gaterun.RunStatus, rep
 			reused = append(reused, outcome.Name)
 		}
 	}
-	return &GateRunPolicy{Status: string(status), ReportPath: controller.run.ReportPath(), ReusedPhases: reused}
+	path := ""
+	if report.ExecutionID != "" {
+		path = controller.run.ReportPath()
+	}
+	return &GateRunPolicy{Status: string(status), ReportPath: path, ReusedPhases: reused}
 }
 
 func gateRunTestEvidence(commands []TestCommandEvidence) []gaterun.TestEvidence {

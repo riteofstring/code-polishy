@@ -29,6 +29,10 @@ func platformReadArtifact(artifactFile, int) ([]byte, error) {
 	return nil, unsupportedArtifactPlatform()
 }
 
+func platformRemoveArtifact(artifactFile) error {
+	return unsupportedArtifactPlatform()
+}
+
 func unsupportedArtifactPlatform() error {
 	return fmt.Errorf("%w: gate run artifacts are unsupported on %s", ErrOperational, runtime.GOOS)
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -127,6 +128,7 @@ const (
 	CheckpointScopeChanged       = "changed"
 	CheckpointScopeDocumentation = "documentation"
 	CheckpointReceiptPath        = ".code-polishy-reports/checkpoint-gate/receipt.json"
+	checkpointReceiptVersion     = 2
 )
 
 type RecordCheckpointOptions struct {
@@ -134,14 +136,16 @@ type RecordCheckpointOptions struct {
 	Candidate        string
 	Scope            string
 	BehaviorReviewID string
+	GateRun          gaterun.ExecutionEvidence
 }
 
 type CheckpointReceipt struct {
-	Version          int    `json:"version"`
-	Base             string `json:"base"`
-	Candidate        string `json:"candidate"`
-	Scope            string `json:"scope"`
-	BehaviorReviewID string `json:"behavior_review_id,omitempty"`
+	Version          int                       `json:"version"`
+	Base             string                    `json:"base"`
+	Candidate        string                    `json:"candidate"`
+	Scope            string                    `json:"scope"`
+	BehaviorReviewID string                    `json:"behavior_review_id,omitempty"`
+	GateRun          gaterun.ExecutionEvidence `json:"gate_run"`
 }
 
 type RecordCheckpointResult struct {

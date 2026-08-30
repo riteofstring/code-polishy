@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -132,8 +133,8 @@ func recordCheckpoint(ctx context.Context, repo repository.Repository, options R
 		return RecordCheckpointResult{}, err
 	}
 	receipt := CheckpointReceipt{
-		Version: artifactVersion, Base: options.Base, Candidate: options.Candidate,
-		Scope: options.Scope, BehaviorReviewID: options.BehaviorReviewID,
+		Version: checkpointReceiptVersion, Base: options.Base, Candidate: options.Candidate,
+		Scope: options.Scope, BehaviorReviewID: options.BehaviorReviewID, GateRun: options.GateRun,
 	}
 	data, err := marshalArtifact(receipt)
 	if err != nil {
@@ -175,6 +176,12 @@ func validateCheckpointFields(options RecordCheckpointOptions) error {
 		}
 	default:
 		return fmt.Errorf("%w: checkpoint scope is invalid", ErrInvalidInput)
+	}
+	if options.GateRun.Gate != gaterun.CheckpointGate {
+		return fmt.Errorf("%w: checkpoint gate evidence is invalid", ErrInvalidInput)
+	}
+	if err := gaterun.ValidateExecutionEvidence(options.GateRun); err != nil {
+		return fmt.Errorf("%w: checkpoint gate evidence is invalid: %v", ErrInvalidInput, err)
 	}
 	return nil
 }

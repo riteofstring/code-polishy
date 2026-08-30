@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -657,7 +658,7 @@ func TestArtifactHandleRejectsSymlinkArtifactTarget(t *testing.T) {
 func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -682,7 +683,7 @@ func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation,
+		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation, GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
 	if err != nil || result.Receipt.BehaviorReviewID != "" {
 		t.Fatalf("checkpoint result = %+v, error = %v", result, err)
@@ -692,7 +693,7 @@ func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T)
 func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	written, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -706,7 +707,7 @@ func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 func TestReadCheckpointRejectsSymlinkReceiptWithoutFollowingIt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -762,7 +763,7 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 			name: "stale candidate",
 			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
 				if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -774,7 +775,7 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 			name: "diverged base",
 			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
 				result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -805,11 +806,11 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testing.T) {
 	for name, mutate := range map[string]func(*testing.T, repository.Repository, string, string) RecordCheckpointOptions{
 		"missing review": func(_ *testing.T, _ repository.Repository, base, candidate string) RecordCheckpointOptions {
-			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged}
+			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, GateRun: checkpointEvidenceInput()}
 		},
 		"dirty candidate": func(t *testing.T, repo repository.Repository, base, candidate string) RecordCheckpointOptions {
 			writeBehaviorFile(t, repo.Root, "dirty.txt", "dirty\n")
-			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123"}
+			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointEvidenceInput()}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -835,7 +836,7 @@ func TestCheckpointArtifactRootRejectsEscapingSymlink(t *testing.T) {
 		t.Skipf("create symlink: %v", err)
 	}
 	_, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointEvidenceInput(),
 	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("checkpoint artifact root error = %v, want invalid input", err)
@@ -918,6 +919,36 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 		}}},
 	}
 	return repository.Repository{Root: root, PolicyRoot: root, Config: config}, base, candidate
+}
+
+func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, candidate string) gaterun.ExecutionEvidence {
+	t.Helper()
+	identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
+		Gate: gaterun.CheckpointGate, RequestedBase: "main", ExactBase: base, Candidate: candidate, PolicyLevel: CheckpointScopeChanged,
+		Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
+		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := gaterun.Start(gaterun.StartOptions{RepositoryRoot: repo.Root, Identity: identity})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gaterun.ExecutionEvidence{
+		Gate: gaterun.CheckpointGate, IdentitySHA256: report.IdentitySHA256, ExecutionID: report.ExecutionID, ReportSHA256: report.SHA256,
+	}
+}
+
+func checkpointEvidenceInput() gaterun.ExecutionEvidence {
+	return gaterun.ExecutionEvidence{
+		Gate: gaterun.CheckpointGate, IdentitySHA256: strings.Repeat("a", 64),
+		ExecutionID: "run-" + strings.Repeat("b", 32), ReportSHA256: strings.Repeat("c", 64),
+	}
 }
 
 func newExistingEvidenceRepository(t *testing.T) (repository.Repository, string, string) {

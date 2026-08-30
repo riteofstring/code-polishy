@@ -264,16 +264,31 @@ type FinalizeOptions struct {
 	CompletedAt     time.Time
 }
 
+type ExecutionEvidence struct {
+	Gate           GateKind `json:"gate"`
+	IdentitySHA256 string   `json:"identity_sha256"`
+	ExecutionID    string   `json:"execution_id"`
+	ReportSHA256   string   `json:"report_sha256"`
+}
+
+type PreparedFinalization struct {
+	run       *Run
+	report    Report
+	completed bool
+}
+
 type Receipt struct {
-	Version       int             `json:"version"`
-	Gate          GateKind        `json:"gate"`
-	RunSHA256     string          `json:"run_sha256"`
-	ExecutionID   string          `json:"execution_id"`
-	CommandSHA256 string          `json:"command_sha256"`
-	Category      CommandCategory `json:"category"`
-	Status        CommandStatus   `json:"status"`
-	LogSHA256     string          `json:"log_sha256"`
-	SHA256        string          `json:"sha256"`
+	Version             int             `json:"version"`
+	Gate                GateKind        `json:"gate"`
+	RunSHA256           string          `json:"run_sha256"`
+	ExecutionID         string          `json:"execution_id"`
+	CommandSHA256       string          `json:"command_sha256"`
+	Category            CommandCategory `json:"category"`
+	Status              CommandStatus   `json:"status"`
+	LogSHA256           string          `json:"log_sha256"`
+	SourceExecutionID   string          `json:"source_execution_id,omitempty"`
+	SourceReceiptSHA256 string          `json:"source_receipt_sha256,omitempty"`
+	SHA256              string          `json:"sha256"`
 }
 
 type ReusableReceipt struct {
@@ -337,5 +352,6 @@ type Run struct {
 	startedAt      time.Time
 	commands       map[int]CommandOutcome
 	openLogs       map[int]bool
+	preparation    *PreparedFinalization
 	finalized      bool
 }

@@ -114,6 +114,67 @@ func TestMergeRunKeepsFailedEvidenceImmutableUntilLaterTestReuse(t *testing.T) {
 	}
 }
 
+func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
+	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit"), testCommand(Check, "quality")})
+	root := t.TempDir()
+	initial := startRun(t, root, identity)
+	recordAttempt(t, initial, 0, Passed, 0, "unit pass", "", 16)
+	recordAttempt(t, initial, 1, Failed, 1, "", "initial late failure", 16)
+	initialReport, err := initial.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstReusable, err := LoadReusableReceipt(root, identity, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstResume := startRun(t, root, identity)
+	firstOutcome, err := firstResume.RecordReuse(0, firstReusable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstOutcome.ReceiptPath == firstReusable.Path || !strings.Contains(firstOutcome.ReceiptPath, firstResume.executionID) {
+		t.Fatalf("first resumed receipt path = %q, source = %q", firstOutcome.ReceiptPath, firstReusable.Path)
+	}
+	recordAttempt(t, firstResume, 1, Failed, 1, "", "resumed late failure", 16)
+	firstReport, err := firstResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadReport(root, identity)
+	if err != nil {
+		t.Fatalf("reloading resumed failed run: %v", err)
+	}
+	if loaded.ExecutionID != firstReport.ExecutionID || loaded.Commands[0].ReceiptPath != firstOutcome.ReceiptPath {
+		t.Fatalf("loaded resumed report = %+v", loaded)
+	}
+
+	secondReusable, err := LoadReusableReceipt(root, identity, 0)
+	if err != nil {
+		t.Fatalf("reusing from resumed failed run: %v", err)
+	}
+	if secondReusable.Path != firstOutcome.ReceiptPath || secondReusable.Receipt.SourceExecutionID != initialReport.ExecutionID ||
+		secondReusable.Receipt.SourceReceiptSHA256 != initialReport.Commands[0].ReceiptSHA256 {
+		t.Fatalf("second reusable receipt = %+v", secondReusable)
+	}
+	secondResume := startRun(t, root, identity)
+	secondOutcome, err := secondResume.RecordReuse(0, secondReusable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondOutcome.ReceiptPath == secondReusable.Path || !strings.Contains(secondOutcome.ReceiptPath, secondResume.executionID) {
+		t.Fatalf("second resumed receipt path = %q, source = %q", secondOutcome.ReceiptPath, secondReusable.Path)
+	}
+	recordAttempt(t, secondResume, 1, Failed, 1, "", "second resumed late failure", 16)
+	if _, err := secondResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadReport(root, identity); err != nil {
+		t.Fatalf("reloading second resumed failed run: %v", err)
+	}
+}
+
 func TestOnlyOrdinaryTestsCanProvideReusableReceipts(t *testing.T) {
 	for _, category := range []CommandCategory{Check, Build, SupplyChain, ArtifactSecurity, BehaviorProof} {
 		t.Run(string(category), func(t *testing.T) {
