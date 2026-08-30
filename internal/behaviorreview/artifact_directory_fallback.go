@@ -72,18 +72,39 @@ func openArtifactFile(directory *artifactHandle, name string) (*os.File, error) 
 }
 
 func writeArtifactAtomicAt(directory *artifactHandle, name string, data []byte) error {
+	root, err := artifactWriteRoot(directory, name)
+	if err != nil {
+		return err
+	}
+	if err := validateArtifactWriteTarget(root, name); err != nil {
+		return err
+	}
+	return writeArtifactAtomically(root, name, data)
+}
+
+func artifactWriteRoot(directory *artifactHandle, name string) (*os.Root, error) {
 	root := artifactRoot(directory)
 	if root == nil {
-		return fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
+		return nil, fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
 	}
 	if _, err := artifactNameComponents(name); err != nil {
+		return nil, fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
+	}
+	return root, nil
+}
+
+func validateArtifactWriteTarget(root *os.Root, name string) error {
+	info, err := root.Lstat(name)
+	if err == nil && !info.Mode().IsRegular() {
 		return fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
 	}
-	if info, err := root.Lstat(name); err == nil && !info.Mode().IsRegular() {
-		return fmt.Errorf("%w: behavior review artifact target is not a regular file", ErrInvalidInput)
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return operational("inspect behavior review artifact", err)
 	}
+	return nil
+}
+
+func writeArtifactAtomically(root *os.Root, name string, data []byte) error {
 	temporaryName, err := temporaryArtifactName()
 	if err != nil {
 		return operational("create behavior review artifact", err)
@@ -93,6 +114,16 @@ func writeArtifactAtomicAt(directory *artifactHandle, name string, data []byte) 
 		return operational("create behavior review artifact", err)
 	}
 	defer root.Remove(temporaryName)
+	if err := writeArtifactTemporary(temporary, data); err != nil {
+		return err
+	}
+	if err := root.Rename(temporaryName, name); err != nil {
+		return operational("replace behavior review artifact", err)
+	}
+	return nil
+}
+
+func writeArtifactTemporary(temporary *os.File, data []byte) error {
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return operational("set behavior review artifact permissions", err)
@@ -107,9 +138,6 @@ func writeArtifactAtomicAt(directory *artifactHandle, name string, data []byte) 
 	}
 	if err := temporary.Close(); err != nil {
 		return operational("close behavior review artifact", err)
-	}
-	if err := root.Rename(temporaryName, name); err != nil {
-		return operational("replace behavior review artifact", err)
 	}
 	return nil
 }
