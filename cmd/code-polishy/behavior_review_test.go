@@ -319,11 +319,15 @@ func newBehaviorReviewCLIRepository(t *testing.T) (string, string) {
 
 func behaviorReviewCLIPolicyRoot(t *testing.T) string {
 	t.Helper()
-	workingDirectory, err := os.Getwd()
+	goExecutable, err := exec.LookPath("go")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("resolve governed Go executable: %v", err)
 	}
-	return filepath.Clean(filepath.Join(workingDirectory, "..", ".."))
+	policyRoot, found := findPolicyRoot(filepath.Dir(goExecutable))
+	if !found {
+		t.Fatalf("governed Go executable is outside a Code Polishy policy root: %s", goExecutable)
+	}
+	return policyRoot
 }
 
 func writeBehaviorReviewCLIFile(t *testing.T, root, name, contents string) string {
