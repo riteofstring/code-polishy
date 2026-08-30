@@ -33,9 +33,10 @@ set -euo pipefail
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 prefix="${HOME}/.local/share/code-polishy"
+lock="${policy_root}/.code-polishy.lock.json"
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE]" >&2
   exit 2
 }
 
@@ -52,6 +53,17 @@ while (($#)); do
       prefix="${1#*=}"
       shift
       ;;
+    --lock)
+      if (($# < 2)); then
+        usage
+      fi
+      lock="$2"
+      shift 2
+      ;;
+    --lock=*)
+      lock="${1#*=}"
+      shift
+      ;;
     *) usage ;;
   esac
 done
@@ -62,12 +74,11 @@ fail() {
 }
 
 launcher="${prefix}/bin/code-polishy"
-lock="${policy_root}/.code-polishy.lock.json"
 if [[ ! -x "${launcher}" ]]; then
   fail "no installed Code Polishy launcher at ${launcher}; run ./scripts/install.sh"
 fi
 if [[ ! -f "${lock}" ]]; then
-  fail "${policy_root} requires no release; write ${lock} from the release it must run"
+  fail "the release lock is unavailable at ${lock}"
 fi
 
 lock_field() {
@@ -242,6 +253,8 @@ expect_no_target_commands() {
   fi
 }
 
+source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
+
 exercise_documentation_lane() {
   local target="$1" description="$2"
   local command_log="${target}/.git/code-polishy-command-log"
@@ -283,7 +296,7 @@ EOF
   expect_no_target_commands "${target}" "${description} changed tests"
 }
 
-echo "Governing disposable targets with the release ${policy_root}/.code-polishy.lock.json requires..."
+echo "Governing disposable targets with the release named by ${lock} requires..."
 
 
 
@@ -314,6 +327,15 @@ func TestRenderNamesTheGreeted(t *testing.T) {
 }
 EOF
 write_target_commands "${go_only}"
+write_file "${go_only}/scripts/test.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
+  printf '%s\n' "$(basename "$0")" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
+fi
+go test ./...
+EOF
+chmod +x "${go_only}/scripts/test.sh"
 write_security_workflow "${go_only}"
 write_file "${go_only}/.code-polishy.json" <<'EOF'
 {
@@ -377,6 +399,7 @@ if ! grep -q "conditional policy module: osv at ." "${output}"; then
 fi
 expect_absent "go-only activated a JavaScript framework policy module" \
   "conditional policy module: (react|electron)"
+exercise_behavior_review_lane "${go_only}" "go-only" "${real_git}" "${fixture_root}" "${output}"
 write_file "${go_only}/internal/greeting/farewell.go" <<'EOF'
 package greeting
 

@@ -95,6 +95,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native release identity contracts failed.' }
           & $go test -count=1 ./internal/javascript -run '^TestJavaScriptExecutableUsesNativeHostContract$'
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
+          & $go test -count=1 ./internal/gaterun
+          if ($LASTEXITCODE -ne 0) { throw 'Native gate report runtime contracts failed.' }
+          & $go test -count=1 ./internal/behaviorreview
+          if ($LASTEXITCODE -ne 0) { throw 'Native behavior review runtime contracts failed.' }
 
       - name: Install native release from source
         shell: pwsh
@@ -156,8 +160,13 @@ jobs:
             "exceptions": []
           }
           '@ | Set-Content -LiteralPath (Join-Path $target '.code-polishy.json')
-          Set-Content -LiteralPath (Join-Path $target 'scripts\test.ps1') -Value "`$ErrorActionPreference = 'Stop'`nexit 0`n"
-          Set-Content -LiteralPath (Join-Path $target 'src\data.json') -Value '{"platform":"windows","native":true}'
+          @'
+          $ErrorActionPreference = 'Stop'
+          $root = Split-Path -Parent $PSScriptRoot
+          $data = Get-Content -LiteralPath (Join-Path $root 'src\data.json') -Raw | ConvertFrom-Json
+          if ($data.state -ne 'base') { throw 'Expected base behavior.' }
+          '@ | Set-Content -LiteralPath (Join-Path $target 'scripts\test.ps1')
+          Set-Content -LiteralPath (Join-Path $target 'src\data.json') -Value '{"platform":"windows","state":"base"}'
           & git.exe -C $target init -b main
           & git.exe -C $target config user.name 'Code Polishy CI'
           & git.exe -C $target config user.email 'ci@example.invalid'
@@ -178,3 +187,54 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed launcher doctor failed.' }
           & $launcher --repo-root $target task-session --module application -- pwsh -NoProfile -NonInteractive -Command 'exit 0'
           if ($LASTEXITCODE -ne 0) { throw 'Installed native task session failed.' }
+
+          $behaviorBase = (& git.exe -C $target rev-parse HEAD).Trim()
+          $intent = Join-Path $env:RUNNER_TEMP 'windows-behavior-intent.txt'
+          Set-Content -LiteralPath $intent -Value 'Change the Windows fixture state to candidate and keep it covered.'
+          & $launcher --repo-root $target behavior-review capture-intent --intent-file $intent
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native intent capture failed.' }
+
+          @'
+          $ErrorActionPreference = 'Stop'
+          $root = Split-Path -Parent $PSScriptRoot
+          $data = Get-Content -LiteralPath (Join-Path $root 'src\data.json') -Raw | ConvertFrom-Json
+          if ($data.state -ne 'candidate') { throw 'Expected candidate behavior.' }
+          '@ | Set-Content -LiteralPath (Join-Path $target 'scripts\test.ps1')
+          Set-Content -LiteralPath (Join-Path $target 'src\data.json') -Value '{"platform":"windows","state":"candidate"}'
+          & git.exe -C $target add scripts/test.ps1 src/data.json
+          & git.exe -C $target commit -m 'Change native fixture behavior'
+          if ($LASTEXITCODE -ne 0) { throw 'Native behavior candidate commit failed.' }
+
+          function Complete-BehaviorReview {
+            & $launcher --repo-root $target behavior-review prepare --base $behaviorBase
+            if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior review preparation failed.' }
+            & $launcher --repo-root $target regression-proof --base $behaviorBase --suite application-focused --evidence scripts/test.ps1 --id windows-state
+            if ($LASTEXITCODE -ne 0) { throw 'Installed native regression proof failed.' }
+            $packetPath = Join-Path $target '.code-polishy-reports\behavior-review\packet.json'
+            $packet = Get-Content -LiteralPath $packetPath -Raw | ConvertFrom-Json
+            $result = [ordered]@{
+              version = 2
+              review_id = $packet.review_id
+              base = $packet.base
+              candidate = $packet.candidate
+              intent_sha256 = $packet.intent_sha256
+              behaviors = @([ordered]@{
+                before = 'The fixture reports the base state.'
+                after = 'The fixture reports the requested candidate state.'
+                classification = 'requested'
+                proof_ids = @('windows-state')
+              })
+              findings = @()
+            }
+            $resultPath = Join-Path $target '.code-polishy-reports\behavior-review\result.json'
+            $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $resultPath -Encoding utf8
+            & $launcher --repo-root $target behavior-review finalize --base $behaviorBase
+            if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior review finalization failed.' }
+          }
+
+          Complete-BehaviorReview
+          & $launcher --repo-root $target checkpoint-gate --base $behaviorBase
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior checkpoint failed.' }
+          Complete-BehaviorReview
+          & $launcher --repo-root $target merge-gate --base $behaviorBase
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior merge failed.' }
