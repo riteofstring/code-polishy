@@ -77,6 +77,15 @@ pushes, or installs state.
    repository's `.code-polishy.lock.json` to the installed release with
    `<release>/bin/code-polishy lock`, as that repository's own reviewed change.
    Rerun the script with its default lock for this repository.
+8. Keep behavior review experimental until real workflows in more than one
+   repository cover an optional `NOT RUN` refactor, a user-requested feature, a
+   merge-required feature, a checkpoint-required task, a strict full-candidate
+   repository, an unintended behavior fixed and reviewed again, and a late
+   request backed by pre-code intent. Retain completion rate, wall and proof
+   time, corrective attempts, reviewer disagreements, false alarms, later-found
+   misses, and operator-status clarity with the release evidence. Promote the
+   workflow only when that evidence shows useful findings beyond ordinary
+   tests often enough to justify its cost.
 
 The source is licensed under Apache-2.0. Pushing the version tag, changing
 visibility, or changing branch and tag protection remains an explicit

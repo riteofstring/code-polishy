@@ -22,8 +22,8 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
 - Can bind the user's exact request to named product features, then enforce an
-  opt-in [review subagent](docs/policies/behavior-review.md) workflow for
-  sensitive behavior changes.
+  experimental opt-in [review subagent](docs/policies/behavior-review.md)
+  workflow for sensitive behavior changes.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.

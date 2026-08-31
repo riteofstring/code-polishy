@@ -5,6 +5,10 @@ Polishy selects its scope, prepares a bounded packet, validates a strict result,
 records red/green proofs, and replays those proofs at a gate. It does not call an
 AI provider or claim deterministic semantic regression detection.
 
+This workflow is experimental until its installed-release Unix and native
+Windows acceptance contracts pass and real multi-repository dogfood meets the
+release checklist.
+
 Every base-aware plan, checkpoint gate, and merge gate reports exactly one
 state:
 

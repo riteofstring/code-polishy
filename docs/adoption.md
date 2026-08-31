@@ -585,6 +585,10 @@ gate does not reuse prior work.
 
 ### Keep behavior-regression evidence in custody
 
+This workflow is experimental; its installed-release Unix and native Windows
+acceptance contracts and real multi-repository dogfood must meet the release
+checklist.
+
 At the start of a source task, the agent harness should pass the user's original
 request and supplied acceptance criteria to `behavior-review capture-intent` at
 the clean task-base commit. Capture is cheap and invokes neither tests nor an AI
