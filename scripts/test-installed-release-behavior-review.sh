@@ -126,6 +126,14 @@ write_behavior_review_fixture_config() {
         "runOn": ["focused", "recommended", "full"]
       },
       {
+        "name": "tooling-contract",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["tooling"],
+        "argv": ["./scripts/test.sh", "tooling-contract"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
         "name": "repository-full",
         "kind": "integration",
         "scope": "repository",
