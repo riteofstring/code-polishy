@@ -349,20 +349,28 @@ func (repo Repository) gitOutput(ctx context.Context, arguments ...string) ([]by
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	command := exec.CommandContext(ctx, "git", append([]string{"-C", repo.Root}, arguments...)...)
+	command := exec.CommandContext(ctx, "git", append([]string{"-c", "core.longpaths=true", "-C", repo.Root}, arguments...)...)
 	output, err := command.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git %s: %w", strings.Join(arguments, " "), err)
+		return nil, gitCommandError(arguments, err)
 	}
 	return output, nil
 }
 
 func (repo Repository) gitRun(ctx context.Context, arguments ...string) error {
-	if ctx == nil {
-		ctx = context.Background()
+	_, err := repo.gitOutput(ctx, arguments...)
+	return err
+}
+
+func gitCommandError(arguments []string, err error) error {
+	invocation := "git " + strings.Join(arguments, " ")
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		if diagnostic := strings.TrimSpace(string(exitError.Stderr)); diagnostic != "" {
+			return fmt.Errorf("%s: %s: %w", invocation, diagnostic, err)
+		}
 	}
-	command := exec.CommandContext(ctx, "git", append([]string{"-C", repo.Root}, arguments...)...)
-	return command.Run()
+	return fmt.Errorf("%s: %w", invocation, err)
 }
 
 func gitExitStatus(err error) int {

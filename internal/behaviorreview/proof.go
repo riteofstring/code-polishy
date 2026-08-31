@@ -510,7 +510,7 @@ func applyEvidencePatch(ctx context.Context, worktree string, patch []byte) ([]b
 	}
 	output := &bytes.Buffer{}
 	result, err := runner.Run(ctx, runner.HostCommand{
-		Path: "git", Argv: []string{"git", "-C", worktree, "apply", "--binary", "--whitespace=nowarn", "-"},
+		Path: "git", Argv: []string{"git", "-c", "core.longpaths=true", "-C", worktree, "apply", "--binary", "--whitespace=nowarn", "-"},
 		Environment: runner.Environment(nil), Stdin: bytes.NewReader(patch), Stdout: output, Stderr: output,
 	})
 	if err != nil || !result.Started || result.ExitStatus != 0 {

@@ -95,6 +95,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native release identity contracts failed.' }
           & $go test -count=1 ./internal/javascript -run '^TestJavaScriptExecutableUsesNativeHostContract$'
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
+          & $go test -count=1 ./internal/repository -run '^TestDetachedWorktreeSupportsLongHostPaths$'
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows Git worktree contract failed.' }
           & $go test -count=1 ./internal/gaterun
           if ($LASTEXITCODE -ne 0) { throw 'Native gate report runtime contracts failed.' }
           & $go test -count=1 ./internal/behaviorreview -run '^TestIntentJournalLockRetainsConcurrentFeatureCaptures$'

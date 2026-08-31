@@ -142,6 +142,20 @@ func TestAncestryResultReportsUnexpectedGitFailuresAsOperational(t *testing.T) {
 	}
 }
 
+func TestGitFailuresIncludeNativeDiagnostics(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	_, err := repo.gitOutput(context.Background(), "rev-parse", "--verify", "--end-of-options", "refs/code-polishy/missing")
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) {
+		t.Fatalf("gitOutput() error = %v, want Git exit error", err)
+	}
+	diagnostic := bytes.TrimSpace(exitError.Stderr)
+	if len(diagnostic) == 0 || !bytes.Contains([]byte(err.Error()), diagnostic) {
+		t.Fatalf("gitOutput() error omitted native diagnostic %q: %v", diagnostic, err)
+	}
+}
+
 func TestPatchProducesBinaryEvidenceForExactRevisions(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)
@@ -224,6 +238,39 @@ func TestDetachedWorktreeLifecycleRejectsUnsafeTargets(t *testing.T) {
 	}
 	if err := repo.RemoveWorktree(context.Background(), repo.Root); !errors.Is(err, ErrInvalidPath) {
 		t.Fatalf("RemoveWorktree(repository root) error = %v, want invalid path", err)
+	}
+}
+
+func TestDetachedWorktreeSupportsLongHostPaths(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	relative := filepath.Join("nested", strings.Repeat("x", 80)+".txt")
+	writeFile(t, repo.Root, relative, "long path\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "long path")
+	head, err := repo.CleanHead()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	for len(filepath.Join(parent, "worktree")) < 220 {
+		parent = filepath.Join(parent, "nested-path")
+	}
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	worktree := filepath.Join(parent, "worktree")
+	if len(filepath.Join(worktree, relative)) <= 260 {
+		t.Fatalf("test worktree path is too short: %s", worktree)
+	}
+	if err := repo.AddDetachedWorktree(context.Background(), worktree, head); err != nil {
+		t.Fatal(err)
+	}
+	if !isRegularFile(filepath.Join(worktree, relative)) {
+		t.Fatalf("long-path worktree is missing %s", relative)
+	}
+	if err := repo.RemoveWorktree(context.Background(), worktree); err != nil {
+		t.Fatal(err)
 	}
 }
 
