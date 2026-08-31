@@ -214,17 +214,25 @@ jobs:
           if ($data.state -ne 'candidate') { throw 'Expected candidate behavior.' }
           '@ | Set-Content -LiteralPath (Join-Path $target 'scripts\test.ps1')
           Set-Content -LiteralPath (Join-Path $target 'src\data.json') -Value '{"platform":"windows","state":"candidate"}'
+          & $launcher --repo-root $target format --files src/data.json
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native candidate formatting failed.' }
           & git.exe -C $target add scripts/test.ps1 src/data.json
           & git.exe -C $target commit -m 'Change native fixture behavior'
           if ($LASTEXITCODE -ne 0) { throw 'Native behavior candidate commit failed.' }
 
           $optionalCheckpoint = (& $launcher --repo-root $target checkpoint-gate --base $behaviorBase 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed optional native behavior checkpoint failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $optionalCheckpoint
+            throw 'Installed optional native behavior checkpoint failed.'
+          }
           if ($optionalCheckpoint -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
             throw "Optional checkpoint did not report an unselected behavior review: $optionalCheckpoint"
           }
           $optionalMerge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed optional native behavior merge failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $optionalMerge
+            throw 'Installed optional native behavior merge failed.'
+          }
           if ($optionalMerge -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
             throw "Optional merge did not report an unselected behavior review: $optionalMerge"
           }
@@ -236,12 +244,18 @@ jobs:
           }
 
           $requestedReview = (& $launcher --repo-root $target behavior-review require --base $behaviorBase --feature windows-state 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed task-requested native behavior review failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $requestedReview
+            throw 'Installed task-requested native behavior review failed.'
+          }
           if ($requestedReview -notlike '*Behavior review requirement added:*') {
             throw "Task-requested behavior review did not report its journal update: $requestedReview"
           }
           $requiredStatus = (& $launcher --repo-root $target behavior-review status --base $behaviorBase 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed task-requested behavior status failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $requiredStatus
+            throw 'Installed task-requested behavior status failed.'
+          }
           if ($requiredStatus -notlike '*BEHAVIOR REVIEW: REQUIRED (windows-state)*') {
             throw "Task-requested behavior review did not report the selected feature: $requiredStatus"
           }
@@ -281,12 +295,18 @@ jobs:
 
           Complete-BehaviorReview
           $checkpoint = (& $launcher --repo-root $target checkpoint-gate --base $behaviorBase 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior checkpoint failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $checkpoint
+            throw 'Installed native behavior checkpoint failed.'
+          }
           if ($checkpoint -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
             throw "Checkpoint did not report the passed requested feature review: $checkpoint"
           }
           $merge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior merge failed.' }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $merge
+            throw 'Installed native behavior merge failed.'
+          }
           if ($merge -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
             throw "Merge did not report the passed requested feature review: $merge"
           }
