@@ -32,11 +32,11 @@ func TestStandaloneArtifactReleaseAgeUsesAuthoritativeUpstreamMetadata(t *testin
 	released := "2026-08-20T12:00:00Z"
 	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
 		responses := map[string]string{
-			"https://api.github.com/repos/golang/go/commits/go1.26.6":           `{"sha":"` + strings.Repeat("a", 40) + `","commit":{"committer":{"date":"` + released + `"},"message":"[release-branch.go1.26] go1.26.6"}}`,
-			"https://nodejs.org/dist/index.json":                                `[{"version":"v24.18.0","date":"2026-08-20"}]`,
-			"https://proxy.golang.org/honnef.co/go/tools/@v/v0.7.0.info":        `{"Version":"v0.7.0","Time":"` + released + `"}`,
-			"https://api.github.com/repos/astral-sh/ruff/releases/tags/v0.16.0": `{"tag_name":"v0.16.0","published_at":"` + released + `"}`,
-			"https://registry.npmjs.org/@example%2Fcli":                         `{"time":{"2.3.4":"` + released + `"}}`,
+			goReleaseHistoryEndpoint:                                     `<html><p id="go1.26.6">go1.26.6 (released 2026-08-20)</p></html>`,
+			"https://nodejs.org/dist/index.json":                         `[{"version":"v24.18.0","date":"2026-08-20"}]`,
+			"https://proxy.golang.org/honnef.co/go/tools/@v/v0.7.0.info": `{"Version":"v0.7.0","Time":"` + released + `"}`,
+			"https://github.com/astral-sh/ruff/releases.atom":            `<feed><entry><id>tag:github.com,2008:Repository/123/v0.16.0</id><updated>` + released + `</updated></entry></feed>`,
+			"https://registry.npmjs.org/@example%2Fcli":                  `{"time":{"2.3.4":"` + released + `"}}`,
 		}
 		body, exists := responses[request.URL.String()]
 		if !exists {
@@ -62,9 +62,34 @@ func TestStandaloneArtifactReleaseAgeUsesAuthoritativeUpstreamMetadata(t *testin
 		}
 	}
 	for _, finding := range findings {
-		if finding.Subject == "node@24.18.0" && !finding.ReleaseAge.Released.Equal(time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)) {
-			t.Errorf("Node date-only metadata was not conservatively bounded: %s", finding.ReleaseAge.Released)
+		if (finding.Subject == "go@1.26.6" || finding.Subject == "node@24.18.0") &&
+			!finding.ReleaseAge.Released.Equal(time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)) {
+			t.Errorf("date-only metadata was not conservatively bounded for %s: %s", finding.Subject, finding.ReleaseAge.Released)
 		}
+	}
+}
+
+func TestGoToolchainReleaseHistoryFailsClosedOnMalformedEntries(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{
+		`<p id="go1.26.5">go1.26.5 (released 2026-08-20)</p>`,
+		`<p id="go1.26.6">go1.26.6</p>`,
+		`<p id="go1.26.6">go1.26.6 (released yesterday)</p>`,
+		`<p id="go1.26.6">go1.26.6 (released 2026-08-20) (released 2026-08-21)</p>`,
+	} {
+		body := body
+		t.Run(body, func(t *testing.T) {
+			t.Parallel()
+			client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
+				if request.URL.String() != goReleaseHistoryEndpoint || request.Header.Get("Accept") != "text/html" {
+					return nil, fmt.Errorf("unexpected Go release history request")
+				}
+				return artifactResponse(http.StatusOK, body), nil
+			})
+			if _, err := lookupGoToolchainRelease(t.Context(), client, "1.26.6"); err == nil {
+				t.Fatal("malformed Go release history entry was accepted")
+			}
+		})
 	}
 }
 
@@ -79,10 +104,10 @@ func TestStandaloneArtifactReleaseAgeFailsClosedOnPinsAndMetadata(t *testing.T) 
 	writeSupplyFile(t, repo.Root, "tools/floating-version.txt", "latest\n")
 	writeSupplyFile(t, repo.Root, "tools/ruff-version.txt", "0.16.0\n")
 	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != "https://api.github.com/repos/astral-sh/ruff/releases/tags/0.16.0" {
+		if request.URL.String() != "https://github.com/astral-sh/ruff/releases.atom" {
 			return nil, fmt.Errorf("unexpected metadata request %s", request.URL)
 		}
-		return artifactResponse(http.StatusOK, `{"tag_name":"other","published_at":null}`), nil
+		return artifactResponse(http.StatusServiceUnavailable, ""), nil
 	})
 	findings := releaseArtifactAgeFindings(t.Context(), repo, client, time.Now().UTC())
 	if len(findings) != 3 {
@@ -104,7 +129,7 @@ func TestStandaloneArtifactOlderThanTheMinimumPasses(t *testing.T) {
 	}}
 	writeSupplyFile(t, repo.Root, "tools/ruff-version.txt", "0.16.0\n")
 	client := artifactClientFunc(func(*http.Request) (*http.Response, error) {
-		return artifactResponse(http.StatusOK, `{"tag_name":"0.16.0","published_at":"2026-06-01T00:00:00Z"}`), nil
+		return artifactResponse(http.StatusOK, `<feed><entry><id>tag:github.com,2008:Repository/123/0.16.0</id><updated>2026-06-01T00:00:00Z</updated></entry></feed>`), nil
 	})
 	now := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
 	if findings := releaseArtifactAgeFindings(t.Context(), repo, client, now); len(findings) != 0 {
@@ -112,56 +137,24 @@ func TestStandaloneArtifactOlderThanTheMinimumPasses(t *testing.T) {
 	}
 }
 
-func TestGitHubTokenTransportScopesCredentialToGitHubAPI(t *testing.T) {
+func TestGitHubReleaseFeedPaginatesToTheExactTag(t *testing.T) {
 	t.Parallel()
-	received := map[string]string{}
-	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		received[request.URL.String()] = request.Header.Get("Authorization")
-		return artifactResponse(http.StatusOK, `{}`), nil
-	})
-	transport := githubTokenTransport{base: base, token: "github-actions-token"}
-	for _, endpoint := range []string{
-		"https://api.github.com/repos/example/tool/releases/tags/v1.0.0",
-		"http://api.github.com/repos/example/tool/releases/tags/v1.0.0",
-		"https://registry.npmjs.org/example",
-		"https://api.github.com.example.invalid/repos/example/tool",
-	} {
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		response, err := transport.RoundTrip(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		response.Body.Close()
-		if request.Header.Get("Authorization") != "" {
-			t.Fatal("credential transport mutated its input request")
-		}
-	}
-	githubEndpoint := "https://api.github.com/repos/example/tool/releases/tags/v1.0.0"
-	if received[githubEndpoint] != "Bearer github-actions-token" {
-		t.Fatalf("GitHub API authorization = %q", received[githubEndpoint])
-	}
-	for endpoint, authorization := range received {
-		if endpoint != githubEndpoint && authorization != "" {
-			t.Fatalf("credential reached %s", endpoint)
-		}
-	}
-}
-
-func TestGitHubTokenTransportFallsBackToPublicMetadata(t *testing.T) {
-	t.Parallel()
-	authorizations := []string{}
+	requests := []string{}
 	released := "2026-06-30T09:52:02Z"
-	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		authorizations = append(authorizations, request.Header.Get("Authorization"))
-		if len(authorizations) == 1 {
-			return artifactResponse(http.StatusForbidden, `{"message":"Resource not accessible by integration"}`), nil
+	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.URL.String())
+		if request.Header.Get("Accept") != "application/atom+xml" || request.Header.Get("Authorization") != "" {
+			return nil, fmt.Errorf("unexpected GitHub release feed headers")
 		}
-		return artifactResponse(http.StatusOK, `{"tag_name":"v0.72.0","published_at":"`+released+`"}`), nil
+		switch request.URL.String() {
+		case "https://github.com/aquasecurity/trivy/releases.atom":
+			return artifactResponse(http.StatusOK, `<feed><entry><id>tag:github.com,2008:Repository/180687624/v0.73.0</id><updated>2026-08-03T10:56:21Z</updated></entry></feed>`), nil
+		case "https://github.com/aquasecurity/trivy/releases.atom?after=v0.73.0":
+			return artifactResponse(http.StatusOK, `<feed><entry><id>tag:github.com,2008:Repository/180687624/v0.72.0</id><updated>`+released+`</updated></entry></feed>`), nil
+		default:
+			return nil, fmt.Errorf("unexpected metadata request %s", request.URL)
+		}
 	})
-	client := &http.Client{Transport: githubTokenTransport{base: base, token: "github-actions-token"}}
 	observed, err := lookupGitHubRelease(t.Context(), client, "aquasecurity/trivy", "v0.72.0")
 	if err != nil {
 		t.Fatal(err)
@@ -173,8 +166,18 @@ func TestGitHubTokenTransportFallsBackToPublicMetadata(t *testing.T) {
 	if !observed.Equal(want) {
 		t.Fatalf("release time = %s, want %s", observed, want)
 	}
-	if len(authorizations) != 2 || authorizations[0] != "Bearer github-actions-token" || authorizations[1] != "" {
-		t.Fatalf("authorization attempts = %q", authorizations)
+	if len(requests) != 2 {
+		t.Fatalf("metadata requests = %q", requests)
+	}
+}
+
+func TestGitHubReleaseFeedRejectsMalformedMetadata(t *testing.T) {
+	t.Parallel()
+	client := artifactClientFunc(func(*http.Request) (*http.Response, error) {
+		return artifactResponse(http.StatusOK, `<feed><entry><id>unexpected</id><updated>2026-06-30T09:52:02Z</updated></entry></feed>`), nil
+	})
+	if _, err := lookupGitHubRelease(t.Context(), client, "aquasecurity/trivy", "v0.72.0"); err == nil || !strings.Contains(err.Error(), "malformed") {
+		t.Fatalf("malformed feed error = %v", err)
 	}
 }
 
@@ -188,18 +191,12 @@ func TestGitHubMetadataFailureReportsSafeReason(t *testing.T) {
 	})
 	target := map[string]any{}
 	err := fetchArtifactMetadata(
-		t.Context(), client, "https://api.github.com/repos/aquasecurity/trivy/releases/tags/v0.72.0", &target,
+		t.Context(), client, "https://github.com/aquasecurity/trivy/releases.atom", &target,
 	)
 	if err == nil || !strings.Contains(err.Error(), `GitHub message "API rate limit exceeded"`) ||
 		!strings.Contains(err.Error(), "rate-limit remaining 0") || !strings.Contains(err.Error(), "retry after 60") {
 		t.Fatalf("metadata error = %v", err)
 	}
-}
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
-	return function(request)
 }
 
 type artifactClientFunc func(*http.Request) (*http.Response, error)

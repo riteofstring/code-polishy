@@ -215,12 +215,12 @@ adoption.
   General exceptions cannot waive release age.
 - Environment variables do not override checked-in age policy. Missing or
   malformed registry metadata is a failure, not evidence of age.
-- `GITHUB_TOKEN`, when present, authenticates release metadata requests only to
-  the exact HTTPS `api.github.com` host. When a public repository rejects that
-  repository-scoped credential, the same request is attempted once without the
-  credential. It is never sent to another registry or metadata service and does
-  not change which release or policy is evaluated. A failed public attempt
-  remains a finding and reports bounded GitHub failure and rate-limit details.
+- GitHub release artifacts use GitHub's public Atom release feed with bounded
+  pagination and exact tag matching. Go toolchain releases use the exact entry
+  in Go's public release history, with date-only metadata conservatively bounded
+  to the end of the release day. These public metadata sources avoid
+  repository-scoped credentials and shared GitHub API quotas; unavailable,
+  malformed, or incomplete metadata remains a finding.
 - A release-age assessment never suppresses a native-audit or OSV finding for
   the same package. Vulnerability enforcement takes precedence over age.
 

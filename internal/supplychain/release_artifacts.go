@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,9 @@ import (
 const (
 	artifactMetadataMaximumBytes      = 16 << 20
 	artifactMetadataErrorMaximumBytes = 4 << 10
+	githubReleaseFeedMaximumPages     = 32
+	githubReleaseFeedIDPrefix         = "tag:github.com,2008:Repository/"
+	goReleaseHistoryEndpoint          = "https://go.dev/doc/devel/release"
 )
 
 type artifactHTTPClient interface {
@@ -184,18 +188,62 @@ func lookupReleaseArtifact(ctx context.Context, client artifactHTTPClient, repo 
 
 func lookupGitHubRelease(ctx context.Context, client artifactHTTPClient, repositoryName, tag string) (time.Time, error) {
 	owner, name, _ := strings.Cut(repositoryName, "/")
-	endpoint := "https://api.github.com/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/releases/tags/" + url.PathEscape(tag)
-	var payload struct {
-		TagName     string    `json:"tag_name"`
-		PublishedAt time.Time `json:"published_at"`
+	baseEndpoint := "https://github.com/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/releases.atom"
+	cursor := ""
+	for range githubReleaseFeedMaximumPages {
+		endpoint := baseEndpoint
+		if cursor != "" {
+			endpoint += "?after=" + url.QueryEscape(cursor)
+		}
+		var feed githubReleaseFeed
+		if err := fetchArtifactFeed(ctx, client, endpoint, &feed); err != nil {
+			return time.Time{}, err
+		}
+		if len(feed.Entries) == 0 {
+			break
+		}
+		for _, entry := range feed.Entries {
+			observed, err := githubReleaseFeedTag(entry.ID)
+			if err != nil || entry.Updated.IsZero() {
+				return time.Time{}, fmt.Errorf("GitHub release feed contained malformed release metadata")
+			}
+			if observed == tag {
+				return entry.Updated, nil
+			}
+		}
+		next, err := githubReleaseFeedTag(feed.Entries[len(feed.Entries)-1].ID)
+		if err != nil || next == cursor {
+			return time.Time{}, fmt.Errorf("GitHub release feed pagination did not advance")
+		}
+		cursor = next
 	}
-	if err := fetchArtifactMetadata(ctx, client, endpoint, &payload); err != nil {
-		return time.Time{}, err
+	return time.Time{}, fmt.Errorf("GitHub release feed omitted tag %s", tag)
+}
+
+type githubReleaseFeed struct {
+	Entries []githubReleaseFeedEntry `xml:"entry"`
+}
+
+type githubReleaseFeedEntry struct {
+	ID      string    `xml:"id"`
+	Updated time.Time `xml:"updated"`
+}
+
+func githubReleaseFeedTag(id string) (string, error) {
+	remainder, found := strings.CutPrefix(id, githubReleaseFeedIDPrefix)
+	if !found {
+		return "", fmt.Errorf("unrecognized GitHub release feed identity")
 	}
-	if payload.TagName != tag || payload.PublishedAt.IsZero() {
-		return time.Time{}, fmt.Errorf("GitHub release metadata did not identify tag %s with a publication timestamp", tag)
+	repositoryID, tag, found := strings.Cut(remainder, "/")
+	if !found || repositoryID == "" || tag == "" || tag != strings.TrimSpace(tag) {
+		return "", fmt.Errorf("malformed GitHub release feed identity")
 	}
-	return payload.PublishedAt, nil
+	for _, character := range repositoryID {
+		if character < '0' || character > '9' {
+			return "", fmt.Errorf("malformed GitHub release feed repository identity")
+		}
+	}
+	return tag, nil
 }
 
 func lookupGoModuleRelease(ctx context.Context, client artifactHTTPClient, module, version string) (time.Time, error) {
@@ -214,26 +262,33 @@ func lookupGoModuleRelease(ctx context.Context, client artifactHTTPClient, modul
 }
 
 func lookupGoToolchainRelease(ctx context.Context, client artifactHTTPClient, version string) (time.Time, error) {
-	tag := "go" + version
-	endpoint := "https://api.github.com/repos/golang/go/commits/" + url.PathEscape(tag)
-	var payload struct {
-		SHA    string `json:"sha"`
-		Commit struct {
-			Committer struct {
-				Date time.Time `json:"date"`
-			} `json:"committer"`
-			Message string `json:"message"`
-		} `json:"commit"`
-	}
-	if err := fetchArtifactMetadata(ctx, client, endpoint, &payload); err != nil {
+	data, err := fetchArtifactDocument(ctx, client, goReleaseHistoryEndpoint, "text/html")
+	if err != nil {
 		return time.Time{}, err
 	}
-	firstLine, _, _ := strings.Cut(payload.Commit.Message, "\n")
-	fields := strings.Fields(firstLine)
-	if !fullCommit.MatchString(payload.SHA) || payload.Commit.Committer.Date.IsZero() || len(fields) == 0 || fields[len(fields)-1] != tag {
-		return time.Time{}, fmt.Errorf("go release tag %s did not resolve to its exact release commit", tag)
+	marker := []byte(`<p id="go` + version + `">`)
+	if bytes.Count(data, marker) != 1 {
+		return time.Time{}, fmt.Errorf("go release history did not identify go%s exactly once", version)
 	}
-	return payload.Commit.Committer.Date, nil
+	section := data[bytes.Index(data, marker)+len(marker):]
+	end := bytes.Index(section, []byte("</p>"))
+	if end < 0 {
+		return time.Time{}, fmt.Errorf("go release history entry for go%s was incomplete", version)
+	}
+	section = section[:end]
+	releaseMarker := []byte("(released ")
+	if bytes.Count(section, releaseMarker) != 1 {
+		return time.Time{}, fmt.Errorf("go release history entry for go%s did not contain one release date", version)
+	}
+	remainder := section[bytes.Index(section, releaseMarker)+len(releaseMarker):]
+	if len(remainder) < len("2006-01-02)") || remainder[len("2006-01-02")] != ')' {
+		return time.Time{}, fmt.Errorf("go release history entry for go%s had a malformed release date", version)
+	}
+	released, err := time.Parse("2006-01-02", string(remainder[:len("2006-01-02")]))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("go release history entry for go%s had a malformed release date", version)
+	}
+	return released.AddDate(0, 0, 1), nil
 }
 
 func lookupNodeRuntimeRelease(ctx context.Context, client artifactHTTPClient, version string) (time.Time, error) {
@@ -276,26 +331,9 @@ func lookupNPMArtifactRelease(ctx context.Context, client artifactHTTPClient, re
 }
 
 func fetchArtifactMetadata(ctx context.Context, client artifactHTTPClient, endpoint string, target any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	data, err := fetchArtifactDocument(ctx, client, endpoint, "application/json")
 	if err != nil {
 		return err
-	}
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "code-polishy-release-age")
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return artifactMetadataStatusError(endpoint, response)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, artifactMetadataMaximumBytes+1))
-	if err != nil {
-		return err
-	}
-	if len(data) > artifactMetadataMaximumBytes {
-		return fmt.Errorf("release metadata exceeds %d bytes", artifactMetadataMaximumBytes)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(target); err != nil {
@@ -304,9 +342,42 @@ func fetchArtifactMetadata(ctx context.Context, client artifactHTTPClient, endpo
 	return requireOneJSONValue(decoder)
 }
 
+func fetchArtifactFeed(ctx context.Context, client artifactHTTPClient, endpoint string, target any) error {
+	data, err := fetchArtifactDocument(ctx, client, endpoint, "application/atom+xml")
+	if err != nil {
+		return err
+	}
+	return xml.Unmarshal(data, target)
+}
+
+func fetchArtifactDocument(ctx context.Context, client artifactHTTPClient, endpoint, accept string) ([]byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Accept", accept)
+	request.Header.Set("User-Agent", "code-polishy-release-age")
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, artifactMetadataStatusError(endpoint, response)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, artifactMetadataMaximumBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > artifactMetadataMaximumBytes {
+		return nil, fmt.Errorf("release metadata exceeds %d bytes", artifactMetadataMaximumBytes)
+	}
+	return data, nil
+}
+
 func artifactMetadataStatusError(endpoint string, response *http.Response) error {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Scheme != "https" || parsed.Host != "api.github.com" {
+	if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" {
 		return fmt.Errorf("release metadata request failed with HTTP %d", response.StatusCode)
 	}
 	details := []string{}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -241,8 +240,7 @@ func nodeAuditSeverityAtLeast(severity, threshold string) bool {
 
 func registryClient() *http.Client {
 	return &http.Client{
-		Timeout:   registryRequestTimeout,
-		Transport: githubTokenTransport{base: http.DefaultTransport, token: os.Getenv("GITHUB_TOKEN")},
+		Timeout: registryRequestTimeout,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
 			if request.URL.Scheme != "https" {
 				return errors.New("registry redirect must remain HTTPS")
@@ -253,31 +251,4 @@ func registryClient() *http.Client {
 			return nil
 		},
 	}
-}
-
-type githubTokenTransport struct {
-	base  http.RoundTripper
-	token string
-}
-
-func (transport githubTokenTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Scheme != "https" || request.URL.Host != "api.github.com" || transport.token == "" {
-		return transport.base.RoundTrip(request)
-	}
-	if len(transport.token) > 4096 || strings.TrimSpace(transport.token) != transport.token {
-		return nil, errors.New("GITHUB_TOKEN must contain one bounded token without surrounding whitespace")
-	}
-	authenticated := request.Clone(request.Context())
-	authenticated.Header = request.Header.Clone()
-	authenticated.Header.Set("Authorization", "Bearer "+transport.token)
-	response, err := transport.base.RoundTrip(authenticated)
-	if err != nil || response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden {
-		return response, err
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
-	_ = response.Body.Close()
-	public := request.Clone(request.Context())
-	public.Header = request.Header.Clone()
-	public.Header.Del("Authorization")
-	return transport.base.RoundTrip(public)
 }
