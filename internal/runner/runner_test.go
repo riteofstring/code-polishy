@@ -254,9 +254,11 @@ func TestOSRunnerBuildsASealedCommandEnvironment(t *testing.T) {
 
 func TestOSRunnerTimeoutCancelsDescendants(t *testing.T) {
 	root := t.TempDir()
+	ready := filepath.Join(root, "ready")
+	release := filepath.Join(root, "release")
 	survivor := filepath.Join(root, "survivor")
 	script := filepath.Join(root, "descendant.sh")
-	contents := "#!/bin/sh\n(sleep 1; : > survivor) &\nwait\n"
+	contents := "#!/bin/sh\n(while [ ! -e release ]; do sleep 0.05; done; : > survivor) &\n: > ready\nwait\n"
 	if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -265,9 +267,20 @@ func TestOSRunnerTimeoutCancelsDescendants(t *testing.T) {
 	}); err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("descendant command did not time out: %v", err)
 	}
-	time.Sleep(1100 * time.Millisecond)
-	if _, err := os.Stat(survivor); err == nil {
-		t.Fatal("descendant survived governed command timeout")
+	if _, err := os.Stat(ready); err != nil {
+		t.Fatalf("descendant fixture did not start: %v", err)
+	}
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(survivor); err == nil {
+			t.Fatal("descendant survived governed command timeout")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
