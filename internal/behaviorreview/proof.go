@@ -17,7 +17,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-const worktreeDirectory = "worktrees"
+const worktreeDirectory = "w"
 
 type proofExecution struct {
 	ExitStatus int    `json:"exit_status"`
@@ -200,14 +200,14 @@ func replayEvidenceError(id string, err error) error {
 }
 
 func replayProofExecution(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root *artifactHandle, candidate string, proof regressionProof, suite policy.TestSuite, patch []byte) (resultErr error) {
-	baseline, err := createReplayWorktree(ctx, repo, root, "replay-baseline-", proof.Base)
+	baseline, err := createReplayWorktree(ctx, repo, root, "rb-", proof.Base)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		resultErr = joinReplayCleanup(resultErr, cleanupProofWorktree(repo, baseline))
 	}()
-	candidateWorktree, err := createReplayWorktree(ctx, repo, root, "replay-candidate-", candidate)
+	candidateWorktree, err := createReplayWorktree(ctx, repo, root, "rc-", candidate)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func proofMaterial(repo repository.Repository, base, candidate string, options P
 }
 
 func createProofWorktree(ctx context.Context, repo repository.Repository, root *artifactHandle, base string) (string, error) {
-	return createDetachedProofWorktree(ctx, repo, root, "baseline-", base)
+	return createDetachedProofWorktree(ctx, repo, root, "b-", base)
 }
 
 func createReplayWorktree(ctx context.Context, repo repository.Repository, root *artifactHandle, prefix, revision string) (string, error) {

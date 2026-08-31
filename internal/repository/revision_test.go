@@ -241,8 +241,10 @@ func TestDetachedWorktreeLifecycleRejectsUnsafeTargets(t *testing.T) {
 	}
 }
 
-func TestDetachedWorktreeSupportsLongHostPaths(t *testing.T) {
+func TestDetachedWorktreeSupportsLongCheckoutPaths(t *testing.T) {
 	t.Parallel()
+	const windowsGitDirectoryLimit = 220
+	const windowsLegacyPathLimit = 260
 	repo := newGitRepository(t)
 	relative := filepath.Join("nested", strings.Repeat("x", 80)+".txt")
 	writeFile(t, repo.Root, relative, "long path\n")
@@ -253,15 +255,18 @@ func TestDetachedWorktreeSupportsLongHostPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent := t.TempDir()
-	for len(filepath.Join(parent, "worktree")) < 220 {
-		parent = filepath.Join(parent, "nested-path")
+	for len(filepath.Join(parent, "worktree", ".git")) < windowsGitDirectoryLimit-15 {
+		parent = filepath.Join(parent, "path")
 	}
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	worktree := filepath.Join(parent, "worktree")
-	if len(filepath.Join(worktree, relative)) <= 260 {
-		t.Fatalf("test worktree path is too short: %s", worktree)
+	if len(filepath.Join(worktree, ".git")) > windowsGitDirectoryLimit {
+		t.Fatalf("test worktree root exceeds Git's supported boundary: %s", worktree)
+	}
+	if len(filepath.Join(worktree, relative)) <= windowsLegacyPathLimit {
+		t.Fatalf("test checkout path is too short: %s", worktree)
 	}
 	if err := repo.AddDetachedWorktree(context.Background(), worktree, head); err != nil {
 		t.Fatal(err)
