@@ -97,6 +97,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
           & $go test -count=1 ./internal/gaterun
           if ($LASTEXITCODE -ne 0) { throw 'Native gate report runtime contracts failed.' }
+          & $go test -count=1 ./internal/behaviorreview -run '^TestIntentJournalLockRetainsConcurrentFeatureCaptures$'
+          if ($LASTEXITCODE -ne 0) { throw 'Native behavior-review journal-lock contract failed.' }
           & $go test -count=1 ./internal/behaviorreview
           if ($LASTEXITCODE -ne 0) { throw 'Native behavior review runtime contracts failed.' }
 
@@ -146,7 +148,15 @@ jobs:
               {"name": "application", "paths": ["src/**"]},
               {"name": "tooling", "paths": ["scripts/**"]}
             ],
-            "verification": {"mergeGate": {"recommendedModules": ["application"]}},
+            "verification": {
+              "mergeGate": {"recommendedModules": ["application"]},
+              "behaviorReview": {
+                "defaultRequiredAt": "on-request",
+                "features": [
+                  {"name": "windows-state", "modules": ["application"], "suites": ["application-focused"]}
+                ]
+              }
+            },
             "checks": [
               {"name": "application-build", "provides": ["build"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"], "modules": ["application"], "runOn": ["build"]},
               {"name": "tooling-build", "provides": ["build"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"], "modules": ["tooling"], "runOn": ["build"]}
@@ -206,6 +216,34 @@ jobs:
           & git.exe -C $target commit -m 'Change native fixture behavior'
           if ($LASTEXITCODE -ne 0) { throw 'Native behavior candidate commit failed.' }
 
+          $optionalCheckpoint = (& $launcher --repo-root $target checkpoint-gate --base $behaviorBase 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Installed optional native behavior checkpoint failed.' }
+          if ($optionalCheckpoint -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
+            throw "Optional checkpoint did not report an unselected behavior review: $optionalCheckpoint"
+          }
+          $optionalMerge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Installed optional native behavior merge failed.' }
+          if ($optionalMerge -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
+            throw "Optional merge did not report an unselected behavior review: $optionalMerge"
+          }
+          $behaviorArtifacts = Join-Path $target '.code-polishy-reports\behavior-review'
+          foreach ($artifact in @('packet.json', 'receipt.json')) {
+            if (Test-Path -LiteralPath (Join-Path $behaviorArtifacts $artifact)) {
+              throw "Optional behavior review unexpectedly created $artifact."
+            }
+          }
+
+          $requestedReview = (& $launcher --repo-root $target behavior-review require --base $behaviorBase --feature windows-state 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Installed task-requested native behavior review failed.' }
+          if ($requestedReview -notlike '*Behavior review requirement added:*') {
+            throw "Task-requested behavior review did not report its journal update: $requestedReview"
+          }
+          $requiredStatus = (& $launcher --repo-root $target behavior-review status --base $behaviorBase 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Installed task-requested behavior status failed.' }
+          if ($requiredStatus -notlike '*BEHAVIOR REVIEW: REQUIRED (windows-state)*') {
+            throw "Task-requested behavior review did not report the selected feature: $requiredStatus"
+          }
+
           function Complete-BehaviorReview {
             & $launcher --repo-root $target behavior-review prepare --base $behaviorBase
             if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior review preparation failed.' }
@@ -214,32 +252,42 @@ jobs:
             $packetPath = Join-Path $target '.code-polishy-reports\behavior-review\packet.json'
             $packet = Get-Content -LiteralPath $packetPath -Raw | ConvertFrom-Json
             $result = [ordered]@{
-              version = 2
+              version = 3
               review_id = $packet.review_id
               base = $packet.base
               candidate = $packet.candidate
               intent_sha256 = $packet.intent_sha256
+              selection_sha256 = $packet.selection_sha256
+              decision_sha256 = $packet.decision_sha256
               behaviors = @([ordered]@{
                 before = 'The fixture reports the base state.'
                 after = 'The fixture reports the requested candidate state.'
                 classification = 'requested'
                 proof_ids = @('windows-state')
+                scope = [ordered]@{
+                  features = @('windows-state')
+                  full_candidate = $false
+                }
               })
               findings = @()
             }
             $resultPath = Join-Path $target '.code-polishy-reports\behavior-review\result.json'
-            $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $resultPath -Encoding utf8
+            $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultPath -Encoding utf8
             & $launcher --repo-root $target behavior-review finalize --base $behaviorBase
             if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior review finalization failed.' }
           }
 
           Complete-BehaviorReview
-          & $launcher --repo-root $target checkpoint-gate --base $behaviorBase
+          $checkpoint = (& $launcher --repo-root $target checkpoint-gate --base $behaviorBase 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior checkpoint failed.' }
-          Complete-BehaviorReview
-          & $launcher --repo-root $target merge-gate --base $behaviorBase
+          if ($checkpoint -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
+            throw "Checkpoint did not report the passed requested feature review: $checkpoint"
+          }
+          $merge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) { throw 'Installed native behavior merge failed.' }
-          $behaviorArtifacts = Join-Path $target '.code-polishy-reports\behavior-review'
+          if ($merge -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
+            throw "Merge did not report the passed requested feature review: $merge"
+          }
           $artifactBytes = (Get-ChildItem -LiteralPath $behaviorArtifacts -File -Recurse | Measure-Object -Property Length -Sum).Sum
           $durationSeconds = [math]::Round(((Get-Date) - $behaviorStarted).TotalSeconds)
           Write-Output "DOGFOOD SUMMARY repo=windows-native completed=true duration_seconds=$durationSeconds corrective_attempts=0 artifact_bytes=$artifactBytes"
