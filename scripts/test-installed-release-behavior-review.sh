@@ -297,6 +297,16 @@ assert_task_features() {
   done
 }
 
+assert_intent_capture_count() {
+  local target="$1" want="$2"
+  local journal="${target}/.code-polishy-reports/behavior-review/intent-journal.json" count
+  [[ -f "${journal}" ]] || fail "$(basename "${target}"): capture did not create its intent journal"
+  count="$(grep -c '"id": "intent-' "${journal}" || true)"
+  if [[ "${count}" != "${want}" ]]; then
+    fail "$(basename "${target}"): intent capture count ${count}, want ${want}"
+  fi
+}
+
 assert_task_requirement_count() {
   local target="$1" want="$2"
   local journal="${target}/.code-polishy-reports/behavior-review/intent-journal.json"
@@ -521,6 +531,8 @@ exercise_later_additive_require() {
   local base journal before after
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
   capture_fixture_intent "${target}" "${scenario}" original-request "${scratch_root}"
+  assert_intent_capture_count "${target}" 1
+  assert_task_requirement_count "${target}" 0
   commit_requested_greeting "${target}" "${git_executable}" "later feature request candidate"
   fixture_status "${target}" "${scenario}" "${base}" "NOT RUN (optional)"
   assert_no_review_packet_or_receipt "${target}" "${scenario} before feature request"
@@ -633,6 +645,7 @@ exercise_multi_task_union() {
   second_base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
   capture_fixture_intent "${target}" "${scenario}" second-task "${scratch_root}" search
   commit_refactored_greeting "${target}" "${git_executable}" "second task greeting refactor"
+  assert_intent_capture_count "${target}" 2
   assert_task_features "${target}" checkout search
   assert_task_requirement_count "${target}" 2
   journal="${target}/.code-polishy-reports/behavior-review/intent-journal.json"
