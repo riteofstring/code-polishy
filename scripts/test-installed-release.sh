@@ -415,7 +415,7 @@ if ! grep -q "conditional policy module: osv at ." "${output}"; then
 fi
 expect_absent "go-only activated a JavaScript framework policy module" \
   "conditional policy module: (react|electron)"
-exercise_behavior_review_lane "${go_only}" "go-only" "${real_git}" "${fixture_root}" "${output}"
+exercise_opt_in_behavior_review_fixtures "${fixture_root}" "${real_git}"
 write_file "${go_only}/internal/greeting/farewell.go" <<'EOF'
 package greeting
 
