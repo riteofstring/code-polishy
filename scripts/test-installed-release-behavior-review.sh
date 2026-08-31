@@ -151,17 +151,22 @@ write_behavior_review_fixture_config() {
 EOF
 }
 
-write_behavior_review_test_command() {
+write_behavior_review_commands() {
   local target="$1"
+  write_file "${target}/scripts/build.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+command_log="$(git rev-parse --path-format=absolute --git-common-dir)/code-polishy-command-log"
+printf '%s\n' "$(basename "$0")" >>"${command_log}"
+EOF
   write_file "${target}/scripts/test.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
-  printf '%s %s\n' "$(basename "$0")" "$*" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
-fi
+command_log="$(git rev-parse --path-format=absolute --git-common-dir)/code-polishy-command-log"
+printf '%s %s\n' "$(basename "$0")" "$*" >>"${command_log}"
 go test ./...
 EOF
-  chmod +x "${target}/scripts/test.sh"
+  chmod +x "${target}/scripts/build.sh" "${target}/scripts/test.sh"
 }
 
 new_behavior_review_target() {
@@ -183,7 +188,7 @@ EOF
 # Installed behavior-review fixture
 EOF
   write_target_commands "${target}"
-  write_behavior_review_test_command "${target}"
+  write_behavior_review_commands "${target}"
   write_security_workflow "${target}"
   write_behavior_review_fixture_config "${target}" "${behavior_policy}"
   seal_target "${target}"
