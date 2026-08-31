@@ -47,3 +47,23 @@ func TestCandidateImpactIncludesTransitiveReverseDependents(t *testing.T) {
 		t.Fatalf("impacted modules = %v", impact.ImpactedModules)
 	}
 }
+
+func TestImpactForPathsOwnsExpandedAnalysisImpact(t *testing.T) {
+	t.Parallel()
+	repo := Repository{Config: policy.Config{Modules: []policy.Module{
+		{Name: "domain", Paths: []string{"domain/**"}},
+		{Name: "api", Paths: []string{"api/**"}, DependsOn: []string{"domain"}},
+	}}}
+
+	impact := repo.ImpactForPaths([]string{"api/handler.go", "domain/order.go", "api/handler.go"})
+
+	if !slices.Equal(impact.Paths, []string{"api/handler.go", "domain/order.go"}) {
+		t.Fatalf("paths = %v", impact.Paths)
+	}
+	if !slices.Equal(impact.DirectModules, []string{"api", "domain"}) {
+		t.Fatalf("direct modules = %v", impact.DirectModules)
+	}
+	if !slices.Equal(impact.ImpactedModules, []string{"api", "domain"}) {
+		t.Fatalf("impacted modules = %v", impact.ImpactedModules)
+	}
+}

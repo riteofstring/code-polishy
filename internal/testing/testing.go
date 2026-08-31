@@ -100,14 +100,15 @@ func BuildPlan(repo repository.Repository, request Request) (Plan, error) {
 		plan.Reasons = []string{"direct named-suite selection"}
 		return plan, nil
 	}
-	direct := directModules(repo, request)
-	direct = uniqueStrings(direct)
-	if err := validateModuleNames(repo.Config, direct); err != nil {
-		return Plan{}, err
-	}
+	direct := uniqueStrings(request.Modules)
 	impacted := append([]string{}, direct...)
 	if len(request.Modules) == 0 {
-		impacted = reverseClosure(repo.Config, direct)
+		impact := repo.ImpactForPaths(analysisPaths(request.Changed))
+		direct = impact.DirectModules
+		impacted = impact.ImpactedModules
+	}
+	if err := validateModuleNames(repo.Config, direct); err != nil {
+		return Plan{}, err
 	}
 	changedPaths := analysisPaths(request.Changed)
 	profile := "focused"
@@ -226,17 +227,6 @@ func explicitSuitePlan(suites []policy.TestSuite, names []string) (Plan, error) 
 		selected = append(selected, suites[index])
 	}
 	return Plan{Suites: uniqueSuites(selected)}, nil
-}
-
-func directModules(repo repository.Repository, request Request) []string {
-	if len(request.Modules) > 0 {
-		return append([]string{}, request.Modules...)
-	}
-	direct := []string{}
-	for _, path := range analysisPaths(request.Changed) {
-		direct = append(direct, repo.ModuleNames(path)...)
-	}
-	return direct
 }
 
 func validateModuleNames(config policy.Config, names []string) error {
@@ -574,30 +564,6 @@ func hasFullKind(suites []policy.TestSuite, kinds ...string) bool {
 		}
 	}
 	return false
-}
-
-func reverseClosure(config policy.Config, roots []string) []string {
-	selected := map[string]bool{}
-	queue := append([]string{}, roots...)
-	for len(queue) > 0 {
-		name := queue[0]
-		queue = queue[1:]
-		if selected[name] {
-			continue
-		}
-		selected[name] = true
-		for _, module := range config.Modules {
-			if slices.Contains(module.DependsOn, name) {
-				queue = append(queue, module.Name)
-			}
-		}
-	}
-	result := make([]string, 0, len(selected))
-	for name := range selected {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func pathsMatch(paths, patterns []string) bool {

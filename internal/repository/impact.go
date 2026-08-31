@@ -7,7 +7,11 @@ type CandidateImpact struct {
 }
 
 func (repo Repository) CandidateImpact(candidate CandidateDelta) CandidateImpact {
-	paths := candidate.Paths()
+	return repo.ImpactForPaths(candidate.Paths())
+}
+
+func (repo Repository) ImpactForPaths(paths []string) CandidateImpact {
+	paths = uniqueSorted(paths)
 	direct := []string{}
 	for _, path := range paths {
 		direct = append(direct, repo.ModuleNames(path)...)
