@@ -52,27 +52,89 @@ func (err *CleanupError) Unwrap() error {
 }
 
 type PrepareOptions struct {
-	Base string
+	Base      string
+	Selection ReviewSelection
 }
 
 type CaptureIntentOptions struct {
 	IntentPath string
+	Features   []string
 }
 
 type CaptureIntentResult struct {
-	ID            string
-	Commit        string
-	IntentSHA256  string
-	JournalSHA256 string
-	JournalPath   string
+	ID                string
+	Commit            string
+	IntentSHA256      string
+	JournalSHA256     string
+	JournalPath       string
+	RequirementID     string
+	RequirementSHA256 string
+	Features          []string
+}
+
+type RequireOptions struct {
+	Base     string
+	Features []string
+}
+
+type RequireResult struct {
+	ID                string
+	Base              string
+	Candidate         string
+	IntentSHA256      string
+	RequirementSHA256 string
+	JournalPath       string
+	Features          []string
+}
+
+type TaskRequirement struct {
+	ID             string   `json:"id"`
+	TaskBase       string   `json:"task_base"`
+	IntentIDs      []string `json:"intent_ids"`
+	IntentSHA256   string   `json:"intent_sha256"`
+	Features       []string `json:"features"`
+	PreviousSHA256 string   `json:"previous_requirement_sha256"`
+	EntrySHA256    string   `json:"requirement_sha256"`
+}
+
+type TaskRequirementsResult struct {
+	Base              string            `json:"base"`
+	Candidate         string            `json:"candidate"`
+	Requirements      []TaskRequirement `json:"requirements"`
+	RequestedFeatures []string          `json:"requested_features"`
+	SHA256            string            `json:"sha256"`
+}
+
+type SelectedFeature struct {
+	Name       string   `json:"name"`
+	Modules    []string `json:"modules"`
+	Paths      []string `json:"paths"`
+	Suites     []string `json:"suites"`
+	RequiredAt string   `json:"required_at"`
+	Reasons    []string `json:"reasons"`
+}
+
+type ReviewSelection struct {
+	Features             []SelectedFeature `json:"features"`
+	FullCandidate        bool              `json:"full_candidate"`
+	FullCandidateReasons []string          `json:"full_candidate_reasons"`
+}
+
+type BehaviorScope struct {
+	Features      []string `json:"features"`
+	FullCandidate bool     `json:"full_candidate"`
 }
 
 type PrepareResult struct {
-	ReviewID     string
-	Base         string
-	Candidate    string
-	IntentSHA256 string
-	PacketPath   string
+	ReviewID          string
+	Base              string
+	Candidate         string
+	IntentSHA256      string
+	SelectionSHA256   string
+	RequirementSHA256 string
+	DecisionSHA256    string
+	Selection         ReviewSelection
+	PacketPath        string
 }
 
 type FinalizeOptions struct {
@@ -80,10 +142,13 @@ type FinalizeOptions struct {
 }
 
 type FinalizeResult struct {
-	ReviewID    string
-	Base        string
-	Candidate   string
-	ReceiptPath string
+	ReviewID        string
+	Base            string
+	Candidate       string
+	SelectionSHA256 string
+	DecisionSHA256  string
+	Selection       ReviewSelection
+	ReceiptPath     string
 }
 
 type ProveOptions struct {
@@ -95,15 +160,18 @@ type ProveOptions struct {
 }
 
 type ProveResult struct {
-	ID        string
-	Base      string
-	Candidate string
-	Suite     string
-	ProofPath string
+	ID              string
+	Base            string
+	Candidate       string
+	Suite           string
+	SelectionSHA256 string
+	DecisionSHA256  string
+	ProofPath       string
 }
 
 type ValidateGateReceiptOptions struct {
-	Base string
+	Base      string
+	Selection ReviewSelection
 }
 
 type ProofReference struct {
@@ -112,15 +180,19 @@ type ProofReference struct {
 }
 
 type GateReceipt struct {
-	Version       int              `json:"version"`
-	ReviewID      string           `json:"review_id"`
-	Base          string           `json:"base"`
-	Candidate     string           `json:"candidate"`
-	IntentSHA256  string           `json:"intent_sha256"`
-	PacketSHA256  string           `json:"packet_sha256"`
-	PrepareSHA256 string           `json:"prepare_sha256"`
-	ReviewSHA256  string           `json:"review_sha256"`
-	Proofs        []ProofReference `json:"proofs"`
+	Version           int              `json:"version"`
+	ReviewID          string           `json:"review_id"`
+	Base              string           `json:"base"`
+	Candidate         string           `json:"candidate"`
+	IntentSHA256      string           `json:"intent_sha256"`
+	SelectionSHA256   string           `json:"selection_sha256"`
+	RequirementSHA256 string           `json:"requirement_sha256"`
+	DecisionSHA256    string           `json:"decision_sha256"`
+	Selection         ReviewSelection  `json:"selection"`
+	PacketSHA256      string           `json:"packet_sha256"`
+	PrepareSHA256     string           `json:"prepare_sha256"`
+	ReviewSHA256      string           `json:"review_sha256"`
+	Proofs            []ProofReference `json:"proofs"`
 }
 
 type GateReplayPlan struct {
@@ -139,24 +211,24 @@ const (
 	CheckpointScopeChanged       = "changed"
 	CheckpointScopeDocumentation = "documentation"
 	CheckpointReceiptPath        = ".code-polishy-reports/checkpoint-gate/receipt.json"
-	checkpointReceiptVersion     = 2
+	checkpointReceiptVersion     = 3
 )
 
 type RecordCheckpointOptions struct {
-	Base             string
-	Candidate        string
-	Scope            string
-	BehaviorReviewID string
-	GateRun          gaterun.ExecutionEvidence
+	Base           string
+	Candidate      string
+	Scope          string
+	BehaviorReview gaterun.BehaviorReview
+	GateRun        gaterun.ExecutionEvidence
 }
 
 type CheckpointReceipt struct {
-	Version          int                       `json:"version"`
-	Base             string                    `json:"base"`
-	Candidate        string                    `json:"candidate"`
-	Scope            string                    `json:"scope"`
-	BehaviorReviewID string                    `json:"behavior_review_id,omitempty"`
-	GateRun          gaterun.ExecutionEvidence `json:"gate_run"`
+	Version        int                       `json:"version"`
+	Base           string                    `json:"base"`
+	Candidate      string                    `json:"candidate"`
+	Scope          string                    `json:"scope"`
+	BehaviorReview gaterun.BehaviorReview    `json:"behavior_review"`
+	GateRun        gaterun.ExecutionEvidence `json:"gate_run"`
 }
 
 type RecordCheckpointResult struct {
@@ -170,6 +242,14 @@ func Prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 
 func CaptureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
 	return captureIntent(ctx, repo, options)
+}
+
+func Require(ctx context.Context, repo repository.Repository, options RequireOptions) (RequireResult, error) {
+	return require(ctx, repo, options)
+}
+
+func TaskRequirements(ctx context.Context, repo repository.Repository, base string) (TaskRequirementsResult, error) {
+	return taskRequirements(ctx, repo, base)
 }
 
 func Finalize(ctx context.Context, repo repository.Repository, options FinalizeOptions) (FinalizeResult, error) {

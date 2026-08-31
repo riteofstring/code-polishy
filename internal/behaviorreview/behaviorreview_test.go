@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -19,7 +20,7 @@ import (
 
 func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
-	prepared, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
+	prepared, err := Prepare(context.Background(), repo, prepareOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestPrepareSelectsOneTaskOrTheWholeIntentChain(t *testing.T) {
 	gitBehavior(t, repo.Root, "commit", "-m", "second task")
 	secondCandidate := strings.TrimSpace(gitBehavior(t, repo.Root, "rev-parse", "HEAD"))
 
-	task, err := Prepare(context.Background(), repo, PrepareOptions{Base: firstCandidate})
+	task, err := Prepare(context.Background(), repo, prepareOptions(firstCandidate))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func TestPrepareSelectsOneTaskOrTheWholeIntentChain(t *testing.T) {
 		t.Fatalf("task packet = %+v", taskPacket)
 	}
 
-	merge, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
+	merge, err := Prepare(context.Background(), repo, prepareOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +126,7 @@ func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
 	if err := os.RemoveAll(root); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+	if _, err := Prepare(context.Background(), repo, prepareOptions("main")); !errors.Is(err, ErrInvalidInput) ||
 		!strings.Contains(err.Error(), "capture the original request") {
 		t.Fatalf("missing intent Prepare() error = %v", err)
 	}
@@ -133,7 +134,7 @@ func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
 	if late.Commit != candidate {
 		t.Fatalf("late capture commit = %s, want %s", late.Commit, candidate)
 	}
-	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+	if _, err := Prepare(context.Background(), repo, prepareOptions("main")); !errors.Is(err, ErrInvalidInput) ||
 		!strings.Contains(err.Error(), "review base before implementation") {
 		t.Fatalf("late intent Prepare() error = %v", err)
 	}
@@ -143,7 +144,7 @@ func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
 	if late.Commit != candidate {
 		t.Fatalf("second late capture commit = %s, want %s", late.Commit, candidate)
 	}
-	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) ||
+	if _, err := Prepare(context.Background(), repo, prepareOptions("main")); !errors.Is(err, ErrInvalidInput) ||
 		!strings.Contains(err.Error(), "intent must be captured before implementation") {
 		t.Fatalf("after-the-fact intent Prepare() error = %v", err)
 	}
@@ -173,6 +174,223 @@ func TestCaptureIntentRejectsStagedUnstagedAndUntrackedChanges(t *testing.T) {
 				t.Fatalf("CaptureIntent() error = %v, want dirty candidate", err)
 			}
 		})
+	}
+}
+
+func TestTaskRequirementsAllowsDirtyCandidateWithoutJournal(t *testing.T) {
+	repo, base := newFeatureTaskBaseRepository(t)
+	writeBehaviorFile(t, repo.Root, "dirty.txt", "uncommitted documentation draft\n")
+	candidate := strings.TrimSpace(gitBehavior(t, repo.Root, "rev-parse", "HEAD"))
+	if _, err := os.Lstat(filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("behavior review artifacts before task requirement probe = %v, want missing", err)
+	}
+	snapshot, err := TaskRequirements(context.Background(), repo, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Base != base || snapshot.Candidate != candidate || len(snapshot.Requirements) != 0 || !slicesEqual(snapshot.RequestedFeatures, []string{}) || !validSHA256(snapshot.SHA256) {
+		t.Fatalf("empty task requirements = %+v", snapshot)
+	}
+	if _, err := os.Lstat(filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("task requirement probe created artifacts: %v", err)
+	}
+}
+
+func TestTaskRequirementsReadsPresentJournalWithDirtyCandidate(t *testing.T) {
+	repo, base, candidate := newFeatureTaskCandidate(t, []string{"search"})
+	writeBehaviorFile(t, repo.Root, "dirty.txt", "uncommitted documentation draft\n")
+	snapshot, err := TaskRequirements(context.Background(), repo, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Base != base || snapshot.Candidate != candidate || len(snapshot.Requirements) != 1 || !slicesEqual(snapshot.RequestedFeatures, []string{"search"}) || !validSHA256(snapshot.SHA256) {
+		t.Fatalf("dirty task requirements = %+v", snapshot)
+	}
+}
+
+func TestCaptureFeatureAndLaterRequireUnion(t *testing.T) {
+	repo, base := newFeatureTaskBaseRepository(t)
+	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Review the search behavior.\n")
+	captured, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent, Features: []string{"search"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured.RequirementID == "" || !slicesEqual(captured.Features, []string{"search"}) {
+		t.Fatalf("capture result = %+v", captured)
+	}
+	candidate := commitFeatureCandidate(t, repo)
+	first, err := Require(context.Background(), repo, RequireOptions{Base: "main", Features: []string{"checkout"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Base != base || first.Candidate != candidate || !slicesEqual(first.Features, []string{"checkout"}) {
+		t.Fatalf("first requirement = %+v", first)
+	}
+	firstSnapshot, err := TaskRequirements(context.Background(), repo, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := featureSelection(t, repo, "checkout", "search")
+	firstDecision, err := DecisionBindingSHA256(selection, firstSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Require(context.Background(), repo, RequireOptions{Base: "main", Features: []string{"search", "checkout"}}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := TaskRequirements(context.Background(), repo, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Base != base || snapshot.Candidate != candidate || len(snapshot.Requirements) != 3 || !slicesEqual(snapshot.RequestedFeatures, []string{"checkout", "search"}) || !validSHA256(snapshot.SHA256) {
+		t.Fatalf("task requirements = %+v", snapshot)
+	}
+	decision, err := DecisionBindingSHA256(selection, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision == firstDecision {
+		t.Fatal("decision binding did not change when a later requirement record was added")
+	}
+}
+
+func TestTaskRequirementRejectsTaskBaseAndIntentTampering(t *testing.T) {
+	for name, mutate := range map[string]func(*intentJournal, string){
+		"task base":        func(journal *intentJournal, candidate string) { journal.Requirements[0].TaskBase = candidate },
+		"intent reference": func(journal *intentJournal, _ string) { journal.Requirements[0].IntentIDs = []string{"intent-missing"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, _ := newFeatureTaskBaseRepository(t)
+			intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Review the search behavior.\n")
+			if _, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent, Features: []string{"search"}}); err != nil {
+				t.Fatal(err)
+			}
+			candidate := commitFeatureCandidate(t, repo)
+			root := behaviorArtifact(t, repo)
+			journal, err := readIntentJournal(repo, root, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutate(&journal, candidate)
+			data, err := marshalArtifact(journal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := root.writeArtifactAtomic(intentJournalFilename, data); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := TaskRequirements(context.Background(), repo, "main"); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("TaskRequirements() error = %v, want invalid input", err)
+			}
+		})
+	}
+}
+
+func TestFinalizeRejectsBehaviorOutsideSelectedFeatureScope(t *testing.T) {
+	repo, _, candidate := newFeatureTaskCandidate(t, []string{"search"})
+	prepared, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: featureSelection(t, repo, "search")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, scope := range map[string]BehaviorScope{
+		"unselected feature": {Features: []string{"checkout"}},
+		"full candidate":     {Features: []string{}, FullCandidate: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			writeReviewResult(t, repo, prepared, ReviewResult{
+				Version: artifactVersion, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256,
+				Behaviors: []Behavior{{Before: "old", After: "new", Classification: "preserved", ProofIDs: []string{}, Scope: scope}}, Findings: []string{},
+			})
+			if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); !errors.Is(err, ErrStaleReview) {
+				t.Fatalf("Finalize() error = %v, want stale review", err)
+			}
+		})
+	}
+}
+
+func TestProofRestrictsSelectedFeatureSuitesAndAllowsFullCandidate(t *testing.T) {
+	repo, _, _ := newFeatureTaskCandidate(t, nil)
+	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: featureSelection(t, repo, "search")}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{
+		Base: "main", Suite: "other-unit", Evidence: []string{"evidence_test.go"}, ID: "proof-restricted", ExpectedRedExitStatus: 1,
+	})
+	if !errors.Is(err, ErrInvalidEvidence) {
+		t.Fatalf("restricted proof error = %v, want invalid evidence", err)
+	}
+	full := ReviewSelection{Features: []SelectedFeature{}, FullCandidate: true, FullCandidateReasons: []string{SelectionReasonDefaultRequired}}
+	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: full}); err != nil {
+		t.Fatal(err)
+	}
+	proof, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{
+		Base: "main", Suite: "other-unit", Evidence: []string{"evidence_test.go"}, ID: "proof-full", ExpectedRedExitStatus: 1,
+	})
+	if err != nil || proof.Suite != "other-unit" {
+		t.Fatalf("full candidate proof = %+v, error = %v", proof, err)
+	}
+}
+
+func TestPacketRejectsSelectionRequirementAndDecisionDigestTampering(t *testing.T) {
+	for name, mutate := range map[string]func(*reviewPacket){
+		"selection":   func(packet *reviewPacket) { packet.SelectionSHA256 = strings.Repeat("0", 64) },
+		"requirement": func(packet *reviewPacket) { packet.RequirementSHA256 = strings.Repeat("0", 64) },
+		"decision":    func(packet *reviewPacket) { packet.DecisionSHA256 = strings.Repeat("0", 64) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, _, _ := newFeatureTaskCandidate(t, []string{"search"})
+			if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: featureSelection(t, repo, "search")}); err != nil {
+				t.Fatal(err)
+			}
+			root := behaviorArtifact(t, repo)
+			packet, _, err := readPacket(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutate(&packet)
+			writePacketAndMarker(t, root.path, packet)
+			if _, err := Finalize(context.Background(), repo, FinalizeOptions{Base: "main"}); !errors.Is(err, ErrInvalidReview) {
+				t.Fatalf("Finalize() error = %v, want invalid review", err)
+			}
+		})
+	}
+}
+
+func TestIntentJournalLockRetainsConcurrentFeatureCaptures(t *testing.T) {
+	repo, _ := newFeatureTaskBaseRepository(t)
+	const captures = 8
+	paths := make([]string, 0, captures)
+	for index := 0; index < captures; index++ {
+		paths = append(paths, writeBehaviorFile(t, t.TempDir(), "intent.txt", "Review search behavior.\n"))
+	}
+	errorsByCapture := make(chan error, captures)
+	var group sync.WaitGroup
+	for _, path := range paths {
+		group.Add(1)
+		go func(path string) {
+			defer group.Done()
+			_, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: path, Features: []string{"search"}})
+			errorsByCapture <- err
+		}(path)
+	}
+	group.Wait()
+	close(errorsByCapture)
+	for err := range errorsByCapture {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := behaviorArtifact(t, repo)
+	journal, err := readIntentJournal(repo, root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(journal.Entries) != captures || len(journal.Requirements) != captures {
+		t.Fatalf("journal lost concurrent records: %+v", journal)
+	}
+	snapshot, err := TaskRequirements(context.Background(), repo, "main")
+	if err != nil || len(snapshot.Requirements) != captures || !slicesEqual(snapshot.RequestedFeatures, []string{"search"}) {
+		t.Fatalf("concurrent requirements = %+v, error = %v", snapshot, err)
 	}
 }
 
@@ -206,7 +424,7 @@ func TestPrepareRejectsEditedRemovedAndReorderedIntentEntries(t *testing.T) {
 			if err := root.writeArtifactAtomic(intentJournalFilename, data); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"}); !errors.Is(err, ErrInvalidInput) {
+			if _, err := Prepare(context.Background(), repo, prepareOptions("main")); !errors.Is(err, ErrInvalidInput) {
 				t.Fatalf("Prepare() error = %v, want invalid input", err)
 			}
 		})
@@ -240,7 +458,7 @@ func TestFinalizeAndValidateGateReceipt(t *testing.T) {
 	if finalized.ReceiptPath != artifactDisplayPath(receiptFilename) || finalized.ReviewID != prepared.ReviewID {
 		t.Fatalf("finalize result = %+v", finalized)
 	}
-	receipt, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	receipt, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,32 +475,36 @@ func TestFinalizeRejectsStrictStaleAndBlockingResults(t *testing.T) {
 	}{
 		{
 			name: "unknown field", result: func(prepared PrepareResult, base, candidate string) string {
-				return `{"version":2,"review_id":"` + prepared.ReviewID + `","base":"` + base + `","candidate":"` + candidate + `","intent_sha256":"` + prepared.IntentSHA256 + `","behaviors":[],"findings":[],"extra":true}`
+				valid := preparedReviewJSON(prepared, ReviewResult{
+					Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256,
+					Behaviors: []Behavior{{Before: "old", After: "new", Classification: "preserved", ProofIDs: []string{}}}, Findings: []string{},
+				})
+				return strings.TrimSuffix(strings.TrimSpace(valid), "}") + `,"extra":true}`
 			}, want: ErrInvalidReview,
 		},
 		{
 			name: "stale candidate", result: func(prepared PrepareResult, base, candidate string) string {
-				return reviewJSON(ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: strings.Repeat("0", len(candidate)), IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "preserved", ProofIDs: []string{}}}, Findings: []string{}})
+				return preparedReviewJSON(prepared, ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: strings.Repeat("0", len(candidate)), IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "preserved", ProofIDs: []string{}}}, Findings: []string{}})
 			}, want: ErrStaleReview,
 		},
 		{
 			name: "unintended", result: func(prepared PrepareResult, base, candidate string) string {
-				return reviewJSON(ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "unintended", ProofIDs: []string{}}}, Findings: []string{}})
+				return preparedReviewJSON(prepared, ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "unintended", ProofIDs: []string{}}}, Findings: []string{}})
 			}, want: ErrInvalidReview,
 		},
 		{
 			name: "finding", result: func(prepared PrepareResult, base, candidate string) string {
-				return reviewJSON(ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{}, Findings: []string{"ambiguous outcome"}})
+				return preparedReviewJSON(prepared, ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{}, Findings: []string{"ambiguous outcome"}})
 			}, want: ErrInvalidReview,
 		},
 		{
 			name: "empty behaviors", result: func(prepared PrepareResult, base, candidate string) string {
-				return reviewJSON(ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{}, Findings: []string{}})
+				return preparedReviewJSON(prepared, ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{}, Findings: []string{}})
 			}, want: ErrInvalidReview,
 		},
 		{
 			name: "missing proof", result: func(prepared PrepareResult, base, candidate string) string {
-				return reviewJSON(ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "requested", ProofIDs: []string{"absent"}}}, Findings: []string{}})
+				return preparedReviewJSON(prepared, ReviewResult{Version: artifactVersion, ReviewID: prepared.ReviewID, Base: base, Candidate: candidate, IntentSHA256: prepared.IntentSHA256, Behaviors: []Behavior{{Before: "old", After: "new", Classification: "requested", ProofIDs: []string{"absent"}}}, Findings: []string{}})
 			}, want: ErrInvalidEvidence,
 		},
 	}
@@ -309,12 +531,12 @@ func TestValidateGateReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 	}
 	root := behaviorRoot(t, repo)
 	writeBehaviorFile(t, root, packetFilename, "{}\n")
-	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main")); !errors.Is(err, ErrStaleReceipt) {
 		t.Fatalf("packet change validation error = %v, want stale receipt", err)
 	}
 	prepareReview(t, repo)
 	writeBehaviorFile(t, repo.Root, "app.txt", "changed outside commit\n")
-	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, repository.ErrDirtyCandidate) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main")); !errors.Is(err, repository.ErrDirtyCandidate) {
 		t.Fatalf("candidate change validation error = %v, want dirty candidate", err)
 	}
 }
@@ -328,7 +550,7 @@ func TestValidateGateReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact root before validation = %v, want missing", err)
 	}
-	_, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	_, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main"))
 	if !errors.Is(err, ErrMissingReceipt) {
 		t.Fatalf("ValidateGateReceipt() error = %v, want missing receipt", err)
 	}
@@ -388,7 +610,7 @@ func TestValidateGateReceiptBindsPrepareMarker(t *testing.T) {
 	if sha256Hex(packetData) == receipt.PacketSHA256 || sha256Hex(markerData) == receipt.PrepareSHA256 || packet.IntentSHA256 == prepared.IntentSHA256 {
 		t.Fatal("tampered packet did not change receipt-bound values")
 	}
-	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main")); !errors.Is(err, ErrStaleReceipt) {
 		t.Fatalf("ValidateGateReceipt() error = %v, want stale receipt", err)
 	}
 }
@@ -426,7 +648,7 @@ func assertReceiptRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)
 	receipt.PacketSHA256 = sha256Hex(packetData)
 	receipt.PrepareSHA256 = sha256Hex(markerData)
 	writeReceiptRecord(t, root, receipt)
-	if _, err := ValidateGateReceipt(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+	if _, err := ValidateGateReceipt(context.Background(), repo, validationOptions("main")); !errors.Is(err, ErrStaleReceipt) {
 		t.Fatalf("ValidateGateReceipt() error = %v, want stale receipt", err)
 	}
 }
@@ -604,7 +826,7 @@ func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T)
 	beforeReceipt := readBehaviorArtifact(t, root, receiptFilename)
 	beforeProof := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".json"))
 	beforeLog := readBehaviorArtifact(t, root, proofArtifactName(proof.ID, ".candidate.log"))
-	receipt, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ValidateGateReceiptOptions{Base: "main"})
+	receipt, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, validationOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,12 +841,20 @@ func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T)
 func TestReplayPlanReturnsStableClonedValidatedProofPhasesWithoutExecution(t *testing.T) {
 	repo, proof := finalizedRequestedReview(t)
 	before := gitBehavior(t, repo.Root, "worktree", "list", "--porcelain")
-	plan, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	plan, err := ReplayPlan(context.Background(), repo, validationOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plan.Proofs) != 1 {
 		t.Fatalf("replay phases = %+v", plan.Proofs)
+	}
+	storedReceipt, err := readReceipt(behaviorArtifact(t, repo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Receipt.SelectionSHA256 != storedReceipt.SelectionSHA256 || plan.Receipt.RequirementSHA256 != storedReceipt.RequirementSHA256 ||
+		plan.Receipt.DecisionSHA256 != storedReceipt.DecisionSHA256 || !sameReviewSelection(plan.Receipt.Selection, storedReceipt.Selection) {
+		t.Fatalf("replay receipt bindings = %+v, stored = %+v", plan.Receipt, storedReceipt)
 	}
 	phase := plan.Proofs[0]
 	wantCommand := suiteCommand(repo.Config.Tests.Suites[0])
@@ -639,7 +869,7 @@ func TestReplayPlanReturnsStableClonedValidatedProofPhasesWithoutExecution(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	again, err := ReplayPlan(context.Background(), repo, validationOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -650,7 +880,7 @@ func TestReplayPlanReturnsStableClonedValidatedProofPhasesWithoutExecution(t *te
 	if string(first) == string(second) {
 		t.Fatal("mutating a returned plan altered its deterministic replay representation")
 	}
-	clean, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"})
+	clean, err := ReplayPlan(context.Background(), repo, validationOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -671,7 +901,7 @@ func TestReplayPlanRejectsTamperedProofArtifacts(t *testing.T) {
 	repo, proof := finalizedRequestedReview(t)
 	root := behaviorRoot(t, repo)
 	writeBehaviorFile(t, root, proofArtifactName(proof.ID, ".candidate.log"), "tampered\n")
-	if _, err := ReplayPlan(context.Background(), repo, ValidateGateReceiptOptions{Base: "main"}); !errors.Is(err, ErrStaleReceipt) {
+	if _, err := ReplayPlan(context.Background(), repo, validationOptions("main")); !errors.Is(err, ErrStaleReceipt) {
 		t.Fatalf("ReplayPlan() error = %v, want stale receipt", err)
 	}
 }
@@ -679,14 +909,14 @@ func TestReplayPlanRejectsTamperedProofArtifacts(t *testing.T) {
 func TestReplayGateReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *testing.T) {
 	t.Run("semantic failure", func(t *testing.T) {
 		repo, _ := finalizedRequestedReview(t)
-		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, ValidateGateReceiptOptions{Base: "main"})
+		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, validationOptions("main"))
 		if !errors.Is(err, ErrInvalidEvidence) {
 			t.Fatalf("ReplayGateReceipt() error = %v, want invalid evidence", err)
 		}
 	})
 	t.Run("candidate worktree mutation", func(t *testing.T) {
 		repo, _ := finalizedRequestedReview(t)
-		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateReplayCandidate: true}, ValidateGateReceiptOptions{Base: "main"})
+		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, mutateReplayCandidate: true}, validationOptions("main"))
 		if !errors.Is(err, ErrCandidateChanged) {
 			t.Fatalf("ReplayGateReceipt() error = %v, want changed candidate", err)
 		}
@@ -805,13 +1035,13 @@ func TestArtifactHandleRejectsSymlinkArtifactTarget(t *testing.T) {
 func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.ReceiptPath != CheckpointReceiptPath || result.Receipt.Base != base || result.Receipt.Candidate != candidate ||
-		result.Receipt.Scope != CheckpointScopeChanged || result.Receipt.BehaviorReviewID != "review-123" {
+		result.Receipt.Scope != CheckpointScopeChanged || result.Receipt.BehaviorReview.State != gaterun.BehaviorReviewNotRun {
 		t.Fatalf("checkpoint result = %+v", result)
 	}
 	data, err := os.ReadFile(filepath.Join(repo.Root, filepath.FromSlash(CheckpointReceiptPath)))
@@ -822,7 +1052,7 @@ func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 	if err := decodeStrict(data, &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt != result.Receipt {
+	if !reflect.DeepEqual(receipt, result.Receipt) {
 		t.Fatalf("checkpoint receipt = %+v, want %+v", receipt, result.Receipt)
 	}
 }
@@ -830,9 +1060,9 @@ func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation, GateRun: checkpointGateEvidence(t, repo, base, candidate),
+		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
-	if err != nil || result.Receipt.BehaviorReviewID != "" {
+	if err != nil || result.Receipt.BehaviorReview.State != gaterun.BehaviorReviewNotRun {
 		t.Fatalf("checkpoint result = %+v, error = %v", result, err)
 	}
 }
@@ -840,13 +1070,13 @@ func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T)
 func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	written, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	read, err := ReadCheckpoint(context.Background(), repo)
-	if err != nil || read != written.Receipt {
+	if err != nil || !reflect.DeepEqual(read, written.Receipt) {
 		t.Fatalf("checkpoint=%+v error=%v want=%+v", read, err, written.Receipt)
 	}
 }
@@ -854,7 +1084,7 @@ func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 func TestReadCheckpointRejectsSymlinkReceiptWithoutFollowingIt(t *testing.T) {
 	repo, base, candidate := newBehaviorRepository(t)
 	if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -910,7 +1140,7 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 			name: "stale candidate",
 			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
 				if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -922,7 +1152,7 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 			name: "diverged base",
 			prepare: func(t *testing.T, repo repository.Repository, base, candidate string) {
 				result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointGateEvidence(t, repo, base, candidate),
+					Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -957,7 +1187,7 @@ func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testin
 		},
 		"dirty candidate": func(t *testing.T, repo repository.Repository, base, candidate string) RecordCheckpointOptions {
 			writeBehaviorFile(t, repo.Root, "dirty.txt", "dirty\n")
-			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointEvidenceInput()}
+			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointEvidenceInput()}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -983,7 +1213,7 @@ func TestCheckpointArtifactRootRejectsEscapingSymlink(t *testing.T) {
 		t.Skipf("create symlink: %v", err)
 	}
 	_, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
-		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReviewID: "review-123", GateRun: checkpointEvidenceInput(),
+		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointEvidenceInput(),
 	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("checkpoint artifact root error = %v, want invalid input", err)
@@ -1066,10 +1296,11 @@ func newBehaviorRepository(t *testing.T) (repository.Repository, string, string)
 
 func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, candidate string) gaterun.ExecutionEvidence {
 	t.Helper()
+	review := checkpointBehaviorReview()
 	identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
 		Gate: gaterun.CheckpointGate, RequestedBase: "main", ExactBase: base, Candidate: candidate, PolicyLevel: CheckpointScopeChanged,
 		Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
-		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{},
+		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{}, BehaviorReview: review,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1078,12 +1309,19 @@ func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, cand
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: review})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return gaterun.ExecutionEvidence{
 		Gate: gaterun.CheckpointGate, IdentitySHA256: report.IdentitySHA256, ExecutionID: report.ExecutionID, ReportSHA256: report.SHA256,
+	}
+}
+
+func checkpointBehaviorReview() gaterun.BehaviorReview {
+	return gaterun.BehaviorReview{
+		State: gaterun.BehaviorReviewNotRun, RequiredBoundary: gaterun.BehaviorReviewOnRequest,
+		SelectedFeatures: []gaterun.BehaviorReviewFeatureSelection{}, SelectionDigest: strings.Repeat("d", 64),
 	}
 }
 
@@ -1129,9 +1367,94 @@ func behaviorTestConfig() policy.Config {
 	}
 }
 
+func featureBehaviorTestConfig() policy.Config {
+	config := behaviorTestConfig()
+	config.Verification = policy.Verification{BehaviorReview: &policy.BehaviorReviewPolicy{
+		DefaultRequiredAt: policy.BehaviorReviewOnRequest,
+		Features: []policy.BehaviorReviewFeature{
+			{Name: "checkout", Modules: []string{"app"}, Suites: []string{"checkout-unit"}, RequiredAt: policy.BehaviorReviewMerge},
+			{Name: "search", Paths: []string{"app.txt"}, Suites: []string{"search-unit"}},
+		},
+	}}
+	config.Tests.Suites = []policy.TestSuite{
+		{Name: "checkout-unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30},
+		{Name: "other-unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30},
+		{Name: "search-unit", Kind: "unit", Scope: "repository", Argv: []string{"runner"}, Cwd: ".", RunOn: []string{"full"}, TimeoutSeconds: 30},
+	}
+	return config
+}
+
+func newFeatureTaskBaseRepository(t *testing.T) (repository.Repository, string) {
+	t.Helper()
+	root := t.TempDir()
+	writeBehaviorFile(t, root, "templates/behavior-review.md", "Review the packet.\n")
+	writeBehaviorFile(t, root, "docs/design.md", "Application design.\n")
+	writeBehaviorFile(t, root, "app.txt", "old\n")
+	writeBehaviorFile(t, root, "README.md", "# Test\n")
+	writeBehaviorFile(t, root, ".gitignore", ".code-polishy-reports/\n")
+	gitBehavior(t, root, "init", "-b", "main")
+	gitBehavior(t, root, "config", "user.email", "test@example.com")
+	gitBehavior(t, root, "config", "user.name", "Test")
+	gitBehavior(t, root, "add", ".")
+	gitBehavior(t, root, "commit", "-m", "base")
+	gitBehavior(t, root, "commit", "--allow-empty", "-m", "review base")
+	base := strings.TrimSpace(gitBehavior(t, root, "rev-parse", "HEAD"))
+	repo := repository.Repository{Root: root, PolicyRoot: root, Config: featureBehaviorTestConfig()}
+	gitBehavior(t, root, "switch", "-c", "feature")
+	return repo, base
+}
+
+func commitFeatureCandidate(t *testing.T, repo repository.Repository) string {
+	t.Helper()
+	writeBehaviorFile(t, repo.Root, "app.txt", "new\n")
+	writeBehaviorFile(t, repo.Root, "evidence_test.go", "expect-new\n")
+	gitBehavior(t, repo.Root, "add", "app.txt", "evidence_test.go")
+	gitBehavior(t, repo.Root, "commit", "-m", "candidate")
+	return strings.TrimSpace(gitBehavior(t, repo.Root, "rev-parse", "HEAD"))
+}
+
+func newFeatureTaskCandidate(t *testing.T, features []string) (repository.Repository, string, string) {
+	t.Helper()
+	repo, base := newFeatureTaskBaseRepository(t)
+	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Review the selected behavior.\n")
+	if _, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent, Features: features}); err != nil {
+		t.Fatal(err)
+	}
+	return repo, base, commitFeatureCandidate(t, repo)
+}
+
+func featureSelection(t *testing.T, repo repository.Repository, names ...string) ReviewSelection {
+	t.Helper()
+	features := make([]SelectedFeature, 0, len(names))
+	for _, name := range names {
+		feature, err := ConfiguredFeatureSelection(repo.Config, name, []string{SelectionReasonTaskRequested})
+		if err != nil {
+			t.Fatal(err)
+		}
+		features = append(features, feature)
+	}
+	return ReviewSelection{Features: features, FullCandidate: false, FullCandidateReasons: []string{}}
+}
+
+func slicesEqual(left, right []string) bool {
+	return reflect.DeepEqual(left, right)
+}
+
+func testFullCandidateSelection() ReviewSelection {
+	return ReviewSelection{Features: []SelectedFeature{}, FullCandidate: true, FullCandidateReasons: []string{"test"}}
+}
+
+func prepareOptions(base string) PrepareOptions {
+	return PrepareOptions{Base: base, Selection: testFullCandidateSelection()}
+}
+
+func validationOptions(base string) ValidateGateReceiptOptions {
+	return ValidateGateReceiptOptions{Base: base, Selection: testFullCandidateSelection()}
+}
+
 func prepareReview(t *testing.T, repo repository.Repository) PrepareResult {
 	t.Helper()
-	result, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main"})
+	result, err := Prepare(context.Background(), repo, prepareOptions("main"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1210,7 +1533,22 @@ func writePreservedResult(t *testing.T, repo repository.Repository, prepared Pre
 
 func writeReviewResult(t *testing.T, repo repository.Repository, prepared PrepareResult, review ReviewResult) {
 	t.Helper()
-	writeBehaviorFile(t, behaviorRoot(t, repo), defaultResultFilename, reviewJSON(review))
+	writeBehaviorFile(t, behaviorRoot(t, repo), defaultResultFilename, preparedReviewJSON(prepared, review))
+}
+
+func preparedReviewJSON(prepared PrepareResult, review ReviewResult) string {
+	if review.SelectionSHA256 == "" {
+		review.SelectionSHA256 = prepared.SelectionSHA256
+	}
+	if review.DecisionSHA256 == "" {
+		review.DecisionSHA256 = prepared.DecisionSHA256
+	}
+	for index := range review.Behaviors {
+		if review.Behaviors[index].Scope.Features == nil && !review.Behaviors[index].Scope.FullCandidate {
+			review.Behaviors[index].Scope = BehaviorScope{Features: []string{}, FullCandidate: true}
+		}
+	}
+	return reviewJSON(review)
 }
 
 func writeProofRecord(t *testing.T, root string, proof regressionProof) {
@@ -1230,7 +1568,8 @@ func writePacketAndMarker(t *testing.T, root string, packet reviewPacket) ([]byt
 	}
 	writeBehaviorBytes(t, root, packetFilename, data)
 	markerData, err := marshalArtifact(prepareMarker{
-		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate, PacketSHA256: sha256Hex(data),
+		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate,
+		SelectionSHA256: packet.SelectionSHA256, RequirementSHA256: packet.RequirementSHA256, DecisionSHA256: packet.DecisionSHA256, PacketSHA256: sha256Hex(data),
 	})
 	if err != nil {
 		t.Fatal(err)

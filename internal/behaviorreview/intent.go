@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	intentJournalVersion = 1
-	maximumIntentEntries = 128
+	intentJournalVersion    = 2
+	maximumIntentEntries    = 128
+	maximumTaskRequirements = 128
 )
 
 type intentCapture struct {
@@ -28,8 +29,9 @@ type intentCapture struct {
 }
 
 type intentJournal struct {
-	Version int             `json:"version"`
-	Entries []intentCapture `json:"entries"`
+	Version      int               `json:"version"`
+	Entries      []intentCapture   `json:"entries"`
+	Requirements []TaskRequirement `json:"requirements"`
 }
 
 type intentCaptureMaterial struct {
@@ -41,6 +43,10 @@ type intentCaptureMaterial struct {
 }
 
 func captureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
+	features, err := configuredFeatureNames(repo.Config, options.Features)
+	if err != nil {
+		return CaptureIntentResult{}, err
+	}
 	commit, intent, err := captureIntentInputs(ctx, repo, options)
 	if err != nil {
 		return CaptureIntentResult{}, err
@@ -50,7 +56,7 @@ func captureIntent(ctx context.Context, repo repository.Repository, options Capt
 		return CaptureIntentResult{}, err
 	}
 	defer root.Close()
-	return appendIntentCapture(repo, root, commit, intent)
+	return appendIntentCapture(repo, root, commit, intent, features)
 }
 
 func captureIntentInputs(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (string, []byte, error) {
@@ -72,7 +78,12 @@ func captureIntentInputs(ctx context.Context, repo repository.Repository, option
 	return commit, intent, nil
 }
 
-func appendIntentCapture(repo repository.Repository, root *artifactHandle, commit string, intent []byte) (CaptureIntentResult, error) {
+func appendIntentCapture(repo repository.Repository, root *artifactHandle, commit string, intent []byte, features []string) (CaptureIntentResult, error) {
+	release, err := lockIntentJournal(root)
+	if err != nil {
+		return CaptureIntentResult{}, err
+	}
+	defer release()
 	journal, err := readIntentJournal(repo, root, true)
 	if err != nil {
 		return CaptureIntentResult{}, err
@@ -82,6 +93,14 @@ func appendIntentCapture(repo repository.Repository, root *artifactHandle, commi
 		return CaptureIntentResult{}, err
 	}
 	journal.Entries = append(journal.Entries, entry)
+	var requirement TaskRequirement
+	if len(features) > 0 {
+		requirement, err = newTaskRequirement(commit, []intentCapture{entry}, features, journal.Requirements)
+		if err != nil {
+			return CaptureIntentResult{}, err
+		}
+		journal.Requirements = append(journal.Requirements, requirement)
+	}
 	if err := validateIntentJournal(repo, journal); err != nil {
 		return CaptureIntentResult{}, err
 	}
@@ -105,6 +124,7 @@ func appendIntentCapture(repo repository.Repository, root *artifactHandle, commi
 	return CaptureIntentResult{
 		ID: entry.ID, Commit: entry.CapturedAtCommit, IntentSHA256: entry.IntentSHA256,
 		JournalSHA256: entry.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename),
+		RequirementID: requirement.ID, RequirementSHA256: requirement.EntrySHA256, Features: append([]string{}, features...),
 	}, nil
 }
 
@@ -154,7 +174,7 @@ func intentEntryDigest(entry intentCapture) (string, error) {
 func readIntentJournal(repo repository.Repository, root *artifactHandle, allowMissing bool) (intentJournal, error) {
 	data, err := root.readArtifact(intentJournalFilename, maximumIntentJournal)
 	if allowMissing && errors.Is(err, os.ErrNotExist) {
-		return intentJournal{Version: intentJournalVersion, Entries: []intentCapture{}}, nil
+		return intentJournal{Version: intentJournalVersion, Entries: []intentCapture{}, Requirements: []TaskRequirement{}}, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return intentJournal{}, fmt.Errorf("%w: capture the original request at the review base before implementation", ErrInvalidInput)
@@ -199,7 +219,7 @@ func validateIntentJournal(repo repository.Repository, journal intentJournal) er
 		previousDigest = entry.EntrySHA256
 		previousCommit = entry.CapturedAtCommit
 	}
-	return nil
+	return validateTaskRequirements(repo, journal)
 }
 
 func validateIntentCapture(entry intentCapture, expectedPrevious string, seen map[string]bool) error {

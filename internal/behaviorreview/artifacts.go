@@ -20,20 +20,21 @@ import (
 )
 
 const (
-	artifactDirectory       = ".code-polishy-reports/behavior-review"
-	checkpointDirectory     = ".code-polishy-reports/checkpoint-gate"
-	packetFilename          = "packet.json"
-	defaultResultFilename   = "result.json"
-	finalReviewFilename     = "review.json"
-	receiptFilename         = "receipt.json"
-	proofDirectory          = "proofs"
-	intentJournalFilename   = "intent-journal.json"
-	maximumIntentBytes      = 64 << 10
-	maximumIntentJournal    = 4 << 20
-	maximumTemplateBytes    = 64 << 10
-	maximumResultBytes      = 256 << 10
-	maximumDesignBytes      = 256 << 10
-	maximumArtifactReadByte = 8 << 20
+	artifactDirectory         = ".code-polishy-reports/behavior-review"
+	checkpointDirectory       = ".code-polishy-reports/checkpoint-gate"
+	packetFilename            = "packet.json"
+	defaultResultFilename     = "result.json"
+	finalReviewFilename       = "review.json"
+	receiptFilename           = "receipt.json"
+	proofDirectory            = "proofs"
+	intentJournalFilename     = "intent-journal.json"
+	intentJournalLockFilename = ".intent-journal.lock"
+	maximumIntentBytes        = 64 << 10
+	maximumIntentJournal      = 4 << 20
+	maximumTemplateBytes      = 64 << 10
+	maximumResultBytes        = 256 << 10
+	maximumDesignBytes        = 256 << 10
+	maximumArtifactReadByte   = 8 << 20
 )
 
 var (
@@ -136,7 +137,7 @@ func recordCheckpoint(ctx context.Context, repo repository.Repository, options R
 	}
 	receipt := CheckpointReceipt{
 		Version: checkpointReceiptVersion, Base: options.Base, Candidate: options.Candidate,
-		Scope: options.Scope, BehaviorReviewID: options.BehaviorReviewID, GateRun: options.GateRun,
+		Scope: options.Scope, BehaviorReview: options.BehaviorReview, GateRun: options.GateRun,
 	}
 	data, err := marshalArtifact(receipt)
 	if err != nil {
@@ -168,16 +169,12 @@ func validateCheckpointFields(options RecordCheckpointOptions) error {
 		return fmt.Errorf("%w: checkpoint revisions are malformed", ErrInvalidInput)
 	}
 	switch options.Scope {
-	case CheckpointScopeChanged:
-		if !validIdentifier(options.BehaviorReviewID) {
-			return fmt.Errorf("%w: checkpoint behavior review is invalid", ErrInvalidInput)
-		}
-	case CheckpointScopeDocumentation:
-		if options.BehaviorReviewID != "" {
-			return fmt.Errorf("%w: checkpoint behavior review is invalid", ErrInvalidInput)
-		}
+	case CheckpointScopeChanged, CheckpointScopeDocumentation:
 	default:
 		return fmt.Errorf("%w: checkpoint scope is invalid", ErrInvalidInput)
+	}
+	if !validCheckpointBehaviorReview(options.BehaviorReview) {
+		return fmt.Errorf("%w: checkpoint behavior review is invalid", ErrInvalidInput)
 	}
 	if options.GateRun.Gate != gaterun.CheckpointGate {
 		return fmt.Errorf("%w: checkpoint gate evidence is invalid", ErrInvalidInput)

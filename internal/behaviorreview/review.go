@@ -14,7 +14,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const artifactVersion = 2
+const artifactVersion = 3
 
 const prepareMarkerFilename = "prepare.json"
 
@@ -25,54 +25,70 @@ type packetDesignDocument struct {
 }
 
 type reviewPacket struct {
-	Version         int                    `json:"version"`
-	ReviewID        string                 `json:"review_id"`
-	Base            string                 `json:"base"`
-	Candidate       string                 `json:"candidate"`
-	Intents         []intentCapture        `json:"intents"`
-	IntentSHA256    string                 `json:"intent_sha256"`
-	Patch           string                 `json:"patch"`
-	PatchSHA256     string                 `json:"patch_sha256"`
-	DesignDocuments []packetDesignDocument `json:"design_documents"`
-	Instructions    string                 `json:"instructions"`
-	ResultPath      string                 `json:"result_path"`
-	ProofDirectory  string                 `json:"proof_directory"`
+	Version           int                    `json:"version"`
+	ReviewID          string                 `json:"review_id"`
+	Base              string                 `json:"base"`
+	Candidate         string                 `json:"candidate"`
+	Intents           []intentCapture        `json:"intents"`
+	IntentSHA256      string                 `json:"intent_sha256"`
+	TaskRequirements  []TaskRequirement      `json:"task_requirements"`
+	RequirementSHA256 string                 `json:"requirement_sha256"`
+	Selection         ReviewSelection        `json:"selection"`
+	SelectionSHA256   string                 `json:"selection_sha256"`
+	DecisionSHA256    string                 `json:"decision_sha256"`
+	Patch             string                 `json:"patch"`
+	PatchSHA256       string                 `json:"patch_sha256"`
+	DesignDocuments   []packetDesignDocument `json:"design_documents"`
+	Instructions      string                 `json:"instructions"`
+	ResultPath        string                 `json:"result_path"`
+	ProofDirectory    string                 `json:"proof_directory"`
 }
 
 type prepareMarker struct {
-	Version      int    `json:"version"`
-	ReviewID     string `json:"review_id"`
-	Base         string `json:"base"`
-	Candidate    string `json:"candidate"`
-	PacketSHA256 string `json:"packet_sha256"`
+	Version           int    `json:"version"`
+	ReviewID          string `json:"review_id"`
+	Base              string `json:"base"`
+	Candidate         string `json:"candidate"`
+	SelectionSHA256   string `json:"selection_sha256"`
+	RequirementSHA256 string `json:"requirement_sha256"`
+	DecisionSHA256    string `json:"decision_sha256"`
+	PacketSHA256      string `json:"packet_sha256"`
 }
 
 type Behavior struct {
-	Before         string   `json:"before"`
-	After          string   `json:"after"`
-	Classification string   `json:"classification"`
-	ProofIDs       []string `json:"proof_ids"`
+	Before         string        `json:"before"`
+	After          string        `json:"after"`
+	Classification string        `json:"classification"`
+	ProofIDs       []string      `json:"proof_ids"`
+	Scope          BehaviorScope `json:"scope"`
 }
 
 type ReviewResult struct {
-	Version      int        `json:"version"`
-	ReviewID     string     `json:"review_id"`
-	Base         string     `json:"base"`
-	Candidate    string     `json:"candidate"`
-	IntentSHA256 string     `json:"intent_sha256"`
-	Behaviors    []Behavior `json:"behaviors"`
-	Findings     []string   `json:"findings"`
+	Version         int        `json:"version"`
+	ReviewID        string     `json:"review_id"`
+	Base            string     `json:"base"`
+	Candidate       string     `json:"candidate"`
+	IntentSHA256    string     `json:"intent_sha256"`
+	SelectionSHA256 string     `json:"selection_sha256"`
+	DecisionSHA256  string     `json:"decision_sha256"`
+	Behaviors       []Behavior `json:"behaviors"`
+	Findings        []string   `json:"findings"`
 }
 
 type prepareInputs struct {
-	base         string
-	candidate    string
-	intents      []intentCapture
-	intentSHA256 string
-	instructions []byte
-	patch        []byte
-	documents    []packetDesignDocument
-	reviewID     string
+	base              string
+	candidate         string
+	intents           []intentCapture
+	intentSHA256      string
+	requirements      []TaskRequirement
+	requirementSHA256 string
+	selection         ReviewSelection
+	selectionSHA256   string
+	decisionSHA256    string
+	instructions      []byte
+	patch             []byte
+	documents         []packetDesignDocument
+	reviewID          string
 }
 
 type finalizationState struct {
@@ -97,6 +113,7 @@ type receiptState struct {
 	root      *artifactHandle
 	base      string
 	candidate string
+	selection ReviewSelection
 	receipt   GateReceipt
 }
 
@@ -124,12 +141,18 @@ func prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 	if err := writePrepareMarker(root, packet, data); err != nil {
 		return PrepareResult{}, err
 	}
-	return PrepareResult{ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate, IntentSHA256: packet.IntentSHA256, PacketPath: artifactDisplayPath(packetFilename)}, nil
+	return PrepareResult{
+		ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate, IntentSHA256: packet.IntentSHA256,
+		SelectionSHA256: packet.SelectionSHA256, RequirementSHA256: packet.RequirementSHA256, DecisionSHA256: packet.DecisionSHA256,
+		Selection:  cloneReviewSelection(packet.Selection),
+		PacketPath: artifactDisplayPath(packetFilename),
+	}, nil
 }
 
 func writePrepareMarker(root *artifactHandle, packet reviewPacket, packetData []byte) error {
 	marker := prepareMarker{
-		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate, PacketSHA256: sha256Hex(packetData),
+		Version: artifactVersion, ReviewID: packet.ReviewID, Base: packet.Base, Candidate: packet.Candidate,
+		SelectionSHA256: packet.SelectionSHA256, RequirementSHA256: packet.RequirementSHA256, DecisionSHA256: packet.DecisionSHA256, PacketSHA256: sha256Hex(packetData),
 	}
 	data, err := marshalArtifact(marker)
 	if err != nil {
@@ -142,6 +165,14 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 	if err := validatePrepareRequest(ctx, options); err != nil {
 		return prepareInputs{}, err
 	}
+	selection, err := NormalizeReviewSelection(options.Selection)
+	if err != nil {
+		return prepareInputs{}, err
+	}
+	selectionSHA256, err := SelectionSHA256(selection)
+	if err != nil {
+		return prepareInputs{}, err
+	}
 	base, candidate, err := cleanCandidateAtMergeBase(repo, options.Base)
 	if err != nil {
 		return prepareInputs{}, err
@@ -151,6 +182,17 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 		return prepareInputs{}, err
 	}
 	intents, intentSHA256, err := selectIntentCaptures(repo, journal, base, candidate)
+	if err != nil {
+		return prepareInputs{}, err
+	}
+	requirements, err := taskRequirementsFor(repo, journal, base, candidate)
+	if err != nil {
+		return prepareInputs{}, err
+	}
+	if err := validateSelectionIncludesFeatures(selection, requirements.RequestedFeatures); err != nil {
+		return prepareInputs{}, err
+	}
+	decisionSHA256, err := DecisionBindingSHA256(selection, requirements)
 	if err != nil {
 		return prepareInputs{}, err
 	}
@@ -168,7 +210,9 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 	}
 	return prepareInputs{
 		base: base, candidate: candidate, intents: intents, intentSHA256: intentSHA256,
-		instructions: instructions, patch: patch, documents: documents, reviewID: reviewID,
+		requirements: requirements.Requirements, requirementSHA256: requirements.SHA256, selection: selection, selectionSHA256: selectionSHA256,
+		decisionSHA256: decisionSHA256,
+		instructions:   instructions, patch: patch, documents: documents, reviewID: reviewID,
 	}, nil
 }
 
@@ -217,6 +261,8 @@ func packetFromInputs(inputs prepareInputs) (reviewPacket, error) {
 	return reviewPacket{
 		Version: artifactVersion, ReviewID: inputs.reviewID, Base: inputs.base, Candidate: inputs.candidate,
 		Intents: append([]intentCapture{}, inputs.intents...), IntentSHA256: inputs.intentSHA256,
+		TaskRequirements: cloneTaskRequirements(inputs.requirements), RequirementSHA256: inputs.requirementSHA256,
+		Selection: cloneReviewSelection(inputs.selection), SelectionSHA256: inputs.selectionSHA256, DecisionSHA256: inputs.decisionSHA256,
 		Patch: string(inputs.patch), PatchSHA256: sha256Hex(inputs.patch),
 		DesignDocuments: inputs.documents, Instructions: string(inputs.instructions), ResultPath: artifactDisplayPath(defaultResultFilename), ProofDirectory: artifactDisplayPath(proofDirectory),
 	}, nil
@@ -247,7 +293,10 @@ func finalize(ctx context.Context, repo repository.Repository, options FinalizeO
 	if err := writeGateReceipt(state); err != nil {
 		return FinalizeResult{}, err
 	}
-	return FinalizeResult{ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate, ReceiptPath: artifactDisplayPath(receiptFilename)}, nil
+	return FinalizeResult{
+		ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate, SelectionSHA256: state.packet.SelectionSHA256,
+		DecisionSHA256: state.packet.DecisionSHA256, Selection: cloneReviewSelection(state.packet.Selection), ReceiptPath: artifactDisplayPath(receiptFilename),
+	}, nil
 }
 
 func loadFinalization(ctx context.Context, repo repository.Repository, options FinalizeOptions) (finalizationState, error) {
@@ -269,7 +318,7 @@ func loadFinalization(ctx context.Context, repo repository.Repository, options F
 	if err != nil {
 		return finalizationState{}, err
 	}
-	proofs, err := proofReferences(repo, root, requestedProofIDs(review), candidate, prepared.packet)
+	proofs, err := proofReferences(repo, root, review, candidate, prepared.packet)
 	if err != nil {
 		return finalizationState{}, err
 	}
@@ -331,10 +380,16 @@ func markerMatchesPacket(marker prepareMarker, packet reviewPacket, packetData [
 		validIdentifier(marker.ReviewID),
 		validRevision(marker.Base),
 		validRevision(marker.Candidate),
+		validSHA256(marker.SelectionSHA256),
+		validSHA256(marker.RequirementSHA256),
+		validSHA256(marker.DecisionSHA256),
 		validSHA256(marker.PacketSHA256),
 		marker.ReviewID == packet.ReviewID,
 		marker.Base == packet.Base,
 		marker.Candidate == packet.Candidate,
+		marker.SelectionSHA256 == packet.SelectionSHA256,
+		marker.RequirementSHA256 == packet.RequirementSHA256,
+		marker.DecisionSHA256 == packet.DecisionSHA256,
 		marker.PacketSHA256 == sha256Hex(packetData),
 	)
 }
@@ -356,9 +411,21 @@ func validatePacketMaterial(repo repository.Repository, root *artifactHandle, pa
 	if err != nil {
 		return fmt.Errorf("%w: prepared intent journal differs from the bound candidate", ErrStaleReview)
 	}
+	requirements, err := taskRequirementsFor(repo, journal, packet.Base, packet.Candidate)
+	if err != nil {
+		return fmt.Errorf("%w: prepared task requirements differ from the bound candidate", ErrStaleReview)
+	}
 	if packet.Patch != string(patch) || packet.Instructions != string(instructions) ||
-		!samePacketDocuments(packet.DesignDocuments, documents) || !sameIntentCaptures(packet.Intents, intents) || packet.IntentSHA256 != intentSHA256 {
+		!samePacketDocuments(packet.DesignDocuments, documents) || !sameIntentCaptures(packet.Intents, intents) || packet.IntentSHA256 != intentSHA256 ||
+		!sameTaskRequirements(packet.TaskRequirements, requirements.Requirements) || packet.RequirementSHA256 != requirements.SHA256 {
 		return fmt.Errorf("%w: prepared packet material differs from the bound candidate", ErrStaleReview)
+	}
+	if err := validateSelectionIncludesFeatures(packet.Selection, requirements.RequestedFeatures); err != nil {
+		return fmt.Errorf("%w: prepared selection does not retain task requirements", ErrStaleReview)
+	}
+	decisionSHA256, err := DecisionBindingSHA256(packet.Selection, requirements)
+	if err != nil || packet.DecisionSHA256 != decisionSHA256 {
+		return fmt.Errorf("%w: prepared decision binding differs from the bound candidate", ErrStaleReview)
 	}
 	return nil
 }
@@ -397,12 +464,22 @@ func finalizedReviewInput(root *artifactHandle, packet reviewPacket, candidate s
 }
 
 func reviewMatchesPacket(review ReviewResult, packet reviewPacket, candidate string) bool {
-	return allValid(
+	if !allValid(
 		review.ReviewID == packet.ReviewID,
 		review.Base == packet.Base,
 		review.Candidate == candidate,
 		review.IntentSHA256 == packet.IntentSHA256,
-	)
+		review.SelectionSHA256 == packet.SelectionSHA256,
+		review.DecisionSHA256 == packet.DecisionSHA256,
+	) {
+		return false
+	}
+	for _, behavior := range review.Behaviors {
+		if err := validateBehaviorScope(behavior.Scope, packet.Selection); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func writeFinalizedReview(state finalizationState) error {
@@ -412,7 +489,9 @@ func writeFinalizedReview(state finalizationState) error {
 func writeGateReceipt(state finalizationState) error {
 	receipt := GateReceipt{
 		Version: artifactVersion, ReviewID: state.review.ReviewID, Base: state.base, Candidate: state.candidate,
-		IntentSHA256: state.packet.IntentSHA256, PacketSHA256: sha256Hex(state.packetData), PrepareSHA256: sha256Hex(state.markerData), ReviewSHA256: sha256Hex(state.reviewData), Proofs: state.proofs,
+		IntentSHA256: state.packet.IntentSHA256, SelectionSHA256: state.packet.SelectionSHA256, RequirementSHA256: state.packet.RequirementSHA256,
+		DecisionSHA256: state.packet.DecisionSHA256, Selection: cloneReviewSelection(state.packet.Selection), PacketSHA256: sha256Hex(state.packetData), PrepareSHA256: sha256Hex(state.markerData),
+		ReviewSHA256: sha256Hex(state.reviewData), Proofs: state.proofs,
 	}
 	data, err := marshalArtifact(receipt)
 	if err != nil {
@@ -422,7 +501,7 @@ func writeGateReceipt(state finalizationState) error {
 }
 
 func validateGateReceipt(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReceipt, error) {
-	state, err := currentReceiptState(reviewContext(ctx), repo, options.Base)
+	state, err := currentReceiptState(reviewContext(ctx), repo, options)
 	if err != nil {
 		return GateReceipt{}, err
 	}
@@ -441,11 +520,18 @@ func validateGateReceipt(ctx context.Context, repo repository.Repository, option
 	return state.receipt, nil
 }
 
-func currentReceiptState(ctx context.Context, repo repository.Repository, reference string) (receiptState, error) {
+func currentReceiptState(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (receiptState, error) {
 	if err := ctx.Err(); err != nil {
 		return receiptState{}, operational("validate behavior review receipt", err)
 	}
-	base, candidate, err := cleanCandidateAtMergeBase(repo, reference)
+	if strings.TrimSpace(options.Base) == "" {
+		return receiptState{}, fmt.Errorf("%w: behavior review receipt base is required", ErrInvalidInput)
+	}
+	selection, err := NormalizeReviewSelection(options.Selection)
+	if err != nil {
+		return receiptState{}, err
+	}
+	base, candidate, err := cleanCandidateAtMergeBase(repo, options.Base)
 	if err != nil {
 		return receiptState{}, err
 	}
@@ -470,7 +556,7 @@ func currentReceiptState(ctx context.Context, repo repository.Repository, refere
 		return receiptState{}, staleReceipt("receipt does not match the current base and candidate", nil)
 	}
 	success = true
-	return receiptState{root: root, base: base, candidate: candidate, receipt: receipt}, nil
+	return receiptState{root: root, base: base, candidate: candidate, selection: selection, receipt: receipt}, nil
 }
 
 func validateReceiptPacket(repo repository.Repository, state receiptState) (reviewPacket, error) {
@@ -478,7 +564,7 @@ func validateReceiptPacket(repo repository.Repository, state receiptState) (revi
 	if err != nil {
 		return reviewPacket{}, staleReceipt("prepared packet is unavailable", err)
 	}
-	if !packetMatchesReceipt(prepared.packet, prepared.packetData, prepared.markerData, state) {
+	if !packetMatchesReceipt(prepared.packet, prepared.packetData, prepared.markerData, state) || !sameReviewSelection(prepared.packet.Selection, state.selection) {
 		return reviewPacket{}, staleReceipt("prepared packet does not match the receipt", nil)
 	}
 	return prepared.packet, nil
@@ -492,6 +578,10 @@ func packetMatchesReceipt(packet reviewPacket, data, markerData []byte, state re
 		packet.Base == state.base,
 		packet.Candidate == state.candidate,
 		packet.IntentSHA256 == state.receipt.IntentSHA256,
+		packet.SelectionSHA256 == state.receipt.SelectionSHA256,
+		packet.RequirementSHA256 == state.receipt.RequirementSHA256,
+		packet.DecisionSHA256 == state.receipt.DecisionSHA256,
+		sameReviewSelection(packet.Selection, state.receipt.Selection),
 	)
 }
 
@@ -520,7 +610,7 @@ func validateReceiptReview(state receiptState, packet reviewPacket) (ReviewResul
 }
 
 func validateReceiptProofs(repo repository.Repository, state receiptState, packet reviewPacket, review ReviewResult) error {
-	proofs, err := proofReferences(repo, state.root, requestedProofIDs(review), state.candidate, packet)
+	proofs, err := proofReferences(repo, state.root, review, state.candidate, packet)
 	if err != nil {
 		return staleReceipt("proofs do not validate", err)
 	}
@@ -567,6 +657,12 @@ func validatePacket(packet reviewPacket) error {
 	if err := validatePacketIntents(packet); err != nil {
 		return err
 	}
+	if err := validatePacketRequirements(packet); err != nil {
+		return err
+	}
+	if err := validatePacketSelection(packet); err != nil {
+		return err
+	}
 	if err := validatePacketPatch(packet); err != nil {
 		return err
 	}
@@ -574,6 +670,41 @@ func validatePacket(packet reviewPacket) error {
 		return err
 	}
 	return validatePacketDocuments(packet.DesignDocuments)
+}
+
+func validatePacketRequirements(packet reviewPacket) error {
+	if packet.TaskRequirements == nil || !validSHA256(packet.RequirementSHA256) {
+		return fmt.Errorf("%w: packet task requirements are invalid", ErrInvalidReview)
+	}
+	digest, err := taskRequirementsDigest(packet.TaskRequirements)
+	if err != nil || digest != packet.RequirementSHA256 {
+		return fmt.Errorf("%w: packet task requirement digest is invalid", ErrInvalidReview)
+	}
+	for _, requirement := range packet.TaskRequirements {
+		if err := validateTaskRequirementFeatures(requirement.Features); err != nil {
+			return fmt.Errorf("%w: packet task requirements are invalid", ErrInvalidReview)
+		}
+	}
+	requested := requestedRequirementFeatures(packet.TaskRequirements)
+	if err := validateSelectionIncludesFeatures(packet.Selection, requested); err != nil {
+		return fmt.Errorf("%w: packet selection omits task requirements", ErrInvalidReview)
+	}
+	decisionSHA256, err := DecisionBindingSHA256(packet.Selection, TaskRequirementsResult{Requirements: packet.TaskRequirements, SHA256: packet.RequirementSHA256})
+	if err != nil || !validSHA256(packet.DecisionSHA256) || decisionSHA256 != packet.DecisionSHA256 {
+		return fmt.Errorf("%w: packet decision binding is invalid", ErrInvalidReview)
+	}
+	return nil
+}
+
+func validatePacketSelection(packet reviewPacket) error {
+	if err := validateReviewSelection(packet.Selection); err != nil {
+		return err
+	}
+	digest, err := SelectionSHA256(packet.Selection)
+	if err != nil || !validSHA256(packet.SelectionSHA256) || digest != packet.SelectionSHA256 {
+		return fmt.Errorf("%w: packet selection digest is invalid", ErrInvalidReview)
+	}
+	return nil
 }
 
 func validPacketIdentifiers(packet reviewPacket) bool {
@@ -674,7 +805,7 @@ func validateReviewHeader(review ReviewResult) error {
 	if review.Version != artifactVersion {
 		return fmt.Errorf("%w: result version must be %d", ErrInvalidReview, artifactVersion)
 	}
-	if !allValid(validIdentifier(review.ReviewID), validRevision(review.Base), validRevision(review.Candidate), validSHA256(review.IntentSHA256)) {
+	if !allValid(validIdentifier(review.ReviewID), validRevision(review.Base), validRevision(review.Candidate), validSHA256(review.IntentSHA256), validSHA256(review.SelectionSHA256), validSHA256(review.DecisionSHA256)) {
 		return fmt.Errorf("%w: result identifiers are malformed", ErrInvalidReview)
 	}
 	return nil
@@ -704,6 +835,9 @@ func validateBehavior(behavior Behavior, index int) error {
 	}
 	if err := validateBehaviorProofIDs(behavior, index); err != nil {
 		return err
+	}
+	if err := validateBehaviorScopeShape(behavior.Scope); err != nil {
+		return fmt.Errorf("%w: behavior %d scope is invalid", ErrInvalidReview, index)
 	}
 	if behavior.Classification == "requested" && len(behavior.ProofIDs) == 0 {
 		return fmt.Errorf("%w: requested behavior %d needs at least one proof identifier", ErrInvalidReview, index)
@@ -773,6 +907,13 @@ func validateReceipt(receipt GateReceipt) error {
 	if receipt.Proofs == nil {
 		return errors.New("receipt proof references are missing")
 	}
+	if err := validateReviewSelection(receipt.Selection); err != nil {
+		return errors.New("receipt selection is invalid")
+	}
+	selectionSHA256, err := SelectionSHA256(receipt.Selection)
+	if err != nil || selectionSHA256 != receipt.SelectionSHA256 || !validSHA256(receipt.DecisionSHA256) {
+		return errors.New("receipt selection digest is invalid")
+	}
 	return validateReceiptProofReferences(receipt.Proofs)
 }
 
@@ -783,6 +924,8 @@ func validReceiptHeader(receipt GateReceipt) bool {
 		validRevision(receipt.Base),
 		validRevision(receipt.Candidate),
 		validSHA256(receipt.IntentSHA256),
+		validSHA256(receipt.SelectionSHA256),
+		validSHA256(receipt.RequirementSHA256),
 		validSHA256(receipt.PacketSHA256),
 		validSHA256(receipt.PrepareSHA256),
 		validSHA256(receipt.ReviewSHA256),

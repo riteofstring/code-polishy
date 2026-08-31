@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -60,6 +61,9 @@ func validateCheckpointGateRun(repo repository.Repository, receipt CheckpointRec
 	if report.Identity.Gate != gaterun.CheckpointGate || report.Identity.ExactBase != receipt.Base || report.Identity.Candidate != receipt.Candidate {
 		return staleCheckpoint("receipt does not match its checkpoint gate run", nil)
 	}
+	if !reflect.DeepEqual(report.BehaviorReview, receipt.BehaviorReview) {
+		return staleCheckpoint("receipt does not match its checkpoint behavior review state", nil)
+	}
 	return nil
 }
 
@@ -93,8 +97,41 @@ func validateCheckpointReceipt(receipt CheckpointReceipt) error {
 		return fmt.Errorf("receipt version must be %d", checkpointReceiptVersion)
 	}
 	return validateCheckpointFields(RecordCheckpointOptions{
-		Base: receipt.Base, Candidate: receipt.Candidate, Scope: receipt.Scope, BehaviorReviewID: receipt.BehaviorReviewID, GateRun: receipt.GateRun,
+		Base: receipt.Base, Candidate: receipt.Candidate, Scope: receipt.Scope, BehaviorReview: receipt.BehaviorReview, GateRun: receipt.GateRun,
 	})
+}
+
+func validCheckpointBehaviorReview(review gaterun.BehaviorReview) bool {
+	if !validSHA256(review.SelectionDigest) || review.SelectedFeatures == nil {
+		return false
+	}
+	switch review.RequiredBoundary {
+	case gaterun.BehaviorReviewOnRequest, gaterun.BehaviorReviewMerge, gaterun.BehaviorReviewCheckpoint:
+	default:
+		return false
+	}
+	previousFeature := ""
+	for _, feature := range review.SelectedFeatures {
+		if !validFeatureName(feature.Name) || feature.Name <= previousFeature || len(feature.Reasons) == 0 {
+			return false
+		}
+		previousReason := ""
+		for _, reason := range feature.Reasons {
+			if !validSelectionReason(reason) || reason <= previousReason {
+				return false
+			}
+			previousReason = reason
+		}
+		previousFeature = feature.Name
+	}
+	switch review.State {
+	case gaterun.BehaviorReviewNotRun:
+		return review.ReviewID == "" && review.ReceiptPath == ""
+	case gaterun.BehaviorReviewPassed:
+		return (len(review.SelectedFeatures) > 0 || review.FullCandidate) && validIdentifier(review.ReviewID) && review.ReceiptPath == artifactDisplayPath(receiptFilename)
+	default:
+		return false
+	}
 }
 
 func staleCheckpoint(message string, cause error) error {

@@ -32,6 +32,10 @@ type regressionProof struct {
 	ReviewBase            string         `json:"review_base"`
 	Base                  string         `json:"base"`
 	Candidate             string         `json:"candidate"`
+	SelectionSHA256       string         `json:"selection_sha256"`
+	DecisionSHA256        string         `json:"decision_sha256"`
+	SelectedFeatures      []string       `json:"selected_features"`
+	FullCandidate         bool           `json:"full_candidate"`
 	Suite                 string         `json:"suite"`
 	Evidence              []string       `json:"evidence"`
 	EvidencePatchSHA256   string         `json:"evidence_patch_sha256"`
@@ -49,6 +53,9 @@ type proofInputs struct {
 	reviewBase            string
 	base                  string
 	candidate             string
+	selection             ReviewSelection
+	selectionSHA256       string
+	decisionSHA256        string
 	suite                 policy.TestSuite
 	evidence              []string
 	patch                 []byte
@@ -85,7 +92,10 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	if err := inputs.root.writeArtifactAtomic(proofArtifactName(inputs.id, ".json"), data); err != nil {
 		return ProveResult{}, err
 	}
-	return ProveResult{ID: inputs.id, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name, ProofPath: artifactDisplayPath(proofArtifactName(inputs.id, ".json"))}, nil
+	return ProveResult{
+		ID: inputs.id, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name, SelectionSHA256: inputs.selectionSHA256, DecisionSHA256: inputs.decisionSHA256,
+		ProofPath: artifactDisplayPath(proofArtifactName(inputs.id, ".json")),
+	}, nil
 }
 
 func replayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
@@ -111,7 +121,7 @@ func replayGateReceipt(ctx context.Context, repo repository.Repository, commandR
 }
 
 func replayPlan(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) (GateReplayPlan, error) {
-	state, err := currentReceiptState(reviewContext(ctx), repo, options.Base)
+	state, err := currentReceiptState(reviewContext(ctx), repo, options)
 	if err != nil {
 		return GateReplayPlan{}, err
 	}
@@ -124,7 +134,7 @@ func replayPlan(ctx context.Context, repo repository.Repository, options Validat
 	if err != nil {
 		return GateReplayPlan{}, err
 	}
-	phases, references, err := replayProofPhases(repo, state.root, requestedProofIDs(review), state.candidate, packet)
+	phases, references, err := replayProofPhases(repo, state.root, review, state.candidate, packet)
 	if err != nil {
 		return GateReplayPlan{}, staleReceipt("proofs do not validate", err)
 	}
@@ -137,6 +147,8 @@ func replayPlan(ctx context.Context, repo repository.Repository, options Validat
 func cloneGateReceipt(receipt GateReceipt) GateReceipt {
 	return GateReceipt{
 		Version: receipt.Version, ReviewID: receipt.ReviewID, Base: receipt.Base, Candidate: receipt.Candidate, IntentSHA256: receipt.IntentSHA256,
+		SelectionSHA256: receipt.SelectionSHA256, RequirementSHA256: receipt.RequirementSHA256, DecisionSHA256: receipt.DecisionSHA256,
+		Selection:    cloneReviewSelection(receipt.Selection),
 		PacketSHA256: receipt.PacketSHA256, PrepareSHA256: receipt.PrepareSHA256, ReviewSHA256: receipt.ReviewSHA256,
 		Proofs: append([]ProofReference{}, receipt.Proofs...),
 	}
@@ -291,12 +303,16 @@ func collectProofInputs(ctx context.Context, repo repository.Repository, options
 	if err := proofBaseMatchesReview(repo, packet.Base, base); err != nil {
 		return proofInputs{}, err
 	}
-	suite, evidence, patch, err := proofMaterial(repo, base, candidate, options)
+	suite, evidence, patch, err := proofMaterial(repo, base, candidate, options, packet)
 	if err != nil {
 		return proofInputs{}, err
 	}
 	success = true
-	return proofInputs{id: options.ID, root: root, reviewID: packet.ReviewID, reviewBase: packet.Base, base: base, candidate: candidate, suite: suite, evidence: evidence, patch: patch, expectedRedExitStatus: expected}, nil
+	return proofInputs{
+		id: options.ID, root: root, reviewID: packet.ReviewID, reviewBase: packet.Base, base: base, candidate: candidate,
+		selection: cloneReviewSelection(packet.Selection), selectionSHA256: packet.SelectionSHA256, decisionSHA256: packet.DecisionSHA256, suite: suite, evidence: evidence,
+		patch: patch, expectedRedExitStatus: expected,
+	}, nil
 }
 
 func preparedProofPacket(repo repository.Repository, candidate string) (*artifactHandle, reviewPacket, error) {
@@ -365,10 +381,13 @@ func proofBaseAndCandidate(repo repository.Repository, reference string) (string
 	return base, candidate, nil
 }
 
-func proofMaterial(repo repository.Repository, base, candidate string, options ProveOptions) (policy.TestSuite, []string, []byte, error) {
+func proofMaterial(repo repository.Repository, base, candidate string, options ProveOptions, packet reviewPacket) (policy.TestSuite, []string, []byte, error) {
 	suite, err := ordinarySuite(repo.Config, options.Suite)
 	if err != nil {
 		return policy.TestSuite{}, nil, nil, err
+	}
+	if !selectionAllowsSuite(packet.Selection, suite.Name) {
+		return policy.TestSuite{}, nil, nil, fmt.Errorf("%w: suite %q is not eligible for the selected behavior review features", ErrInvalidEvidence, suite.Name)
 	}
 	evidence, err := validateEvidence(repo, options.Evidence)
 	if err != nil {
@@ -420,7 +439,8 @@ func executeProof(ctx context.Context, repo repository.Repository, commandRunner
 		return regressionProof{}, err
 	}
 	return regressionProof{
-		Version: artifactVersion, ID: inputs.id, ReviewID: inputs.reviewID, ReviewBase: inputs.reviewBase, Base: inputs.base, Candidate: inputs.candidate, Suite: inputs.suite.Name,
+		Version: artifactVersion, ID: inputs.id, ReviewID: inputs.reviewID, ReviewBase: inputs.reviewBase, Base: inputs.base, Candidate: inputs.candidate,
+		SelectionSHA256: inputs.selectionSHA256, DecisionSHA256: inputs.decisionSHA256, SelectedFeatures: selectedFeatureNames(inputs.selection), FullCandidate: inputs.selection.FullCandidate, Suite: inputs.suite.Name,
 		Evidence: inputs.evidence, EvidencePatchSHA256: sha256Hex(inputs.patch), ExpectedRedExitStatus: inputs.expectedRedExitStatus,
 		ApplyLogPath: artifactDisplayPath(proofArtifactName(inputs.id, ".apply.log")), ApplyLogSHA256: applyDigest,
 		Baseline: baseline, CandidateExecution: candidate,
@@ -611,11 +631,7 @@ func configuredSuites(config policy.Config, name string) []policy.TestSuite {
 }
 
 func ordinarySuiteAllowed(suite policy.TestSuite) bool {
-	return allValid(
-		!slices.Contains(suite.RunOn, "supplemental"),
-		!slices.Contains([]string{"live", "credentialed", "destructive"}, suite.Kind),
-		len(suite.Environment) == 0,
-	)
+	return policy.BehaviorReviewSuiteAllowed(suite)
 }
 
 func validateEvidence(repo repository.Repository, values []string) ([]string, error) {
@@ -661,12 +677,13 @@ func evidenceFileIsRegular(repo repository.Repository, path string) error {
 	return nil
 }
 
-func proofReferences(repo repository.Repository, root *artifactHandle, ids []string, candidate string, packet reviewPacket) ([]ProofReference, error) {
-	_, references, err := replayProofPhases(repo, root, ids, candidate, packet)
+func proofReferences(repo repository.Repository, root *artifactHandle, review ReviewResult, candidate string, packet reviewPacket) ([]ProofReference, error) {
+	_, references, err := replayProofPhases(repo, root, review, candidate, packet)
 	return references, err
 }
 
-func replayProofPhases(repo repository.Repository, root *artifactHandle, ids []string, candidate string, packet reviewPacket) ([]ReplayProofPhase, []ProofReference, error) {
+func replayProofPhases(repo repository.Repository, root *artifactHandle, review ReviewResult, candidate string, packet reviewPacket) ([]ReplayProofPhase, []ProofReference, error) {
+	ids := requestedProofIDs(review)
 	phases := make([]ReplayProofPhase, 0, len(ids))
 	references := make([]ProofReference, 0, len(ids))
 	for _, id := range ids {
@@ -679,6 +696,9 @@ func replayProofPhases(repo repository.Repository, root *artifactHandle, ids []s
 			return nil, nil, err
 		}
 		if err := verifyProofLogs(root, proof); err != nil {
+			return nil, nil, err
+		}
+		if err := validateProofBehaviorScopes(proof, review, packet); err != nil {
 			return nil, nil, err
 		}
 		digest := sha256Hex(data)
@@ -719,6 +739,9 @@ func proofReplayMaterial(repo repository.Repository, proof regressionProof, cand
 	if proof.ReviewID != packet.ReviewID || proof.ReviewBase != packet.Base {
 		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q is not bound to the prepared review", ErrInvalidEvidence, proof.ID)
 	}
+	if proof.SelectionSHA256 != packet.SelectionSHA256 || proof.DecisionSHA256 != packet.DecisionSHA256 || proof.FullCandidate != packet.Selection.FullCandidate || !slices.Equal(proof.SelectedFeatures, selectedFeatureNames(packet.Selection)) {
+		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q does not match the selected behavior review features", ErrInvalidEvidence, proof.ID)
+	}
 	base, err := repo.ResolveAncestor(proof.Base)
 	if err != nil {
 		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q base is unavailable", ErrInvalidEvidence, proof.ID)
@@ -729,7 +752,7 @@ func proofReplayMaterial(repo repository.Repository, proof regressionProof, cand
 	if err := proofBaseMatchesReview(repo, packet.Base, base); err != nil {
 		return policy.TestSuite{}, nil, err
 	}
-	suite, evidence, patch, err := proofMaterial(repo, base, candidate, ProveOptions{Suite: proof.Suite, Evidence: proof.Evidence})
+	suite, evidence, patch, err := proofMaterial(repo, base, candidate, ProveOptions{Suite: proof.Suite, Evidence: proof.Evidence}, packet)
 	if err != nil {
 		return policy.TestSuite{}, nil, err
 	}
@@ -749,6 +772,9 @@ func validateProofStructure(proof regressionProof) error {
 	if err := validateProofEvidence(proof.Evidence); err != nil {
 		return err
 	}
+	if err := validateProofSelection(proof); err != nil {
+		return err
+	}
 	return validateProofLogLocations(proof)
 }
 
@@ -760,11 +786,39 @@ func validProofHeader(proof regressionProof) bool {
 		validRevision(proof.ReviewBase),
 		validRevision(proof.Base),
 		validRevision(proof.Candidate),
+		validSHA256(proof.SelectionSHA256),
+		validSHA256(proof.DecisionSHA256),
 		validIdentifier(proof.Suite),
 		validSHA256(proof.EvidencePatchSHA256),
 		proof.ExpectedRedExitStatus >= 1,
 		proof.ExpectedRedExitStatus <= 255,
 	)
+}
+
+func validateProofBehaviorScopes(proof regressionProof, review ReviewResult, packet reviewPacket) error {
+	for _, behavior := range review.Behaviors {
+		if behavior.Classification != "requested" || !slices.Contains(behavior.ProofIDs, proof.ID) {
+			continue
+		}
+		if !scopeAllowsSuite(behavior.Scope, packet.Selection, proof.Suite) {
+			return fmt.Errorf("%w: proof %q suite %q is not allowed by its behavior scope", ErrInvalidEvidence, proof.ID, proof.Suite)
+		}
+	}
+	return nil
+}
+
+func validateProofSelection(proof regressionProof) error {
+	if proof.SelectedFeatures == nil || (!proof.FullCandidate && len(proof.SelectedFeatures) == 0) {
+		return fmt.Errorf("%w: proof selected feature scope is invalid", ErrInvalidEvidence)
+	}
+	previous := ""
+	for _, feature := range proof.SelectedFeatures {
+		if !validFeatureName(feature) || feature <= previous {
+			return fmt.Errorf("%w: proof selected feature scope is invalid", ErrInvalidEvidence)
+		}
+		previous = feature
+	}
+	return nil
 }
 
 func validateProofExecution(proof regressionProof) error {
