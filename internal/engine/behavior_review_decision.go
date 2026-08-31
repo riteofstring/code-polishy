@@ -80,6 +80,9 @@ func (engine *Engine) behaviorReviewDecision(
 	if err != nil {
 		return behaviorReviewDecision{}, err
 	}
+	if engine.Repository.Config.Verification.BehaviorReview == nil && baseConfig.Verification.BehaviorReview == nil {
+		return emptyBehaviorReviewDecision()
+	}
 	documentation := engine.Repository.ClassifyDocumentationCandidate(selection).Ordinary
 	requirements, err := behaviorreview.TaskRequirements(ctx, engine.Repository, selection.Base)
 	if err != nil {
@@ -132,6 +135,19 @@ func (engine *Engine) behaviorReviewDecision(
 		required: true, selection: normalized, selectionDigest: digest,
 		requiredSuites: behaviorReviewSelectionSuites(normalized), baseSelectedSuites: baseSelectedSuites, status: status,
 	}, nil
+}
+
+func emptyBehaviorReviewDecision() (behaviorReviewDecision, error) {
+	digest, err := emptyBehaviorReviewSelectionDigest()
+	if err != nil {
+		return behaviorReviewDecision{}, err
+	}
+	return behaviorReviewDecision{selectionDigest: digest, status: BehaviorReviewStatus{
+		State: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
+		SelectedFeatures: []BehaviorReviewFeatureSelection{}, SelectionDigest: digest,
+		Affected: []string{}, Configured: []string{}, TaskRequested: []string{},
+		Required: []string{}, Completed: []string{}, Missing: []string{},
+	}}, nil
 }
 
 func (engine *Engine) behaviorReviewConfigAt(base string) (policy.Config, error) {

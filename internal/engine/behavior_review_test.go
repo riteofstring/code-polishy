@@ -56,6 +56,8 @@ func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *tes
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	gitBehaviorReview(t, root, "add", "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "candidate")
+	staleJournal := []byte("{\n  \"version\": 1,\n  \"entries\": []\n}\n")
+	writeEngineFile(t, root, ".code-polishy-reports/behavior-review/intent-journal.json", string(staleJournal), 0o600)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +83,10 @@ func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *tes
 	if len(commandRunner.commands) == 0 {
 		t.Fatal("optional merge gate did not run its ordinary commands")
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("optional gate accessed behavior-review artifacts: %v", statErr)
+	journalPath := filepath.Join(root, ".code-polishy-reports", "behavior-review", "intent-journal.json")
+	journal, readErr := os.ReadFile(journalPath)
+	if readErr != nil || !slices.Equal(journal, staleJournal) {
+		t.Fatalf("optional gate changed stale behavior-review artifacts: %q, %v", journal, readErr)
 	}
 	planningReport, err := policyEngine.TestPlan("main")
 	if err != nil || planningReport.BehaviorReview == nil || planningReport.BehaviorReview.State != BehaviorReviewNotRun {
