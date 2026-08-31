@@ -38,13 +38,6 @@ minimumReleaseAge: 43200
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 
-# The only admitted exceptions are exact releases that remove a vulnerability
-# from the version the hard minimum would otherwise force the bundle to keep.
-# Each entry needs a matching supplyChain.releaseAgeAssessments record that
-# expires when that exact release reaches the hard minimum on its own.
-minimumReleaseAgeExclude:
-  - js-yaml@4.3.1
-
 # Only registry sources are admitted, and a recorded resolution may never be
 # downgraded to a weaker one by a later resolution.
 blockExoticSubdeps: true
