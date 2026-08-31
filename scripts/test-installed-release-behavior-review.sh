@@ -11,20 +11,20 @@ fixture_pass() {
     "${scenario}" "${phase}" "$((SECONDS - started))" "${review_attempt}"
 }
 
-fixture_expect_findings() {
-  local target="$1" scenario="$2" phase="$3" review_attempt="$4"
-  shift 4
+fixture_expect_rejection() {
+  local target="$1" scenario="$2" phase="$3" review_attempt="$4" expected_status="$5"
+  shift 5
   local started=${SECONDS} status
   if run_policy "${target}" "$@"; then
     fail "${scenario} ${phase}: ${*} reported nothing: $(excerpt)"
   else
     status=$?
   fi
-  if [[ "${status}" != 1 ]]; then
-    fail "${scenario} ${phase}: ${*} exited ${status}, want findings exit 1: $(excerpt)"
+  if [[ "${status}" != "${expected_status}" ]]; then
+    fail "${scenario} ${phase}: ${*} exited ${status}, want ${expected_status}: $(excerpt)"
   fi
-  printf 'FIXTURE METRIC scenario=%s phase=%s duration_seconds=%d review_attempt=%s outcome=findings\n' \
-    "${scenario}" "${phase}" "$((SECONDS - started))" "${review_attempt}"
+  printf 'FIXTURE METRIC scenario=%s phase=%s duration_seconds=%d review_attempt=%s outcome=rejected exit_status=%s\n' \
+    "${scenario}" "${phase}" "$((SECONDS - started))" "${review_attempt}" "${status}"
 }
 
 assert_behavior_review_status_line() {
@@ -51,7 +51,7 @@ fixture_gate_requires_review() {
   local target="$1" scenario="$2" phase="$3" base="$4" expected="$5" command="$6"
   local command_log="${target}/.git/code-polishy-command-log"
   : >"${command_log}"
-  fixture_expect_findings "${target}" "${scenario}" "${phase}" 0 "${command}" --base "${base}"
+  fixture_expect_rejection "${target}" "${scenario}" "${phase}" 0 1 "${command}" --base "${base}"
   assert_behavior_review_status_line "${scenario}: ${phase}" "${expected}"
   expect_finding "${scenario} ${phase}" "policy.behaviorReview" \
     ".code-polishy-reports/behavior-review/receipt.json" "gate-receipt"
@@ -62,7 +62,7 @@ fixture_gate_reports_stale_review() {
   local target="$1" scenario="$2" base="$3"
   local command_log="${target}/.git/code-polishy-command-log"
   : >"${command_log}"
-  fixture_expect_findings "${target}" "${scenario}" stale-review 1 merge-gate --base "${base}"
+  fixture_expect_rejection "${target}" "${scenario}" stale-review 1 1 merge-gate --base "${base}"
   assert_behavior_review_status_line "${scenario}: stale review" 'FAILED (checkout)'
   expect_finding "${scenario} stale review" "policy.behaviorReview" \
     ".code-polishy-reports/behavior-review/receipt.json" "gate-receipt"
@@ -474,7 +474,7 @@ record_preserved_behavior_review() {
 
 assert_feature_proof_suite_restriction() {
   local target="$1" scenario="$2" base="$3"
-  fixture_expect_findings "${target}" "${scenario}" feature-suite-rejected 1 \
+  fixture_expect_rejection "${target}" "${scenario}" feature-suite-rejected 1 2 \
     regression-proof --base "${base}" --suite greeting-contract \
     --evidence internal/greeting/greeting_test.go --id feature-suite-rejected
   grep -Fq 'is not eligible for the selected behavior review features' "${output}" ||
