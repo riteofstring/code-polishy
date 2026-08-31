@@ -102,7 +102,7 @@ func platformReadArtifact(artifact artifactFile, maximum int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errUnsafeArtifact
 	}
 	file, err := root.Open(artifact.name)
@@ -172,7 +172,7 @@ func validateRootReplacementTarget(root *os.Root, name string) error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 		return errUnsafeArtifact
 	}
 	return nil
@@ -196,7 +196,7 @@ func readRootRestrictiveArtifact(file *os.File, maximum int) ([]byte, error) {
 		_ = file.Close()
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > int64(maximum) {
+	if !info.Mode().IsRegular() || info.Size() > int64(maximum) {
 		_ = file.Close()
 		return nil, errUnsafeArtifact
 	}

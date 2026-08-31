@@ -31,7 +31,7 @@ func TestRunWritesBoundedArtifactsAndStrictReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertRestrictiveFile(t, info.Mode().Perm())
+	assertRestrictiveFile(t, info.Mode())
 	log, _, err := readAttemptLog(run, identity, 0, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -64,8 +64,11 @@ func assertLoadedReport(t *testing.T, loaded, report Report) {
 
 func assertRestrictiveFile(t *testing.T, mode os.FileMode) {
 	t.Helper()
-	if mode != 0o600 {
-		t.Fatalf("report permissions = %o, want 600", mode)
+	if !mode.IsRegular() {
+		t.Fatalf("report mode = %v, want a regular file", mode)
+	}
+	if runtime.GOOS != "windows" && mode.Perm() != 0o600 {
+		t.Fatalf("report permissions = %o, want 600", mode.Perm())
 	}
 }
 
