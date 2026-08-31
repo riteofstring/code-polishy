@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -16,6 +17,7 @@ const (
 	claudeTargetFilename       = "CLAUDE.md"
 	ignoreTargetFilename       = ".gitignore"
 	reportsIgnorePattern       = "/.code-polishy-reports/"
+	reportsDirectoryPath       = ".code-polishy-reports/"
 	claudeRedirect             = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 )
 
@@ -53,7 +55,11 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget)
+	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
+	if err != nil {
+		return "", err
+	}
+	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
 	mutations := make([]mutation, 0, 3)
 	if writesAgents {
 		mutations = append(mutations, agentsMutation)
@@ -91,7 +97,11 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget)
+	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
+	if err != nil {
+		return "", err
+	}
+	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
 	mutations := make([]mutation, 0, 3)
 	if writesAgents {
 		mutations = append(mutations, agentsMutation)
@@ -121,7 +131,8 @@ func Check(repoRoot, policyRoot string) Status {
 	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
 	agentsStatus := checkAgents(agentsTarget, agentsErr, guidance.agents)
 	claudeStatus := checkClaude(claudeTarget, claudeErr, guidance.claude)
-	ignoreStatus := checkReportIgnore(ignoreTarget, ignoreErr)
+	ignoreCurrent, ignoreMatchErr := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
+	ignoreStatus := checkReportIgnore(ignoreTarget, ignoreErr, ignoreCurrent, ignoreMatchErr)
 	statuses := []checkStatus{agentsStatus, claudeStatus, ignoreStatus}
 	if agentsStatus.current && claudeStatus.current && ignoreStatus.current {
 		return Status{Current: true, Message: joinStatusMessages(statuses)}
@@ -249,8 +260,8 @@ func planClaude(existing targetState, template []byte) (mutation, bool, string, 
 	return mutation{}, false, "", errors.New("CLAUDE.md conflicts with the canonical redirect; its bytes were preserved")
 }
 
-func planReportIgnore(existing targetState) (mutation, bool, string) {
-	if reportArtifactsIgnored(existing.contents) {
+func planReportIgnore(existing targetState, current bool) (mutation, bool, string) {
+	if current {
 		return mutation{}, false, ".gitignore report-artifact rule is already current"
 	}
 	mode := existing.mode
@@ -262,7 +273,28 @@ func planReportIgnore(existing targetState) (mutation, bool, string) {
 	}, true, "installed .gitignore report-artifact rule"
 }
 
-func reportArtifactsIgnored(contents []byte) bool {
+func reportArtifactsIgnored(repoRoot string, contents []byte) (bool, error) {
+	if !containsReportIgnoreRule(contents) {
+		return false, nil
+	}
+	if _, err := os.Lstat(filepath.Join(repoRoot, ".git")); errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("inspect Git repository metadata: %w", err)
+	}
+	command := exec.Command("git", "-C", repoRoot, "check-ignore", "--no-index", "--quiet", "--", reportsDirectoryPath)
+	if err := command.Run(); err == nil {
+		return true, nil
+	} else {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("verify report-artifact ignore behavior with Git: %w", err)
+	}
+}
+
+func containsReportIgnoreRule(contents []byte) bool {
 	for _, line := range bytes.Split(contents, []byte("\n")) {
 		line = bytes.TrimSuffix(line, []byte("\r"))
 		if bytes.Equal(line, []byte(reportsIgnorePattern)) {
@@ -314,11 +346,14 @@ func checkClaude(existing targetState, readErr error, template []byte) checkStat
 	return checkStatus{current: true, message: "CLAUDE.md redirect is current"}
 }
 
-func checkReportIgnore(existing targetState, readErr error) checkStatus {
+func checkReportIgnore(existing targetState, readErr error, current bool, matchErr error) checkStatus {
 	if readErr != nil {
 		return failedStatus("policy.reportArtifacts", ignoreTargetFilename, "workspace-ignore", ".gitignore is unreadable or non-regular; preserve its bytes and resolve the conflict")
 	}
-	if !existing.exists || !reportArtifactsIgnored(existing.contents) {
+	if matchErr != nil {
+		return failedStatus("policy.reportArtifacts", ignoreTargetFilename, "workspace-ignore", matchErr.Error())
+	}
+	if !existing.exists || !current {
 		return failedStatus("policy.reportArtifacts", ignoreTargetFilename, "workspace-ignore", "Code Polishy report artifacts are not ignored; run `code-polishy agents sync`")
 	}
 	return checkStatus{current: true, message: ".gitignore report-artifact rule is current"}
