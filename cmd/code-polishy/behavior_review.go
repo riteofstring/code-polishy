@@ -27,44 +27,65 @@ type regressionProofOptions struct {
 
 var regressionProofOptionNames = []string{"--base", "--suite", "--evidence", "--id", "--red-exit"}
 
+type behaviorReviewAction struct {
+	parse  func(*behaviorReviewOptions, []string) error
+	handle func(context.Context, *engine.Engine, behaviorReviewOptions) (commandResult, error)
+}
+
+var behaviorReviewActions = map[string]behaviorReviewAction{
+	"capture-intent": {parse: parseBehaviorReviewCaptureIntent, handle: handleBehaviorReviewCaptureIntent},
+	"require":        {parse: parseBehaviorReviewRequire, handle: handleBehaviorReviewRequire},
+	"status":         {parse: parseBehaviorReviewStatus, handle: handleBehaviorReviewStatus},
+	"prepare":        {parse: parseBehaviorReviewPrepare, handle: handleBehaviorReviewPrepare},
+	"finalize":       {parse: parseBehaviorReviewFinalize, handle: handleBehaviorReviewFinalize},
+}
+
 func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
 	options, err := parseBehaviorReviewOptions(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	switch options.action {
-	case "capture-intent":
-		result, captureErr := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile, options.features)
-		if captureErr != nil {
-			return commandResult{}, captureErr
-		}
-		return commandResult{quiet: true, messages: []string{behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID)}}, nil
-	case "require":
-		result, requireErr := policyEngine.RequireBehaviorReview(ctx, options.base, options.features)
-		if requireErr != nil {
-			return commandResult{}, requireErr
-		}
-		return commandResult{quiet: true, messages: []string{behaviorReviewRequirementAddedMessage(result.JournalPath, result.ID, result.Features)}}, nil
-	case "status":
-		status, statusErr := policyEngine.BehaviorReviewStatus(ctx, options.base)
-		if statusErr != nil {
-			return commandResult{}, statusErr
-		}
-		return commandResult{quiet: true, messages: []string{behaviorReviewStatusMessage(status)}}, nil
-	case "prepare":
-		result, prepareErr := policyEngine.PrepareBehaviorReview(ctx, options.base)
-		if prepareErr != nil {
-			return commandResult{}, prepareErr
-		}
-		return commandResult{quiet: true, messages: []string{behaviorReviewPreparedMessage(result.PacketPath, result.ReviewID)}}, nil
-	case "finalize":
-		result, finalizeErr := policyEngine.FinalizeBehaviorReview(ctx, options.base)
-		if finalizeErr != nil {
-			return commandResult{}, finalizeErr
-		}
-		return commandResult{quiet: true, messages: []string{behaviorReviewFinalizedMessage(result.ReceiptPath, result.ReviewID)}}, nil
+	return behaviorReviewActions[options.action].handle(ctx, policyEngine, options)
+}
+
+func handleBehaviorReviewCaptureIntent(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	result, err := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile, options.features)
+	if err != nil {
+		return commandResult{}, err
 	}
-	return commandResult{}, fmt.Errorf("unknown behavior-review action %q", options.action)
+	return commandResult{quiet: true, messages: []string{behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID)}}, nil
+}
+
+func handleBehaviorReviewRequire(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	result, err := policyEngine.RequireBehaviorReview(ctx, options.base, options.features)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{quiet: true, messages: []string{behaviorReviewRequirementAddedMessage(result.JournalPath, result.ID, result.Features)}}, nil
+}
+
+func handleBehaviorReviewStatus(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	status, err := policyEngine.BehaviorReviewStatus(ctx, options.base)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{quiet: true, messages: []string{behaviorReviewStatusMessage(status)}}, nil
+}
+
+func handleBehaviorReviewPrepare(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	result, err := policyEngine.PrepareBehaviorReview(ctx, options.base)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{quiet: true, messages: []string{behaviorReviewPreparedMessage(result.PacketPath, result.ReviewID)}}, nil
+}
+
+func handleBehaviorReviewFinalize(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	result, err := policyEngine.FinalizeBehaviorReview(ctx, options.base)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{quiet: true, messages: []string{behaviorReviewFinalizedMessage(result.ReceiptPath, result.ReviewID)}}, nil
 }
 
 func handleRegressionProof(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
@@ -127,31 +148,26 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, require, status, prepare, or finalize")
 	}
 	options := behaviorReviewOptions{action: arguments[0]}
-	switch options.action {
-	case "capture-intent":
-		if err := parseBehaviorReviewCaptureIntent(&options, arguments[1:]); err != nil {
-			return behaviorReviewOptions{}, err
-		}
-	case "require":
-		if err := parseBehaviorReviewRequire(&options, arguments[1:]); err != nil {
-			return behaviorReviewOptions{}, err
-		}
-	case "status":
-		if err := parseBehaviorReviewBase(&options, arguments[1:], "status"); err != nil {
-			return behaviorReviewOptions{}, err
-		}
-	case "prepare":
-		if err := parseBehaviorReviewBase(&options, arguments[1:], "prepare"); err != nil {
-			return behaviorReviewOptions{}, err
-		}
-	case "finalize":
-		if err := parseBehaviorReviewBase(&options, arguments[1:], "finalize"); err != nil {
-			return behaviorReviewOptions{}, err
-		}
-	default:
+	action, found := behaviorReviewActions[options.action]
+	if !found {
 		return behaviorReviewOptions{}, fmt.Errorf("unknown behavior-review action %q", options.action)
 	}
+	if err := action.parse(&options, arguments[1:]); err != nil {
+		return behaviorReviewOptions{}, err
+	}
 	return options, nil
+}
+
+func parseBehaviorReviewStatus(options *behaviorReviewOptions, arguments []string) error {
+	return parseBehaviorReviewBase(options, arguments, "status")
+}
+
+func parseBehaviorReviewPrepare(options *behaviorReviewOptions, arguments []string) error {
+	return parseBehaviorReviewBase(options, arguments, "prepare")
+}
+
+func parseBehaviorReviewFinalize(options *behaviorReviewOptions, arguments []string) error {
+	return parseBehaviorReviewBase(options, arguments, "finalize")
 }
 
 func parseBehaviorReviewCaptureIntent(options *behaviorReviewOptions, arguments []string) error {

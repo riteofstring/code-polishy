@@ -2,6 +2,8 @@
 
 # Sourced by test-installed-release.sh after its fixture helpers are defined.
 
+declare output
+
 fixture_pass() {
   local target="$1" scenario="$2" phase="$3" review_attempt="$4"
   shift 4
@@ -338,7 +340,8 @@ assert_no_behavior_review_artifacts() {
 }
 
 assert_no_review_packet_or_receipt() {
-  local target="$1" scenario="$2" artifact_root="${target}/.code-polishy-reports/behavior-review"
+  local target="$1" scenario="$2"
+  local artifact_root="${target}/.code-polishy-reports/behavior-review"
   local artifact
   for artifact in packet.json receipt.json; do
     if [[ -e "${artifact_root}/${artifact}" ]]; then

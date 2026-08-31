@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -13,27 +14,46 @@ import (
 
 func TestParseBehaviorReviewOptionsAcceptsStrictFeatureAndReviewRequests(t *testing.T) {
 	t.Parallel()
-	capture, err := parseBehaviorReviewOptions([]string{"capture-intent", "--feature", "checkout", "--intent-file=intent.md", "--feature=search"})
-	if err != nil || capture.action != "capture-intent" || capture.intentFile != "intent.md" || capture.base != "" ||
-		!slices.Equal(capture.features, []string{"checkout", "search"}) {
-		t.Fatalf("capture=%+v err=%v", capture, err)
-	}
-	require, err := parseBehaviorReviewOptions([]string{"require", "--feature=checkout", "--base", "origin/main", "--feature", "search"})
-	if err != nil || require.action != "require" || require.base != "origin/main" || require.intentFile != "" ||
-		!slices.Equal(require.features, []string{"checkout", "search"}) {
-		t.Fatalf("require=%+v err=%v", require, err)
-	}
-	status, err := parseBehaviorReviewOptions([]string{"status", "--base=origin/main"})
-	if err != nil || status.action != "status" || status.base != "origin/main" || status.intentFile != "" || len(status.features) != 0 {
-		t.Fatalf("status=%+v err=%v", status, err)
-	}
-	prepare, err := parseBehaviorReviewOptions([]string{"prepare", "--base", "origin/main"})
-	if err != nil || prepare.action != "prepare" || prepare.base != "origin/main" || prepare.intentFile != "" || len(prepare.features) != 0 {
-		t.Fatalf("prepare=%+v err=%v", prepare, err)
-	}
-	finalize, err := parseBehaviorReviewOptions([]string{"finalize", "--base=origin/main"})
-	if err != nil || finalize.action != "finalize" || finalize.base != "origin/main" || finalize.intentFile != "" || len(finalize.features) != 0 {
-		t.Fatalf("finalize=%+v err=%v", finalize, err)
+	for _, test := range []struct {
+		name      string
+		arguments []string
+		want      behaviorReviewOptions
+	}{
+		{
+			name:      "capture intent",
+			arguments: []string{"capture-intent", "--feature", "checkout", "--intent-file=intent.md", "--feature=search"},
+			want:      behaviorReviewOptions{action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
+		},
+		{
+			name:      "require",
+			arguments: []string{"require", "--feature=checkout", "--base", "origin/main", "--feature", "search"},
+			want:      behaviorReviewOptions{action: "require", base: "origin/main", features: []string{"checkout", "search"}},
+		},
+		{
+			name:      "status",
+			arguments: []string{"status", "--base=origin/main"},
+			want:      behaviorReviewOptions{action: "status", base: "origin/main"},
+		},
+		{
+			name:      "prepare",
+			arguments: []string{"prepare", "--base", "origin/main"},
+			want:      behaviorReviewOptions{action: "prepare", base: "origin/main"},
+		},
+		{
+			name:      "finalize",
+			arguments: []string{"finalize", "--base=origin/main"},
+			want:      behaviorReviewOptions{action: "finalize", base: "origin/main"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := parseBehaviorReviewOptions(test.arguments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("options=%+v want=%+v", got, test.want)
+			}
+		})
 	}
 }
 
@@ -120,57 +140,93 @@ func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *tes
 
 func TestBehaviorReviewCLIHelpAndFailuresUsePublicExitContract(t *testing.T) {
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
-	status, stdout, stderr := runBehaviorReviewCLI(t, []string{"--policy-root", policyRoot, "help"})
-	if status != 0 || stderr != "" || !strings.Contains(stdout, "behavior-review capture-intent --intent-file PATH [--feature NAME...]") ||
-		!strings.Contains(stdout, "behavior-review require --base REF --feature NAME...") ||
-		!strings.Contains(stdout, "behavior-review status --base REF") ||
-		!strings.Contains(stdout, "behavior-review prepare --base REF") ||
-		!strings.Contains(stdout, "regression-proof --base REF --suite NAME --evidence PATH... --id ID") {
-		t.Fatalf("help status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLIHelpContract(t, policyRoot)
+	assertBehaviorReviewCLIInputFailureContracts(t, policyRoot)
+	assertBehaviorReviewCLIOperationalFailureContract(t, policyRoot)
+}
 
+func assertBehaviorReviewCLIHelpContract(t *testing.T, policyRoot string) {
+	t.Helper()
+	status, stdout, stderr := runBehaviorReviewCLI(t, []string{"--policy-root", policyRoot, "help"})
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
+	for _, syntax := range []string{
+		"behavior-review capture-intent --intent-file PATH [--feature NAME...]",
+		"behavior-review require --base REF --feature NAME...",
+		"behavior-review status --base REF",
+		"behavior-review prepare --base REF",
+		"regression-proof --base REF --suite NAME --evidence PATH... --id ID",
+	} {
+		assertBehaviorReviewCLIOutputContains(t, stdout, syntax)
+	}
+}
+
+func assertBehaviorReviewCLIInputFailureContracts(t *testing.T, policyRoot string) {
+	t.Helper()
 	repositoryRoot, _ := newBehaviorReviewCLIBaseRepository(t)
 	commitBehaviorReviewCLICandidate(t, repositoryRoot)
-	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
+	status, stdout, stderr := runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"behavior-review", "prepare", "--base", "main",
 	})
-	if status != 2 || stdout != "" || !strings.Contains(stderr, "capture the original request") {
-		t.Fatalf("missing intent capture status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLIRejected(t, status, stdout, stderr, "capture the original request")
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"behavior-review", "require", "--base", "main",
 	})
-	if status != 2 || stdout != "" || !strings.Contains(stderr, "requires at least one --feature NAME") ||
-		!strings.Contains(stderr, "Usage:\n  code-polishy behavior-review") {
-		t.Fatalf("invalid require status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLIRejected(t, status, stdout, stderr, "requires at least one --feature NAME", "Usage:\n  code-polishy behavior-review")
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"regression-proof", "--base", "main", "--suite", "regression", "--evidence", "evidence_test.go", "--id", "proof", "--id", "duplicate",
 	})
-	if status != 2 || stdout != "" || !strings.Contains(stderr, "only once") {
-		t.Fatalf("duplicate proof option status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLIRejected(t, status, stdout, stderr, "only once")
+}
+
+func assertBehaviorReviewCLIOperationalFailureContract(t *testing.T, policyRoot string) {
+	t.Helper()
 	repositoryRoot, intent := newBehaviorReviewCLIBaseRepository(t)
-	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
+	status, stdout, stderr := runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"behavior-review", "capture-intent", "--intent-file", intent,
 	})
-	if status != 0 || stderr != "" {
-		t.Fatalf("capture status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
 	commitBehaviorReviewCLICandidate(t, repositoryRoot)
 	status, stdout, stderr = runBehaviorReviewCLI(t, []string{
 		"--repo-root", repositoryRoot, "--policy-root", policyRoot,
 		"behavior-review", "prepare", "--base", "missing-base",
 	})
-	if status != 2 || stdout != "" || !strings.Contains(stderr, "operational error:") {
-		t.Fatalf("prepare operational failure status=%d stdout=%q stderr=%q", status, stdout, stderr)
-	}
+	assertBehaviorReviewCLIRejected(t, status, stdout, stderr, "operational error:")
 	if _, err := os.Stat(intent); err != nil {
 		t.Fatalf("intent was changed by rejected CLI calls: %v", err)
+	}
+}
+
+func assertBehaviorReviewCLISuccess(t *testing.T, status int, stdout, stderr string) {
+	t.Helper()
+	if status != 0 {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func assertBehaviorReviewCLIRejected(t *testing.T, status int, stdout, stderr string, messages ...string) {
+	t.Helper()
+	if status != 2 {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+	for _, message := range messages {
+		assertBehaviorReviewCLIOutputContains(t, stderr, message)
+	}
+}
+
+func assertBehaviorReviewCLIOutputContains(t *testing.T, output, text string) {
+	t.Helper()
+	if !strings.Contains(output, text) {
+		t.Fatalf("output omitted %q: %q", text, output)
 	}
 }
 
