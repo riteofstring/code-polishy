@@ -29,6 +29,8 @@ type gateRunController struct {
 	candidate            string
 	requestedBase        string
 	workingTreeCandidate bool
+	behaviorReview       gaterun.BehaviorReview
+	behaviorStatus       BehaviorReviewStatus
 }
 
 type gateArtifactRunner struct {
@@ -52,8 +54,9 @@ type gateDiagnosticRunner struct {
 	parent *gateArtifactRunner
 }
 
-func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, resume bool) (*gateRunController, error) {
-	identity, err := gateRunIdentity(engine, gate, requestedBase, exactBase, candidate, level, commands)
+func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorStatus BehaviorReviewStatus, resume bool) (*gateRunController, error) {
+	behaviorReview := gaterunBehaviorReview(behaviorStatus)
+	identity, err := gateRunIdentity(engine, gate, requestedBase, exactBase, candidate, level, commands, behaviorReview)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +69,10 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 		return nil, err
 	}
 	commandRunner := newGateArtifactRunner(engine, run, commands, reusable)
-	return &gateRunController{run: run, runner: commandRunner, candidate: candidate, requestedBase: requestedBase}, nil
+	return &gateRunController{
+		run: run, runner: commandRunner, candidate: candidate, requestedBase: requestedBase,
+		behaviorReview: behaviorReview, behaviorStatus: cloneBehaviorReviewStatus(behaviorStatus),
+	}, nil
 }
 
 func reusableGateReceipts(root string, gate gaterun.GateKind, identity gaterun.Identity, resume bool) (map[int]gaterun.ReusableReceipt, error) {
@@ -172,7 +178,7 @@ func workingTreeCandidateDigest(root string, selection repository.Selection) (st
 	return gaterun.ContentSHA256(payload), nil
 }
 
-func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand) (gaterun.Identity, error) {
+func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorReview gaterun.BehaviorReview) (gaterun.Identity, error) {
 	configuration, err := json.Marshal(engine.Repository.Config)
 	if err != nil {
 		return gaterun.Identity{}, fmt.Errorf("encode loaded policy configuration: %w", err)
@@ -215,7 +221,7 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 		Gate: gate, RequestedBase: requestedBase, ExactBase: exactBase, Candidate: candidate, PolicyLevel: level,
 		Release: releaseIdentity, ConfigurationSHA256: configurationDigest,
 		Platform: gaterun.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}, Commands: specifications,
-		Environment: environment, AmbientEnvironment: ambient,
+		Environment: environment, AmbientEnvironment: ambient, BehaviorReview: behaviorReview,
 	})
 }
 
@@ -346,9 +352,13 @@ func (controller *gateRunController) finalizeArtifact(status gaterun.RunStatus, 
 }
 
 func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, report Report) gaterun.FinalizeOptions {
+	behaviorReview := controller.behaviorReview
+	if report.BehaviorReview != nil {
+		behaviorReview = gaterunBehaviorReview(*report.BehaviorReview)
+	}
 	return gaterun.FinalizeOptions{
 		Status: status, Findings: gateRunFindings(report.Findings), TestEvidence: gateRunTestEvidence(report.TestCommands),
-		TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics),
+		TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics), BehaviorReview: behaviorReview,
 	}
 }
 

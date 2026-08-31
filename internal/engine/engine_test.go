@@ -222,7 +222,7 @@ func TestMergeReminderAddsOnlyAValidCurrentCheckpointTaskSlice(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := behaviorreview.RecordCheckpoint(t.Context(), policyEngine.Repository, behaviorreview.RecordCheckpointOptions{
-		Base: checkpointBase, Candidate: candidate, Scope: behaviorreview.CheckpointScopeChanged, BehaviorReviewID: "review-123",
+		Base: checkpointBase, Candidate: candidate, Scope: behaviorreview.CheckpointScopeChanged, BehaviorReview: testGateRunBehaviorReview(),
 		GateRun: finalizedCheckpointGateEvidence(t, policyEngine.Repository, checkpointBase, candidate),
 	}); err != nil {
 		t.Fatal(err)
@@ -253,7 +253,7 @@ func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, b
 	identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
 		Gate: gaterun.CheckpointGate, RequestedBase: "main", ExactBase: base, Candidate: candidate, PolicyLevel: behaviorreview.CheckpointScopeChanged,
 		Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
-		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{},
+		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{}, BehaviorReview: testGateRunBehaviorReview(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, b
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,6 +568,7 @@ func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T)
 		t.Run(testCase.name, func(t *testing.T) {
 			root := testCase.root(t)
 			if testCase.level != testpolicy.MergeLevelDocumentation {
+				installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 				installBehaviorReviewTestGuidance(t, root)
 			}
 			initializeEngineGitRepository(t, root)
@@ -897,6 +898,7 @@ func TestVerifyDoesNotRunSupplementalSuites(t *testing.T) {
 func TestMergeGateRunsRecommendedPipelineForConfiguredContentChange(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	captureEngineBehaviorIntent(t, root)
@@ -1136,6 +1138,7 @@ func TestDocumentationChangedTestRunsZeroApplicationSuites(t *testing.T) {
 func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	captureEngineBehaviorIntent(t, root)
@@ -1172,6 +1175,7 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 func TestMergeGateDoesNotStartLaterSuitesAfterSuiteFailure(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	captureEngineBehaviorIntent(t, root)
@@ -1393,7 +1397,7 @@ func captureEngineBehaviorIntent(t *testing.T, root string) {
 	if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, nil); err != nil {
 		t.Fatal(err)
 	}
 }

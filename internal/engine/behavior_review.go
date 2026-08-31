@@ -22,6 +22,7 @@ type checkpointGateExecution struct {
 	state         checkpointGateState
 	selection     repository.Selection
 	plan          MergeGateExecutionPlan
+	decision      behaviorReviewDecision
 	commands      []MergeGateExecutionCommand
 	proofCommands []MergeGateExecutionCommand
 	controller    *gateRunController
@@ -30,12 +31,59 @@ type checkpointGateExecution struct {
 	reviewErr     error
 }
 
-func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string) (behaviorreview.CaptureIntentResult, error) {
-	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{IntentPath: intentPath})
+func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string, features []string) (behaviorreview.CaptureIntentResult, error) {
+	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{
+		IntentPath: intentPath, Features: append([]string{}, features...),
+	})
 }
 
 func (engine *Engine) PrepareBehaviorReview(ctx context.Context, base string) (behaviorreview.PrepareResult, error) {
-	return behaviorreview.Prepare(ctx, engine.Repository, behaviorreview.PrepareOptions{Base: base})
+	selection, err := engine.Repository.SelectBase(base)
+	if err != nil {
+		return behaviorreview.PrepareResult{}, err
+	}
+	decision, err := engine.behaviorReviewDecision(ctx, selection, BehaviorReviewMerge)
+	if err != nil {
+		return behaviorreview.PrepareResult{}, err
+	}
+	if !decision.required {
+		return behaviorreview.PrepareResult{}, fmt.Errorf("behavior review is not selected for this candidate")
+	}
+	return behaviorreview.Prepare(ctx, engine.Repository, behaviorreview.PrepareOptions{Base: base, Selection: decision.selection})
+}
+
+func (engine *Engine) RequireBehaviorReview(ctx context.Context, base string, features []string) (behaviorreview.RequireResult, error) {
+	return behaviorreview.Require(ctx, engine.Repository, behaviorreview.RequireOptions{Base: base, Features: append([]string{}, features...)})
+}
+
+func (engine *Engine) BehaviorReviewStatus(ctx context.Context, base string) (BehaviorReviewStatus, error) {
+	selection, err := engine.Repository.SelectBase(base)
+	if err != nil {
+		return BehaviorReviewStatus{}, err
+	}
+	decision, err := engine.behaviorReviewDecision(ctx, selection, BehaviorReviewMerge)
+	if err != nil {
+		return BehaviorReviewStatus{}, err
+	}
+	if !decision.required {
+		return cloneBehaviorReviewStatus(decision.status), nil
+	}
+	receipt, err := behaviorreview.ValidateGateReceipt(ctx, engine.Repository, behaviorreview.ValidateGateReceiptOptions{
+		Base: selection.Base, Selection: decision.selection,
+	})
+	if err == nil {
+		return decision.withState(BehaviorReviewPassed, receipt.ReviewID, behaviorReviewReceiptPath), nil
+	}
+	if errors.Is(err, behaviorreview.ErrOperational) || errors.Is(err, behaviorreview.ErrCleanup) {
+		return BehaviorReviewStatus{}, err
+	}
+	if errors.Is(err, behaviorreview.ErrMissingReceipt) {
+		return decision.withState(BehaviorReviewRequired, "", ""), nil
+	}
+	if errors.Is(err, repository.ErrDirtyCandidate) {
+		return decision.withState(BehaviorReviewRequired, "", ""), nil
+	}
+	return decision.withState(BehaviorReviewFailed, "", ""), nil
 }
 
 func (engine *Engine) FinalizeBehaviorReview(ctx context.Context, base string) (behaviorreview.FinalizeResult, error) {
@@ -65,10 +113,12 @@ func behaviorReviewGateReceiptFinding(err error) (*policy.Finding, error) {
 }
 
 func (engine *Engine) behaviorReviewReplayPlanReport(ctx context.Context, plan MergeGateExecutionPlan) (behaviorreview.GateReplayPlan, *Report, error) {
-	if plan.Level == testpolicy.MergeLevelDocumentation {
+	if !plan.BehaviorReview.required {
 		return behaviorreview.GateReplayPlan{}, nil, nil
 	}
-	replayPlan, err := behaviorreview.ReplayPlan(ctx, engine.Repository, behaviorreview.ValidateGateReceiptOptions{Base: plan.Selection.Base})
+	replayPlan, err := behaviorreview.ReplayPlan(ctx, engine.Repository, behaviorreview.ValidateGateReceiptOptions{
+		Base: plan.Selection.Base, Selection: plan.BehaviorReview.selection,
+	})
 	if err == nil {
 		return replayPlan, nil, nil
 	}
@@ -77,11 +127,16 @@ func (engine *Engine) behaviorReviewReplayPlanReport(ctx context.Context, plan M
 }
 
 func (engine *Engine) behaviorReviewGateFailureReport(plan MergeGateExecutionPlan, reviewErr error) (*Report, error) {
+	status := plan.BehaviorReview.withState(BehaviorReviewFailed, "", "")
+	if errors.Is(reviewErr, behaviorreview.ErrMissingReceipt) {
+		status = plan.BehaviorReview.withState(BehaviorReviewRequired, "", "")
+	}
 	finding, err := behaviorReviewGateReceiptFinding(reviewErr)
 	if err != nil || finding == nil {
 		return nil, err
 	}
 	report := engine.finish([]policy.Finding{*finding}, nil)
+	report = withBehaviorReview(report, status)
 	report = engine.withTestQualityReminder(report, plan.Selection.Candidate)
 	return &report, nil
 }
@@ -106,7 +161,16 @@ func (engine *Engine) unchangedCheckpointGate(base string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	return withCheckpointPolicy(Report{}, "unchanged", base, candidate, ""), nil
+	digest, err := emptyBehaviorReviewSelectionDigest()
+	if err != nil {
+		return Report{}, err
+	}
+	report := withCheckpointPolicy(Report{}, "unchanged", base, candidate, "")
+	return withBehaviorReview(report, BehaviorReviewStatus{
+		State: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
+		SelectedFeatures: []BehaviorReviewFeatureSelection{}, SelectionDigest: digest,
+		Affected: []string{}, Configured: []string{}, TaskRequested: []string{}, Required: []string{}, Completed: []string{}, Missing: []string{},
+	}), nil
 }
 
 func (engine *Engine) prepareCheckpointGate(ctx context.Context, base string, selection repository.Selection) (checkpointGateExecution, Report, error) {
@@ -115,29 +179,45 @@ func (engine *Engine) prepareCheckpointGate(ctx context.Context, base string, se
 	if err != nil {
 		return checkpointGateExecution{}, Report{}, err
 	}
-	commands, _, err := engine.checkpointGateCommands(selection, documentation)
+	decision, err := engine.behaviorReviewDecision(ctx, selection, BehaviorReviewCheckpoint)
 	if err != nil {
 		return checkpointGateExecution{}, Report{}, err
 	}
-	state, plan := checkpointGateStateAndPlan(base, candidate, selection, documentation)
+	commands, tests, err := engine.checkpointGateCommands(selection, documentation)
+	if err != nil {
+		return checkpointGateExecution{}, Report{}, err
+	}
+	tests, err = engine.forceBehaviorReviewSuites(tests, decision)
+	if err != nil {
+		return checkpointGateExecution{}, Report{}, err
+	}
+	commands = append(commands, mergeGateSuiteCommands(tests.Suites)...)
+	state, plan := checkpointGateStateAndPlan(base, candidate, selection, documentation, decision, tests, commands)
 	replayPlan, reviewReport, reviewErr := engine.behaviorReviewReplayPlanReport(ctx, plan)
 	proofCommands, err := gateBehaviorProofCommands(replayPlan)
 	if err != nil {
 		return checkpointGateExecution{}, checkpointGateReport(Report{}, state), err
 	}
-	controller, err := newGateRunController(engine, gaterun.CheckpointGate, base, selection.Base, candidate, state.Scope, append(proofCommands, commands...), false)
+	initialStatus := decision.status
+	if reviewReport != nil && reviewReport.BehaviorReview != nil {
+		initialStatus = *reviewReport.BehaviorReview
+	}
+	if reviewErr == nil && reviewReport == nil && decision.required {
+		initialStatus = decision.withState(BehaviorReviewPassed, replayPlan.Receipt.ReviewID, behaviorReviewReceiptPath)
+	}
+	controller, err := newGateRunController(engine, gaterun.CheckpointGate, base, selection.Base, candidate, state.Scope, append(proofCommands, commands...), initialStatus, false)
 	if err != nil {
 		return checkpointGateExecution{}, checkpointGateReport(Report{}, state), err
 	}
 	controller.workingTreeCandidate = workingTreeCandidate
 	state.ReviewID = replayPlan.Receipt.ReviewID
 	return checkpointGateExecution{
-		state: state, selection: selection, plan: plan, commands: commands, proofCommands: proofCommands, controller: controller,
+		state: state, selection: selection, plan: plan, decision: decision, commands: commands, proofCommands: proofCommands, controller: controller,
 		documentation: documentation, reviewReport: reviewReport, reviewErr: reviewErr,
 	}, Report{}, nil
 }
 
-func checkpointGateStateAndPlan(base, candidate string, selection repository.Selection, documentation bool) (checkpointGateState, MergeGateExecutionPlan) {
+func checkpointGateStateAndPlan(base, candidate string, selection repository.Selection, documentation bool, decision behaviorReviewDecision, tests testpolicy.Plan, commands []MergeGateExecutionCommand) (checkpointGateState, MergeGateExecutionPlan) {
 	scope := behaviorreview.CheckpointScopeChanged
 	level := testpolicy.MergeLevelRecommended
 	if documentation {
@@ -145,30 +225,43 @@ func checkpointGateStateAndPlan(base, candidate string, selection repository.Sel
 		level = testpolicy.MergeLevelDocumentation
 	}
 	state := checkpointGateState{Base: base, Candidate: candidate, Scope: scope, ExactBase: selection.Base}
-	return state, MergeGateExecutionPlan{Level: level, Selection: selection}
+	return state, MergeGateExecutionPlan{Level: level, Selection: selection, Tests: tests, Commands: commands, BehaviorReview: decision}
 }
 
 func (engine *Engine) executeCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
-	if execution.documentation {
-		return engine.executeDocumentationCheckpointGate(ctx, execution)
-	}
 	if execution.reviewErr != nil {
-		return execution.controller.finalize(engine, checkpointGateReport(Report{}, execution.state), execution.reviewErr)
+		report := withBehaviorReview(checkpointGateReport(Report{}, execution.state), execution.controller.behaviorStatus)
+		return execution.controller.finalize(engine, report, execution.reviewErr)
 	}
 	if execution.reviewReport != nil {
 		return execution.controller.finalize(engine, checkpointGateReport(*execution.reviewReport, execution.state), nil)
 	}
 	if len(execution.proofCommands) > 0 {
-		if replayErr := execution.controller.replayBehaviorReview(ctx, engine, execution.selection.Base); replayErr != nil {
+		if replayErr := execution.controller.replayBehaviorReview(ctx, engine, execution.selection.Base, execution.plan.BehaviorReview.selection); replayErr != nil {
 			return engine.finalizeCheckpointReplayFailure(execution, replayErr)
 		}
+	}
+	if execution.documentation {
+		return engine.executeDocumentationCheckpointGate(ctx, execution)
 	}
 	return engine.executeChangedCheckpointGate(ctx, execution)
 }
 
 func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
 	report, gateErr := engine.documentationMergeGate(ctx, execution.selection)
+	if gateErr == nil && len(report.Findings) == 0 && len(execution.plan.Tests.Suites) > 0 {
+		plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
+		plannedEngine := *engine
+		plannedEngine.Runner = plannedRunner
+		tested, testErr := plannedEngine.testExactPlan(ctx, execution.plan.Tests, execution.selection, true)
+		report = engine.combine(report, tested)
+		gateErr = checkpointPlannedRunnerError(plannedRunner, report, execution.commands)
+		if testErr != nil {
+			gateErr = errors.Join(gateErr, testErr)
+		}
+	}
 	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
+	report = withBehaviorReview(report, execution.controller.behaviorStatus)
 	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
 
@@ -178,6 +271,7 @@ func (engine *Engine) finalizeCheckpointReplayFailure(execution checkpointGateEx
 	if replayReport != nil {
 		report = *replayReport
 	}
+	report = withBehaviorReview(report, execution.decision.withState(BehaviorReviewFailed, execution.controller.behaviorReview.ReviewID, execution.controller.behaviorReview.ReceiptPath))
 	return execution.controller.finalize(engine, checkpointGateReport(report, execution.state), gateErr)
 }
 
@@ -185,21 +279,23 @@ func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, executio
 	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
 	plannedEngine := *engine
 	plannedEngine.Runner = plannedRunner
-	report, testErr := engine.checkpointChecksAndTests(ctx, plannedEngine, execution.selection)
+	report, testErr := engine.checkpointChecksAndTests(ctx, plannedEngine, execution.selection, execution.plan.Tests)
 	if testErr != nil {
+		report = withBehaviorReview(report, execution.controller.behaviorStatus)
 		return execution.controller.finalize(engine, checkpointGateReport(report, execution.state), testErr)
 	}
 	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
+	report = withBehaviorReview(report, execution.controller.behaviorStatus)
 	gateErr := checkpointPlannedRunnerError(plannedRunner, report, execution.commands)
 	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
 
-func (engine *Engine) checkpointChecksAndTests(ctx context.Context, plannedEngine Engine, selection repository.Selection) (Report, error) {
+func (engine *Engine) checkpointChecksAndTests(ctx context.Context, plannedEngine Engine, selection repository.Selection, tests testpolicy.Plan) (Report, error) {
 	report := plannedEngine.Check(ctx, selection, "check")
 	if len(report.Findings) != 0 {
 		return report, nil
 	}
-	tested, err := plannedEngine.test(ctx, testpolicy.Request{Changed: selection}, true)
+	tested, err := plannedEngine.testExactPlan(ctx, tests, selection, true)
 	return engine.combine(report, tested), err
 }
 
@@ -216,19 +312,20 @@ func checkpointGateReport(report Report, state checkpointGateState) Report {
 
 func (engine *Engine) checkpointGateCommands(selection repository.Selection, documentation bool) ([]MergeGateExecutionCommand, testpolicy.Plan, error) {
 	if documentation {
-		return []MergeGateExecutionCommand{}, testpolicy.Plan{}, nil
+		return []MergeGateExecutionCommand{}, testpolicy.Plan{Suites: []policy.TestSuite{}}, nil
 	}
 	tests, err := testpolicy.BuildPlan(engine.Repository, testpolicy.Request{Changed: selection})
 	if err != nil {
 		return nil, testpolicy.Plan{}, err
 	}
-	commands := mergeGateCheckCommands(gaterun.Check, quality.CheckCommands(engine.Repository, selection, "check"))
-	commands = append(commands, mergeGateSuiteCommands(tests.Suites)...)
-	return commands, tests, nil
+	return mergeGateCheckCommands(gaterun.Check, quality.CheckCommands(engine.Repository, selection, "check")), tests, nil
 }
 
 func (engine *Engine) finalizeAcceptedCheckpointGate(ctx context.Context, controller *gateRunController, report Report, gateErr error, state checkpointGateState) (Report, error) {
 	report = checkpointGateReport(report, state)
+	if report.BehaviorReview == nil {
+		report = withBehaviorReview(report, controller.behaviorStatus)
+	}
 	if gateErr != nil || len(report.Findings) != 0 {
 		return controller.finalize(engine, report, gateErr)
 	}
@@ -237,7 +334,7 @@ func (engine *Engine) finalizeAcceptedCheckpointGate(ctx context.Context, contro
 		return controller.finalizeOperational(report, err)
 	}
 	recorded, err := behaviorreview.RecordCheckpoint(ctx, engine.Repository, behaviorreview.RecordCheckpointOptions{
-		Base: state.ExactBase, Candidate: state.Candidate, Scope: state.Scope, BehaviorReviewID: state.ReviewID, GateRun: prepared.Evidence(),
+		Base: state.ExactBase, Candidate: state.Candidate, Scope: state.Scope, BehaviorReview: controller.behaviorReview, GateRun: prepared.Evidence(),
 	})
 	if err != nil {
 		return controller.finalizeOperational(report, errors.Join(err, prepared.Abort()))

@@ -32,7 +32,7 @@ func (commandRunner *gateProofCaptureRunner) RunWithOutput(ctx context.Context, 
 	return runGateCommand(ctx, commandRunner.delegate, root, command, commandRunner.stdout, commandRunner.stderr, true)
 }
 
-func (controller *gateRunController) replayBehaviorReview(ctx context.Context, engine *Engine, base string) error {
+func (controller *gateRunController) replayBehaviorReview(ctx context.Context, engine *Engine, base string, selection behaviorreview.ReviewSelection) error {
 	commandRunner := controller.runner
 	index := commandRunner.next
 	if index >= len(commandRunner.expected) || commandRunner.expected[index].Category != gaterun.BehaviorProof {
@@ -50,7 +50,7 @@ func (controller *gateRunController) replayBehaviorReview(ctx context.Context, e
 	}
 	started := time.Now()
 	captured := &gateProofCaptureRunner{delegate: engine.Runner, stdout: commandLog.Stdout(), stderr: commandLog.Stderr()}
-	_, replayErr := behaviorreview.ReplayGateReceipt(ctx, engine.Repository, captured, behaviorreview.ValidateGateReceiptOptions{Base: base})
+	_, replayErr := behaviorreview.ReplayGateReceipt(ctx, engine.Repository, captured, behaviorreview.ValidateGateReceiptOptions{Base: base, Selection: selection})
 	duration := time.Since(started)
 	logResult, logErr := commandLog.Close()
 	if logErr != nil {

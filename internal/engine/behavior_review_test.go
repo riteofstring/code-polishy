@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -45,6 +46,321 @@ func TestMergeGateBypassesBehaviorReviewForDocumentationCandidates(t *testing.T)
 	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("documentation merge gate created behavior-review artifacts: %v", statErr)
 	}
+}
+
+func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *testing.T) {
+	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if planned.BehaviorReview.status.State != BehaviorReviewNotRun || planned.BehaviorReview.status.FullCandidate ||
+		len(planned.BehaviorReview.status.SelectedFeatures) != 0 {
+		t.Fatalf("behavior review plan = %+v", planned.BehaviorReview.status)
+	}
+	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || status.State != BehaviorReviewNotRun || len(status.Required) != 0 || len(status.Missing) != 0 {
+		t.Fatalf("status = %+v, error = %v", status, err)
+	}
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil || report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewNotRun || len(report.Findings) != 0 {
+		t.Fatalf("report = %+v, error = %v", report, err)
+	}
+	if len(commandRunner.commands) == 0 {
+		t.Fatal("optional merge gate did not run its ordinary commands")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("optional gate accessed behavior-review artifacts: %v", statErr)
+	}
+	planningReport, err := policyEngine.TestPlan("main")
+	if err != nil || planningReport.BehaviorReview == nil || planningReport.BehaviorReview.State != BehaviorReviewNotRun {
+		t.Fatalf("planning report = %+v, error = %v", planningReport, err)
+	}
+}
+
+func TestTaskRequestedBehaviorReviewFeatureBlocksBeforeMergeCommands(t *testing.T) {
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := plan.BehaviorReview.status
+	if status.State != BehaviorReviewRequired || status.RequiredBoundary != BehaviorReviewOnRequest ||
+		!slices.Equal(status.TaskRequested, []string{"content"}) || !slices.Equal(status.Required, []string{"content"}) ||
+		len(status.SelectedFeatures) != 1 || status.SelectedFeatures[0].Name != "content" ||
+		!slices.Equal(status.SelectedFeatures[0].Reasons, []string{behaviorreview.SelectionReasonTaskRequested}) {
+		t.Fatalf("task-requested plan = %+v", status)
+	}
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBehaviorReviewGateFinding(t, report, "missing behavior review receipt")
+	if report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewRequired || len(commandRunner.commands) != 0 {
+		t.Fatalf("report = %+v commands = %v", report, commandRunner.commands)
+	}
+}
+
+func TestMergeRequiredFeatureStaysOptionalAtCheckpointAndBlocksMerge(t *testing.T) {
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`, nil)
+	checkpointRunner := &recordingEngineRunner{}
+	policyEngine.Runner = checkpointRunner
+	checkpoint, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil || checkpoint.BehaviorReview == nil || checkpoint.BehaviorReview.State != BehaviorReviewNotRun || len(checkpoint.Findings) != 0 {
+		t.Fatalf("checkpoint = %+v, error = %v", checkpoint, err)
+	}
+	if len(checkpointRunner.commands) == 0 {
+		t.Fatal("merge-only feature skipped ordinary checkpoint commands")
+	}
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil || plan.BehaviorReview.status.State != BehaviorReviewRequired || plan.BehaviorReview.status.RequiredBoundary != BehaviorReviewMerge {
+		t.Fatalf("merge plan = %+v, error = %v", plan.BehaviorReview.status, err)
+	}
+	mergeRunner := &recordingEngineRunner{}
+	policyEngine.Runner = mergeRunner
+	merged, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBehaviorReviewGateFinding(t, merged, "missing behavior review receipt")
+	if merged.BehaviorReview == nil || merged.BehaviorReview.State != BehaviorReviewRequired || len(mergeRunner.commands) != 0 {
+		t.Fatalf("merge report = %+v commands = %v", merged, mergeRunner.commands)
+	}
+}
+
+func TestCheckpointRequiredFeatureBlocksCheckpointAndMerge(t *testing.T) {
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`, nil)
+	checkpointRunner := &recordingEngineRunner{}
+	policyEngine.Runner = checkpointRunner
+	checkpoint, err := policyEngine.CheckpointGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCheckpointBehaviorReviewFinding(t, checkpoint, "missing behavior review receipt")
+	if checkpoint.BehaviorReview == nil || checkpoint.BehaviorReview.RequiredBoundary != BehaviorReviewCheckpoint || len(checkpointRunner.commands) != 0 {
+		t.Fatalf("checkpoint report = %+v commands = %v", checkpoint, checkpointRunner.commands)
+	}
+	mergeRunner := &recordingEngineRunner{}
+	policyEngine.Runner = mergeRunner
+	merged, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBehaviorReviewGateFinding(t, merged, "missing behavior review receipt")
+	if merged.BehaviorReview == nil || merged.BehaviorReview.RequiredBoundary != BehaviorReviewCheckpoint || len(mergeRunner.commands) != 0 {
+		t.Fatalf("merge report = %+v commands = %v", merged, mergeRunner.commands)
+	}
+}
+
+func TestStrictBehaviorReviewSelectsTheFullCandidate(t *testing.T) {
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"merge","features":[]}`, nil)
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := plan.BehaviorReview.status
+	if status.State != BehaviorReviewRequired || status.RequiredBoundary != BehaviorReviewMerge || !status.FullCandidate ||
+		len(status.SelectedFeatures) != 0 || len(status.Required) != 0 {
+		t.Fatalf("strict plan = %+v", status)
+	}
+}
+
+func TestBehaviorReviewUnionsBaseAndCandidateFeatureDefinitions(t *testing.T) {
+	root := contentRepository(t, nil)
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
+	candidatePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","paths":["content/data.json"],"suites":["full"]}]}`
+	installBehaviorReviewPolicy(t, root, basePolicy)
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	replaceBehaviorReviewPolicy(t, root, basePolicy, candidatePolicy)
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "weaken candidate behavior review")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.BehaviorReview.selection.Features) != 1 {
+		t.Fatalf("selection = %+v", plan.BehaviorReview.selection)
+	}
+	feature := plan.BehaviorReview.selection.Features[0]
+	if feature.Name != "content" || feature.RequiredAt != policy.BehaviorReviewCheckpoint ||
+		!slices.Equal(feature.Modules, []string{"content"}) || !slices.Equal(feature.Paths, []string{"content/data.json"}) ||
+		!slices.Equal(feature.Suites, []string{"focused", "full"}) ||
+		!slices.Equal(feature.Reasons, []string{behaviorreview.SelectionReasonBaseRequired}) {
+		t.Fatalf("merged feature = %+v", feature)
+	}
+	if plan.BehaviorReview.status.RequiredBoundary != BehaviorReviewCheckpoint {
+		t.Fatalf("decision = %+v", plan.BehaviorReview.status)
+	}
+}
+
+func TestBehaviorReviewRejectsCandidateSuiteThatWeakensBaseRequiredEvidence(t *testing.T) {
+	root := contentRepository(t, nil)
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
+	installBehaviorReviewPolicy(t, root, basePolicy)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weakened := strings.Replace(string(config), `"argv":["go","test","./..."]`, `"argv":["go","test","./content/..."]`, 1)
+	if weakened == string(config) {
+		t.Fatal("focused suite was not weakened")
+	}
+	writeEngineFile(t, root, policy.ConfigFilename, weakened, 0o600)
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "weaken focused behavior evidence")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = policyEngine.PlanMergeGateExecution("main")
+	if err == nil || !strings.Contains(err.Error(), `selected behavior review suite "focused" no longer matches its base-required definition`) {
+		t.Fatalf("plan error = %v", err)
+	}
+}
+
+func TestBehaviorReviewForcesSelectedSuitesOnce(t *testing.T) {
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"first","modules":["content"],"suites":["full"],"requiredAt":"merge"},{"name":"second","modules":["content"],"suites":["full"],"requiredAt":"merge"}]}`, nil)
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(testSuiteNames(plan.Tests.Suites), []string{"focused", "full"}) || mergeGateCommandCount(plan.Commands, "full") != 1 || mergeGateCommandCount(plan.Commands, "focused") != 1 {
+		t.Fatalf("forced tests = %+v commands = %+v", plan.Tests.Suites, plan.Commands)
+	}
+}
+
+func TestBehaviorReviewStatusDistinguishesMissingAndStaleReceiptsWithoutWriting(t *testing.T) {
+	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "merge")
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intentPath := filepath.Join(t.TempDir(), "intent.md")
+	if err := os.WriteFile(intentPath, []byte("Preserve content behavior.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "candidate")
+	policyEngine, err = Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || missing.State != BehaviorReviewRequired || !missing.FullCandidate {
+		t.Fatalf("missing status = %+v, error = %v", missing, err)
+	}
+	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
+	receiptPath := filepath.Join(root, filepath.FromSlash(behaviorReviewReceiptPath))
+	before, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	passed, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || passed.State != BehaviorReviewPassed || passed.ReviewID == "" || !passed.FullCandidate {
+		t.Fatalf("passed status = %+v, error = %v", passed, err)
+	}
+	after, err := os.ReadFile(receiptPath)
+	if err != nil || !slices.Equal(before, after) {
+		t.Fatalf("status changed receipt: before=%q after=%q error=%v", before, after, err)
+	}
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":2}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "stale receipt")
+	policyEngine, err = Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || stale.State != BehaviorReviewFailed || stale.ReviewID != "" {
+		t.Fatalf("stale status = %+v, error = %v", stale, err)
+	}
+}
+
+func TestBehaviorReviewStatusStaysRequiredForDirtyTaskSelectedCandidate(t *testing.T) {
+	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":2}\n", 0o600)
+	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || status.State != BehaviorReviewRequired || !slices.Equal(status.TaskRequested, []string{"content"}) ||
+		!slices.Equal(status.Required, []string{"content"}) || !slices.Equal(status.Missing, []string{"content"}) {
+		t.Fatalf("dirty status = %+v, error = %v", status, err)
+	}
+	report, err := policyEngine.TestPlan("main")
+	if err != nil || report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewRequired ||
+		!slices.Equal(report.BehaviorReview.Missing, []string{"content"}) {
+		t.Fatalf("dirty planning report = %+v, error = %v", report, err)
+	}
+}
+
+func TestDocumentationBehaviorReviewIsOptionalUnlessAFeatureSelectsIt(t *testing.T) {
+	t.Run("optional", func(t *testing.T) {
+		root := documentationRepository(t)
+		installBehaviorReviewTestGuidance(t, root)
+		initializeEngineGitRepository(t, root)
+		writeEngineFile(t, root, "docs/index.md", "# Updated\n", 0o600)
+		commitEngineCandidate(t, root, "documentation candidate")
+		policyEngine, err := Open(root, enginePolicyRoot(t), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		report, err := policyEngine.MergeGate(t.Context(), "main")
+		if err != nil || report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewNotRun || len(report.Findings) != 0 {
+			t.Fatalf("report = %+v, error = %v", report, err)
+		}
+	})
+	t.Run("selected", func(t *testing.T) {
+		root := documentationRepository(t)
+		installDocumentationBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"documentation","paths":["docs/index.md"],"suites":["docs-product-contract"],"requiredAt":"merge"}]}`)
+		installBehaviorReviewTestGuidance(t, root)
+		initializeEngineGitRepository(t, root)
+		writeEngineFile(t, root, "docs/index.md", "# Updated\n", 0o600)
+		commitEngineCandidate(t, root, "documentation candidate")
+		policyEngine, err := Open(root, enginePolicyRoot(t), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		commandRunner := &recordingEngineRunner{}
+		policyEngine.Runner = commandRunner
+		report, err := policyEngine.MergeGate(t.Context(), "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertBehaviorReviewGateFindingAtLevel(t, report, testpolicy.MergeLevelDocumentation, "missing behavior review receipt")
+		if report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewRequired || len(commandRunner.commands) != 0 {
+			t.Fatalf("report = %+v commands = %v", report, commandRunner.commands)
+		}
+	})
 }
 
 func TestMergeGateReportsMissingRequiredBehaviorReviewReceiptBeforeCommands(t *testing.T) {
@@ -143,11 +459,12 @@ func TestCheckpointGateRunsChangedScopeAndRecordsAcceptedCandidate(t *testing.T)
 	if err := json.Unmarshal(data, &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Candidate != report.CheckpointPolicy.Candidate || receipt.Scope != behaviorreview.CheckpointScopeChanged || receipt.BehaviorReviewID == "" {
+	if receipt.Candidate != report.CheckpointPolicy.Candidate || receipt.Scope != behaviorreview.CheckpointScopeChanged ||
+		receipt.BehaviorReview.State != gaterun.BehaviorReviewPassed || receipt.BehaviorReview.ReviewID == "" {
 		t.Fatalf("checkpoint receipt = %+v", receipt)
 	}
 	accepted, err := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository)
-	if err != nil || accepted != receipt {
+	if err != nil || !reflect.DeepEqual(accepted, receipt) {
 		t.Fatalf("ReadCheckpoint() receipt = %+v, error = %v, want %+v", accepted, err, receipt)
 	}
 }
@@ -376,6 +693,40 @@ func TestMergeGateResumeReusesOnlyPassedOrdinaryTestsFromIdenticalFailedRun(t *t
 	}
 }
 
+func TestMergeGateResumeReplaysBehaviorProofInsteadOfReusingIt(t *testing.T) {
+	root := requiredBehaviorReviewCandidate(t)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1, failure: "offline-supply"}
+	policyEngine.Runner = failedRunner
+	prepareRequestedBehaviorReviewReceipt(t, policyEngine, root, failedRunner, nil)
+	failedRunner.events = nil
+	failed, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.GateRunPolicy == nil || failed.GateRunPolicy.Status != "failed" {
+		t.Fatalf("failed report = %+v", failed)
+	}
+
+	resumedRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1}
+	policyEngine.Runner = resumedRunner
+	resumed, err := policyEngine.MergeGateWithOptions(t.Context(), "main", MergeGateOptions{Resume: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed.Findings) != 0 || resumed.GateRunPolicy == nil || resumed.GateRunPolicy.Status != "passed" ||
+		!slices.Contains(resumed.GateRunPolicy.ReusedPhases, "focused") {
+		t.Fatalf("resumed report = %+v", resumed)
+	}
+	if len(resumedRunner.events) < 2 || resumedRunner.events[0] != "replay:focused" || resumedRunner.events[1] != "replay:focused" {
+		t.Fatalf("resumed proof replay events = %v", resumedRunner.events)
+	}
+	assertBehaviorProofGateOutcome(t, root, resumed)
+}
+
 func TestMergeGateReplaysRequestedBehaviorReviewProofBeforePlannedCommands(t *testing.T) {
 	root := requiredBehaviorReviewCandidate(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -432,7 +783,11 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 	commandRunner := &behaviorReviewReplayRunner{candidateRoot: root, baselineStatus: 1}
 	policyEngine.Runner = commandRunner
 	prepareRequestedBehaviorReviewReceipt(t, policyEngine, root, commandRunner, forgeBehaviorReviewProofRecord)
-	if _, err := behaviorreview.ValidateGateReceipt(t.Context(), policyEngine.Repository, behaviorreview.ValidateGateReceiptOptions{Base: "main"}); err != nil {
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := behaviorreview.ValidateGateReceipt(t.Context(), policyEngine.Repository, behaviorreview.ValidateGateReceiptOptions{Base: "main", Selection: plan.BehaviorReview.selection}); err != nil {
 		t.Fatalf("forged proof record was not statically valid: %v", err)
 	}
 	commandRunner.events = nil
@@ -448,9 +803,91 @@ func TestMergeGateRejectsForgedRecordedProofBeforePlannedCommands(t *testing.T) 
 	}
 }
 
+func behaviorReviewContentCandidate(t *testing.T, behaviorReview string, captureFeatures []string) (*Engine, string) {
+	t.Helper()
+	root := contentRepository(t, nil)
+	installBehaviorReviewPolicy(t, root, behaviorReview)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "behavior-review")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captureFeatures != nil {
+		intentPath := filepath.Join(t.TempDir(), "intent.md")
+		if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, captureFeatures); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "candidate")
+	policyEngine, err = Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return policyEngine, root
+}
+
+func replaceBehaviorReviewPolicy(t *testing.T, root, oldPolicy, newPolicy string) {
+	t.Helper()
+	path := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(data), `"behaviorReview":`+oldPolicy, `"behaviorReview":`+newPolicy, 1)
+	if updated == string(data) {
+		t.Fatal("test behavior review policy was not replaced")
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func installDocumentationBehaviorReviewPolicy(t *testing.T, root, behaviorReview string) {
+	t.Helper()
+	path := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(data), `"quality": {},`, `"quality": {},
+  "verification": {"behaviorReview":`+behaviorReview+`},`, 1)
+	if updated == string(data) {
+		t.Fatal("documentation test policy lacks quality configuration")
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testSuiteNames(suites []policy.TestSuite) []string {
+	names := make([]string, 0, len(suites))
+	for _, suite := range suites {
+		names = append(names, suite.Name)
+	}
+	return names
+}
+
+func mergeGateCommandCount(commands []MergeGateExecutionCommand, name string) int {
+	count := 0
+	for _, command := range commands {
+		if command.Command.Name == name {
+			count++
+		}
+	}
+	return count
+}
+
 func requiredBehaviorReviewCandidate(t *testing.T) string {
 	t.Helper()
 	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "behavior-review")
@@ -462,13 +899,36 @@ func requiredBehaviorReviewCandidate(t *testing.T) string {
 	if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, nil); err != nil {
 		t.Fatal(err)
 	}
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
 	gitBehaviorReview(t, root, "add", "content/data.json")
 	gitBehaviorReview(t, root, "commit", "-m", "candidate")
 	return root
+}
+
+func installRequiredBehaviorReviewPolicy(t *testing.T, root, requiredAt string) {
+	installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"`+requiredAt+`","features":[]}`)
+}
+
+func installBehaviorReviewPolicy(t *testing.T, root, behaviorReview string) {
+	t.Helper()
+	path := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(data), `"verification": {
+    "mergeGate"`, `"verification": {
+    "behaviorReview":`+behaviorReview+`,
+    "mergeGate"`, 1)
+	if updated == string(data) {
+		t.Fatal("content test policy lacks verification.mergeGate")
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func installBehaviorReviewTestGuidance(t *testing.T, root string) {
@@ -485,9 +945,11 @@ func prepareValidBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, root 
 		t.Fatal(err)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 2, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 3, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		SelectionSHA256: prepared.SelectionSHA256, DecisionSHA256: prepared.DecisionSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "preserved", ProofIDs: []string{},
+			Scope: behaviorreview.BehaviorScope{Features: []string{}, FullCandidate: true},
 		}}, Findings: []string{},
 	}
 	data, err := json.Marshal(review)
@@ -509,7 +971,7 @@ func prepareRequestedBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, r
 	if err := os.WriteFile(intentPath, []byte("Change the content behavior.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath); err != nil {
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, nil); err != nil {
 		t.Fatal(err)
 	}
 	evidence := "content/behavior.test.txt"
@@ -528,9 +990,11 @@ func prepareRequestedBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, r
 		forge(t, root, proof.ID)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 2, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 3, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		SelectionSHA256: prepared.SelectionSHA256, DecisionSHA256: prepared.DecisionSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "requested", ProofIDs: []string{proof.ID},
+			Scope: behaviorreview.BehaviorScope{Features: []string{}, FullCandidate: true},
 		}}, Findings: []string{},
 	}
 	data, err := json.Marshal(review)
@@ -600,6 +1064,7 @@ func behaviorReviewProofDigest(data []byte) string {
 type behaviorReviewReplayRunner struct {
 	candidateRoot  string
 	baselineStatus int
+	failure        string
 	events         []string
 }
 
@@ -628,6 +1093,9 @@ func (runner *checkpointArtifactFailureRunner) Run(_ context.Context, _ string, 
 
 func (commandRunner *behaviorReviewReplayRunner) Run(_ context.Context, _ string, command policy.Command) error {
 	commandRunner.events = append(commandRunner.events, "planned:"+command.Name)
+	if command.Name == commandRunner.failure {
+		return errors.New("configured failure")
+	}
 	return nil
 }
 

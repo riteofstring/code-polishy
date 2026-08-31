@@ -30,14 +30,14 @@ func TestGateRunIdentityChangesWithEffectiveAmbientEnvironment(t *testing.T) {
 	if err := os.Setenv("CGO_ENABLED", "0"); err != nil {
 		t.Fatal(err)
 	}
-	first, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", commands)
+	first, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", commands, testGateRunBehaviorReview())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("CGO_ENABLED", "1"); err != nil {
 		t.Fatal(err)
 	}
-	second, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", commands)
+	second, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", commands, testGateRunBehaviorReview())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +51,13 @@ func TestGateRunIdentityChangesWithEffectiveAmbientEnvironment(t *testing.T) {
 	}
 	if firstDigest == secondDigest {
 		t.Fatal("effective ambient environment did not invalidate the gate-run identity")
+	}
+}
+
+func testGateRunBehaviorReview() gaterun.BehaviorReview {
+	return gaterun.BehaviorReview{
+		State: gaterun.BehaviorReviewNotRun, RequiredBoundary: gaterun.BehaviorReviewOnRequest,
+		SelectedFeatures: []gaterun.BehaviorReviewFeatureSelection{}, SelectionDigest: strings.Repeat("0", 64),
 	}
 }
 

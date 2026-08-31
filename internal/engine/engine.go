@@ -36,6 +36,7 @@ type Engine struct {
 }
 
 type Report struct {
+	BehaviorReview      *BehaviorReviewStatus
 	MergePolicy         *MergePolicy
 	CheckpointPolicy    *CheckpointPolicy
 	GateRunPolicy       *GateRunPolicy
@@ -264,10 +265,14 @@ func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stop
 	if err != nil {
 		return Report{}, err
 	}
+	return engine.testExactPlan(ctx, plan, request.Changed, stopAfterFailure)
+}
+
+func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, selection repository.Selection, stopAfterFailure bool) (Report, error) {
 	notes := []string{}
 	if len(plan.ChangedModules) > 0 {
 		label := "changed modules: "
-		if request.Changed.All {
+		if selection.All {
 			label = "modules selected after repository-wide expansion: "
 		}
 		notes = append(notes, label+strings.Join(plan.ChangedModules, ", "))
@@ -290,9 +295,9 @@ func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stop
 	runResult := runSuites(ctx, engine.Repository, engine.Runner, plan, reporter)
 	notes = append(notes, fmt.Sprintf("ran %d test suites", len(plan.Suites)))
 	report := engine.finish(runResult.Findings, notes)
-	report.TestCommands = engine.testCommandEvidence(plan, request.Changed, runResult.Executions, "working-tree")
+	report.TestCommands = engine.testCommandEvidence(plan, selection, runResult.Executions, "working-tree")
 	if stopAfterFailure {
-		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, request.Changed, runResult.Executions)
+		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, runResult.Executions)
 		report.TestDiagnostics = diagnostics
 		report.TestCommands = append(report.TestCommands, diagnosticEvidence...)
 	}
@@ -334,6 +339,13 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 	report := engine.finish(nil, notes)
 	report.MergePolicy = mergePolicy
 	report.Tables = []Table{testLevelsTable(advice, selectedLevel, base != "")}
+	if base != "" {
+		status, statusErr := engine.BehaviorReviewStatus(context.Background(), base)
+		if statusErr != nil {
+			return Report{}, statusErr
+		}
+		report = withBehaviorReview(report, status)
+	}
 	return engine.withTestQualityReminder(report, selection.Candidate), nil
 }
 
@@ -668,6 +680,7 @@ func mergeAdvisories(left, right []policy.Advisory) []policy.Advisory {
 
 func (engine *Engine) combine(left, right Report) Report {
 	return Report{
+		BehaviorReview:      combineBehaviorReview(left.BehaviorReview, right.BehaviorReview),
 		MergePolicy:         combineMergePolicy(left.MergePolicy, right.MergePolicy),
 		CheckpointPolicy:    combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
 		GateRunPolicy:       combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
@@ -683,6 +696,13 @@ func (engine *Engine) combine(left, right Report) Report {
 		Tables:              append(append([]Table{}, left.Tables...), right.Tables...),
 		Notes:               append(append([]string{}, left.Notes...), right.Notes...),
 	}
+}
+
+func combineBehaviorReview(left, right *BehaviorReviewStatus) *BehaviorReviewStatus {
+	if right != nil {
+		return right
+	}
+	return left
 }
 
 func combineGateRunPolicy(left, right *GateRunPolicy) *GateRunPolicy {
