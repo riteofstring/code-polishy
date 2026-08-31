@@ -31,6 +31,20 @@ type checkpointGateExecution struct {
 	reviewErr     error
 }
 
+type checkpointGatePreparation struct {
+	state                checkpointGateState
+	plan                 MergeGateExecutionPlan
+	workingTreeCandidate bool
+	documentation        bool
+}
+
+type checkpointGateReviewPreparation struct {
+	replayPlan    behaviorreview.GateReplayPlan
+	proofCommands []MergeGateExecutionCommand
+	reviewReport  *Report
+	reviewErr     error
+}
+
 func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string, features []string) (behaviorreview.CaptureIntentResult, error) {
 	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{
 		IntentPath: intentPath, Features: append([]string{}, features...),
@@ -174,47 +188,75 @@ func (engine *Engine) unchangedCheckpointGate(base string) (Report, error) {
 }
 
 func (engine *Engine) prepareCheckpointGate(ctx context.Context, base string, selection repository.Selection) (checkpointGateExecution, Report, error) {
+	preparation, err := engine.checkpointGatePreparation(ctx, base, selection)
+	if err != nil {
+		return checkpointGateExecution{}, Report{}, err
+	}
+	review, err := engine.checkpointGateReviewPreparation(ctx, preparation.plan)
+	if err != nil {
+		return checkpointGateExecution{}, checkpointGateReport(Report{}, preparation.state), err
+	}
+	initialStatus := checkpointGateInitialBehaviorReviewStatus(preparation.plan.BehaviorReview, review)
+	controller, err := newGateRunController(
+		engine, gaterun.CheckpointGate, base, selection.Base, preparation.state.Candidate, preparation.state.Scope,
+		append(review.proofCommands, preparation.plan.Commands...), initialStatus, false,
+	)
+	if err != nil {
+		return checkpointGateExecution{}, checkpointGateReport(Report{}, preparation.state), err
+	}
+	controller.workingTreeCandidate = preparation.workingTreeCandidate
+	preparation.state.ReviewID = review.replayPlan.Receipt.ReviewID
+	return checkpointGateExecution{
+		state: preparation.state, selection: selection, plan: preparation.plan, decision: preparation.plan.BehaviorReview,
+		commands: preparation.plan.Commands, proofCommands: review.proofCommands, controller: controller,
+		documentation: preparation.documentation, reviewReport: review.reviewReport, reviewErr: review.reviewErr,
+	}, Report{}, nil
+}
+
+func (engine *Engine) checkpointGatePreparation(ctx context.Context, base string, selection repository.Selection) (checkpointGatePreparation, error) {
 	documentation := engine.Repository.ClassifyDocumentationCandidate(selection).Ordinary
 	candidate, workingTreeCandidate, err := gateCandidateIdentity(engine.Repository, selection, false)
 	if err != nil {
-		return checkpointGateExecution{}, Report{}, err
+		return checkpointGatePreparation{}, err
 	}
 	decision, err := engine.behaviorReviewDecision(ctx, selection, BehaviorReviewCheckpoint)
 	if err != nil {
-		return checkpointGateExecution{}, Report{}, err
+		return checkpointGatePreparation{}, err
 	}
 	commands, tests, err := engine.checkpointGateCommands(selection, documentation)
 	if err != nil {
-		return checkpointGateExecution{}, Report{}, err
+		return checkpointGatePreparation{}, err
 	}
 	tests, err = engine.forceBehaviorReviewSuites(tests, decision)
 	if err != nil {
-		return checkpointGateExecution{}, Report{}, err
+		return checkpointGatePreparation{}, err
 	}
 	commands = append(commands, mergeGateSuiteCommands(tests.Suites)...)
 	state, plan := checkpointGateStateAndPlan(base, candidate, selection, documentation, decision, tests, commands)
+	return checkpointGatePreparation{
+		state: state, plan: plan, workingTreeCandidate: workingTreeCandidate, documentation: documentation,
+	}, nil
+}
+
+func (engine *Engine) checkpointGateReviewPreparation(ctx context.Context, plan MergeGateExecutionPlan) (checkpointGateReviewPreparation, error) {
 	replayPlan, reviewReport, reviewErr := engine.behaviorReviewReplayPlanReport(ctx, plan)
 	proofCommands, err := gateBehaviorProofCommands(replayPlan)
 	if err != nil {
-		return checkpointGateExecution{}, checkpointGateReport(Report{}, state), err
+		return checkpointGateReviewPreparation{}, err
 	}
-	initialStatus := decision.status
-	if reviewReport != nil && reviewReport.BehaviorReview != nil {
-		initialStatus = *reviewReport.BehaviorReview
+	return checkpointGateReviewPreparation{
+		replayPlan: replayPlan, proofCommands: proofCommands, reviewReport: reviewReport, reviewErr: reviewErr,
+	}, nil
+}
+
+func checkpointGateInitialBehaviorReviewStatus(decision behaviorReviewDecision, review checkpointGateReviewPreparation) BehaviorReviewStatus {
+	if review.reviewReport != nil && review.reviewReport.BehaviorReview != nil {
+		return *review.reviewReport.BehaviorReview
 	}
-	if reviewErr == nil && reviewReport == nil && decision.required {
-		initialStatus = decision.withState(BehaviorReviewPassed, replayPlan.Receipt.ReviewID, behaviorReviewReceiptPath)
+	if review.reviewErr == nil && review.reviewReport == nil && decision.required {
+		return decision.withState(BehaviorReviewPassed, review.replayPlan.Receipt.ReviewID, behaviorReviewReceiptPath)
 	}
-	controller, err := newGateRunController(engine, gaterun.CheckpointGate, base, selection.Base, candidate, state.Scope, append(proofCommands, commands...), initialStatus, false)
-	if err != nil {
-		return checkpointGateExecution{}, checkpointGateReport(Report{}, state), err
-	}
-	controller.workingTreeCandidate = workingTreeCandidate
-	state.ReviewID = replayPlan.Receipt.ReviewID
-	return checkpointGateExecution{
-		state: state, selection: selection, plan: plan, decision: decision, commands: commands, proofCommands: proofCommands, controller: controller,
-		documentation: documentation, reviewReport: reviewReport, reviewErr: reviewErr,
-	}, Report{}, nil
+	return decision.status
 }
 
 func checkpointGateStateAndPlan(base, candidate string, selection repository.Selection, documentation bool, decision behaviorReviewDecision, tests testpolicy.Plan, commands []MergeGateExecutionCommand) (checkpointGateState, MergeGateExecutionPlan) {

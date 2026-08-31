@@ -183,6 +183,17 @@ func (engine *Engine) withMergeGateMetadata(ctx context.Context, report Report, 
 }
 
 func (engine *Engine) PlanMergeGateExecution(base string) (MergeGateExecutionPlan, error) {
+	plan, err := engine.mergeGateBaseExecutionPlan(base)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
+	if plan.Level == testpolicy.MergeLevelDocumentation {
+		return engine.planDocumentationMergeGateExecution(plan)
+	}
+	return engine.planOrdinaryMergeGateExecution(plan)
+}
+
+func (engine *Engine) mergeGateBaseExecutionPlan(base string) (MergeGateExecutionPlan, error) {
 	selection, err := engine.Repository.SelectBase(base)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
@@ -198,53 +209,70 @@ func (engine *Engine) PlanMergeGateExecution(base string) (MergeGateExecutionPla
 	plan := MergeGateExecutionPlan{
 		Level: mergeDecision.Level, Reasons: append([]string{}, mergeDecision.Reasons...), Selection: selection, BehaviorReview: behaviorDecision,
 	}
-	if plan.Level == testpolicy.MergeLevelDocumentation {
-		plan.Tests, err = testpolicy.BuildPlan(engine.Repository, testpolicy.Request{Changed: selection})
-		if err != nil {
-			return MergeGateExecutionPlan{}, err
-		}
-		plan.Tests, err = engine.forceBehaviorReviewSuites(plan.Tests, plan.BehaviorReview)
-		if err != nil {
-			return MergeGateExecutionPlan{}, err
-		}
-		plan.Commands = mergeGateSuiteCommands(plan.Tests.Suites)
-		return plan, nil
-	}
-	checkSelection := selection
-	request := testpolicy.Request{Changed: selection, Recommended: true}
-	if plan.Level == testpolicy.MergeLevelFull {
-		checkSelection, err = engine.Repository.Select("all", nil)
-		if err != nil {
-			return MergeGateExecutionPlan{}, err
-		}
-		request = testpolicy.Request{Full: true}
-	}
-	plan.Tests, err = testpolicy.BuildPlan(engine.Repository, request)
+	return plan, nil
+}
+
+func (engine *Engine) planDocumentationMergeGateExecution(plan MergeGateExecutionPlan) (MergeGateExecutionPlan, error) {
+	tests, err := testpolicy.BuildPlan(engine.Repository, testpolicy.Request{Changed: plan.Selection})
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
-	plan.Tests, err = engine.forceBehaviorReviewSuites(plan.Tests, plan.BehaviorReview)
+	tests, err = engine.forceBehaviorReviewSuites(tests, plan.BehaviorReview)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
+	plan.Tests = tests
+	plan.Commands = mergeGateSuiteCommands(plan.Tests.Suites)
+	return plan, nil
+}
+
+func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan) (MergeGateExecutionPlan, error) {
+	checkSelection, request, err := engine.mergeGateTestRequest(plan)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
+	tests, err := testpolicy.BuildPlan(engine.Repository, request)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
+	tests, err = engine.forceBehaviorReviewSuites(tests, plan.BehaviorReview)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
+	plan.Tests = tests
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, quality.CheckCommands(engine.Repository, checkSelection, "gate"))...)
 	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(plan.Tests.Suites)...)
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Build, quality.CommandsForProfiles(engine.Repository, checkSelection, "build"))...)
+	return engine.appendMergeGateSupplyChainCommands(plan)
+}
+
+func (engine *Engine) mergeGateTestRequest(plan MergeGateExecutionPlan) (repository.Selection, testpolicy.Request, error) {
+	if plan.Level != testpolicy.MergeLevelFull {
+		return plan.Selection, testpolicy.Request{Changed: plan.Selection, Recommended: true}, nil
+	}
+	selection, err := engine.Repository.Select("all", nil)
+	if err != nil {
+		return repository.Selection{}, testpolicy.Request{}, err
+	}
+	return selection, testpolicy.Request{Full: true}, nil
+}
+
+func (engine *Engine) appendMergeGateSupplyChainCommands(plan MergeGateExecutionPlan) (MergeGateExecutionPlan, error) {
 	supplySelection, err := engine.Repository.Select("all", nil)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
-	if plan.Level == testpolicy.MergeLevelFull {
-		onlineCommands, onlineErr := supplychain.OnlineCommands(engine.Repository, supplySelection.Files)
-		if onlineErr != nil {
-			return MergeGateExecutionPlan{}, onlineErr
-		}
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, onlineCommands)...)
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain", "supply-chain-online", "security"))...)
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.ArtifactSecurity, artifactsecurity.PlannedCommands(engine.Repository))...)
-	} else {
+	if plan.Level != testpolicy.MergeLevelFull {
 		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain"))...)
+		return plan, nil
 	}
+	onlineCommands, err := supplychain.OnlineCommands(engine.Repository, supplySelection.Files)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
+	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, onlineCommands)...)
+	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain", "supply-chain-online", "security"))...)
+	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.ArtifactSecurity, artifactsecurity.PlannedCommands(engine.Repository))...)
 	return plan, nil
 }
 
@@ -277,38 +305,56 @@ func (engine *Engine) forceBehaviorReviewSuites(plan testpolicy.Plan, decision b
 	if !decision.required || len(decision.requiredSuites) == 0 {
 		return plan, nil
 	}
-	configured := make(map[string]policy.TestSuite, len(engine.Repository.Config.Tests.Suites))
-	for _, suite := range engine.Repository.Config.Tests.Suites {
+	configured := behaviorReviewConfiguredSuites(engine.Repository.Config.Tests.Suites)
+	if err := validateBaseBehaviorReviewSuites(configured, decision.baseSelectedSuites); err != nil {
+		return testpolicy.Plan{}, err
+	}
+	selected, err := forceBehaviorReviewSuites(plan.Suites, decision.requiredSuites, configured)
+	if err != nil {
+		return testpolicy.Plan{}, err
+	}
+	plan.Suites = selected
+	return plan, nil
+}
+
+func behaviorReviewConfiguredSuites(suites []policy.TestSuite) map[string]policy.TestSuite {
+	configured := make(map[string]policy.TestSuite, len(suites))
+	for _, suite := range suites {
 		configured[suite.Name] = suite
 	}
-	for _, baseSuite := range decision.baseSelectedSuites {
-		candidateSuite, found := configured[baseSuite.Name]
-		if !found {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is unavailable in the candidate configuration", baseSuite.Name)
-		}
-		if !policy.BehaviorReviewSuiteAllowed(candidateSuite) {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is ineligible in the candidate configuration", baseSuite.Name)
+	return configured
+}
+
+func validateBaseBehaviorReviewSuites(configured map[string]policy.TestSuite, baseSuites []policy.TestSuite) error {
+	for _, baseSuite := range baseSuites {
+		candidateSuite, err := configuredBehaviorReviewSuite(configured, baseSuite.Name)
+		if err != nil {
+			return err
 		}
 		if !sameTestSuiteSemantics(candidateSuite, baseSuite) {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q no longer matches its base-selected definition", baseSuite.Name)
+			return fmt.Errorf("selected behavior review suite %q no longer matches its base-selected definition", baseSuite.Name)
 		}
 	}
-	selected := make([]policy.TestSuite, 0, len(plan.Suites)+len(decision.requiredSuites))
-	seen := map[string]bool{}
-	for _, suite := range plan.Suites {
-		if seen[suite.Name] {
-			continue
-		}
-		seen[suite.Name] = true
-		selected = append(selected, suite)
+	return nil
+}
+
+func configuredBehaviorReviewSuite(configured map[string]policy.TestSuite, name string) (policy.TestSuite, error) {
+	suite, found := configured[name]
+	if !found {
+		return policy.TestSuite{}, fmt.Errorf("selected behavior review suite %q is unavailable in the candidate configuration", name)
 	}
-	for _, name := range decision.requiredSuites {
-		suite, found := configured[name]
-		if !found {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is unavailable in the candidate configuration", name)
-		}
-		if !policy.BehaviorReviewSuiteAllowed(suite) {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is ineligible in the candidate configuration", name)
+	if !policy.BehaviorReviewSuiteAllowed(suite) {
+		return policy.TestSuite{}, fmt.Errorf("selected behavior review suite %q is ineligible in the candidate configuration", name)
+	}
+	return suite, nil
+}
+
+func forceBehaviorReviewSuites(existing []policy.TestSuite, required []string, configured map[string]policy.TestSuite) ([]policy.TestSuite, error) {
+	selected, seen := uniqueBehaviorReviewSuites(existing, len(required))
+	for _, name := range required {
+		suite, err := configuredBehaviorReviewSuite(configured, name)
+		if err != nil {
+			return nil, err
 		}
 		if seen[name] {
 			continue
@@ -316,8 +362,20 @@ func (engine *Engine) forceBehaviorReviewSuites(plan testpolicy.Plan, decision b
 		seen[name] = true
 		selected = append(selected, suite)
 	}
-	plan.Suites = selected
-	return plan, nil
+	return selected, nil
+}
+
+func uniqueBehaviorReviewSuites(suites []policy.TestSuite, additional int) ([]policy.TestSuite, map[string]bool) {
+	selected := make([]policy.TestSuite, 0, len(suites)+additional)
+	seen := map[string]bool{}
+	for _, suite := range suites {
+		if seen[suite.Name] {
+			continue
+		}
+		seen[suite.Name] = true
+		selected = append(selected, suite)
+	}
+	return selected, seen
 }
 
 func suiteCommand(suite policy.TestSuite) policy.Command {
@@ -463,31 +521,6 @@ func (engine *Engine) fullMergeGate(ctx context.Context, tests testpolicy.Plan) 
 	}
 	supply, err := engine.SupplyChain(ctx, false)
 	return engine.combine(engine.combine(engine.combine(engine.combine(doctor, checked), verified), built), supply), err
-}
-
-func (engine *Engine) recommendedMergeGate(ctx context.Context, selection repository.Selection) (Report, error) {
-	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
-		return doctor, err
-	}
-	checked := engine.Check(ctx, selection, "gate")
-	report := engine.combine(doctor, checked)
-	if len(checked.Findings) > 0 {
-		return report, nil
-	}
-	verified, err := engine.test(ctx, testpolicy.Request{Recommended: true, Changed: selection}, true)
-	report = engine.combine(report, verified)
-	if err != nil || len(verified.Findings) > 0 {
-		return report, err
-	}
-	buildFindings := quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "build")
-	built := engine.finish(buildFindings, []string{"completed applicable build profile"})
-	report = engine.combine(report, built)
-	if len(built.Findings) > 0 {
-		return report, nil
-	}
-	supply, err := engine.SupplyChain(ctx, true)
-	return engine.combine(report, supply), err
 }
 
 func (engine *Engine) recommendedMergeGateWithTests(ctx context.Context, selection repository.Selection, tests testpolicy.Plan) (Report, error) {

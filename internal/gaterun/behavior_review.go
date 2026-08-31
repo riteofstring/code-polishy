@@ -57,7 +57,7 @@ func validateBehaviorReviewFeatures(features []BehaviorReviewFeatureSelection) e
 }
 
 func validBehaviorReviewReasons(reasons []string) bool {
-	if reasons == nil || len(reasons) == 0 || !validStrings(reasons) {
+	if len(reasons) == 0 || !validStrings(reasons) {
 		return false
 	}
 	previous := ""

@@ -49,6 +49,22 @@ func TestMergeGateBypassesBehaviorReviewForDocumentationCandidates(t *testing.T)
 }
 
 func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *testing.T) {
+	root, policyEngine, staleJournal := behaviorReviewWithoutConfigurationCandidate(t)
+	plan, planErr := policyEngine.PlanMergeGateExecution("main")
+	assertBehaviorReviewNotRunPlan(t, plan, planErr)
+	status, statusErr := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	assertBehaviorReviewNotRunStatus(t, status, statusErr)
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	report, mergeErr := policyEngine.MergeGate(t.Context(), "main")
+	assertBehaviorReviewOptionalMergeGate(t, report, mergeErr, commandRunner)
+	assertBehaviorReviewArtifactsUnchanged(t, root, staleJournal)
+	planningReport, planningErr := policyEngine.TestPlan("main")
+	assertBehaviorReviewNotRunPlanningReport(t, planningReport, planningErr)
+}
+
+func behaviorReviewWithoutConfigurationCandidate(t *testing.T) (string, *Engine, []byte) {
+	t.Helper()
 	root := contentRepository(t, nil)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
@@ -62,35 +78,59 @@ func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	planned, err := policyEngine.PlanMergeGateExecution("main")
+	return root, policyEngine, staleJournal
+}
+
+func assertBehaviorReviewNotRunPlan(t *testing.T, plan MergeGateExecutionPlan, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if planned.BehaviorReview.status.State != BehaviorReviewNotRun || planned.BehaviorReview.status.FullCandidate ||
-		len(planned.BehaviorReview.status.SelectedFeatures) != 0 {
-		t.Fatalf("behavior review plan = %+v", planned.BehaviorReview.status)
+	status := plan.BehaviorReview.status
+	if status.State != BehaviorReviewNotRun || status.FullCandidate || len(status.SelectedFeatures) != 0 {
+		t.Fatalf("behavior review plan = %+v", status)
 	}
-	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
-	if err != nil || status.State != BehaviorReviewNotRun || len(status.Required) != 0 || len(status.Missing) != 0 {
-		t.Fatalf("status = %+v, error = %v", status, err)
+}
+
+func assertBehaviorReviewNotRunStatus(t *testing.T, status BehaviorReviewStatus, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
 	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine.Runner = commandRunner
-	report, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil || report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewNotRun || len(report.Findings) != 0 {
-		t.Fatalf("report = %+v, error = %v", report, err)
+	if status.State != BehaviorReviewNotRun || len(status.Required) != 0 || len(status.Missing) != 0 {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func assertBehaviorReviewOptionalMergeGate(t *testing.T, report Report, err error, commandRunner *recordingEngineRunner) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewNotRun || len(report.Findings) != 0 {
+		t.Fatalf("report = %+v", report)
 	}
 	if len(commandRunner.commands) == 0 {
 		t.Fatal("optional merge gate did not run its ordinary commands")
 	}
+}
+
+func assertBehaviorReviewArtifactsUnchanged(t *testing.T, root string, staleJournal []byte) {
+	t.Helper()
 	journalPath := filepath.Join(root, ".code-polishy-reports", "behavior-review", "intent-journal.json")
 	journal, readErr := os.ReadFile(journalPath)
 	if readErr != nil || !slices.Equal(journal, staleJournal) {
 		t.Fatalf("optional gate changed stale behavior-review artifacts: %q, %v", journal, readErr)
 	}
-	planningReport, err := policyEngine.TestPlan("main")
-	if err != nil || planningReport.BehaviorReview == nil || planningReport.BehaviorReview.State != BehaviorReviewNotRun {
-		t.Fatalf("planning report = %+v, error = %v", planningReport, err)
+}
+
+func assertBehaviorReviewNotRunPlanningReport(t *testing.T, report Report, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.BehaviorReview == nil || report.BehaviorReview.State != BehaviorReviewNotRun {
+		t.Fatalf("planning report = %+v", report)
 	}
 }
 

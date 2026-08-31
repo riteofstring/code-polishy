@@ -313,6 +313,29 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	selectedLevel, mergePolicy, ordinaryNotes, err := engine.testPlanMergePolicy(base, selection, advice)
+	if err != nil {
+		return Report{}, err
+	}
+	report := engine.testPlanReport(base, selection, advice, selectedLevel, mergePolicy, ordinaryNotes)
+	report, err = engine.withTestPlanBehaviorReview(base, report)
+	if err != nil {
+		return Report{}, err
+	}
+	return engine.withTestQualityReminder(report, selection.Candidate), nil
+}
+
+func (engine *Engine) testPlanReport(
+	base string, selection repository.Selection, advice testpolicy.Advice, selectedLevel string,
+	mergePolicy *MergePolicy, ordinaryNotes []string,
+) Report {
+	report := engine.finish(nil, testPlanNotes(base, selection, advice, ordinaryNotes))
+	report.MergePolicy = mergePolicy
+	report.Tables = []Table{testLevelsTable(advice, selectedLevel, base != "")}
+	return report
+}
+
+func testPlanNotes(base string, selection repository.Selection, advice testpolicy.Advice, ordinaryNotes []string) []string {
 	notes := []string{}
 	if base == "" {
 		notes = append(notes, "planning current uncommitted Git changes")
@@ -327,26 +350,23 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 	if len(advice.ImpactedModules) > 0 {
 		notes = append(notes, "impacted modules: "+strings.Join(advice.ImpactedModules, ", "))
 	}
-	selectedLevel, mergePolicy, ordinaryNotes, err := engine.testPlanMergePolicy(base, selection, advice)
-	if err != nil {
-		return Report{}, err
-	}
 	notes = append(notes, ordinaryNotes...)
 	if len(advice.Supplemental) > 0 {
 		notes = append(notes, "supplemental quality (run separately with test --supplemental): "+suiteSummary(advice.Supplemental))
 		notes = append(notes, "supplemental suites are excluded from ordinary recommended, full, verify, and gate")
 	}
-	report := engine.finish(nil, notes)
-	report.MergePolicy = mergePolicy
-	report.Tables = []Table{testLevelsTable(advice, selectedLevel, base != "")}
-	if base != "" {
-		status, statusErr := engine.BehaviorReviewStatus(context.Background(), base)
-		if statusErr != nil {
-			return Report{}, statusErr
-		}
-		report = withBehaviorReview(report, status)
+	return notes
+}
+
+func (engine *Engine) withTestPlanBehaviorReview(base string, report Report) (Report, error) {
+	if base == "" {
+		return report, nil
 	}
-	return engine.withTestQualityReminder(report, selection.Candidate), nil
+	status, err := engine.BehaviorReviewStatus(context.Background(), base)
+	if err != nil {
+		return Report{}, err
+	}
+	return withBehaviorReview(report, status), nil
 }
 
 func (engine *Engine) testPlanMergePolicy(

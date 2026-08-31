@@ -73,6 +73,15 @@ type behaviorReviewFeatureRequirement struct {
 	candidateAffected bool
 }
 
+type behaviorReviewDecisionInput struct {
+	selection          behaviorreview.ReviewSelection
+	requiredBoundary   BehaviorReviewBoundary
+	baseSelectedSuites []policy.TestSuite
+	configured         []string
+	affected           []string
+	requested          []string
+}
+
 func (engine *Engine) behaviorReviewDecision(
 	ctx context.Context, selection repository.Selection, boundary BehaviorReviewBoundary,
 ) (behaviorReviewDecision, error) {
@@ -80,13 +89,27 @@ func (engine *Engine) behaviorReviewDecision(
 	if err != nil {
 		return behaviorReviewDecision{}, err
 	}
-	if engine.Repository.Config.Verification.BehaviorReview == nil && baseConfig.Verification.BehaviorReview == nil {
+	if behaviorReviewConfigurationAbsent(engine.Repository.Config, baseConfig) {
 		return emptyBehaviorReviewDecision()
 	}
+	input, err := engine.buildBehaviorReviewDecisionInput(ctx, selection, boundary, baseConfig)
+	if err != nil {
+		return behaviorReviewDecision{}, err
+	}
+	return behaviorReviewDecisionFromInput(input)
+}
+
+func behaviorReviewConfigurationAbsent(candidateConfig, baseConfig policy.Config) bool {
+	return candidateConfig.Verification.BehaviorReview == nil && baseConfig.Verification.BehaviorReview == nil
+}
+
+func (engine *Engine) buildBehaviorReviewDecisionInput(
+	ctx context.Context, selection repository.Selection, boundary BehaviorReviewBoundary, baseConfig policy.Config,
+) (behaviorReviewDecisionInput, error) {
 	documentation := engine.Repository.ClassifyDocumentationCandidate(selection).Ordinary
 	requirements, err := behaviorreview.TaskRequirements(ctx, engine.Repository, selection.Base)
 	if err != nil {
-		return behaviorReviewDecision{}, err
+		return behaviorReviewDecisionInput{}, err
 	}
 	candidateImpact := engine.Repository.CandidateImpact(selection.Candidate)
 	baseRepository := engine.Repository
@@ -97,26 +120,28 @@ func (engine *Engine) behaviorReviewDecision(
 	)
 	selectionValue, requiredBoundary, err := behaviorReviewSelection(engine.Repository.Config, baseConfig, features, boundary, documentation)
 	if err != nil {
-		return behaviorReviewDecision{}, err
+		return behaviorReviewDecisionInput{}, err
 	}
 	baseSelectedSuites, err := behaviorReviewBaseSelectedSuites(baseConfig, features)
 	if err != nil {
-		return behaviorReviewDecision{}, err
+		return behaviorReviewDecisionInput{}, err
 	}
 	configured, affected := behaviorReviewStatusFeatures(features)
-	if len(selectionValue.Features) == 0 && !selectionValue.FullCandidate {
-		digest, err := emptyBehaviorReviewSelectionDigest()
-		if err != nil {
-			return behaviorReviewDecision{}, err
-		}
-		return behaviorReviewDecision{selectionDigest: digest, status: BehaviorReviewStatus{
-			State: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
-			SelectedFeatures: []BehaviorReviewFeatureSelection{}, SelectionDigest: digest,
-			Affected: affected, Configured: configured, TaskRequested: slices.Clone(requirements.RequestedFeatures),
-			Required: []string{}, Completed: []string{}, Missing: []string{},
-		}}, nil
+	return behaviorReviewDecisionInput{
+		selection:          selectionValue,
+		requiredBoundary:   requiredBoundary,
+		baseSelectedSuites: baseSelectedSuites,
+		configured:         configured,
+		affected:           affected,
+		requested:          requirements.RequestedFeatures,
+	}, nil
+}
+
+func behaviorReviewDecisionFromInput(input behaviorReviewDecisionInput) (behaviorReviewDecision, error) {
+	if len(input.selection.Features) == 0 && !input.selection.FullCandidate {
+		return behaviorReviewNotRunDecision(input.affected, input.configured, input.requested)
 	}
-	normalized, err := behaviorreview.NormalizeReviewSelection(selectionValue)
+	normalized, err := behaviorreview.NormalizeReviewSelection(input.selection)
 	if err != nil {
 		return behaviorReviewDecision{}, fmt.Errorf("normalize behavior review selection: %w", err)
 	}
@@ -124,20 +149,24 @@ func (engine *Engine) behaviorReviewDecision(
 	if err != nil {
 		return behaviorReviewDecision{}, fmt.Errorf("digest behavior review selection: %w", err)
 	}
-	status := newBehaviorReviewStatus(BehaviorReviewRequired, requiredBoundary, normalized, digest, "", "")
-	status.Affected = affected
-	status.Configured = configured
-	status.TaskRequested = slices.Clone(requirements.RequestedFeatures)
+	status := newBehaviorReviewStatus(BehaviorReviewRequired, input.requiredBoundary, normalized, digest, "", "")
+	status.Affected = input.affected
+	status.Configured = input.configured
+	status.TaskRequested = slices.Clone(input.requested)
 	status.Required = behaviorReviewSelectionNames(normalized)
 	status.Completed = []string{}
 	status.Missing = slices.Clone(status.Required)
 	return behaviorReviewDecision{
 		required: true, selection: normalized, selectionDigest: digest,
-		requiredSuites: behaviorReviewSelectionSuites(normalized), baseSelectedSuites: baseSelectedSuites, status: status,
+		requiredSuites: behaviorReviewSelectionSuites(normalized), baseSelectedSuites: input.baseSelectedSuites, status: status,
 	}, nil
 }
 
 func emptyBehaviorReviewDecision() (behaviorReviewDecision, error) {
+	return behaviorReviewNotRunDecision([]string{}, []string{}, []string{})
+}
+
+func behaviorReviewNotRunDecision(affected, configured, requested []string) (behaviorReviewDecision, error) {
 	digest, err := emptyBehaviorReviewSelectionDigest()
 	if err != nil {
 		return behaviorReviewDecision{}, err
@@ -145,7 +174,7 @@ func emptyBehaviorReviewDecision() (behaviorReviewDecision, error) {
 	return behaviorReviewDecision{selectionDigest: digest, status: BehaviorReviewStatus{
 		State: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
 		SelectedFeatures: []BehaviorReviewFeatureSelection{}, SelectionDigest: digest,
-		Affected: []string{}, Configured: []string{}, TaskRequested: []string{},
+		Affected: affected, Configured: configured, TaskRequested: slices.Clone(requested),
 		Required: []string{}, Completed: []string{}, Missing: []string{},
 	}}, nil
 }
