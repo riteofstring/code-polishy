@@ -14,6 +14,7 @@ type behaviorReviewOptions struct {
 	action     string
 	base       string
 	intentFile string
+	features   []string
 }
 
 type regressionProofOptions struct {
@@ -33,11 +34,23 @@ func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, argu
 	}
 	switch options.action {
 	case "capture-intent":
-		result, captureErr := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile)
+		result, captureErr := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile, options.features)
 		if captureErr != nil {
 			return commandResult{}, captureErr
 		}
 		return commandResult{quiet: true, messages: []string{behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID)}}, nil
+	case "require":
+		result, requireErr := policyEngine.RequireBehaviorReview(ctx, options.base, options.features)
+		if requireErr != nil {
+			return commandResult{}, requireErr
+		}
+		return commandResult{quiet: true, messages: []string{behaviorReviewRequirementAddedMessage(result.JournalPath, result.ID, result.Features)}}, nil
+	case "status":
+		status, statusErr := policyEngine.BehaviorReviewStatus(ctx, options.base)
+		if statusErr != nil {
+			return commandResult{}, statusErr
+		}
+		return commandResult{quiet: true, messages: []string{behaviorReviewStatusMessage(status)}}, nil
 	case "prepare":
 		result, prepareErr := policyEngine.PrepareBehaviorReview(ctx, options.base)
 		if prepareErr != nil {
@@ -74,6 +87,33 @@ func behaviorReviewIntentCapturedMessage(journalPath, captureID string) string {
 	return fmt.Sprintf("Behavior review intent captured: %s (intent %s)", journalPath, captureID)
 }
 
+func behaviorReviewRequirementAddedMessage(journalPath, requirementID string, features []string) string {
+	return fmt.Sprintf("Behavior review requirement added: %s (requirement %s; features %s)", journalPath, requirementID, strings.Join(features, ", "))
+}
+
+func behaviorReviewStatusMessage(status engine.BehaviorReviewStatus) string {
+	var output strings.Builder
+	printBehaviorReview(&output, &status, false)
+	for _, list := range []struct {
+		label  string
+		values []string
+	}{
+		{label: "AFFECTED FEATURES", values: status.Affected},
+		{label: "CONFIGURED FEATURES", values: status.Configured},
+		{label: "TASK-REQUESTED FEATURES", values: status.TaskRequested},
+		{label: "REQUIRED FEATURES", values: status.Required},
+		{label: "COMPLETED FEATURES", values: status.Completed},
+		{label: "MISSING FEATURES", values: status.Missing},
+	} {
+		values := "none"
+		if len(list.values) > 0 {
+			values = strings.Join(list.values, ", ")
+		}
+		fmt.Fprintf(&output, "%s: %s\n", list.label, values)
+	}
+	return strings.TrimSuffix(output.String(), "\n")
+}
+
 func behaviorReviewFinalizedMessage(receiptPath, reviewID string) string {
 	return fmt.Sprintf("Behavior review finalized: %s (review %s)", receiptPath, reviewID)
 }
@@ -84,7 +124,7 @@ func regressionProofMessage(proofPath, proofID string) string {
 
 func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, error) {
 	if len(arguments) == 0 {
-		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, prepare, or finalize")
+		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, require, status, prepare, or finalize")
 	}
 	options := behaviorReviewOptions{action: arguments[0]}
 	switch options.action {
@@ -92,12 +132,20 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 		if err := parseBehaviorReviewCaptureIntent(&options, arguments[1:]); err != nil {
 			return behaviorReviewOptions{}, err
 		}
+	case "require":
+		if err := parseBehaviorReviewRequire(&options, arguments[1:]); err != nil {
+			return behaviorReviewOptions{}, err
+		}
+	case "status":
+		if err := parseBehaviorReviewBase(&options, arguments[1:], "status"); err != nil {
+			return behaviorReviewOptions{}, err
+		}
 	case "prepare":
-		if err := parseBehaviorReviewPrepare(&options, arguments[1:]); err != nil {
+		if err := parseBehaviorReviewBase(&options, arguments[1:], "prepare"); err != nil {
 			return behaviorReviewOptions{}, err
 		}
 	case "finalize":
-		if err := parseBehaviorReviewFinalize(&options, arguments[1:]); err != nil {
+		if err := parseBehaviorReviewBase(&options, arguments[1:], "finalize"); err != nil {
 			return behaviorReviewOptions{}, err
 		}
 	default:
@@ -109,17 +157,27 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 func parseBehaviorReviewCaptureIntent(options *behaviorReviewOptions, arguments []string) error {
 	for index := 0; index < len(arguments); {
 		value, consumed, matched, err := namedOptionValue(arguments[index:], "--intent-file")
-		if !matched {
-			return fmt.Errorf("unknown behavior-review capture-intent option %q", arguments[index])
+		if matched {
+			if err != nil {
+				return err
+			}
+			if options.intentFile != "" {
+				return errorsDuplicateOption("behavior-review capture-intent", "--intent-file")
+			}
+			options.intentFile = value
+			index += consumed
+			continue
 		}
-		if err != nil {
-			return err
+		value, consumed, matched, err = namedOptionValue(arguments[index:], "--feature")
+		if matched {
+			if err != nil {
+				return err
+			}
+			options.features = append(options.features, value)
+			index += consumed
+			continue
 		}
-		if options.intentFile != "" {
-			return errorsDuplicateOption("behavior-review capture-intent", "--intent-file")
-		}
-		options.intentFile = value
-		index += consumed
+		return fmt.Errorf("unknown behavior-review capture-intent option %q", arguments[index])
 	}
 	if options.intentFile == "" {
 		return fmt.Errorf("behavior-review capture-intent requires exactly one --intent-file PATH")
@@ -127,7 +185,7 @@ func parseBehaviorReviewCaptureIntent(options *behaviorReviewOptions, arguments 
 	return nil
 }
 
-func parseBehaviorReviewPrepare(options *behaviorReviewOptions, arguments []string) error {
+func parseBehaviorReviewRequire(options *behaviorReviewOptions, arguments []string) error {
 	for index := 0; index < len(arguments); {
 		value, consumed, matched, err := namedOptionValue(arguments[index:], "--base")
 		if matched {
@@ -135,37 +193,49 @@ func parseBehaviorReviewPrepare(options *behaviorReviewOptions, arguments []stri
 				return err
 			}
 			if options.base != "" {
-				return errorsDuplicateOption("behavior-review prepare", "--base")
+				return errorsDuplicateOption("behavior-review require", "--base")
 			}
 			options.base = value
 			index += consumed
 			continue
 		}
-		return fmt.Errorf("unknown behavior-review prepare option %q", arguments[index])
+		value, consumed, matched, err = namedOptionValue(arguments[index:], "--feature")
+		if matched {
+			if err != nil {
+				return err
+			}
+			options.features = append(options.features, value)
+			index += consumed
+			continue
+		}
+		return fmt.Errorf("unknown behavior-review require option %q", arguments[index])
 	}
 	if options.base == "" {
-		return fmt.Errorf("behavior-review prepare requires exactly one --base REF")
+		return fmt.Errorf("behavior-review require requires exactly one --base REF")
+	}
+	if len(options.features) == 0 {
+		return fmt.Errorf("behavior-review require requires at least one --feature NAME")
 	}
 	return nil
 }
 
-func parseBehaviorReviewFinalize(options *behaviorReviewOptions, arguments []string) error {
+func parseBehaviorReviewBase(options *behaviorReviewOptions, arguments []string, action string) error {
 	for index := 0; index < len(arguments); {
 		value, consumed, matched, err := namedOptionValue(arguments[index:], "--base")
 		if !matched {
-			return fmt.Errorf("unknown behavior-review finalize option %q", arguments[index])
+			return fmt.Errorf("unknown behavior-review %s option %q", action, arguments[index])
 		}
 		if err != nil {
 			return err
 		}
 		if options.base != "" {
-			return errorsDuplicateOption("behavior-review finalize", "--base")
+			return errorsDuplicateOption("behavior-review "+action, "--base")
 		}
 		options.base = value
 		index += consumed
 	}
 	if options.base == "" {
-		return fmt.Errorf("behavior-review finalize requires exactly one --base REF")
+		return fmt.Errorf("behavior-review %s requires exactly one --base REF", action)
 	}
 	return nil
 }

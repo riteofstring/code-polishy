@@ -30,7 +30,9 @@ Commands:
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
-  behavior-review capture-intent --intent-file PATH
+  behavior-review capture-intent --intent-file PATH [--feature NAME...]
+  behavior-review require --base REF --feature NAME...
+  behavior-review status --base REF
   behavior-review prepare --base REF
   behavior-review finalize --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
@@ -129,6 +131,7 @@ func printOperationalReportHeaders(output io.Writer, report engine.Report, verbo
 	if report.CheckpointPolicy != nil {
 		printCheckpointPolicyForMode(output, report.CheckpointPolicy, verbose)
 	}
+	printBehaviorReview(output, report.BehaviorReview, verbose)
 }
 
 func handleMetaCommand(invocation invocation) (int, bool) {
@@ -788,6 +791,7 @@ func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
 	if report.CheckpointPolicy != nil {
 		printCheckpointPolicyForMode(output, report.CheckpointPolicy, verbose)
 	}
+	printBehaviorReview(output, report.BehaviorReview, verbose)
 	if report.GateRunPolicy != nil {
 		printGateRunPolicy(output, report.GateRunPolicy)
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -71,4 +72,48 @@ func printReportCompletion(stdout, stderr io.Writer, report engine.Report) {
 	if len(report.Findings) > 0 {
 		fmt.Fprintf(stderr, "FAILED with %d finding(s)\n", len(report.Findings))
 	}
+}
+
+func printBehaviorReview(output io.Writer, review *engine.BehaviorReviewStatus, verbose bool) {
+	if review == nil {
+		return
+	}
+	fmt.Fprintf(output, "BEHAVIOR REVIEW: %s (%s)\n", behaviorReviewStatusLabel(review.State), behaviorReviewScope(review))
+	if !verbose {
+		return
+	}
+	fmt.Fprintln(output, "BEHAVIOR REVIEW BOUNDARY:", strings.ToUpper(string(review.RequiredBoundary)))
+	for _, feature := range review.SelectedFeatures {
+		fmt.Fprintln(output, "BEHAVIOR REVIEW FEATURE:", feature.Name)
+		for _, reason := range feature.Reasons {
+			fmt.Fprintf(output, "BEHAVIOR REVIEW REASON: %s (%s)\n", feature.Name, reason)
+		}
+	}
+	if review.FullCandidate {
+		fmt.Fprintln(output, "BEHAVIOR REVIEW FULL CANDIDATE: yes")
+	}
+	if review.ReceiptPath != "" {
+		fmt.Fprintln(output, "BEHAVIOR REVIEW RECEIPT:", review.ReceiptPath)
+	}
+}
+
+func behaviorReviewStatusLabel(state engine.BehaviorReviewState) string {
+	if state == engine.BehaviorReviewNotRun {
+		return "NOT RUN"
+	}
+	return strings.ToUpper(string(state))
+}
+
+func behaviorReviewScope(review *engine.BehaviorReviewStatus) string {
+	if review.State == engine.BehaviorReviewNotRun {
+		return "optional"
+	}
+	scope := make([]string, 0, len(review.SelectedFeatures)+1)
+	if review.FullCandidate {
+		scope = append(scope, "all changes")
+	}
+	for _, feature := range review.SelectedFeatures {
+		scope = append(scope, feature.Name)
+	}
+	return strings.Join(scope, ", ")
 }

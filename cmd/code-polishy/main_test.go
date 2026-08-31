@@ -447,6 +447,98 @@ func TestPrintReportSummarizesDocumentationMergePolicyForHumans(t *testing.T) {
 	}
 }
 
+func TestPrintReportRendersExactlyOneConciseBehaviorReviewStatusForBaseAwareReports(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name   string
+		report engine.Report
+		want   string
+	}{
+		{
+			name: "planning optional",
+			report: engine.Report{
+				MergePolicy: &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
+				BehaviorReview: &engine.BehaviorReviewStatus{
+					State: engine.BehaviorReviewNotRun, RequiredBoundary: engine.BehaviorReviewOnRequest,
+					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{}, SelectionDigest: strings.Repeat("a", 64),
+				},
+			},
+			want: "BEHAVIOR REVIEW: NOT RUN (optional)\n",
+		},
+		{
+			name: "checkpoint required",
+			report: engine.Report{
+				CheckpointPolicy: &engine.CheckpointPolicy{Scope: "changed", Base: "TASK_BASE", Candidate: strings.Repeat("b", 40)},
+				BehaviorReview: &engine.BehaviorReviewStatus{
+					State: engine.BehaviorReviewRequired, RequiredBoundary: engine.BehaviorReviewCheckpoint,
+					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{
+						{Name: "authentication", Reasons: []string{"task-requested"}},
+					},
+					SelectionDigest: strings.Repeat("c", 64),
+				},
+			},
+			want: "BEHAVIOR REVIEW: REQUIRED (authentication)\n",
+		},
+		{
+			name: "merge passed",
+			report: engine.Report{
+				MergePolicy: &engine.MergePolicy{Level: "full", Base: "origin/main"},
+				BehaviorReview: &engine.BehaviorReviewStatus{
+					State: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
+					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{
+						{Name: "checkout", Reasons: []string{"candidate-required"}},
+					},
+					SelectionDigest: strings.Repeat("d", 64), ReviewID: "review-123", ReceiptPath: ".code-polishy-reports/behavior-review/receipt.json",
+				},
+			},
+			want: "BEHAVIOR REVIEW: PASSED (checkout)\n",
+		},
+		{
+			name: "merge failed full candidate",
+			report: engine.Report{
+				MergePolicy: &engine.MergePolicy{Level: "full", Base: "origin/main"},
+				BehaviorReview: &engine.BehaviorReviewStatus{
+					State: engine.BehaviorReviewFailed, RequiredBoundary: engine.BehaviorReviewMerge,
+					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{}, FullCandidate: true, SelectionDigest: strings.Repeat("e", 64),
+				},
+			},
+			want: "BEHAVIOR REVIEW: FAILED (all changes)\n",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+			printReportTo(stdout, stderr, testCase.report)
+			if strings.Count(stdout.String(), "BEHAVIOR REVIEW:") != 1 || !strings.Contains(stdout.String(), testCase.want) || stderr.Len() != 0 {
+				t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestVerboseBehaviorReviewReportAddsDetailsWithoutRepeatingStatus(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	printReportWithMode(stdout, stderr, engine.Report{BehaviorReview: &engine.BehaviorReviewStatus{
+		State: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
+		SelectedFeatures: []engine.BehaviorReviewFeatureSelection{{Name: "checkout", Reasons: []string{"candidate-required", "task-requested"}}},
+		SelectionDigest:  strings.Repeat("f", 64), ReviewID: "review-123", ReceiptPath: ".code-polishy-reports/behavior-review/receipt.json",
+	}}, true)
+	output := stdout.String()
+	for _, want := range []string{
+		"BEHAVIOR REVIEW: PASSED (checkout)", "BEHAVIOR REVIEW BOUNDARY: MERGE", "BEHAVIOR REVIEW FEATURE: checkout",
+		"BEHAVIOR REVIEW REASON: checkout (candidate-required)", "BEHAVIOR REVIEW RECEIPT: .code-polishy-reports/behavior-review/receipt.json",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout missing %q: %q", want, output)
+		}
+	}
+	if strings.Count(output, "BEHAVIOR REVIEW:") != 1 || stderr.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", output, stderr.String())
+	}
+}
+
 func TestVerboseReportPreservesDetailedMergePolicyReceipt(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
