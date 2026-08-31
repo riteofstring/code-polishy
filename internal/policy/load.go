@@ -64,6 +64,9 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 func applyDefaults(config *Config) {
+	if behaviorReview := config.Verification.BehaviorReview; behaviorReview != nil {
+		defaultString(&behaviorReview.DefaultRequiredAt, BehaviorReviewOnRequest)
+	}
 	defaultInt(&config.Quality.MaxFileLines, MaxFileLines)
 	defaultInt(&config.Quality.MaxTestFileLines, MaxTestFileLines)
 	defaultInt(&config.Quality.Complexity.Go, MaxGoComplexity)
@@ -183,13 +186,13 @@ func validate(config *Config) error {
 	if err := validateDocumentation(config); err != nil {
 		return err
 	}
-	if err := validateVerification(config); err != nil {
-		return err
-	}
 	if err := validateChecks(config); err != nil {
 		return err
 	}
 	if err := validateTests(config); err != nil {
+		return err
+	}
+	if err := validateVerification(config); err != nil {
 		return err
 	}
 	if err := validatePortability(config); err != nil {
@@ -210,6 +213,9 @@ func validateVerification(config *Config) error {
 			return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
 		}
 	}
+	if err := validateBehaviorReview(config); err != nil {
+		return err
+	}
 	mergeGate := config.Verification.MergeGate
 	if mergeGate == nil {
 		return nil
@@ -226,6 +232,85 @@ func validateVerification(config *Config) error {
 		}
 	}
 	return nil
+}
+
+func validateBehaviorReview(config *Config) error {
+	behaviorReview := config.Verification.BehaviorReview
+	if behaviorReview == nil {
+		return nil
+	}
+	if err := allowedValues([]string{behaviorReview.DefaultRequiredAt}, []string{BehaviorReviewOnRequest, BehaviorReviewMerge, BehaviorReviewCheckpoint}, "verification.behaviorReview.defaultRequiredAt"); err != nil {
+		return err
+	}
+	featureNames := map[string]bool{}
+	for index, feature := range behaviorReview.Features {
+		label := fmt.Sprintf("verification.behaviorReview.features[%d]", index)
+		if err := validateBehaviorReviewFeature(config, *behaviorReview, feature, label, featureNames); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string, names map[string]bool) error {
+	if err := identifier(feature.Name, label+".name"); err != nil {
+		return err
+	}
+	if names[feature.Name] {
+		return fmt.Errorf("duplicate behavior review feature name %q", feature.Name)
+	}
+	names[feature.Name] = true
+	if len(feature.Modules) == 0 && len(feature.Paths) == 0 {
+		return fmt.Errorf("%s must define at least one module or path", label)
+	}
+	if err := validateCommandModules(config, feature.Modules, label); err != nil {
+		return err
+	}
+	if err := validatePatterns(feature.Paths, label+".paths", false); err != nil {
+		return err
+	}
+	if len(feature.Suites) == 0 {
+		return fmt.Errorf("%s.suites must not be empty", label)
+	}
+	if err := validateUniqueStrings(feature.Suites, label+".suites", true); err != nil {
+		return err
+	}
+	for _, suiteName := range feature.Suites {
+		suite, err := referencedSuite(config.Tests.Suites, suiteName, label+".suites")
+		if err != nil {
+			return err
+		}
+		if !BehaviorReviewSuiteAllowed(suite) {
+			return fmt.Errorf("%s.suites references ineligible suite %q; behavior review evidence must be ordinary, non-credentialed, and non-destructive", label, suiteName)
+		}
+	}
+	if feature.RequiredAt != "" && !slices.Contains([]string{BehaviorReviewMerge, BehaviorReviewCheckpoint}, feature.RequiredAt) {
+		return fmt.Errorf("%s.requiredAt must be merge or checkpoint when set", label)
+	}
+	if behaviorReviewRequirementRank(behaviorReview.EffectiveRequiredAt(feature)) < behaviorReviewRequirementRank(behaviorReview.DefaultRequiredAt) {
+		return fmt.Errorf("%s.requiredAt cannot weaken verification.behaviorReview.defaultRequiredAt", label)
+	}
+	return nil
+}
+
+func BehaviorReviewSuiteAllowed(suite TestSuite) bool {
+	return !slices.Contains(suite.RunOn, "supplemental") &&
+		!supplementalOnlyKind(suite.Kind) &&
+		!slices.Contains([]string{"live", "credentialed", "destructive"}, suite.Kind) &&
+		len(suite.Environment) == 0
+}
+
+func behaviorReviewRequirementRank(requiredAt string) int {
+	switch requiredAt {
+	case BehaviorReviewOnRequest:
+		return 0
+	case BehaviorReviewMerge:
+		return 1
+	case BehaviorReviewCheckpoint:
+		return 2
+	default:
+		return -1
+	}
 }
 
 func validatePortability(config *Config) error {

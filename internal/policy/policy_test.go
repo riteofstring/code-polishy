@@ -425,18 +425,6 @@ func TestLoadAcceptsConfiguredMergeGate(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsBehaviorReviewConfiguration(t *testing.T) {
-	t.Parallel()
-	for name, setting := range map[string]string{"required": `{"required":true}`, "disabled": `{"required":false}`} {
-		t.Run(name, func(t *testing.T) {
-			configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"behaviorReview":`+setting+`},"checks":[]`, 1)
-			if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), "unknown field") {
-				t.Fatalf("expected behaviorReview to be rejected as an unknown field, got %v", err)
-			}
-		})
-	}
-}
-
 func TestLoadAcceptsCheckedInTrustedMergeTarget(t *testing.T) {
 	t.Parallel()
 	configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"trustedMergeTarget":"origin/release"},"checks":[]`, 1)

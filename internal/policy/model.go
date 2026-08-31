@@ -5,6 +5,10 @@ import "time"
 const ConfigVersion = 3
 
 const (
+	BehaviorReviewOnRequest  = "on-request"
+	BehaviorReviewMerge      = "merge"
+	BehaviorReviewCheckpoint = "checkpoint"
+
 	ConfigFilename = ".code-polishy.json"
 
 	LockFilename                            = ".code-polishy.lock.json"
@@ -66,8 +70,29 @@ type Config struct {
 }
 
 type Verification struct {
-	MergeGate          *MergeGate `json:"mergeGate,omitempty"`
-	TrustedMergeTarget string     `json:"trustedMergeTarget,omitempty"`
+	BehaviorReview     *BehaviorReviewPolicy `json:"behaviorReview,omitempty"`
+	MergeGate          *MergeGate            `json:"mergeGate,omitempty"`
+	TrustedMergeTarget string                `json:"trustedMergeTarget,omitempty"`
+}
+
+type BehaviorReviewPolicy struct {
+	DefaultRequiredAt string                  `json:"defaultRequiredAt,omitempty"`
+	Features          []BehaviorReviewFeature `json:"features,omitempty"`
+}
+
+func (policy BehaviorReviewPolicy) EffectiveRequiredAt(feature BehaviorReviewFeature) string {
+	if feature.RequiredAt == "" {
+		return policy.DefaultRequiredAt
+	}
+	return feature.RequiredAt
+}
+
+type BehaviorReviewFeature struct {
+	Name       string   `json:"name"`
+	Modules    []string `json:"modules,omitempty"`
+	Paths      []string `json:"paths,omitempty"`
+	Suites     []string `json:"suites"`
+	RequiredAt string   `json:"requiredAt,omitempty"`
 }
 
 type MergeGate struct {

@@ -229,7 +229,7 @@
     },
     "verification": {
       "type": "object",
-      "description": "Merge-gate selection facts and optional checked-in merge-target guidance.",
+      "description": "Behavior-review and merge-gate selection facts, with optional checked-in merge-target guidance.",
       "additionalProperties": false,
       "properties": {
         "trustedMergeTarget": {
@@ -238,8 +238,47 @@
           "pattern": "^[^\\s\\u0000]+$",
           "description": "Optional checked-in trusted merge target used when the caller supplies no explicit target."
         },
+        "behaviorReview": { "$ref": "#/$defs/behaviorReview" },
         "mergeGate": { "$ref": "#/$defs/mergeGate" }
       }
+    },
+    "behaviorReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultRequiredAt": {
+          "enum": ["on-request", "merge", "checkpoint"],
+          "default": "on-request"
+        },
+        "features": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/behaviorReviewFeature" }
+        }
+      }
+    },
+    "behaviorReviewFeature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "suites"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "modules": { "$ref": "#/$defs/identifierArray" },
+        "paths": { "$ref": "#/$defs/paths" },
+        "suites": {
+          "allOf": [{ "$ref": "#/$defs/identifierArray" }, { "minItems": 1 }]
+        },
+        "requiredAt": { "enum": ["merge", "checkpoint"] }
+      },
+      "anyOf": [
+        {
+          "required": ["modules"],
+          "properties": { "modules": { "minItems": 1 } }
+        },
+        {
+          "required": ["paths"],
+          "properties": { "paths": { "minItems": 1 } }
+        }
+      ]
     },
     "mergeGate": {
       "type": "object",
