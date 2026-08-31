@@ -253,6 +253,16 @@ func validateBehaviorReview(config *Config) error {
 }
 
 func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string, names map[string]bool) error {
+	if err := validateBehaviorReviewFeatureScope(config, feature, label, names); err != nil {
+		return err
+	}
+	if err := validateBehaviorReviewFeatureSuites(config, feature, label); err != nil {
+		return err
+	}
+	return validateBehaviorReviewFeatureRequirement(behaviorReview, feature, label)
+}
+
+func validateBehaviorReviewFeatureScope(config *Config, feature BehaviorReviewFeature, label string, names map[string]bool) error {
 	if err := identifier(feature.Name, label+".name"); err != nil {
 		return err
 	}
@@ -269,6 +279,10 @@ func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReview
 	if err := validatePatterns(feature.Paths, label+".paths", false); err != nil {
 		return err
 	}
+	return nil
+}
+
+func validateBehaviorReviewFeatureSuites(config *Config, feature BehaviorReviewFeature, label string) error {
 	if len(feature.Suites) == 0 {
 		return fmt.Errorf("%s.suites must not be empty", label)
 	}
@@ -284,6 +298,10 @@ func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReview
 			return fmt.Errorf("%s.suites references ineligible suite %q; behavior review evidence must be ordinary, non-credentialed, and non-destructive", label, suiteName)
 		}
 	}
+	return nil
+}
+
+func validateBehaviorReviewFeatureRequirement(behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string) error {
 	if feature.RequiredAt != "" && !slices.Contains([]string{BehaviorReviewMerge, BehaviorReviewCheckpoint}, feature.RequiredAt) {
 		return fmt.Errorf("%s.requiredAt must be merge or checkpoint when set", label)
 	}
