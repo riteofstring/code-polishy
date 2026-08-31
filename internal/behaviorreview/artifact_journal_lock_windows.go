@@ -44,38 +44,74 @@ func lockIntentJournal(directory *artifactHandle) (func(), error) {
 }
 
 func openWindowsIntentJournalLock(root *os.Root) (*os.File, error) {
-	info, err := root.Lstat(intentJournalLockFilename)
-	if errors.Is(err, os.ErrNotExist) {
-		file, createErr := root.OpenFile(intentJournalLockFilename, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
-		if createErr == nil {
-			info, err = file.Stat()
-			if closeErr := file.Close(); closeErr != nil && err == nil {
-				err = closeErr
-			}
-		} else if errors.Is(createErr, os.ErrExist) {
-			info, err = root.Lstat(intentJournalLockFilename)
-		} else {
-			return nil, operational("create behavior review journal lock", createErr)
-		}
-	}
+	info, err := windowsIntentJournalLockInfo(root)
 	if err != nil {
-		return nil, operational("inspect behavior review journal lock", err)
+		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if !validWindowsIntentJournalLock(info) {
 		return nil, fmt.Errorf("%w: behavior review journal lock is not a contained regular file", ErrInvalidInput)
 	}
 	file, err := root.OpenFile(intentJournalLockFilename, os.O_RDWR, 0)
 	if err != nil {
 		return nil, operational("open behavior review journal lock", err)
 	}
-	info, err = file.Stat()
-	runtime.KeepAlive(file)
-	if err != nil || !info.Mode().IsRegular() {
+	if err := validateOpenedWindowsIntentJournalLock(file); err != nil {
 		_ = file.Close()
-		if err != nil {
-			return nil, operational("inspect behavior review journal lock", err)
-		}
-		return nil, fmt.Errorf("%w: behavior review journal lock is not a regular file", ErrInvalidInput)
+		return nil, err
 	}
 	return file, nil
+}
+
+func windowsIntentJournalLockInfo(root *os.Root) (os.FileInfo, error) {
+	info, err := root.Lstat(intentJournalLockFilename)
+	if err == nil {
+		return info, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, operational("inspect behavior review journal lock", err)
+	}
+	return createWindowsIntentJournalLock(root)
+}
+
+func createWindowsIntentJournalLock(root *os.Root) (os.FileInfo, error) {
+	file, err := root.OpenFile(intentJournalLockFilename, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		return statAndCloseWindowsIntentJournalLock(file)
+	}
+	if errors.Is(err, os.ErrExist) {
+		info, inspectErr := root.Lstat(intentJournalLockFilename)
+		if inspectErr != nil {
+			return nil, operational("inspect behavior review journal lock", inspectErr)
+		}
+		return info, nil
+	}
+	return nil, operational("create behavior review journal lock", err)
+}
+
+func statAndCloseWindowsIntentJournalLock(file *os.File) (os.FileInfo, error) {
+	info, statErr := file.Stat()
+	closeErr := file.Close()
+	if statErr != nil {
+		return nil, operational("inspect behavior review journal lock", statErr)
+	}
+	if closeErr != nil {
+		return nil, operational("inspect behavior review journal lock", closeErr)
+	}
+	return info, nil
+}
+
+func validWindowsIntentJournalLock(info os.FileInfo) bool {
+	return info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0
+}
+
+func validateOpenedWindowsIntentJournalLock(file *os.File) error {
+	info, err := file.Stat()
+	runtime.KeepAlive(file)
+	if err != nil {
+		return operational("inspect behavior review journal lock", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: behavior review journal lock is not a regular file", ErrInvalidInput)
+	}
+	return nil
 }

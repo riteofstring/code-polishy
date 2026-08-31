@@ -34,6 +34,12 @@ type intentJournal struct {
 	Requirements []TaskRequirement `json:"requirements"`
 }
 
+type intentJournalAppend struct {
+	entry       intentCapture
+	requirement TaskRequirement
+	data        []byte
+}
+
 type intentCaptureMaterial struct {
 	ID               string `json:"id"`
 	CapturedAtCommit string `json:"captured_at_commit"`
@@ -84,48 +90,79 @@ func appendIntentCapture(repo repository.Repository, root *artifactHandle, commi
 		return CaptureIntentResult{}, err
 	}
 	defer release()
-	journal, err := readIntentJournal(repo, root, true)
+	appendResult, err := prepareIntentJournalAppend(repo, root, commit, intent, features)
 	if err != nil {
 		return CaptureIntentResult{}, err
 	}
-	entry, err := newIntentCapture(commit, intent, journal)
-	if err != nil {
+	if err := ensureIntentCaptureCandidate(repo, commit); err != nil {
 		return CaptureIntentResult{}, err
 	}
-	journal.Entries = append(journal.Entries, entry)
-	var requirement TaskRequirement
-	if len(features) > 0 {
-		requirement, err = newTaskRequirement(commit, []intentCapture{entry}, features, journal.Requirements)
-		if err != nil {
-			return CaptureIntentResult{}, err
-		}
-		journal.Requirements = append(journal.Requirements, requirement)
-	}
-	if err := validateIntentJournal(repo, journal); err != nil {
-		return CaptureIntentResult{}, err
-	}
-	data, err := marshalArtifact(journal)
-	if err != nil {
-		return CaptureIntentResult{}, err
-	}
-	if len(data) > maximumIntentJournal {
-		return CaptureIntentResult{}, fmt.Errorf("%w: intent journal exceeds %d bytes", ErrInvalidInput, maximumIntentJournal)
-	}
-	current, err := repo.CleanHead()
-	if err != nil {
-		return CaptureIntentResult{}, err
-	}
-	if current != commit {
-		return CaptureIntentResult{}, fmt.Errorf("%w: candidate changed while intent was captured", ErrCandidateChanged)
-	}
-	if err := root.writeArtifactAtomic(intentJournalFilename, data); err != nil {
+	if err := root.writeArtifactAtomic(intentJournalFilename, appendResult.data); err != nil {
 		return CaptureIntentResult{}, err
 	}
 	return CaptureIntentResult{
-		ID: entry.ID, Commit: entry.CapturedAtCommit, IntentSHA256: entry.IntentSHA256,
-		JournalSHA256: entry.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename),
-		RequirementID: requirement.ID, RequirementSHA256: requirement.EntrySHA256, Features: append([]string{}, features...),
+		ID: appendResult.entry.ID, Commit: appendResult.entry.CapturedAtCommit, IntentSHA256: appendResult.entry.IntentSHA256,
+		JournalSHA256: appendResult.entry.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename),
+		RequirementID: appendResult.requirement.ID, RequirementSHA256: appendResult.requirement.EntrySHA256, Features: append([]string{}, features...),
 	}, nil
+}
+
+func prepareIntentJournalAppend(repo repository.Repository, root *artifactHandle, commit string, intent []byte, features []string) (intentJournalAppend, error) {
+	journal, err := readIntentJournal(repo, root, true)
+	if err != nil {
+		return intentJournalAppend{}, err
+	}
+	entry, err := newIntentCapture(commit, intent, journal)
+	if err != nil {
+		return intentJournalAppend{}, err
+	}
+	journal.Entries = append(journal.Entries, entry)
+	requirement, err := appendIntentCaptureRequirement(&journal, commit, entry, features)
+	if err != nil {
+		return intentJournalAppend{}, err
+	}
+	data, err := marshalValidatedIntentJournal(repo, journal)
+	if err != nil {
+		return intentJournalAppend{}, err
+	}
+	return intentJournalAppend{entry: entry, requirement: requirement, data: data}, nil
+}
+
+func appendIntentCaptureRequirement(journal *intentJournal, commit string, entry intentCapture, features []string) (TaskRequirement, error) {
+	if len(features) == 0 {
+		return TaskRequirement{}, nil
+	}
+	requirement, err := newTaskRequirement(commit, []intentCapture{entry}, features, journal.Requirements)
+	if err != nil {
+		return TaskRequirement{}, err
+	}
+	journal.Requirements = append(journal.Requirements, requirement)
+	return requirement, nil
+}
+
+func marshalValidatedIntentJournal(repo repository.Repository, journal intentJournal) ([]byte, error) {
+	if err := validateIntentJournal(repo, journal); err != nil {
+		return nil, err
+	}
+	data, err := marshalArtifact(journal)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maximumIntentJournal {
+		return nil, fmt.Errorf("%w: intent journal exceeds %d bytes", ErrInvalidInput, maximumIntentJournal)
+	}
+	return data, nil
+}
+
+func ensureIntentCaptureCandidate(repo repository.Repository, commit string) error {
+	current, err := repo.CleanHead()
+	if err != nil {
+		return err
+	}
+	if current != commit {
+		return fmt.Errorf("%w: candidate changed while intent was captured", ErrCandidateChanged)
+	}
+	return nil
 }
 
 func newIntentCapture(commit string, intent []byte, journal intentJournal) (intentCapture, error) {

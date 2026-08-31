@@ -91,6 +91,19 @@ type prepareInputs struct {
 	reviewID          string
 }
 
+type prepareBindings struct {
+	intents        []intentCapture
+	intentSHA256   string
+	requirements   TaskRequirementsResult
+	decisionSHA256 string
+}
+
+type prepareContent struct {
+	instructions []byte
+	patch        []byte
+	documents    []packetDesignDocument
+}
+
 type finalizationState struct {
 	root       *artifactHandle
 	base       string
@@ -165,11 +178,7 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 	if err := validatePrepareRequest(ctx, options); err != nil {
 		return prepareInputs{}, err
 	}
-	selection, err := NormalizeReviewSelection(options.Selection)
-	if err != nil {
-		return prepareInputs{}, err
-	}
-	selectionSHA256, err := SelectionSHA256(selection)
+	selection, selectionSHA256, err := normalizedPrepareSelection(options.Selection)
 	if err != nil {
 		return prepareInputs{}, err
 	}
@@ -177,30 +186,11 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 	if err != nil {
 		return prepareInputs{}, err
 	}
-	journal, err := readIntentJournal(repo, root, false)
+	bindings, err := collectPrepareBindings(repo, root, base, candidate, selection)
 	if err != nil {
 		return prepareInputs{}, err
 	}
-	intents, intentSHA256, err := selectIntentCaptures(repo, journal, base, candidate)
-	if err != nil {
-		return prepareInputs{}, err
-	}
-	requirements, err := taskRequirementsFor(repo, journal, base, candidate)
-	if err != nil {
-		return prepareInputs{}, err
-	}
-	if err := validateSelectionIncludesFeatures(selection, requirements.RequestedFeatures); err != nil {
-		return prepareInputs{}, err
-	}
-	decisionSHA256, err := DecisionBindingSHA256(selection, requirements)
-	if err != nil {
-		return prepareInputs{}, err
-	}
-	instructions, err := readCanonicalInstructions(repo)
-	if err != nil {
-		return prepareInputs{}, err
-	}
-	patch, documents, err := prepareCandidateMaterial(repo, base, candidate)
+	content, err := collectPrepareContent(repo, base, candidate)
 	if err != nil {
 		return prepareInputs{}, err
 	}
@@ -209,11 +199,58 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 		return prepareInputs{}, operational("generate behavior review identifier", err)
 	}
 	return prepareInputs{
-		base: base, candidate: candidate, intents: intents, intentSHA256: intentSHA256,
-		requirements: requirements.Requirements, requirementSHA256: requirements.SHA256, selection: selection, selectionSHA256: selectionSHA256,
-		decisionSHA256: decisionSHA256,
-		instructions:   instructions, patch: patch, documents: documents, reviewID: reviewID,
+		base: base, candidate: candidate, intents: bindings.intents, intentSHA256: bindings.intentSHA256,
+		requirements: bindings.requirements.Requirements, requirementSHA256: bindings.requirements.SHA256, selection: selection, selectionSHA256: selectionSHA256,
+		decisionSHA256: bindings.decisionSHA256,
+		instructions:   content.instructions, patch: content.patch, documents: content.documents, reviewID: reviewID,
 	}, nil
+}
+
+func normalizedPrepareSelection(selection ReviewSelection) (ReviewSelection, string, error) {
+	normalized, err := NormalizeReviewSelection(selection)
+	if err != nil {
+		return ReviewSelection{}, "", err
+	}
+	digest, err := SelectionSHA256(normalized)
+	if err != nil {
+		return ReviewSelection{}, "", err
+	}
+	return normalized, digest, nil
+}
+
+func collectPrepareBindings(repo repository.Repository, root *artifactHandle, base, candidate string, selection ReviewSelection) (prepareBindings, error) {
+	journal, err := readIntentJournal(repo, root, false)
+	if err != nil {
+		return prepareBindings{}, err
+	}
+	intents, intentSHA256, err := selectIntentCaptures(repo, journal, base, candidate)
+	if err != nil {
+		return prepareBindings{}, err
+	}
+	requirements, err := taskRequirementsFor(repo, journal, base, candidate)
+	if err != nil {
+		return prepareBindings{}, err
+	}
+	if err := validateSelectionIncludesFeatures(selection, requirements.RequestedFeatures); err != nil {
+		return prepareBindings{}, err
+	}
+	decisionSHA256, err := DecisionBindingSHA256(selection, requirements)
+	if err != nil {
+		return prepareBindings{}, err
+	}
+	return prepareBindings{intents: intents, intentSHA256: intentSHA256, requirements: requirements, decisionSHA256: decisionSHA256}, nil
+}
+
+func collectPrepareContent(repo repository.Repository, base, candidate string) (prepareContent, error) {
+	instructions, err := readCanonicalInstructions(repo)
+	if err != nil {
+		return prepareContent{}, err
+	}
+	patch, documents, err := prepareCandidateMaterial(repo, base, candidate)
+	if err != nil {
+		return prepareContent{}, err
+	}
+	return prepareContent{instructions: instructions, patch: patch, documents: documents}, nil
 }
 
 func validatePrepareRequest(ctx context.Context, options PrepareOptions) error {
@@ -392,54 +429,6 @@ func markerMatchesPacket(marker prepareMarker, packet reviewPacket, packetData [
 		marker.DecisionSHA256 == packet.DecisionSHA256,
 		marker.PacketSHA256 == sha256Hex(packetData),
 	)
-}
-
-func validatePacketMaterial(repo repository.Repository, root *artifactHandle, packet reviewPacket) error {
-	patch, documents, err := prepareCandidateMaterial(repo, packet.Base, packet.Candidate)
-	if err != nil {
-		return err
-	}
-	instructions, err := readCanonicalInstructions(repo)
-	if err != nil {
-		return err
-	}
-	journal, err := readIntentJournal(repo, root, false)
-	if err != nil {
-		return fmt.Errorf("%w: prepared intent journal is unavailable", ErrStaleReview)
-	}
-	intents, intentSHA256, err := selectIntentCaptures(repo, journal, packet.Base, packet.Candidate)
-	if err != nil {
-		return fmt.Errorf("%w: prepared intent journal differs from the bound candidate", ErrStaleReview)
-	}
-	requirements, err := taskRequirementsFor(repo, journal, packet.Base, packet.Candidate)
-	if err != nil {
-		return fmt.Errorf("%w: prepared task requirements differ from the bound candidate", ErrStaleReview)
-	}
-	if packet.Patch != string(patch) || packet.Instructions != string(instructions) ||
-		!samePacketDocuments(packet.DesignDocuments, documents) || !sameIntentCaptures(packet.Intents, intents) || packet.IntentSHA256 != intentSHA256 ||
-		!sameTaskRequirements(packet.TaskRequirements, requirements.Requirements) || packet.RequirementSHA256 != requirements.SHA256 {
-		return fmt.Errorf("%w: prepared packet material differs from the bound candidate", ErrStaleReview)
-	}
-	if err := validateSelectionIncludesFeatures(packet.Selection, requirements.RequestedFeatures); err != nil {
-		return fmt.Errorf("%w: prepared selection does not retain task requirements", ErrStaleReview)
-	}
-	decisionSHA256, err := DecisionBindingSHA256(packet.Selection, requirements)
-	if err != nil || packet.DecisionSHA256 != decisionSHA256 {
-		return fmt.Errorf("%w: prepared decision binding differs from the bound candidate", ErrStaleReview)
-	}
-	return nil
-}
-
-func samePacketDocuments(left, right []packetDesignDocument) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 func finalizedReviewInput(root *artifactHandle, packet reviewPacket, candidate string) (ReviewResult, []byte, error) {
@@ -991,25 +980,9 @@ func hexadecimal(value string) bool {
 	return true
 }
 
-func allValid(values ...bool) bool {
-	for _, value := range values {
-		if !value {
-			return false
-		}
-	}
-	return true
-}
-
 func staleReceipt(message string, cause error) error {
 	if cause == nil {
 		return fmt.Errorf("%w: %s", ErrStaleReceipt, message)
 	}
 	return fmt.Errorf("%w: %s: %v", ErrStaleReceipt, message, cause)
-}
-
-func reviewContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }

@@ -23,26 +23,20 @@ type taskRequirementMaterial struct {
 	PreviousSHA256 string   `json:"previous_requirement_sha256"`
 }
 
+type requireInputs struct {
+	features  []string
+	candidate string
+	taskBase  string
+}
+
+type requirementJournalAppend struct {
+	requirement  TaskRequirement
+	intentSHA256 string
+	data         []byte
+}
+
 func require(ctx context.Context, repo repository.Repository, options RequireOptions) (RequireResult, error) {
-	ctx = reviewContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return RequireResult{}, operational("require behavior review features", err)
-	}
-	if strings.TrimSpace(options.Base) == "" {
-		return RequireResult{}, fmt.Errorf("%w: task base is required", ErrInvalidInput)
-	}
-	features, err := configuredFeatureNames(repo.Config, options.Features)
-	if err != nil {
-		return RequireResult{}, err
-	}
-	if len(features) == 0 {
-		return RequireResult{}, fmt.Errorf("%w: at least one behavior review feature is required", ErrInvalidInput)
-	}
-	candidate, err := repo.CleanHead()
-	if err != nil {
-		return RequireResult{}, err
-	}
-	taskBase, err := repo.ResolveAncestor(options.Base)
+	inputs, err := collectRequireInputs(ctx, repo, options)
 	if err != nil {
 		return RequireResult{}, err
 	}
@@ -56,43 +50,78 @@ func require(ctx context.Context, repo repository.Repository, options RequireOpt
 		return RequireResult{}, err
 	}
 	defer release()
-	journal, err := readIntentJournal(repo, root, false)
+	appendResult, err := appendRequirementJournal(repo, root, inputs)
 	if err != nil {
 		return RequireResult{}, err
 	}
-	intents, intentSHA256, err := selectIntentCaptures(repo, journal, taskBase, candidate)
-	if err != nil {
+	if err := ensureRequirementCandidate(repo, inputs.candidate); err != nil {
 		return RequireResult{}, err
 	}
-	requirement, err := newTaskRequirement(taskBase, intents, features, journal.Requirements)
-	if err != nil {
-		return RequireResult{}, err
-	}
-	journal.Requirements = append(journal.Requirements, requirement)
-	if err := validateIntentJournal(repo, journal); err != nil {
-		return RequireResult{}, err
-	}
-	data, err := marshalArtifact(journal)
-	if err != nil {
-		return RequireResult{}, err
-	}
-	if len(data) > maximumIntentJournal {
-		return RequireResult{}, fmt.Errorf("%w: intent journal exceeds %d bytes", ErrInvalidInput, maximumIntentJournal)
-	}
-	current, err := repo.CleanHead()
-	if err != nil {
-		return RequireResult{}, err
-	}
-	if current != candidate {
-		return RequireResult{}, fmt.Errorf("%w: candidate changed while behavior review features were required", ErrCandidateChanged)
-	}
-	if err := root.writeArtifactAtomic(intentJournalFilename, data); err != nil {
+	if err := root.writeArtifactAtomic(intentJournalFilename, appendResult.data); err != nil {
 		return RequireResult{}, err
 	}
 	return RequireResult{
-		ID: requirement.ID, Base: taskBase, Candidate: candidate, IntentSHA256: intentSHA256,
-		RequirementSHA256: requirement.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename), Features: slices.Clone(features),
+		ID: appendResult.requirement.ID, Base: inputs.taskBase, Candidate: inputs.candidate, IntentSHA256: appendResult.intentSHA256,
+		RequirementSHA256: appendResult.requirement.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename), Features: slices.Clone(inputs.features),
 	}, nil
+}
+
+func collectRequireInputs(ctx context.Context, repo repository.Repository, options RequireOptions) (requireInputs, error) {
+	ctx = reviewContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return requireInputs{}, operational("require behavior review features", err)
+	}
+	if strings.TrimSpace(options.Base) == "" {
+		return requireInputs{}, fmt.Errorf("%w: task base is required", ErrInvalidInput)
+	}
+	features, err := configuredFeatureNames(repo.Config, options.Features)
+	if err != nil {
+		return requireInputs{}, err
+	}
+	if len(features) == 0 {
+		return requireInputs{}, fmt.Errorf("%w: at least one behavior review feature is required", ErrInvalidInput)
+	}
+	candidate, err := repo.CleanHead()
+	if err != nil {
+		return requireInputs{}, err
+	}
+	taskBase, err := repo.ResolveAncestor(options.Base)
+	if err != nil {
+		return requireInputs{}, err
+	}
+	return requireInputs{features: features, candidate: candidate, taskBase: taskBase}, nil
+}
+
+func appendRequirementJournal(repo repository.Repository, root *artifactHandle, inputs requireInputs) (requirementJournalAppend, error) {
+	journal, err := readIntentJournal(repo, root, false)
+	if err != nil {
+		return requirementJournalAppend{}, err
+	}
+	intents, intentSHA256, err := selectIntentCaptures(repo, journal, inputs.taskBase, inputs.candidate)
+	if err != nil {
+		return requirementJournalAppend{}, err
+	}
+	requirement, err := newTaskRequirement(inputs.taskBase, intents, inputs.features, journal.Requirements)
+	if err != nil {
+		return requirementJournalAppend{}, err
+	}
+	journal.Requirements = append(journal.Requirements, requirement)
+	data, err := marshalValidatedIntentJournal(repo, journal)
+	if err != nil {
+		return requirementJournalAppend{}, err
+	}
+	return requirementJournalAppend{requirement: requirement, intentSHA256: intentSHA256, data: data}, nil
+}
+
+func ensureRequirementCandidate(repo repository.Repository, candidate string) error {
+	current, err := repo.CleanHead()
+	if err != nil {
+		return err
+	}
+	if current != candidate {
+		return fmt.Errorf("%w: candidate changed while behavior review features were required", ErrCandidateChanged)
+	}
+	return nil
 }
 
 func taskRequirements(ctx context.Context, repo repository.Repository, base string) (TaskRequirementsResult, error) {
@@ -149,40 +178,9 @@ func taskRequirementsFor(repo repository.Repository, journal intentJournal, base
 	if len(journal.Entries) == 0 {
 		return emptyTaskRequirements(base, candidate)
 	}
-	selected := make([]TaskRequirement, 0, len(journal.Requirements))
-	for _, requirement := range journal.Requirements {
-		afterBase, err := repo.IsAncestor(base, requirement.TaskBase)
-		if err != nil {
-			return TaskRequirementsResult{}, operational("select behavior review task requirements", err)
-		}
-		if !afterBase {
-			continue
-		}
-		beforeCandidate, err := repo.IsAncestor(requirement.TaskBase, candidate)
-		if err != nil {
-			return TaskRequirementsResult{}, operational("select behavior review task requirements", err)
-		}
-		if !beforeCandidate {
-			continue
-		}
-		intents, err := requirementIntents(repo, journal.Entries, requirement)
-		if err != nil {
-			return TaskRequirementsResult{}, err
-		}
-		included := true
-		for _, intent := range intents {
-			ancestor, err := repo.IsAncestor(intent.CapturedAtCommit, candidate)
-			if err != nil {
-				return TaskRequirementsResult{}, operational("select behavior review task requirements", err)
-			}
-			if !ancestor {
-				included = false
-				break
-			}
-		}
-		if included {
-			selected = append(selected, cloneTaskRequirement(requirement))
-		}
+	selected, err := selectedTaskRequirements(repo, journal, base, candidate)
+	if err != nil {
+		return TaskRequirementsResult{}, err
 	}
 	requested := requestedRequirementFeatures(selected)
 	digest, err := taskRequirementsDigest(selected)
@@ -190,6 +188,60 @@ func taskRequirementsFor(repo repository.Repository, journal intentJournal, base
 		return TaskRequirementsResult{}, err
 	}
 	return TaskRequirementsResult{Base: base, Candidate: candidate, Requirements: selected, RequestedFeatures: requested, SHA256: digest}, nil
+}
+
+func selectedTaskRequirements(repo repository.Repository, journal intentJournal, base, candidate string) ([]TaskRequirement, error) {
+	selected := make([]TaskRequirement, 0, len(journal.Requirements))
+	for _, requirement := range journal.Requirements {
+		included, err := taskRequirementIncluded(repo, journal.Entries, base, candidate, requirement)
+		if err != nil {
+			return nil, err
+		}
+		if included {
+			selected = append(selected, cloneTaskRequirement(requirement))
+		}
+	}
+	return selected, nil
+}
+
+func taskRequirementIncluded(repo repository.Repository, entries []intentCapture, base, candidate string, requirement TaskRequirement) (bool, error) {
+	withinCandidate, err := taskRequirementWithinCandidate(repo, base, candidate, requirement.TaskBase)
+	if err != nil || !withinCandidate {
+		return withinCandidate, err
+	}
+	intents, err := requirementIntents(repo, entries, requirement)
+	if err != nil {
+		return false, err
+	}
+	return requirementIntentsReachCandidate(repo, intents, candidate)
+}
+
+func taskRequirementWithinCandidate(repo repository.Repository, base, candidate, taskBase string) (bool, error) {
+	afterBase, err := repo.IsAncestor(base, taskBase)
+	if err != nil {
+		return false, operational("select behavior review task requirements", err)
+	}
+	if !afterBase {
+		return false, nil
+	}
+	beforeCandidate, err := repo.IsAncestor(taskBase, candidate)
+	if err != nil {
+		return false, operational("select behavior review task requirements", err)
+	}
+	return beforeCandidate, nil
+}
+
+func requirementIntentsReachCandidate(repo repository.Repository, intents []intentCapture, candidate string) (bool, error) {
+	for _, intent := range intents {
+		ancestor, err := repo.IsAncestor(intent.CapturedAtCommit, candidate)
+		if err != nil {
+			return false, operational("select behavior review task requirements", err)
+		}
+		if !ancestor {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func configuredFeatureNames(config policy.Config, values []string) ([]string, error) {

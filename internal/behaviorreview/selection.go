@@ -44,19 +44,9 @@ func ConfiguredFeatureSelection(config policy.Config, name string, reasons []str
 }
 
 func NormalizeReviewSelection(selection ReviewSelection) (ReviewSelection, error) {
-	features := make([]SelectedFeature, 0, len(selection.Features))
-	for _, feature := range selection.Features {
-		normalized, err := normalizeSelectedFeature(feature)
-		if err != nil {
-			return ReviewSelection{}, err
-		}
-		features = append(features, normalized)
-	}
-	sort.Slice(features, func(left, right int) bool { return features[left].Name < features[right].Name })
-	for index := 1; index < len(features); index++ {
-		if features[index-1].Name == features[index].Name {
-			return ReviewSelection{}, fmt.Errorf("%w: selected behavior review features must be unique", ErrInvalidInput)
-		}
+	features, err := normalizeSelectionFeatures(selection.Features)
+	if err != nil {
+		return ReviewSelection{}, err
 	}
 	reasons, err := normalizeSelectionReasons(selection.FullCandidateReasons)
 	if err != nil {
@@ -67,16 +57,48 @@ func NormalizeReviewSelection(selection ReviewSelection) (ReviewSelection, error
 		FullCandidate:        selection.FullCandidate,
 		FullCandidateReasons: reasons,
 	}
-	if len(normalized.Features) == 0 && !normalized.FullCandidate {
-		return ReviewSelection{}, fmt.Errorf("%w: behavior review selection must contain a feature or the full candidate", ErrInvalidInput)
-	}
-	if !normalized.FullCandidate && len(normalized.FullCandidateReasons) != 0 {
-		return ReviewSelection{}, fmt.Errorf("%w: full-candidate reasons require full-candidate review", ErrInvalidInput)
-	}
-	if normalized.FullCandidate && len(normalized.FullCandidateReasons) == 0 {
-		return ReviewSelection{}, fmt.Errorf("%w: full-candidate review needs a selection reason", ErrInvalidInput)
+	if err := validateNormalizedReviewSelection(normalized); err != nil {
+		return ReviewSelection{}, err
 	}
 	return normalized, nil
+}
+
+func normalizeSelectionFeatures(values []SelectedFeature) ([]SelectedFeature, error) {
+	features := make([]SelectedFeature, 0, len(values))
+	for _, feature := range values {
+		normalized, err := normalizeSelectedFeature(feature)
+		if err != nil {
+			return nil, err
+		}
+		features = append(features, normalized)
+	}
+	sort.Slice(features, func(left, right int) bool { return features[left].Name < features[right].Name })
+	if !uniqueSelectedFeatures(features) {
+		return nil, fmt.Errorf("%w: selected behavior review features must be unique", ErrInvalidInput)
+	}
+	return features, nil
+}
+
+func uniqueSelectedFeatures(features []SelectedFeature) bool {
+	for index := 1; index < len(features); index++ {
+		if features[index-1].Name == features[index].Name {
+			return false
+		}
+	}
+	return true
+}
+
+func validateNormalizedReviewSelection(selection ReviewSelection) error {
+	if len(selection.Features) == 0 && !selection.FullCandidate {
+		return fmt.Errorf("%w: behavior review selection must contain a feature or the full candidate", ErrInvalidInput)
+	}
+	if !selection.FullCandidate && len(selection.FullCandidateReasons) != 0 {
+		return fmt.Errorf("%w: full-candidate reasons require full-candidate review", ErrInvalidInput)
+	}
+	if selection.FullCandidate && len(selection.FullCandidateReasons) == 0 {
+		return fmt.Errorf("%w: full-candidate review needs a selection reason", ErrInvalidInput)
+	}
+	return nil
 }
 
 func SelectionSHA256(selection ReviewSelection) (string, error) {

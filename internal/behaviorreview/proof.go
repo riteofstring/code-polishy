@@ -733,33 +733,61 @@ func readProof(root *artifactHandle, id string) (regressionProof, []byte, error)
 }
 
 func proofReplayMaterial(repo repository.Repository, proof regressionProof, candidate string, packet reviewPacket) (policy.TestSuite, []byte, error) {
-	if proof.Candidate != candidate {
-		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q is bound to another candidate", ErrInvalidEvidence, proof.ID)
+	if err := validateReplayProofBinding(proof, candidate, packet); err != nil {
+		return policy.TestSuite{}, nil, err
 	}
-	if proof.ReviewID != packet.ReviewID || proof.ReviewBase != packet.Base {
-		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q is not bound to the prepared review", ErrInvalidEvidence, proof.ID)
-	}
-	if proof.SelectionSHA256 != packet.SelectionSHA256 || proof.DecisionSHA256 != packet.DecisionSHA256 || proof.FullCandidate != packet.Selection.FullCandidate || !slices.Equal(proof.SelectedFeatures, selectedFeatureNames(packet.Selection)) {
-		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q does not match the selected behavior review features", ErrInvalidEvidence, proof.ID)
-	}
-	base, err := repo.ResolveAncestor(proof.Base)
+	base, err := replayProofBase(repo, proof, candidate, packet.Base)
 	if err != nil {
-		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q base is unavailable", ErrInvalidEvidence, proof.ID)
-	}
-	if base == candidate {
-		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q has no pre-fix base", ErrInvalidEvidence, proof.ID)
-	}
-	if err := proofBaseMatchesReview(repo, packet.Base, base); err != nil {
 		return policy.TestSuite{}, nil, err
 	}
 	suite, evidence, patch, err := proofMaterial(repo, base, candidate, ProveOptions{Suite: proof.Suite, Evidence: proof.Evidence}, packet)
 	if err != nil {
 		return policy.TestSuite{}, nil, err
 	}
-	if suite.Name != proof.Suite || !slices.Equal(evidence, proof.Evidence) || sha256Hex(patch) != proof.EvidencePatchSHA256 {
+	if !replayProofMaterialMatches(proof, suite, evidence, patch) {
 		return policy.TestSuite{}, nil, fmt.Errorf("%w: proof %q does not match current suite, evidence, or patch", ErrInvalidEvidence, proof.ID)
 	}
 	return suite, patch, nil
+}
+
+func validateReplayProofBinding(proof regressionProof, candidate string, packet reviewPacket) error {
+	if proof.Candidate != candidate {
+		return fmt.Errorf("%w: proof %q is bound to another candidate", ErrInvalidEvidence, proof.ID)
+	}
+	if !replayProofMatchesPacket(proof, packet) {
+		return fmt.Errorf("%w: proof %q is not bound to the prepared review", ErrInvalidEvidence, proof.ID)
+	}
+	if !replayProofSelectionMatchesPacket(proof, packet) {
+		return fmt.Errorf("%w: proof %q does not match the selected behavior review features", ErrInvalidEvidence, proof.ID)
+	}
+	return nil
+}
+
+func replayProofMatchesPacket(proof regressionProof, packet reviewPacket) bool {
+	return proof.ReviewID == packet.ReviewID && proof.ReviewBase == packet.Base
+}
+
+func replayProofSelectionMatchesPacket(proof regressionProof, packet reviewPacket) bool {
+	return proof.SelectionSHA256 == packet.SelectionSHA256 && proof.DecisionSHA256 == packet.DecisionSHA256 &&
+		proof.FullCandidate == packet.Selection.FullCandidate && slices.Equal(proof.SelectedFeatures, selectedFeatureNames(packet.Selection))
+}
+
+func replayProofBase(repo repository.Repository, proof regressionProof, candidate, reviewBase string) (string, error) {
+	base, err := repo.ResolveAncestor(proof.Base)
+	if err != nil {
+		return "", fmt.Errorf("%w: proof %q base is unavailable", ErrInvalidEvidence, proof.ID)
+	}
+	if base == candidate {
+		return "", fmt.Errorf("%w: proof %q has no pre-fix base", ErrInvalidEvidence, proof.ID)
+	}
+	if err := proofBaseMatchesReview(repo, reviewBase, base); err != nil {
+		return "", err
+	}
+	return base, nil
+}
+
+func replayProofMaterialMatches(proof regressionProof, suite policy.TestSuite, evidence []string, patch []byte) bool {
+	return suite.Name == proof.Suite && slices.Equal(evidence, proof.Evidence) && sha256Hex(patch) == proof.EvidencePatchSHA256
 }
 
 func validateProofStructure(proof regressionProof) error {
