@@ -574,19 +574,6 @@
         "owner": "code-polishy-maintainer",
         "reviewed": "2026-08-26",
         "expires": "2026-09-12"
-      },
-      {
-        "id": "js-yaml-4-3-1-fix",
-        "ecosystem": "pnpm",
-        "package": "js-yaml",
-        "version": "4.3.1",
-        "scope": "tools/javascript/pnpm-lock.yaml",
-        "category": "security-fix",
-        "evidence": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
-        "reason": "js-yaml 4.3.1 is the first 4.x release fixing GHSA-5p4m-2wfm-xmqj, and every older 4.x release the hard minimum would allow is affected.",
-        "owner": "code-polishy-maintainer",
-        "reviewed": "2026-08-15",
-        "expires": "2026-08-30"
       }
     ]
   },
