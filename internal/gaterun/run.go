@@ -310,6 +310,7 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 		Status: options.Status, StartedAt: run.startedAt, CompletedAt: completedAt,
 		Commands: commands, Findings: cloneFindings(options.Findings), Notes: cloneStrings(options.Notes),
 		TestEvidence: cloneTestEvidence(options.TestEvidence), TestDiagnostics: cloneTestDiagnostics(options.TestDiagnostics),
+		BehaviorReview: cloneBehaviorReview(options.BehaviorReview),
 	}
 	if err := validateReport(report, run.identity); err != nil {
 		return Report{}, err

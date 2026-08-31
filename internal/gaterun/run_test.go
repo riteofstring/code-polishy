@@ -2,6 +2,7 @@ package gaterun
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,7 +17,7 @@ func TestRunWritesBoundedArtifactsAndStrictReport(t *testing.T) {
 	first := recordAttempt(t, run, 0, Passed, 0, "123456", "abcdef", 4)
 	assertBoundedOutcome(t, first, run.ReportPath())
 	recordAttempt(t, run, 1, Failed, 1, "failure", "details", 16)
-	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{"quality failed"}})
+	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{"quality failed"}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestMergeRunKeepsFailedEvidenceImmutableUntilLaterTestReuse(t *testing.T) {
 	failed := startRun(t, root, identity)
 	recordAttempt(t, failed, 0, Failed, 1, "", "quality failed", 16)
 	recordAttempt(t, failed, 1, Passed, 0, "unit pass", "", 16)
-	prior, err := failed.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	prior, err := failed.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func TestMergeRunKeepsFailedEvidenceImmutableUntilLaterTestReuse(t *testing.T) {
 	if _, err := LoadReport(root, identity); err != nil {
 		t.Fatalf("prior failed report no longer validates: %v", err)
 	}
-	passed, err := resumed.Finalize(FinalizeOptions{Status: RunPassed, Findings: []Finding{}, Notes: []string{}})
+	passed, err := resumed.Finalize(FinalizeOptions{Status: RunPassed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 	initial := startRun(t, root, identity)
 	recordAttempt(t, initial, 0, Passed, 0, "unit pass", "", 16)
 	recordAttempt(t, initial, 1, Failed, 1, "", "initial late failure", 16)
-	initialReport, err := initial.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	initialReport, err := initial.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 		t.Fatalf("first resumed receipt path = %q, source = %q", firstOutcome.ReceiptPath, firstReusable.Path)
 	}
 	recordAttempt(t, firstResume, 1, Failed, 1, "", "resumed late failure", 16)
-	firstReport, err := firstResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	firstReport, err := firstResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 		t.Fatalf("second resumed receipt path = %q, source = %q", secondOutcome.ReceiptPath, secondReusable.Path)
 	}
 	recordAttempt(t, secondResume, 1, Failed, 1, "", "second resumed late failure", 16)
-	if _, err := secondResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); err != nil {
+	if _, err := secondResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadReport(root, identity); err != nil {
@@ -182,7 +183,7 @@ func TestOnlyOrdinaryTestsCanProvideReusableReceipts(t *testing.T) {
 			root := t.TempDir()
 			run := startRun(t, root, identity)
 			recordAttempt(t, run, 0, Passed, 0, "pass", "", 16)
-			if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); err != nil {
+			if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := LoadReusableReceipt(root, identity, 0); !errors.Is(err, ErrIneligible) {
@@ -201,7 +202,7 @@ func TestDiagnosticAttemptDoesNotChangePlannedOutcomeOrReceipt(t *testing.T) {
 		!diagnostic.Attempts[1].Diagnostic || diagnostic.Attempts[1].Status != Passed {
 		t.Fatalf("diagnostic outcome = %+v", diagnostic)
 	}
-	if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); err != nil {
+	if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadReusableReceipt(run.repositoryRoot, identity, 0); !errors.Is(err, ErrMissingArtifact) {
@@ -255,7 +256,7 @@ func TestFinalizeBindsTypedTestEvidenceAndDiagnosticState(t *testing.T) {
 	diagnosticState := TestDiagnostic{Suite: "unit", State: "baseline-unavailable", CandidateRetry: &diagnosticEvidence}
 	report, err := run.Finalize(FinalizeOptions{
 		Status: RunFailed, Findings: []Finding{}, Notes: []string{}, TestEvidence: []TestEvidence{initialEvidence, diagnosticEvidence},
-		TestDiagnostics: []TestDiagnostic{diagnosticState},
+		TestDiagnostics: []TestDiagnostic{diagnosticState}, BehaviorReview: identity.BehaviorReview,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -267,6 +268,83 @@ func TestFinalizeBindsTypedTestEvidenceAndDiagnosticState(t *testing.T) {
 	loaded.TestEvidence[0].SuiteModules[0] = "changed"
 	if report.TestEvidence[0].SuiteModules[0] == "changed" || loaded.TestDiagnostics[0].CandidateRetry.LogPath == "" {
 		t.Fatalf("report evidence cloning failed: %+v", loaded)
+	}
+}
+
+func TestFinalizeRecordsBehaviorReviewReplayFailure(t *testing.T) {
+	for _, withReceipt := range []bool{false, true} {
+		t.Run(fmt.Sprintf("receipt=%t", withReceipt), func(t *testing.T) {
+			identity := testIdentityWithBehaviorReview(t, []CommandSpec{testCommand(Check, "quality")}, passedBehaviorReview())
+			run := startRun(t, t.TempDir(), identity)
+			recordAttempt(t, run, 0, Failed, 1, "", "replay failed", 16)
+			outcome := cloneBehaviorReview(identity.BehaviorReview)
+			outcome.State = BehaviorReviewFailed
+			if !withReceipt {
+				outcome.ReviewID, outcome.ReceiptPath = "", ""
+			}
+			report, err := run.Finalize(FinalizeOptions{
+				Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: outcome,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.BehaviorReview.State != BehaviorReviewFailed || report.BehaviorReview.SelectionDigest != identity.BehaviorReview.SelectionDigest ||
+				report.BehaviorReview.ReviewID != outcome.ReviewID || report.BehaviorReview.ReceiptPath != outcome.ReceiptPath {
+				t.Fatalf("report behavior review = %+v", report.BehaviorReview)
+			}
+			loaded, err := LoadReport(run.repositoryRoot, identity)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded.BehaviorReview.SelectedFeatures[0].Reasons[0] = "changed"
+			if report.BehaviorReview.SelectedFeatures[0].Reasons[0] == "changed" {
+				t.Fatalf("report behavior review cloning failed: %+v", loaded.BehaviorReview)
+			}
+		})
+	}
+}
+
+func TestFinalizeRejectsBehaviorReviewOutcomeTransitions(t *testing.T) {
+	cases := []struct {
+		name    string
+		planned BehaviorReview
+		outcome BehaviorReview
+	}{
+		{
+			name: "not run becomes required",
+			planned: func() BehaviorReview {
+				value := requiredBehaviorReview("task-request")
+				value.State = BehaviorReviewNotRun
+				return value
+			}(),
+			outcome: requiredBehaviorReview("task-request"),
+		},
+		{
+			name:    "required becomes passed",
+			planned: requiredBehaviorReview("task-request"),
+			outcome: passedBehaviorReview(),
+		},
+		{
+			name: "failed becomes passed",
+			planned: func() BehaviorReview {
+				value := passedBehaviorReview()
+				value.State = BehaviorReviewFailed
+				return value
+			}(),
+			outcome: passedBehaviorReview(),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			identity := testIdentityWithBehaviorReview(t, []CommandSpec{testCommand(Check, "quality")}, test.planned)
+			run := startRun(t, t.TempDir(), identity)
+			recordAttempt(t, run, 0, Failed, 1, "", "gate failed", 16)
+			if _, err := run.Finalize(FinalizeOptions{
+				Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: test.outcome,
+			}); !errors.Is(err, ErrStaleArtifact) {
+				t.Fatalf("Finalize() error = %v, want stale artifact", err)
+			}
+		})
 	}
 }
 
@@ -361,7 +439,7 @@ func TestFinalizeRejectsLatestPointerSymlinkReplacement(t *testing.T) {
 	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit")})
 	prior := startRun(t, root, identity)
 	recordAttempt(t, prior, 0, Passed, 0, "pass", "", 16)
-	if _, err := prior.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); err != nil {
+	if _, err := prior.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	current := startRun(t, root, identity)
@@ -375,7 +453,7 @@ func TestFinalizeRejectsLatestPointerSymlinkReplacement(t *testing.T) {
 	if err := os.Symlink(outside, latestPath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := current.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}}); !errors.Is(err, ErrInvalidArtifact) {
+	if _, err := current.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); !errors.Is(err, ErrInvalidArtifact) {
 		t.Fatalf("Finalize() error = %v, want invalid artifact", err)
 	}
 	data, err := os.ReadFile(outside)
@@ -414,7 +492,7 @@ func TestLoadRejectsSymlinkEscapes(t *testing.T) {
 	}
 }
 
-func TestReceiptRejectsCandidateAndLogChangesBeforeReuse(t *testing.T) {
+func TestReceiptRejectsCandidateSelectionAndLogChangesBeforeReuse(t *testing.T) {
 	root, identity, report := failedRunWithReceipt(t)
 	reusable, err := LoadReusableReceipt(root, identity, 0)
 	if err != nil {
@@ -429,6 +507,15 @@ func TestReceiptRejectsCandidateAndLogChangesBeforeReuse(t *testing.T) {
 	if _, err := LoadReusableReceipt(root, changed, 0); !errors.Is(err, ErrMissingArtifact) {
 		t.Fatalf("changed candidate receipt error = %v, want missing artifact", err)
 	}
+	selectionChangedInput := testIdentityInput(identity.Commands)
+	selectionChangedInput.BehaviorReview = requiredBehaviorReview("task-request")
+	selectionChanged, err := NewIdentity(selectionChangedInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadReusableReceipt(root, selectionChanged, 0); !errors.Is(err, ErrMissingArtifact) {
+		t.Fatalf("changed behavior review selection receipt error = %v, want missing artifact", err)
+	}
 	writeRuntimeFile(t, physicalArtifactPath(root, report.Commands[0].Attempts[0].LogPath), []byte(`{}`))
 	resumed := startRun(t, root, identity)
 	if _, err := resumed.RecordReuse(0, reusable); !errors.Is(err, ErrInvalidArtifact) && !errors.Is(err, ErrStaleArtifact) {
@@ -438,7 +525,14 @@ func TestReceiptRejectsCandidateAndLogChangesBeforeReuse(t *testing.T) {
 
 func testIdentity(t *testing.T, commands []CommandSpec) Identity {
 	t.Helper()
-	identity, err := NewIdentity(testIdentityInput(commands))
+	return testIdentityWithBehaviorReview(t, commands, notRunBehaviorReview())
+}
+
+func testIdentityWithBehaviorReview(t *testing.T, commands []CommandSpec, review BehaviorReview) Identity {
+	t.Helper()
+	input := testIdentityInput(commands)
+	input.BehaviorReview = cloneBehaviorReview(review)
+	identity, err := NewIdentity(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +592,7 @@ func failedRunWithReceipt(t *testing.T) (string, Identity, Report) {
 	run := startRun(t, root, identity)
 	recordAttempt(t, run, 0, Passed, 0, "pass", "", 16)
 	recordAttempt(t, run, 1, Failed, 1, "", "failed", 16)
-	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}})
+	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}

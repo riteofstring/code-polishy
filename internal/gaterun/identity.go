@@ -68,6 +68,7 @@ func identityFromInput(input IdentityInput) (Identity, error) {
 		ExactBase: input.ExactBase, Candidate: input.Candidate, PolicyLevel: input.PolicyLevel,
 		Release: input.Release, ConfigurationSHA256: input.ConfigurationSHA256,
 		Platform: input.Platform, Commands: cloneCommands(input.Commands), Environment: environment, AmbientEnvironment: ambient,
+		BehaviorReview: cloneBehaviorReview(input.BehaviorReview),
 	}, nil
 }
 
@@ -168,7 +169,7 @@ func validateIdentityContext(identity Identity) error {
 	if !validToken(identity.PolicyLevel) || !validRelease(identity.Release) || !validSHA256(identity.ConfigurationSHA256) || !validPlatform(identity.Platform) {
 		return fmt.Errorf("%w: gate identity policy, release, configuration, or platform is invalid", ErrInvalidInput)
 	}
-	return nil
+	return validateBehaviorReview(identity.BehaviorReview)
 }
 
 func validateIdentityPlan(identity Identity) error {

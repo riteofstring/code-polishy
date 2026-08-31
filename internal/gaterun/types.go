@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Version            = 1
+	Version            = 2
 	DefaultStreamLimit = 1 << 20
 	MaximumStreamLimit = 8 << 20
 )
@@ -75,6 +75,23 @@ const (
 	RunOperational RunStatus = "operational"
 )
 
+type BehaviorReviewState string
+
+const (
+	BehaviorReviewNotRun   BehaviorReviewState = "not-run"
+	BehaviorReviewRequired BehaviorReviewState = "required"
+	BehaviorReviewPassed   BehaviorReviewState = "passed"
+	BehaviorReviewFailed   BehaviorReviewState = "failed"
+)
+
+type BehaviorReviewBoundary string
+
+const (
+	BehaviorReviewOnRequest  BehaviorReviewBoundary = "on-request"
+	BehaviorReviewMerge      BehaviorReviewBoundary = "merge"
+	BehaviorReviewCheckpoint BehaviorReviewBoundary = "checkpoint"
+)
+
 type FailureCategory string
 
 const (
@@ -128,6 +145,21 @@ type CommandSpec struct {
 	SealedEnvironment  bool            `json:"sealed_environment"`
 }
 
+type BehaviorReviewFeatureSelection struct {
+	Name    string   `json:"name"`
+	Reasons []string `json:"reasons"`
+}
+
+type BehaviorReview struct {
+	State            BehaviorReviewState              `json:"state"`
+	RequiredBoundary BehaviorReviewBoundary           `json:"required_boundary"`
+	SelectedFeatures []BehaviorReviewFeatureSelection `json:"selected_features"`
+	SelectionDigest  string                           `json:"selection_digest"`
+	FullCandidate    bool                             `json:"full_candidate"`
+	ReviewID         string                           `json:"review_id"`
+	ReceiptPath      string                           `json:"receipt_path"`
+}
+
 type IdentityInput struct {
 	Gate                GateKind
 	RequestedBase       string
@@ -140,6 +172,7 @@ type IdentityInput struct {
 	Commands            []CommandSpec
 	Environment         []EnvironmentInput
 	AmbientEnvironment  []EnvironmentInput
+	BehaviorReview      BehaviorReview
 }
 
 type Identity struct {
@@ -155,6 +188,7 @@ type Identity struct {
 	Commands            []CommandSpec            `json:"commands"`
 	Environment         []EnvironmentFingerprint `json:"environment"`
 	AmbientEnvironment  []EnvironmentFingerprint `json:"ambient_environment"`
+	BehaviorReview      BehaviorReview           `json:"behavior_review"`
 }
 
 type CommandRef struct {
@@ -224,6 +258,7 @@ type Report struct {
 	Notes           []string         `json:"notes"`
 	TestEvidence    []TestEvidence   `json:"test_evidence"`
 	TestDiagnostics []TestDiagnostic `json:"test_diagnostics"`
+	BehaviorReview  BehaviorReview   `json:"behavior_review"`
 	SHA256          string           `json:"sha256"`
 }
 
@@ -261,6 +296,7 @@ type FinalizeOptions struct {
 	Notes           []string
 	TestEvidence    []TestEvidence
 	TestDiagnostics []TestDiagnostic
+	BehaviorReview  BehaviorReview
 	CompletedAt     time.Time
 }
 

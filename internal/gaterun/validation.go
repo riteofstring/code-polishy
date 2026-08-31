@@ -255,6 +255,9 @@ func validateReport(report Report, expected Identity) error {
 	if err := validateReportIdentity(report, expected); err != nil {
 		return err
 	}
+	if err := validateReportBehaviorReview(expected.BehaviorReview, report.BehaviorReview); err != nil {
+		return err
+	}
 	return validateReportOutcomes(report, expected)
 }
 
@@ -737,6 +740,7 @@ func cloneIdentity(identity Identity) Identity {
 	identity.Commands = cloneCommands(identity.Commands)
 	identity.Environment = append([]EnvironmentFingerprint{}, identity.Environment...)
 	identity.AmbientEnvironment = append([]EnvironmentFingerprint{}, identity.AmbientEnvironment...)
+	identity.BehaviorReview = cloneBehaviorReview(identity.BehaviorReview)
 	return identity
 }
 
@@ -797,5 +801,6 @@ func cloneReport(report Report) Report {
 	report.Notes = cloneStrings(report.Notes)
 	report.TestEvidence = cloneTestEvidence(report.TestEvidence)
 	report.TestDiagnostics = cloneTestDiagnostics(report.TestDiagnostics)
+	report.BehaviorReview = cloneBehaviorReview(report.BehaviorReview)
 	return report
 }
