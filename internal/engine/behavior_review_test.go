@@ -308,6 +308,38 @@ func TestBehaviorReviewStatusDistinguishesMissingAndStaleReceiptsWithoutWriting(
 	}
 }
 
+func TestBehaviorReviewGateStatusUsesPreparedPacketSelectionDigest(t *testing.T) {
+	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	packetData, err := os.ReadFile(filepath.Join(root, ".code-polishy-reports", "behavior-review", "packet.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var packet struct {
+		SelectionSHA256 string `json:"selection_sha256"`
+	}
+	if err := json.Unmarshal(packetData, &packet); err != nil {
+		t.Fatal(err)
+	}
+	if packet.SelectionSHA256 == "" || prepared.SelectionSHA256 != packet.SelectionSHA256 {
+		t.Fatalf("prepared selection digest = %q, packet selection digest = %q", prepared.SelectionSHA256, packet.SelectionSHA256)
+	}
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.BehaviorReview.status.SelectionDigest != packet.SelectionSHA256 || status.SelectionDigest != packet.SelectionSHA256 {
+		t.Fatalf("plan digest = %q, status digest = %q, packet selection digest = %q", plan.BehaviorReview.status.SelectionDigest, status.SelectionDigest, packet.SelectionSHA256)
+	}
+}
+
 func TestBehaviorReviewStatusStaysRequiredForDirtyTaskSelectedCandidate(t *testing.T) {
 	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":2}\n", 0o600)

@@ -117,9 +117,9 @@ func (engine *Engine) behaviorReviewDecision(
 	if err != nil {
 		return behaviorReviewDecision{}, fmt.Errorf("normalize behavior review selection: %w", err)
 	}
-	digest, err := behaviorreview.DecisionBindingSHA256(normalized, requirements)
+	digest, err := behaviorreview.SelectionSHA256(normalized)
 	if err != nil {
-		return behaviorReviewDecision{}, fmt.Errorf("bind behavior review decision: %w", err)
+		return behaviorReviewDecision{}, fmt.Errorf("digest behavior review selection: %w", err)
 	}
 	status := newBehaviorReviewStatus(BehaviorReviewRequired, requiredBoundary, normalized, digest, "", "")
 	status.Affected = affected
