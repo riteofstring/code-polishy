@@ -254,6 +254,48 @@ func TestCaptureFeatureAndLaterRequireUnion(t *testing.T) {
 	}
 }
 
+func TestRequireRejectsUnknownFeatureUnrelatedBaseAndDirtyCandidate(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		features []string
+		prepare  func(t *testing.T, repo repository.Repository, base string) string
+		want     error
+	}{
+		{
+			name:     "unknown feature",
+			features: []string{"missing"},
+			prepare:  func(_ *testing.T, _ repository.Repository, base string) string { return base },
+			want:     ErrInvalidInput,
+		},
+		{
+			name:     "unrelated base",
+			features: []string{"search"},
+			prepare: func(t *testing.T, repo repository.Repository, _ string) string {
+				candidate := commitFeatureCandidate(t, repo)
+				return strings.TrimSpace(gitBehavior(t, repo.Root, "commit-tree", candidate+"^{tree}", "-m", "unrelated"))
+			},
+			want: repository.ErrNotAncestor,
+		},
+		{
+			name:     "dirty candidate",
+			features: []string{"search"},
+			prepare: func(t *testing.T, repo repository.Repository, base string) string {
+				writeBehaviorFile(t, repo.Root, "app.txt", "dirty\n")
+				return base
+			},
+			want: repository.ErrDirtyCandidate,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo, base := newFeatureTaskBaseRepository(t)
+			reference := test.prepare(t, repo, base)
+			if _, err := Require(context.Background(), repo, RequireOptions{Base: reference, Features: test.features}); !errors.Is(err, test.want) {
+				t.Fatalf("Require() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
 func TestTaskRequirementRejectsTaskBaseAndIntentTampering(t *testing.T) {
 	for name, mutate := range map[string]func(*intentJournal, string){
 		"task base":        func(journal *intentJournal, candidate string) { journal.Requirements[0].TaskBase = candidate },

@@ -213,6 +213,64 @@ func TestBehaviorReviewUnionsBaseAndCandidateFeatureDefinitions(t *testing.T) {
 	}
 }
 
+func TestBehaviorReviewSelectsFeaturesFromDeletedPathsAndReverseDependentModules(t *testing.T) {
+	t.Run("deleted path ownership", func(t *testing.T) {
+		root := contentRepository(t, nil)
+		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"deleted-content","paths":["content/data.json"],"suites":["focused"],"requiredAt":"merge"}]}`)
+		installBehaviorReviewTestGuidance(t, root)
+		initializeEngineGitRepository(t, root)
+		gitBehaviorReview(t, root, "switch", "-c", "candidate")
+		if err := os.Remove(filepath.Join(root, "content", "data.json")); err != nil {
+			t.Fatal(err)
+		}
+		gitBehaviorReview(t, root, "add", "--update")
+		gitBehaviorReview(t, root, "commit", "-m", "delete content data")
+		policyEngine, err := Open(root, enginePolicyRoot(t), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := policyEngine.PlanMergeGateExecution("main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.BehaviorReview.status.State != BehaviorReviewRequired || !slices.Equal(plan.BehaviorReview.status.Required, []string{"deleted-content"}) {
+			t.Fatalf("deleted-path behavior review = %+v", plan.BehaviorReview.status)
+		}
+	})
+
+	t.Run("reverse dependent module impact", func(t *testing.T) {
+		root := contentRepository(t, nil)
+		configPath := filepath.Join(root, policy.ConfigFilename)
+		config, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		updated := strings.Replace(string(config), `{"name":"content","paths":["content/**"]}`, `{"name":"content","paths":["content/**"]},{"name":"dependent","paths":["dependent/**"],"dependsOn":["content"]}`, 1)
+		if updated == string(config) {
+			t.Fatal("content module was not extended with a dependent module")
+		}
+		writeEngineFile(t, root, policy.ConfigFilename, updated, 0o600)
+		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"dependent-content","modules":["dependent"],"suites":["focused"],"requiredAt":"merge"}]}`)
+		installBehaviorReviewTestGuidance(t, root)
+		initializeEngineGitRepository(t, root)
+		gitBehaviorReview(t, root, "switch", "-c", "candidate")
+		writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+		gitBehaviorReview(t, root, "add", "content/data.json")
+		gitBehaviorReview(t, root, "commit", "-m", "change content data")
+		policyEngine, err := Open(root, enginePolicyRoot(t), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := policyEngine.PlanMergeGateExecution("main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.BehaviorReview.status.State != BehaviorReviewRequired || !slices.Equal(plan.BehaviorReview.status.Required, []string{"dependent-content"}) {
+			t.Fatalf("reverse-dependent behavior review = %+v", plan.BehaviorReview.status)
+		}
+	})
+}
+
 func TestBehaviorReviewRejectsCandidateSuiteThatWeakensBaseRequiredEvidence(t *testing.T) {
 	root := contentRepository(t, nil)
 	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
