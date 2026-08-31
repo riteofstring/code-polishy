@@ -238,8 +238,65 @@ func TestBehaviorReviewRejectsCandidateSuiteThatWeakensBaseRequiredEvidence(t *t
 		t.Fatal(err)
 	}
 	_, err = policyEngine.PlanMergeGateExecution("main")
-	if err == nil || !strings.Contains(err.Error(), `selected behavior review suite "focused" no longer matches its base-required definition`) {
+	if err == nil || !strings.Contains(err.Error(), `selected behavior review suite "focused" no longer matches its base-selected definition`) {
 		t.Fatalf("plan error = %v", err)
+	}
+}
+
+func TestBehaviorReviewRejectsCandidateSuiteThatWeakensAnySelectedBaseDefinition(t *testing.T) {
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`
+	for _, test := range []struct {
+		name            string
+		candidatePolicy string
+		captureFeatures []string
+	}{
+		{name: "task requested", candidatePolicy: basePolicy, captureFeatures: []string{"content"}},
+		{name: "candidate required", candidatePolicy: `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := contentRepository(t, nil)
+			installBehaviorReviewPolicy(t, root, basePolicy)
+			installBehaviorReviewTestGuidance(t, root)
+			initializeEngineGitRepository(t, root)
+			gitBehaviorReview(t, root, "switch", "-c", "candidate")
+			policyEngine, err := Open(root, enginePolicyRoot(t), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.captureFeatures != nil {
+				intentPath := filepath.Join(t.TempDir(), "intent.md")
+				if err := os.WriteFile(intentPath, []byte("Preserve the requested behavior.\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, test.captureFeatures); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.candidatePolicy != basePolicy {
+				replaceBehaviorReviewPolicy(t, root, basePolicy, test.candidatePolicy)
+			}
+			configPath := filepath.Join(root, policy.ConfigFilename)
+			config, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			weakened := strings.Replace(string(config), `"argv":["go","test","./..."]`, `"argv":["go","test","./content/..."]`, 1)
+			if weakened == string(config) {
+				t.Fatal("focused suite was not weakened")
+			}
+			writeEngineFile(t, root, policy.ConfigFilename, weakened, 0o600)
+			writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+			gitBehaviorReview(t, root, "add", policy.ConfigFilename, "content/data.json")
+			gitBehaviorReview(t, root, "commit", "-m", "weaken selected behavior evidence")
+			policyEngine, err = Open(root, enginePolicyRoot(t), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = policyEngine.PlanMergeGateExecution("main")
+			if err == nil || !strings.Contains(err.Error(), `selected behavior review suite "focused" no longer matches its base-selected definition`) {
+				t.Fatalf("plan error = %v", err)
+			}
+		})
 	}
 }
 

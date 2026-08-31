@@ -281,7 +281,7 @@ func (engine *Engine) forceBehaviorReviewSuites(plan testpolicy.Plan, decision b
 	for _, suite := range engine.Repository.Config.Tests.Suites {
 		configured[suite.Name] = suite
 	}
-	for _, baseSuite := range decision.baseRequiredSuites {
+	for _, baseSuite := range decision.baseSelectedSuites {
 		candidateSuite, found := configured[baseSuite.Name]
 		if !found {
 			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is unavailable in the candidate configuration", baseSuite.Name)
@@ -290,7 +290,7 @@ func (engine *Engine) forceBehaviorReviewSuites(plan testpolicy.Plan, decision b
 			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q is ineligible in the candidate configuration", baseSuite.Name)
 		}
 		if !sameTestSuiteSemantics(candidateSuite, baseSuite) {
-			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q no longer matches its base-required definition", baseSuite.Name)
+			return testpolicy.Plan{}, fmt.Errorf("selected behavior review suite %q no longer matches its base-selected definition", baseSuite.Name)
 		}
 	}
 	selected := make([]policy.TestSuite, 0, len(plan.Suites)+len(decision.requiredSuites))

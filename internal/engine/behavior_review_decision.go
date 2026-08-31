@@ -59,7 +59,7 @@ type behaviorReviewDecision struct {
 	selection          behaviorreview.ReviewSelection
 	selectionDigest    string
 	requiredSuites     []string
-	baseRequiredSuites []policy.TestSuite
+	baseSelectedSuites []policy.TestSuite
 	status             BehaviorReviewStatus
 }
 
@@ -96,7 +96,7 @@ func (engine *Engine) behaviorReviewDecision(
 	if err != nil {
 		return behaviorReviewDecision{}, err
 	}
-	baseRequiredSuites, err := behaviorReviewBaseRequiredSuites(baseConfig, features)
+	baseSelectedSuites, err := behaviorReviewBaseSelectedSuites(baseConfig, features)
 	if err != nil {
 		return behaviorReviewDecision{}, err
 	}
@@ -130,7 +130,7 @@ func (engine *Engine) behaviorReviewDecision(
 	status.Missing = slices.Clone(status.Required)
 	return behaviorReviewDecision{
 		required: true, selection: normalized, selectionDigest: digest,
-		requiredSuites: behaviorReviewSelectionSuites(normalized), baseRequiredSuites: baseRequiredSuites, status: status,
+		requiredSuites: behaviorReviewSelectionSuites(normalized), baseSelectedSuites: baseSelectedSuites, status: status,
 	}, nil
 }
 
@@ -431,7 +431,7 @@ func behaviorReviewSelectionSuites(selection behaviorreview.ReviewSelection) []s
 	return sortedUniqueStrings(suites)
 }
 
-func behaviorReviewBaseRequiredSuites(
+func behaviorReviewBaseSelectedSuites(
 	config policy.Config, requirements map[string]behaviorReviewFeatureRequirement,
 ) ([]policy.TestSuite, error) {
 	configured := make(map[string]policy.TestSuite, len(config.Tests.Suites))
@@ -440,7 +440,7 @@ func behaviorReviewBaseRequiredSuites(
 	}
 	names := make([]string, 0, len(requirements))
 	for _, feature := range requirements {
-		if feature.baseRule && feature.base != nil {
+		if feature.base != nil && (feature.task || feature.baseRule || feature.candidateRule) {
 			names = append(names, feature.base.Suites...)
 		}
 	}
