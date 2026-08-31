@@ -1,206 +1,278 @@
 # Behavior Regression Review
 
-Every non-documentation checkpoint and merge gate uses a behavior review
-subagent. The primary agent is the agent implementing the change. Code Polishy
-does not launch AI agents; it prepares the exact packet, records red/green
-proofs, validates the structured result, and replays every cited proof whenever
-either gate runs.
+Behavior regression review is an optional AI-assisted evidence workflow. Code
+Polishy selects its scope, prepares a bounded packet, validates a strict result,
+records red/green proofs, and replays those proofs at a gate. It does not call an
+AI provider or claim deterministic semantic regression detection.
 
-Ordinary agent reviews remain useful advisory evidence and can inspect a dirty
-working tree; this workflow is deliberately bound to one clean committed
-candidate.
+Every base-aware plan, checkpoint gate, and merge gate reports exactly one
+state:
 
-## When it runs
+```text
+BEHAVIOR REVIEW: NOT RUN (optional)
+BEHAVIOR REVIEW: REQUIRED (checkout, authentication)
+BEHAVIOR REVIEW: PASSED (checkout)
+BEHAVIOR REVIEW: FAILED (checkout)
+```
 
-The receipt is required for every non-documentation `checkpoint-gate` and for
-recommended and full `merge-gate` candidates. An unchanged checkpoint is a
-no-op. Ordinary Markdown-only candidates run the documentation contract and
-bypass behavior review.
+`NOT RUN` is a successful outcome when neither checked-in policy nor the bound
+task requested review. `REQUIRED` and `FAILED` block before expensive ordinary
+gate commands.
 
-## Required workflow
+## Configure review policy
 
-1. Choose the task base before implementation. For a long-lived branch task,
-   this is the previous accepted commit. The repository must be clean and
-   committed at that exact starting point.
-2. Have the agent harness write the user's original request and any supplied
-   acceptance criteria to a non-empty regular UTF-8 file. Capture it before
-   changing code:
+Omitting `verification.behaviorReview` keeps review optional. A present policy
+defaults to `defaultRequiredAt: on-request`:
 
-   ```sh
-   code-polishy behavior-review capture-intent --intent-file PATH
-   ```
+```json
+{
+  "verification": {
+    "behaviorReview": {
+      "defaultRequiredAt": "on-request",
+      "features": [
+        {
+          "name": "checkout",
+          "modules": ["checkout", "payments"],
+          "paths": ["web/checkout/**"],
+          "suites": ["checkout-contract"],
+          "requiredAt": "merge"
+        },
+        {
+          "name": "authentication",
+          "modules": ["auth"],
+          "suites": ["auth-contract"],
+          "requiredAt": "checkpoint"
+        }
+      ]
+    }
+  }
+}
+```
 
-   The command copies the exact bytes into the managed intent journal and binds
-   that entry to the current commit. It rejects a dirty repository. Do not
-   recreate or paraphrase the request after implementation. If the user adds a
-   separate request later, reach a clean committed boundary and capture that
-   request before implementing it.
+The persistent levels are ordered `on-request < merge < checkpoint`:
 
-3. Implement the request, then commit the candidate. Its tracked, staged,
-   unstaged, and untracked candidate files must be clean. The excluded report
-   directory is the only workflow output that may remain untracked.
-4. Prepare the packet against the task base:
+- `on-request` selects nothing automatically. A user may request configured
+  features for one bound task.
+- `merge` requires each affected feature once against the final merge base.
+- `checkpoint` requires each affected feature at every completed checkpoint
+  and again at final merge.
+
+A feature can strengthen the repository default and cannot weaken it. Its
+lowercase unique `name` identifies it in commands and reports. `modules`
+references declared project modules; `paths` contains repository-relative path
+patterns. At least one module or path is required. `suites` names one or more
+configured ordinary suites.
+
+Feature suites must work in disposable worktrees without credentials or secret
+environment. Supplemental, mutation, live, destructive, credentialed, and
+environment-dependent suites cannot be behavior-review suites or proofs.
+Commands remain owned by `tests.suites`.
+
+Code Polishy selects every matching feature and deduplicates shared suites. A
+changed module also affects features owned by its reverse dependents. Deleted
+paths retain their previous ownership. Base and candidate policies are unioned,
+so editing or removing candidate policy cannot weaken an applicable base rule.
+An explicit task request selects its features even when path matching does not.
+
+To require a full-candidate review for every non-documentation merge, use:
+
+```json
+{
+  "verification": {
+    "behaviorReview": {
+      "defaultRequiredAt": "merge",
+      "features": []
+    }
+  }
+}
+```
+
+Using `checkpoint` instead also requires full-candidate review at every changed
+checkpoint. Ordinary Markdown-only candidates stay in the documentation lane
+unless a task explicitly requests a feature or a configured feature deliberately
+includes that product input.
+
+## Bind a task request
+
+The harness should preserve the user's exact request before implementation even
+when review is currently optional. Intent capture is cheap: it runs no tests,
+launches no reviewer, and creates no review packet.
+
+From the clean task-base commit:
+
+```sh
+code-polishy behavior-review capture-intent --intent-file PATH
+```
+
+To request configured features immediately, repeat `--feature`:
+
+```sh
+code-polishy behavior-review capture-intent \
+  --intent-file PATH \
+  --feature checkout \
+  --feature search
+```
+
+If the user asks for more coverage after implementation, first commit the clean
+candidate, then append a requirement tied to the original intent and task base:
+
+```sh
+code-polishy behavior-review require \
+  --base TASK_BASE \
+  --feature authentication
+```
+
+Requirement records are additive. Repeating the command produces a stable
+union; there is no remove or replace operation. Unknown features, an unrelated
+base, a dirty candidate, edited journal records, or missing pre-code intent fail
+explicitly. Code Polishy never guesses feature names from request prose and
+never accepts an after-the-fact paraphrase as the original intent.
+
+Inspect the decision without creating a packet or running commands:
+
+```sh
+code-polishy behavior-review status --base TASK_BASE
+```
+
+The status reports configured, affected, task-requested, required, completed,
+and missing features.
+
+## Complete a selected review
+
+When status or a gate says review is required:
+
+1. Commit the candidate and keep tracked, staged, unstaged, and untracked
+   candidate paths clean. Managed report files are excluded from the candidate.
+2. Prepare the selected packet:
 
    ```sh
    code-polishy behavior-review prepare --base REVIEW_BASE
    ```
 
-   Preparation selects the captured requests from the reviewed history,
-   resolves the base, freezes the exact candidate, and writes
-   `.code-polishy-reports/behavior-review/packet.json` plus `prepare.json`.
-   Missing or after-the-fact intent capture fails instead of accepting a new
-   account of what the user asked for.
+   Preparation resolves the exact base and clean candidate, selects the
+   applicable base policy, candidate policy, and task requirements, then writes
+   `.code-polishy-reports/behavior-review/packet.json` and `prepare.json`.
+   Their digests bind the selected feature definitions and reasons, requirement
+   snapshot, captured intents, patch, mapped current design documents, and
+   canonical review instructions.
 
-5. Start a review subagent with no inherited conversation and give it only the
-   generated packet. If the harness cannot start subagents, use a separate clean
-   AI invocation with only that packet. The review subagent must not inspect the
-   current workspace, parent conversation, prior reviews, plans, or external
-   context. The packet contains the ordered original requests, resolved base and
-   candidate, binary-safe Git patch, current mapped design documents, a random
-   review ID, and the canonical review instructions.
-6. The review subagent describes every material observable behavior as
-   `requested`, `preserved`, `unintended`, or `unknown`. For every `requested`
-   behavior, the primary agent creates at least one proof ID:
+3. Start a fresh review subagent with no inherited conversation and give it
+   only the generated packet. If the harness cannot start subagents, use a
+   separate clean AI invocation with only that packet. The reviewer must not
+   inspect the workspace, parent conversation, plans, prior reviews, or external
+   context.
+4. For each material observable behavior, the reviewer records `requested`,
+   `preserved`, `unintended`, or `unknown` and scopes it either to one or more
+   selected features or to the explicit full candidate. A requested behavior
+   needs at least one proof ID.
+5. After packet preparation, create each proof:
 
    ```sh
    code-polishy regression-proof \
      --base PRE_FIX \
-     --suite focused-suite \
+     --suite checkout-contract \
      --evidence path/to/behavior_test.go \
-     --id behavior-proof
+     --id checkout-submit
    ```
 
-   Run proofs only after packet preparation. `PRE_FIX` must be an ancestor of
-   the candidate at or after the packet's reviewed merge base. Repeat
-   `--evidence` for each evidence file. Use `--red-exit STATUS` only when the
-   expected baseline failure is not status `1`.
+   `PRE_FIX` must be an ancestor of the candidate at or after the packet's
+   reviewed merge base. Repeat `--evidence` as needed. Use `--red-exit STATUS`
+   only when the expected baseline failure is not status `1`. A feature-scoped
+   behavior may cite only suites declared by that feature. Full-candidate
+   behavior may use any eligible ordinary suite.
 
-   After a proof exists, the review subagent may read only that proof's JSON
-   record and named logs below the packet's proof directory.
-
-   Proof suites execute from disposable Git worktrees. Their commands must use
-   checked-in inputs and executables supplied by the governed command
-   environment. An untracked dependency or tool directory that exists only in
-   the caller's checkout is unavailable inside a proof worktree.
-
-7. Save the review subagent's exact JSON result at the packet's `result_path`,
-   with no surrounding prose, and finalize it:
+6. Save the reviewer's exact JSON object at the packet's `result_path`, then
+   finalize it:
 
    ```sh
    code-polishy behavior-review finalize --base REVIEW_BASE
    ```
 
-   Finalization re-derives the patch, instructions, and mapped design documents
-   from the bound revisions; validates the preparation marker, result,
-   candidate, base, and cited proofs; then atomically writes
+   Finalization re-derives all bound material, validates behavior scopes and
+   proofs, and atomically writes
    `.code-polishy-reports/behavior-review/receipt.json`.
 
-8. Run the applicable gate with that same base:
+7. Run the applicable gate with the same base:
 
    ```sh
-   code-polishy checkpoint-gate --base REVIEW_BASE
-   # Or, for the final candidate:
-   code-polishy merge-gate --base REVIEW_BASE
+   code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
+   code-polishy merge-gate --base MERGE_TARGET
    ```
 
-   Run only the command appropriate to the checkpoint. For a non-documentation
-   candidate, either gate validates the receipt and reruns every cited proof in
-   disposable baseline and candidate worktrees before further verification.
-   Recorded success or edited logs alone cannot satisfy the gate.
+   The gate independently validates the exact selected receipt, replays every
+   cited red/green proof, forces selected feature suites into the ordinary test
+   plan without duplicate execution, and records the structured outcome in its
+   versioned gate report.
 
-## Long-lived branch checkpoints
+The result is strict JSON. It includes the packet's `review_id`, `base`,
+`candidate`, `intent_sha256`, `selection_sha256`, and `decision_sha256`. Each
+behavior has an explicit scope:
 
-Do not wait for a merge into the main branch when an AI is making a sequence of
-changes on one long-lived branch. Capture each new request at the previous
-accepted commit before implementing it. After implementation, use that commit
-as the base and run the same preparation, review, proof, finalization, and
-checkpoint workflow:
-
-```sh
-code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
+```json
+{
+  "version": 3,
+  "review_id": "the packet review_id",
+  "base": "the packet base",
+  "candidate": "the packet candidate",
+  "intent_sha256": "the packet intent_sha256",
+  "selection_sha256": "the packet selection_sha256",
+  "decision_sha256": "the packet decision_sha256",
+  "behaviors": [
+    {
+      "before": "observable behavior before the candidate",
+      "after": "observable behavior after the candidate",
+      "classification": "requested",
+      "proof_ids": ["checkout-submit"],
+      "scope": {
+        "features": ["checkout"],
+        "full_candidate": false
+      }
+    }
+  ],
+  "findings": []
+}
 ```
 
-The command runs changed-scope policy checks and focused tests after behavior
-evidence passes. It prepares the exact passed run report, writes
-`.code-polishy-reports/checkpoint-gate/receipt.json` bound to that report's
-identity, execution, and digest, then publishes the report. The receipt is
-accepted only while that exact passed report remains current. A receipt or
-report publication failure is operational and leaves no readable acceptance.
-When the base yields no governed candidate paths, the command reports an
-unchanged no-op and writes nothing. This makes an always-invoked wrapper
-harmless after a conversational or read-only request, although agent guidance
-should invoke the command only after a completed committed task.
+For full-candidate scope, use an empty `features` array and
+`"full_candidate": true`. Unresolved findings, `unintended`, `unknown`, stale
+bindings, an omitted selected feature, missing proof, unsuitable proof suite, or
+a changed candidate stops finalization.
 
-Use the accepted candidate commit as the next task's `PREVIOUS_CHECKPOINT`. The
-checkpoint receipt records that fact for audit; the next invocation still
-requires an explicit base. The final merge checkpoint must repeat preparation,
-review, proof, and finalization against the actual merge target before
-`merge-gate`. Preparation selects the ordered request entries beginning at that
-merge base, so a long-lived branch is reviewed against all captured tasks. A
-receipt bound to a branch checkpoint cannot satisfy a gate against a different
+## Checkpoints, fixes, and final merge
+
+A merge-only feature does not require a checkpoint review. A checkpoint feature
+requires review against every completed checkpoint base and against the final
+merge target. The final merge always recalculates impact and requirements from
+the real merge base; a branch-checkpoint receipt cannot satisfy a different
 base.
 
-## What makes a result valid
+If review finds an unintended behavior, fix it, commit the new candidate, and
+repeat preparation, review, proof, and finalization. Candidate changes invalidate
+the previous packet and receipt. Code Polishy does not automatically fix the
+regression.
 
-The review result is strict JSON. It accepts no unknown fields and must bind the
-packet's review ID, base, candidate, and intent digest. It must contain at least
-one behavior, each with non-empty `before` and `after` descriptions, one allowed
-classification, and an explicit proof-ID array. A `preserved` behavior needs no
-red/green proof. Every `requested` behavior needs one or more valid proof IDs.
+Resume never reuses proof replay. Ordinary commands retain their exact-identity
+reuse rules.
 
-Unresolved findings, an `unintended` behavior, an `unknown` behavior, stale
-identifiers, missing proof, or a changed candidate stops finalization. The
-receipt records structured identifiers and digests, while prompts, patches, and
-logs remain separate artifacts.
+## Evidence and trust boundary
 
-## What makes a proof valid
+The intent journal, lock, packet, preparation marker, result, review, proof
+records, bounded logs, and receipt live below
+`.code-polishy-reports/behavior-review`. Keep that complete directory in one
+workspace through the gate. A multi-job CI workflow may transfer it only as an
+explicit trusted artifact. Checkpoint and merge reports live in their own
+directories below `.code-polishy-reports`.
 
-`regression-proof` resolves `--base` to one exact ancestor of the clean
-candidate that is no earlier than the prepared review base. It binds the proof
-to that review ID and candidate. Its named suite must be one configured ordinary
-suite with no declared environment: supplemental, live, credentialed, and
-destructive work cannot act as receipt evidence. Every evidence path must be
-unique, contained, regular, and classified as development or test material.
+Each captured request and the canonical reviewer instructions are limited to
+64 KiB. The journal permits at most 128 intent entries and 128 additive
+requirement entries within 4 MiB. Results and mapped design documents are
+limited to 256 KiB; artifact reads are limited to 8 MiB. Inputs must be regular,
+contained, bounded UTF-8 files. Artifact writes are atomic and concurrent
+journal appends use an interprocess lock.
 
-Code Polishy builds a binary patch from only those evidence files, applies it in
-a disposable worktree at the pre-fix base, and runs the suite there. That run
-must exit with the expected non-zero status, which defaults to `1`. It then runs
-the same suite on the candidate, which must exit `0`. Both checkpoint and merge
-gates independently repeat both executions from the recorded patch and
-configured suite. The source candidate and replay candidate must remain the
-same clean commit throughout. Failed patch application, timeout, invalid
-evidence, candidate mutation, or worktree cleanup failure is an error, never
-proof.
-
-## Artifact boundary and limits
-
-The intent journal, preparation marker, packet, result, proof, log, worktree,
-and receipt artifacts live below `.code-polishy-reports/behavior-review`. The
-directory is excluded from candidate selection, so report updates cannot change
-merge classification. Keep it in the same workspace from intent capture through
-the applicable gate. A multi-job CI workflow may transfer the complete
-directory only as an explicit trusted artifact, preserving the exact candidate
-and base it names. The accepted checkpoint receipt lives separately below
-`.code-polishy-reports/checkpoint-gate`; both report directories are excluded
-from candidate selection. `agents install` and `agents sync` maintain the exact
-root `.gitignore` rule that keeps the shared report root workspace-local.
-
-Each captured request and the subagent instructions are limited to 64 KiB. The
-strict journal allows at most 128 entries and 4 MiB. A review result and each
-mapped design document are limited to 256 KiB; artifact reads are limited to
-8 MiB. Request input must be a non-empty regular UTF-8 file; artifact targets
-and evidence paths remain contained. These limits keep the review packet
-bounded and prevent artifacts from becoming a second ungoverned source tree.
-
-The harness owns capture timing and source fidelity. Code Polishy binds the
-captured bytes and their commit boundaries through preparation, finalization,
-and gate replay. Digests and re-derivation detect stale or individually edited
-artifacts; they are not signatures. Code Polishy cannot authenticate which user
-or provider supplied the captured text, which model or session wrote the
-review, prove that the review subagent started without inherited context, or
-stop a writer with artifact access from replacing a complete self-consistent
-artifact set. The agent harness and CI custody boundary must enforce those
-parts.
-
-The receipt adds gate evidence. It does not replace ordinary policy checks,
-configured tests, human approval, or separate supplemental test-strength work.
+Digests and re-derivation detect stale or partially edited evidence; they are not
+signatures. The harness remains responsible for authentic request capture,
+reviewer isolation, and provider custody. An AI reviewer can miss a regression
+or raise a false alarm. The receipt proves deterministic enforcement of the
+recorded review decision and evidence, and does not replace ordinary policy
+checks, configured tests, human approval, or supplemental test-strength work.

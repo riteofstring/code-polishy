@@ -585,20 +585,29 @@ gate does not reuse prior work.
 
 ### Keep behavior-regression evidence in custody
 
-At the start of every non-documentation task, the agent harness must pass the
-user's original request and supplied acceptance criteria to
-`behavior-review capture-intent` at the clean task-base commit. After the
-candidate is committed, start a review subagent with no inherited conversation
-and give it only the generated packet. If the harness cannot start subagents,
-use a separate clean AI invocation with only that packet.
+At the start of a source task, the agent harness should pass the user's original
+request and supplied acceptance criteria to `behavior-review capture-intent` at
+the clean task-base commit. Capture is cheap and invokes neither tests nor an AI
+reviewer. Repositories may define named features at `on-request`, `merge`, or
+`checkpoint`; users may select configured features during capture or append
+them later with `behavior-review require`. Requirements are additive, and
+agents must not infer feature names from prose.
 
-CI must retain the complete `.code-polishy-reports/behavior-review` directory
-in the same workspace from intent capture through preparation, proof,
-finalization, and the applicable gate, or transfer it between jobs as an
-explicit trusted artifact. Both checkpoint and merge gates replay every cited
-proof; the primary agent or harness must keep the review subagent packet-only.
-See [Behavior Regression Review](policies/behavior-review.md) before relying on
-the workflow.
+After the candidate is committed, use `behavior-review status --base TASK_BASE`
+to inspect the decision. `NOT RUN` means optional review was skipped. When
+review is required, start a review subagent with no inherited conversation and
+give it only the generated packet. If the harness cannot start subagents, use a
+separate clean AI invocation with only that packet.
+
+When selected review crosses CI jobs, CI must retain the complete
+`.code-polishy-reports/behavior-review` directory from intent capture through
+preparation, proof, finalization, and the applicable gate, or transfer it as an
+explicit trusted artifact. Checkpoint and merge gates replay every cited proof
+and force the selected feature suites; the primary agent or harness must keep
+the review subagent packet-only. Repositories with no behavior-review policy
+need no AI artifact and retain their ordinary gate runtime. See
+[Behavior Regression Review](policies/behavior-review.md) before relying on the
+workflow.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen

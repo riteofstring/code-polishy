@@ -213,14 +213,16 @@ merge-base delta ---> impacted modules + matching standard suites
 
 merge-gate delta ---> exact candidate classifier
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> behavior-review receipt validation
-                                      ---> shared escalation rules + target module allowlist
-                                      ---> recommended pipeline OR complete full gate
+                 ---> behavior decision ---> optional ---> no review artifacts
+                                          ---> selected ---> receipt + proof replay
+                 ---> shared escalation rules + target module allowlist
+                 ---> recommended pipeline OR complete full gate
 
 checkpoint delta ---> unchanged ---> no-op
                  ---> ordinary Markdown ---> built-in documentation contract
-                 ---> other candidate ---> behavior-review receipt + proof replay
-                                      ---> affected checks + focused changed tests
+                 ---> behavior decision ---> optional ---> no review artifacts
+                                          ---> selected ---> receipt + proof replay
+                 ---> affected checks + focused changed tests
                  ---> gate-run owner ---> bounded command logs + versioned JSON report
                  ---> complete pass ---> accepted-HEAD receipt
 
@@ -246,13 +248,15 @@ runtime cost are not hidden inside the word “full.”
 The executable merge gate is distinct from that read-only planner. Its only
 caller input is a Git base. Repository selection preserves the exact candidate
 delta separately from any repository-wide analysis expansion.
-`internal/testing.BuildMergeDecision` makes the deterministic level decision
-from that selection and compiled policy; `internal/engine` owns the three
-orchestration branches. The documentation branch runs only the built-in
-Markdown contract and bypasses behavior-review receipt validation. For every
-non-documentation candidate, the engine first validates a receipt bound to the
-exact base and clean candidate; report artifacts are excluded from the
-candidate delta so they cannot change its classification. The recommended
+`internal/testing.BuildMergeDecision` makes the deterministic ordinary level
+decision from that selection and compiled policy. `internal/engine` separately
+builds one behavior-review decision from additive task requests, base policy,
+candidate policy, and repository-owned path/module impact. Optional review
+loads no receipt and runs no proof. Selected review validates the exact receipt,
+replays every proof, and forces its ordinary feature suites into the deduplicated
+test plan before later commands. Both decisions and the behavior-review status
+are bound into the gate-run identity and report. Report artifacts are excluded
+from the candidate delta so they cannot change either decision. The recommended
 branch runs strict doctor, applicable gate checks and builds, recommended tests,
 and offline supply-chain verification. For non-documentation candidates, any
 repository-wide expansion,
@@ -260,14 +264,16 @@ path-ownership failure, non-allowlisted module, broad planner impact, or missing
 adaptive configuration selects the existing complete gate.
 
 `checkpoint-gate` is a separate task boundary. It requires an explicit previous
-checkpoint and a clean committed candidate. Unchanged work is a no-op;
-documentation runs the same built-in contract; other changes validate and
-replay behavior evidence before the normal change-aware check and
-focused impacted tests. Only a finding-free run with an unchanged HEAD writes
-the accepted-checkpoint receipt. A two-phase publication binds that receipt to
-the exact passed run identity, execution, and report digest; the receipt is
-accepted only while the report remains current and validates. The receipt
-records state but does not select the next base automatically.
+checkpoint and a clean committed candidate. Unchanged work is a no-op. The same
+behavior decision reports optional review as `NOT RUN`, enforces task-requested
+or checkpoint-required features, and leaves merge-only features for final
+merge. Selected evidence is validated and replayed before the normal
+change-aware check and focused impacted tests. Only a finding-free run with an
+unchanged HEAD writes the accepted-checkpoint receipt. A two-phase publication
+binds that receipt to the exact behavior status, passed run identity, execution,
+and report digest; the receipt is accepted only while the report remains current
+and validates. The receipt records state but does not select the next base
+automatically.
 
 The gate-run owner gives checkpoint and merge execution a single durable
 artifact contract. It binds the exact candidate, base, loaded policy, locked

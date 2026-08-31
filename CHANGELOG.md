@@ -2,15 +2,15 @@
 
 ## Unreleased
 
-- Add pre-implementation intent capture and behavior-regression review for
-  non-documentation gates, binding the original requests, a clean-context
-  review subagent, and independently replayed red/green proofs to the clean
-  candidate.
+- Add optional feature-scoped behavior-regression review with pre-implementation
+  intent capture, additive task requests, `on-request`, `merge`, and
+  `checkpoint` policy, concise gate status, clean-context review packets, and
+  independently replayed red/green proofs bound to the exact decision.
 - Add `checkpoint-gate --base REF` for accepting one completed task on a
   long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
-  contract for documentation-only work, otherwise validates behavior evidence,
-  runs affected checks and focused tests, and binds the accepted HEAD to the
-  exact durable passed run report.
+  contract for documentation-only work, validates selected behavior evidence,
+  runs affected checks and focused tests, and binds the accepted HEAD plus its
+  behavior-review status to the exact durable passed run report.
 - Add durable checkpoint and merge run reports with bounded command logs,
   fact-based failure evidence derived from matching exact-base suites, explicit
   changed-test comparisons, and merge-wide plus latest-task test reminders.

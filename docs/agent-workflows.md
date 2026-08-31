@@ -39,7 +39,7 @@ the working tree with `HEAD`; with `TASK_BASE`, they compare
 `merge-base(TASK_BASE, HEAD)` plus the working tree. On a long-lived branch,
 finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
-and preparing its behavior evidence. At a merge checkpoint, run one
+and completing any selected behavior review. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
 candidate. Run `code-polishy test --supplemental` only when the caller or a
 checked-in workflow requires that separate hardening stage. Conversational,
@@ -98,27 +98,37 @@ non-deterministic evidence and does not replace policy checks or human approval.
 
 ## Behavior regression review
 
-Use the [Behavior Regression Review Policy](policies/behavior-review.md) for
-every non-documentation checkpoint or merge candidate. It turns a clean-context
-subagent review into gate-checkable evidence without making the subagent a
+Use the [Behavior Regression Review Policy](policies/behavior-review.md) when a
+repository rule or explicit task request selects review. Optional review that
+was skipped reports `NOT RUN` and does not block. A selected clean-context
+subagent review becomes gate-checkable evidence without making the subagent a
 policy engine:
 
 1. Before implementation, run `code-polishy behavior-review capture-intent`
    from the clean task base with the exact user request supplied by the harness.
-2. Commit the candidate and keep it clean, apart from the excluded review
-   reports.
-3. Run `code-polishy behavior-review prepare --base REVIEW_BASE`. Start a
+   Repeat `--feature` only for configured features the user explicitly named.
+   Capture itself runs no tests or AI review.
+2. If the user adds review coverage later, commit the clean candidate and run
+   `code-polishy behavior-review require --base TASK_BASE --feature NAME`.
+   Requirements are additive and cannot be removed. Never infer a feature from
+   request keywords.
+3. Commit the candidate, run the read-only behavior-review status command for
+   `REVIEW_BASE`, and keep it clean apart from excluded review reports. If
+   status is optional, continue to the gate without creating a packet.
+4. When selected, run `code-polishy behavior-review prepare --base REVIEW_BASE`.
+   Start a
    review subagent with no inherited conversation and give it only the generated
    packet. If the harness cannot start subagents, use a separate clean AI
    invocation with only that packet.
-4. For every behavior the review subagent classifies as `requested`, the primary
+5. For every behavior the review subagent classifies as `requested`, the primary
    agent runs one or more `code-polishy regression-proof` commands that fail on
    the declared pre-fix base and pass on the candidate. Run them after
    preparation and do not choose a pre-fix revision older than the packet's
-   reviewed merge base.
-5. Save the review subagent's strict result at the packet's result path, then run
+   reviewed merge base. Each behavior names its selected feature scope, and its
+   proofs use only suites allowed by that scope.
+6. Save the review subagent's strict result at the packet's result path, then run
    `code-polishy behavior-review finalize` to write the receipt.
-6. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
+7. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
    completed task on a long-lived branch, or
    `code-polishy merge-gate --base <merge-target>` for the final candidate.
    Either gate validates the receipt and independently reruns every cited
@@ -129,8 +139,9 @@ policy engine:
 
 Keep `.code-polishy-reports/behavior-review` in the same workspace from intent
 capture through the gate. A multi-job CI run may transfer the complete
-directory only as an explicit trusted artifact. Documentation-only candidates
-bypass the receipt; ordinary agent reviews remain useful advisory evidence.
+directory only as an explicit trusted artifact. Ordinary Markdown-only
+candidates stay optional unless a task request or deliberately configured
+feature selects them. Ordinary agent reviews remain useful advisory evidence.
 Local digests do not authenticate the source of the request, subagent identity,
 or subagent context; see the policy's trust limits.
 

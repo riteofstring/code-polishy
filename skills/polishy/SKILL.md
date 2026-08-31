@@ -52,11 +52,15 @@ bounded UTF-8 file. From the clean task-base commit, run:
 code-polishy behavior-review capture-intent --intent-file PATH
 ```
 
-The command copies those exact bytes into the managed intent journal. Never
-write a replacement summary after implementation has started. If the task was
-not captured at its base, report the missing boundary. Capture a later request
-only after reaching another clean committed boundary and before implementing
-that request.
+The command copies those exact bytes into the managed intent journal and runs
+no tests or AI review. Repeat `--feature NAME` only for configured features the
+user explicitly selected; never infer a feature from prose. Never write a
+replacement summary after implementation has started. If the task was not
+captured at its base, report the missing boundary. Capture a later request only
+after reaching another clean committed boundary and before implementing it. If
+the user adds feature coverage after implementation, first commit the clean
+candidate, then append it with `behavior-review require` using the task base and
+one or more explicit features; requirements cannot be removed.
 
 Honor `quality.allowComments`. When it is false, keep governed handwritten
 source free of prose comments and docstrings and retain only exact
@@ -113,24 +117,26 @@ policy upgrade, and do not invent authoritative suite counts.
   policy, ordinary verification, build, and online supply-chain workflow. Do
   not describe either as merely another test level.
 - After a completed, clean, committed task on a long-lived branch, run
-  `checkpoint-gate --base <previous-checkpoint>`. It replays behavior
-  evidence, runs affected checks and focused tests, and records the accepted
-  HEAD. Do not run it for conversational or read-only requests; an unchanged
-  invocation is a no-op.
+  `checkpoint-gate --base <previous-checkpoint>`. It reports behavior review,
+  replays selected evidence, runs affected checks and focused tests, and records
+  the accepted HEAD. Do not run it for conversational or read-only requests; an
+  unchanged invocation is a no-op.
 - At an ordinary merge checkpoint, resolve the trusted base and run
   `merge-gate --base <trusted-base>` without asking the user to choose
   a level. It alone selects documentation, the configured recommended merge
   profile, or the complete full gate and accepts no caller-supplied file,
   module, suite, or quick-mode scope.
-- For every clean, committed non-documentation candidate, run
-  `behavior-review prepare --base <review-base>` after the request was captured
-  at its task base. Start a review subagent with no inherited conversation and
-  give it only the generated packet. If the harness cannot start subagents, use
-  a separate clean AI invocation with only that packet. Record red-on-pre-fix
-  and green-on-candidate `regression-proof` evidence for every behavior it
-  classifies as requested, save its strict result, and run
-  `behavior-review finalize --base <review-base>`. Both gates independently
-  replay cited proofs. Keep the complete
+- For a clean committed candidate, inspect `behavior-review status` using the
+  review base. Report `NOT RUN` directly when review is optional. When status
+  selects configured or task-requested features, run `behavior-review prepare`
+  using the same base, start a review subagent with no inherited conversation,
+  and give it only the generated packet. If the harness cannot start subagents,
+  use a separate clean AI invocation with only that packet. Record
+  red-on-pre-fix and green-on-candidate `regression-proof` evidence for every
+  requested behavior using suites permitted by its selected feature scope,
+  save the strict result, and run `behavior-review finalize` using the same
+  review base. Both gates independently replay cited proofs and force the
+  selected ordinary suites. Keep the complete
   `.code-polishy-reports/behavior-review` directory in the same workspace from
   capture through the gate, or move it only as an explicit trusted CI artifact.
   The primary agent's existing context is not a clean-context subagent review,

@@ -130,13 +130,15 @@ does not become a target manifest dependency.
 ## Behavior review evidence
 
 Behavior-review files use a separate local artifact boundary under
-`.code-polishy-reports/behavior-review`. The directory starts with the request
-captured before implementation and later holds the prepared packet, review,
-proofs, logs, and receipt. Keep the complete directory together through the
-applicable gate; if CI splits the workflow across jobs, transfer it as one
-trusted artifact.
+`.code-polishy-reports/behavior-review`. Intent capture may exist even when
+review remains optional. The directory later holds additive feature
+requirements, the exact selected-feature packet, review, proofs, logs, and
+receipt. Journal appends use an interprocess lock and every mutation publishes
+atomically. Keep the complete directory together through the applicable gate;
+if CI splits the workflow across jobs, transfer it as one trusted artifact.
 
-Its hashes bind the same captured bytes, commits, packet, and proof records
+Its hashes bind the same captured bytes, task-requirement snapshot, base and
+candidate policy decision, selected features, commits, packet, and proof records
 through the workflow. They are integrity checks, not signatures. The agent
 harness remains responsible for supplying the actual user request and isolating
 the review subagent. See the

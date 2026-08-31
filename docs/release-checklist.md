@@ -16,11 +16,13 @@ pushes, or installs state.
    worktree as a separate release proof.
 2. Check out the exact candidate commit and verify it through the managed
    lifecycle. The agent harness must have captured each original user request
-   at its clean task base before implementation. Prepare and finalize one fresh
-   behavior review against the merge target, then run the policy-selected merge
-   gate once for the unchanged candidate. Follow the
-   [behavior-review workflow](policies/behavior-review.md) rather than creating
-   an intent summary during release preparation. Then run
+   at its clean task base before implementation. Inspect behavior-review status
+   against the merge target and complete a fresh review only when checked-in or
+   task policy selects it. The final merge gate must print `NOT RUN` for an
+   optional skip or validate the exact selected receipt; it runs once for the
+   unchanged candidate. Follow the [behavior-review
+   workflow](policies/behavior-review.md) rather than creating an intent summary
+   during release preparation. Then run
    `code-polishy test --supplemental` as this repository's separate
    release-hardening stage. Credentialed, destructive,
    production-mutating, and live-provider probes remain typed external approval
@@ -30,9 +32,9 @@ pushes, or installs state.
    not invalidate that result. Rerun the gate only after the candidate commit
    changes.
    The unchanged candidate must also pass the native CI lanes on Ubuntu, macOS,
-   and Windows. Windows runs the executable, process-containment, and complete
-   installed behavior-review workflow in PowerShell without WSL or Bash. Retain
-   the CI run URL with the release evidence.
+   and Windows. Windows runs the executable, process-containment, journal-lock,
+   optional and selected installed behavior-review workflows in PowerShell
+   without WSL or Bash. Retain the CI run URL with the release evidence.
 3. Run `./scripts/release-preflight.sh <candidate-commit-id>`, naming the
    candidate with Git's canonical lowercase full commit object ID, exactly as
    `git rev-parse HEAD` prints it; a symbolic, abbreviated, or uppercase
@@ -69,8 +71,9 @@ pushes, or installs state.
 7. Prove an installed candidate before the public lock cutover by writing a
    temporary lock with its release engine, then run
    `./scripts/test-installed-release.sh --prefix PREFIX --lock LOCK`. This
-   exercises the complete behavior-review workflow and the other target shapes
-   this repository is not one of. After publication, move each consuming
+   exercises optional, task-requested, merge-required, checkpoint-required, and
+   strict full-candidate behavior review plus target shapes this repository is
+   not one of. After publication, move each consuming
    repository's `.code-polishy.lock.json` to the installed release with
    `<release>/bin/code-polishy lock`, as that repository's own reviewed change.
    Rerun the script with its default lock for this repository.

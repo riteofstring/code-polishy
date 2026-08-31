@@ -111,15 +111,17 @@ code-polishy merge-gate --base MERGE_TARGET
   supplemental suites.
 - `checkpoint-gate` accepts one clean committed task on a long-lived branch.
   It no-ops when the supplied base yields no governed candidate paths, runs the
-  documentation contract for ordinary Markdown, and otherwise requires
-  behavior evidence before affected checks and focused changed-scope tests.
+  documentation contract for ordinary Markdown, and runs affected checks and
+  focused changed-scope tests. It reports behavior review as optional, required,
+  passed, or failed; only selected task or checkpoint features require evidence.
   Only a complete pass records the accepted HEAD and checkpoint receipt.
 - `merge-gate` is the executable ordinary merge policy. Given a trusted base,
   it selects the documentation contract, an impact-scoped recommended profile,
-  or the complete full gate. Gate output shows concise phase progress and a
-  final result. On failure it prints a bounded failure tail and the path to the
-  corresponding managed log; direct `test` commands keep their normal
-  streaming output.
+  or the complete full gate. Its independent behavior decision uses the base
+  and candidate policy plus additive task requirements. Gate output shows one
+  concise behavior status, phase progress, and a final result. On failure it
+  prints a bounded failure tail and the path to the corresponding managed log;
+  direct `test` commands keep their normal streaming output.
 
 ## Test-quality reminder
 
@@ -212,13 +214,15 @@ the candidate must be one clean committed HEAD. The command accepts no file,
 module, suite, or profile downscope.
 
 An unchanged candidate prints `CHECKPOINT GATE: UNCHANGED` and performs no
-review, checks, tests, or receipt write. An ordinary Markdown-only candidate
-runs the documentation contract without behavior review. Every other candidate
-must first satisfy the behavior-review receipt and proof replay. The
-gate then runs the normal change-aware policy check for the selected files and
-focused suites for changed modules plus reverse dependents. It stops after a
-failed phase and never runs merge-only builds, supply-chain work, full suites,
-or supplemental suites.
+review, checks, tests, or receipt write. A changed candidate first computes one
+behavior decision. Missing configuration and no task request reports `NOT RUN`
+and reads no review artifacts. A task-requested or checkpoint-required feature
+must satisfy its exact receipt and proof replay; a merge-only feature remains
+optional at this boundary. The gate then runs the normal change-aware policy
+check for the selected files and focused suites for changed modules plus reverse
+dependents, forcing and deduplicating any selected feature suites. It stops
+after a failed phase and never runs merge-only builds, supply-chain work, full
+suites, or supplemental suites.
 
 After a complete pass, Code Polishy verifies that HEAD stayed unchanged and
 records checkpoint evidence for the accepted candidate. A checkpoint that runs
@@ -227,11 +231,11 @@ executed command below `.code-polishy-reports/checkpoint-gate/`. The report
 binds the requested and exact base, candidate, selected policy level, release
 and configuration identity, command outcomes, failure evidence, log paths, and
 final status. The checkpoint receipt records the exact merge base, accepted
-candidate, scope, behavior-review ID when applicable, and the exact passed run
-identity, execution, and report digest. Readers require that report to remain
-the current validated passed checkpoint report. It is an audit record, not an
-implicit base: the next invocation still supplies the accepted commit
-explicitly.
+candidate, scope, full behavior-review status and selection digest, and the
+exact passed run identity, execution, and report digest. Readers require that
+report to remain the current validated passed checkpoint report. It is an audit
+record, not an implicit base: the next invocation still supplies the accepted
+commit explicitly.
 
 The terminal shows `RUN`, `PASS`, or `FAIL` phase progress. A failure prints a
 bounded tail and the managed log path; the report and log remain the durable
@@ -356,29 +360,34 @@ and actionable failures; report paths provide the detailed evidence.
 
 ## Behavior regression review receipt
 
-Every non-documentation checkpoint or merge candidate requires a
-behavior-regression receipt.
+Behavior review is optional unless checked-in policy or an additive task
+request selects it. Base-aware plans and both gates always disclose `NOT RUN`,
+`REQUIRED`, `PASSED`, or `FAILED`. Optional review reads no packet, proof, or
+receipt and does not change ordinary command selection or runtime.
 
 Before implementation, the agent harness supplies the user's original request
 and acceptance criteria to `behavior-review capture-intent` at the clean task
-base. Preparation later selects those captured requests from the reviewed Git
-history. It refuses a missing capture or one made only after the candidate was
-implemented.
+base. Capture invokes no tests or AI review. Repeated `--feature` options select
+configured features immediately; `behavior-review require --base TASK_BASE`
+can append feature coverage later only when that original intent exists. Records
+are additive and cannot remove checked-in or earlier task requirements.
 
-Both `checkpoint-gate` and `merge-gate` validate the current clean candidate's
-receipt against the resolved base and replay every cited red/green proof before
-further work. A missing, stale, malformed, unresolved, under-proved, or
-non-reproducible review becomes a `policy.behaviorReview` finding. An unchanged
-checkpoint and the built-in documentation level bypass this receipt.
+For selected review, `checkpoint-gate` and `merge-gate` validate the current
+clean candidate's receipt against the resolved base, base and candidate policy,
+task requirements, and exact feature selection. They replay every cited
+red/green proof and force selected ordinary feature suites before further work.
+A missing required receipt reports `REQUIRED`; stale, malformed, unresolved,
+under-proved, or non-reproducible evidence reports `FAILED`. Either becomes a
+`policy.behaviorReview` finding before expensive ordinary commands.
 
 The receipt comes from a review subagent with no inherited conversation plus
 red/green regression proof for each requested behavior. If the harness cannot
 start subagents, use a separate clean AI invocation with only the generated
 packet. Local artifacts cannot authenticate subagent identity or context. The
-receipt is additional merge evidence, not a replacement for ordinary tests,
-policy checks, human approval, or supplemental hardening. Follow the
-[Behavior Regression Review Policy](behavior-review.md) for the required
-sequence, artifact boundary, replay behavior, and limits.
+receipt is additional evidence, not a replacement for ordinary tests, policy
+checks, human approval, or supplemental hardening. Follow the
+[Behavior Regression Review Policy](behavior-review.md) for configuration,
+task requests, artifact custody, replay behavior, and limits.
 
 ## AI execution
 
@@ -394,9 +403,9 @@ An AI collaborator should treat the levels differently:
 3. While iterating on application source, run `test --changed` for affected modules and reverse
    dependents when exact focused tests are no longer enough.
 4. After a completed code-changing task on a long-lived branch, commit the
-   candidate, complete behavior review against the previous accepted commit,
-   and run `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task
-   only after it records the accepted HEAD.
+   candidate, complete behavior review only when status selects it, and run
+   `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task only after
+   it records the accepted HEAD.
 5. During a task, use `test --changed --base TASK_BASE` or
    `test-levels --base TASK_BASE` (or the compatibility alias `test-plan`) to
    inspect changes since the task boundary. At an ordinary merge checkpoint,

@@ -19,12 +19,13 @@ when you need the operating contract or policy details behind it.
 - [Isolated Task Sessions](task-sessions.md) specifies disposable-worktree
   boundaries, promotion, and artifacts.
 - [Artifact Security](artifact-security.md) documents shared container scanning,
-  producer contracts, OpenVEX, and behavior-review evidence custody.
+  producer contracts, OpenVEX, and optional behavior-review evidence custody.
 
 ## Policy reference
 
 - [Architecture](policies/architecture.md)
-- [Behavior regression review](policies/behavior-review.md)
+- [Behavior regression review](policies/behavior-review.md), including opt-in
+  feature policy and task requests
 - [Code quality](policies/code-quality.md)
 - [Conditional modules](policies/conditional-modules.md)
 - [Exceptions](policies/exceptions.md)
