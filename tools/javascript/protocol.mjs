@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PROTOCOL_VERSION = 3;
@@ -110,7 +110,16 @@ function resolved(path) {
 }
 
 function insideTree(tree, path) {
-  return tree !== "" && (path === tree || path.startsWith(`${tree}/`));
+  if (tree === "" || path === "") {
+    return false;
+  }
+  const difference = relative(tree, path);
+  return (
+    difference === "" ||
+    (!isAbsolute(difference) &&
+      difference !== ".." &&
+      !difference.startsWith(`..${sep}`))
+  );
 }
 
 export function containedRead(path) {

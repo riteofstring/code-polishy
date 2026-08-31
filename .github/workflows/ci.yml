@@ -93,7 +93,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows process and lock contracts failed.' }
           & $go test -count=1 ./internal/release -run '^(TestReleaseHostMatrix|TestParseLock|TestRenderLock|TestReadLock)'
           if ($LASTEXITCODE -ne 0) { throw 'Native release identity contracts failed.' }
-          & $go test -count=1 ./internal/javascript -run '^TestJavaScriptExecutableUsesNativeHostContract$'
+          & $go test -count=1 ./internal/javascript -run '^TestJavaScript(ExecutableUsesNativeHostContract|BundleContainsNativeTargetPaths)$'
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
           & $go test -count=1 ./internal/repository -run '^TestDetachedWorktreeSupportsLongCheckoutPaths$'
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows Git worktree contract failed.' }
