@@ -148,6 +148,29 @@ EOF
 
 Run the installed task-session supervisor.
 EOF
+  write_file "${source_root}/docs/catalog.json" <<'EOF'
+{
+  "version": 1,
+  "topics": [
+    {
+      "id": "agent-workflows",
+      "path": "docs/agent-workflows.md",
+      "title": "Agent workflows",
+      "summary": "Run the installed task-session supervisor.",
+      "aliases": ["agents"],
+      "public": true
+    },
+    {
+      "id": "installation",
+      "path": "docs/installation.md",
+      "title": "Installation",
+      "summary": "Install the native release.",
+      "aliases": ["install"],
+      "public": true
+    }
+  ]
+}
+EOF
   printf '1.26.6\n' >"${source_root}/scripts/go_version.txt"
   printf '%s\n' "${node_version}" >"${source_root}/tools/node-version.txt"
   printf '%s\n' "${pnpm_version}" >"${source_root}/tools/pnpm-version.txt"
@@ -451,7 +474,7 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 
 
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
-  docs/installation.md docs/agent-workflows.md schema/code-polishy.schema.json \
+  docs/installation.md docs/agent-workflows.md docs/catalog.json schema/code-polishy.schema.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
   skills/polishy/SKILL.md skills/polishy/agents/openai.yaml \
   artifact-security/scanner-policy.json \
@@ -471,7 +494,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
   fail "the installed release carried retired shell workflow supervisors"
-for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-workflows.md; do
+for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-workflows.md docs/catalog.json; do
   cmp -s "${source_root}/${documentation}" "${release}/${documentation}" ||
     fail "the release did not carry the exact ${documentation} documentation"
 done

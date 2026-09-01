@@ -271,6 +271,25 @@ expect_no_target_commands() {
 
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 
+exercise_versioned_documentation() {
+  local target="$1" description="$2" before
+  before="$("${real_git}" -C "${target}" status --porcelain=v1 --untracked-files=all)"
+  expect_pass "${target}" "${description} documentation list" docs list
+  grep -q $'^agent-workflows\tAgent Workflows$' "${output}" ||
+    fail "${description}: docs list omitted agent-workflows: $(excerpt)"
+  grep -q $'^behavior-review\tBehavior Regression Review$' "${output}" ||
+    fail "${description}: docs list omitted behavior-review: $(excerpt)"
+  expect_pass "${target}" "${description} documentation search" docs find behavior review
+  grep -q $'^behavior-review\tBehavior Regression Review\t' "${output}" ||
+    fail "${description}: docs find did not rank behavior review: $(excerpt)"
+  expect_pass "${target}" "${description} documentation read" docs read agents
+  cmp -s "${release}/docs/agent-workflows.md" "${output}" ||
+    fail "${description}: docs read did not return the installed release bytes"
+  if [[ "$("${real_git}" -C "${target}" status --porcelain=v1 --untracked-files=all)" != "${before}" ]]; then
+    fail "${description}: documentation commands mutated the target repository"
+  fi
+}
+
 exercise_documentation_lane() {
   local target="$1" description="$2"
   local command_log="${target}/.git/code-polishy-command-log"
@@ -402,6 +421,7 @@ write_file "${go_only}/.code-polishy.json" <<'EOF'
 }
 EOF
 seal_target "${go_only}"
+exercise_versioned_documentation "${go_only}" "go-only"
 exercise_documentation_lane "${go_only}" "go-only"
 expect_pass "${go_only}" "go-only" check --all
 expect_pass "${go_only}" "go-only" --verbose doctor --strict
