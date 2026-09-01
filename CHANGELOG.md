@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.20.0 - 2026-09-01
+
 - Add locally installed, content-addressed community language packs with exact
   project selection, conformance fixtures, structured adapter evidence, and
   normal quality, architecture, build, supply-chain, doctor, and gate coverage.
