@@ -39,6 +39,10 @@
       "dependsOn": ["gaterun", "policy", "repository", "runner"]
     },
     {
+      "name": "documentation",
+      "paths": ["internal/documentation/**"]
+    },
+    {
       "name": "agents",
       "paths": ["internal/agents/**"]
     },
@@ -112,6 +116,7 @@
       "paths": ["cmd/code-polishy/**"],
       "dependsOn": [
         "agents",
+        "documentation",
         "engine",
         "policy",
         "release",
@@ -140,6 +145,7 @@
         "runner",
         "gaterun",
         "behaviorreview",
+        "documentation",
         "agents",
         "release",
         "javascript",
@@ -202,6 +208,13 @@
         "scope": "module",
         "modules": ["behaviorreview"],
         "argv": ["go", "test", "-count=1", "./internal/behaviorreview/..."]
+      },
+      {
+        "name": "documentation-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["documentation"],
+        "argv": ["go", "test", "-count=1", "./internal/documentation/..."]
       },
       {
         "name": "agents-unit",
@@ -359,6 +372,16 @@
         "cost": "expensive",
         "modules": ["behaviorreview"],
         "argv": ["./scripts/go-mutation.sh", "./internal/behaviorreview"],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "documentation-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["documentation"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/documentation"],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
