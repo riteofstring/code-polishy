@@ -620,7 +620,8 @@ exist.
 
 Agents can inspect the exact installed operating contract with
 `code-polishy docs list`, locate a topic with `docs find`, and read it with
-`docs read`. These commands do not require a repository or network access.
+`docs read`. The stable launcher uses the repository lock to select the exact
+release and the commands perform no network access.
 
 A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the guidance from `templates/AGENTS.md`: routine focused or

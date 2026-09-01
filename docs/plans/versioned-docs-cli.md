@@ -3,7 +3,8 @@
 ## Outcome
 
 Add a small read-only Go CLI surface that lets coding agents discover and read
-the documentation shipped with the exact Code Polishy release in use.
+the documentation shipped with the exact Code Polishy release a repository
+locks.
 
 This command complements the Polishy skill. The skill explains when and why to
 use Code Polishy. The CLI returns the full version-matched reference without
@@ -69,7 +70,8 @@ ranking, an index daemon, and provider-specific integration.
 ### Help and exit behavior
 
 - `code-polishy docs --help`, every action's `--help`, and
-  `code-polishy help docs` work without opening a repository.
+  `code-polishy help docs` work without opening a repository. Actual reads use
+  the repository lock so the stable launcher never guesses a release.
 - Invalid syntax exits with the CLI usage status and one relevant usage line.
 - Missing or damaged installed documentation is an operational failure with the
   release root named concisely.
@@ -181,7 +183,8 @@ the installed-release test.
 - strict arguments and exit statuses;
 - output piping and broken-pipe behavior;
 - no repository or report mutations;
-- execution from outside a Code Polishy-managed repository.
+- contextual help outside a Code Polishy-managed repository and actual reads
+  through a repository's exact lock.
 
 ### Release tests
 

@@ -127,7 +127,8 @@ One release identity has one self-contained policy root per supported host:
   path; and
 - `release-manifest.json`, which records everything above.
 
-Read the exact installed guides without locating the release directory:
+From a managed repository, read its exact locked guides without locating the
+release directory:
 
 ```sh
 code-polishy docs list

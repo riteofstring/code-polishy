@@ -3,8 +3,8 @@
 The root [README](../README.md) is the short product introduction. Use this map
 when you need the operating contract or policy details behind it.
 
-The installed CLI reads this exact version of the documentation from any
-directory:
+From a managed repository, the installed CLI reads the documentation carried by
+that repository's locked release:
 
 ```sh
 code-polishy docs list

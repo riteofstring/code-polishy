@@ -4,7 +4,7 @@
 
 - Add `docs list`, `docs find`, and `docs read` so agents can retrieve bounded,
   deterministic documentation from the exact installed release without a
-  repository, network access, or guessed file path.
+  network request or guessed file path.
 - Add optional feature-scoped behavior-regression review with pre-implementation
   intent capture, additive task requests, `on-request`, `merge`, and
   `checkpoint` policy, concise gate status, clean-context review packets, and

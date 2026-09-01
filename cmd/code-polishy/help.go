@@ -57,7 +57,7 @@ var commandHelpPages = []commandHelpPage{
 			"find requires one or more query terms and returns a bounded deterministic result list.",
 			"read requires one exact topic identifier or documented alias.",
 		},
-		sideEffects: []string{"Reads only the version-matched documentation under the policy root; no repository or network access."},
+		sideEffects: []string{"After the launcher selects the repository's locked release, reads only its documentation; no project files or network access."},
 		exits:       []string{"0 requested documentation printed or no search results", "2 invalid usage or unavailable documentation"},
 		examples:    []string{"code-polishy docs list", "code-polishy docs find behavior review", "code-polishy docs read agent-workflows"},
 	},

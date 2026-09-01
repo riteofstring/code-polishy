@@ -23,7 +23,7 @@ type docsTopicFixture struct {
 	Public  bool     `json:"public"`
 }
 
-func TestDocsCLIListsFindsAndReadsWithoutARepository(t *testing.T) {
+func TestDocsEngineListsFindsAndReadsWithoutRepositoryInitialization(t *testing.T) {
 	policyRoot := docsPolicyFixture(t)
 	missingRepository := filepath.Join(t.TempDir(), "missing-repository")
 	status, stdout, stderr := captureRunOutput(t, []string{

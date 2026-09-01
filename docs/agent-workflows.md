@@ -1,6 +1,6 @@
 # Agent Workflows
 
-Read this version-matched guide from any directory with:
+Read this guide from the repository's locked release with:
 
 ```sh
 code-polishy docs read agent-workflows

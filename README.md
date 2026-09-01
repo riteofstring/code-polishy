@@ -89,8 +89,8 @@ validates the whole branch. Each reports whether behavior review was optional,
 required, passed, or failed; selected reviews replay their proofs and force the
 configured feature suites. Gate reports stay under `.code-polishy-reports`.
 Resume never reuses checks, builds, security work, or behavior proofs.
-Agents can use `code-polishy docs list`, `docs find`, and `docs read` from any
-directory to retrieve the exact documentation shipped with the running release.
+Agents can use `code-polishy docs list`, `docs find`, and `docs read` to retrieve
+the exact documentation shipped with the repository's locked release.
 
 ## Languages
 

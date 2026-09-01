@@ -134,29 +134,6 @@ jobs:
           $releaseEngine = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'releases') -Filter 'code-polishy.exe' -File -Recurse)
           if ($releaseEngine.Count -ne 1) { throw 'Installed release did not contain exactly one engine.' }
           $launcher = Join-Path $prefix 'bin\code-polishy.exe'
-          $missingDocsTarget = Join-Path $env:RUNNER_TEMP 'missing-code-polishy-docs-target'
-          $docsList = (& $launcher --repo-root $missingDocsTarget docs list 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output $docsList
-            throw 'Installed native documentation list failed.'
-          }
-          if ($docsList -notlike '*agent-workflows*Agent Workflows*' -or
-              $docsList -notlike '*behavior-review*Behavior Regression Review*') {
-            throw "Installed native documentation list omitted required topics: $docsList"
-          }
-          $docsFind = (& $launcher --repo-root $missingDocsTarget docs find behavior review 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $docsFind -notlike '*behavior-review*Behavior Regression Review*') {
-            Write-Output $docsFind
-            throw 'Installed native documentation search failed.'
-          }
-          $docsRead = (& $launcher --repo-root $missingDocsTarget docs read agents 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $docsRead -notlike '# Agent Workflows*') {
-            Write-Output $docsRead
-            throw 'Installed native documentation read failed.'
-          }
-          if (Test-Path -LiteralPath $missingDocsTarget) {
-            throw 'Installed native documentation commands created a repository.'
-          }
           $target = Join-Path $env:RUNNER_TEMP 'code-polishy-target'
           New-Item -ItemType Directory -Path (Join-Path $target 'src') | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $target 'scripts') | Out-Null
@@ -206,6 +183,31 @@ jobs:
           & $releaseEngine[0].FullName --repo-root $target lock
           & $launcher --repo-root $target agents install
           if ($LASTEXITCODE -ne 0) { throw 'Installed canonical agent guidance failed.' }
+
+          $docsStatusBefore = (& git.exe -C $target status --porcelain=v1 --untracked-files=all | Out-String)
+          $docsList = (& $launcher --repo-root $target docs list 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output $docsList
+            throw 'Installed native documentation list failed.'
+          }
+          if ($docsList -notlike '*agent-workflows*Agent Workflows*' -or
+              $docsList -notlike '*behavior-review*Behavior Regression Review*') {
+            throw "Installed native documentation list omitted required topics: $docsList"
+          }
+          $docsFind = (& $launcher --repo-root $target docs find behavior review 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $docsFind -notlike '*behavior-review*Behavior Regression Review*') {
+            Write-Output $docsFind
+            throw 'Installed native documentation search failed.'
+          }
+          $docsRead = (& $launcher --repo-root $target docs read agents 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $docsRead -notlike '# Agent Workflows*') {
+            Write-Output $docsRead
+            throw 'Installed native documentation read failed.'
+          }
+          $docsStatusAfter = (& git.exe -C $target status --porcelain=v1 --untracked-files=all | Out-String)
+          if ($docsStatusAfter -ne $docsStatusBefore) {
+            throw 'Installed native documentation commands changed the target repository.'
+          }
 
           & $launcher --repo-root $target format --files src/data.json
           if ($LASTEXITCODE -ne 0) { throw 'Installed sealed JavaScript formatter failed.' }
