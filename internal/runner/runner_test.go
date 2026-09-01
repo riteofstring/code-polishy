@@ -271,23 +271,41 @@ func TestOSRunnerBuildsASealedCommandEnvironment(t *testing.T) {
 	}
 }
 
-func TestOSRunnerTimeoutCancelsDescendants(t *testing.T) {
+func TestOSRunnerCancellationCancelsDescendants(t *testing.T) {
 	root := t.TempDir()
 	ready := filepath.Join(root, "ready")
 	release := filepath.Join(root, "release")
 	survivor := filepath.Join(root, "survivor")
 	script := filepath.Join(root, "descendant.sh")
-	contents := "#!/bin/sh\n(while [ ! -e release ]; do sleep 0.05; done; : > survivor) &\n: > ready\nwait\n"
+	contents := "#!/bin/sh\n(: > ready; while [ ! -e release ]; do sleep 0.05; done; : > survivor) &\nwait\n"
 	if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := (OSRunner{}).Run(context.Background(), root, policy.Command{
-		Name: "descendant", Argv: []string{"./descendant.sh"}, Cwd: ".", TimeoutSeconds: 1,
-	}); err == nil || !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("descendant command did not time out: %v", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- (OSRunner{}).Run(ctx, root, policy.Command{
+			Name: "descendant", Argv: []string{"./descendant.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
+		})
+	}()
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			cancel()
+			<-result
+			t.Fatal(err)
+		}
+		select {
+		case err := <-result:
+			t.Fatalf("descendant fixture exited before starting: %v", err)
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
-	if _, err := os.Stat(ready); err != nil {
-		t.Fatalf("descendant fixture did not start: %v", err)
+	cancel()
+	if err := <-result; err == nil || !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("descendant command was not canceled: %v", err)
 	}
 	if err := os.WriteFile(release, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -295,7 +313,7 @@ func TestOSRunnerTimeoutCancelsDescendants(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(survivor); err == nil {
-			t.Fatal("descendant survived governed command timeout")
+			t.Fatal("descendant survived governed command cancellation")
 		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
