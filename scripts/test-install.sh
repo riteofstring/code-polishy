@@ -201,12 +201,8 @@ EOF
   write_file "${source_root}/templates/behavior-review.md" <<'EOF'
 # Behavior review instructions
 EOF
-  write_file "${source_root}/skills/polishy/SKILL.md" <<'EOF'
-# Polishy skill
-EOF
-  write_file "${source_root}/skills/polishy/agents/openai.yaml" <<'EOF'
-interface:
-  display_name: "Polishy"
+  write_file "${source_root}/skills/unpackaged-fixture/SKILL.md" <<'EOF'
+# Unpackaged fixture
 EOF
   write_file "${source_root}/artifact-security/scanner-policy.json" <<'EOF'
 { "scanner": "disposable" }
@@ -498,7 +494,7 @@ for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-work
     fail "the release did not carry the exact ${documentation} documentation"
 done
 [[ ! -e "${release}/skills" ]] ||
-  fail "the installed release carried optional agent skills"
+  fail "the installed release carried a source-only skills directory"
 cmp -s "${source_root}/templates/CLAUDE.md" "${release}/templates/CLAUDE.md" ||
   fail "the release did not carry the exact canonical CLAUDE.md import"
 cmp -s "${source_root}/templates/behavior-review.md" \

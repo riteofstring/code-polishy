@@ -5,8 +5,9 @@
 - Add `docs list`, `docs find`, and `docs read` so agents can retrieve bounded,
   deterministic documentation from the exact installed release without a
   network request or guessed file path.
-- Keep optional agent skills out of normal installations and make the managed
-  `CLAUDE.md` use Claude Code's native `@AGENTS.md` import.
+- Remove the source-only Polishy skill, use versioned CLI documentation as the
+  detailed agent reference, and make the managed `CLAUDE.md` use Claude Code's
+  native `@AGENTS.md` import.
 - Add optional feature-scoped behavior-regression review with pre-implementation
   intent capture, additive task requests, `on-request`, `merge`, and
   `checkpoint` policy, concise gate status, clean-context review packets, and

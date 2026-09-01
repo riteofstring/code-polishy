@@ -6,10 +6,9 @@ Add a small read-only Go CLI surface that lets coding agents discover and read
 the documentation shipped with the exact Code Polishy release a repository
 locks.
 
-This command can complement the optional Polishy skill. Repository guidance
-explains when and why to use Code Polishy. The CLI returns the full
-version-matched reference without requiring the agent to guess file paths,
-browse the web, or copy large manuals into `AGENTS.md`.
+Repository guidance explains when and why to use Code Polishy. The CLI returns
+the full version-matched reference without requiring the agent to guess file
+paths, browse the web, install a skill, or copy large manuals into `AGENTS.md`.
 
 ## Why this is worth doing
 
@@ -81,7 +80,7 @@ ranking, an index daemon, and provider-specific integration.
 ## One authoritative documentation source
 
 Checked-in Markdown under `docs/` remains authoritative. Do not copy document
-bodies into Go source, the skill, or generated agent guidance.
+bodies into Go source or generated agent guidance.
 
 Add a small checked-in catalog that contains only routing metadata:
 
@@ -135,29 +134,19 @@ fallback that silently reads different docs is out of scope.
 - Preserve standard broken-pipe handling so `docs read TOPIC | less` and
   `docs find QUERY | head` behave normally.
 
-## Agent guidance and optional skill
-
-The source repository may keep the Polishy skill as an optional manual workflow
-router. Normal installations do not copy it into the release or agent-specific
-skill directories. Keep it using the CLI for detailed versioned references,
-with examples such as:
-
-```sh
-code-polishy docs find behavior review
-code-polishy docs read agent-workflows
-```
+## Agent guidance
 
 Generate a short canonical `AGENTS.md` that states the durable operating rules
-and points agents to `code-polishy docs`. Generate `CLAUDE.md` as the exact
-one-line `@AGENTS.md` import. Do not remove a rule from root guidance until the
-matching exact versioned document is installed and discoverable in the same
-release.
+and points agents to `code-polishy docs`. Do not ship or install a separate
+Polishy skill. Generate `CLAUDE.md` as the exact one-line `@AGENTS.md` import.
+Do not remove a rule from root guidance until the matching exact versioned
+document is installed and discoverable in the same release.
 
 The atomic cutover includes:
 
 - root and template `AGENTS.md`;
 - root and template `CLAUDE.md`;
-- the optional source-only `skills/polishy/SKILL.md`;
+- removal of the source-only Polishy skill;
 - the docs catalog and bundled Markdown;
 - CLI help and examples;
 - agent-guidance generation and drift checks;
@@ -207,7 +196,7 @@ the installed-release test.
 - editing documentation through the CLI;
 - semantic or AI-powered search;
 - indexing arbitrary repository files;
-- installing or replacing optional agent skills;
+- installing agent skills;
 - provider-specific chat history or prompt capture;
 - a background server, plugin protocol, or new network service.
 
@@ -218,7 +207,7 @@ the installed-release test.
 3. Commit the domain package and exact tests.
 4. Commit CLI routing, help, rendering, and contract tests.
 5. Commit installed-release and Windows coverage.
-6. Commit the optional source skill, shortened generated guidance, docs,
+6. Commit removal of the source skill, shortened generated guidance, docs,
    templates, changelog, version, lock, and README cutover together.
 7. Run the installed candidate, changed tests, final merge gate, and hosted CI.
 8. Remove this temporary plan only after permanent docs own every public
