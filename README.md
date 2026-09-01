@@ -58,6 +58,9 @@ See the [agent setup guide](docs/ai-adoption.md) or the
 A coding agent runs these commands as it works:
 
 ```sh
+# Read the documentation carried by this repo's Code Polishy release
+code-polishy docs read agent-workflows
+
 # Save the user's request before changing code; this runs no tests or AI review
 code-polishy behavior-review capture-intent --intent-file REQUEST_FILE
 
@@ -86,6 +89,8 @@ validates the whole branch. Each reports whether behavior review was optional,
 required, passed, or failed; selected reviews replay their proofs and force the
 configured feature suites. Gate reports stay under `.code-polishy-reports`.
 Resume never reuses checks, builds, security work, or behavior proofs.
+Agents can use `code-polishy docs list`, `docs find`, and `docs read` from any
+directory to retrieve the exact documentation shipped with the running release.
 
 ## Languages
 
@@ -117,6 +122,7 @@ Your prompts can stay focused on what you want built.
 
 ## More
 
+- Run `code-polishy docs list` for every version-matched documentation topic.
 - [All docs](docs/README.md)
 - [Agent workflows](docs/agent-workflows.md)
 - [Architecture rules](docs/policies/architecture.md)

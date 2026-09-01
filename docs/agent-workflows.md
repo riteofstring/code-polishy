@@ -1,5 +1,13 @@
 # Agent Workflows
 
+Read this version-matched guide from any directory with:
+
+```sh
+code-polishy docs read agent-workflows
+```
+
+Use `code-polishy docs find QUERY...` to locate another exact policy reference.
+
 ## Choose a workflow
 
 Ordinary interactive work may use the caller's current checkout. The primary

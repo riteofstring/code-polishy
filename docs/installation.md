@@ -117,8 +117,8 @@ One release identity has one self-contained policy root per supported host:
   policy tooling, and none of these is ever taken from an ambient `PATH`, a host
   installation, or an environment override, so a check decides the same thing
   on every machine that has the matching host release;
-- the version-matched `README.md`, `CHANGELOG.md`, and complete permanent
-  `docs/` tree from the reviewed commit;
+- the version-matched `README.md`, `CHANGELOG.md`, permanent `docs/` tree and
+  documentation catalog, plus the release-owned `polishy` skill;
 - the configuration schema, templates, canonical guidance, pinned tool versions,
   and native workflow contracts the engine reads at runtime;
 - the bundle's dependency and license inventory;
@@ -127,11 +127,18 @@ One release identity has one self-contained policy root per supported host:
   path; and
 - `release-manifest.json`, which records everything above.
 
-Read the installed overview at
-`<prefix>/releases/<version>-<releaseDigest>/README.md` and the permanent guides
-under that release's `docs/` directory. Documentation bytes are recorded in the
-release manifest like runtime inputs, so a changed, missing, or added file makes
-the installed release invalid.
+Read the exact installed guides without locating the release directory:
+
+```sh
+code-polishy docs list
+code-polishy docs find dependency review
+code-polishy docs read installation
+```
+
+The files remain available below
+`<prefix>/releases/<version>-<releaseDigest>/docs/`. Documentation, catalog, and
+skill bytes are recorded in the release manifest like runtime inputs, so a
+changed, missing, or added file makes the installed release invalid.
 
 A release carries no source checkout, no history, and no build inputs.
 Installing does not modify the checkout it was built from.

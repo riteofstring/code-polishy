@@ -618,6 +618,10 @@ never downloaded during a check. Bootstrap target dependencies from frozen
 inputs before strict doctor, because doctor verifies that declared executables
 exist.
 
+Agents can inspect the exact installed operating contract with
+`code-polishy docs list`, locate a topic with `docs find`, and read it with
+`docs read`. These commands do not require a repository or network access.
+
 A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the guidance from `templates/AGENTS.md`: routine focused or
 changed tests during source work; `test --changed --base TASK_BASE` for a

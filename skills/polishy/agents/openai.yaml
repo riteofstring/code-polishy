@@ -1,6 +1,6 @@
 interface:
   display_name: "Polishy"
-  short_description: "Operate pinned Code Polishy workflows"
-  default_prompt: "Use $polishy to inspect repository verification levels and run an authorized Code Polishy workflow."
+  short_description: "Use pinned Code Polishy docs and workflows"
+  default_prompt: "Use $polishy to read version-matched guidance, inspect repository verification, and run an authorized Code Polishy workflow."
 policy:
   allow_implicit_invocation: false

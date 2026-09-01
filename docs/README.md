@@ -3,6 +3,18 @@
 The root [README](../README.md) is the short product introduction. Use this map
 when you need the operating contract or policy details behind it.
 
+The installed CLI reads this exact version of the documentation from any
+directory:
+
+```sh
+code-polishy docs list
+code-polishy docs find behavior review
+code-polishy docs read agent-workflows
+```
+
+The checked-in `catalog.json` owns stable topic identifiers, titles, summaries,
+and aliases. Search is local, bounded, and deterministic.
+
 ## Start here
 
 - [Installation](installation.md) explains exact-tag source installation,

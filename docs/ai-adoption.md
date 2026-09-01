@@ -424,8 +424,10 @@ rule. `agents check` and `doctor --strict` reject a missing rule. Do not
 hand-copy or duplicate the canonical policy text.
 
 Keep canonical guidance compact and limited to durable rules used across tasks.
-The release-owned `polishy` skill and permanent docs carry command procedures,
-policy rationale, and edge-case detail.
+The release-owned `polishy` skill routes recurring work. `code-polishy docs`
+lists, searches, and reads the permanent documentation carried by the exact
+running release, including command procedures, policy rationale, and edge-case
+detail.
 
 The resulting guidance should make these execution boundaries clear:
 
