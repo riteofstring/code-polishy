@@ -67,10 +67,11 @@
   skip application tests. Fix documentation findings directly without asking
   the user for authorization. Control and declared product-input Markdown
   follow ordinary source verification.
-- Run exact tests while editing source and `code-polishy test --changed` for
-  broader feedback. At a merge checkpoint, resolve the base from an explicit
-  target, checked-in guidance, `origin/HEAD`, then `origin/main` or
-  `origin/master`.
+- During active development, run the narrowest useful exact test after a
+  coherent runnable change. Do not test after every edit or chat turn. Use
+  `code-polishy test --changed` for broader feedback at a completed task
+  boundary. At a merge checkpoint, resolve the base from an explicit target,
+  checked-in guidance, `origin/HEAD`, then `origin/main` or `origin/master`.
 - Run `code-polishy merge-gate --base <merge-target>` once for the final
   candidate. Let it select documentation, recommended, or full without asking
   the user. Summarize its result in plain language.

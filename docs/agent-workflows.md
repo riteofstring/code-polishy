@@ -40,10 +40,11 @@ boundary instead of writing a new summary of the request.
 
 For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
 documentation findings, and skip application tests without asking the user for
-authorization. Run exact tests while editing source and
-`code-polishy test --changed --base TASK_BASE` when broader feedback needs to
-cover a completed task boundary. Without `--base`, changed-scope tests compare
-the working tree with `HEAD`; with `TASK_BASE`, they compare
+authorization. During active development, run the narrowest useful exact test
+after a coherent runnable source change. Do not test after every edit or chat
+turn. Use `code-polishy test --changed --base TASK_BASE` when broader feedback
+needs to cover a completed task boundary. Without `--base`, changed-scope tests
+compare the working tree with `HEAD`; with `TASK_BASE`, they compare
 `merge-base(TASK_BASE, HEAD)` plus the working tree. On a long-lived branch,
 finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
