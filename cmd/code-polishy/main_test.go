@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
 )
@@ -450,66 +451,88 @@ func TestPrintReportSummarizesDocumentationMergePolicyForHumans(t *testing.T) {
 func TestPrintReportRendersExactlyOneConciseBehaviorReviewStatusForBaseAwareReports(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
-		name   string
-		report engine.Report
-		want   string
+		name    string
+		report  engine.Report
+		want    string
+		final   string
+		finding string
 	}{
 		{
 			name: "planning optional",
 			report: engine.Report{
 				MergePolicy: &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
 				BehaviorReview: &engine.BehaviorReviewStatus{
-					State: engine.BehaviorReviewNotRun, RequiredBoundary: engine.BehaviorReviewOnRequest,
+					State: engine.BehaviorReviewNotRun, FinalStateState: engine.BehaviorReviewNotRun, RequiredBoundary: engine.BehaviorReviewOnRequest,
 					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{}, SelectionDigest: strings.Repeat("a", 64),
 				},
 			},
-			want: "BEHAVIOR REVIEW: NOT RUN (optional)\n",
+			want:  "BEHAVIOR REVIEW: NOT RUN (optional)\n",
+			final: "FINAL STATE: NOT RUN (optional)\n",
 		},
 		{
 			name: "checkpoint required",
 			report: engine.Report{
 				CheckpointPolicy: &engine.CheckpointPolicy{Scope: "changed", Base: "TASK_BASE", Candidate: strings.Repeat("b", 40)},
 				BehaviorReview: &engine.BehaviorReviewStatus{
-					State: engine.BehaviorReviewRequired, RequiredBoundary: engine.BehaviorReviewCheckpoint,
+					State: engine.BehaviorReviewRequired, FinalStateState: engine.BehaviorReviewNotRun, RequiredBoundary: engine.BehaviorReviewCheckpoint,
 					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{
 						{Name: "authentication", Reasons: []string{"task-requested"}},
 					},
 					SelectionDigest: strings.Repeat("c", 64),
 				},
 			},
-			want: "BEHAVIOR REVIEW: REQUIRED (authentication)\n",
+			want:  "BEHAVIOR REVIEW: REQUIRED (authentication)\n",
+			final: "FINAL STATE: NOT RUN (required)\n",
 		},
 		{
 			name: "merge passed",
 			report: engine.Report{
 				MergePolicy: &engine.MergePolicy{Level: "full", Base: "origin/main"},
 				BehaviorReview: &engine.BehaviorReviewStatus{
-					State: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
+					State: engine.BehaviorReviewPassed, FinalStateState: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
 					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{
 						{Name: "checkout", Reasons: []string{"candidate-required"}},
 					},
 					SelectionDigest: strings.Repeat("d", 64), ReviewID: "review-123", ReceiptPath: ".code-polishy-reports/behavior-review/receipt.json",
 				},
 			},
-			want: "BEHAVIOR REVIEW: PASSED (checkout)\n",
+			want:  "BEHAVIOR REVIEW: PASSED (checkout)\n",
+			final: "FINAL STATE: PASSED (checkout)\n",
 		},
 		{
 			name: "merge failed full candidate",
 			report: engine.Report{
 				MergePolicy: &engine.MergePolicy{Level: "full", Base: "origin/main"},
 				BehaviorReview: &engine.BehaviorReviewStatus{
-					State: engine.BehaviorReviewFailed, RequiredBoundary: engine.BehaviorReviewMerge,
+					State: engine.BehaviorReviewFailed, FinalStateState: engine.BehaviorReviewFailed, RequiredBoundary: engine.BehaviorReviewMerge,
 					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{}, FullCandidate: true, SelectionDigest: strings.Repeat("e", 64),
+					FinalStateFindings: []finalstate.Finding{{Kind: finalstate.KindMetaNote, Path: "README.md", Line: 18, Summary: "Describes the editing task."}},
 				},
 			},
-			want: "BEHAVIOR REVIEW: FAILED (all changes)\n",
+			want:    "BEHAVIOR REVIEW: FAILED (all changes)\n",
+			final:   "FINAL STATE: FAILED (all changes)\n",
+			finding: "README.md:18 meta note: Describes the editing task.\n",
+		},
+		{
+			name: "behavior failed after clean final-state review",
+			report: engine.Report{
+				MergePolicy: &engine.MergePolicy{Level: "full", Base: "origin/main"},
+				BehaviorReview: &engine.BehaviorReviewStatus{
+					State: engine.BehaviorReviewFailed, FinalStateState: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
+					SelectedFeatures: []engine.BehaviorReviewFeatureSelection{}, FullCandidate: true, SelectionDigest: strings.Repeat("f", 64),
+				},
+			},
+			want:  "BEHAVIOR REVIEW: FAILED (all changes)\n",
+			final: "FINAL STATE: PASSED (all changes)\n",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 			printReportTo(stdout, stderr, testCase.report)
-			if strings.Count(stdout.String(), "BEHAVIOR REVIEW:") != 1 || !strings.Contains(stdout.String(), testCase.want) || stderr.Len() != 0 {
+			if strings.Count(stdout.String(), "BEHAVIOR REVIEW:") != 1 || strings.Count(stdout.String(), "FINAL STATE:") != 1 ||
+				!strings.Contains(stdout.String(), testCase.want) || !strings.Contains(stdout.String(), testCase.final) ||
+				(testCase.finding != "" && !strings.Contains(stdout.String(), testCase.finding)) || stderr.Len() != 0 {
 				t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 			}
 		})
@@ -521,7 +544,7 @@ func TestVerboseBehaviorReviewReportAddsDetailsWithoutRepeatingStatus(t *testing
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	printReportWithMode(stdout, stderr, engine.Report{BehaviorReview: &engine.BehaviorReviewStatus{
-		State: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
+		State: engine.BehaviorReviewPassed, FinalStateState: engine.BehaviorReviewPassed, RequiredBoundary: engine.BehaviorReviewMerge,
 		SelectedFeatures: []engine.BehaviorReviewFeatureSelection{{Name: "checkout", Reasons: []string{"candidate-required", "task-requested"}}},
 		SelectionDigest:  strings.Repeat("f", 64), ReviewID: "review-123", ReceiptPath: ".code-polishy-reports/behavior-review/receipt.json",
 	}}, true)
@@ -534,7 +557,7 @@ func TestVerboseBehaviorReviewReportAddsDetailsWithoutRepeatingStatus(t *testing
 			t.Fatalf("stdout missing %q: %q", want, output)
 		}
 	}
-	if strings.Count(output, "BEHAVIOR REVIEW:") != 1 || stderr.Len() != 0 {
+	if strings.Count(output, "BEHAVIOR REVIEW:") != 1 || strings.Count(output, "FINAL STATE:") != 1 || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", output, stderr.String())
 	}
 }

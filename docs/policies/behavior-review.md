@@ -1,22 +1,27 @@
-# Behavior Regression Review
+# Behavior and Final-State Review
 
-Behavior regression review is an optional AI-assisted evidence workflow. Code
-Polishy selects its scope, prepares a bounded packet, validates a strict result,
-records red/green proofs, and replays those proofs at a gate. It does not call an
-AI provider or claim deterministic semantic regression detection.
+Behavior review is an optional AI-assisted evidence workflow. One isolated
+reviewer checks observable behavior, durable prose, and executable correction
+residue. Code Polishy selects the scope, prepares bounded evidence, validates a
+strict result, records red/green behavior proofs, and enforces the result at a
+gate. It does not call an AI provider or claim deterministic semantic judgment.
 
 This workflow is experimental until its installed-release Unix and native
 Windows acceptance contracts pass and real multi-repository dogfood meets the
 release checklist.
 
-Every base-aware plan, checkpoint gate, and merge gate reports exactly one
-state:
+Every base-aware plan, checkpoint gate, and merge gate reports one behavior
+state and one final-state disclosure:
 
 ```text
 BEHAVIOR REVIEW: NOT RUN (optional)
 BEHAVIOR REVIEW: REQUIRED (checkout, authentication)
 BEHAVIOR REVIEW: PASSED (checkout)
 BEHAVIOR REVIEW: FAILED (checkout)
+FINAL STATE: NOT RUN (optional)
+FINAL STATE: NOT RUN (required)
+FINAL STATE: PASSED (checkout)
+FINAL STATE: FAILED (checkout)
 ```
 
 `NOT RUN` is a successful outcome when neither checked-in policy nor the bound
@@ -98,15 +103,24 @@ includes that product input.
 
 ## Bind a task request
 
-The harness should preserve the user's exact request before implementation even
-when review is currently optional. Intent capture is cheap: it runs no tests,
-launches no reviewer, and creates no review packet.
+The harness should preserve the user's exact request before implementation and
+append each later correction before acting on it, even when review is currently
+optional. Intent capture is cheap: it runs no tests, launches no reviewer, and
+creates no review packet.
 
-From the clean task-base commit:
+Capture the original request at the task-base commit:
 
 ```sh
 code-polishy behavior-review capture-intent --intent-file PATH
 ```
+
+Run the same command with a new exact intent file before acting on each
+correction. Correction capture may run while the worktree contains staged,
+unstaged, deleted, or untracked candidate paths. Each append records the exact
+text, current HEAD, a deterministic candidate-state digest, and the previous
+journal digest under one lock. If candidate state changes during capture, the
+append fails. Actual review preparation and finalization still require a clean,
+committed candidate.
 
 To request configured features immediately, repeat `--feature`:
 
@@ -128,9 +142,10 @@ code-polishy behavior-review require \
 
 Requirement records are additive. Repeating the command produces a stable
 union; there is no remove or replace operation. Unknown features, an unrelated
-base, a dirty candidate, edited journal records, or missing pre-code intent fail
-explicitly. Code Polishy never guesses feature names from request prose and
-never accepts an after-the-fact paraphrase as the original intent.
+base, edited journal records, or missing pre-code intent fail explicitly.
+`require` still needs a clean candidate. Code Polishy never guesses feature
+names from request prose and never accepts an after-the-fact paraphrase as the
+original intent.
 
 Inspect the decision without creating a packet or running commands:
 
@@ -157,8 +172,9 @@ When status or a gate says review is required:
    applicable base policy, candidate policy, and task requirements, then writes
    `.code-polishy-reports/behavior-review/packet.json` and `prepare.json`.
    Their digests bind the selected feature definitions and reasons, requirement
-   snapshot, captured intents, patch, mapped current design documents, and
-   canonical review instructions.
+   snapshot, captured intents, patch, mapped current design documents, canonical
+   review instructions, path roles, stable patch-hunk IDs, and bounded source
+   context.
 
 3. Start a fresh review subagent with no inherited conversation and give it
    only the generated packet. If the harness cannot start subagents, use a
@@ -185,7 +201,14 @@ When status or a gate says review is required:
    behavior may cite only suites declared by that feature. Full-candidate
    behavior may use any eligible ordinary suite.
 
-6. Save the reviewer's exact JSON object at the packet's `result_path`, then
+6. The reviewer also checks changed durable prose for task or editing narration
+   and changed executable code for rejected ideas left in guards, flags,
+   fallbacks, wrappers, tests, names, configuration, or compatibility paths.
+   Real security rules, external-input validation, current compatibility
+   contracts, and explicitly requested rollouts remain valid. Each finding must
+   cite an exact packet path, line, hunk digest, and any relevant captured intent
+   IDs.
+7. Save the reviewer's exact JSON object at the packet's `result_path`, then
    finalize it:
 
    ```sh
@@ -196,7 +219,7 @@ When status or a gate says review is required:
    proofs, and atomically writes
    `.code-polishy-reports/behavior-review/receipt.json`.
 
-7. Run the applicable gate with the same base:
+8. Run the applicable gate with the same base:
 
    ```sh
    code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
@@ -214,7 +237,7 @@ behavior has an explicit scope:
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "review_id": "the packet review_id",
   "base": "the packet base",
   "candidate": "the packet candidate",
@@ -233,14 +256,34 @@ behavior has an explicit scope:
       }
     }
   ],
-  "findings": []
+  "findings": [],
+  "final_state_findings": []
 }
 ```
 
 For full-candidate scope, use an empty `features` array and
 `"full_candidate": true`. Unresolved findings, `unintended`, `unknown`, stale
-bindings, an omitted selected feature, missing proof, unsuitable proof suite, or
-a changed candidate stops finalization.
+bindings, an omitted selected feature, missing proof, unsuitable proof suite,
+any `meta-note`, `correction-residue`, or `unknown-final-state` finding, or a
+changed candidate stops finalization.
+
+A final-state finding uses this bounded shape:
+
+```json
+{
+  "kind": "correction-residue",
+  "path": "internal/soup/soup.go",
+  "line": 42,
+  "patch_hunk_sha256": "an exact packet hunk digest",
+  "intent_ids": ["an exact captured correction ID"],
+  "summary": "The rejected ingredient remains as a guard."
+}
+```
+
+Code Polishy rejects unknown kinds, invented paths or lines, mismatched hunk
+digests, unknown intent IDs, control characters, oversized text, and duplicate
+findings. `unknown-final-state` blocks so the reviewer cannot silently guess
+when packet context is insufficient.
 
 ## Checkpoints, fixes, and final merge
 
@@ -270,9 +313,11 @@ directories below `.code-polishy-reports`.
 Each captured request and the canonical reviewer instructions are limited to
 64 KiB. The journal permits at most 128 intent entries and 128 additive
 requirement entries within 4 MiB. Results and mapped design documents are
-limited to 256 KiB; artifact reads are limited to 8 MiB. Inputs must be regular,
-contained, bounded UTF-8 files. Artifact writes are atomic and concurrent
-journal appends use an interprocess lock.
+limited to 256 KiB; artifact reads are limited to 8 MiB. Intent inputs must be
+regular, contained, bounded UTF-8 files. Candidate snapshots bind staged and
+unstaged patches plus deleted and untracked state without printing their
+contents. Artifact writes are atomic and concurrent journal appends use an
+interprocess lock.
 
 Digests and re-derivation detect stale or partially edited evidence; they are not
 signatures. The harness remains responsible for authentic request capture,

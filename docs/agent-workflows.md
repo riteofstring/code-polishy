@@ -38,6 +38,11 @@ Code Polishy copies that text into its managed journal. If implementation has
 already started without a capture at the task base, stop and report the missing
 boundary instead of writing a new summary of the request.
 
+When the user corrects the implementation, capture that exact correction before
+acting on it. This later append may run while candidate files are staged,
+unstaged, deleted, or untracked. It records the current HEAD and a candidate
+state digest; it still runs no tests or AI review.
+
 For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
 documentation findings, and skip application tests without asking the user for
 authorization. During active development, run the narrowest useful exact test
@@ -105,16 +110,19 @@ contract concerns from requested-outcome concerns and tie each finding to its
 source instruction or objective and affected file or hunk. Agent review is
 non-deterministic evidence and does not replace policy checks or human approval.
 
-## Behavior regression review
+## Behavior and final-state review
 
-Use the [Behavior Regression Review Policy](policies/behavior-review.md) when a
+Use the [Behavior and Final-State Review Policy](policies/behavior-review.md) when a
 repository rule or explicit task request selects review. Optional review that
 was skipped reports `NOT RUN` and does not block. A selected clean-context
 subagent review becomes gate-checkable evidence without making the subagent a
 policy engine:
 
 1. Before implementation, run `code-polishy behavior-review capture-intent`
-   from the clean task base with the exact user request supplied by the harness.
+   from the task base with the exact user request supplied by the harness. Run
+   it again before acting on every later user correction. Later captures may
+   occur while code is staged, unstaged, deleted, or untracked; Code Polishy
+   binds each entry to the exact HEAD and a digest of that candidate state.
    Repeat `--feature` only for configured features the user explicitly named.
    Capture itself runs no tests or AI review.
 2. If the user adds review coverage later, commit the clean candidate and run
@@ -135,8 +143,11 @@ policy engine:
    preparation and do not choose a pre-fix revision older than the packet's
    reviewed merge base. Each behavior names its selected feature scope, and its
    proofs use only suites allowed by that scope.
-6. Save the review subagent's strict result at the packet's result path, then run
-   `code-polishy behavior-review finalize` to write the receipt.
+6. The same reviewer checks observable behavior, durable prose, and executable
+   correction residue. Every final-state finding must cite an exact packet path,
+   line, patch hunk, and relevant intent ID. Save the strict result at the
+   packet's result path, then run `code-polishy behavior-review finalize` to
+   write the receipt. Any final-state finding blocks finalization.
 7. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
    completed task on a long-lived branch, or
    `code-polishy merge-gate --base <merge-target>` for the final candidate.

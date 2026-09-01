@@ -35,6 +35,22 @@ assert_behavior_review_status_line() {
   if [[ "${count}" != 1 ]] || ! grep -Fxq "BEHAVIOR REVIEW: ${expected}" "${output}"; then
     fail "${scenario}: expected exactly one behavior-review status ${expected}: $(excerpt)"
   fi
+  assert_final_state_status_line "${scenario}" "${expected}"
+}
+
+assert_final_state_status_line() {
+  local scenario="$1" behavior="$2" expected count
+  case "${behavior}" in
+    "NOT RUN (optional)") expected="NOT RUN (optional)" ;;
+    REQUIRED*) expected="NOT RUN (required)" ;;
+    PASSED*) expected="PASSED${behavior#PASSED}" ;;
+    FAILED*) expected="FAILED${behavior#FAILED}" ;;
+    *) fail "${scenario}: cannot map behavior status ${behavior} to final-state status" ;;
+  esac
+  count="$(grep -Fc 'FINAL STATE:' "${output}" || true)"
+  if [[ "${count}" != 1 ]] || ! grep -Fxq "FINAL STATE: ${expected}" "${output}"; then
+    fail "${scenario}: expected exactly one final-state status ${expected}: $(excerpt)"
+  fi
 }
 
 fixture_status() {
@@ -237,6 +253,34 @@ EOF
   "${git_executable}" -C "${target}" commit --quiet -m "${message}"
 }
 
+stage_correction_residue_greeting() {
+  local target="$1" git_executable="$2"
+  write_file "${target}/internal/greeting/greeting.go" <<'EOF'
+package greeting
+
+var rejectedBroccoliPrefix = ""
+
+func Render(name string) string {
+	if rejectedBroccoliPrefix != "" {
+		return rejectedBroccoliPrefix + name
+	}
+	return "hi, " + name
+}
+EOF
+  write_file "${target}/internal/greeting/greeting_test.go" <<'EOF'
+package greeting
+
+import "testing"
+
+func TestRenderNamesTheGreeted(t *testing.T) {
+	if got := Render("world"); got != "hi, world" {
+		t.Fatalf("Render() = %q", got)
+	}
+}
+EOF
+  "${git_executable}" -C "${target}" add internal/greeting/greeting.go internal/greeting/greeting_test.go
+}
+
 commit_broken_greeting() {
   local target="$1" git_executable="$2"
   write_file "${target}/internal/greeting/greeting.go" <<'EOF'
@@ -350,13 +394,13 @@ assert_no_review_packet_or_receipt() {
   done
 }
 
-assert_packet_v3() {
+assert_packet_v4() {
   local target="$1" full_candidate="$2"
   shift 2
   local packet="${target}/.code-polishy-reports/behavior-review/packet.json"
   local review_id selection_sha requirement_sha decision_sha
   [[ -f "${packet}" ]] || fail "$(basename "${target}"): behavior-review packet is missing"
-  grep -Fq '"version": 3' "${packet}" || fail "$(basename "${target}"): packet is not schema v3"
+  grep -Fq '"version": 4' "${packet}" || fail "$(basename "${target}"): packet is not schema v4"
   review_id="$(lock_field "${packet}" review_id)"
   selection_sha="$(lock_field "${packet}" selection_sha256)"
   requirement_sha="$(lock_field "${packet}" requirement_sha256)"
@@ -365,7 +409,7 @@ assert_packet_v3() {
     ! "${selection_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${requirement_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${decision_sha}" =~ ^[0-9a-f]{64}$ ]]; then
-    fail "$(basename "${target}"): packet lacks valid v3 review bindings"
+    fail "$(basename "${target}"): packet lacks valid v4 review bindings"
   fi
   if [[ "${full_candidate}" == true ]]; then
     grep -Fq '"full_candidate": true' "${packet}" ||
@@ -381,19 +425,19 @@ assert_packet_v3() {
   done
 }
 
-assert_receipt_v3() {
+assert_receipt_v4() {
   local target="$1"
   local receipt="${target}/.code-polishy-reports/behavior-review/receipt.json"
   local selection_sha requirement_sha decision_sha
   [[ -f "${receipt}" ]] || fail "$(basename "${target}"): behavior-review receipt is missing"
-  grep -Fq '"version": 3' "${receipt}" || fail "$(basename "${target}"): receipt is not schema v3"
+  grep -Fq '"version": 4' "${receipt}" || fail "$(basename "${target}"): receipt is not schema v4"
   selection_sha="$(lock_field "${receipt}" selection_sha256)"
   requirement_sha="$(lock_field "${receipt}" requirement_sha256)"
   decision_sha="$(lock_field "${receipt}" decision_sha256)"
   if [[ ! "${selection_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${requirement_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${decision_sha}" =~ ^[0-9a-f]{64}$ ]]; then
-    fail "$(basename "${target}"): receipt lacks valid v3 review bindings"
+    fail "$(basename "${target}"): receipt lacks valid v4 review bindings"
   fi
 }
 
@@ -414,11 +458,11 @@ write_single_review_result() {
     ! "${intent_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${selection_sha}" =~ ^[0-9a-f]{64}$ ||
     ! "${decision_sha}" =~ ^[0-9a-f]{64}$ ]]; then
-    fail "installed behavior review packet has invalid v3 result bindings"
+    fail "installed behavior review packet has invalid v4 result bindings"
   fi
   write_file "${result}" <<EOF
 {
-  "version": 3,
+  "version": 4,
   "review_id": "${review_id}",
   "base": "${base}",
   "candidate": "${candidate}",
@@ -437,7 +481,8 @@ write_single_review_result() {
       }
     }
   ],
-  "findings": []
+  "findings": [],
+  "final_state_findings": []
 }
 EOF
 }
@@ -452,27 +497,103 @@ write_preserved_review_result() {
     "Render returns the same greeting." "Render preserves the greeting while changing its implementation."
 }
 
+write_final_state_finding_result() {
+  local target="$1" path="$2" kind="$3" summary="$4"
+  local packet="${target}/.code-polishy-reports/behavior-review/packet.json"
+  local journal="${target}/.code-polishy-reports/behavior-review/intent-journal.json"
+  local result="${target}/.code-polishy-reports/behavior-review/result.json"
+  local review_id base candidate intent_sha selection_sha decision_sha hunk_sha line intent_id
+  review_id="$(lock_field "${packet}" review_id)"
+  base="$(lock_field "${packet}" base)"
+  candidate="$(lock_field "${packet}" candidate)"
+  intent_sha="$(lock_field "${packet}" intent_sha256)"
+  selection_sha="$(lock_field "${packet}" selection_sha256)"
+  decision_sha="$(lock_field "${packet}" decision_sha256)"
+  hunk_sha="$(awk -v path="${path}" '
+    $0 ~ "\"path\": \"" path "\"" { selected = 1; next }
+    selected && $0 ~ /"sha256": "/ {
+      value = $0
+      sub(/^.*"sha256": "/, "", value)
+      sub(/".*$/, "", value)
+      print value
+      exit
+    }
+  ' "${packet}")"
+  line="$(awk -v path="${path}" '
+    $0 ~ "\"path\": \"" path "\"" { selected = 1; next }
+    selected && $0 ~ /"candidate_start": [0-9]+/ {
+      value = $0
+      sub(/^.*"candidate_start": /, "", value)
+      sub(/,.*/, "", value)
+      print value
+      exit
+    }
+  ' "${packet}")"
+  intent_id="$(awk '/"id": "intent-/ {
+    value = $0
+    sub(/^.*"id": "/, "", value)
+    sub(/".*$/, "", value)
+    found = value
+  }
+  END { print found }
+  ' "${journal}")"
+  if [[ ! "${hunk_sha}" =~ ^[0-9a-f]{64}$ || ! "${line}" =~ ^[1-9][0-9]*$ || ! "${intent_id}" =~ ^intent-[0-9a-f]{32}$ ]]; then
+    fail "installed final-state evidence bindings are invalid"
+  fi
+  write_file "${result}" <<EOF
+{
+  "version": 4,
+  "review_id": "${review_id}",
+  "base": "${base}",
+  "candidate": "${candidate}",
+  "intent_sha256": "${intent_sha}",
+  "selection_sha256": "${selection_sha}",
+  "decision_sha256": "${decision_sha}",
+  "behaviors": [
+    {
+      "before": "The greeting remains available.",
+      "after": "The greeting remains available.",
+      "classification": "preserved",
+      "proof_ids": [],
+      "scope": {"features": [], "full_candidate": true}
+    }
+  ],
+  "findings": [],
+  "final_state_findings": [
+    {
+      "kind": "${kind}",
+      "path": "${path}",
+      "line": ${line},
+      "patch_hunk_sha256": "${hunk_sha}",
+      "intent_ids": ["${intent_id}"],
+      "summary": "${summary}"
+    }
+  ]
+}
+EOF
+}
+
 record_requested_behavior_review() {
   local target="$1" scenario="$2" base="$3" proof_id="$4" suite="$5" scope_features="$6" full_candidate="$7"
   shift 7
   fixture_pass "${target}" "${scenario}" prepare 1 behavior-review prepare --base "${base}"
-  assert_packet_v3 "${target}" "${full_candidate}" "$@"
+  assert_packet_v4 "${target}" "${full_candidate}" "$@"
   fixture_pass "${target}" "${scenario}" regression-proof 1 \
     regression-proof --base "${base}" --suite "${suite}" \
     --evidence internal/greeting/greeting_test.go --id "${proof_id}"
   write_requested_review_result "${target}" "${proof_id}" "${scope_features}" "${full_candidate}"
   fixture_pass "${target}" "${scenario}" finalize 1 behavior-review finalize --base "${base}"
-  assert_receipt_v3 "${target}"
+  assert_receipt_v4 "${target}"
 }
 
 record_preserved_behavior_review() {
   local target="$1" scenario="$2" base="$3" scope_features="$4" full_candidate="$5"
   shift 5
   fixture_pass "${target}" "${scenario}" reprepare 2 behavior-review prepare --base "${base}"
-  assert_packet_v3 "${target}" "${full_candidate}" "$@"
+  assert_packet_v4 "${target}" "${full_candidate}" "$@"
   write_preserved_review_result "${target}" "${scope_features}" "${full_candidate}"
   fixture_pass "${target}" "${scenario}" refinalize 2 behavior-review finalize --base "${base}"
-  assert_receipt_v3 "${target}"
+  assert_receipt_v4 "${target}"
 }
 
 assert_feature_proof_suite_restriction() {
@@ -529,7 +650,7 @@ exercise_capture_time_features_and_replay() {
   commit_requested_greeting "${target}" "${git_executable}" "capture-time requested greeting"
   fixture_status "${target}" "${scenario}" "${base}" "REQUIRED (checkout, search)"
   fixture_pass "${target}" "${scenario}" prepare-feature-scope 1 behavior-review prepare --base "${base}"
-  assert_packet_v3 "${target}" false checkout search
+  assert_packet_v4 "${target}" false checkout search
   assert_feature_proof_suite_restriction "${target}" "${scenario}" "${base}"
   record_requested_behavior_review "${target}" "${scenario}" "${base}" capture-time-proof greeting-unit '["checkout","search"]' false checkout search
   command_log="${target}/.git/code-polishy-command-log"
@@ -630,7 +751,7 @@ exercise_stale_fix_and_rereview() {
   capture_fixture_intent "${target}" "${scenario}" repair-capture "${scratch_root}"
   commit_broken_greeting "${target}" "${git_executable}"
   fixture_pass "${target}" "${scenario}" prepare-unintended 1 behavior-review prepare --base "${repair_base}"
-  assert_packet_v3 "${target}" false checkout
+  assert_packet_v4 "${target}" false checkout
   write_single_review_result "${target}" unintended '[]' '["checkout"]' false \
     "Render returns the expected greeting." "Render returns an unintended broken greeting."
   started=${SECONDS}
@@ -675,6 +796,40 @@ exercise_multi_task_union() {
   fixture_summary "${target}" "${scenario}" 1
 }
 
+exercise_dirty_correction_and_final_state() {
+  local scratch_root="$1" git_executable="$2"
+  local scenario="behavior-final-state" target="${scratch_root}/behavior-final-state"
+  local policy='{"defaultRequiredAt":"checkpoint","features":[]}'
+  local base journal
+  new_behavior_review_target "${target}" "${policy}" "${git_executable}"
+  base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
+  capture_fixture_intent "${target}" "${scenario}" original "${scratch_root}"
+  stage_correction_residue_greeting "${target}" "${git_executable}"
+  capture_fixture_intent "${target}" "${scenario}" remove-broccoli "${scratch_root}"
+  journal="${target}/.code-polishy-reports/behavior-review/intent-journal.json"
+  assert_intent_capture_count "${target}" 2
+  grep -Eq '"candidate_state_sha256": "[0-9a-f]{64}"' "${journal}" ||
+    fail "${scenario}: dirty correction capture lacks its candidate-state digest"
+  "${git_executable}" -C "${target}" commit --quiet -m "retain rejected correction residue"
+
+  fixture_pass "${target}" "${scenario}" prepare-residue 1 behavior-review prepare --base "${base}"
+  assert_packet_v4 "${target}" true
+  write_final_state_finding_result "${target}" "internal/greeting/greeting.go" \
+    correction-residue "The rejected broccoli path remains as a feature switch."
+  fixture_expect_rejection "${target}" "${scenario}" finalize-residue 1 2 behavior-review finalize --base "${base}"
+  grep -Fq 'final-state finding' "${output}" ||
+    fail "${scenario}: finalization did not explain the final-state block: $(excerpt)"
+  fixture_status "${target}" "${scenario}" "${base}" "FAILED (all changes)"
+  grep -Fq 'internal/greeting/greeting.go:' "${output}" ||
+    fail "${scenario}: failed status omitted the actionable final-state location"
+
+  commit_requested_greeting "${target}" "${git_executable}" "remove rejected correction residue"
+  record_requested_behavior_review "${target}" "${scenario}" "${base}" final-state-proof greeting-contract '[]' true
+  fixture_gate_pass "${target}" "${scenario}" checkpoint "${base}" "PASSED (all changes)" 2 checkpoint-gate
+  fixture_gate_pass "${target}" "${scenario}" merge "${base}" "PASSED (all changes)" 2 merge-gate
+  fixture_summary "${target}" "${scenario}" 2
+}
+
 exercise_opt_in_behavior_review_fixtures() {
   local scratch_root="$1" git_executable="$2"
   exercise_no_config_behavior_review "${scratch_root}" "${git_executable}"
@@ -685,4 +840,5 @@ exercise_opt_in_behavior_review_fixtures() {
   exercise_strict_full_candidate "${scratch_root}" "${git_executable}"
   exercise_stale_fix_and_rereview "${scratch_root}" "${git_executable}"
   exercise_multi_task_union "${scratch_root}" "${git_executable}"
+  exercise_dirty_correction_and_final_state "${scratch_root}" "${git_executable}"
 }

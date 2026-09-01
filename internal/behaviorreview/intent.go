@@ -14,18 +14,19 @@ import (
 )
 
 const (
-	intentJournalVersion    = 2
+	intentJournalVersion    = 3
 	maximumIntentEntries    = 128
 	maximumTaskRequirements = 128
 )
 
 type intentCapture struct {
-	ID               string `json:"id"`
-	CapturedAtCommit string `json:"captured_at_commit"`
-	Intent           string `json:"intent"`
-	IntentSHA256     string `json:"intent_sha256"`
-	PreviousSHA256   string `json:"previous_entry_sha256"`
-	EntrySHA256      string `json:"entry_sha256"`
+	ID                   string `json:"id"`
+	CapturedAtCommit     string `json:"captured_at_commit"`
+	CandidateStateSHA256 string `json:"candidate_state_sha256"`
+	Intent               string `json:"intent"`
+	IntentSHA256         string `json:"intent_sha256"`
+	PreviousSHA256       string `json:"previous_entry_sha256"`
+	EntrySHA256          string `json:"entry_sha256"`
 }
 
 type intentJournal struct {
@@ -41,11 +42,12 @@ type intentJournalAppend struct {
 }
 
 type intentCaptureMaterial struct {
-	ID               string `json:"id"`
-	CapturedAtCommit string `json:"captured_at_commit"`
-	Intent           string `json:"intent"`
-	IntentSHA256     string `json:"intent_sha256"`
-	PreviousSHA256   string `json:"previous_entry_sha256"`
+	ID                   string `json:"id"`
+	CapturedAtCommit     string `json:"captured_at_commit"`
+	CandidateStateSHA256 string `json:"candidate_state_sha256"`
+	Intent               string `json:"intent"`
+	IntentSHA256         string `json:"intent_sha256"`
+	PreviousSHA256       string `json:"previous_entry_sha256"`
 }
 
 func captureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
@@ -53,7 +55,7 @@ func captureIntent(ctx context.Context, repo repository.Repository, options Capt
 	if err != nil {
 		return CaptureIntentResult{}, err
 	}
-	commit, intent, err := captureIntentInputs(ctx, repo, options)
+	snapshot, intent, err := captureIntentInputs(ctx, repo, options)
 	if err != nil {
 		return CaptureIntentResult{}, err
 	}
@@ -62,62 +64,62 @@ func captureIntent(ctx context.Context, repo repository.Repository, options Capt
 		return CaptureIntentResult{}, err
 	}
 	defer root.Close()
-	return appendIntentCapture(repo, root, commit, intent, features)
+	return appendIntentCapture(repo, root, snapshot, intent, features)
 }
 
-func captureIntentInputs(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (string, []byte, error) {
+func captureIntentInputs(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (repository.CandidateStateSnapshot, []byte, error) {
 	ctx = reviewContext(ctx)
 	if err := ctx.Err(); err != nil {
-		return "", nil, operational("capture behavior review intent", err)
+		return repository.CandidateStateSnapshot{}, nil, operational("capture behavior review intent", err)
 	}
 	if strings.TrimSpace(options.IntentPath) == "" {
-		return "", nil, fmt.Errorf("%w: intent path is required", ErrInvalidInput)
+		return repository.CandidateStateSnapshot{}, nil, fmt.Errorf("%w: intent path is required", ErrInvalidInput)
 	}
-	commit, err := repo.CleanHead()
+	snapshot, err := repo.CandidateState()
 	if err != nil {
-		return "", nil, err
+		return repository.CandidateStateSnapshot{}, nil, err
 	}
 	intent, err := readExternalRegularUTF8(options.IntentPath, maximumIntentBytes, true, "intent file")
 	if err != nil {
-		return "", nil, err
+		return repository.CandidateStateSnapshot{}, nil, err
 	}
-	return commit, intent, nil
+	return snapshot, intent, nil
 }
 
-func appendIntentCapture(repo repository.Repository, root *artifactHandle, commit string, intent []byte, features []string) (CaptureIntentResult, error) {
+func appendIntentCapture(repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (CaptureIntentResult, error) {
 	release, err := lockIntentJournal(root)
 	if err != nil {
 		return CaptureIntentResult{}, err
 	}
 	defer release()
-	appendResult, err := prepareIntentJournalAppend(repo, root, commit, intent, features)
+	appendResult, err := prepareIntentJournalAppend(repo, root, snapshot, intent, features)
 	if err != nil {
 		return CaptureIntentResult{}, err
 	}
-	if err := ensureIntentCaptureCandidate(repo, commit); err != nil {
+	if err := ensureIntentCaptureCandidate(repo, snapshot); err != nil {
 		return CaptureIntentResult{}, err
 	}
 	if err := root.writeArtifactAtomic(intentJournalFilename, appendResult.data); err != nil {
 		return CaptureIntentResult{}, err
 	}
 	return CaptureIntentResult{
-		ID: appendResult.entry.ID, Commit: appendResult.entry.CapturedAtCommit, IntentSHA256: appendResult.entry.IntentSHA256,
+		ID: appendResult.entry.ID, Commit: appendResult.entry.CapturedAtCommit, CandidateSHA256: appendResult.entry.CandidateStateSHA256, IntentSHA256: appendResult.entry.IntentSHA256,
 		JournalSHA256: appendResult.entry.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename),
 		RequirementID: appendResult.requirement.ID, RequirementSHA256: appendResult.requirement.EntrySHA256, Features: append([]string{}, features...),
 	}, nil
 }
 
-func prepareIntentJournalAppend(repo repository.Repository, root *artifactHandle, commit string, intent []byte, features []string) (intentJournalAppend, error) {
+func prepareIntentJournalAppend(repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (intentJournalAppend, error) {
 	journal, err := readIntentJournal(repo, root, true)
 	if err != nil {
 		return intentJournalAppend{}, err
 	}
-	entry, err := newIntentCapture(commit, intent, journal)
+	entry, err := newIntentCapture(snapshot, intent, journal)
 	if err != nil {
 		return intentJournalAppend{}, err
 	}
 	journal.Entries = append(journal.Entries, entry)
-	requirement, err := appendIntentCaptureRequirement(&journal, commit, entry, features)
+	requirement, err := appendIntentCaptureRequirement(&journal, snapshot.Head, entry, features)
 	if err != nil {
 		return intentJournalAppend{}, err
 	}
@@ -154,18 +156,21 @@ func marshalValidatedIntentJournal(repo repository.Repository, journal intentJou
 	return data, nil
 }
 
-func ensureIntentCaptureCandidate(repo repository.Repository, commit string) error {
-	current, err := repo.CleanHead()
+func ensureIntentCaptureCandidate(repo repository.Repository, snapshot repository.CandidateStateSnapshot) error {
+	current, err := repo.CandidateState()
 	if err != nil {
 		return err
 	}
-	if current != commit {
+	if current != snapshot {
 		return fmt.Errorf("%w: candidate changed while intent was captured", ErrCandidateChanged)
 	}
 	return nil
 }
 
-func newIntentCapture(commit string, intent []byte, journal intentJournal) (intentCapture, error) {
+func newIntentCapture(snapshot repository.CandidateStateSnapshot, intent []byte, journal intentJournal) (intentCapture, error) {
+	if len(journal.Entries) == 0 && snapshot.Dirty {
+		return intentCapture{}, fmt.Errorf("%w: capture the original request before candidate changes", repository.ErrDirtyCandidate)
+	}
 	if len(journal.Entries) >= maximumIntentEntries {
 		return intentCapture{}, fmt.Errorf("%w: intent journal exceeds %d entries", ErrInvalidInput, maximumIntentEntries)
 	}
@@ -179,7 +184,8 @@ func newIntentCapture(commit string, intent []byte, journal intentJournal) (inte
 		return intentCapture{}, operational("generate intent capture identifier", err)
 	}
 	entry := intentCapture{
-		ID: id, CapturedAtCommit: commit, Intent: string(intent), IntentSHA256: sha256Hex(intent), PreviousSHA256: previous,
+		ID: id, CapturedAtCommit: snapshot.Head, CandidateStateSHA256: snapshot.SHA256,
+		Intent: string(intent), IntentSHA256: sha256Hex(intent), PreviousSHA256: previous,
 	}
 	entry.EntrySHA256, err = intentEntryDigest(entry)
 	if err != nil {
@@ -198,7 +204,7 @@ func newCaptureID() (string, error) {
 
 func intentEntryDigest(entry intentCapture) (string, error) {
 	material := intentCaptureMaterial{
-		ID: entry.ID, CapturedAtCommit: entry.CapturedAtCommit, Intent: entry.Intent,
+		ID: entry.ID, CapturedAtCommit: entry.CapturedAtCommit, CandidateStateSHA256: entry.CandidateStateSHA256, Intent: entry.Intent,
 		IntentSHA256: entry.IntentSHA256, PreviousSHA256: entry.PreviousSHA256,
 	}
 	data, err := json.Marshal(material)
@@ -268,6 +274,9 @@ func validateIntentCapture(entry intentCapture, expectedPrevious string, seen ma
 	}
 	if !validSHA256(entry.IntentSHA256) || sha256Hex([]byte(entry.Intent)) != entry.IntentSHA256 {
 		return errors.New("intent digest is invalid")
+	}
+	if !validSHA256(entry.CandidateStateSHA256) {
+		return errors.New("candidate state digest is invalid")
 	}
 	if entry.PreviousSHA256 != expectedPrevious {
 		return errors.New("previous entry digest is invalid")

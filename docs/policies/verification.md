@@ -358,19 +358,20 @@ report detail. CI that needs retention stores the managed JSON report and logs,
 not parsed or archived terminal output. Human handoffs summarize the outcome
 and actionable failures; report paths provide the detailed evidence.
 
-## Behavior regression review receipt
+## Behavior and final-state review receipt
 
 Behavior review is optional unless checked-in policy or an additive task
-request selects it. Base-aware plans and both gates always disclose `NOT RUN`,
-`REQUIRED`, `PASSED`, or `FAILED`. Optional review reads no packet, proof, or
-receipt and does not change ordinary command selection or runtime.
+request selects it. Base-aware plans and both gates disclose both `BEHAVIOR
+REVIEW` and `FINAL STATE`. Optional review reads no packet, proof, or receipt
+and does not change ordinary command selection or runtime.
 
 Before implementation, the agent harness supplies the user's original request
-and acceptance criteria to `behavior-review capture-intent` at the clean task
-base. Capture invokes no tests or AI review. Repeated `--feature` options select
-configured features immediately; `behavior-review require --base TASK_BASE`
-can append feature coverage later only when that original intent exists. Records
-are additive and cannot remove checked-in or earlier task requirements.
+and acceptance criteria to `behavior-review capture-intent` at the task base.
+The harness repeats capture before acting on each later correction. Correction
+capture may bind a dirty candidate-state digest; it invokes no tests or AI
+review. Repeated `--feature` options select configured features immediately;
+`behavior-review require --base TASK_BASE` can append feature coverage later
+only when that original intent exists. Records are additive.
 
 For selected review, `checkpoint-gate` and `merge-gate` validate the current
 clean candidate's receipt against the resolved base, base and candidate policy,
@@ -380,23 +381,22 @@ A missing required receipt reports `REQUIRED`; stale, malformed, unresolved,
 under-proved, or non-reproducible evidence reports `FAILED`. Either becomes a
 `policy.behaviorReview` finding before expensive ordinary commands.
 
-The receipt comes from a review subagent with no inherited conversation plus
-red/green regression proof for each requested behavior. If the harness cannot
-start subagents, use a separate clean AI invocation with only the generated
-packet. Local artifacts cannot authenticate subagent identity or context. The
-receipt is additional evidence, not a replacement for ordinary tests, policy
-checks, human approval, or supplemental hardening. Follow the
-[Behavior Regression Review Policy](behavior-review.md) for configuration,
-task requests, artifact custody, replay behavior, and limits.
+The receipt comes from one review subagent with no inherited conversation. It
+classifies observable behavior, checks durable prose and executable correction
+residue, and cites packet evidence for every final-state finding. Requested
+behavior also needs red/green proof. If the harness cannot start subagents, use
+a separate clean AI invocation with only the packet. Follow the [Behavior and
+Final-State Review Policy](behavior-review.md) for the trust boundary and
+limits.
 
 ## AI execution
 
 An AI collaborator should treat the levels differently:
 
 1. Before implementing a non-documentation request, capture the exact
-   harness-supplied request at the clean task base with
-   `behavior-review capture-intent`. During implementation, run exact named or
-   module tests as useful.
+   harness-supplied request at the task base with `behavior-review
+capture-intent`. Capture each later correction before acting on it. During
+   implementation, run exact named or module tests as useful.
 2. For ordinary Markdown-only work, run `format --git-changes`, fix the built-in
    documentation findings, and run no application tests. This needs no user
    approval.

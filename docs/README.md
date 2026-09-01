@@ -37,7 +37,7 @@ and aliases. Search is local, bounded, and deterministic.
 ## Policy reference
 
 - [Architecture](policies/architecture.md)
-- [Behavior regression review](policies/behavior-review.md), including
+- [Behavior and final-state review](policies/behavior-review.md), including
   experimental opt-in feature policy and task requests
 - [Code quality](policies/code-quality.md)
 - [Conditional modules](policies/conditional-modules.md)

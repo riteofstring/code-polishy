@@ -2,7 +2,11 @@
 
 ## Status
 
-Proposed. Nothing in this document is implemented yet.
+Implemented on `feature/final-state-review`. Dirty-state capture applies only to
+later corrections; the original request, review preparation, finalization, and
+gates still require their existing trusted clean boundaries. Hosted
+cross-platform acceptance and multi-repository dogfood remain release evidence
+for the experimental feature.
 
 ## Outcome
 
@@ -205,8 +209,6 @@ The packet should contain:
 - the ordered original request and every later instruction;
 - task requirements and their selected intent IDs;
 - the complete readable patch from the trusted base to the final candidate;
-- staged, unstaged, deleted, and untracked content when the supported review
-  mode deliberately accepts a dirty candidate;
 - stable IDs for changed patch hunks;
 - bounded candidate source context around changed hunks;
 - mapped current design documents;

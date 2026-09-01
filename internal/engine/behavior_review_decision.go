@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -39,19 +40,21 @@ type BehaviorReviewFeatureSelection struct {
 }
 
 type BehaviorReviewStatus struct {
-	State            BehaviorReviewState
-	RequiredBoundary BehaviorReviewBoundary
-	SelectedFeatures []BehaviorReviewFeatureSelection
-	SelectionDigest  string
-	FullCandidate    bool
-	ReviewID         string
-	ReceiptPath      string
-	Affected         []string
-	Configured       []string
-	TaskRequested    []string
-	Required         []string
-	Completed        []string
-	Missing          []string
+	State              BehaviorReviewState
+	FinalStateState    BehaviorReviewState
+	RequiredBoundary   BehaviorReviewBoundary
+	SelectedFeatures   []BehaviorReviewFeatureSelection
+	SelectionDigest    string
+	FullCandidate      bool
+	ReviewID           string
+	ReceiptPath        string
+	Affected           []string
+	Configured         []string
+	TaskRequested      []string
+	Required           []string
+	Completed          []string
+	Missing            []string
+	FinalStateFindings []finalstate.Finding
 }
 
 type behaviorReviewDecision struct {
@@ -172,7 +175,7 @@ func behaviorReviewNotRunDecision(affected, configured, requested []string) (beh
 		return behaviorReviewDecision{}, err
 	}
 	return behaviorReviewDecision{selectionDigest: digest, status: BehaviorReviewStatus{
-		State: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
+		State: BehaviorReviewNotRun, FinalStateState: BehaviorReviewNotRun, RequiredBoundary: BehaviorReviewOnRequest,
 		SelectedFeatures: []BehaviorReviewFeatureSelection{}, SelectionDigest: digest,
 		Affected: affected, Configured: configured, TaskRequested: slices.Clone(requested),
 		Required: []string{}, Completed: []string{}, Missing: []string{},
@@ -534,7 +537,7 @@ func newBehaviorReviewStatus(
 		features = append(features, BehaviorReviewFeatureSelection{Name: feature.Name, Reasons: slices.Clone(feature.Reasons)})
 	}
 	return BehaviorReviewStatus{
-		State: state, RequiredBoundary: boundary, SelectedFeatures: features, SelectionDigest: digest,
+		State: state, FinalStateState: initialFinalState(state), RequiredBoundary: boundary, SelectedFeatures: features, SelectionDigest: digest,
 		FullCandidate: selection.FullCandidate, ReviewID: reviewID, ReceiptPath: receiptPath,
 	}
 }
@@ -542,6 +545,7 @@ func newBehaviorReviewStatus(
 func (decision behaviorReviewDecision) withState(state BehaviorReviewState, reviewID, receiptPath string) BehaviorReviewStatus {
 	status := cloneBehaviorReviewStatus(decision.status)
 	status.State = state
+	status.FinalStateState = initialFinalState(state)
 	status.ReviewID = reviewID
 	status.ReceiptPath = receiptPath
 	switch state {
@@ -558,6 +562,13 @@ func (decision behaviorReviewDecision) withState(state BehaviorReviewState, revi
 	return status
 }
 
+func initialFinalState(state BehaviorReviewState) BehaviorReviewState {
+	if state == BehaviorReviewPassed || state == BehaviorReviewFailed {
+		return state
+	}
+	return BehaviorReviewNotRun
+}
+
 func cloneBehaviorReviewStatus(status BehaviorReviewStatus) BehaviorReviewStatus {
 	result := status
 	result.SelectedFeatures = make([]BehaviorReviewFeatureSelection, len(status.SelectedFeatures))
@@ -570,6 +581,11 @@ func cloneBehaviorReviewStatus(status BehaviorReviewStatus) BehaviorReviewStatus
 	result.Required = slices.Clone(status.Required)
 	result.Completed = slices.Clone(status.Completed)
 	result.Missing = slices.Clone(status.Missing)
+	result.FinalStateFindings = make([]finalstate.Finding, len(status.FinalStateFindings))
+	for index, finding := range status.FinalStateFindings {
+		result.FinalStateFindings[index] = finding
+		result.FinalStateFindings[index].IntentIDs = slices.Clone(finding.IntentIDs)
+	}
 	return result
 }
 

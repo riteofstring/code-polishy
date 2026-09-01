@@ -15,6 +15,9 @@
   intent capture, additive task requests, `on-request`, `merge`, and
   `checkpoint` policy, concise gate status, clean-context review packets, and
   independently replayed red/green proofs bound to the exact decision.
+- Extend selected behavior review with ordered dirty-state correction capture,
+  evidence-bound final-state checks for task narration and rejected-code
+  residue, and explicit `FINAL STATE` gate reporting.
 - Add `checkpoint-gate --base REF` for accepting one completed task on a
   long-lived branch. It no-ops for an unchanged candidate, runs the Markdown
   contract for documentation-only work, validates selected behavior evidence,

@@ -21,7 +21,7 @@
       "id": "agent-workflows",
       "path": "docs/agent-workflows.md",
       "title": "Agent Workflows",
-      "summary": "Run interactive work, behavior review, checkpoints, merge gates, and isolated sessions.",
+      "summary": "Run interactive work, behavior and final-state review, checkpoints, merge gates, and isolated sessions.",
       "aliases": ["agents", "workflow"],
       "public": true
     },
@@ -52,9 +52,14 @@
     {
       "id": "behavior-review",
       "path": "docs/policies/behavior-review.md",
-      "title": "Behavior Regression Review",
-      "summary": "Configure and run optional feature-scoped behavior regression review.",
-      "aliases": ["regressions"],
+      "title": "Behavior and Final-State Review",
+      "summary": "Configure optional behavior regression, meta-note, and correction-residue review.",
+      "aliases": [
+        "correction-residue",
+        "final-state",
+        "meta-notes",
+        "regressions"
+      ],
       "public": true
     },
     {

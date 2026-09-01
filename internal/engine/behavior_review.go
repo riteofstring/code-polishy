@@ -92,12 +92,14 @@ func (engine *Engine) BehaviorReviewStatus(ctx context.Context, base string) (Be
 		return BehaviorReviewStatus{}, err
 	}
 	if errors.Is(err, behaviorreview.ErrMissingReceipt) {
-		return decision.withState(BehaviorReviewRequired, "", ""), nil
+		status := decision.withState(BehaviorReviewRequired, "", "")
+		return engine.withFinalStateFindings(ctx, selection, decision, status), nil
 	}
 	if errors.Is(err, repository.ErrDirtyCandidate) {
 		return decision.withState(BehaviorReviewRequired, "", ""), nil
 	}
-	return decision.withState(BehaviorReviewFailed, "", ""), nil
+	status := decision.withState(BehaviorReviewFailed, "", "")
+	return engine.withFinalStateFindings(ctx, selection, decision, status), nil
 }
 
 func (engine *Engine) FinalizeBehaviorReview(ctx context.Context, base string) (behaviorreview.FinalizeResult, error) {
@@ -136,15 +138,16 @@ func (engine *Engine) behaviorReviewReplayPlanReport(ctx context.Context, plan M
 	if err == nil {
 		return replayPlan, nil, nil
 	}
-	report, reportErr := engine.behaviorReviewGateFailureReport(plan, err)
+	report, reportErr := engine.behaviorReviewGateFailureReport(ctx, plan, err)
 	return behaviorreview.GateReplayPlan{}, report, reportErr
 }
 
-func (engine *Engine) behaviorReviewGateFailureReport(plan MergeGateExecutionPlan, reviewErr error) (*Report, error) {
+func (engine *Engine) behaviorReviewGateFailureReport(ctx context.Context, plan MergeGateExecutionPlan, reviewErr error) (*Report, error) {
 	status := plan.BehaviorReview.withState(BehaviorReviewFailed, "", "")
 	if errors.Is(reviewErr, behaviorreview.ErrMissingReceipt) {
 		status = plan.BehaviorReview.withState(BehaviorReviewRequired, "", "")
 	}
+	status = engine.withFinalStateFindings(ctx, plan.Selection, plan.BehaviorReview, status)
 	finding, err := behaviorReviewGateReceiptFinding(reviewErr)
 	if err != nil || finding == nil {
 		return nil, err
@@ -153,6 +156,23 @@ func (engine *Engine) behaviorReviewGateFailureReport(plan MergeGateExecutionPla
 	report = withBehaviorReview(report, status)
 	report = engine.withTestQualityReminder(report, plan.Selection.Candidate)
 	return &report, nil
+}
+
+func (engine *Engine) withFinalStateFindings(ctx context.Context, selection repository.Selection, decision behaviorReviewDecision, status BehaviorReviewStatus) BehaviorReviewStatus {
+	findings, err := behaviorreview.FinalStateFindings(ctx, engine.Repository, behaviorreview.ValidateGateReceiptOptions{
+		Base: selection.Base, Selection: decision.selection,
+	})
+	if err != nil {
+		return status
+	}
+	status.FinalStateFindings = findings
+	if len(findings) == 0 {
+		status.FinalStateState = BehaviorReviewPassed
+		return status
+	}
+	status.State = BehaviorReviewFailed
+	status.FinalStateState = BehaviorReviewFailed
+	return status
 }
 
 func (engine *Engine) CheckpointGate(ctx context.Context, base string) (Report, error) {
@@ -280,7 +300,7 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 	}
 	if len(execution.proofCommands) > 0 {
 		if replayErr := execution.controller.replayBehaviorReview(ctx, engine, execution.selection.Base, execution.plan.BehaviorReview.selection); replayErr != nil {
-			return engine.finalizeCheckpointReplayFailure(execution, replayErr)
+			return engine.finalizeCheckpointReplayFailure(ctx, execution, replayErr)
 		}
 	}
 	if execution.documentation {
@@ -307,8 +327,8 @@ func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, ex
 	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
 
-func (engine *Engine) finalizeCheckpointReplayFailure(execution checkpointGateExecution, replayErr error) (Report, error) {
-	replayReport, gateErr := engine.behaviorReviewGateFailureReport(execution.plan, replayErr)
+func (engine *Engine) finalizeCheckpointReplayFailure(ctx context.Context, execution checkpointGateExecution, replayErr error) (Report, error) {
+	replayReport, gateErr := engine.behaviorReviewGateFailureReport(ctx, execution.plan, replayErr)
 	report := Report{}
 	if replayReport != nil {
 		report = *replayReport

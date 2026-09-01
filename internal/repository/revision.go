@@ -3,11 +3,16 @@ package repository
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -35,6 +40,32 @@ type GitError struct {
 	Kind      GitErrorKind
 	Operation string
 	Cause     error
+}
+
+type CandidateStateSnapshot struct {
+	Head   string
+	SHA256 string
+	Dirty  bool
+}
+
+type candidateStateMaterial struct {
+	Head      string                        `json:"head"`
+	Staged    candidateStateDiff            `json:"staged"`
+	Unstaged  candidateStateDiff            `json:"unstaged"`
+	Untracked []candidateStateUntrackedFile `json:"untracked"`
+}
+
+type candidateStateDiff struct {
+	Paths  []string `json:"paths"`
+	SHA256 string   `json:"sha256"`
+}
+
+type candidateStateUntrackedFile struct {
+	Path       string `json:"path"`
+	Kind       string `json:"kind"`
+	Executable bool   `json:"executable"`
+	Size       int64  `json:"size"`
+	SHA256     string `json:"sha256"`
 }
 
 func (err *GitError) Error() string {
@@ -70,6 +101,116 @@ func (repo Repository) CleanHead() (string, error) {
 		return "", newGitError(GitErrorDirtyCandidate, "inspect candidate", fmt.Errorf("changed paths: %s", strings.Join(changed, ", ")))
 	}
 	return head, nil
+}
+
+func (repo Repository) CandidateState() (CandidateStateSnapshot, error) {
+	ctx := context.Background()
+	head, err := repo.resolveCommit(ctx, "HEAD")
+	if err != nil {
+		return CandidateStateSnapshot{}, newGitError(GitErrorNoHead, "snapshot candidate", err)
+	}
+	staged, err := repo.candidateStateDiff(ctx, true)
+	if err != nil {
+		return CandidateStateSnapshot{}, err
+	}
+	unstaged, err := repo.candidateStateDiff(ctx, false)
+	if err != nil {
+		return CandidateStateSnapshot{}, err
+	}
+	untracked, err := repo.candidateStateUntracked(ctx)
+	if err != nil {
+		return CandidateStateSnapshot{}, err
+	}
+	material := candidateStateMaterial{Head: head, Staged: staged, Unstaged: unstaged, Untracked: untracked}
+	data, err := json.Marshal(material)
+	if err != nil {
+		return CandidateStateSnapshot{}, newGitError(GitErrorOperation, "snapshot candidate", err)
+	}
+	dirty := len(staged.Paths) > 0 || len(unstaged.Paths) > 0 || len(untracked) > 0
+	return CandidateStateSnapshot{Head: head, SHA256: digestBytes(data), Dirty: dirty}, nil
+}
+
+func (repo Repository) candidateStateDiff(ctx context.Context, staged bool) (candidateStateDiff, error) {
+	nameArguments := []string{"diff", "--name-only", "-z", "--no-renames"}
+	patchArguments := []string{"diff", "--binary", "--full-index", "--no-color", "--no-ext-diff", "--no-renames"}
+	if staged {
+		nameArguments = append(nameArguments, "--cached", "HEAD")
+		patchArguments = append(patchArguments, "--cached", "HEAD")
+	}
+	nameArguments = append(nameArguments, "--")
+	output, err := repo.gitOutput(ctx, nameArguments...)
+	if err != nil {
+		return candidateStateDiff{}, newGitError(GitErrorOperation, "snapshot candidate diff", err)
+	}
+	paths := uniqueSorted(repo.includedPaths(output))
+	if len(paths) == 0 {
+		return candidateStateDiff{Paths: []string{}, SHA256: digestBytes(nil)}, nil
+	}
+	patchArguments = append(patchArguments, "--")
+	patchArguments = append(patchArguments, paths...)
+	patch, err := repo.gitOutput(ctx, patchArguments...)
+	if err != nil {
+		return candidateStateDiff{}, newGitError(GitErrorOperation, "snapshot candidate diff", err)
+	}
+	return candidateStateDiff{Paths: paths, SHA256: digestBytes(patch)}, nil
+}
+
+func (repo Repository) candidateStateUntracked(ctx context.Context) ([]candidateStateUntrackedFile, error) {
+	output, err := repo.gitOutput(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, newGitError(GitErrorOperation, "snapshot untracked files", err)
+	}
+	paths := uniqueSorted(repo.includedPaths(output))
+	files := make([]candidateStateUntrackedFile, 0, len(paths))
+	for _, path := range paths {
+		file, err := repo.candidateStateUntrackedFile(path)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
+	return files, nil
+}
+
+func (repo Repository) candidateStateUntrackedFile(path string) (candidateStateUntrackedFile, error) {
+	absolute := filepath.Join(repo.Root, filepath.FromSlash(path))
+	info, err := os.Lstat(absolute)
+	if err != nil {
+		return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked file", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(absolute)
+		if err != nil {
+			return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked symlink", err)
+		}
+		return candidateStateUntrackedFile{Path: path, Kind: "symlink", Size: int64(len([]byte(target))), SHA256: digestBytes([]byte(target))}, nil
+	}
+	if !info.Mode().IsRegular() {
+		return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked file", fmt.Errorf("non-regular candidate path: %s", path))
+	}
+	file, err := os.Open(absolute)
+	if err != nil {
+		return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked file", err)
+	}
+	hash := sha256.New()
+	read, readErr := io.Copy(hash, file)
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil {
+		return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked file", errors.Join(readErr, closeErr))
+	}
+	if read != info.Size() {
+		return candidateStateUntrackedFile{}, newGitError(GitErrorOperation, "snapshot untracked file", fmt.Errorf("candidate changed while reading %s", path))
+	}
+	return candidateStateUntrackedFile{
+		Path: path, Kind: "regular", Executable: info.Mode().Perm()&0o111 != 0,
+		Size: read, SHA256: hex.EncodeToString(hash.Sum(nil)),
+	}, nil
+}
+
+func digestBytes(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
 func (repo Repository) ResolveAncestor(reference string) (string, error) {

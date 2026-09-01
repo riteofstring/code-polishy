@@ -2,7 +2,9 @@ package behaviorreview
 
 import (
 	"fmt"
+	"reflect"
 
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -13,6 +15,7 @@ type currentPacketMaterial struct {
 	intents      []intentCapture
 	intentSHA256 string
 	requirements TaskRequirementsResult
+	finalState   finalstate.Evidence
 }
 
 func validatePacketMaterial(repo repository.Repository, root *artifactHandle, packet reviewPacket) error {
@@ -34,7 +37,7 @@ func validatePacketMaterial(repo repository.Repository, root *artifactHandle, pa
 }
 
 func collectCurrentPacketMaterial(repo repository.Repository, root *artifactHandle, packet reviewPacket) (currentPacketMaterial, error) {
-	patch, documents, err := prepareCandidateMaterial(repo, packet.Base, packet.Candidate)
+	patch, documents, finalState, err := prepareCandidateMaterial(repo, packet.Base, packet.Candidate)
 	if err != nil {
 		return currentPacketMaterial{}, err
 	}
@@ -55,7 +58,7 @@ func collectCurrentPacketMaterial(repo repository.Repository, root *artifactHand
 		return currentPacketMaterial{}, fmt.Errorf("%w: prepared task requirements differ from the bound candidate", ErrStaleReview)
 	}
 	return currentPacketMaterial{
-		patch: patch, documents: documents, instructions: instructions, intents: intents, intentSHA256: intentSHA256, requirements: requirements,
+		patch: patch, documents: documents, instructions: instructions, intents: intents, intentSHA256: intentSHA256, requirements: requirements, finalState: finalState,
 	}, nil
 }
 
@@ -63,7 +66,7 @@ func packetMatchesCurrentMaterial(packet reviewPacket, material currentPacketMat
 	return packet.Patch == string(material.patch) && packet.Instructions == string(material.instructions) &&
 		samePacketDocuments(packet.DesignDocuments, material.documents) && sameIntentCaptures(packet.Intents, material.intents) &&
 		packet.IntentSHA256 == material.intentSHA256 && sameTaskRequirements(packet.TaskRequirements, material.requirements.Requirements) &&
-		packet.RequirementSHA256 == material.requirements.SHA256
+		packet.RequirementSHA256 == material.requirements.SHA256 && reflect.DeepEqual(packet.FinalState, material.finalState)
 }
 
 func samePacketDocuments(left, right []packetDesignDocument) bool {

@@ -584,7 +584,7 @@ again. A changed exact base, candidate, release, configuration, command plan,
 platform, or declared command environment invalidates reuse. A normal merge
 gate does not reuse prior work.
 
-### Keep behavior-regression evidence in custody
+### Keep behavior and final-state evidence in custody
 
 This workflow is experimental; its installed-release Unix and native Windows
 acceptance contracts and real multi-repository dogfood must meet the release
@@ -592,11 +592,12 @@ checklist.
 
 At the start of a source task, the agent harness should pass the user's original
 request and supplied acceptance criteria to `behavior-review capture-intent` at
-the clean task-base commit. Capture is cheap and invokes neither tests nor an AI
-reviewer. Repositories may define named features at `on-request`, `merge`, or
-`checkpoint`; users may select configured features during capture or append
-them later with `behavior-review require`. Requirements are additive, and
-agents must not infer feature names from prose.
+the task-base commit, then repeat capture before acting on each correction.
+Correction capture accepts staged, unstaged, deleted, and untracked candidate
+state and records its digest. Capture is cheap and invokes neither tests nor an
+AI reviewer. Repositories may define named features at `on-request`, `merge`,
+or `checkpoint`; users may select configured features during capture or append
+them later with `behavior-review require`.
 
 After the candidate is committed, use `behavior-review status --base TASK_BASE`
 to inspect the decision. `NOT RUN` means optional review was skipped. When
@@ -611,8 +612,8 @@ explicit trusted artifact. Checkpoint and merge gates replay every cited proof
 and force the selected feature suites; the primary agent or harness must keep
 the review subagent packet-only. Repositories with no behavior-review policy
 need no AI artifact and retain their ordinary gate runtime. See
-[Behavior Regression Review](policies/behavior-review.md) before relying on the
-workflow.
+[Behavior and Final-State Review](policies/behavior-review.md) before relying on
+the workflow.
 
 The runner must already have the locked release installed; Code Polishy is
 never downloaded during a check. Bootstrap target dependencies from frozen

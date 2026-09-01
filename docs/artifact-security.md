@@ -127,20 +127,20 @@ supply-chain profile and gate include the same module. A Docker CLI and server
 are required only when artifact targets exist; Trivy itself is policy-owned and
 does not become a target manifest dependency.
 
-## Behavior review evidence
+## Behavior and final-state review evidence
 
 Behavior-review files use a separate local artifact boundary under
 `.code-polishy-reports/behavior-review`. Intent capture may exist even when
-review remains optional. The directory later holds additive feature
-requirements, the exact selected-feature packet, review, proofs, logs, and
-receipt. Journal appends use an interprocess lock and every mutation publishes
-atomically. Keep the complete directory together through the applicable gate;
-if CI splits the workflow across jobs, transfer it as one trusted artifact.
+review remains optional. Each entry binds exact intent bytes, the current HEAD,
+and a digest of staged, unstaged, deleted, and untracked candidate state. The
+directory later holds additive requirements, the exact packet, structured
+final-state evidence and findings, proofs, logs, and receipt. Journal appends
+use an interprocess lock and every mutation publishes atomically.
 
 Its hashes bind the same captured bytes, task-requirement snapshot, base and
 candidate policy decision, selected features, commits, packet, and proof records
 through the workflow. They are integrity checks, not signatures. The agent
 harness remains responsible for supplying the actual user request and isolating
 the review subagent. See the
-[Behavior Regression Review Policy](policies/behavior-review.md) for the exact
+[Behavior and Final-State Review Policy](policies/behavior-review.md) for the exact
 workflow and limits.

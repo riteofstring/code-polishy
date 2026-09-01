@@ -249,7 +249,7 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "behavior-review",
-		summary: "Capture intent, add feature requirements, inspect review status, prepare evidence, or finalize a clean-context behavior review.",
+		summary: "Capture intent and corrections, inspect review status, prepare evidence, or finalize a behavior and final-state review.",
 		syntax: []string{
 			"code-polishy behavior-review capture-intent --intent-file PATH [--feature NAME...]",
 			"code-polishy behavior-review require --base REF --feature NAME...",

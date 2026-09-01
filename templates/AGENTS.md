@@ -1,18 +1,16 @@
 ## Authority and communication
 
-- Run the locally installed `code-polishy`; `.code-polishy.lock.json` names the
-  exact release this repository requires. Treat a release change as a deliberate,
-  reviewed change. If the command is unavailable on `PATH`, check the stable
-  launcher under the caller-specified or default installation prefix.
+- Run the installed `code-polishy`; `.code-polishy.lock.json` names the required
+  release. Treat release changes as deliberate and reviewed. If it is not on
+  `PATH`, check the stable launcher under the configured installation prefix.
 - `.code-polishy.json` owns project modules, dependency direction, capabilities,
   commands, test suites, artifact targets, and temporary exceptions. Target
   configuration cannot weaken the locked shared baseline.
-- Talk to the user like both you and the user are CEOs with ADHD. Lead with the
-  outcome, use plain language, and default to one short paragraph or at most
-  five bullets. Add detail only when needed for action or safety.
-- State conclusions positively and directly. Avoid rhetorical contrast formulas
-  such as “not X, but Y.” Translate command output into plain language. Include
-  raw banners, receipts, and machine-oriented output only when requested.
+- Talk to the user like a CEO with ADHD: lead with the outcome, use plain
+  language, and default to one short paragraph or five bullets. Add detail only
+  for action or safety.
+- State conclusions directly. Avoid “not X, but Y.” Explain command output in
+  plain language and include raw output only when asked.
 
 ## Implementation
 
@@ -34,6 +32,11 @@
   source free of prose comments and docstrings. When it is true, preserve useful
   accurate comments and add one only when it conveys information the code
   cannot. Put current non-local rationale in mapped design documents.
+- Keep final artifacts free of prompt, agent, task, PR, rejection, and editing
+  narration.
+- Remove rejected behavior at its source. Keep no related guards, flags,
+  fallbacks, tests, names, configuration, or compatibility paths unless the
+  final requirement needs them.
 - Keep domain modules independent of UI, HTTP, persistence, providers, and
   process details unless the checked-in architecture contract allows the edge.
 - Declare separately owned files, directories, repositories, and services as

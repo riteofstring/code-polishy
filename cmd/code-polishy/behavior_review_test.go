@@ -319,7 +319,7 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 		t.Fatalf("proof statuses = baseline %d candidate %d", proof.Baseline.ExitStatus, proof.CandidateExecution.ExitStatus)
 	}
 	result := map[string]any{
-		"version":          3,
+		"version":          4,
 		"review_id":        packet.ReviewID,
 		"base":             packet.Base,
 		"candidate":        packet.Candidate,
@@ -330,7 +330,8 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 			"before": "Value returns old.", "after": "Value returns new.", "classification": "requested", "proof_ids": []string{"value-change"},
 			"scope": map[string]any{"features": []string{}, "full_candidate": true},
 		}},
-		"findings": []string{},
+		"findings":             []string{},
+		"final_state_findings": []any{},
 	}
 	data, err := json.Marshal(result)
 	if err != nil {

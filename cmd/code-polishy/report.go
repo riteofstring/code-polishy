@@ -90,6 +90,12 @@ func printBehaviorReview(output io.Writer, review *engine.BehaviorReviewStatus, 
 		return
 	}
 	fmt.Fprintf(output, "BEHAVIOR REVIEW: %s (%s)\n", behaviorReviewStatusLabel(review.State), behaviorReviewScope(review))
+	fmt.Fprintf(output, "FINAL STATE: %s (%s)\n", finalStateStatusLabel(review.FinalStateState), finalStateScope(review))
+	if review.FinalStateState == engine.BehaviorReviewFailed {
+		for _, finding := range review.FinalStateFindings {
+			fmt.Fprintf(output, "%s:%d %s: %s\n", finding.Path, finding.Line, strings.ReplaceAll(finding.Kind, "-", " "), finding.Summary)
+		}
+	}
 	if !verbose {
 		return
 	}
@@ -106,6 +112,23 @@ func printBehaviorReview(output io.Writer, review *engine.BehaviorReviewStatus, 
 	if review.ReceiptPath != "" {
 		fmt.Fprintln(output, "BEHAVIOR REVIEW RECEIPT:", review.ReceiptPath)
 	}
+}
+
+func finalStateStatusLabel(state engine.BehaviorReviewState) string {
+	if state == engine.BehaviorReviewNotRun || state == engine.BehaviorReviewRequired {
+		return "NOT RUN"
+	}
+	return strings.ToUpper(string(state))
+}
+
+func finalStateScope(review *engine.BehaviorReviewStatus) string {
+	if review.FinalStateState == engine.BehaviorReviewNotRun && review.State == engine.BehaviorReviewNotRun {
+		return "optional"
+	}
+	if review.FinalStateState == engine.BehaviorReviewNotRun {
+		return "required"
+	}
+	return behaviorReviewScope(review)
 }
 
 func behaviorReviewStatusLabel(state engine.BehaviorReviewState) string {

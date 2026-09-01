@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -41,7 +42,7 @@ func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 	}
 }
 
-func TestCaptureIntentRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
+func TestCaptureIntentRejectsUnsafeIntent(t *testing.T) {
 	repo, _, _ := newBehaviorRepository(t)
 	cases := []struct {
 		name    string
@@ -73,12 +74,6 @@ func TestCaptureIntentRejectsUnsafeIntentAndDirtyCandidate(t *testing.T) {
 			}
 			removeBehaviorFile(t, path)
 		})
-	}
-	intent := writeBehaviorFile(t, t.TempDir(), "request.txt", "request\n")
-	writeBehaviorFile(t, repo.Root, "dirty.txt", "dirty\n")
-	_, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent})
-	if !errors.Is(err, repository.ErrDirtyCandidate) {
-		t.Fatalf("dirty Prepare() error = %v, want dirty candidate", err)
 	}
 }
 
@@ -150,7 +145,7 @@ func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
 	}
 }
 
-func TestCaptureIntentRejectsStagedUnstagedAndUntrackedChanges(t *testing.T) {
+func TestCaptureIntentBindsStagedUnstagedDeletedAndUntrackedChanges(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		change func(*testing.T, repository.Repository)
@@ -165,15 +160,50 @@ func TestCaptureIntentRejectsStagedUnstagedAndUntrackedChanges(t *testing.T) {
 		{name: "untracked", change: func(t *testing.T, repo repository.Repository) {
 			writeBehaviorFile(t, repo.Root, "untracked.txt", "untracked\n")
 		}},
+		{name: "deleted", change: func(t *testing.T, repo repository.Repository) {
+			removeBehaviorFile(t, filepath.Join(repo.Root, "app.txt"))
+		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repo, _, _ := newBehaviorRepository(t)
 			test.change(t, repo)
+			snapshot, err := repo.CandidateState()
+			if err != nil {
+				t.Fatal(err)
+			}
 			intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Next request.\n")
-			if _, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent}); !errors.Is(err, repository.ErrDirtyCandidate) {
-				t.Fatalf("CaptureIntent() error = %v, want dirty candidate", err)
+			captured, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if captured.Commit != snapshot.Head || captured.CandidateSHA256 != snapshot.SHA256 || !validSHA256(captured.CandidateSHA256) {
+				t.Fatalf("capture = %+v, snapshot = %+v", captured, snapshot)
 			}
 		})
+	}
+}
+
+func TestCaptureIntentRequiresCleanStateForOriginalRequest(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	if err := os.RemoveAll(filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))); err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorFile(t, repo.Root, "untracked.txt", "candidate work\n")
+	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Original request.\n")
+	if _, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent}); !errors.Is(err, repository.ErrDirtyCandidate) {
+		t.Fatalf("CaptureIntent() error = %v, want dirty candidate", err)
+	}
+}
+
+func TestIntentCaptureRejectsCandidateMutationAfterSnapshot(t *testing.T) {
+	repo, _, _ := newBehaviorRepository(t)
+	snapshot, err := repo.CandidateState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorFile(t, repo.Root, "changed-after-snapshot.txt", "candidate work\n")
+	if err := ensureIntentCaptureCandidate(repo, snapshot); !errors.Is(err, ErrCandidateChanged) {
+		t.Fatalf("ensureIntentCaptureCandidate() error = %v, want candidate changed", err)
 	}
 }
 
@@ -1282,6 +1312,9 @@ func preparedReviewJSON(prepared PrepareResult, review ReviewResult) string {
 	}
 	if review.DecisionSHA256 == "" {
 		review.DecisionSHA256 = prepared.DecisionSHA256
+	}
+	if review.FinalStateFindings == nil {
+		review.FinalStateFindings = []finalstate.Finding{}
 	}
 	for index := range review.Behaviors {
 		if review.Behaviors[index].Scope.Features == nil && !review.Behaviors[index].Scope.FullCandidate {

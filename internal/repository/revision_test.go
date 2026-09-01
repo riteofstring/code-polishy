@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,50 @@ func TestCleanHeadReturnsAnExactCommittedHeadAndIgnoresReports(t *testing.T) {
 	if got != want || !exactRevision(got) {
 		t.Fatalf("CleanHead() = %q, want exact %q", got, want)
 	}
+}
+
+func TestCandidateStateBindsEveryDirtyStateWithoutIncludingReports(t *testing.T) {
+	repo, _ := committedRepository(t)
+	clean := candidateState(t, repo)
+	if clean.Head == "" || len(clean.SHA256) != 64 || clean.Dirty {
+		t.Fatalf("clean snapshot = %+v", clean)
+	}
+
+	writeFile(t, repo.Root, "tracked.txt", "unstaged\n")
+	unstaged := candidateState(t, repo)
+	git(t, repo.Root, "add", "tracked.txt")
+	staged := candidateState(t, repo)
+	writeFile(t, repo.Root, "untracked.txt", "untracked\n")
+	untracked := candidateState(t, repo)
+	if err := os.Remove(filepath.Join(repo.Root, "tracked.txt")); err != nil {
+		t.Fatal(err)
+	}
+	deleted := candidateState(t, repo)
+	if !unstaged.Dirty || !staged.Dirty || !untracked.Dirty || !deleted.Dirty {
+		t.Fatalf("dirty snapshots were not marked dirty")
+	}
+	digests := []string{clean.SHA256, unstaged.SHA256, staged.SHA256, untracked.SHA256, deleted.SHA256}
+	unique := append([]string{}, digests...)
+	slices.Sort(unique)
+	unique = slices.Compact(unique)
+	if len(unique) != len(digests) {
+		t.Fatalf("candidate state digests are not unique: %v", digests)
+	}
+
+	writeFile(t, repo.Root, ".code-polishy-reports/behavior-review/result.json", "private\n")
+	withReport := candidateState(t, repo)
+	if withReport != deleted {
+		t.Fatalf("report changed candidate snapshot: before=%+v after=%+v", deleted, withReport)
+	}
+}
+
+func candidateState(t *testing.T, repo Repository) CandidateStateSnapshot {
+	t.Helper()
+	snapshot, err := repo.CandidateState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
 }
 
 func TestCleanHeadRejectsARepositoryWithoutACommit(t *testing.T) {

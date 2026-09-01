@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -64,6 +65,7 @@ type CaptureIntentOptions struct {
 type CaptureIntentResult struct {
 	ID                string
 	Commit            string
+	CandidateSHA256   string
 	IntentSHA256      string
 	JournalSHA256     string
 	JournalPath       string
@@ -254,6 +256,10 @@ func TaskRequirements(ctx context.Context, repo repository.Repository, base stri
 
 func Finalize(ctx context.Context, repo repository.Repository, options FinalizeOptions) (FinalizeResult, error) {
 	return finalize(ctx, repo, options)
+}
+
+func FinalStateFindings(ctx context.Context, repo repository.Repository, options ValidateGateReceiptOptions) ([]finalstate.Finding, error) {
+	return finalStateFindings(ctx, repo, options)
 }
 
 func Prove(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ProveOptions) (ProveResult, error) {

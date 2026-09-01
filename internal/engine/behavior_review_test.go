@@ -16,6 +16,7 @@ import (
 
 	agentpolicy "github.com/riteofstring/code-polishy/internal/agents"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -464,6 +465,70 @@ func TestBehaviorReviewStatusDistinguishesMissingAndStaleReceiptsWithoutWriting(
 	stale, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
 	if err != nil || stale.State != BehaviorReviewFailed || stale.ReviewID != "" {
 		t.Fatalf("stale status = %+v, error = %v", stale, err)
+	}
+}
+
+func TestBehaviorReviewStatusReportsEvidenceBoundFinalStateFindings(t *testing.T) {
+	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "merge")
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intentPath := filepath.Join(t.TempDir(), "intent.md")
+	if err := os.WriteFile(intentPath, []byte("Keep final artifacts free of task narration.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policyEngine.CaptureBehaviorReviewIntent(t.Context(), intentPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "content/data.json")
+	gitBehaviorReview(t, root, "commit", "-m", "candidate")
+	policyEngine, err = Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	packetData, err := os.ReadFile(filepath.Join(root, ".code-polishy-reports", "behavior-review", "packet.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var packet struct {
+		Intents []struct {
+			ID string `json:"id"`
+		} `json:"intents"`
+		FinalState finalstate.Evidence `json:"final_state_evidence"`
+	}
+	if err := json.Unmarshal(packetData, &packet); err != nil {
+		t.Fatal(err)
+	}
+	path := packet.FinalState.Paths[0]
+	hunk := path.Hunks[0]
+	review := behaviorreview.ReviewResult{
+		Version: 4, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		SelectionSHA256: prepared.SelectionSHA256, DecisionSHA256: prepared.DecisionSHA256,
+		Behaviors: []behaviorreview.Behavior{{
+			Before: "Content is available.", After: "Content is available.", Classification: "preserved", ProofIDs: []string{},
+			Scope: behaviorreview.BehaviorScope{Features: []string{}, FullCandidate: true},
+		}}, Findings: []string{}, FinalStateFindings: []finalstate.Finding{{
+			Kind: finalstate.KindMetaNote, Path: path.Path, Line: hunk.Context.StartLine, PatchHunkSHA256: hunk.SHA256,
+			IntentIDs: []string{packet.Intents[0].ID}, Summary: "The value narrates the current task.",
+		}},
+	}
+	data, err := json.Marshal(review)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, ".code-polishy-reports/behavior-review/result.json", string(data), 0o600)
+	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
+	if err != nil || status.State != BehaviorReviewFailed || status.FinalStateState != BehaviorReviewFailed || len(status.FinalStateFindings) != 1 || status.FinalStateFindings[0].Path != path.Path {
+		t.Fatalf("status = %+v, error = %v", status, err)
 	}
 }
 
@@ -1136,12 +1201,12 @@ func prepareValidBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, root 
 		t.Fatal(err)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 3, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 4, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
 		SelectionSHA256: prepared.SelectionSHA256, DecisionSHA256: prepared.DecisionSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "preserved", ProofIDs: []string{},
 			Scope: behaviorreview.BehaviorScope{Features: []string{}, FullCandidate: true},
-		}}, Findings: []string{},
+		}}, Findings: []string{}, FinalStateFindings: []finalstate.Finding{},
 	}
 	data, err := json.Marshal(review)
 	if err != nil {
@@ -1181,12 +1246,12 @@ func prepareRequestedBehaviorReviewReceipt(t *testing.T, policyEngine *Engine, r
 		forge(t, root, proof.ID)
 	}
 	review := behaviorreview.ReviewResult{
-		Version: 3, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
+		Version: 4, ReviewID: prepared.ReviewID, Base: prepared.Base, Candidate: prepared.Candidate, IntentSHA256: prepared.IntentSHA256,
 		SelectionSHA256: prepared.SelectionSHA256, DecisionSHA256: prepared.DecisionSHA256,
 		Behaviors: []behaviorreview.Behavior{{
 			Before: "The baseline content is available.", After: "The candidate content is available.", Classification: "requested", ProofIDs: []string{proof.ID},
 			Scope: behaviorreview.BehaviorScope{Features: []string{}, FullCandidate: true},
-		}}, Findings: []string{},
+		}}, Findings: []string{}, FinalStateFindings: []finalstate.Finding{},
 	}
 	data, err := json.Marshal(review)
 	if err != nil {

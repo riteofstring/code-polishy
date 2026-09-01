@@ -34,9 +34,13 @@
       "paths": ["internal/gaterun/**"]
     },
     {
+      "name": "finalstate",
+      "paths": ["internal/finalstate/**"]
+    },
+    {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
-      "dependsOn": ["gaterun", "policy", "repository", "runner"]
+      "dependsOn": ["finalstate", "gaterun", "policy", "repository", "runner"]
     },
     {
       "name": "documentation",
@@ -104,6 +108,7 @@
         "architecture",
         "artifactsecurity",
         "behaviorreview",
+        "finalstate",
         "gaterun",
         "pack",
         "policy",
@@ -124,6 +129,7 @@
         "agents",
         "documentation",
         "engine",
+        "finalstate",
         "pack",
         "policy",
         "release",
@@ -151,6 +157,7 @@
         "repository",
         "runner",
         "gaterun",
+        "finalstate",
         "behaviorreview",
         "documentation",
         "agents",
@@ -209,6 +216,13 @@
         "scope": "module",
         "modules": ["gaterun"],
         "argv": ["go", "test", "-count=1", "./internal/gaterun/..."]
+      },
+      {
+        "name": "finalstate-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["finalstate"],
+        "argv": ["go", "test", "-count=1", "./internal/finalstate/..."]
       },
       {
         "name": "behaviorreview-unit",

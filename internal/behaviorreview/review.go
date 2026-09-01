@@ -11,10 +11,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const artifactVersion = 3
+const artifactVersion = 4
 
 const prepareMarkerFilename = "prepare.json"
 
@@ -38,6 +39,7 @@ type reviewPacket struct {
 	DecisionSHA256    string                 `json:"decision_sha256"`
 	Patch             string                 `json:"patch"`
 	PatchSHA256       string                 `json:"patch_sha256"`
+	FinalState        finalstate.Evidence    `json:"final_state_evidence"`
 	DesignDocuments   []packetDesignDocument `json:"design_documents"`
 	Instructions      string                 `json:"instructions"`
 	ResultPath        string                 `json:"result_path"`
@@ -64,15 +66,16 @@ type Behavior struct {
 }
 
 type ReviewResult struct {
-	Version         int        `json:"version"`
-	ReviewID        string     `json:"review_id"`
-	Base            string     `json:"base"`
-	Candidate       string     `json:"candidate"`
-	IntentSHA256    string     `json:"intent_sha256"`
-	SelectionSHA256 string     `json:"selection_sha256"`
-	DecisionSHA256  string     `json:"decision_sha256"`
-	Behaviors       []Behavior `json:"behaviors"`
-	Findings        []string   `json:"findings"`
+	Version            int                  `json:"version"`
+	ReviewID           string               `json:"review_id"`
+	Base               string               `json:"base"`
+	Candidate          string               `json:"candidate"`
+	IntentSHA256       string               `json:"intent_sha256"`
+	SelectionSHA256    string               `json:"selection_sha256"`
+	DecisionSHA256     string               `json:"decision_sha256"`
+	Behaviors          []Behavior           `json:"behaviors"`
+	Findings           []string             `json:"findings"`
+	FinalStateFindings []finalstate.Finding `json:"final_state_findings"`
 }
 
 type prepareInputs struct {
@@ -88,6 +91,7 @@ type prepareInputs struct {
 	instructions      []byte
 	patch             []byte
 	documents         []packetDesignDocument
+	finalState        finalstate.Evidence
 	reviewID          string
 }
 
@@ -102,6 +106,7 @@ type prepareContent struct {
 	instructions []byte
 	patch        []byte
 	documents    []packetDesignDocument
+	finalState   finalstate.Evidence
 }
 
 type finalizationState struct {
@@ -202,7 +207,7 @@ func collectPrepareInputs(ctx context.Context, repo repository.Repository, root 
 		base: base, candidate: candidate, intents: bindings.intents, intentSHA256: bindings.intentSHA256,
 		requirements: bindings.requirements.Requirements, requirementSHA256: bindings.requirements.SHA256, selection: selection, selectionSHA256: selectionSHA256,
 		decisionSHA256: bindings.decisionSHA256,
-		instructions:   content.instructions, patch: content.patch, documents: content.documents, reviewID: reviewID,
+		instructions:   content.instructions, patch: content.patch, documents: content.documents, finalState: content.finalState, reviewID: reviewID,
 	}, nil
 }
 
@@ -246,11 +251,11 @@ func collectPrepareContent(repo repository.Repository, base, candidate string) (
 	if err != nil {
 		return prepareContent{}, err
 	}
-	patch, documents, err := prepareCandidateMaterial(repo, base, candidate)
+	patch, documents, finalState, err := prepareCandidateMaterial(repo, base, candidate)
 	if err != nil {
 		return prepareContent{}, err
 	}
-	return prepareContent{instructions: instructions, patch: patch, documents: documents}, nil
+	return prepareContent{instructions: instructions, patch: patch, documents: documents, finalState: finalState}, nil
 }
 
 func validatePrepareRequest(ctx context.Context, options PrepareOptions) error {
@@ -275,20 +280,24 @@ func cleanCandidateAtMergeBase(repo repository.Repository, reference string) (st
 	return base, candidate, nil
 }
 
-func prepareCandidateMaterial(repo repository.Repository, base, candidate string) ([]byte, []packetDesignDocument, error) {
+func prepareCandidateMaterial(repo repository.Repository, base, candidate string) ([]byte, []packetDesignDocument, finalstate.Evidence, error) {
 	selection, err := repo.SelectBase(base)
 	if err != nil {
-		return nil, nil, operational("select behavior review candidate", err)
+		return nil, nil, finalstate.Evidence{}, operational("select behavior review candidate", err)
 	}
 	patch, err := repo.Patch(base, candidate, nil)
 	if err != nil {
-		return nil, nil, operational("build behavior review patch", err)
+		return nil, nil, finalstate.Evidence{}, operational("build behavior review patch", err)
 	}
 	documents, err := readCurrentDesignDocuments(repo, selection.Candidate.Paths())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, finalstate.Evidence{}, err
 	}
-	return patch, documents, nil
+	evidence, err := buildFinalStateEvidence(repo, base, candidate, selection.Candidate)
+	if err != nil {
+		return nil, nil, finalstate.Evidence{}, err
+	}
+	return patch, documents, evidence, nil
 }
 
 func packetFromInputs(inputs prepareInputs) (reviewPacket, error) {
@@ -301,7 +310,7 @@ func packetFromInputs(inputs prepareInputs) (reviewPacket, error) {
 		TaskRequirements: cloneTaskRequirements(inputs.requirements), RequirementSHA256: inputs.requirementSHA256,
 		Selection: cloneReviewSelection(inputs.selection), SelectionSHA256: inputs.selectionSHA256, DecisionSHA256: inputs.decisionSHA256,
 		Patch: string(inputs.patch), PatchSHA256: sha256Hex(inputs.patch),
-		DesignDocuments: inputs.documents, Instructions: string(inputs.instructions), ResultPath: artifactDisplayPath(defaultResultFilename), ProofDirectory: artifactDisplayPath(proofDirectory),
+		FinalState: inputs.finalState, DesignDocuments: inputs.documents, Instructions: string(inputs.instructions), ResultPath: artifactDisplayPath(defaultResultFilename), ProofDirectory: artifactDisplayPath(proofDirectory),
 	}, nil
 }
 
@@ -445,6 +454,9 @@ func finalizedReviewInput(root *artifactHandle, packet reviewPacket, candidate s
 	}
 	if !reviewMatchesPacket(review, packet, candidate) {
 		return ReviewResult{}, nil, fmt.Errorf("%w: result identifiers do not match the prepared packet", ErrStaleReview)
+	}
+	if err := validateReviewFinalState(review, packet); err != nil {
+		return ReviewResult{}, nil, err
 	}
 	if err := rejectBlockingReview(review); err != nil {
 		return ReviewResult{}, nil, err
@@ -592,6 +604,9 @@ func validateReceiptReview(state receiptState, packet reviewPacket) (ReviewResul
 	if !reviewMatchesPacket(review, packet, state.candidate) {
 		return ReviewResult{}, staleReceipt("finalized review identifiers do not match the packet", nil)
 	}
+	if err := validateReviewFinalState(review, packet); err != nil {
+		return ReviewResult{}, staleReceipt("finalized review has invalid final-state findings", err)
+	}
 	if err := rejectBlockingReview(review); err != nil {
 		return ReviewResult{}, staleReceipt("finalized review has unresolved findings", err)
 	}
@@ -654,6 +669,9 @@ func validatePacket(packet reviewPacket) error {
 	}
 	if err := validatePacketPatch(packet); err != nil {
 		return err
+	}
+	if err := finalstate.ValidateEvidence(packet.FinalState); err != nil {
+		return fmt.Errorf("%w: packet final-state evidence is invalid: %v", ErrInvalidReview, err)
 	}
 	if err := validatePacketInstructions(packet); err != nil {
 		return err
@@ -781,8 +799,8 @@ func validateReviewResult(review ReviewResult) error {
 	if len(review.Behaviors) == 0 {
 		return fmt.Errorf("%w: result must contain at least one behavior", ErrInvalidReview)
 	}
-	if review.Behaviors == nil || review.Findings == nil {
-		return fmt.Errorf("%w: result must explicitly contain behaviors and findings arrays", ErrInvalidReview)
+	if review.Behaviors == nil || review.Findings == nil || review.FinalStateFindings == nil {
+		return fmt.Errorf("%w: result must explicitly contain behaviors, findings, and final_state_findings arrays", ErrInvalidReview)
 	}
 	if err := validateFindings(review.Findings); err != nil {
 		return err
@@ -863,6 +881,10 @@ func rejectBlockingReview(review ReviewResult) error {
 	if len(review.Findings) > 0 {
 		return fmt.Errorf("%w: reviewer reported %d unresolved finding(s)", ErrInvalidReview, len(review.Findings))
 	}
+	if len(review.FinalStateFindings) > 0 {
+		finding := review.FinalStateFindings[0]
+		return fmt.Errorf("%w: reviewer reported %d final-state finding(s); %s:%d %s: %s", ErrInvalidReview, len(review.FinalStateFindings), finding.Path, finding.Line, finding.Kind, finding.Summary)
+	}
 	for _, behavior := range review.Behaviors {
 		if behavior.Classification == "unintended" || behavior.Classification == "unknown" {
 			return fmt.Errorf("%w: reviewer classified a behavior as %s", ErrInvalidReview, behavior.Classification)
@@ -937,52 +959,4 @@ func validateReceiptProofReferences(proofs []ProofReference) error {
 
 func validProofReference(proof ProofReference, seen map[string]bool) bool {
 	return allValid(validIdentifier(proof.ID), validSHA256(proof.SHA256), !seen[proof.ID])
-}
-
-func validIdentifier(value string) bool {
-	if len(value) == 0 || len(value) > 80 {
-		return false
-	}
-	if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", rune(value[0])) {
-		return false
-	}
-	return identifierTailIsValid(value[1:])
-}
-
-func identifierTailIsValid(value string) bool {
-	const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
-	for _, character := range value {
-		if !strings.ContainsRune(allowed, character) {
-			return false
-		}
-	}
-	return true
-}
-
-func validRevision(value string) bool {
-	if len(value) != 40 && len(value) != 64 {
-		return false
-	}
-	return hexadecimal(value)
-}
-
-func validSHA256(value string) bool {
-	return len(value) == 64 && hexadecimal(value)
-}
-
-func hexadecimal(value string) bool {
-	const hexadecimalCharacters = "0123456789abcdefABCDEF"
-	for _, character := range value {
-		if !strings.ContainsRune(hexadecimalCharacters, character) {
-			return false
-		}
-	}
-	return true
-}
-
-func staleReceipt(message string, cause error) error {
-	if cause == nil {
-		return fmt.Errorf("%w: %s", ErrStaleReceipt, message)
-	}
-	return fmt.Errorf("%w: %s: %v", ErrStaleReceipt, message, cause)
 }

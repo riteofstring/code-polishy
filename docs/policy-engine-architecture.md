@@ -257,12 +257,13 @@ caller input is a Git base. Repository selection preserves the exact candidate
 delta separately from any repository-wide analysis expansion.
 `internal/testing.BuildMergeDecision` makes the deterministic ordinary level
 decision from that selection and compiled policy. `internal/engine` separately
-builds one behavior-review decision from additive task requests, base policy,
-candidate policy, and repository-owned path/module impact. Optional review
-loads no receipt and runs no proof. Selected review validates the exact receipt,
-replays every proof, and forces its ordinary feature suites into the deduplicated
-test plan before later commands. Both decisions and the behavior-review status
-are bound into the gate-run identity and report. Report artifacts are excluded
+builds one behavior-review decision from ordered intents, additive task
+requests, base policy, candidate policy, and repository-owned path/module
+impact. Optional review loads no receipt and runs no proof. Selected review
+validates observable behavior plus evidence-bound final-state findings, replays
+every behavior proof, and forces its ordinary feature suites into the
+deduplicated test plan before later commands. Both decisions and the review
+status are bound into the gate-run identity and report. Report artifacts are excluded
 from the candidate delta so they cannot change either decision. The recommended
 branch runs strict doctor, applicable gate checks and builds, recommended tests,
 and offline supply-chain verification. For non-documentation candidates, any

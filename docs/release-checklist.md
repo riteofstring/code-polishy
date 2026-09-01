@@ -16,7 +16,8 @@ pushes, or installs state.
    worktree as a separate release proof.
 2. Check out the exact candidate commit and verify it through the managed
    lifecycle. The agent harness must have captured each original user request
-   at its clean task base before implementation. Inspect behavior-review status
+   at its task base and each later correction before implementation continued.
+   Inspect behavior-review status
    against the merge target and complete a fresh review only when checked-in or
    task policy selects it. The final merge gate must print `NOT RUN` for an
    optional skip or validate the exact selected receipt; it runs once for the

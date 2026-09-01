@@ -125,7 +125,7 @@ func (execution mergeGateExecution) replayBehaviorReview(
 }
 
 func (engine *Engine) finalizeMergeGateReplayFailure(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController, replayErr error) (Report, error) {
-	replayReport, replayReportErr := engine.behaviorReviewGateFailureReport(plan, replayErr)
+	replayReport, replayReportErr := engine.behaviorReviewGateFailureReport(ctx, plan, replayErr)
 	report := Report{}
 	if replayReport != nil {
 		report = *replayReport

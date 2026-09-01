@@ -277,12 +277,12 @@ exercise_versioned_documentation() {
   expect_pass "${target}" "${description} documentation list" docs list
   grep -q $'^agent-workflows\tAgent Workflows$' "${output}" ||
     fail "${description}: docs list omitted agent-workflows: $(excerpt)"
-  grep -q $'^behavior-review\tBehavior Regression Review$' "${output}" ||
+  grep -q $'^behavior-review\tBehavior and Final-State Review$' "${output}" ||
     fail "${description}: docs list omitted behavior-review: $(excerpt)"
   grep -q $'^adding-a-language\tAdding a Community Language$' "${output}" ||
     fail "${description}: docs list omitted adding-a-language: $(excerpt)"
   expect_pass "${target}" "${description} documentation search" docs find behavior review
-  grep -q $'^behavior-review\tBehavior Regression Review\t' "${output}" ||
+  grep -q $'^behavior-review\tBehavior and Final-State Review\t' "${output}" ||
     fail "${description}: docs find did not rank behavior review: $(excerpt)"
   expect_pass "${target}" "${description} documentation read" docs read agents
   cmp -s "${release}/docs/agent-workflows.md" "${output}" ||

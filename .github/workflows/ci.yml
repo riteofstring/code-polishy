@@ -195,12 +195,12 @@ jobs:
             throw 'Installed native documentation list failed.'
           }
           if ($docsList -notlike '*agent-workflows*Agent Workflows*' -or
-              $docsList -notlike '*behavior-review*Behavior Regression Review*' -or
+              $docsList -notlike '*behavior-review*Behavior and Final-State Review*' -or
               $docsList -notlike '*adding-a-language*Adding a Community Language*') {
             throw "Installed native documentation list omitted required topics: $docsList"
           }
           $docsFind = (& $launcher --repo-root $target docs find behavior review 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $docsFind -notlike '*behavior-review*Behavior Regression Review*') {
+          if ($LASTEXITCODE -ne 0 -or $docsFind -notlike '*behavior-review*Behavior and Final-State Review*') {
             Write-Output $docsFind
             throw 'Installed native documentation search failed.'
           }
@@ -249,6 +249,15 @@ jobs:
           & $launcher --repo-root $target format --files src/data.json
           if ($LASTEXITCODE -ne 0) { throw 'Installed native candidate formatting failed.' }
           & git.exe -C $target add scripts/test.ps1 src/data.json
+          $correction = Join-Path $env:RUNNER_TEMP 'windows-behavior-correction.txt'
+          Set-Content -LiteralPath $correction -Value 'Keep the candidate state direct and remove any rejected alternate path.'
+          & $launcher --repo-root $target behavior-review capture-intent --intent-file $correction
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native dirty correction capture failed.' }
+          $journalPath = Join-Path $target '.code-polishy-reports\behavior-review\intent-journal.json'
+          $journal = Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
+          if ($journal.entries.Count -ne 2 -or $journal.entries[1].candidate_state_sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw 'Installed native dirty correction capture lacks ordered candidate-state evidence.'
+          }
           & git.exe -C $target commit -m 'Change native fixture behavior'
           if ($LASTEXITCODE -ne 0) { throw 'Native behavior candidate commit failed.' }
 
@@ -260,6 +269,9 @@ jobs:
           if ($optionalCheckpoint -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
             throw "Optional checkpoint did not report an unselected behavior review: $optionalCheckpoint"
           }
+          if ($optionalCheckpoint -notlike '*FINAL STATE: NOT RUN (optional)*') {
+            throw "Optional checkpoint omitted final-state disclosure: $optionalCheckpoint"
+          }
           $optionalMerge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) {
             Write-Output $optionalMerge
@@ -267,6 +279,9 @@ jobs:
           }
           if ($optionalMerge -notlike '*BEHAVIOR REVIEW: NOT RUN (optional)*') {
             throw "Optional merge did not report an unselected behavior review: $optionalMerge"
+          }
+          if ($optionalMerge -notlike '*FINAL STATE: NOT RUN (optional)*') {
+            throw "Optional merge omitted final-state disclosure: $optionalMerge"
           }
           $behaviorArtifacts = Join-Path $target '.code-polishy-reports\behavior-review'
           foreach ($artifact in @('packet.json', 'receipt.json')) {
@@ -291,6 +306,9 @@ jobs:
           if ($requiredStatus -notlike '*BEHAVIOR REVIEW: REQUIRED (windows-state)*') {
             throw "Task-requested behavior review did not report the selected feature: $requiredStatus"
           }
+          if ($requiredStatus -notlike '*FINAL STATE: NOT RUN (required)*') {
+            throw "Task-requested behavior review omitted required final-state disclosure: $requiredStatus"
+          }
 
           function Complete-BehaviorReview {
             & $launcher --repo-root $target behavior-review prepare --base $behaviorBase
@@ -300,7 +318,7 @@ jobs:
             $packetPath = Join-Path $target '.code-polishy-reports\behavior-review\packet.json'
             $packet = Get-Content -LiteralPath $packetPath -Raw | ConvertFrom-Json
             $result = [ordered]@{
-              version = 3
+              version = 4
               review_id = $packet.review_id
               base = $packet.base
               candidate = $packet.candidate
@@ -318,6 +336,7 @@ jobs:
                 }
               })
               findings = @()
+              final_state_findings = @()
             }
             $resultPath = Join-Path $target '.code-polishy-reports\behavior-review\result.json'
             $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultPath -Encoding utf8
@@ -334,6 +353,9 @@ jobs:
           if ($checkpoint -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
             throw "Checkpoint did not report the passed requested feature review: $checkpoint"
           }
+          if ($checkpoint -notlike '*FINAL STATE: PASSED (windows-state)*') {
+            throw "Checkpoint omitted the passed final-state review: $checkpoint"
+          }
           $merge = (& $launcher --repo-root $target merge-gate --base $behaviorBase 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) {
             Write-Output $merge
@@ -341,6 +363,9 @@ jobs:
           }
           if ($merge -notlike '*BEHAVIOR REVIEW: PASSED (windows-state)*') {
             throw "Merge did not report the passed requested feature review: $merge"
+          }
+          if ($merge -notlike '*FINAL STATE: PASSED (windows-state)*') {
+            throw "Merge omitted the passed final-state review: $merge"
           }
           $artifactBytes = (Get-ChildItem -LiteralPath $behaviorArtifacts -File -Recurse | Measure-Object -Property Length -Sum).Sum
           $durationSeconds = [math]::Round(((Get-Date) - $behaviorStarted).TotalSeconds)
