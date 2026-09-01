@@ -117,8 +117,8 @@ One release identity has one self-contained policy root per supported host:
   policy tooling, and none of these is ever taken from an ambient `PATH`, a host
   installation, or an environment override, so a check decides the same thing
   on every machine that has the matching host release;
-- the version-matched `README.md`, `CHANGELOG.md`, permanent `docs/` tree and
-  documentation catalog, plus the release-owned `polishy` skill;
+- the version-matched `README.md`, `CHANGELOG.md`, permanent `docs/` tree, and
+  documentation catalog;
 - the configuration schema, templates, canonical guidance, pinned tool versions,
   and native workflow contracts the engine reads at runtime;
 - the bundle's dependency and license inventory;
@@ -137,9 +137,10 @@ code-polishy docs read installation
 ```
 
 The files remain available below
-`<prefix>/releases/<version>-<releaseDigest>/docs/`. Documentation, catalog, and
-skill bytes are recorded in the release manifest like runtime inputs, so a
-changed, missing, or added file makes the installed release invalid.
+`<prefix>/releases/<version>-<releaseDigest>/docs/`. Documentation and catalog
+bytes are recorded in the release manifest like runtime inputs, so a changed,
+missing, or added file makes the installed release invalid. Optional agent
+skills remain source artifacts and are not copied into a normal installation.
 
 A release carries no source checkout, no history, and no build inputs.
 Installing does not modify the checkout it was built from.
@@ -206,9 +207,9 @@ retired distribution mechanisms that must never reach a target: a
 `check_policy.sh` or `.gitmodules` entry, a checkout, a retired workflow wrapper,
 or policy-owned text that still tells a target to run a submodule command. A
 release is the whole Code Polishy interface a target gets, so one of those
-reaching a target through a template, canonical guidance, a skill, or a
-workflow script is an installation failure rather than something to find
-later. The sealed runtime and bundle are not searched for Code Polishy's own
+reaching a target through a template, canonical guidance, or workflow script is
+an installation failure rather than something to find later. The sealed
+runtime and bundle are not searched for Code Polishy's own
 retired commands; they are third-party bytes, and the bundle inventory and
 manifest govern them.
 

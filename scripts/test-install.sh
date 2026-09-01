@@ -196,7 +196,7 @@ EOF
 # Canonical guidance
 EOF
   write_file "${source_root}/templates/CLAUDE.md" <<'EOF'
-Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.
+@AGENTS.md
 EOF
   write_file "${source_root}/templates/behavior-review.md" <<'EOF'
 # Behavior review instructions
@@ -476,7 +476,6 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md docs/catalog.json schema/code-polishy.schema.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
-  skills/polishy/SKILL.md skills/polishy/agents/openai.yaml \
   artifact-security/scanner-policy.json \
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
@@ -498,13 +497,10 @@ for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-work
   cmp -s "${source_root}/${documentation}" "${release}/${documentation}" ||
     fail "the release did not carry the exact ${documentation} documentation"
 done
-for skill_file in \
-  skills/polishy/SKILL.md skills/polishy/agents/openai.yaml; do
-  cmp -s "${source_root}/${skill_file}" "${release}/${skill_file}" ||
-    fail "the release did not carry the exact ${skill_file} skill package file"
-done
+[[ ! -e "${release}/skills" ]] ||
+  fail "the installed release carried optional agent skills"
 cmp -s "${source_root}/templates/CLAUDE.md" "${release}/templates/CLAUDE.md" ||
-  fail "the release did not carry the exact canonical CLAUDE.md redirect"
+  fail "the release did not carry the exact canonical CLAUDE.md import"
 cmp -s "${source_root}/templates/behavior-review.md" \
   "${release}/templates/behavior-review.md" ||
   fail "the release did not carry the exact behavior review instructions"

@@ -412,22 +412,23 @@ code-polishy agents install
 The locked release owns every byte of `AGENTS.md`. The command creates the
 canonical file when missing and accepts an exact existing copy without a
 rewrite. A noncanonical existing file is preserved and reported as a conflict.
-It also creates the release's exact one-line `CLAUDE.md` redirect when absent,
-keeping `AGENTS.md` as the single guidance authority. If `CLAUDE.md` differs,
+It also creates the release's exact one-line `CLAUDE.md` import (`@AGENTS.md`)
+when absent, keeping `AGENTS.md` as the single guidance authority. If
+`CLAUDE.md` differs,
 the command preserves its bytes and changes neither guidance file; resolve that
 explicit conflict before retrying. The same validated transaction appends the
 exact `/.code-polishy-reports/` rule to the repository's root `.gitignore` when
 needed while preserving existing project rules, line endings, and file mode.
 Use `agents sync` after later Code Polishy upgrades; it requires an existing
-file, replaces the entire stale `AGENTS.md`, and repairs a missing report ignore
-rule. `agents check` and `doctor --strict` reject a missing rule. Do not
-hand-copy or duplicate the canonical policy text.
+file, replaces the entire stale `AGENTS.md`, upgrades the exact former managed
+Claude redirect to the import, and repairs a missing report ignore rule.
+`agents check` and `doctor --strict` reject a missing rule. Do not hand-copy or
+duplicate the canonical policy text.
 
 Keep canonical guidance compact and limited to durable rules used across tasks.
-The release-owned `polishy` skill routes recurring work. `code-polishy docs`
-lists, searches, and reads the permanent documentation carried by the exact
-running release, including command procedures, policy rationale, and edge-case
-detail.
+`code-polishy docs` lists, searches, and reads the permanent documentation
+carried by the exact running release, including command procedures, policy
+rationale, and edge-case detail.
 
 The resulting guidance should make these execution boundaries clear:
 

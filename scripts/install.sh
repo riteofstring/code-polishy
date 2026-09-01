@@ -252,7 +252,6 @@ release_contents=(
   "docs"
   "schema"
   "templates"
-  "skills"
   "artifact-security"
   "scripts/go_version.txt"
   "scripts/release-manifest.sh"

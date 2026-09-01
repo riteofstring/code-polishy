@@ -133,6 +133,10 @@ jobs:
 
           $releaseEngine = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'releases') -Filter 'code-polishy.exe' -File -Recurse)
           if ($releaseEngine.Count -ne 1) { throw 'Installed release did not contain exactly one engine.' }
+          $releaseRoot = Split-Path -Parent (Split-Path -Parent $releaseEngine[0].FullName)
+          if (Test-Path -LiteralPath (Join-Path $releaseRoot 'skills')) {
+            throw 'Installed release carried optional agent skills.'
+          }
           $launcher = Join-Path $prefix 'bin\code-polishy.exe'
           $target = Join-Path $env:RUNNER_TEMP 'code-polishy-target'
           New-Item -ItemType Directory -Path (Join-Path $target 'src') | Out-Null

@@ -29,7 +29,7 @@ try {
   }
 
   foreach ($Relative in @(
-    'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','skills','artifact-security',
+    'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','artifact-security',
     'scripts/go_version.txt','tools/govulncheck-version.txt','tools/node-version.txt','tools/osv-scanner-version.txt',
     'tools/pnpm-version.txt','tools/ruff-version.txt','tools/shellcheck-version.txt','tools/staticcheck-version.txt',
     'tools/ty-version.txt','tools/ty.toml',

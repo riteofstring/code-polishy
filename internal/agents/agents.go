@@ -18,7 +18,8 @@ const (
 	ignoreTargetFilename       = ".gitignore"
 	reportsIgnorePattern       = "/.code-polishy-reports/"
 	reportsDirectoryPath       = ".code-polishy-reports/"
-	claudeRedirect             = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
+	claudeImport               = "@AGENTS.md\n"
+	legacyClaudeRedirect       = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 )
 
 type Issue struct {
@@ -169,8 +170,8 @@ func canonical(policyRoot string) (canonicalGuidance, error) {
 	if len(agentsTemplate) == 0 {
 		return canonicalGuidance{}, errors.New("canonical AGENTS.md must not be empty")
 	}
-	if !bytes.Equal(claudeTemplate, []byte(claudeRedirect)) {
-		return canonicalGuidance{}, errors.New("canonical CLAUDE.md must contain exactly the required one-line redirect")
+	if !bytes.Equal(claudeTemplate, []byte(claudeImport)) {
+		return canonicalGuidance{}, errors.New("canonical CLAUDE.md must contain exactly the required one-line import")
 	}
 	return canonicalGuidance{
 		agents: append([]byte{}, agentsTemplate...),
@@ -252,12 +253,17 @@ func planClaude(existing targetState, template []byte) (mutation, bool, string, 
 	if !existing.exists {
 		return mutation{
 			path: claudeTargetFilename, contents: template, mode: 0o644, previous: existing,
-		}, true, "installed canonical CLAUDE.md redirect", nil
+		}, true, "installed canonical CLAUDE.md import", nil
 	}
 	if matchesCanonicalGuidance(existing.contents, template) {
-		return mutation{}, false, "CLAUDE.md redirect is already current", nil
+		return mutation{}, false, "CLAUDE.md import is already current", nil
 	}
-	return mutation{}, false, "", errors.New("CLAUDE.md conflicts with the canonical redirect; its bytes were preserved")
+	if matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeRedirect)) {
+		return mutation{
+			path: claudeTargetFilename, contents: template, mode: existing.mode, previous: existing,
+		}, true, "updated canonical CLAUDE.md import", nil
+	}
+	return mutation{}, false, "", errors.New("CLAUDE.md conflicts with the canonical import; its bytes were preserved")
 }
 
 func planReportIgnore(existing targetState, current bool) (mutation, bool, string) {
@@ -335,15 +341,18 @@ func checkAgents(existing targetState, readErr error, template []byte) checkStat
 
 func checkClaude(existing targetState, readErr error, template []byte) checkStatus {
 	if readErr != nil {
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md conflicts with the canonical redirect or is unreadable; preserve its bytes and resolve the conflict")
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md conflicts with the canonical import or is unreadable; preserve its bytes and resolve the conflict")
 	}
 	if !existing.exists {
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md is missing; run `code-polishy agents sync` after AGENTS.md is current")
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md is missing; run `code-polishy agents sync` after AGENTS.md is current")
 	}
 	if !matchesCanonicalGuidance(existing.contents, template) {
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-redirect", "CLAUDE.md conflicts with the canonical redirect; preserve its bytes and resolve the conflict")
+		if matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeRedirect)) {
+			return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md canonical import is stale; run `code-polishy agents sync`")
+		}
+		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md conflicts with the canonical import; preserve its bytes and resolve the conflict")
 	}
-	return checkStatus{current: true, message: "CLAUDE.md redirect is current"}
+	return checkStatus{current: true, message: "CLAUDE.md import is current"}
 }
 
 func checkReportIgnore(existing targetState, readErr error, current bool, matchErr error) checkStatus {

@@ -110,13 +110,14 @@ them but does not supply their tools.
 
 ## What stays in your repo
 
-Three checked-in files keep every agent aligned:
+Four checked-in files keep every agent aligned:
 
 - `.code-polishy.lock.json` keeps the policy and tools stable until you choose
   to upgrade.
 - `.code-polishy.json` describes your code boundaries, tests, commands, and
   exceptions once.
 - `AGENTS.md` gives every coding agent the same operating instructions.
+- `CLAUDE.md` imports those instructions for Claude Code.
 
 Your prompts can stay focused on what you want built.
 
