@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -93,6 +94,17 @@ func RunCommands(ctx context.Context, repo repository.Repository, selection repo
 func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profiles ...string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, command := range CommandsForProfiles(repo, selection, profiles...) {
+		if command.Adapter != nil {
+			profile := profiles[0]
+			for _, candidate := range profiles {
+				if slices.Contains(command.RunOn, candidate) {
+					profile = candidate
+					break
+				}
+			}
+			findings = append(findings, pack.RunAdapter(ctx, repo, selection, command, commandRunner, profile)...)
+			continue
+		}
 		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
 			findings = append(findings, configuredCommandFailure(command, err))
 		}
@@ -147,8 +159,16 @@ func RunNamedCommands(ctx context.Context, repo repository.Repository, commandRu
 	if err != nil {
 		return nil, err
 	}
+	files, err := repo.AllFiles()
+	if err != nil {
+		return nil, err
+	}
 	findings := []policy.Finding{}
 	for _, command := range commands {
+		if command.Adapter != nil {
+			findings = append(findings, pack.RunAdapter(ctx, repo, repository.Selection{Files: files, All: true}, command, commandRunner, command.RunOn[0])...)
+			continue
+		}
 		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
 			findings = append(findings, configuredCommandFailure(command, err))
 		}
@@ -217,6 +237,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule)...)
 	findings = append(findings, builtInProviderFindings(repo, files)...)
 	findings = append(findings, buildCoverageFindings(repo.Config, languagesByModule)...)
+	findings = append(findings, pack.CoverageFindings(repo, files)...)
 	return findings
 }
 

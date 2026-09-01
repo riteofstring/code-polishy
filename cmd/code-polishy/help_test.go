@@ -16,7 +16,7 @@ import (
 
 func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 	publicCommands := []string{
-		"version", "docs", "agents", "lock", "release-manifest", "change-boundary", "task-session",
+		"version", "docs", "pack", "agents", "lock", "release-manifest", "change-boundary", "task-session",
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
 		"test", "test-plan", "test-levels", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",

@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack.schema.json",
+  "title": "Code Polishy community language pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "name",
+    "version",
+    "protocolVersion",
+    "platforms",
+    "languages",
+    "commands",
+    "fixtures"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "manifestVersion": { "const": 1 },
+    "name": { "$ref": "#/$defs/identifier" },
+    "version": { "$ref": "#/$defs/semanticVersion" },
+    "protocolVersion": { "const": 1 },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "darwin-amd64",
+          "darwin-arm64",
+          "linux-amd64",
+          "linux-arm64",
+          "windows-amd64"
+        ]
+      }
+    },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/language" }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/command" }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
+    },
+    "paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "sourcePatterns": { "$ref": "#/$defs/paths" },
+        "dependencyManifests": { "$ref": "#/$defs/paths" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "not": {
+                  "enum": [
+                    "dart",
+                    "go",
+                    "jvm",
+                    "native",
+                    "php",
+                    "protobuf",
+                    "python",
+                    "ruby",
+                    "rust",
+                    "shell",
+                    "sql",
+                    "swift",
+                    "typescript"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "required": ["sourcePatterns"],
+            "properties": { "sourcePatterns": { "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "argv",
+        "capabilities",
+        "profiles",
+        "timeoutSeconds"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/path" }],
+          "items": { "type": "string", "pattern": ".*\\S.*" }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "format",
+              "lint",
+              "typecheck",
+              "complexity",
+              "dead-code",
+              "architecture",
+              "build",
+              "dependency-policy",
+              "lock-sync",
+              "release-age",
+              "security"
+            ]
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "check",
+              "gate",
+              "format",
+              "build",
+              "supply-chain",
+              "supply-chain-online",
+              "security"
+            ]
+          }
+        },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "environment": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command",
+        "capability",
+        "project",
+        "files",
+        "expectedStatus"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "command": { "$ref": "#/$defs/identifier" },
+        "capability": { "$ref": "#/$defs/identifier" },
+        "project": { "$ref": "#/$defs/path" },
+        "files": { "$ref": "#/$defs/paths" },
+        "expectedStatus": {
+          "enum": ["pass", "findings", "operational-failure"]
+        }
+      }
+    }
+  }
+}

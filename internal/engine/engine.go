@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/architecture"
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
+	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/policymodule"
 	"github.com/riteofstring/code-polishy/internal/portability"
@@ -33,6 +34,7 @@ type Engine struct {
 	Verbose              bool
 	PolicyModuleFindings []policy.Finding
 	PolicyModuleNotes    []string
+	PackDataRoot         string
 }
 
 type Report struct {
@@ -101,6 +103,12 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	dataRoot, dataRootErr := pack.UserDataRoot()
+	packResolution := pack.Resolve(config.Packs, dataRoot)
+	if dataRootErr != nil && len(config.Packs) > 0 {
+		packResolution = pack.Unavailable(config.Packs, dataRootErr)
+	}
+	pack.Apply(&repo.Config, packResolution)
 	files, err := repo.AllFiles()
 	if err != nil {
 		return nil, err
@@ -112,8 +120,9 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	commandRunner := runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr, PathEntries: pathEntries}
 	return &Engine{
 		Repository: repo, Runner: commandRunner, Output: os.Stdout,
-		PolicyModuleFindings: moduleResolution.Findings,
-		PolicyModuleNotes:    policymodule.Notes(moduleResolution.Active),
+		PolicyModuleFindings: append(moduleResolution.Findings, packResolution.Findings...),
+		PolicyModuleNotes:    append(policymodule.Notes(moduleResolution.Active), packResolution.Notes...),
+		PackDataRoot:         dataRoot,
 	}, nil
 }
 
@@ -172,6 +181,9 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	findings = append(findings, configuredToolFindings(engine.Repository)...)
 	findings = append(findings, supplychain.Static(ctx, engine.Repository, files)...)
 	findings = append(findings, engine.PolicyModuleFindings...)
+	if len(engine.Repository.Config.Packs) > 0 && engine.PackDataRoot != "" {
+		findings = append(findings, pack.FullTreeFindings(engine.Repository.Config.Packs, engine.PackDataRoot)...)
+	}
 	javascriptFindings, javascriptNotes := quality.JavaScriptBundleStatus(engine.Repository, files)
 	findings = append(findings, javascriptFindings...)
 	notes := []string{fmt.Sprintf("inventory: %d governed files across %d modules", len(files), len(engine.Repository.Config.Modules))}
@@ -627,7 +639,7 @@ func sortFindings(findings []policy.Finding) {
 }
 
 func findingKey(finding policy.Finding) string {
-	return finding.Check + "\x00" + finding.Path + "\x00" + finding.Subject + "\x00" + finding.Message
+	return fmt.Sprintf("%s\x00%s\x00%09d\x00%09d\x00%s\x00%s", finding.Check, finding.Path, finding.Line, finding.Column, finding.Subject, finding.Message)
 }
 
 func advisoryKey(advisory policy.Advisory) string {
@@ -781,12 +793,21 @@ func hiddenInputFindings(repo repository.Repository, files []string) []policy.Fi
 		if !policy.MatchesAny(path, repo.Config.Scope.Exclude) {
 			continue
 		}
-		protected := repo.IsSourceCommentSource(path) || supplychain.IsGovernedInput(path)
+		protected := repo.IsSourceCommentSource(path) || supplychain.IsGovernedInput(path) || packOwnsManifest(repo.Config, path)
 		if protected {
 			findings = append(findings, policy.Finding{Check: "policy.scope", Path: path, Subject: "exclude", Message: "target scope cannot exclude protected source, manifests, lockfiles, or workflows"})
 		}
 	}
 	return findings
+}
+
+func packOwnsManifest(config policy.Config, path string) bool {
+	for _, rule := range config.PackManifests {
+		if policy.MatchesAny(path, rule.Paths) {
+			return true
+		}
+	}
+	return false
 }
 
 func configuredToolFindings(repo repository.Repository) []policy.Finding {

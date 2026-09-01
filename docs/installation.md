@@ -139,8 +139,25 @@ code-polishy docs read installation
 The files remain available below
 `<prefix>/releases/<version>-<releaseDigest>/docs/`. Documentation and catalog
 bytes are recorded in the release manifest like runtime inputs, so a changed,
-missing, or added file makes the installed release invalid. Optional agent
-skills remain source artifacts and are not copied into a normal installation.
+missing, or added file makes the installed release invalid. Agent guidance is
+delivered through generated root files and the versioned documentation CLI.
+
+## Community language packs
+
+Language packs are installed separately from engine releases and never change
+`.code-polishy.lock.json`. From a repository already using the intended locked
+engine release, verify and install a reviewed local source directory:
+
+```sh
+code-polishy pack verify --source ./code-polishy-example
+code-polishy pack install --source ./code-polishy-example
+code-polishy pack root
+```
+
+Installation prints the exact name, semantic version, and content digest to add
+under the target configuration's `packs` array. It performs no download and
+executes no pack code. See `code-polishy docs read adding-a-language` for the
+manifest, protocol, trust, and contributor contracts.
 
 A release carries no source checkout, no history, and no build inputs.
 Installing does not modify the checkout it was built from.

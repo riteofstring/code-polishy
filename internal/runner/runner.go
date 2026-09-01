@@ -30,6 +30,11 @@ type OutputRunner interface {
 	RunWithOutput(context.Context, string, policy.Command) (Result, Output, error)
 }
 
+type StructuredRunner interface {
+	Runner
+	RunStructured(context.Context, string, policy.Command) (Result, Output, error)
+}
+
 type StreamRunner interface {
 	Runner
 	RunWithWriters(context.Context, string, policy.Command, io.Writer, io.Writer) (Result, error)
@@ -130,6 +135,17 @@ func (runner OSRunner) RunWithOutput(parent context.Context, root string, specif
 	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
 }
 
+func (runner OSRunner) RunStructured(parent context.Context, root string, specification policy.Command) (Result, Output, error) {
+	stdout := &boundedOutput{limit: maximumStructuredOutputBytes}
+	stderr := &boundedOutput{limit: maximumStructuredDiagnosticBytes}
+	result, err := runner.run(parent, root, specification, stdout, appendOutputWriter(runner.Stderr, stderr))
+	if stdout.truncated || stderr.truncated {
+		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
+		result.FailureCategory = FailureCategoryFor(parent, result, err)
+	}
+	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
+}
+
 func captureLimit(stdout, stderr *boundedOutput) int {
 	if stdout.truncated {
 		return stdout.limit
@@ -205,7 +221,7 @@ func (runner OSRunner) runLeasedCommand(parent context.Context, specification po
 	defer cleanupEnvironment()
 	hostResult, runErr := Run(contextWithTimeout, HostCommand{
 		Path: argv[0], Argv: argv, Directory: workingDirectory, Environment: environment,
-		Stdout: stdout, Stderr: stderr,
+		Stdin: bytes.NewReader(specification.Stdin), Stdout: stdout, Stderr: stderr,
 	})
 	if runErr != nil {
 		return commandFailureResult(hostResult, contextWithTimeout, specification.Name, timeout, started, resourceWait, runErr)
@@ -282,7 +298,19 @@ func commandEnvironment(specification policy.Command, pathEntries []string) ([]s
 		"npm_config_userconfig=" + absentConfiguration,
 		"npm_config_globalconfig=" + absentConfiguration,
 	}
+	environment = append(environment, explicitlySelectedEnvironment(specification.Environment)...)
 	return environment, func() { _ = os.RemoveAll(root) }, nil
+}
+
+func explicitlySelectedEnvironment(requested []string) []string {
+	environment := []string{}
+	for _, entry := range os.Environ() {
+		name, _, found := strings.Cut(entry, "=")
+		if found && slices.Contains(requested, name) {
+			environment = append(environment, entry)
+		}
+	}
+	return environment
 }
 
 func Environment(requested []string) []string {

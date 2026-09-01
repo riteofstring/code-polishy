@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+IFS= read -r request
+project_root=$(printf '%s\n' "$request" | /usr/bin/sed -n 's/.*"projectRoot":"\([^"]*\)".*/\1/p')
+if [ -z "$project_root" ]; then
+  printf '%s\n' '{"protocolVersion":1,"status":"operational-failure","failure":"request omitted projectRoot"}'
+  exit 0
+fi
+if /usr/bin/grep -q BAD "$project_root/src/main.fixture"; then
+  printf '%s\n' '{"protocolVersion":1,"status":"findings","findings":[{"capability":"lint","path":"src/main.fixture","line":1,"column":1,"subject":"fixture marker","message":"remove the BAD marker"}]}'
+  exit 0
+fi
+printf '%s\n' '{"protocolVersion":1,"status":"pass","evidence":["fixture source inspected"]}'

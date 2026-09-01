@@ -58,6 +58,25 @@ func TestOSRunnerCapturesStructuredOutputThroughTheCommonBoundary(t *testing.T) 
 	}
 }
 
+func TestOSRunnerKeepsStructuredProtocolOutputOutOfHumanOutput(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	script := filepath.Join(root, "protocol.sh")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nprintf 'response'\nprintf 'diagnostic' >&2\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var configuredStdout, configuredStderr bytes.Buffer
+	result, output, err := (OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}).RunStructured(context.Background(), root, policy.Command{
+		Name: "protocol", Argv: []string{"./protocol.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
+	})
+	if err != nil || result.ExitStatus != 0 || string(output.Stdout) != "response" || string(output.Stderr) != "diagnostic" {
+		t.Fatalf("result=%+v output=%+v error=%v", result, output, err)
+	}
+	if configuredStdout.Len() != 0 || configuredStderr.String() != "diagnostic" {
+		t.Fatalf("configured output stdout=%q stderr=%q", configuredStdout.String(), configuredStderr.String())
+	}
+}
+
 func TestOSRunnerRunWithWritersUsesOnlyTheRequestedDestinations(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

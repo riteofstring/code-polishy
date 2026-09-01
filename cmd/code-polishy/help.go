@@ -62,6 +62,23 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy docs list", "code-polishy docs find behavior review", "code-polishy docs read agent-workflows"},
 	},
 	{
+		name:    "pack",
+		summary: "Install, verify, or inspect an exact local community language pack.",
+		syntax: []string{
+			"code-polishy pack install --source PATH",
+			"code-polishy pack verify --source PATH",
+			"code-polishy pack root",
+		},
+		selectors: []string{
+			"install validates and atomically installs one local source directory.",
+			"verify runs the source directory's declared conformance fixtures without installing it.",
+			"root prints the effective local pack storage root.",
+		},
+		sideEffects: []string{"install writes an immutable content-addressed user-data directory; verify executes declared local adapters; root only reads platform configuration."},
+		exits:       []string{"0 requested action completed", "2 invalid usage, unsafe pack, unavailable integration, or operational failure"},
+		examples:    []string{"code-polishy pack verify --source ./code-polishy-rust", "code-polishy pack install --source ./code-polishy-rust", "code-polishy pack root"},
+	},
+	{
 		name:    "agents",
 		summary: "Install, synchronize, or verify generated AI-agent guidance and report-artifact hygiene.",
 		syntax:  []string{"code-polishy agents <install|sync|check>"},

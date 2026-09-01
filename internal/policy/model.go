@@ -55,6 +55,7 @@ type Config struct {
 	Quality             Quality              `json:"quality,omitempty"`
 	Portability         Portability          `json:"portability,omitempty"`
 	Documentation       Documentation        `json:"documentation,omitempty"`
+	Packs               []PackSelection      `json:"packs,omitempty"`
 	Modules             []Module             `json:"modules"`
 	Verification        Verification         `json:"verification,omitempty"`
 	Checks              []Command            `json:"checks,omitempty"`
@@ -67,6 +68,19 @@ type Config struct {
 	ActivePolicyModules []ActivePolicyModule `json:"-"`
 
 	JavaScriptLintScopes []JavaScriptLintScope `json:"-"`
+	PackManifests        []PackDependencyRule  `json:"-"`
+}
+
+type PackSelection struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Digest  string `json:"digest"`
+}
+
+type PackDependencyRule struct {
+	Pack     string
+	Language string
+	Paths    []string
 }
 
 type Verification struct {
@@ -178,20 +192,31 @@ type Module struct {
 }
 
 type Command struct {
-	Name               string   `json:"name"`
-	Provides           []string `json:"provides,omitempty"`
-	Argv               []string `json:"argv"`
-	Cwd                string   `json:"cwd,omitempty"`
-	Paths              []string `json:"paths,omitempty"`
-	Modules            []string `json:"modules,omitempty"`
-	RunOn              []string `json:"runOn,omitempty"`
-	Environment        []string `json:"environment,omitempty"`
-	ExclusiveResources []string `json:"exclusiveResources"`
-	TimeoutSeconds     int      `json:"timeoutSeconds,omitempty"`
-	Managed            bool     `json:"-"`
-	PassFiles          bool     `json:"-"`
-	PassFilePaths      []string `json:"-"`
-	SealedEnvironment  bool     `json:"-"`
+	Name               string       `json:"name"`
+	Provides           []string     `json:"provides,omitempty"`
+	Argv               []string     `json:"argv"`
+	Cwd                string       `json:"cwd,omitempty"`
+	Paths              []string     `json:"paths,omitempty"`
+	Modules            []string     `json:"modules,omitempty"`
+	RunOn              []string     `json:"runOn,omitempty"`
+	Environment        []string     `json:"environment,omitempty"`
+	ExclusiveResources []string     `json:"exclusiveResources"`
+	TimeoutSeconds     int          `json:"timeoutSeconds,omitempty"`
+	Managed            bool         `json:"-"`
+	PassFiles          bool         `json:"-"`
+	PassFilePaths      []string     `json:"-"`
+	SealedEnvironment  bool         `json:"-"`
+	Adapter            *PackAdapter `json:"-"`
+	Stdin              []byte       `json:"-"`
+}
+
+type PackAdapter struct {
+	PackName        string
+	PackVersion     string
+	PackDigest      string
+	PackRoot        string
+	ProtocolVersion int
+	Capability      string
 }
 
 type Testing struct {
@@ -366,6 +391,8 @@ func (date *Date) UnmarshalJSON(data []byte) error {
 type Finding struct {
 	Check         string
 	Path          string
+	Line          int
+	Column        int
 	Subject       string
 	Message       string
 	Vulnerability *VulnerabilityIdentity

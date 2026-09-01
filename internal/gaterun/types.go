@@ -241,6 +241,8 @@ type CommandOutcome struct {
 type Finding struct {
 	Check   string `json:"check"`
 	Path    string `json:"path"`
+	Line    int    `json:"line,omitempty"`
+	Column  int    `json:"column,omitempty"`
 	Subject string `json:"subject"`
 	Message string `json:"message"`
 }

@@ -279,12 +279,17 @@ exercise_versioned_documentation() {
     fail "${description}: docs list omitted agent-workflows: $(excerpt)"
   grep -q $'^behavior-review\tBehavior Regression Review$' "${output}" ||
     fail "${description}: docs list omitted behavior-review: $(excerpt)"
+  grep -q $'^adding-a-language\tAdding a Community Language$' "${output}" ||
+    fail "${description}: docs list omitted adding-a-language: $(excerpt)"
   expect_pass "${target}" "${description} documentation search" docs find behavior review
   grep -q $'^behavior-review\tBehavior Regression Review\t' "${output}" ||
     fail "${description}: docs find did not rank behavior review: $(excerpt)"
   expect_pass "${target}" "${description} documentation read" docs read agents
   cmp -s "${release}/docs/agent-workflows.md" "${output}" ||
     fail "${description}: docs read did not return the installed release bytes"
+  expect_pass "${target}" "${description} pack storage root" pack root
+  [[ -n "$(tr -d '[:space:]' <"${output}")" ]] ||
+    fail "${description}: pack root was empty"
   if [[ "$("${real_git}" -C "${target}" status --porcelain=v1 --untracked-files=all)" != "${before}" ]]; then
     fail "${description}: documentation commands mutated the target repository"
   fi

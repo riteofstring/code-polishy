@@ -268,6 +268,15 @@ func validateReportHeader(report Report) error {
 	if report.Commands == nil || report.Findings == nil || report.Notes == nil || report.TestEvidence == nil || report.TestDiagnostics == nil {
 		return fmt.Errorf("%w: gate run report collections are missing", ErrInvalidArtifact)
 	}
+	return validateFindingLocations(report.Findings)
+}
+
+func validateFindingLocations(findings []Finding) error {
+	for _, finding := range findings {
+		if finding.Line < 0 || finding.Column < 0 || finding.Column > 0 && finding.Line == 0 {
+			return fmt.Errorf("%w: gate run finding location is invalid", ErrInvalidArtifact)
+		}
+	}
 	return nil
 }
 

@@ -1,0 +1,41 @@
+{
+  "$schema": "../../../schema/code-polishy-pack.schema.json",
+  "manifestVersion": 1,
+  "name": "fixture-language",
+  "version": "1.0.0",
+  "protocolVersion": 1,
+  "platforms": ["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"],
+  "languages": [
+    {
+      "id": "fixture",
+      "sourcePatterns": ["**/*.fixture"]
+    }
+  ],
+  "commands": [
+    {
+      "name": "adapter",
+      "argv": ["bin/adapter"],
+      "capabilities": ["lint"],
+      "profiles": ["check", "gate"],
+      "timeoutSeconds": 30
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "lint-pass",
+      "command": "adapter",
+      "capability": "lint",
+      "project": "fixtures/pass",
+      "files": ["src/main.fixture"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "lint-fail",
+      "command": "adapter",
+      "capability": "lint",
+      "project": "fixtures/fail",
+      "files": ["src/main.fixture"],
+      "expectedStatus": "findings"
+    }
+  ]
+}

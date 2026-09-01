@@ -22,6 +22,7 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 Commands:
   version
   docs <list|find|read>
+  pack <install|verify|root>
   agents <install|sync|check>
   lock
   release-manifest <write|verify|materialize> [options]
@@ -151,6 +152,8 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 		return printVersion(invocation), true
 	case "docs":
 		return handleDocsMeta(invocation), true
+	case "pack":
+		return handlePackMeta(invocation), true
 	case "agents":
 		return handleAgentsMeta(invocation), true
 	case "lock":
@@ -260,7 +263,7 @@ func handleAgentsMeta(invocation invocation) int {
 }
 
 func requireLockedRelease(invocation invocation) (int, bool) {
-	exempt := []string{"lock", "install-bundle", "release-manifest", "version", "docs", "--version", "help", "--help", "-h"}
+	exempt := []string{"lock", "install-bundle", "release-manifest", "version", "docs", "pack", "--version", "help", "--help", "-h"}
 	if slices.Contains(exempt, invocation.command) {
 		return 0, true
 	}

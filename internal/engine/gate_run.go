@@ -365,7 +365,7 @@ func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, r
 func gateRunFindings(findings []policy.Finding) []gaterun.Finding {
 	result := make([]gaterun.Finding, 0, len(findings))
 	for _, finding := range findings {
-		result = append(result, gaterun.Finding{Check: finding.Check, Path: finding.Path, Subject: finding.Subject, Message: finding.Message})
+		result = append(result, gaterun.Finding{Check: finding.Check, Path: finding.Path, Line: finding.Line, Column: finding.Column, Subject: finding.Subject, Message: finding.Message})
 	}
 	return result
 }

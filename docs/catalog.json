@@ -2,6 +2,14 @@
   "version": 1,
   "topics": [
     {
+      "id": "adding-a-language",
+      "path": "docs/adding-a-language.md",
+      "title": "Adding a Community Language",
+      "summary": "Build, verify, install, and select an independently owned community language pack.",
+      "aliases": ["language-packs", "packs"],
+      "public": true
+    },
+    {
       "id": "adoption",
       "path": "docs/adoption.md",
       "title": "Adopting Code Polishy",

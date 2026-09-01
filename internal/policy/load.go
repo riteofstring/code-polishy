@@ -183,6 +183,9 @@ func validate(config *Config) error {
 	if err := validateModules(config); err != nil {
 		return err
 	}
+	if err := validatePacks(config.Packs); err != nil {
+		return err
+	}
 	if err := validateDocumentation(config); err != nil {
 		return err
 	}
@@ -977,23 +980,6 @@ func validateUniqueStrings(values []string, label string, validateIDs bool) erro
 			return fmt.Errorf("%s must not contain duplicate %q", label, value)
 		}
 		seen[value] = true
-	}
-	return nil
-}
-
-func identifier(value, label string) error {
-	if err := nonempty(value, label); err != nil {
-		return err
-	}
-	if !identifierPattern.MatchString(value) {
-		return fmt.Errorf("%s must be a lowercase dotted or dashed identifier", label)
-	}
-	return nil
-}
-
-func nonempty(value, label string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s must be a non-empty string", label)
 	}
 	return nil
 }

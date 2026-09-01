@@ -59,7 +59,7 @@
     {
       "name": "quality",
       "paths": ["internal/quality/**"],
-      "dependsOn": ["javascript", "policy", "repository", "runner"]
+      "dependsOn": ["javascript", "pack", "policy", "repository", "runner"]
     },
     {
       "name": "architecture",
@@ -87,6 +87,11 @@
       "dependsOn": ["policy", "repository", "runner"]
     },
     {
+      "name": "pack",
+      "paths": ["internal/pack/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
       "name": "portability",
       "paths": ["internal/portability/**"],
       "dependsOn": ["policy", "repository"]
@@ -100,6 +105,7 @@
         "artifactsecurity",
         "behaviorreview",
         "gaterun",
+        "pack",
         "policy",
         "policymodule",
         "portability",
@@ -118,6 +124,7 @@
         "agents",
         "documentation",
         "engine",
+        "pack",
         "policy",
         "release",
         "runner",
@@ -154,6 +161,7 @@
         "testing",
         "supplychain",
         "artifactsecurity",
+        "pack",
         "policymodule",
         "portability",
         "engine",
@@ -271,6 +279,13 @@
         "scope": "module",
         "modules": ["artifactsecurity"],
         "argv": ["go", "test", "-count=1", "./internal/artifactsecurity/..."]
+      },
+      {
+        "name": "pack-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["pack"],
+        "argv": ["go", "test", "-count=1", "./internal/pack/..."]
       },
       {
         "name": "policymodule-unit",

@@ -195,7 +195,8 @@ jobs:
             throw 'Installed native documentation list failed.'
           }
           if ($docsList -notlike '*agent-workflows*Agent Workflows*' -or
-              $docsList -notlike '*behavior-review*Behavior Regression Review*') {
+              $docsList -notlike '*behavior-review*Behavior Regression Review*' -or
+              $docsList -notlike '*adding-a-language*Adding a Community Language*') {
             throw "Installed native documentation list omitted required topics: $docsList"
           }
           $docsFind = (& $launcher --repo-root $target docs find behavior review 2>&1 | Out-String)
@@ -211,6 +212,10 @@ jobs:
           $docsStatusAfter = (& git.exe -C $target status --porcelain=v1 --untracked-files=all | Out-String)
           if ($docsStatusAfter -ne $docsStatusBefore) {
             throw 'Installed native documentation commands changed the target repository.'
+          }
+          $packRoot = (& $launcher --repo-root $target pack root 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($packRoot)) {
+            throw 'Installed native pack root inspection failed.'
           }
 
           & $launcher --repo-root $target format --files src/data.json

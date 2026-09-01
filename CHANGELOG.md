@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add locally installed, content-addressed community language packs with exact
+  project selection, conformance fixtures, structured adapter evidence, and
+  normal quality, architecture, build, supply-chain, doctor, and gate coverage.
 - Add `docs list`, `docs find`, and `docs read` so agents can retrieve bounded,
   deterministic documentation from the exact installed release without a
   network request or guessed file path.

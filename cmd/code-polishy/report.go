@@ -11,13 +11,24 @@ import (
 
 func printFindings(output io.Writer, findings []policy.Finding) {
 	for _, finding := range findings {
-		fmt.Fprintf(output, "FAIL %-34s %s [%s]\n     %s\n", finding.Check, finding.Path, finding.Subject, finding.Message)
+		fmt.Fprintf(output, "FAIL %-34s %s [%s]\n     %s\n", finding.Check, findingLocation(finding), finding.Subject, finding.Message)
 	}
+}
+
+func findingLocation(finding policy.Finding) string {
+	if finding.Line <= 0 {
+		return finding.Path
+	}
+	location := fmt.Sprintf("%s:%d", finding.Path, finding.Line)
+	if finding.Column > 0 {
+		location += fmt.Sprintf(":%d", finding.Column)
+	}
+	return location
 }
 
 func printSuppressedFindings(output io.Writer, suppressed []policy.Suppressed) {
 	for _, finding := range suppressed {
-		fmt.Fprintf(output, "WAIVED %-32s %s [%s] by %s\n", finding.Finding.Check, finding.Finding.Path, finding.Finding.Subject, finding.Exception.ID)
+		fmt.Fprintf(output, "WAIVED %-32s %s [%s] by %s\n", finding.Finding.Check, findingLocation(finding.Finding), finding.Finding.Subject, finding.Exception.ID)
 	}
 }
 
@@ -30,7 +41,7 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 		fmt.Fprintf(
 			output,
 			"VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, approved by %s, expires %s)\n",
-			assessment.Finding.Check, assessment.Finding.Path, assessment.Finding.Subject, assessment.Assessment.ID,
+			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID,
 			observedSeverity, assessment.Assessment.Severity, assessment.Assessment.Status, assessment.Assessment.Basis, assessment.Assessment.ApprovedBy,
 			assessment.Assessment.Expires.Format("2006-01-02"),
 		)
@@ -39,7 +50,7 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 
 func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedReleaseAge) {
 	for _, assessment := range assessed {
-		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s)\n", assessment.Finding.Check, assessment.Finding.Path, assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category)
+		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s)\n", assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category)
 	}
 }
 

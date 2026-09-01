@@ -18,6 +18,13 @@ quality  architecture  testing  behaviorreview  supplychain  policymodule  porta
    policy + repository + runner + javascript
 ```
 
+Community language packs add one generic `internal/pack` boundary beside
+conditional modules. It validates local manifests and installation receipts,
+compiles exact selected providers into the ordinary capability profiles, and
+exchanges one bounded JSON request and response with each contained adapter.
+Pack code always remains in a child process; no language-specific implementation
+or third-party code is loaded into the Go engine.
+
 ## Deep boundaries
 
 `internal/policy` decodes JSON with unknown-field rejection, applies immutable

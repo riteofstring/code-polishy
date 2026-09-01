@@ -10,6 +10,7 @@ that repository's locked release:
 code-polishy docs list
 code-polishy docs find behavior review
 code-polishy docs read agent-workflows
+code-polishy docs read adding-a-language
 ```
 
 The checked-in `catalog.json` owns stable topic identifiers, titles, summaries,
@@ -58,3 +59,5 @@ and aliases. Search is local, bounded, and deterministic.
   toolchain origins, and implementation boundaries.
 - [Release Checklist](release-checklist.md) defines the immutable annotated-tag
   release process.
+- [Adding a Community Language](adding-a-language.md) defines local language
+  packs, conformance verification, exact installation, and adapter protocol.
