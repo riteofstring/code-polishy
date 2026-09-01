@@ -45,6 +45,23 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy version"},
 	},
 	{
+		name:    "docs",
+		summary: "List, search, or read the documentation shipped with this exact Code Polishy release.",
+		syntax: []string{
+			"code-polishy docs list",
+			"code-polishy docs find QUERY...",
+			"code-polishy docs read TOPIC",
+		},
+		selectors: []string{
+			"list accepts no arguments and prints public topic identifiers in stable order.",
+			"find requires one or more query terms and returns a bounded deterministic result list.",
+			"read requires one exact topic identifier or documented alias.",
+		},
+		sideEffects: []string{"Reads only the version-matched documentation under the policy root; no repository or network access."},
+		exits:       []string{"0 requested documentation printed or no search results", "2 invalid usage or unavailable documentation"},
+		examples:    []string{"code-polishy docs list", "code-polishy docs find behavior review", "code-polishy docs read agent-workflows"},
+	},
+	{
 		name:    "agents",
 		summary: "Install, synchronize, or verify generated AI-agent guidance and report-artifact hygiene.",
 		syntax:  []string{"code-polishy agents <install|sync|check>"},
