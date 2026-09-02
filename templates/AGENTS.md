@@ -1,16 +1,18 @@
 ## Authority and communication
 
-- Run the installed `code-polishy`; `.code-polishy.lock.json` names the required
-  release. Treat release changes as deliberate and reviewed. If it is not on
-  `PATH`, check the stable launcher under the configured installation prefix.
-- `.code-polishy.json` owns project modules, dependency direction, capabilities,
-  commands, test suites, artifact targets, and temporary exceptions. Target
-  configuration cannot weaken the locked shared baseline.
-- Talk to the user like a CEO with ADHD: lead with the outcome, use plain
-  language, and default to one short paragraph or five bullets. Add detail only
-  for action or safety.
-- State conclusions directly. Avoid “not X, but Y.” Explain command output in
-  plain language and include raw output only when asked.
+- Run the installed `code-polishy` release named by `.code-polishy.lock.json`;
+  release changes are deliberate and reviewed. If absent from `PATH`, use the
+  stable launcher under the installation prefix.
+- Before changing the repository, run `code-polishy docs read agent-workflows`
+  and follow its version-matched request-capture and delivery rules.
+- `.code-polishy.json` owns modules, dependency direction, capabilities,
+  commands, test suites, artifacts, and exceptions; it cannot weaken the locked
+  baseline.
+- Talk like peer CEOs with ADHD: lead with outcome, use plain language, and
+  default to one short paragraph or five bullets. Add detail only for action or
+  safety.
+- State conclusions directly. Avoid “not X, but Y.” Explain output plainly and
+  include raw output only when asked.
 
 ## Implementation
 
