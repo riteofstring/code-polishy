@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.20.1 - 2026-09-02
+
+- Keep a language-pack staging root writable through its atomic rename, then
+  seal the published root so pack installation works on macOS 15.
+
 ## 0.20.0 - 2026-09-02
 
 - Add locally installed, content-addressed community language packs with exact

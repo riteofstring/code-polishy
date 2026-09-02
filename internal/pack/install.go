@@ -103,7 +103,7 @@ func publishTree(tree sourceTree, target string) error {
 	if _, err := VerifyInstalled(staging); err != nil {
 		return err
 	}
-	if err := freezeTree(staging, tree.Receipt); err != nil {
+	if err := freezeTreeContents(staging, tree.Receipt); err != nil {
 		return err
 	}
 	if err := os.Rename(staging, target); err != nil {
@@ -111,6 +111,11 @@ func publishTree(tree sourceTree, target string) error {
 			return err
 		}
 		return nil
+	}
+	if err := os.Chmod(target, 0o555); err != nil {
+		makeWritable(target)
+		_ = os.RemoveAll(target)
+		return err
 	}
 	keep = true
 	return nil
@@ -137,7 +142,7 @@ func writeCandidate(staging string, tree sourceTree) error {
 	return os.WriteFile(filepath.Join(staging, ReceiptFilename), append(receipt, '\n'), 0o644)
 }
 
-func freezeTree(root string, receipt Receipt) error {
+func freezeTreeContents(root string, receipt Receipt) error {
 	for _, entry := range receipt.Files {
 		mode := fs.FileMode(0o444)
 		if entry.Executable {
@@ -160,6 +165,9 @@ func freezeTree(root string, receipt Receipt) error {
 		return err
 	}
 	for index := len(directories) - 1; index >= 0; index-- {
+		if directories[index] == root {
+			continue
+		}
 		if err := os.Chmod(directories[index], 0o555); err != nil {
 			return err
 		}

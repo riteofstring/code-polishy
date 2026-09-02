@@ -59,6 +59,15 @@ func TestInstallPublishesExactContentAddressedTreeAndDetectsTampering(t *testing
 	if installed != InstalledRoot(dataRoot, identity.Name, identity.Version, identity.Digest) {
 		t.Fatalf("unexpected installed root %s", installed)
 	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(installed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o555 {
+			t.Fatalf("installed pack root remained writable: %s", info.Mode().Perm())
+		}
+	}
 	second, secondRoot, err := Install(source, dataRoot)
 	if err != nil || second != identity || secondRoot != installed {
 		t.Fatalf("idempotent install failed: %+v %s %v", second, secondRoot, err)
