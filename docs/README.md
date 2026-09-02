@@ -62,5 +62,5 @@ and aliases. Search is local, bounded, and deterministic.
   toolchain origins, and implementation boundaries.
 - [Release Checklist](release-checklist.md) defines the immutable annotated-tag
   release process.
-- [Adding a Community Language](adding-a-language.md) defines local language
+- [Adding a Language Pack](adding-a-language.md) defines local language
   packs, conformance verification, exact installation, and adapter protocol.

@@ -18,7 +18,7 @@ quality  architecture  testing  behaviorreview  supplychain  policymodule  porta
    policy + repository + runner + javascript
 ```
 
-Community language packs add one generic `internal/pack` boundary beside
+Language packs add one generic `internal/pack` boundary beside
 conditional modules. It validates local manifests and installation receipts,
 compiles exact selected providers into the ordinary capability profiles, and
 exchanges one bounded JSON request and response with each contained adapter.

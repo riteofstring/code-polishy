@@ -278,7 +278,7 @@ exercise_versioned_documentation() {
     fail "${description}: docs list omitted agent-workflows: $(excerpt)"
   grep -q $'^behavior-review\tBehavior and Final-State Review$' "${output}" ||
     fail "${description}: docs list omitted behavior-review: $(excerpt)"
-  grep -q $'^adding-a-language\tAdding a Community Language$' "${output}" ||
+  grep -q $'^adding-a-language\tAdding a Language Pack$' "${output}" ||
     fail "${description}: docs list omitted adding-a-language: $(excerpt)"
   expect_pass "${target}" "${description} documentation search" docs find behavior review
   grep -q $'^behavior-review\tBehavior and Final-State Review\t' "${output}" ||

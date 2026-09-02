@@ -1,6 +1,6 @@
-# Adding a Community Language
+# Adding a Language Pack
 
-Community language packs connect an independently owned toolchain to Code
+Language packs connect an independently owned toolchain to Code
 Polishy's existing policy engine. A pack is executable third-party input. Code
 Polishy validates and runs it; it does not endorse, download, update, or support
 the tools it contains.

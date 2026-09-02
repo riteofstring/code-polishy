@@ -143,7 +143,7 @@ bytes are recorded in the release manifest like runtime inputs, so a changed,
 missing, or added file makes the installed release invalid. Agent guidance is
 delivered through generated root files and the versioned documentation CLI.
 
-## Community language packs
+## Language packs
 
 Language packs are installed separately from engine releases and never change
 `.code-polishy.lock.json`. From a repository already using the intended locked

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack.schema.json",
-  "title": "Code Polishy community language pack",
+  "title": "Code Polishy language pack",
   "type": "object",
   "additionalProperties": false,
   "required": [

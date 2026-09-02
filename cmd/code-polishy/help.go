@@ -63,7 +63,7 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "pack",
-		summary: "Install, verify, or inspect an exact local community language pack.",
+		summary: "Install, verify, or inspect an exact local language pack.",
 		syntax: []string{
 			"code-polishy pack install --source PATH",
 			"code-polishy pack verify --source PATH",

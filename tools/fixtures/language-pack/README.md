@@ -1,4 +1,4 @@
-# Community pack contract fixture
+# Language pack contract fixture
 
 This source-only pack exercises the public manifest and adapter protocol. It is
 not official support for a language, a recommendation, or a complete language
