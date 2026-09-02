@@ -184,11 +184,11 @@ with that reason rather than reinterpreted, so a release installed before the
 manifest changed is reinstalled from its commit rather than read as if it
 recorded what a release records now.
 
-Code Polishy 0.19.0 uses manifest version 3. Its required `tools.ty` field
-records the carried `ty` 0.0.65 release. A version 2 manifest is rejected and
-reinstalled from its exact source commit; it is never treated as evidence that
-the release carried or verified `ty`. The target configuration version is a
-separate contract.
+Manifest version 3 was introduced in Code Polishy 0.19.0. Its required
+`tools.ty` field records the carried `ty` 0.0.65 release. A version 2 manifest is
+rejected and reinstalled from its exact source commit; it is never treated as
+evidence that the release carried or verified `ty`. The target configuration
+version is a separate contract.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after
