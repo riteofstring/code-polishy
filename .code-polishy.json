@@ -521,6 +521,8 @@
           "./scripts/go-mutation.sh",
           "./internal/quality",
           "--conditionals-boundary=false",
+          "--timeout-coefficient",
+          "10",
           "--exclude-files",
           "(^|/)(comments|comments_(python|web)|javascript|markdown.*|quality)[.]go$"
         ],
