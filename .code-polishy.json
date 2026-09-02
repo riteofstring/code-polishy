@@ -395,12 +395,47 @@
         "timeoutSeconds": 3600
       },
       {
-        "name": "behaviorreview-mutation",
+        "name": "behaviorreview-artifacts-mutation",
         "kind": "mutation",
         "scope": "module",
         "cost": "expensive",
         "modules": ["behaviorreview"],
-        "argv": ["./scripts/go-mutation.sh", "./internal/behaviorreview"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/behaviorreview",
+          "--exclude-files",
+          "(^|/)(intent|proof|requirements|review|review_material|selection)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "behaviorreview-intent-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["behaviorreview"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/behaviorreview",
+          "--exclude-files",
+          "(^|/)(artifact.*|checkpoint|common|final_state|proof|review|types)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "behaviorreview-proof-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["behaviorreview"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/behaviorreview",
+          "--exclude-files",
+          "(^|/)(artifact.*|checkpoint|common|final_state|intent|requirements|review_material|selection|types)[.]go$"
+        ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
@@ -445,7 +480,7 @@
         "timeoutSeconds": 3600
       },
       {
-        "name": "quality-mutation",
+        "name": "quality-comments-core-mutation",
         "kind": "mutation",
         "scope": "module",
         "cost": "expensive",
@@ -453,7 +488,89 @@
         "argv": [
           "./scripts/go-mutation.sh",
           "./internal/quality",
-          "--conditionals-boundary=false"
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments_(python|shell|web)|javascript|markdown.*|quality)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-comments-python-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments|comments_(shell|web)|javascript|markdown.*|quality)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-comments-shell-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments|comments_(python|web)|javascript|markdown.*|quality)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-comments-web-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments|comments_(python|shell)|javascript|markdown.*|quality)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-analysis-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments.*|markdown.*)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-markdown-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments.*|javascript|quality)[.]go$"
         ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600

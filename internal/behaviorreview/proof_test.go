@@ -14,6 +14,7 @@ import (
 )
 
 func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root}
@@ -47,6 +48,7 @@ func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
 }
 
 func TestProveAllowsAnExistingReproducerWithAnEmptyEvidencePatch(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newExistingEvidenceRepository(t)
 	prepareReview(t, repo)
 	result, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "existing"})
@@ -63,6 +65,7 @@ func TestProveAllowsAnExistingReproducerWithAnEmptyEvidencePatch(t *testing.T) {
 }
 
 func TestProveRequiresPreparedReviewAndRejectsOlderReviewBase(t *testing.T) {
+	t.Parallel()
 	t.Run("missing prepare", func(t *testing.T) {
 		repo, _, _ := newBehaviorRepository(t)
 		_, err := Prove(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root}, ProveOptions{Base: "main", Suite: "unit", Evidence: []string{"evidence_test.go"}, ID: "missing-prepare"})
@@ -81,6 +84,7 @@ func TestProveRequiresPreparedReviewAndRejectsOlderReviewBase(t *testing.T) {
 }
 
 func TestProveRejectsDestructiveSuite(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	repo.Config.Tests.Suites[0].Kind = "destructive"
@@ -91,6 +95,7 @@ func TestProveRejectsDestructiveSuite(t *testing.T) {
 }
 
 func TestProveChecksCandidateAfterTimeout(t *testing.T) {
+	t.Parallel()
 	t.Run("operational timeout", func(t *testing.T) {
 		repo, _, _ := newBehaviorRepository(t)
 		prepareReview(t, repo)
@@ -113,6 +118,7 @@ func TestProveChecksCandidateAfterTimeout(t *testing.T) {
 }
 
 func TestProveReturnsCleanupFailure(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root, attachBaselineWorktree: true}
@@ -127,6 +133,7 @@ func TestProveReturnsCleanupFailure(t *testing.T) {
 }
 
 func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		mutate func(t *testing.T, repo repository.Repository, root string, proof regressionProof)
@@ -175,6 +182,7 @@ func TestFinalizeRevalidatesProofArtifactsAndConfiguration(t *testing.T) {
 }
 
 func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -199,6 +207,7 @@ func TestReplayGateReceiptReexecutesProofsWithoutChangingArtifacts(t *testing.T)
 }
 
 func TestReplayPlanReturnsStableClonedValidatedProofPhasesWithoutExecution(t *testing.T) {
+	t.Parallel()
 	repo, proof := finalizedRequestedReview(t)
 	before := gitBehavior(t, repo.Root, "worktree", "list", "--porcelain")
 	plan := replayPlanForTest(t, repo)
@@ -286,6 +295,7 @@ func assertReplayPlanWorktreesUnchanged(t *testing.T, repo repository.Repository
 }
 
 func TestReplayPlanRejectsTamperedProofArtifacts(t *testing.T) {
+	t.Parallel()
 	repo, proof := finalizedRequestedReview(t)
 	root := behaviorRoot(t, repo)
 	writeBehaviorFile(t, root, proofArtifactName(proof.ID, ".candidate.log"), "tampered\n")
@@ -295,6 +305,7 @@ func TestReplayPlanRejectsTamperedProofArtifacts(t *testing.T) {
 }
 
 func TestReplayGateReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *testing.T) {
+	t.Parallel()
 	t.Run("semantic failure", func(t *testing.T) {
 		repo, _ := finalizedRequestedReview(t)
 		_, err := ReplayGateReceipt(context.Background(), repo, &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}, validationOptions("main"))
@@ -315,6 +326,7 @@ func TestReplayGateReceiptRejectsSemanticFailureAndCandidateWorktreeMutation(t *
 }
 
 func TestProveRejectsWrongRedStatusAndUnsafeEvidence(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	wrongStatusRunner := &behaviorRunner{candidateRoot: repo.Root, baselineStatus: 2}
@@ -334,6 +346,7 @@ func TestProveRejectsWrongRedStatusAndUnsafeEvidence(t *testing.T) {
 }
 
 func TestProveDetectsCandidateMutation(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	commandRunner := &behaviorRunner{candidateRoot: repo.Root, mutateCandidate: true}

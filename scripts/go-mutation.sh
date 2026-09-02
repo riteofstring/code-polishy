@@ -36,7 +36,8 @@ fi
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-mutation.XXXXXX")"
 worktree="${temporary_dir}/worktree"
-gremlins_config="${temporary_dir}/gremlins.yaml"
+coverage_config="${temporary_dir}/gremlins-coverage.yaml"
+mutation_config="${temporary_dir}/gremlins-mutation.yaml"
 cleanup() {
   git -C "${repo_root}" worktree remove --force "${worktree}" >/dev/null 2>&1 || true
   rm -rf "${temporary_dir}"
@@ -50,16 +51,17 @@ if [[ -s "${patch_file}" ]]; then
   git -C "${worktree}" apply --binary "${patch_file}"
 fi
 while IFS= read -r -d '' path; do
+  if [[ "${path}" == ".tools" || "${path}" == .tools/* ]]; then
+    continue
+  fi
   mkdir -p "${worktree}/$(dirname "${path}")"
   cp -p "${repo_root}/${path}" "${worktree}/${path}"
 done < <(git -C "${repo_root}" ls-files --others --exclude-standard -z)
-
-printf '%s\n' \
-  'unleash:' \
-  '  workers: 2' \
-  '  threshold:' \
-  '    efficacy: 80' \
-  '    mutant-coverage: 80' >"${gremlins_config}"
+if [[ -e "${worktree}/.tools" || -L "${worktree}/.tools" ]]; then
+  echo "Go mutation worktree unexpectedly contains .tools." >&2
+  exit 1
+fi
+ln -s "${repo_root}/.tools" "${worktree}/.tools"
 
 cd "${worktree}"
 inactive_patterns=()
@@ -74,10 +76,26 @@ if [[ -n "${mutation_target}" && "${mutation_target}" != -* ]]; then
     inactive_patterns+=("(^|/)${inactive_source//./[.]}$")
   done <<<"${ignored_sources}"
 fi
-if [[ "${#inactive_patterns[@]}" -gt 0 ]]; then
-  printf '%s\n' '  exclude-files:' >>"${gremlins_config}"
+write_gremlins_config() {
+  local path="$1"
+  local efficacy="$2"
+  local mutant_coverage="$3"
+  printf '%s\n' \
+    'unleash:' \
+    '  workers: 2' \
+    '  threshold:' \
+    "    efficacy: ${efficacy}" \
+    "    mutant-coverage: ${mutant_coverage}" >"${path}"
+  if [[ "${#inactive_patterns[@]}" -eq 0 ]]; then
+    return
+  fi
+  printf '%s\n' '  exclude-files:' >>"${path}"
   for inactive_pattern in "${inactive_patterns[@]}"; do
-    printf "    - '%s'\n" "${inactive_pattern}" >>"${gremlins_config}"
+    printf "    - '%s'\n" "${inactive_pattern}" >>"${path}"
   done
-fi
-"${gremlins}" --config "${gremlins_config}" unleash "$@"
+}
+
+write_gremlins_config "${coverage_config}" 0 80
+"${gremlins}" --config "${coverage_config}" unleash --dry-run "$@"
+write_gremlins_config "${mutation_config}" 80 0
+"${gremlins}" --config "${mutation_config}" unleash "$@"

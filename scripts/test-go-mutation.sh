@@ -48,17 +48,26 @@ chmod +x "${fixture_repo}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go"
 cat >"${fixture_repo}/.tools/bin/gremlins" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$#" == "4" ]]
 [[ "$1" == "--config" ]]
 [[ "$3" == "unleash" ]]
-[[ "$4" == "./internal/sample" ]]
+[[ -L .tools ]]
+[[ "$(cd .tools && pwd -P)" == "$(cd "${GREMLINS_TEST_TOOLS}" && pwd -P)" ]]
 grep -qx 'unleash:' "$2"
 grep -qx '  workers: 2' "$2"
 grep -qx '  threshold:' "$2"
-grep -qx '    efficacy: 80' "$2"
-grep -qx '    mutant-coverage: 80' "$2"
 grep -qx '  exclude-files:' "$2"
 grep -Fqx "    - '(^|/)inactive_other[.]go$'" "$2"
+if [[ "$#" == "5" && "$4" == "--dry-run" && "$5" == "./internal/sample" ]]; then
+  grep -qx '    efficacy: 0' "$2"
+  grep -qx '    mutant-coverage: 80' "$2"
+  printf '%s\n' coverage >"${GREMLINS_TEST_MARKER}"
+  exit 0
+fi
+[[ "$#" == "4" ]]
+[[ "$4" == "./internal/sample" ]]
+grep -qx '    efficacy: 80' "$2"
+grep -qx '    mutant-coverage: 0' "$2"
+grep -qx coverage "${GREMLINS_TEST_MARKER}"
 printf '%s\n' invoked >"${GREMLINS_TEST_MARKER}"
 exit 10
 EOF
@@ -72,6 +81,7 @@ git -C "${fixture_repo}" commit --quiet -m fixture
 
 status=0
 GREMLINS_TEST_MARKER="${marker}" \
+  GREMLINS_TEST_TOOLS="${fixture_repo}/.tools" \
   "${fixture_repo}/scripts/go-mutation.sh" ./internal/sample >"${output}" 2>&1 || status=$?
 [[ "${status}" == "10" ]] ||
   fail "threshold failure exited ${status}, expected 10: $(sed -n '1,10p' "${output}")"

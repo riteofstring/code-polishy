@@ -12,6 +12,7 @@ import (
 )
 
 func TestFinalizeBlocksEvidenceBoundFinalStateFinding(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	packet, _, err := readPacket(behaviorArtifact(t, repo))
@@ -36,6 +37,7 @@ func TestFinalizeBlocksEvidenceBoundFinalStateFinding(t *testing.T) {
 }
 
 func TestFinalizeRejectsInventedFinalStateEvidence(t *testing.T) {
+	t.Parallel()
 	for name, mutate := range map[string]func(*finalstate.Finding){
 		"path":   func(finding *finalstate.Finding) { finding.Path = "invented.go" },
 		"line":   func(finding *finalstate.Finding) { finding.Line = 99999 },
@@ -68,6 +70,7 @@ func TestFinalizeRejectsInventedFinalStateEvidence(t *testing.T) {
 }
 
 func TestPreparedPacketCarriesTypedFinalStateEvidence(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	packet, _, err := readPacket(behaviorArtifact(t, repo))
@@ -85,6 +88,7 @@ func TestPreparedPacketCarriesTypedFinalStateEvidence(t *testing.T) {
 }
 
 func TestFinalStatePathRoleUsesDeclaredPolicyBeforeFileShape(t *testing.T) {
+	t.Parallel()
 	repo := repository.Repository{Config: policy.Config{
 		Scope:         policy.Scope{Generated: []string{"generated/**"}},
 		Documentation: policy.Documentation{ProductInputs: []string{"docs/product.md"}},

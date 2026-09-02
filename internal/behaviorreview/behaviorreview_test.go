@@ -20,6 +20,7 @@ import (
 )
 
 func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	prepared, err := Prepare(context.Background(), repo, prepareOptions("main"))
 	if err != nil {
@@ -43,6 +44,7 @@ func TestPrepareWritesPacketBoundToCleanCommittedCandidate(t *testing.T) {
 }
 
 func TestCaptureIntentRejectsUnsafeIntent(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	cases := []struct {
 		name    string
@@ -78,6 +80,7 @@ func TestCaptureIntentRejectsUnsafeIntent(t *testing.T) {
 }
 
 func TestPrepareSelectsOneTaskOrTheWholeIntentChain(t *testing.T) {
+	t.Parallel()
 	repo, base, firstCandidate := newBehaviorRepository(t)
 	second := captureReviewIntent(t, repo, "Also write the selected value to a second file.\n")
 	if second.Commit != firstCandidate {
@@ -116,6 +119,7 @@ func TestPrepareSelectsOneTaskOrTheWholeIntentChain(t *testing.T) {
 }
 
 func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
+	t.Parallel()
 	repo, _, candidate := newBehaviorRepository(t)
 	root := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
 	if err := os.RemoveAll(root); err != nil {
@@ -146,6 +150,7 @@ func TestPrepareRejectsMissingOrAfterTheFactIntent(t *testing.T) {
 }
 
 func TestCaptureIntentBindsStagedUnstagedDeletedAndUntrackedChanges(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name   string
 		change func(*testing.T, repository.Repository)
@@ -184,6 +189,7 @@ func TestCaptureIntentBindsStagedUnstagedDeletedAndUntrackedChanges(t *testing.T
 }
 
 func TestCaptureIntentRequiresCleanStateForOriginalRequest(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	if err := os.RemoveAll(filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))); err != nil {
 		t.Fatal(err)
@@ -196,6 +202,7 @@ func TestCaptureIntentRequiresCleanStateForOriginalRequest(t *testing.T) {
 }
 
 func TestIntentCaptureRejectsCandidateMutationAfterSnapshot(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	snapshot, err := repo.CandidateState()
 	if err != nil {
@@ -208,6 +215,7 @@ func TestIntentCaptureRejectsCandidateMutationAfterSnapshot(t *testing.T) {
 }
 
 func TestTaskRequirementsAllowsDirtyCandidateWithoutJournal(t *testing.T) {
+	t.Parallel()
 	repo, base := newFeatureTaskBaseRepository(t)
 	writeBehaviorFile(t, repo.Root, "dirty.txt", "uncommitted documentation draft\n")
 	candidate := strings.TrimSpace(gitBehavior(t, repo.Root, "rev-parse", "HEAD"))
@@ -227,6 +235,7 @@ func TestTaskRequirementsAllowsDirtyCandidateWithoutJournal(t *testing.T) {
 }
 
 func TestTaskRequirementsReadsPresentJournalWithDirtyCandidate(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newFeatureTaskCandidate(t, []string{"search"})
 	writeBehaviorFile(t, repo.Root, "dirty.txt", "uncommitted documentation draft\n")
 	snapshot, err := TaskRequirements(context.Background(), repo, "main")
@@ -239,6 +248,7 @@ func TestTaskRequirementsReadsPresentJournalWithDirtyCandidate(t *testing.T) {
 }
 
 func TestCaptureFeatureAndLaterRequireUnion(t *testing.T) {
+	t.Parallel()
 	repo, base := newFeatureTaskBaseRepository(t)
 	intent := writeBehaviorFile(t, t.TempDir(), "intent.txt", "Review the search behavior.\n")
 	captured, err := CaptureIntent(context.Background(), repo, CaptureIntentOptions{IntentPath: intent, Features: []string{"search"}})
@@ -285,6 +295,7 @@ func TestCaptureFeatureAndLaterRequireUnion(t *testing.T) {
 }
 
 func TestRequireRejectsUnknownFeatureUnrelatedBaseAndDirtyCandidate(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name     string
 		features []string
@@ -327,6 +338,7 @@ func TestRequireRejectsUnknownFeatureUnrelatedBaseAndDirtyCandidate(t *testing.T
 }
 
 func TestTaskRequirementRejectsTaskBaseAndIntentTampering(t *testing.T) {
+	t.Parallel()
 	for name, mutate := range map[string]func(*intentJournal, string){
 		"task base":        func(journal *intentJournal, candidate string) { journal.Requirements[0].TaskBase = candidate },
 		"intent reference": func(journal *intentJournal, _ string) { journal.Requirements[0].IntentIDs = []string{"intent-missing"} },
@@ -359,6 +371,7 @@ func TestTaskRequirementRejectsTaskBaseAndIntentTampering(t *testing.T) {
 }
 
 func TestFinalizeRejectsBehaviorOutsideSelectedFeatureScope(t *testing.T) {
+	t.Parallel()
 	repo, _, candidate := newFeatureTaskCandidate(t, []string{"search"})
 	prepared, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: featureSelection(t, repo, "search")})
 	if err != nil {
@@ -381,6 +394,7 @@ func TestFinalizeRejectsBehaviorOutsideSelectedFeatureScope(t *testing.T) {
 }
 
 func TestProofRestrictsSelectedFeatureSuitesAndAllowsFullCandidate(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newFeatureTaskCandidate(t, nil)
 	if _, err := Prepare(context.Background(), repo, PrepareOptions{Base: "main", Selection: featureSelection(t, repo, "search")}); err != nil {
 		t.Fatal(err)
@@ -404,6 +418,7 @@ func TestProofRestrictsSelectedFeatureSuitesAndAllowsFullCandidate(t *testing.T)
 }
 
 func TestPacketRejectsSelectionRequirementAndDecisionDigestTampering(t *testing.T) {
+	t.Parallel()
 	for name, mutate := range map[string]func(*reviewPacket){
 		"selection":   func(packet *reviewPacket) { packet.SelectionSHA256 = strings.Repeat("0", 64) },
 		"requirement": func(packet *reviewPacket) { packet.RequirementSHA256 = strings.Repeat("0", 64) },
@@ -429,6 +444,7 @@ func TestPacketRejectsSelectionRequirementAndDecisionDigestTampering(t *testing.
 }
 
 func TestIntentJournalLockRetainsConcurrentFeatureCaptures(t *testing.T) {
+	t.Parallel()
 	repo, _ := newFeatureTaskBaseRepository(t)
 	const captures = 8
 	paths := make([]string, 0, captures)
@@ -467,6 +483,7 @@ func TestIntentJournalLockRetainsConcurrentFeatureCaptures(t *testing.T) {
 }
 
 func TestPrepareRejectsEditedRemovedAndReorderedIntentEntries(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name   string
 		mutate func(*intentJournal)
@@ -504,6 +521,7 @@ func TestPrepareRejectsEditedRemovedAndReorderedIntentEntries(t *testing.T) {
 }
 
 func TestCaptureRejectsAJournalFromADivergedBranch(t *testing.T) {
+	t.Parallel()
 	repo, _, candidate := newBehaviorRepository(t)
 	captureReviewIntent(t, repo, "Continue the feature.\n")
 	gitBehavior(t, repo.Root, "switch", "main")
@@ -516,6 +534,7 @@ func TestCaptureRejectsAJournalFromADivergedBranch(t *testing.T) {
 }
 
 func TestFinalizeAndValidateGateReceipt(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -540,6 +559,7 @@ func TestFinalizeAndValidateGateReceipt(t *testing.T) {
 }
 
 func TestFinalizeRejectsStrictStaleAndBlockingResults(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		result func(PrepareResult, string, string) string
@@ -594,6 +614,7 @@ func TestFinalizeRejectsStrictStaleAndBlockingResults(t *testing.T) {
 }
 
 func TestValidateGateReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepared := prepareReview(t, repo)
 	proof := proveReview(t, repo, "proof-1", 1)
@@ -614,6 +635,7 @@ func TestValidateGateReceiptRejectsPacketAndCandidateChanges(t *testing.T) {
 }
 
 func TestValidateGateReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	path := filepath.Join(repo.Root, filepath.FromSlash(artifactDirectory))
 	if err := os.RemoveAll(path); err != nil {
@@ -632,6 +654,7 @@ func TestValidateGateReceiptMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
 }
 
 func TestFinalizeAndReceiptRejectRehashedPacketMaterial(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		mutate func(*reviewPacket)
@@ -649,6 +672,7 @@ func TestFinalizeAndReceiptRejectRehashedPacketMaterial(t *testing.T) {
 }
 
 func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepareReview(t, repo)
 	root := behaviorRoot(t, repo)
@@ -669,6 +693,7 @@ func TestPrepareMarkerRejectsRehashedIntent(t *testing.T) {
 }
 
 func TestValidateGateReceiptBindsPrepareMarker(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	prepared, receipt := finalizedPreservedReview(t, repo)
 	root := behaviorRoot(t, repo)
@@ -726,6 +751,7 @@ func assertReceiptRejectsRehashedPacket(t *testing.T, mutate func(*reviewPacket)
 }
 
 func TestBehaviorReviewArtifactRootRejectsEscapingSymlink(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	if err := os.MkdirAll(filepath.Join(repo.Root, ".code-polishy-reports"), 0o700); err != nil {
 		t.Fatal(err)
@@ -740,6 +766,7 @@ func TestBehaviorReviewArtifactRootRejectsEscapingSymlink(t *testing.T) {
 }
 
 func TestArtifactHandleKeepsReadsAndWritesInsideHeldRootAfterSymlinkSwap(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	root, err := behaviorReviewRoot(repo)
 	if err != nil {
@@ -777,6 +804,7 @@ func TestArtifactHandleKeepsReadsAndWritesInsideHeldRootAfterSymlinkSwap(t *test
 }
 
 func TestArtifactHandleRejectsSymlinkArtifactTarget(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	root, err := behaviorReviewRoot(repo)
 	if err != nil {
@@ -803,6 +831,7 @@ func TestArtifactHandleRejectsSymlinkArtifactTarget(t *testing.T) {
 }
 
 func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
 		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
@@ -828,6 +857,7 @@ func TestRecordCheckpointWritesCandidateBoundReceipt(t *testing.T) {
 }
 
 func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	result, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
 		Base: base, Candidate: candidate, Scope: CheckpointScopeDocumentation, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
@@ -838,6 +868,7 @@ func TestRecordCheckpointAcceptsDocumentationWithoutBehaviorReview(t *testing.T)
 }
 
 func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	written, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
 		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
@@ -852,6 +883,7 @@ func TestReadCheckpointReturnsOnlyTheCurrentValidReceipt(t *testing.T) {
 }
 
 func TestReadCheckpointRejectsSymlinkReceiptWithoutFollowingIt(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	if _, err := RecordCheckpoint(context.Background(), repo, RecordCheckpointOptions{
 		Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, BehaviorReview: checkpointBehaviorReview(), GateRun: checkpointGateEvidence(t, repo, base, candidate),
@@ -879,6 +911,7 @@ func TestReadCheckpointRejectsSymlinkReceiptWithoutFollowingIt(t *testing.T) {
 }
 
 func TestReadCheckpointMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
+	t.Parallel()
 	repo, _, _ := newBehaviorRepository(t)
 	if _, err := ReadCheckpoint(context.Background(), repo); !errors.Is(err, ErrMissingCheckpoint) {
 		t.Fatalf("ReadCheckpoint() error = %v, want missing checkpoint", err)
@@ -889,6 +922,7 @@ func TestReadCheckpointMissingReceiptDoesNotCreateArtifacts(t *testing.T) {
 }
 
 func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		prepare func(*testing.T, repository.Repository, string, string)
@@ -951,6 +985,7 @@ func TestReadCheckpointRejectsMissingMalformedStaleAndDivergedReceipts(t *testin
 }
 
 func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testing.T) {
+	t.Parallel()
 	for name, mutate := range map[string]func(*testing.T, repository.Repository, string, string) RecordCheckpointOptions{
 		"missing review": func(_ *testing.T, _ repository.Repository, base, candidate string) RecordCheckpointOptions {
 			return RecordCheckpointOptions{Base: base, Candidate: candidate, Scope: CheckpointScopeChanged, GateRun: checkpointEvidenceInput()}
@@ -974,6 +1009,7 @@ func TestRecordCheckpointRejectsInvalidOrChangedCandidateBeforeWriting(t *testin
 }
 
 func TestCheckpointArtifactRootRejectsEscapingSymlink(t *testing.T) {
+	t.Parallel()
 	repo, base, candidate := newBehaviorRepository(t)
 	if err := os.MkdirAll(filepath.Join(repo.Root, ".code-polishy-reports"), 0o700); err != nil {
 		t.Fatal(err)
