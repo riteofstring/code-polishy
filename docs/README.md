@@ -50,6 +50,9 @@ and aliases. Search is local, bounded, and deterministic.
 
 ## Maintainer reference
 
+- [Canonical Agent Guidance Design](design/agent-guidance.md) defines what
+  belongs in managed `AGENTS.md`, where longer rationale lives, and how to
+  update the template.
 - [Policy Engine Architecture](policy-engine-architecture.md) maps the runtime
   ownership boundaries and execution model.
 - [Source Comment Policy Design](design/source-comment-policy.md) explains the

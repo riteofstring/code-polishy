@@ -108,9 +108,13 @@ code-polishy docs read adding-a-language
 Code Polishy keeps its built-in tools fixed until you upgrade, so local and CI
 checks stay consistent.
 
-- **Go, JavaScript, TypeScript, and Python:** Formats code and catches likely
-  bugs, type errors, unused code, and overly complex functions. Locked
-  dependencies are checked for known vulnerabilities.
+- **Go, JavaScript, and TypeScript:** Formats code and catches likely bugs,
+  type errors, unused code, and overly complex functions. Locked dependencies
+  are checked for known vulnerabilities.
+- **Python:** Finds each contained project, then runs policy-owned Ruff lint
+  and complexity checks, Vulture dead-code analysis, and `ty`; it checks module
+  direction and validates `uv` dependency facts without relying on a target
+  architecture script.
 - **Shell scripts:** Catches syntax errors and common safety problems.
 
 Code Polishy also rejects empty Go tests and obvious test commands that can

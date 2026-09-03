@@ -19,6 +19,11 @@ import (
 	"time"
 )
 
+const (
+	hostSignalHelperMaximumLifetime    = 10 * time.Second
+	hostSignalHelperParentPollInterval = 10 * time.Millisecond
+)
+
 func TestHostRuntimePreservesProcessContract(t *testing.T) {
 	root := t.TempDir()
 	resolvedRoot, err := filepath.EvalSymlinks(root)
@@ -183,6 +188,27 @@ func TestHostRuntimeCancellationAndEscalation(t *testing.T) {
 	})
 }
 
+func TestHostRuntimeSignalHelperExitsWhenParentDoes(t *testing.T) {
+	ready := filepath.Join(t.TempDir(), "ready")
+	command := exec.Command(os.Args[0], "-test.run=^TestHostRuntimeSignalHelper$")
+	command.Env = hostTestEnvironment(t, "signal-parent", map[string]string{"CODE_POLISHY_READY": ready})
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	processIDText, _, _ := strings.Cut(strings.TrimSpace(string(output)), "\n")
+	processID, err := strconv.Atoi(processIDText)
+	if err != nil {
+		t.Fatalf("helper process id %q: %v", output, err)
+	}
+	t.Cleanup(func() {
+		if err := syscall.Kill(processID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("kill helper: %v", err)
+		}
+	})
+	waitForHostProcessExit(t, processID)
+}
+
 func TestHostRuntimeCleansLeaderFirstProcessTreeBeforeReturn(t *testing.T) {
 	root := t.TempDir()
 	ready := filepath.Join(root, "tree-ready")
@@ -215,22 +241,58 @@ func TestHostRuntimeCleansLeaderFirstProcessTreeBeforeReturn(t *testing.T) {
 
 func TestHostRuntimeSignalHelper(t *testing.T) {
 	mode := os.Getenv("CODE_POLISHY_HOST_HELPER")
+	if mode == "signal-parent" {
+		startHostRuntimeSignalHelperChild()
+		return
+	}
 	if mode != "cooperative" && mode != "ignore-term" {
 		return
 	}
+	parentProcess := os.Getppid()
 	if mode == "ignore-term" {
 		signal.Ignore(syscall.SIGTERM)
 		writeHostMarker(os.Getenv("CODE_POLISHY_READY"))
-		for {
-			time.Sleep(time.Hour)
-		}
+		waitForHostSignalHelper(parentProcess, nil)
+		return
 	}
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, syscall.SIGTERM)
 	writeHostMarker(os.Getenv("CODE_POLISHY_READY"))
-	<-term
-	writeHostMarker(os.Getenv("CODE_POLISHY_COOPERATED"))
-	os.Exit(0)
+	if waitForHostSignalHelper(parentProcess, term) {
+		writeHostMarker(os.Getenv("CODE_POLISHY_COOPERATED"))
+	}
+}
+
+func startHostRuntimeSignalHelperChild() {
+	command := exec.Command(os.Getenv("CODE_POLISHY_TEST_EXECUTABLE"), "-test.run=^TestHostRuntimeSignalHelper$")
+	command.Env = replaceEnvironment(os.Environ(), map[string]string{"CODE_POLISHY_HOST_HELPER": "ignore-term"})
+	command.Stdout = io.Discard
+	command.Stderr = io.Discard
+	if err := command.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(79)
+	}
+	waitForHostMarkerProcess(os.Getenv("CODE_POLISHY_READY"))
+	fmt.Fprintln(os.Stdout, command.Process.Pid)
+}
+
+func waitForHostSignalHelper(parentProcess int, term <-chan os.Signal) bool {
+	deadline := time.NewTimer(hostSignalHelperMaximumLifetime)
+	defer deadline.Stop()
+	poll := time.NewTicker(hostSignalHelperParentPollInterval)
+	defer poll.Stop()
+	for {
+		select {
+		case <-term:
+			return true
+		case <-deadline.C:
+			return false
+		case <-poll.C:
+			if os.Getppid() != parentProcess {
+				return false
+			}
+		}
+	}
 }
 
 func TestHostRuntimeTreeHelper(t *testing.T) {
@@ -379,6 +441,22 @@ func waitForHostMarker(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for helper marker %s", path)
+}
+
+func waitForHostProcessExit(t *testing.T, processID int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		err := syscall.Kill(processID, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		if err != nil {
+			t.Fatalf("check helper process %d: %v", processID, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("helper process %d survived its parent", processID)
 }
 
 func waitForHostMarkerProcess(path string) {

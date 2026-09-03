@@ -37,6 +37,116 @@ func TestCustomLanguageRulesExtendDetectionWithoutOverridingBuiltIns(t *testing.
 	}
 }
 
+func TestShellShebangDetectsSourceWithAnUnknownExtension(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "jobs/train.sbatch", "#!/usr/bin/env bash\nprintf '%s\\n' train\n")
+	writeFile(t, root, "jobs/train.sbatch.template", "#!/bin/sh\nprintf '%s\\n' train\n")
+	writeFile(t, root, "jobs/not-shell.template", "rendered input\n")
+	writeFile(t, root, "jobs/mislabeled.py", "#!/bin/sh\nprintf('%s', 'python')\n")
+	repo := Repository{Root: root}
+	for _, path := range []string{"jobs/train.sbatch", "jobs/train.sbatch.template"} {
+		if got := repo.Language(path); got != "shell" {
+			t.Errorf("Language(%q) = %q, want shell", path, got)
+		}
+	}
+	if got := repo.Language("jobs/not-shell.template"); got != "" {
+		t.Errorf("unknown non-shell source language = %q", got)
+	}
+	if got := repo.Language("jobs/mislabeled.py"); got != "python" {
+		t.Errorf("known extension language = %q, want python", got)
+	}
+}
+
+func TestDeclaredDataRemainsGovernedAndOverridesDefaultGeneratedClassification(t *testing.T) {
+	t.Parallel()
+	repo := Repository{Config: policy.Config{Scope: policy.Scope{Data: []string{"data/**/*.json"}}}}
+	if !repo.IsData("data/identity.generated.json") {
+		t.Fatal("declared structured data was not classified as data")
+	}
+	if repo.IsGenerated("data/identity.generated.json") {
+		t.Fatal("declared structured data was classified as generated")
+	}
+	if !repo.IsGenerated("generated/identity.generated.json") {
+		t.Fatal("ordinary generated data lost default generated classification")
+	}
+}
+
+func TestDeclaredDataCannotHideAnActualNestedControlInput(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "data/package.json", "{}\n")
+	repo := Repository{Root: root, Config: policy.Config{Scope: policy.Scope{Data: []string{"data/**/*.json"}}}}
+	if repo.IsData("data/package.json") {
+		t.Fatal("policy-sensitive control input was classified as data")
+	}
+	_, err := repo.AllFiles()
+	if err == nil || !strings.Contains(err.Error(), "scope.data must not classify policy-sensitive control input data/package.json") {
+		t.Fatalf("AllFiles error = %v", err)
+	}
+}
+
+func TestDeclaredDataCannotHideExecutableOrShebangSource(t *testing.T) {
+	t.Parallel()
+	for name, contents := range map[string]string{
+		"shebang":    "#!/bin/sh\necho runnable\n",
+		"executable": "name: executable\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFile(t, root, "data/catalog.yaml", contents)
+			if name == "executable" {
+				if err := os.Chmod(filepath.Join(root, "data", "catalog.yaml"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			repo := Repository{Root: root, Config: policy.Config{Scope: policy.Scope{Data: []string{"data/catalog.yaml"}}}}
+			_, err := repo.AllFiles()
+			if err == nil || !strings.Contains(err.Error(), "scope.data must not classify") {
+				t.Fatalf("AllFiles error = %v", err)
+			}
+		})
+	}
+}
+
+func TestVirtualEnvironmentContentsStayOutsideGovernedInventory(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "src/app.py", "value = 1\n")
+	writeFile(t, root, "apps/api/.venv/lib/python/site-packages/dependency.py", "value = 1\n")
+	files, err := (Repository{Root: root}).AllFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(files, []string{"src/app.py"}) {
+		t.Fatalf("governed files = %v", files)
+	}
+}
+
+func TestEverySelectionRejectsInvalidDeclaredData(t *testing.T) {
+	for _, mode := range []string{"files", "changes", "staged"} {
+		t.Run(mode, func(t *testing.T) {
+			repo := newGitRepository(t)
+			repo.Config.Scope.Data = []string{"data/catalog.yaml"}
+			writeFile(t, repo.Root, "README.md", "base\n")
+			git(t, repo.Root, "add", "README.md")
+			git(t, repo.Root, "commit", "-m", "base")
+			writeFile(t, repo.Root, "data/catalog.yaml", "#!/bin/sh\necho runnable\n")
+			if mode == "staged" {
+				git(t, repo.Root, "add", "data/catalog.yaml")
+			}
+			explicit := []string(nil)
+			if mode == "files" {
+				explicit = []string{"data/catalog.yaml"}
+			}
+			_, err := repo.Select(mode, explicit)
+			if err == nil || !strings.Contains(err.Error(), "scope.data must not classify executable source") {
+				t.Fatalf("Select(%q) error = %v", mode, err)
+			}
+		})
+	}
+}
+
 func TestGoToolResolvesOnlyThePinnedToolchainThePolicyRootCarries(t *testing.T) {
 	policyRoot := t.TempDir()
 	ambient := t.TempDir()
@@ -65,13 +175,15 @@ func TestToolPinReadsWhatThePolicyRootCarries(t *testing.T) {
 	policyRoot := t.TempDir()
 	writeFile(t, policyRoot, "scripts/go_version.txt", "1.26.6\n")
 	writeFile(t, policyRoot, "tools/osv-scanner-version.txt", "v2.4.0\n")
+	writeFile(t, policyRoot, "tools/python-version.txt", "3.12.13+20260728\n")
 	writeFile(t, policyRoot, "tools/ruff-version.txt", "\n")
 	writeFile(t, policyRoot, "tools/ty-version.txt", "0.0.65\n")
+	writeFile(t, policyRoot, "tools/vulture-version.txt", "2.16\n")
 	repo := Repository{PolicyRoot: policyRoot}
 	for name, want := range map[string]string{
-		"go": "1.26.6", "osv-scanner": "2.4.0",
+		"go": "1.26.6", "osv-scanner": "2.4.0", "python": "3.12.13+20260728",
 
-		"ruff": "", "staticcheck": "", "ty": "0.0.65",
+		"ruff": "", "staticcheck": "", "ty": "0.0.65", "vulture": "2.16",
 	} {
 		if got := repo.ToolPin(name); got != want {
 			t.Fatalf("ToolPin(%q) = %q, want %q", name, got, want)

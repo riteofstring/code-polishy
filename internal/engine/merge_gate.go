@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/architecture"
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -240,10 +241,15 @@ func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan
 		return MergeGateExecutionPlan{}, err
 	}
 	plan.Tests = tests
-	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, quality.CheckCommands(engine.Repository, checkSelection, "gate"))...)
+	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, plannedPolicyCheckCommands(engine.Repository, checkSelection, "gate"))...)
 	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(plan.Tests.Suites)...)
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Build, quality.CommandsForProfiles(engine.Repository, checkSelection, "build"))...)
 	return engine.appendMergeGateSupplyChainCommands(plan)
+}
+
+func plannedPolicyCheckCommands(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
+	commands := quality.CheckCommands(repo, selection, profile)
+	return append(commands, architecture.PythonGraphCommands(repo, selection.Files)...)
 }
 
 func (engine *Engine) mergeGateTestRequest(plan MergeGateExecutionPlan) (repository.Selection, testpolicy.Request, error) {
@@ -431,6 +437,19 @@ func (commandRunner *mergeGatePlannedRunner) RunWithOutput(ctx context.Context, 
 		return observed.RunWithOutput(ctx, root, command)
 	}
 	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture output for %q", command.Name)
+}
+
+func (commandRunner *mergeGatePlannedRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	if err := commandRunner.start(root, command); err != nil {
+		return runner.Result{ExitStatus: -1}, runner.Output{}, err
+	}
+	if observed, ok := commandRunner.delegate.(runner.StructuredRunner); ok {
+		return observed.RunStructured(ctx, root, command)
+	}
+	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
+		return observed.RunWithOutput(ctx, root, command)
+	}
+	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture structured output for %q", command.Name)
 }
 
 func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.Command) error {

@@ -11,15 +11,22 @@ import (
 )
 
 var (
-	lowerSHA256Pattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	nodeReleaseVersionPattern = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	goReleaseVersionPattern   = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	artifactVersionPattern    = regexp.MustCompile(`^v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	pypiReleaseVersionPattern = regexp.MustCompile(`^[0-9][A-Za-z0-9.!+_-]*$`)
-	licenseIdentifierPattern  = regexp.MustCompile(`^[A-Za-z0-9.-]+\+?$`)
-	releaseArtifactLocator    = regexp.MustCompile(`^[A-Za-z0-9@][A-Za-z0-9._@/+~-]*$`)
-	githubRepositoryPattern   = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	tagPrefixPattern          = regexp.MustCompile(`^[A-Za-z0-9._-]*$`)
+	lowerSHA256Pattern                  = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	nodeReleaseVersionPattern           = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	goReleaseVersionPattern             = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	artifactVersionPattern              = regexp.MustCompile(`^v?(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	pypiReleaseVersionPattern           = regexp.MustCompile(`^[0-9][A-Za-z0-9.!+_-]*$`)
+	pythonBuildStandaloneVersionPattern = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\+[0-9]{8}$`)
+	licenseIdentifierPattern            = regexp.MustCompile(`^[A-Za-z0-9.-]+\+?$`)
+	releaseArtifactLocator              = regexp.MustCompile(`^[A-Za-z0-9@][A-Za-z0-9._@/+~-]*$`)
+	pypiArtifactLocator                 = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+	githubRepositoryPattern             = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+	tagPrefixPattern                    = regexp.MustCompile(`^[A-Za-z0-9._-]*$`)
+)
+
+const (
+	ReleaseArtifactSourcePyPI                  = "pypi"
+	ReleaseArtifactSourcePythonBuildStandalone = "python-build-standalone"
 )
 
 func validateSupplyChain(supply SupplyChain) error {
@@ -93,7 +100,7 @@ func validateReleaseArtifact(artifact ReleaseArtifact, label string, seenNames, 
 		return fmt.Errorf("duplicate release artifact version file %q", artifact.VersionFile)
 	}
 	seenVersionFiles[artifact.VersionFile] = true
-	if err := allowedValues([]string{artifact.Source}, []string{"github-release", "go-module", "go-toolchain", "node-runtime", "npm"}, label+".source"); err != nil {
+	if err := allowedValues([]string{artifact.Source}, []string{"github-release", "go-module", "go-toolchain", "node-runtime", "npm", ReleaseArtifactSourcePyPI, ReleaseArtifactSourcePythonBuildStandalone}, label+".source"); err != nil {
 		return err
 	}
 	if artifact.TagPrefix != "" && (!tagPrefixPattern.MatchString(artifact.TagPrefix) || len(artifact.TagPrefix) > 32) {
@@ -104,21 +111,48 @@ func validateReleaseArtifact(artifact ReleaseArtifact, label string, seenNames, 
 
 func validateReleaseArtifactSource(artifact ReleaseArtifact, label string) error {
 	switch artifact.Source {
-	case "go-toolchain", "node-runtime":
-		if artifact.Locator != "" || artifact.TagPrefix != "" {
-			return fmt.Errorf("%s source %s does not accept locator or tagPrefix", label, artifact.Source)
-		}
+	case "go-toolchain", "node-runtime", ReleaseArtifactSourcePythonBuildStandalone:
+		return validateFixedReleaseArtifactSource(artifact, label)
 	case "github-release":
-		if !githubRepositoryPattern.MatchString(artifact.Locator) {
-			return fmt.Errorf("%s.locator must be one exact GitHub owner/repository", label)
-		}
+		return validateGitHubReleaseArtifactSource(artifact, label)
 	case "go-module", "npm":
-		if artifact.Locator == "" || !releaseArtifactLocator.MatchString(artifact.Locator) || strings.Contains(artifact.Locator, "..") {
-			return fmt.Errorf("%s.locator must be one exact package identity", label)
-		}
-		if artifact.TagPrefix != "" {
-			return fmt.Errorf("%s source %s does not accept tagPrefix", label, artifact.Source)
-		}
+		return validatePackageReleaseArtifactSource(artifact, label)
+	case ReleaseArtifactSourcePyPI:
+		return validatePyPIReleaseArtifactSource(artifact, label)
+	}
+	return nil
+}
+
+func validateFixedReleaseArtifactSource(artifact ReleaseArtifact, label string) error {
+	if artifact.Locator != "" || artifact.TagPrefix != "" {
+		return fmt.Errorf("%s source %s does not accept locator or tagPrefix", label, artifact.Source)
+	}
+	return nil
+}
+
+func validateGitHubReleaseArtifactSource(artifact ReleaseArtifact, label string) error {
+	if !githubRepositoryPattern.MatchString(artifact.Locator) {
+		return fmt.Errorf("%s.locator must be one exact GitHub owner/repository", label)
+	}
+	return nil
+}
+
+func validatePackageReleaseArtifactSource(artifact ReleaseArtifact, label string) error {
+	if artifact.Locator == "" || !releaseArtifactLocator.MatchString(artifact.Locator) || strings.Contains(artifact.Locator, "..") {
+		return fmt.Errorf("%s.locator must be one exact package identity", label)
+	}
+	if artifact.TagPrefix != "" {
+		return fmt.Errorf("%s source %s does not accept tagPrefix", label, artifact.Source)
+	}
+	return nil
+}
+
+func validatePyPIReleaseArtifactSource(artifact ReleaseArtifact, label string) error {
+	if !pypiArtifactLocator.MatchString(artifact.Locator) {
+		return fmt.Errorf("%s.locator must be one exact PyPI project name", label)
+	}
+	if artifact.TagPrefix != "" {
+		return fmt.Errorf("%s source %s does not accept tagPrefix", label, artifact.Source)
 	}
 	return nil
 }
@@ -436,6 +470,17 @@ func exactReleaseAssessmentVersion(ecosystem, version string) bool {
 
 func ExactArtifactVersion(version string) bool {
 	return artifactVersionPattern.MatchString(version)
+}
+
+func ExactReleaseArtifactVersion(source, version string) bool {
+	switch source {
+	case ReleaseArtifactSourcePyPI:
+		return pypiReleaseVersionPattern.MatchString(version)
+	case ReleaseArtifactSourcePythonBuildStandalone:
+		return pythonBuildStandaloneVersionPattern.MatchString(version)
+	default:
+		return ExactArtifactVersion(version)
+	}
 }
 
 func validateEvidenceURL(value, label string) error {

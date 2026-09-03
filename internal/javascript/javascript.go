@@ -28,6 +28,8 @@ const (
 
 	OperationFormatWrite Operation = "format-write"
 
+	OperationParse Operation = "parse"
+
 	OperationLint Operation = "lint"
 
 	OperationTypeCheck Operation = "typecheck"
@@ -35,6 +37,8 @@ const (
 	OperationDeadCode Operation = "deadcode"
 
 	OperationImports Operation = "imports"
+
+	OperationGitLab Operation = "gitlab"
 
 	OperationPackages Operation = "packages"
 
@@ -54,6 +58,8 @@ const (
 
 	maximumOperationPaths = 4096
 
+	maximumGitLabGovernedPaths = 20000
+
 	cleanupDelay = 5 * time.Second
 
 	provenanceTimeout = 60 * time.Second
@@ -67,6 +73,8 @@ const (
 	deadCodeTimeout = 20 * time.Minute
 
 	importsTimeout = 15 * time.Minute
+
+	gitLabTimeout = 60 * time.Second
 
 	packagesTimeout = 5 * time.Minute
 
@@ -108,6 +116,16 @@ type FormatResult struct {
 	Unsupported []Unsupported `json:"unsupported"`
 }
 
+type ParseResult struct {
+	Covered     []string      `json:"covered"`
+	Unsupported []Unsupported `json:"unsupported"`
+}
+
+type parseResultWire struct {
+	Covered     *[]string      `json:"covered"`
+	Unsupported *[]Unsupported `json:"unsupported"`
+}
+
 type Unsupported struct {
 	Path   string `json:"path"`
 	Reason string `json:"reason"`
@@ -119,6 +137,89 @@ func (bundle Bundle) Format(ctx context.Context, root string, paths []string) (F
 
 func (bundle Bundle) FormatWrite(ctx context.Context, root string, paths []string) (FormatResult, error) {
 	return bundle.format(ctx, OperationFormatWrite, root, paths)
+}
+
+func (bundle Bundle) Parse(ctx context.Context, root string, paths []string) (ParseResult, error) {
+	payload, err := fileRequest(OperationParse, root, paths)
+	if err != nil {
+		return ParseResult{}, err
+	}
+	result, err := bundle.exchange(ctx, payload, formatTimeout)
+	if err != nil {
+		return ParseResult{}, err
+	}
+	reported, err := decodeParseResult(result, paths)
+	if err != nil {
+		return ParseResult{}, fmt.Errorf("the sealed JavaScript bundle returned an unreadable %s result: %w", OperationParse, err)
+	}
+	return reported, nil
+}
+
+func decodeParseResult(data []byte, requested []string) (ParseResult, error) {
+	var wire parseResultWire
+	if err := decodeExactly(data, &wire); err != nil {
+		return ParseResult{}, err
+	}
+	if wire.Covered == nil || wire.Unsupported == nil {
+		return ParseResult{}, fmt.Errorf("the parse result is missing required fields")
+	}
+	requestedPaths, err := parseRequestedPaths(requested)
+	if err != nil {
+		return ParseResult{}, err
+	}
+	reportedPaths := map[string]bool{}
+	if err := addParseCoveredPaths(*wire.Covered, requestedPaths, reportedPaths); err != nil {
+		return ParseResult{}, err
+	}
+	if err := addParseUnsupportedPaths(*wire.Unsupported, requestedPaths, reportedPaths); err != nil {
+		return ParseResult{}, err
+	}
+	if len(reportedPaths) != len(requestedPaths) {
+		return ParseResult{}, fmt.Errorf("the parse result does not account for every requested path")
+	}
+	return ParseResult{Covered: *wire.Covered, Unsupported: *wire.Unsupported}, nil
+}
+
+func parseRequestedPaths(requested []string) (map[string]bool, error) {
+	paths := make(map[string]bool, len(requested))
+	for _, path := range requested {
+		if paths[path] {
+			return nil, fmt.Errorf("the parse request repeats path %q", path)
+		}
+		paths[path] = true
+	}
+	return paths, nil
+}
+
+func addParseCoveredPaths(covered []string, requested, reported map[string]bool) error {
+	for _, path := range covered {
+		if !validParseReportedPath(path, requested, reported) {
+			return fmt.Errorf("the parse result reports invalid covered path %q", path)
+		}
+		reported[path] = true
+	}
+	return nil
+}
+
+func addParseUnsupportedPaths(unsupported []Unsupported, requested, reported map[string]bool) error {
+	for _, finding := range unsupported {
+		if !validParseReportedPath(finding.Path, requested, reported) {
+			return fmt.Errorf("the parse result reports invalid unsupported path %q", finding.Path)
+		}
+		if !validParseReason(finding.Reason) {
+			return fmt.Errorf("the parse result reports an invalid reason for %q", finding.Path)
+		}
+		reported[finding.Path] = true
+	}
+	return nil
+}
+
+func validParseReportedPath(path string, requested, reported map[string]bool) bool {
+	return containedPath(path) && requested[path] && !reported[path]
+}
+
+func validParseReason(reason string) bool {
+	return strings.TrimSpace(reason) != "" && len(reason) <= 4096
 }
 
 func (bundle Bundle) format(ctx context.Context, operation Operation, root string, paths []string) (FormatResult, error) {
@@ -681,6 +782,7 @@ type request struct {
 	Project         string              `json:"project,omitempty"`
 	Directory       string              `json:"directory,omitempty"`
 	Workspaces      []DeadCodeWorkspace `json:"workspaces,omitempty"`
+	GovernedPaths   []string            `json:"governedPaths,omitempty"`
 }
 
 type response struct {

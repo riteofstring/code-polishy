@@ -7,6 +7,7 @@ protocol.mjs
 audit.mjs
 deadcode.mjs
 imports.mjs
+gitlab.mjs
 licenses.mjs
 packages.mjs
 bundle-manifest.mjs

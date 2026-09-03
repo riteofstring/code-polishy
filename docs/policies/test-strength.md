@@ -41,6 +41,12 @@ To make mutation evidence mandatory for that target, add `"mutation"` to
 absence of a mutation suite or engine is not a policy finding and does not
 block adoption.
 
+A declared suite and `tests.requiredSupplementalKinds` establish evidence for a
+selected supplemental hardening event; they do not select or execute it.
+Ordinary development, changed tests, checkpoint and merge gates, guidance
+synchronization, and policy lock upgrades leave supplemental hardening `NOT
+RUN`.
+
 A repository-scoped mutation suite may cover several modules. Its command and
 `paths` must honestly describe the production surface it mutates; a partial
 selector must not be represented as complete repository evidence.
@@ -90,27 +96,37 @@ increment/decrement, and negative-inversion mutation and the same 80% gates.
 
 Mutation, acceptance mutation, Gherkin mutation, CRAP, and risk-analysis kinds
 default to `cost: expensive` and `runOn: ["supplemental"]`. A supplemental suite
-cannot also belong to focused, recommended, or full. Consequently:
+cannot also belong to focused, recommended, or full. When an explicit hardening
+trigger selects it:
 
 ```sh
 code-polishy test --suite orders-mutation
 code-polishy test --supplemental
 ```
 
-execute supplemental work directly. `test --all`, `verify`, `gate`, and
-`merge-gate` exclude it. `test-levels` (and its
+`test --supplemental` executes supplemental work directly. `test --all`,
+`verify`, `gate`, and `merge-gate` exclude it. `test-levels` (and its
 `test-plan` compatibility alias) keeps the ordinary profiles visible and, with
 a trusted base, reports the level that `merge-gate` will select. It lists
 impact-relevant supplemental quality separately but executes none of it.
+
+The first stable release candidate runs the full supplemental set once. After a
+failure, run exact `test --suite` commands only for failed suites and passed
+suites invalidated by changes to their tested production files or tests, or
+their own commands or configuration. Fresh targeted evidence composes with
+still-valid passed suites. Repeat the full set only when shared mutation
+infrastructure, toolchain, or selection changes, or the impact cannot be
+bounded.
 
 An AI collaborator should first stabilize focused tests and, at an ordinary
 merge checkpoint, run `merge-gate --base <merge-target>` without asking the
 user to choose an ordinary level. An ordinary Markdown-only candidate selects
 the documentation level and zero application suites. Run the direct
-supplemental command after ordinary acceptance when the caller or checked-in
-workflow requires local hardening. Credentialed, destructive,
-production-mutating, and live-provider probes need external approval; do not
-start every mutation suite after every edit.
+supplemental command only when the caller explicitly requests it, a checked-in
+workflow explicitly invokes it for that event, or the release checklist selects
+one run after a stable release candidate has stopped changing. Credentialed,
+destructive, production-mutating, and live-provider probes need external
+approval; do not start every mutation suite after every edit.
 
 ## Optional Gherkin, mandatory execution
 

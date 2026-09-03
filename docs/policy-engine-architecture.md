@@ -34,8 +34,12 @@ never reaches execution.
 
 `internal/repository` owns Git selection, deletions, staged/worktree safety,
 segment-aware globs, containment, language detection, module ownership,
-immutable-base change boundaries, nested Go module discovery, and the exact
-clean-candidate, ancestor, binary-patch, and disposable-worktree primitives.
+immutable-base change boundaries, nested Go module discovery, the shared
+Python project inventory, and the exact clean-candidate, ancestor, binary-patch,
+and disposable-worktree primitives. The Python inventory parses each contained
+`pyproject.toml` once, assigns `.py` and `.pyi` files to their nearest project,
+and provides project roots, `src` roots, namespace candidates, and project-local
+environment facts to every consumer.
 
 `internal/behaviorreview` owns the pre-implementation intent journal, packet
 preparation and its marker, strict review-result and receipt validation,
@@ -156,17 +160,32 @@ reconciles with the independent OSV lane.
 structured findings. None decides process exit status or prints final policy
 results.
 
+The Python consumers share the repository inventory rather than independently
+guessing roots. `internal/quality` runs the carried Ruff baseline, C901, target
+additions, Vulture `2.16` full-project dead-code analysis, and structured `ty`
+diagnostics. Vulture runs through carried CPython
+`3.12.13+20260728` from python-build-standalone, derives PEP 621 entry-point
+symbols, and accepts only validated exact `scope.pythonDynamicReferences` for
+dynamic symbols. `internal/architecture` asks the same carried Ruff for an
+isolated import graph and decides module direction in Go; `internal/supplychain`
+parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
+Target Ruff configuration cannot alter the managed baseline or architecture
+graph, target Vulture configuration is ignored, and a dependency-bearing project
+gives `ty` only its explicit contained `.venv`, never an ambient Python
+environment.
+
 `internal/portability` performs linear, subprocess-free scans for
 high-confidence machine/checkout assumptions and validates ownership coverage
 for declared external inputs. It returns structured non-blocking advisories;
 target suites prove runtime resolution and degraded behavior.
 
 `internal/policymodule` detects Python, Node, React, Electron, and supported
-dependency evidence across package roots. It compiles centrally owned commands,
-framework requirements, and test obligations into the same capability model
-before orchestration. Generated commands cannot be authored through JSON and
-receive only their matching selected files when a tool supports safe focused
-execution.
+dependency evidence across package roots. Python activation starts from the
+shared inventory rather than a target tool configuration. It compiles centrally
+owned commands, framework requirements, and test obligations into the same
+capability model before orchestration. Generated commands cannot be authored
+through JSON and receive only their matching selected files when a tool supports
+safe focused execution.
 
 `internal/engine` composes checks, applies exceptions exactly once, and returns
 one report. Merge-gate reports also carry the selected policy level, trusted
@@ -240,7 +259,8 @@ merge execution ---> gate-run owner ---> immutable command attempts + failure ev
 full profile ---> every suite marked full
 
 supplemental profile ---> mutation / acceptance mutation / CRAP / risk suites
-                     ---> never implied by full, verify, or gate
+                     ---> selected only by caller, event-specific workflow, or stable release checklist
+                     ---> declaration never implies execution
 ```
 
 This makes narrow iteration possible without allowing a foundation change to
@@ -250,7 +270,8 @@ browser, visual, E2E, performance, and live workflows remain full-only. The
 read-only planner reports both profiles and, with a trusted base, the same
 selected policy and `merge-gate` path that the executable merge gate will use.
 It lists supplemental strength suites separately so their lifecycle stage and
-runtime cost are not hidden inside the word “full.”
+runtime cost are not hidden inside the word “full,” and does not select them
+because they are declared.
 
 The executable merge gate is distinct from that read-only planner. Its only
 caller input is a Git base. Repository selection preserves the exact candidate
@@ -305,7 +326,7 @@ external input -> owning module + quick contract + ordinary full behavior
 module             -> focused boundary test
 project            -> repository full suite
 capability         -> required full test kind
-explicit supplemental kind -> matching supplemental suite
+declared supplemental kind -> matching supplemental suite, never automatic execution
 governed .feature  -> full executable acceptance
 manifest           -> supported built-in/conditional path or security provider
 command            -> contained cwd, executable, timeout, and profile
@@ -324,18 +345,20 @@ that lock names, verifies it, and passes the target's repository root to it
 separately. The engine reads config and source from the target while resolving
 policy-owned tools from the release beside it. A release carries every pinned
 tool the engine runs — the sealed Node runtime and JavaScript bundle, the Go
-toolchain, ShellCheck, staticcheck, govulncheck, OSV-Scanner, Ruff, and `ty` —
-and none of them is resolved from an ambient `PATH`, a host installation, or an
-environment override, so what a check decides does not depend on the machine it
-ran on. The release manifest records the exact version of each one, the
-installer probes every local tool against its checked-in pin before staging a
-release, and a check compares what a tool reports against that same pin rather
-than against a version compiled into the engine.
+toolchain, ShellCheck, staticcheck, govulncheck, OSV-Scanner, Ruff, Vulture,
+`ty`, and carried CPython — and none of them is resolved from an ambient `PATH`,
+a host installation, or an environment override, so what a check decides does
+not depend on the machine it ran on. The release manifest records the exact
+version of each one, the installer probes every local tool against its
+checked-in pin before staging a release, and a check compares what a tool
+reports against that same pin rather than against a version compiled into the
+engine.
 
 This repository also keeps a development-only source runner at
 `bin/code-polishy`, which executes the engine with the pinned Go version via
-`scripts/go.sh`. It is not a release and no target lock can name it. No Python
-runtime is part of the engine.
+`scripts/go.sh`. It is not a release and no target lock can name it. The
+release-owned Python runtime is policy tooling for Vulture, never a target
+runtime.
 
 ## Testing strategy
 

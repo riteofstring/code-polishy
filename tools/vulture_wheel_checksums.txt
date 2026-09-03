@@ -1,0 +1,2 @@
+# Exact policy-owned Vulture wheel.
+vulture-2.16-py3-none-any.whl 6e0f1c312cef1c87856957e5c2ca9608834a7c794c2180477f30bf0e4cc58eee

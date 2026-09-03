@@ -606,7 +606,7 @@ func parseTestOptions(arguments []string) (testOptions, error) {
 	flags.BoolVar(&options.request.Recommended, "recommended", false, "run the impact-based pre-merge set")
 	flags.StringVar(&options.base, "base", "", "compare with the merge base of this Git ref")
 	flags.BoolVar(&options.request.Full, "all", false, "run the full profile")
-	flags.BoolVar(&options.request.Supplemental, "supplemental", false, "run separately staged test-strength suites")
+	flags.BoolVar(&options.request.Supplemental, "supplemental", false, "run explicitly selected supplemental hardening suites")
 	flags.Var((*stringList)(&options.request.Modules), "module", "run focused suites for a module")
 	flags.Var((*stringList)(&options.request.Suites), "suite", "run a named suite")
 	if err := flags.Parse(arguments); err != nil {

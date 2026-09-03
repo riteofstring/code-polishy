@@ -57,14 +57,16 @@ grep -qx '  workers: 2' "$2"
 grep -qx '  threshold:' "$2"
 grep -qx '  exclude-files:' "$2"
 grep -Fqx "    - '(^|/)inactive_other[.]go$'" "$2"
-if [[ "$#" == "5" && "$4" == "--dry-run" && "$5" == "./internal/sample" ]]; then
+if [[ "$#" == "7" && "$4" == "--dry-run" && "$5" == "./internal/sample" && "$6" == "--timeout-coefficient" && "$7" == "8" ]]; then
   grep -qx '    efficacy: 0' "$2"
   grep -qx '    mutant-coverage: 80' "$2"
   printf '%s\n' coverage >"${GREMLINS_TEST_MARKER}"
   exit 0
 fi
-[[ "$#" == "4" ]]
+[[ "$#" == "6" ]]
 [[ "$4" == "./internal/sample" ]]
+[[ "$5" == "--timeout-coefficient" ]]
+[[ "$6" == "8" ]]
 grep -qx '    efficacy: 80' "$2"
 grep -qx '    mutant-coverage: 0' "$2"
 grep -qx coverage "${GREMLINS_TEST_MARKER}"
@@ -82,7 +84,7 @@ git -C "${fixture_repo}" commit --quiet -m fixture
 status=0
 GREMLINS_TEST_MARKER="${marker}" \
   GREMLINS_TEST_TOOLS="${fixture_repo}/.tools" \
-  "${fixture_repo}/scripts/go-mutation.sh" ./internal/sample >"${output}" 2>&1 || status=$?
+  "${fixture_repo}/scripts/go-mutation.sh" ./internal/sample --timeout-coefficient 8 >"${output}" 2>&1 || status=$?
 [[ "${status}" == "10" ]] ||
   fail "threshold failure exited ${status}, expected 10: $(sed -n '1,10p' "${output}")"
 [[ -f "${marker}" ]] || fail "the configured Gremlins command did not run"

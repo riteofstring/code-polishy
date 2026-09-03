@@ -8,7 +8,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
-	"github.com/riteofstring/code-polishy/internal/quality"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
@@ -380,7 +379,7 @@ func (engine *Engine) checkpointGateCommands(selection repository.Selection, doc
 	if err != nil {
 		return nil, testpolicy.Plan{}, err
 	}
-	return mergeGateCheckCommands(gaterun.Check, quality.CheckCommands(engine.Repository, selection, "check")), tests, nil
+	return mergeGateCheckCommands(gaterun.Check, plannedPolicyCheckCommands(engine.Repository, selection, "check")), tests, nil
 }
 
 func (engine *Engine) finalizeAcceptedCheckpointGate(ctx context.Context, controller *gateRunController, report Report, gateErr error, state checkpointGateState) (Report, error) {

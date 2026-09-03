@@ -44,7 +44,7 @@ var javascriptComplexityRules = map[string]bool{
 }
 
 func JavaScriptBundleStatus(repo repository.Repository, files []string) ([]policy.Finding, []string) {
-	if !bearsJavaScript(repo, files) && len(markdownFormatFiles(repo, files)) == 0 {
+	if !bearsJavaScript(repo, files) && len(markdownFormatFiles(repo, files)) == 0 && len(dataFiles(repo, files)) == 0 {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), javascriptProvenanceBudget)
@@ -76,6 +76,9 @@ func javascriptFormat(ctx context.Context, repo repository.Repository, files []s
 	}
 	findings := javascriptFormatConfigFindings(repo, files)
 	selected := javascriptFormatFiles(repo, files)
+	if write {
+		selected = editableJavaScriptFormatFiles(repo, selected)
+	}
 	return append(findings, runJavaScriptFormat(ctx, repo, selected, write)...)
 }
 
@@ -134,29 +137,31 @@ func JavaScriptLintFindings(ctx context.Context, repo repository.Repository, fil
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
 		}
-		findings = append(findings, javascriptLintResultFindings(repo, result)...)
+		findings = append(findings, javascriptLintResultFindings(repo, result, group.checkComplexity)...)
 	}
 	return findings
 }
 
 type javascriptLintGroup struct {
-	limits     javascript.LintLimits
-	activation javascript.LintActivation
-	paths      []string
+	limits          javascript.LintLimits
+	activation      javascript.LintActivation
+	paths           []string
+	checkComplexity bool
 }
 
 func javascriptLintGroups(repo repository.Repository, files []string) []javascriptLintGroup {
 	grouped := map[string]*javascriptLintGroup{}
 	for _, path := range files {
-		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsGenerated(path) {
+		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
 			continue
 		}
 		limits := javascriptLintLimits(repo, repo.IsTest(path))
 		activation := javascriptLintActivation(repo, path)
-		key := fmt.Sprintf("%+v|%+v", limits, activation)
+		checkComplexity := !repo.IsGenerated(path)
+		key := fmt.Sprintf("%+v|%+v|%t", limits, activation, checkComplexity)
 		group, exists := grouped[key]
 		if !exists {
-			group = &javascriptLintGroup{limits: limits, activation: activation}
+			group = &javascriptLintGroup{limits: limits, activation: activation, checkComplexity: checkComplexity}
 			grouped[key] = group
 		}
 		group.paths = append(group.paths, path)
@@ -214,37 +219,74 @@ func javascriptScopeOwns(root, path string) bool {
 	return root == "." || strings.HasPrefix(path, root+"/")
 }
 
-func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
+func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult, complexity ...bool) []policy.Finding {
+	checkComplexity := len(complexity) == 0 || complexity[0]
 	findings := []policy.Finding{}
-	if !repo.Config.Quality.CommentsAllowed() {
-		for _, entry := range result.Unsupported {
-			findings = append(findings, policy.Finding{
-				Check: "policy.sourceCommentCoverage", Path: entry.Path, Subject: "eslint",
-				Message: "the policy-owned source-comment scanner could not decide this file: " + entry.Reason,
-			})
-		}
-		for _, comment := range result.Comments {
-			if javascriptSourceCommentAllowed(repo, comment) {
-				continue
-			}
-			findings = append(findings, policy.Finding{
-				Check: "policy.sourceComment", Path: comment.Path,
-				Subject: fmt.Sprintf("%d:%d", comment.Line, comment.Column),
-				Message: "prose comments and docstrings are forbidden; move durable context to a design document or use an allowed machine directive",
-			})
-		}
+	findings = append(findings, javascriptLintCommentFindings(repo, result)...)
+	return append(findings, javascriptLintViolationFindings(result.Findings, checkComplexity)...)
+}
+
+func javascriptLintCommentFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
+	if repo.Config.Quality.CommentsAllowed() {
+		return nil
 	}
-	for _, violation := range result.Findings {
-		check := "quality.lint"
-		if javascriptComplexityRules[violation.Rule] {
-			check = "quality.complexity"
+	findings := javascriptLintCommentCoverageFindings(repo, result.Unsupported)
+	return append(findings, javascriptLintProseCommentFindings(repo, result.Comments)...)
+}
+
+func javascriptLintCommentCoverageFindings(repo repository.Repository, unsupported []javascript.Unsupported) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, entry := range unsupported {
+		if repo.IsGenerated(entry.Path) {
+			continue
 		}
 		findings = append(findings, policy.Finding{
-			Check: check, Path: violation.Path, Subject: violation.Rule,
-			Message: fmt.Sprintf("line %d, column %d: %s", violation.Line, violation.Column, violation.Message),
+			Check: "policy.sourceCommentCoverage", Path: entry.Path, Subject: "eslint",
+			Message: "the policy-owned source-comment scanner could not decide this file: " + entry.Reason,
 		})
 	}
 	return findings
+}
+
+func javascriptLintProseCommentFindings(repo repository.Repository, comments []javascript.LintComment) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, comment := range comments {
+		if repo.IsGenerated(comment.Path) || javascriptSourceCommentAllowed(repo, comment) {
+			continue
+		}
+		findings = append(findings, policy.Finding{
+			Check: "policy.sourceComment", Path: comment.Path,
+			Subject: fmt.Sprintf("%d:%d", comment.Line, comment.Column),
+			Message: "prose comments and docstrings are forbidden; move durable context to a design document or use an allowed machine directive",
+		})
+	}
+	return findings
+}
+
+func javascriptLintViolationFindings(violations []javascript.LintViolation, checkComplexity bool) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, violation := range violations {
+		finding, include := javascriptLintViolationFinding(violation, checkComplexity)
+		if include {
+			findings = append(findings, finding)
+		}
+	}
+	return findings
+}
+
+func javascriptLintViolationFinding(violation javascript.LintViolation, checkComplexity bool) (policy.Finding, bool) {
+	isComplexity := javascriptComplexityRules[violation.Rule]
+	if !checkComplexity && isComplexity {
+		return policy.Finding{}, false
+	}
+	check := "quality.lint"
+	if isComplexity {
+		check = "quality.complexity"
+	}
+	return policy.Finding{
+		Check: check, Path: violation.Path, Subject: violation.Rule,
+		Message: fmt.Sprintf("line %d, column %d: %s", violation.Line, violation.Column, violation.Message),
+	}, true
 }
 
 func javascriptSourceCommentAllowed(repo repository.Repository, comment javascript.LintComment) bool {
@@ -353,7 +395,7 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 func javascriptTypeCheckFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
-		if javascriptTypeCheckExtensions[strings.ToLower(filepath.Ext(path))] && !repo.IsGenerated(path) {
+		if javascriptTypeCheckExtensions[strings.ToLower(filepath.Ext(path))] {
 			selected = append(selected, path)
 		}
 	}
@@ -489,7 +531,7 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 	grouped := map[string]*javascript.DeadCodeWorkspace{}
 	uncovered := []javascriptUncoveredFile{}
 	for _, path := range inventory {
-		if repo.Language(path) != "typescript" || repo.IsGenerated(path) {
+		if repo.Language(path) != "typescript" {
 			continue
 		}
 		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
@@ -698,7 +740,10 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 	selected := []string{}
 	for _, path := range files {
 		name := strings.ToLower(filepath.Base(path))
-		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsGenerated(path) {
+		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) {
+			continue
+		}
+		if repo.IsGenerated(path) && !repo.IsExecutableSource(path) {
 			continue
 		}
 		if strings.HasSuffix(name, ".lock") || strings.Contains(name, "-lock.") {
@@ -710,10 +755,20 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 	return selected
 }
 
+func editableJavaScriptFormatFiles(repo repository.Repository, files []string) []string {
+	selected := []string{}
+	for _, path := range files {
+		if !repo.IsGenerated(path) && !repo.IsData(path) {
+			selected = append(selected, path)
+		}
+	}
+	return selected
+}
+
 func markdownFormatFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
-		if markdownPath(path) && !repo.IsGenerated(path) {
+		if markdownPath(path) && !repo.IsGenerated(path) && !repo.IsData(path) {
 			selected = append(selected, path)
 		}
 	}

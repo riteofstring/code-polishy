@@ -21,7 +21,7 @@ set -euo pipefail
 
 
 release_manifest_name="release-manifest.json"
-release_manifest_version=3
+release_manifest_version=4
 
 
 
@@ -39,10 +39,12 @@ release_pin_files=(
   "tools/node-version.txt"
   "tools/osv-scanner-version.txt"
   "tools/pnpm-version.txt"
+  "tools/python-version.txt"
   "tools/ruff-version.txt"
   "tools/shellcheck-version.txt"
   "tools/staticcheck-version.txt"
   "tools/ty-version.txt"
+  "tools/vulture-version.txt"
 )
 
 case "$(uname -s)" in
@@ -138,10 +140,12 @@ govulncheck_version="$(read_tool_pin "${release_pin_files[2]}")"
 node_version="$(read_tool_pin "${release_pin_files[3]}")"
 osv_scanner_version="$(read_tool_pin "${release_pin_files[4]}")"
 pnpm_version="$(read_tool_pin "${release_pin_files[5]}")"
-ruff_version="$(read_tool_pin "${release_pin_files[6]}")"
-shellcheck_version="$(read_tool_pin "${release_pin_files[7]}")"
-staticcheck_version="$(read_tool_pin "${release_pin_files[8]}")"
-ty_version="$(read_tool_pin "${release_pin_files[9]}")"
+python_version="$(read_tool_pin "${release_pin_files[6]}")"
+ruff_version="$(read_tool_pin "${release_pin_files[7]}")"
+shellcheck_version="$(read_tool_pin "${release_pin_files[8]}")"
+staticcheck_version="$(read_tool_pin "${release_pin_files[9]}")"
+ty_version="$(read_tool_pin "${release_pin_files[10]}")"
+vulture_version="$(read_tool_pin "${release_pin_files[11]}")"
 
 
 
@@ -247,10 +251,12 @@ release_identity() {
   printf 'tool.node=%s\n' "${node_version}"
   printf 'tool.osv-scanner=%s\n' "${osv_scanner_version}"
   printf 'tool.pnpm=%s\n' "${pnpm_version}"
+  printf 'tool.python=%s\n' "${python_version}"
   printf 'tool.ruff=%s\n' "${ruff_version}"
   printf 'tool.shellcheck=%s\n' "${shellcheck_version}"
   printf 'tool.staticcheck=%s\n' "${staticcheck_version}"
   printf 'tool.ty=%s\n' "${ty_version}"
+  printf 'tool.vulture=%s\n' "${vulture_version}"
 }
 
 release_digest="$(release_identity |
@@ -283,10 +289,12 @@ $(render_features)
     "node": "${node_version}",
     "osv-scanner": "${osv_scanner_version}",
     "pnpm": "${pnpm_version}",
+    "python": "${python_version}",
     "ruff": "${ruff_version}",
     "shellcheck": "${shellcheck_version}",
     "staticcheck": "${staticcheck_version}",
-    "ty": "${ty_version}"
+    "ty": "${ty_version}",
+    "vulture": "${vulture_version}"
   },
   "releaseDigest": "${release_digest}",
   "contentDigest": "${content_digest}",

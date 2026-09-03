@@ -103,6 +103,11 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	gitLabInspection := supplychain.InspectGitLab(context.Background(), repo)
+	repo, err = repo.WithDynamicControlInputs(gitLabInspection.ControlInputs)
+	if err != nil {
+		return nil, err
+	}
 	dataRoot, dataRootErr := pack.UserDataRoot()
 	packResolution := pack.Resolve(config.Packs, dataRoot)
 	if dataRootErr != nil && len(config.Packs) > 0 {
@@ -113,6 +118,10 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	repo, err = repo.WithPythonProjectInventory(files)
+	if err != nil {
+		return nil, err
+	}
 	moduleResolution := policymodule.Resolve(repo, files)
 	policymodule.Apply(&repo.Config, moduleResolution)
 
@@ -120,7 +129,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	commandRunner := runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr, PathEntries: pathEntries}
 	return &Engine{
 		Repository: repo, Runner: commandRunner, Output: os.Stdout,
-		PolicyModuleFindings: append(moduleResolution.Findings, packResolution.Findings...),
+		PolicyModuleFindings: append(append(moduleResolution.Findings, packResolution.Findings...), gitLabInspection.Findings...),
 		PolicyModuleNotes:    append(policymodule.Notes(moduleResolution.Active), packResolution.Notes...),
 		PackDataRoot:         dataRoot,
 	}, nil
@@ -200,7 +209,7 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	findings := engine.coverageFindings()
 	findings = append(findings, quality.Check(ctx, engine.Repository, selection, engine.Runner, profile)...)
 	findings = append(findings, testpolicy.SourceFindings(engine.Repository, selection.Files)...)
-	findings = append(findings, architecture.Check(ctx, engine.Repository, selection.Files)...)
+	findings = append(findings, architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)...)
 	findings = append(findings, supplychain.Static(ctx, engine.Repository, selection.Files)...)
 	notes := []string{fmt.Sprintf("checked %d files", len(selection.Files))}
 	if len(selection.Candidate.Deleted) > 0 {
@@ -243,7 +252,7 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 }
 
 func (engine *Engine) Architecture(ctx context.Context, selection repository.Selection) Report {
-	return engine.finish(architecture.Check(ctx, engine.Repository, selection.Files), []string{fmt.Sprintf("checked architecture for %d files", len(selection.Files))})
+	return engine.finish(architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner), []string{fmt.Sprintf("checked architecture for %d files", len(selection.Files))})
 }
 
 func (engine *Engine) Format(ctx context.Context, selection repository.Selection) Report {
@@ -364,8 +373,8 @@ func testPlanNotes(base string, selection repository.Selection, advice testpolic
 	}
 	notes = append(notes, ordinaryNotes...)
 	if len(advice.Supplemental) > 0 {
-		notes = append(notes, "supplemental quality (run separately with test --supplemental): "+suiteSummary(advice.Supplemental))
-		notes = append(notes, "supplemental suites are excluded from ordinary recommended, full, verify, and gate")
+		notes = append(notes, "supplemental quality is available only for a caller request, checked-in event workflow, or stable release checklist (test --supplemental): "+suiteSummary(advice.Supplemental))
+		notes = append(notes, "supplemental declarations and requiredSupplementalKinds do not select work; ordinary recommended, full, verify, and gate exclude it")
 	}
 	return notes
 }
@@ -468,7 +477,7 @@ func testLevelsTable(advice testpolicy.Advice, selectedLevel string, hasMergeBas
 		{"focused", suiteCostSummary(advice.Focused), "routine", focusedExecution},
 		{levelName("recommended"), suiteCostSummary(advice.Recommended), ordinaryStatus, recommendedExecution},
 		{levelName("full"), suiteCostSummary(advice.Full), ordinaryStatus, fullExecution},
-		{"supplemental", suiteCostSummary(advice.AllSupplemental), "separate", "test --supplemental"},
+		{"supplemental", suiteCostSummary(advice.AllSupplemental), "explicit only", "test --supplemental"},
 	}
 	if selectedLevel == testpolicy.MergeLevelDocumentation {
 		documentationStatus := "advice"

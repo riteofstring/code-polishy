@@ -384,7 +384,7 @@ func TestResolvedLockParsersIncludeTransitivePackages(t *testing.T) {
 		t.Fatalf("npm packages=%+v err=%v", npm, err)
 	}
 	uv, err := parseUVLock([]byte("[[package]]\nname = \"direct\"\nversion = \"2.0.0\"\nsource = { registry = \"https://pypi.org/simple\" }\n\n[[package]]\nname = \"local\"\nversion = \"1.0.0\"\nsource = { editable = \".\" }\n"), "uv.lock")
-	if err != nil || len(uv) != 1 || uv[0].Name != "direct" {
+	if err != nil || len(uv) != 2 || uv[0].Name != "local" || uv[0].Source.Kind != "local" || uv[1].Name != "direct" || uv[1].Source.Kind != "registry" {
 		t.Fatalf("uv packages=%+v err=%v", uv, err)
 	}
 }
@@ -908,7 +908,11 @@ func TestPythonDependenciesMustBeExactAndLocked(t *testing.T) {
 func TestPythonWildcardIsNotAnExactVersion(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	findings := pythonDependencyFindings(repo, "pyproject.toml", []string{"requests==2.*", "urllib3==2.5.0"})
+	project, err := repository.ParsePythonProject("pyproject.toml", []byte("[project]\ndependencies = [\"requests==2.*\", \"urllib3==2.5.0\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := pythonDependencyFindings(repo, "pyproject.toml", project.Requirements)
 	if len(findings) != 1 || findings[0].Subject != "requests" {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -917,7 +921,11 @@ func TestPythonWildcardIsNotAnExactVersion(t *testing.T) {
 func TestPythonFileDependencyMustRemainInsideRepository(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	findings := pythonDependencyFindings(repo, "pyproject.toml", []string{"shared @ file:../../outside"})
+	project, err := repository.ParsePythonProject("pyproject.toml", []byte("[project]\ndependencies = [\"shared @ file:../../outside\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := pythonDependencyFindings(repo, "pyproject.toml", project.Requirements)
 	if len(findings) != 1 || findings[0].Check != "supplyChain.localDependency" {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -940,6 +948,158 @@ docs = ["mkdocs==1.6.0"]
 	want := []string{"requests==2.32.0", "pytest==9.0.0", "mkdocs==1.6.0"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("dependencies = %v", got)
+	}
+}
+
+func TestPythonGitDependenciesRequireMatchingUVSourceCommitAndSubdirectory(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	repo := supplyRepository(t)
+	manifest := "[project]\ndependencies = [\"private-tool @ git+https://github.com/example/private-tool.git@" + commit + "#subdirectory=src/tool\"]\n"
+	writeSupplyFile(t, repo.Root, "pyproject.toml", manifest)
+	lock := "[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"https://github.com/example/private-tool.git?subdirectory=src%2Ftool&rev=" + commit + "#" + commit + "\" }\n"
+	writeSupplyFile(t, repo.Root, "uv.lock", lock)
+	if findings := checkPythonProject(repo, "pyproject.toml"); len(findings) != 0 {
+		t.Fatalf("matching Git lock was rejected: %+v", findings)
+	}
+	for name, replacement := range map[string]string{
+		"repository":   "https://github.com/example/other.git",
+		"commit":       "abcdef0123456789abcdef0123456789abcdef01",
+		"subdirectory": "src%2Fother",
+	} {
+		name, replacement := name, replacement
+		t.Run(name, func(t *testing.T) {
+			candidate := strings.Replace(lock, map[string]string{
+				"repository":   "https://github.com/example/private-tool.git",
+				"commit":       commit,
+				"subdirectory": "src%2Ftool",
+			}[name], replacement, 1)
+			writeSupplyFile(t, repo.Root, "uv.lock", candidate)
+			findings := checkPythonProject(repo, "pyproject.toml")
+			if len(findings) != 1 || findings[0].Check != "supplyChain.lockConsistency" || findings[0].Subject != "private-tool" {
+				t.Fatalf("findings = %+v", findings)
+			}
+		})
+	}
+	writeSupplyFile(t, repo.Root, "uv.lock", "[[package]]\nname = \"other\"\nversion = \"1.0.0\"\nsource = { registry = \"https://pypi.org/simple\" }\n")
+	if findings := checkPythonProject(repo, "pyproject.toml"); len(findings) != 1 || findings[0].Check != "supplyChain.lockConsistency" || findings[0].Subject != "private-tool" {
+		t.Fatalf("missing Git package findings = %+v", findings)
+	}
+}
+
+func TestPythonBuildRequirementsUseTheSameExactSourcePolicy(t *testing.T) {
+	t.Parallel()
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = []\n[build-system]\nrequires = [\"hatchling>=1.25\"]\n")
+	writeSupplyFile(t, repo.Root, "uv.lock", "version = 1\n")
+	findings := checkPythonProject(repo, "pyproject.toml")
+	if len(findings) != 1 || findings[0].Check != "supplyChain.pythonExactVersion" || findings[0].Subject != "hatchling" {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestPythonBuildGitRequirementDoesNotRequireUVLockEvidence(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = []\n[build-system]\nrequires = [\"private-build @ git+https://github.com/example/private-build.git@"+commit+"\"]\n")
+	writeSupplyFile(t, repo.Root, "uv.lock", "version = 1\n")
+	if findings := checkPythonProject(repo, "pyproject.toml"); len(findings) != 0 {
+		t.Fatalf("build-isolation Git requirement was incorrectly required in uv.lock: %+v", findings)
+	}
+}
+
+func TestPythonGitLockMatchesRepositoryAcrossSSHUsers(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"private-tool @ git+ssh://git@github.com/example/private-tool.git@"+commit+"\"]\n")
+	writeSupplyFile(t, repo.Root, "uv.lock", "[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"ssh://lock-user@github.com/example/private-tool.git?rev="+commit+"#"+commit+"\" }\n")
+	if findings := checkPythonProject(repo, "pyproject.toml"); len(findings) != 0 {
+		t.Fatalf("same Git repository with another SSH user was rejected: %+v", findings)
+	}
+}
+
+func TestUVLockRetainsGitSourceFacts(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	packages, err := parseUVLock([]byte("[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = {\n  git = \"https://github.com/example/private-tool.git?subdirectory=src%2Ftool&rev="+commit+"#"+commit+"\",\n}\n"), "uv.lock")
+	if err != nil || len(packages) != 1 || packages[0].Source.Kind != "git" || packages[0].Source.Git.DeclaredRef != commit || packages[0].Source.Git.Commit != commit || packages[0].Source.Git.Subdirectory != "src/tool" {
+		t.Fatalf("packages = %+v, err = %v", packages, err)
+	}
+}
+
+func TestUVLockFailsClosedForMutableGitReferenceEvidence(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	manifest := "[project]\ndependencies = [\"private-tool @ git+https://github.com/example/private-tool.git@" + commit + "\"]\n"
+	for name, reference := range map[string]string{
+		"branch":   "main",
+		"short":    commit[:12],
+		"mismatch": "abcdef0123456789abcdef0123456789abcdef01",
+	} {
+		name, reference := name, reference
+		t.Run(name, func(t *testing.T) {
+			repo := supplyRepository(t)
+			writeSupplyFile(t, repo.Root, "pyproject.toml", manifest)
+			writeSupplyFile(t, repo.Root, "uv.lock", "[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"https://github.com/example/private-tool.git?rev="+reference+"#"+commit+"\" }\n")
+			findings := checkPythonProject(repo, "pyproject.toml")
+			if len(findings) != 1 || findings[0].Check != "supplyChain.lockConsistency" || findings[0].Subject != "private-tool" {
+				t.Fatalf("findings = %+v", findings)
+			}
+		})
+	}
+}
+
+func TestUVLockScopesPackageFieldsToThePackageTable(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	lock := "[[package]]\nname = \"kept\"\nversion = \"1.0.0\"\nsource = { registry = \"https://pypi.org/simple\" }\n\n[package.metadata]\nname = \"overwritten\"\nversion = \"9.9.9\"\nsource = { git = \"https://github.com/example/private-tool.git?rev=" + commit + "#" + commit + "\" }\n"
+	packages, err := parseUVLock([]byte(lock), "uv.lock")
+	if err != nil || len(packages) != 1 || packages[0].Name != "kept" || packages[0].Version != "1.0.0" || packages[0].Source.Kind != "registry" {
+		t.Fatalf("packages = %+v, err = %v", packages, err)
+	}
+}
+
+func TestPythonGitSourceCoverageIsExplicit(t *testing.T) {
+	t.Parallel()
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, "uv.lock", "[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"https://github.com/example/private-tool.git?rev="+commit+"#"+commit+"\" }\n")
+	findings := checkResolvedPythonReleaseAge(t.Context(), repo, "pyproject.toml")
+	checks := map[string]bool{}
+	for _, finding := range findings {
+		checks[finding.Check] = true
+	}
+	if len(findings) != 2 || !checks["supplyChain.releaseAgeCoverage"] || !checks["policy.securityScanner"] {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestDependencyReviewRepresentsGitSourceAndCommitWithoutReleaseAge(t *testing.T) {
+	t.Parallel()
+	commitBefore := "0123456789abcdef0123456789abcdef01234567"
+	commitAfter := "abcdef0123456789abcdef0123456789abcdef01"
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"private-tool @ git+ssh://git@github.com/example/private-tool.git@"+commitBefore+"\"]\n")
+	gitSupply(t, repo.Root, "init", "-b", "main")
+	gitSupply(t, repo.Root, "config", "user.email", "tests@example.test")
+	gitSupply(t, repo.Root, "config", "user.name", "Policy Tests")
+	gitSupply(t, repo.Root, "add", ".")
+	gitSupply(t, repo.Root, "commit", "-m", "base")
+	output, err := exec.Command("git", "-C", repo.Root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := strings.TrimSpace(string(output))
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"private-tool @ git+ssh://git@github.com/example/private-tool.git@"+commitAfter+"\"]\n")
+	changes, err := DependencyChanges(t.Context(), repo, base)
+	if err != nil || len(changes) != 1 {
+		t.Fatalf("changes = %+v, err = %v", changes, err)
+	}
+	change := changes[0]
+	if change.Ecosystem != "git" || change.Directness != "direct" || change.Package != "private-tool" || !strings.Contains(change.From, commitBefore) || !strings.Contains(change.To, commitAfter) || newDependencyAgeCandidate(change) {
+		t.Fatalf("Git dependency change = %+v", change)
 	}
 }
 

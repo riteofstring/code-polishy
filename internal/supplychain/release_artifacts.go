@@ -145,8 +145,8 @@ func readReleaseArtifactVersion(repo repository.Repository, artifact policy.Rele
 	if version == "" || version != strings.TrimSpace(version) || strings.ContainsAny(version, "\r\n") {
 		return "", fmt.Errorf("version pin must contain one exact version with an optional trailing newline")
 	}
-	if !policy.ExactArtifactVersion(version) {
-		return "", fmt.Errorf("version pin %q is not an exact semantic version", version)
+	if !policy.ExactReleaseArtifactVersion(artifact.Source, version) {
+		return "", fmt.Errorf("version pin %q is not exact for source %s", version, artifact.Source)
 	}
 	if err := validateReleaseArtifactVersion(artifact.Source, version); err != nil {
 		return "", err
@@ -181,6 +181,14 @@ func lookupReleaseArtifact(ctx context.Context, client artifactHTTPClient, repo 
 		return lookupNodeRuntimeRelease(ctx, client, version)
 	case "npm":
 		return lookupNPMArtifactRelease(ctx, client, repo.Config.SupplyChain.NPMRegistryURL, artifact.Locator, version)
+	case policy.ReleaseArtifactSourcePyPI:
+		return lookupPyPIArtifactRelease(ctx, client, artifact.Locator, version)
+	case policy.ReleaseArtifactSourcePythonBuildStandalone:
+		_, tag, found := strings.Cut(version, "+")
+		if !found || tag == "" || !policy.ExactReleaseArtifactVersion(artifact.Source, version) {
+			return time.Time{}, fmt.Errorf("python-build-standalone version %q must include one release tag", version)
+		}
+		return lookupGitHubRelease(ctx, client, "astral-sh/python-build-standalone", tag)
 	default:
 		return time.Time{}, fmt.Errorf("unsupported metadata source %q", artifact.Source)
 	}
@@ -328,6 +336,41 @@ func lookupNPMArtifactRelease(ctx context.Context, client artifactHTTPClient, re
 		return time.Time{}, fmt.Errorf("npm metadata omitted the exact timestamp for %s@%s", packageName, version)
 	}
 	return released, nil
+}
+
+func lookupPyPIArtifactRelease(ctx context.Context, client artifactHTTPClient, packageName, version string) (time.Time, error) {
+	endpoint := "https://pypi.org/pypi/" + url.PathEscape(packageName) + "/" + url.PathEscape(version) + "/json"
+	var payload struct {
+		Info struct {
+			Version string `json:"version"`
+		} `json:"info"`
+		URLs []struct {
+			UploadTime string `json:"upload_time_iso_8601"`
+		} `json:"urls"`
+	}
+	if err := fetchArtifactMetadata(ctx, client, endpoint, &payload); err != nil {
+		return time.Time{}, err
+	}
+	if payload.Info.Version != version || len(payload.URLs) == 0 {
+		return time.Time{}, fmt.Errorf("PyPI metadata did not identify %s@%s", packageName, version)
+	}
+	return latestPyPIUpload(payload.URLs, packageName, version)
+}
+
+func latestPyPIUpload(urls []struct {
+	UploadTime string `json:"upload_time_iso_8601"`
+}, packageName, version string) (time.Time, error) {
+	latest := time.Time{}
+	for _, artifact := range urls {
+		released, err := time.Parse(time.RFC3339, artifact.UploadTime)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("PyPI metadata has an invalid upload time for %s@%s", packageName, version)
+		}
+		if released.After(latest) {
+			latest = released
+		}
+	}
+	return latest, nil
 }
 
 func fetchArtifactMetadata(ctx context.Context, client artifactHTTPClient, endpoint string, target any) error {

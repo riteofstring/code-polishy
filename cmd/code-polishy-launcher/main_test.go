@@ -49,7 +49,8 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 		SourceRevision: revision, Host: host, Features: []string{"javascript-bundle"},
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Ty: "0.0.65",
+			PNPM: "11.13.0", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			Ty: "0.0.65", Vulture: "2.16",
 		},
 		Entries: []release.Entry{
 			{Path: bundleLink, Symlink: "../.pnpm/tool"},

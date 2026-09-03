@@ -1,0 +1,6 @@
+# Exact python-build-standalone install-only archives for the policy CPython runtime.
+cpython-3.12.13+20260728-aarch64-apple-darwin-install_only.tar.gz 12d6700f7e8f222639f0ee5bbd173082c3041aeb65af8f9828e4216bc8047de6
+cpython-3.12.13+20260728-aarch64-unknown-linux-gnu-install_only.tar.gz f86f0742f31df4586ada21b5763c5c9608ebd72048cf3c89f08fca9cfded4c21
+cpython-3.12.13+20260728-x86_64-apple-darwin-install_only.tar.gz 21ea90aa55057e5f1d177f1f5fb2d730704f68124ca8ff40d872a81ffdf0543e
+cpython-3.12.13+20260728-x86_64-pc-windows-msvc-install_only.tar.gz 8a0e1ded37e11f4c72b9671bf134bb478b1b2d55efe53a3d6e589b166f1bf2e1
+cpython-3.12.13+20260728-x86_64-unknown-linux-gnu-install_only.tar.gz fd9d70e1e1ed3f6caccb4e2eefe570aa07589c8f86ddf0e87f68a96cd14272e1

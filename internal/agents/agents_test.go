@@ -255,6 +255,56 @@ func TestSyncReplacesTheEntireStaleAgentsFileAndPreservesItsMode(t *testing.T) {
 	}
 }
 
+func TestInstallAndSyncCarrySupplementalExecutionBoundary(t *testing.T) {
+	t.Parallel()
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyRoot := filepath.Clean(filepath.Join(workingDirectory, "..", ".."))
+	templatePath := filepath.Join(policyRoot, filepath.FromSlash(agentsTemplateRelativePath))
+	canonical, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundaries := [][]byte{
+		[]byte("Run supplemental suites only when"),
+		[]byte("`tests.requiredSupplementalKinds`, never authorize execution"),
+	}
+	for _, boundary := range boundaries {
+		if !bytes.Contains(canonical, boundary) {
+			t.Fatalf("canonical guidance omits supplemental execution boundary %q: %q", boundary, canonical)
+		}
+	}
+	cases := map[string]func(string, string) (string, error){
+		"install": Install,
+		"sync":    Sync,
+	}
+	for name, operation := range cases {
+		t.Run(name, func(t *testing.T) {
+			repoRoot := t.TempDir()
+			if name == "sync" {
+				writeFile(t, filepath.Join(repoRoot, agentsTargetFilename), []byte("stale\n"), 0o600)
+			}
+			if _, err := operation(repoRoot, policyRoot); err != nil {
+				t.Fatal(err)
+			}
+			installed, err := os.ReadFile(filepath.Join(repoRoot, agentsTargetFilename))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(installed, canonical) {
+				t.Fatalf("%s guidance differs from canonical guidance: %q", name, installed)
+			}
+			for _, boundary := range boundaries {
+				if !bytes.Contains(installed, boundary) {
+					t.Fatalf("%s guidance omits supplemental execution boundary %q: %q", name, boundary, installed)
+				}
+			}
+		})
+	}
+}
+
 func TestSyncAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	t.Parallel()
 	policyRoot := policyFixture(t, canonicalAgentsText)

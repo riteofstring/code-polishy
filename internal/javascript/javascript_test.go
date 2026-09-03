@@ -252,6 +252,129 @@ func TestAFormatResultReportsChangedAndUnsupportedFiles(t *testing.T) {
 	}
 }
 
+func TestAParseRequestCarriesTheRootAndStructuredDataSelection(t *testing.T) {
+	observed := filepath.Join(t.TempDir(), "request.json")
+	response := `{"protocolVersion":3,"operation":"parse","result":{"covered":["data/catalog.json","data/layout.yaml"],"unsupported":[]}}`
+	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
+	if _, err := bundle.Parse(context.Background(), "/target", []string{"data/catalog.json", "data/layout.yaml"}); err != nil {
+		t.Fatalf("exchange parse: %v", err)
+	}
+	request, err := os.ReadFile(observed)
+	if err != nil {
+		t.Fatalf("read the observed request: %v", err)
+	}
+	want := `{"protocolVersion":3,"operation":"parse","root":"/target","paths":["data/catalog.json","data/layout.yaml"]}`
+	if string(request) != want {
+		t.Fatalf("unexpected request %q", string(request))
+	}
+}
+
+func TestAParseResultReportsInvalidStructuredData(t *testing.T) {
+	result := `{"covered":[],"unsupported":[{"path":"data/broken.json","reason":"unexpected token"}]}`
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"parse","result":`+result+`}`))
+	reported, err := bundle.Parse(context.Background(), "/target", []string{"data/broken.json"})
+	if err != nil {
+		t.Fatalf("exchange parse: %v", err)
+	}
+	if len(reported.Unsupported) != 1 || reported.Unsupported[0].Path != "data/broken.json" || reported.Unsupported[0].Reason != "unexpected token" {
+		t.Fatalf("unsupported = %+v", reported.Unsupported)
+	}
+}
+
+func TestAnUnknownParseResultFieldIsRejected(t *testing.T) {
+	result := `{"covered":["data/catalog.json"],"unsupported":[],"durationMs":12}`
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"parse","result":`+result+`}`))
+	if _, err := bundle.Parse(context.Background(), "/target", []string{"data/catalog.json"}); err == nil {
+		t.Fatal("expected an unknown result field to be rejected")
+	} else if !strings.Contains(err.Error(), "unreadable parse result") {
+		t.Fatalf("unexpected failure %q", err.Error())
+	}
+}
+
+func TestAParseResultMustAccountForEveryRequestedPath(t *testing.T) {
+	t.Parallel()
+	for name, result := range map[string]string{
+		"missing fields":       `{}`,
+		"null fields":          `{"covered":null,"unsupported":null}`,
+		"omitted path":         `{"covered":[],"unsupported":[]}`,
+		"unrequested path":     `{"covered":["data/other.json"],"unsupported":[]}`,
+		"duplicate path":       `{"covered":["data/catalog.json"],"unsupported":[{"path":"data/catalog.json","reason":"bad"}]}`,
+		"empty refusal reason": `{"covered":[],"unsupported":[{"path":"data/catalog.json","reason":""}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"parse","result":`+result+`}`))
+			if _, err := bundle.Parse(context.Background(), "/target", []string{"data/catalog.json"}); err == nil {
+				t.Fatal("invalid parse result was accepted")
+			}
+		})
+	}
+}
+
+func TestAGitLabRequestCarriesDistinctRootConfigurations(t *testing.T) {
+	observed := filepath.Join(t.TempDir(), "request.json")
+	result := `{"controls":[".gitlab-ci.yml","ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`
+	script := "#!/bin/sh\n/bin/cat >" + observed + "\nprintf '%s\\n' '" +
+		`{"protocolVersion":3,"operation":"gitlab","result":` + result + `}'` + "\n"
+	bundle := fakeBundle(t, script)
+	reported, err := bundle.GitLab(context.Background(), "/target", []string{".gitlab-ci.yml"}, []string{".gitlab-ci.yml", "ci/common.yml"})
+	if err != nil {
+		t.Fatalf("exchange gitlab: %v", err)
+	}
+	if !slices.Equal(reported.Controls, []string{".gitlab-ci.yml", "ci/common.yml"}) {
+		t.Fatalf("controls = %v", reported.Controls)
+	}
+	request, err := os.ReadFile(observed)
+	if err != nil {
+		t.Fatalf("read the observed request: %v", err)
+	}
+	want := `{"protocolVersion":3,"operation":"gitlab","root":"/target","paths":[".gitlab-ci.yml"],"governedPaths":[".gitlab-ci.yml","ci/common.yml"]}`
+	if string(request) != want {
+		t.Fatalf("unexpected request %q", string(request))
+	}
+	for _, paths := range [][]string{nil, {"ci/release.yml"}, {".gitlab-ci.yml", ".gitlab-ci.yml"}} {
+		if _, err := bundle.GitLab(context.Background(), "/target", paths, []string{".gitlab-ci.yml"}); err == nil {
+			t.Fatalf("GitLab(%v) accepted invalid roots", paths)
+		}
+	}
+}
+
+func TestAGitLabResultReportsBoundedFactsAndCoverage(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	result := `{"controls":[".gitlab-ci.yml","ci/common.yml"],` +
+		`"images":[{"path":".gitlab-ci.yml","scope":"global:image","image":"registry.example/app@sha256:` + strings.Repeat("a", 64) + `"}],` +
+		`"includes":[` +
+		`{"path":".gitlab-ci.yml","kind":"local","local":"ci/common.yml","project":"","file":"","ref":"","remote":"","integrity":"","component":"","template":""},` +
+		`{"path":"ci/common.yml","kind":"project","local":"","project":"group/templates","file":"release.yml","ref":"` + commit + `","remote":"","integrity":"","component":"","template":""},` +
+		`{"path":".gitlab-ci.yml","kind":"template","local":"","project":"","file":"","ref":"","remote":"","integrity":"","component":"","template":"Jobs/SAST.gitlab-ci.yml"}],` +
+		`"unsupported":[{"path":"ci/common.yml","reason":"a conditional include cannot be statically resolved"}]}`
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"gitlab","result":`+result+`}`))
+	reported, err := bundle.GitLab(context.Background(), "/target", []string{".gitlab-ci.yml"}, []string{".gitlab-ci.yml", "ci/common.yml"})
+	if err != nil {
+		t.Fatalf("exchange gitlab: %v", err)
+	}
+	if len(reported.Images) != 1 || reported.Images[0].Scope != "global:image" || len(reported.Includes) != 3 || reported.Includes[2].Template != "Jobs/SAST.gitlab-ci.yml" || len(reported.Unsupported) != 1 {
+		t.Fatalf("result = %+v", reported)
+	}
+}
+
+func TestAGitLabResultRejectsUntrustedOrIncompleteFacts(t *testing.T) {
+	for name, result := range map[string]string{
+		"missing fields":      `{}`,
+		"missing root":        `{"controls":["ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`,
+		"unguarded control":   `{"controls":[".gitlab-ci.yml",".git/config"],"images":[],"includes":[],"unsupported":[]}`,
+		"outside image":       `{"controls":[".gitlab-ci.yml"],"images":[{"path":"ci/common.yml","scope":"global:image","image":"registry.example/app"}],"includes":[],"unsupported":[]}`,
+		"incomplete include":  `{"controls":[".gitlab-ci.yml"],"images":[],"includes":[{"path":".gitlab-ci.yml","kind":"local"}],"unsupported":[]}`,
+		"unowned unsupported": `{"controls":[".gitlab-ci.yml"],"images":[],"includes":[],"unsupported":[{"path":"ci/common.yml","reason":"missing"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"gitlab","result":`+result+`}`))
+			if _, err := bundle.GitLab(context.Background(), "/target", []string{".gitlab-ci.yml"}, []string{".gitlab-ci.yml"}); err == nil || !strings.Contains(err.Error(), "unreadable gitlab result") {
+				t.Fatalf("result was accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestAFileOperationRefusesAnUncontainedSelection(t *testing.T) {
 	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"format","result":{"changed":[],"unsupported":[]}}`))
 	for _, test := range []struct {

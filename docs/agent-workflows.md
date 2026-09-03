@@ -55,10 +55,21 @@ finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
 and completing any selected behavior review. At a merge checkpoint, run one
 `code-polishy merge-gate --base <merge-target>` for the unchanged final
-candidate. Run `code-polishy test --supplemental` only when the caller or a
-checked-in workflow requires that separate hardening stage. Conversational,
-read-only, and status requests do not create checkpoints; an invoked
-checkpoint with no changes is a no-op.
+candidate. Run `code-polishy test --supplemental` only when the caller
+explicitly requests it, a checked-in workflow explicitly invokes it for that
+event, or the release checklist selects one run after a stable release
+candidate has stopped changing. A declared supplemental suite or
+`tests.requiredSupplementalKinds` does not trigger it. Ordinary development,
+changed tests, checkpoint and merge gates, agent-guidance synchronization, and
+Code Polishy lock upgrades leave supplemental hardening `NOT RUN`.
+For release hardening, the first stable candidate runs every supplemental suite
+once. After failure, rerun only failed suites and passes invalidated by changes
+to their tested production files or tests, or their own commands or
+configuration. Exact `test --suite` evidence composes with still-valid passes;
+repeat every suite only when shared mutation infrastructure, toolchain, or
+selection changes, or impact cannot be bounded.
+Conversational, read-only, and status requests do not create checkpoints; an
+invoked checkpoint with no changes is a no-op.
 
 When added or modified test files are in the candidate, the default or
 change-aware checkpoints show one prominent, non-blocking test-quality reminder.

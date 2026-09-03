@@ -101,6 +101,158 @@ fi
 
 
 
+gitlab_target="${fixture_root}/gitlab"
+mkdir -p "${gitlab_target}/ci" "${gitlab_target}/.git"
+gitlab_digest="sha256:$(printf 'a%.0s' {1..64})"
+gitlab_commit="0123456789abcdef0123456789abcdef01234567"
+gitlab_integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+cat >"${gitlab_target}/.gitlab-ci.yml" <<SOURCE
+include:
+  - local: /ci/common.yml
+  - local: .git/config
+  - project: group/templates
+    file:
+      - release.yml
+      - security.yml
+    ref: ${gitlab_commit}
+  - remote: https://ci.example/templates/release.yml
+    integrity: ${gitlab_integrity}
+  - component: gitlab.example/group/project/component@${gitlab_commit}
+  - template: Jobs/SAST.gitlab-ci.yml
+image: registry.example/root@${gitlab_digest}
+services:
+  - registry.example/root-service@${gitlab_digest}
+default:
+  image:
+    name: registry.example/default@${gitlab_digest}
+  services:
+    - name: registry.example/default-service@${gitlab_digest}
+release:
+  image: registry.example/job@${gitlab_digest}
+  services:
+    - registry.example/job-service@${gitlab_digest}
+SOURCE
+printf 'image: registry.example/common@%s\n' "${gitlab_digest}" >"${gitlab_target}/ci/common.yml"
+printf 'image: registry.example/secret@%s\n' "${gitlab_digest}" >"${gitlab_target}/.git/config"
+gitlab_request() {
+  printf '{"protocolVersion":3,"operation":"gitlab","root":"%s","paths":[".gitlab-ci.yml"],"governedPaths":[".gitlab-ci.yml","ci/common.yml"]}' "$1"
+}
+gitlab_response="${fixture_root}/gitlab.json"
+gitlab_request "${gitlab_target}" | run_runner >"${gitlab_response}" ||
+  fail "the gitlab operation rejected a governed configuration"
+for governed in '.gitlab-ci.yml' 'ci/common.yml'; do
+  if ! grep -qF "\"${governed}\"" "${gitlab_response}"; then
+    fail "the gitlab operation did not report governed control ${governed}: $(cat "${gitlab_response}")"
+  fi
+done
+for include_kind in project remote component template; do
+  if ! grep -qF "\"kind\":\"${include_kind}\"" "${gitlab_response}"; then
+    fail "the gitlab operation did not report ${include_kind} include facts: $(cat "${gitlab_response}")"
+  fi
+done
+if ! grep -qF 'is not a governed repository input' "${gitlab_response}"; then
+  fail "the gitlab operation did not reject an ignored include: $(cat "${gitlab_response}")"
+fi
+if grep -qF 'registry.example/secret' "${gitlab_response}"; then
+  fail "the gitlab operation read an ignored include: $(cat "${gitlab_response}")"
+fi
+for image_scope in 'global:image' 'global:service' 'default:image' 'default:service' 'job:release:image' 'job:release:service'; do
+  if ! grep -qF "\"scope\":\"${image_scope}\"" "${gitlab_response}"; then
+    fail "the gitlab operation did not report ${image_scope}: $(cat "${gitlab_response}")"
+  fi
+done
+
+
+
+
+gitlab_invalid_target="${fixture_root}/gitlab-invalid"
+mkdir -p "${gitlab_invalid_target}/ci"
+cat >"${gitlab_invalid_target}/.gitlab-ci.yml" <<'SOURCE'
+include:
+  - local: ci/cycle.yml
+  - local: ci/cycle.yml
+  - local: ci/missing.yml
+  - local: ../outside.yml
+  - local: $CI_CONFIG_PATH
+  - unsupported: Security/SAST.gitlab-ci.yml
+SOURCE
+cat >"${gitlab_invalid_target}/ci/cycle.yml" <<'SOURCE'
+include:
+  - local: /.gitlab-ci.yml
+SOURCE
+gitlab_invalid_request() {
+  printf '{"protocolVersion":3,"operation":"gitlab","root":"%s","paths":[".gitlab-ci.yml"],"governedPaths":[".gitlab-ci.yml","ci/cycle.yml","ci/missing.yml"]}' "$1"
+}
+gitlab_invalid_request "${gitlab_invalid_target}" | run_runner >"${gitlab_response}" ||
+  fail "the gitlab operation rejected a malformed GitLab configuration request"
+for reason in 'include cycle' 'included more than once' 'the file is unreadable' 'literal contained path' 'exactly one supported source kind'; do
+  if ! grep -qF "${reason}" "${gitlab_response}"; then
+    fail "the gitlab operation did not report ${reason}: $(cat "${gitlab_response}")"
+  fi
+done
+
+gitlab_windows_path_target="${fixture_root}/gitlab-windows-path"
+mkdir -p "${gitlab_windows_path_target}"
+cat >"${gitlab_windows_path_target}/.gitlab-ci.yml" <<'SOURCE'
+include:
+  - local: C:/outside.yml
+SOURCE
+gitlab_windows_path_request() {
+  printf '{"protocolVersion":3,"operation":"gitlab","root":"%s","paths":[".gitlab-ci.yml"],"governedPaths":[".gitlab-ci.yml"]}' "$1"
+}
+gitlab_windows_path_request "${gitlab_windows_path_target}" | run_runner >"${gitlab_response}" ||
+  fail "the gitlab operation rejected a Windows-path coverage request"
+if ! grep -qF 'literal contained path' "${gitlab_response}"; then
+  fail "the gitlab operation accepted a Windows-absolute local path: $(cat "${gitlab_response}")"
+fi
+
+data_target="${fixture_root}/structured-data"
+mkdir -p "${data_target}"
+printf '{  "identity": "preserve"  }\n' >"${data_target}/identity.json"
+cat >"${data_target}/identity.jsonc" <<'SOURCE'
+{
+  // JSONC comments and trailing commas are valid.
+  "identity": "preserve",
+}
+SOURCE
+cat >"${data_target}/identity.yaml" <<'SOURCE'
+identity: preserve
+items:
+  - one
+SOURCE
+cat >"${data_target}/identity.yml" <<'SOURCE'
+identity: preserve
+items:
+  - one
+SOURCE
+cp -R "${data_target}" "${fixture_root}/structured-data-before"
+parse_request() {
+  printf '{"protocolVersion":3,"operation":"parse","root":"%s","paths":%s}' "$1" "$2"
+}
+data_selection='["identity.json","identity.jsonc","identity.yaml","identity.yml"]'
+parse_response="${fixture_root}/parse.json"
+parse_request "${data_target}" "${data_selection}" | run_runner >"${parse_response}" ||
+  fail "the runner rejected valid structured data"
+if ! grep -qF '"unsupported":[]' "${parse_response}"; then
+  fail "the parse-only operation rejected valid structured data: $(cat "${parse_response}")"
+fi
+if ! diff -ru "${fixture_root}/structured-data-before" "${data_target}" >/dev/null; then
+  fail "the parse-only operation rewrote structured data"
+fi
+printf '{"identity":\n' >"${data_target}/broken.json"
+printf '{"identity": }\n' >"${data_target}/broken.jsonc"
+printf 'identity: [\n' >"${data_target}/broken.yaml"
+printf 'identity: [\n' >"${data_target}/broken.yml"
+parse_request "${data_target}" '["broken.json","broken.jsonc","broken.yaml","broken.yml"]' |
+  run_runner >"${parse_response}" || fail "the runner rejected a malformed-data parse request"
+for malformed in broken.json broken.jsonc broken.yaml broken.yml; do
+  if ! grep -qF "\"path\":\"${malformed}\"" "${parse_response}"; then
+    fail "the parse-only operation did not report ${malformed}: $(cat "${parse_response}")"
+  fi
+done
+
+
+
 
 
 outside="${fixture_root}/outside"

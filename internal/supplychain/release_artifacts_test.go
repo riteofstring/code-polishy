@@ -19,24 +19,29 @@ func TestStandaloneArtifactReleaseAgeUsesAuthoritativeUpstreamMetadata(t *testin
 		{Name: "go", VersionFile: "scripts/go_version.txt", Source: "go-toolchain"},
 		{Name: "node", VersionFile: "tools/node-version.txt", Source: "node-runtime"},
 		{Name: "staticcheck", VersionFile: "tools/staticcheck-version.txt", Source: "go-module", Locator: "honnef.co/go/tools"},
+		{Name: "python", VersionFile: "tools/python-version.txt", Source: policy.ReleaseArtifactSourcePythonBuildStandalone},
 		{Name: "ruff", VersionFile: "tools/ruff-version.txt", Source: "github-release", Locator: "astral-sh/ruff", TagPrefix: "v"},
 		{Name: "example-cli", VersionFile: "tools/example-version.txt", Source: "npm", Locator: "@example/cli"},
+		{Name: "vulture", VersionFile: "tools/vulture-version.txt", Source: policy.ReleaseArtifactSourcePyPI, Locator: "vulture"},
 	}
 	for path, version := range map[string]string{
 		"scripts/go_version.txt": "1.26.6\n", "tools/node-version.txt": "24.18.0\n",
 		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/ruff-version.txt": "0.16.0\n",
-		"tools/example-version.txt": "2.3.4\r\n",
+		"tools/example-version.txt": "2.3.4\r\n", "tools/python-version.txt": "3.12.13+20260728\n",
+		"tools/vulture-version.txt": "2.16\n",
 	} {
 		writeSupplyFile(t, repo.Root, path, version)
 	}
 	released := "2026-08-20T12:00:00Z"
 	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
 		responses := map[string]string{
-			goReleaseHistoryEndpoint:                                     `<html><p id="go1.26.6">go1.26.6 (released 2026-08-20)</p></html>`,
-			"https://nodejs.org/dist/index.json":                         `[{"version":"v24.18.0","date":"2026-08-20"}]`,
-			"https://proxy.golang.org/honnef.co/go/tools/@v/v0.7.0.info": `{"Version":"v0.7.0","Time":"` + released + `"}`,
-			"https://github.com/astral-sh/ruff/releases.atom":            `<feed><entry><id>tag:github.com,2008:Repository/123/v0.16.0</id><updated>` + released + `</updated></entry></feed>`,
-			"https://registry.npmjs.org/@example%2Fcli":                  `{"time":{"2.3.4":"` + released + `"}}`,
+			goReleaseHistoryEndpoint:                                             `<html><p id="go1.26.6">go1.26.6 (released 2026-08-20)</p></html>`,
+			"https://nodejs.org/dist/index.json":                                 `[{"version":"v24.18.0","date":"2026-08-20"}]`,
+			"https://proxy.golang.org/honnef.co/go/tools/@v/v0.7.0.info":         `{"Version":"v0.7.0","Time":"` + released + `"}`,
+			"https://github.com/astral-sh/python-build-standalone/releases.atom": `<feed><entry><id>tag:github.com,2008:Repository/123/20260728</id><updated>` + released + `</updated></entry></feed>`,
+			"https://github.com/astral-sh/ruff/releases.atom":                    `<feed><entry><id>tag:github.com,2008:Repository/123/v0.16.0</id><updated>` + released + `</updated></entry></feed>`,
+			"https://registry.npmjs.org/@example%2Fcli":                          `{"time":{"2.3.4":"` + released + `"}}`,
+			"https://pypi.org/pypi/vulture/2.16/json":                            `{"info":{"version":"2.16"},"urls":[{"upload_time_iso_8601":"` + released + `"}]}`,
 		}
 		body, exists := responses[request.URL.String()]
 		if !exists {
@@ -134,6 +139,66 @@ func TestStandaloneArtifactOlderThanTheMinimumPasses(t *testing.T) {
 	now := time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)
 	if findings := releaseArtifactAgeFindings(t.Context(), repo, client, now); len(findings) != 0 {
 		t.Fatalf("old artifact findings = %+v", findings)
+	}
+}
+
+func TestPythonBuildStandaloneReleaseUsesTheBuildMetadataTag(t *testing.T) {
+	t.Parallel()
+	repo := supplyRepository(t)
+	artifact := policy.ReleaseArtifact{
+		Name: "python", VersionFile: "tools/python-version.txt", Source: policy.ReleaseArtifactSourcePythonBuildStandalone,
+	}
+	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://github.com/astral-sh/python-build-standalone/releases.atom" {
+			return nil, fmt.Errorf("unexpected metadata request %s", request.URL)
+		}
+		return artifactResponse(http.StatusOK, `<feed><entry><id>tag:github.com,2008:Repository/123/20260728</id><updated>2026-07-28T12:00:00Z</updated></entry></feed>`), nil
+	})
+	observed, err := lookupReleaseArtifact(t.Context(), client, repo, artifact, "3.12.13+20260728")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	if !observed.Equal(want) {
+		t.Fatalf("release time = %s, want %s", observed, want)
+	}
+}
+
+func TestPyPIArtifactUsesItsLatestExactUpload(t *testing.T) {
+	t.Parallel()
+	client := artifactClientFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://pypi.org/pypi/vulture/2.16/json" {
+			return nil, fmt.Errorf("unexpected metadata request %s", request.URL)
+		}
+		return artifactResponse(http.StatusOK, `{"info":{"version":"2.16"},"urls":[{"upload_time_iso_8601":"2026-07-28T12:00:00Z"},{"upload_time_iso_8601":"2026-07-29T12:00:00Z"}]}`), nil
+	})
+	observed, err := lookupPyPIArtifactRelease(t.Context(), client, "vulture", "2.16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	if !observed.Equal(want) {
+		t.Fatalf("release time = %s, want %s", observed, want)
+	}
+}
+
+func TestReleaseArtifactSourceVersionFormsFailClosed(t *testing.T) {
+	t.Parallel()
+	repo := supplyRepository(t)
+	for _, test := range []struct {
+		name, source, version string
+	}{
+		{name: "python lacks build date", source: policy.ReleaseArtifactSourcePythonBuildStandalone, version: "3.12.13"},
+		{name: "python has malformed build date", source: policy.ReleaseArtifactSourcePythonBuildStandalone, version: "3.12.13+2026072x"},
+		{name: "PyPI has leading v", source: policy.ReleaseArtifactSourcePyPI, version: "v2.16"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			artifact := policy.ReleaseArtifact{Name: "tool", VersionFile: "tools/version.txt", Source: test.source}
+			writeSupplyFile(t, repo.Root, artifact.VersionFile, test.version+"\n")
+			if _, err := readReleaseArtifactVersion(repo, artifact); err == nil {
+				t.Fatalf("version %q was accepted for %s", test.version, test.source)
+			}
+		})
 	}
 }
 

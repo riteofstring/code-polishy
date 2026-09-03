@@ -33,6 +33,7 @@ const (
 
 var DefaultExcludes = []string{
 	".git/**", ".tools/**", ".code-polishy-reports/**", "node_modules/**", "**/node_modules/**",
+	".venv/**", "**/.venv/**",
 	"dist/**", "**/dist/**", "build/**", "**/build/**", "coverage/**",
 	"**/coverage/**", "playwright-report/**", "**/playwright-report/**",
 	"test-results/**", "**/test-results/**",
@@ -121,11 +122,19 @@ type Project struct {
 type Scope struct {
 	Exclude   []string `json:"exclude,omitempty"`
 	Generated []string `json:"generated,omitempty"`
+	Data      []string `json:"data,omitempty"`
 
-	EntryPoints []string `json:"entryPoints,omitempty"`
+	EntryPoints             []string                 `json:"entryPoints,omitempty"`
+	PythonDynamicReferences []PythonDynamicReference `json:"pythonDynamicReferences,omitempty"`
 
 	Development []string       `json:"development,omitempty"`
 	Languages   []LanguageRule `json:"languages,omitempty"`
+}
+
+type PythonDynamicReference struct {
+	Project string `json:"project"`
+	Module  string `json:"module"`
+	Symbol  string `json:"symbol"`
 }
 
 type LanguageRule struct {

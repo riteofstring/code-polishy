@@ -30,6 +30,31 @@ func TestMatchUsesSegmentAwareWildcards(t *testing.T) {
 	}
 }
 
+func TestPatternsOverlapRecognizesSharedPaths(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		left, right string
+		want        bool
+	}{
+		{name: "nested data", left: "data/**/*.json", right: "data/*.json", want: true},
+		{name: "separate extensions", left: "data/**/*.json", right: "data/**/*.yaml", want: false},
+		{name: "control input", left: "**/*.json", right: "**/package.json", want: true},
+		{name: "separate literals", left: "data/first.json", right: "data/second.json", want: false},
+		{name: "directory star can be empty", left: ".github/workflows/**/*.yaml", right: ".github/workflows/check.yaml", want: true},
+		{name: "nested control input", left: "data/**/*.json", right: "**/package.json", want: true},
+		{name: "nested default exclude", left: "fixtures/node_modules/**/*.data.json", right: "**/node_modules/**", want: true},
+		{name: "nested Python environment", left: "apps/api/.venv/**/*.py", right: "**/.venv/**", want: true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := PatternsOverlap(test.left, test.right); got != test.want {
+				t.Fatalf("PatternsOverlap(%q, %q) = %t, want %t", test.left, test.right, got, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadAppliesNonBypassableDefaults(t *testing.T) {
 	t.Parallel()
 	root := writeConfig(t, minimalConfig())
@@ -331,15 +356,17 @@ func TestReleaseArtifactsRequireExactSourceBoundDeclarations(t *testing.T) {
     {"name":"go","versionFile":"scripts/go_version.txt","source":"go-toolchain"},
     {"name":"node","versionFile":"tools/node-version.txt","source":"node-runtime"},
     {"name":"staticcheck","versionFile":"tools/staticcheck-version.txt","source":"go-module","locator":"honnef.co/go/tools"},
+    {"name":"python","versionFile":"tools/python-version.txt","source":"python-build-standalone"},
     {"name":"ruff","versionFile":"tools/ruff-version.txt","source":"github-release","locator":"astral-sh/ruff"},
-    {"name":"tool","versionFile":"tools/tool-version.txt","source":"npm","locator":"@example/tool"}
+    {"name":"tool","versionFile":"tools/tool-version.txt","source":"npm","locator":"@example/tool"},
+    {"name":"vulture","versionFile":"tools/vulture-version.txt","source":"pypi","locator":"vulture"}
   ]`
 	configText := strings.Replace(minimalConfig(), `"supplyChain":{}`, `"supplyChain":{`+artifacts+`}`, 1)
 	config, err := Load(writeConfig(t, configText), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(config.SupplyChain.ReleaseArtifacts) != 5 {
+	if len(config.SupplyChain.ReleaseArtifacts) != 7 {
 		t.Fatalf("release artifacts = %+v", config.SupplyChain.ReleaseArtifacts)
 	}
 
@@ -350,6 +377,10 @@ func TestReleaseArtifactsRequireExactSourceBoundDeclarations(t *testing.T) {
 		"fixed-locator":   strings.Replace(artifacts, `"source":"node-runtime"`, `"source":"node-runtime","locator":"nodejs/node"`, 1),
 		"wrong-prefix":    strings.Replace(artifacts, `"source":"npm","locator":"@example/tool"`, `"source":"npm","locator":"@example/tool","tagPrefix":"v"`, 1),
 		"github-locator":  strings.Replace(artifacts, `"locator":"astral-sh/ruff"`, `"locator":"https://github.com/astral-sh/ruff"`, 1),
+		"python-locator":  strings.Replace(artifacts, `"source":"python-build-standalone"`, `"source":"python-build-standalone","locator":"astral-sh/python-build-standalone"`, 1),
+		"python-prefix":   strings.Replace(artifacts, `"source":"python-build-standalone"`, `"source":"python-build-standalone","tagPrefix":"v"`, 1),
+		"pypi-locator":    strings.Replace(artifacts, `"locator":"vulture"`, `"locator":"vulture/example"`, 1),
+		"pypi-prefix":     strings.Replace(artifacts, `"source":"pypi","locator":"vulture"`, `"source":"pypi","locator":"vulture","tagPrefix":"v"`, 1),
 		"unknown-source":  strings.Replace(artifacts, `"source":"go-toolchain"`, `"source":"website"`, 1),
 	}
 	for name, declaration := range invalid {
@@ -523,6 +554,11 @@ func TestConditionalPolicyModuleOverridesAreExactAndGoverned(t *testing.T) {
 		t.Fatalf("root = %q", got)
 	}
 
+	vulture := strings.Replace(minimalConfig(), `"quality":{}`, `"policyModules":{"overrides":[{"name":"vulture","mode":"enabled"}]},"quality":{}`, 1)
+	if _, err := Load(writeConfig(t, vulture), ""); err != nil {
+		t.Fatalf("vulture override = %v", err)
+	}
+
 	missingGovernance := strings.Replace(minimalConfig(), `"quality":{}`, `"policyModules":{"overrides":[{"name":"react","mode":"disabled"}]},"quality":{}`, 1)
 	if _, err := Load(writeConfig(t, missingGovernance), ""); err == nil || !strings.Contains(err.Error(), "reason") {
 		t.Fatalf("expected governed-disable error, got %v", err)
@@ -580,6 +616,102 @@ func TestLoadReadsDevelopmentScope(t *testing.T) {
 	if _, err := Load(writeConfig(t, universal), ""); err == nil ||
 		!strings.Contains(err.Error(), "scope.development") {
 		t.Fatalf("expected a scope.development error, got %v", err)
+	}
+}
+
+func TestScopeDataAcceptsDedicatedStructuredData(t *testing.T) {
+	t.Parallel()
+	configText := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"data":["data/catalog.json","data/catalog.jsonc","data/catalog.yaml","data/catalog.yml"]},"quality":{}`, 1)
+	config, err := Load(writeConfig(t, configText), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(config.Scope.Data, []string{"data/catalog.json", "data/catalog.jsonc", "data/catalog.yaml", "data/catalog.yml"}) {
+		t.Fatalf("scope.data = %v", config.Scope.Data)
+	}
+}
+
+func TestScopeDataRejectsControlSourceAndOverlappingPaths(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		scope string
+		want  string
+	}{
+		"unbounded JSON": {
+			scope: `{"data":["**/*.json"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"manifest": {
+			scope: `{"data":["package.json"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"nested manifest wildcard": {
+			scope: `{"data":["data/**/*.json"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"lockfile": {
+			scope: `{"data":["pnpm-lock.yaml"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"tool configuration": {
+			scope: `{"data":["tsconfig.json"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"CI configuration": {
+			scope: `{"data":[".github/workflows/check.yaml"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"GitLab CI configuration": {
+			scope: `{"data":[".gitlab-ci.yml"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"container input": {
+			scope: `{"data":["Dockerfile"]}`,
+			want:  "policy-sensitive control input",
+		},
+		"executable source": {
+			scope: `{"data":["src/**/*.ts"]}`,
+			want:  "executable source",
+		},
+		"custom executable source": {
+			scope: `{"data":["data/catalog.json"],"languages":[{"name":"template","paths":["data/catalog.json"]}]}`,
+			want:  "executable source declared by scope.languages",
+		},
+		"unsupported extension": {
+			scope: `{"data":["data/catalog.toml"]}`,
+			want:  "must match only",
+		},
+		"excluded data": {
+			scope: `{"exclude":["data/**"],"data":["data/catalog.json"]}`,
+			want:  "scope.exclude",
+		},
+		"nested default exclude": {
+			scope: `{"data":["fixtures/node_modules/catalog.json"]}`,
+			want:  "scope.exclude",
+		},
+		"generated data": {
+			scope: `{"generated":["data/**"],"data":["data/catalog.json"]}`,
+			want:  "scope.generated",
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			configText := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":`+test.scope+`,"quality":{}`, 1)
+			_, err := Load(writeConfig(t, configText), "")
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Load() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestScopeDataRejectsRepositoryFormatWriters(t *testing.T) {
+	t.Parallel()
+	configText := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"data":["data/catalog.json"]},"quality":{}`, 1)
+	configText = strings.Replace(configText, `"checks":[]`, `"checks":[{"name":"format-all","provides":["format"],"argv":["formatter","."],"runOn":["format"]}]`, 1)
+	_, err := Load(writeConfig(t, configText), "")
+	if err == nil || !strings.Contains(err.Error(), "data-safe formatting must use a managed file-scoped formatter") {
+		t.Fatalf("Load() error = %v", err)
 	}
 }
 

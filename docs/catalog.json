@@ -18,6 +18,14 @@
       "public": true
     },
     {
+      "id": "agent-guidance-design",
+      "path": "docs/design/agent-guidance.md",
+      "title": "Canonical Agent Guidance Design",
+      "summary": "Maintain concise, durable canonical AGENTS.md guidance.",
+      "aliases": ["agents-design"],
+      "public": true
+    },
+    {
       "id": "agent-workflows",
       "path": "docs/agent-workflows.md",
       "title": "Agent Workflows",

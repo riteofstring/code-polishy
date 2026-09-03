@@ -14,6 +14,14 @@
     ]
   },
   "quality": {},
+  "documentation": {
+    "design": [
+      {
+        "path": "docs/design/agent-guidance.md",
+        "module": "agents"
+      }
+    ]
+  },
   "modules": [
     {
       "name": "policy",
@@ -48,7 +56,7 @@
     },
     {
       "name": "agents",
-      "paths": ["internal/agents/**"]
+      "paths": ["AGENTS.md", "internal/agents/**", "templates/AGENTS.md"]
     },
     {
       "name": "release",
@@ -68,7 +76,7 @@
     {
       "name": "architecture",
       "paths": ["internal/architecture/**"],
-      "dependsOn": ["javascript", "policy", "repository"]
+      "dependsOn": ["javascript", "policy", "repository", "runner"]
     },
     {
       "name": "testing",
@@ -144,7 +152,16 @@
     },
     {
       "name": "tooling",
-      "paths": ["bin/**", "scripts/**", "skills/**", "templates/**", "tools/**"]
+      "paths": [
+        "bin/**",
+        "scripts/**",
+        "skills/**",
+        "templates/CLAUDE.md",
+        "templates/architecture-review.md",
+        "templates/behavior-review.md",
+        "templates/policy-exception.md",
+        "tools/**"
+      ]
     }
   ],
   "checks": [
@@ -593,7 +610,12 @@
         "scope": "module",
         "cost": "expensive",
         "modules": ["testing"],
-        "argv": ["./scripts/go-mutation.sh", "./internal/testing"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/testing",
+          "--timeout-coefficient",
+          "8"
+        ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
@@ -633,7 +655,12 @@
         "scope": "module",
         "cost": "expensive",
         "modules": ["portability"],
-        "argv": ["./scripts/go-mutation.sh", "./internal/portability"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/portability",
+          "--timeout-coefficient",
+          "7"
+        ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
@@ -700,6 +727,11 @@
         "locator": "google/osv-scanner"
       },
       {
+        "name": "python",
+        "versionFile": "tools/python-version.txt",
+        "source": "python-build-standalone"
+      },
+      {
         "name": "ruff",
         "versionFile": "tools/ruff-version.txt",
         "source": "github-release",
@@ -723,6 +755,12 @@
         "versionFile": "tools/ty-version.txt",
         "source": "github-release",
         "locator": "astral-sh/ty"
+      },
+      {
+        "name": "vulture",
+        "versionFile": "tools/vulture-version.txt",
+        "source": "pypi",
+        "locator": "vulture"
       },
       {
         "name": "trivy",

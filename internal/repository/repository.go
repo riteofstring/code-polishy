@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +17,11 @@ import (
 )
 
 type Repository struct {
-	Root       string
-	PolicyRoot string
-	Config     policy.Config
+	Root                 string
+	PolicyRoot           string
+	Config               policy.Config
+	DynamicControlInputs []string
+	pythonProjectCache   *pythonProjectInventoryCache
 }
 
 const DesignDocumentationCheck = "policy.designDocumentation"
@@ -73,10 +76,13 @@ func Open(root, policyRoot string, config policy.Config) (Repository, error) {
 }
 
 func (repo Repository) Select(mode string, explicit []string) (Selection, error) {
+	var selection Selection
+	var err error
 	switch mode {
 	case "all":
-		files, err := repo.AllFiles()
-		return Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}, err
+		var files []string
+		files, err = repo.AllFiles()
+		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}
 	case "files":
 		if len(explicit) == 0 {
 			return Selection{}, errors.New("--files needs at least one path")
@@ -96,50 +102,25 @@ func (repo Repository) Select(mode string, explicit []string) (Selection, error)
 			files = append(files, normalized)
 		}
 		files = uniqueSorted(files)
-		return Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files}, nil
+		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files}
 	case "staged":
-		return repo.stagedSelection()
+		selection, err = repo.stagedSelection()
 	case "changes", "":
-		return repo.changedSelection()
+		selection, err = repo.changedSelection()
 	default:
 		return Selection{}, fmt.Errorf("unknown selection mode %q", mode)
 	}
+	return repo.validatedSelection(selection, err)
 }
 
-func (repo Repository) AllFiles() ([]string, error) {
-	if repo.hasGit() {
-		tracked, err := repo.gitLines("ls-files", "-z")
-		if err != nil {
-			return nil, err
-		}
-		untracked, err := repo.gitLines("ls-files", "-z", "--others", "--exclude-standard")
-		if err != nil {
-			return nil, err
-		}
-		return repo.existingIncluded(append(tracked, untracked...)), nil
+func (repo Repository) validatedSelection(selection Selection, err error) (Selection, error) {
+	if err != nil {
+		return selection, err
 	}
-	files := []string{}
-	err := filepath.WalkDir(repo.Root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(repo.Root, path)
-		if err != nil {
-			return err
-		}
-		normalized := filepath.ToSlash(relative)
-		if entry.IsDir() {
-			if normalized != "." && repo.IsExcluded(normalized+"/placeholder") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if entry.Type().IsRegular() && !repo.IsExcluded(normalized) {
-			files = append(files, normalized)
-		}
-		return nil
-	})
-	return uniqueSorted(files), err
+	if err := repo.validateDataFiles(selection.Files); err != nil {
+		return Selection{}, err
+	}
+	return selection, nil
 }
 
 func (repo Repository) RawFiles() ([]string, error) {
@@ -209,7 +190,8 @@ func (repo Repository) SelectBase(base string) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	return repo.selectionSince(mergeBase)
+	selection, err := repo.selectionSince(mergeBase)
+	return repo.validatedSelection(selection, err)
 }
 
 func (repo Repository) MergeBase(base string) (string, error) {
@@ -407,13 +389,25 @@ func (repo Repository) Resolve(path string) (string, error) {
 }
 
 func (repo Repository) IsExcluded(path string) bool {
+	if repo.isDynamicControlInput(path) {
+		return false
+	}
 	patterns := append(append([]string{}, policy.DefaultExcludes...), repo.Config.Scope.Exclude...)
 	return policy.MatchesAny(path, patterns)
 }
 
 func (repo Repository) IsGenerated(path string) bool {
+	if repo.IsData(path) || repo.isDynamicControlInput(path) {
+		return false
+	}
 	patterns := append(append([]string{}, policy.DefaultGenerated...), repo.Config.Scope.Generated...)
 	return policy.MatchesAny(path, patterns)
+}
+
+func (repo Repository) IsData(path string) bool {
+	return !repo.IsControlInput(path) &&
+		!repo.IsExecutableSource(path) &&
+		policy.MatchesAny(path, repo.Config.Scope.Data)
 }
 
 func (repo Repository) IsTest(path string) bool {
@@ -554,7 +548,7 @@ func (repo Repository) builtInLanguage(path string) string {
 	if language := languages[extension]; language != "" {
 		return language
 	}
-	if extension == "" && repo.hasShellShebang(path) {
+	if repo.hasShellShebang(path) {
 		return "shell"
 	}
 	return ""
@@ -835,7 +829,7 @@ func (repo Repository) policyInputChanged(paths []string) bool {
 	}
 	for _, path := range paths {
 		normalized := normalizePolicyInputPath(path)
-		if isPolicyInput(normalized) || releaseArtifactPins[normalized] {
+		if repo.IsControlInput(normalized) || releaseArtifactPins[normalized] {
 			return true
 		}
 	}
@@ -846,50 +840,22 @@ func normalizePolicyInputPath(path string) string {
 	return strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "./")
 }
 
-func isPolicyInput(path string) bool {
-	name := filepath.Base(path)
-
-	if slices.Contains([]string{policy.ConfigFilename, policy.LockFilename}, path) ||
-		strings.HasPrefix(path, ".github/workflows/") {
-		return true
-	}
-	if containerInputName(name) || lockfileName(name) {
-		return true
-	}
-	if policyToolConfigName(name) {
-		return true
-	}
-	return slices.Contains([]string{
-		"go.mod", "go.sum", "go.work", "go.work.sum", "package.json", "pyproject.toml",
-		"Cargo.toml", "requirements.txt", "Pipfile", "pom.xml", "build.gradle",
-		"build.gradle.kts", "Gemfile", "composer.json", "Package.swift", "Package.resolved",
-		"pubspec.yaml",
-	}, name) || strings.HasPrefix(name, "requirements") && strings.HasSuffix(name, ".txt")
-}
-
-func policyToolConfigName(name string) bool {
-	return strings.HasPrefix(name, "eslint.config.") || strings.HasPrefix(name, ".eslintrc") ||
-		strings.HasPrefix(name, "knip.") || strings.HasPrefix(name, ".knip.") ||
-		strings.HasPrefix(name, "prettier.config.") || name == ".prettierrc" || strings.HasPrefix(name, ".prettierrc.") ||
-		strings.HasPrefix(name, "tsconfig") && strings.HasSuffix(name, ".json") ||
-		slices.Contains([]string{"ruff.toml", ".ruff.toml", "ty.toml", "osv-scanner.toml"}, name)
-}
-
-func containerInputName(name string) bool {
-	return name == "Dockerfile" || strings.HasPrefix(name, "Dockerfile.") || name == "Containerfile" || strings.HasPrefix(name, "Containerfile.")
-}
-
-func lockfileName(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.HasSuffix(lower, ".lock") || strings.Contains(lower, "-lock.") || slices.Contains([]string{"pnpm-lock.yaml", "bun.lockb"}, name)
-}
-
 func (repo Repository) hasShellShebang(path string) bool {
-	data, err := repo.Read(path)
+	resolved, err := repo.Resolve(path)
 	if err != nil {
 		return false
 	}
-	first := string(bytes.SplitN(data, []byte("\n"), 2)[0])
+	file, err := os.Open(resolved)
+	if err != nil {
+		return false
+	}
+	prefix := make([]byte, 512)
+	count, readErr := file.Read(prefix)
+	closeErr := file.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) || closeErr != nil {
+		return false
+	}
+	first := string(bytes.SplitN(prefix[:count], []byte("\n"), 2)[0])
 	return strings.HasPrefix(first, "#!") && (strings.Contains(first, "/sh") || strings.Contains(first, "/bash") || strings.Contains(first, " sh") || strings.Contains(first, " bash"))
 }
 

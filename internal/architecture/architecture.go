@@ -12,9 +12,14 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func Check(ctx context.Context, repo repository.Repository, selected []string) []policy.Finding {
+	return CheckWithRunner(ctx, repo, selected, runner.OSRunner{PathEntries: repo.CommandEnvironment().PathEntries})
+}
+
+func CheckWithRunner(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
 	allFiles, err := repo.AllFiles()
 	if err != nil {
 		return []policy.Finding{{Check: "architecture.inventory", Path: "repository", Subject: "files", Message: err.Error()}}
@@ -24,7 +29,8 @@ func Check(ctx context.Context, repo repository.Repository, selected []string) [
 	for _, source := range selected {
 		findings = append(findings, checkGoFile(repo, source, allFiles, modules)...)
 	}
-	return append(findings, javascriptFindings(ctx, repo, selected, allFiles)...)
+	findings = append(findings, javascriptFindings(ctx, repo, selected, allFiles)...)
+	return append(findings, pythonFindings(ctx, repo, selected, allFiles, commandRunner)...)
 }
 
 func checkGoFile(repo repository.Repository, source string, allFiles []string, modules []repository.GoModule) []policy.Finding {

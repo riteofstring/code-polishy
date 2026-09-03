@@ -7,10 +7,12 @@ import typescript from "./node_modules/typescript/lib/typescript.js";
 import typescriptParser from "./node_modules/@typescript-eslint/parser/dist/index.js";
 import reactHooks from "./node_modules/eslint-plugin-react-hooks/index.js";
 import jsxAccessibility from "./node_modules/eslint-plugin-jsx-a11y/lib/index.js";
+import yaml from "./node_modules/js-yaml/dist/js-yaml.mjs";
 
 import { audit } from "./audit.mjs";
 import { deadcode, requireWorkspaces } from "./deadcode.mjs";
 import { imports } from "./imports.mjs";
+import { gitlab } from "./gitlab.mjs";
 import { licenses } from "./licenses.mjs";
 import { packages, workspace } from "./packages.mjs";
 import {
@@ -42,10 +44,12 @@ const OPERATIONS = {
     fields: ["root", "paths"],
     run: (request) => format(request, true),
   },
+  parse: { fields: ["root", "paths"], run: parse },
   lint: { fields: ["root", "paths", "limits", "activation"], run: lint },
   typecheck: { fields: ["root", "paths", "project"], run: typecheck },
   deadcode: { fields: ["root", "directory", "workspaces"], run: deadcode },
   imports: { fields: ["root", "paths"], run: imports },
+  gitlab: { fields: ["root", "paths", "governedPaths"], run: gitlab },
   packages: { fields: ["root", "directory"], run: packages },
   workspace: { fields: ["root", "paths"], run: workspace },
   licenses: { fields: ["root", "directory"], run: licenses },
@@ -58,6 +62,8 @@ const MAXIMUM_LINT_RESULTS = 5000;
 const MAXIMUM_TYPECHECK_DIAGNOSTICS = 5000;
 
 const MAXIMUM_PROJECT_FILES = 20000;
+
+const MAXIMUM_GITLAB_GOVERNED_PATHS = 20000;
 
 const FORMAT_OPTIONS = {
   arrowParens: "always",
@@ -154,6 +160,59 @@ async function format(request, write) {
     changed.push(path);
   }
   return { changed, unsupported: unsupportedPaths };
+}
+
+function parse(request) {
+  const covered = [];
+  const unsupportedPaths = [];
+  for (const path of request.paths) {
+    const source = readTargetFile(
+      join(request.root, path),
+      path,
+      unsupportedPaths,
+    );
+    if (source === null) {
+      continue;
+    }
+    try {
+      switch (extname(path).toLowerCase()) {
+        case ".json":
+          JSON.parse(source);
+          break;
+        case ".jsonc":
+          parseJsonc(path, source);
+          break;
+        case ".yaml":
+        case ".yml":
+          yaml.loadAll(source, undefined, {
+            filename: path,
+            schema: yaml.JSON_SCHEMA,
+          });
+          break;
+        default:
+          throw new Error(
+            "the policy-owned data parser does not support this file extension",
+          );
+      }
+      covered.push(path);
+    } catch (error) {
+      unsupportedPaths.push(unsupported(path, error.message));
+    }
+  }
+  return { covered, unsupported: unsupportedPaths };
+}
+
+function parseJsonc(path, source) {
+  const document = typescript.parseJsonText(path, source);
+  if (document.parseDiagnostics.length === 0) {
+    return;
+  }
+  throw new Error(
+    typescript.flattenDiagnosticMessageText(
+      document.parseDiagnostics[0].messageText,
+      " ",
+    ),
+  );
 }
 
 function lintRules(request) {
@@ -632,6 +691,25 @@ function requireActivation(activation) {
   }
 }
 
+function requireGitLabGovernedPaths(paths) {
+  if (!Array.isArray(paths)) {
+    fail("the gitlab governed paths are not an array");
+  }
+  if (paths.length > MAXIMUM_GITLAB_GOVERNED_PATHS) {
+    fail(
+      `the gitlab request declares ${paths.length} governed paths, more than the ${MAXIMUM_GITLAB_GOVERNED_PATHS} limit`,
+    );
+  }
+  const seen = new Set();
+  for (const path of paths) {
+    requireContainedPath(path);
+    if (seen.has(path)) {
+      fail(`the gitlab request repeats governed path ${JSON.stringify(path)}`);
+    }
+    seen.add(path);
+  }
+}
+
 function decodeOperation(text) {
   let request;
   try {
@@ -689,6 +767,9 @@ function decodeRequest(text) {
   }
   if (admitted.includes("workspaces")) {
     requireWorkspaces(request.directory, request.workspaces);
+  }
+  if (admitted.includes("governedPaths")) {
+    requireGitLabGovernedPaths(request.governedPaths);
   }
   return request;
 }

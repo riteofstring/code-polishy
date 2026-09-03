@@ -178,6 +178,50 @@ func TestFormattingRequestSeparatesCheckAndWriteModes(t *testing.T) {
 	}
 }
 
+func TestPackRequestsKeepGeneratedExecutableSourceAndProtectDeclaredData(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"src/main.ts", "src/client.generated.ts", "data/identity.json"} {
+		writeTestFile(t, root, path, "value\n", 0o644)
+	}
+	repo, err := repository.Open(root, root, policy.Config{
+		Scope: policy.Scope{
+			Generated: []string{"src/client.generated.ts"},
+			Data:      []string{"data/**/*.json"},
+		},
+		Modules:      []policy.Module{{Name: "app", Paths: []string{"src/**", "data/**"}}},
+		ModuleByName: map[string]int{"app": 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := repository.Selection{Files: []string{"src/main.ts", "src/client.generated.ts", "data/identity.json"}}
+	adapter := func(capability string) *policy.PackAdapter { return &policy.PackAdapter{Capability: capability} }
+	cases := []struct {
+		name       string
+		capability string
+		profile    string
+		paths      []string
+		want       []string
+	}{
+		{name: "format check", capability: "format", profile: "check", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "format write", capability: "format", profile: "format", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts"}},
+		{name: "lint", capability: "lint", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "typecheck", capability: "typecheck", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "dead code", capability: "dead-code", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "architecture", capability: "architecture", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "complexity", capability: "complexity", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts"}},
+		{name: "schema provider", capability: "schema", profile: "check", paths: []string{"data/**"}, want: []string{"data/identity.json"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			request := requestFor(repo, selection, policy.Command{Paths: test.paths, Adapter: adapter(test.capability)}, test.profile)
+			if !slices.Equal(request.Files, test.want) {
+				t.Fatalf("files = %v, want %v", request.Files, test.want)
+			}
+		})
+	}
+}
+
 func TestResolveCompilesExactPackProvidersIntoManagedProfiles(t *testing.T) {
 	source := writePackSource(t)
 	dataRoot := filepath.Join(t.TempDir(), "packs")

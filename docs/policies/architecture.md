@@ -269,8 +269,57 @@ cannot parse without a compiler, a file it could not read, and a dynamic import
 whose specifier is computed are each an `architecture.importCoverage` finding:
 a boundary that was never read is not a boundary that was respected.
 
-Python, Rust, Java, and other ecosystems still connect a target-native
-architecture command through `checks`:
+### Built-in Python evidence
+
+Python is a built-in architecture capability. Do not declare an `architecture`
+provider for Python source: `doctor --strict` and the normal architecture pass
+already require and run the policy-owned evidence.
+
+Before Python quality or architecture work, Code Polishy builds one inventory
+from all governed files. Each `.py` and `.pyi` file belongs to its nearest
+contained `pyproject.toml` project. The inventory records the project root, a
+contained `src` root when one exists, the exact project files, regular and
+namespace-package candidates without requiring `__init__.py`, and an existing
+project-local `.venv`. A nested project owns its own files and environment;
+an ancestor cannot absorb it. The manifest is parsed once at this boundary and
+the dependency and quality paths reuse the validated facts.
+
+No project owner, ambiguous project ownership, unreadable or escaping paths,
+non-regular source, unreadable manifests, and unsupported project layouts are
+coverage failures. Ambient `VIRTUAL_ENV`, `PYTHONPATH`, shell startup files,
+and executable lookup do not select a project or an environment.
+
+For each selected project, the pinned Ruff runs `analyze graph` in isolated
+mode. Code Polishy supplies the derived source roots, asks Ruff to detect
+literal string imports and imports under type-checking branches, and parses the
+bounded graph output once. Target Ruff configuration cannot change this
+evidence. Code Polishy, rather than Ruff or a target command, then decides file
+and module ownership, allowed `dependsOn` edges, and coverage.
+
+The built-in resolver covers flat and `src` layouts, nested projects with
+overlapping import names, regular and namespace packages, package
+`__init__.py` re-exports, `.py` and `.pyi` modules, absolute and valid relative
+imports, and exact one-argument `importlib.import_module(...)` or
+`__import__(...)` calls whose argument is one plain string literal.
+Standard-library and third-party imports create no repository module edge.
+
+Computed, formatted, concatenated, escaped, triple-quoted, or multi-argument
+dynamic imports are unproven. Parenthesized references to a known import
+function are also unproven instead of disappearing from coverage. Calls and
+arguments may use ordinary whitespace or an explicit line continuation without
+changing an otherwise exact literal into computed evidence.
+
+Every local edge must resolve to one contained governed Python file in the same
+project and to exactly one repository module. An omitted selected file,
+malformed graph response, ambiguous or escaping resolution, unreadable source,
+unresolved local-looking import, or dynamic import that cannot be proven emits
+`architecture.importCoverage`; it never reads as a clean graph. A resolved
+cross-module edge without the declaring module's `dependsOn` entry is the
+ordinary `architecture.moduleDependency` finding. Code Polishy does not execute
+project Python code to resolve imports.
+
+Rust, Java, and other ecosystems still connect a target-native architecture
+command through `checks`:
 
 ```json
 {

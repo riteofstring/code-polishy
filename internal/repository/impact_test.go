@@ -48,6 +48,26 @@ func TestCandidateImpactIncludesTransitiveReverseDependents(t *testing.T) {
 	}
 }
 
+func TestCandidateImpactIncludesDeclaredDataOwnershipAndTests(t *testing.T) {
+	t.Parallel()
+	repo := Repository{Config: policy.Config{
+		Scope: policy.Scope{Data: []string{"catalog/**/*.yaml"}},
+		Modules: []policy.Module{
+			{Name: "catalog", Paths: []string{"catalog/**"}},
+			{Name: "api", Paths: []string{"api/**"}, DependsOn: []string{"catalog"}},
+		},
+	}}
+
+	impact := repo.CandidateImpact(CandidateDelta{AddedOrModified: []string{"catalog/products.yaml"}})
+
+	if !slices.Equal(impact.DirectModules, []string{"catalog"}) {
+		t.Fatalf("direct modules = %v", impact.DirectModules)
+	}
+	if !slices.Equal(impact.ImpactedModules, []string{"api", "catalog"}) {
+		t.Fatalf("impacted modules = %v", impact.ImpactedModules)
+	}
+}
+
 func TestImpactForPathsOwnsExpandedAnalysisImpact(t *testing.T) {
 	t.Parallel()
 	repo := Repository{Config: policy.Config{Modules: []policy.Module{

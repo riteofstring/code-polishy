@@ -25,7 +25,7 @@ const (
 	ManifestFilename = "release-manifest.json"
 
 	LockVersion     = 1
-	ManifestVersion = 3
+	ManifestVersion = 4
 
 	releasesDirectory = "releases"
 )
@@ -78,10 +78,12 @@ type Tools struct {
 	Node        string `json:"node"`
 	OSVScanner  string `json:"osv-scanner"`
 	PNPM        string `json:"pnpm"`
+	Python      string `json:"python"`
 	Ruff        string `json:"ruff"`
 	Shellcheck  string `json:"shellcheck"`
 	Staticcheck string `json:"staticcheck"`
 	Ty          string `json:"ty"`
+	Vulture     string `json:"vulture"`
 }
 
 type Entry struct {
@@ -211,10 +213,12 @@ func (manifest Manifest) Identity() string {
 	fmt.Fprintf(identity, "tool.node=%s\n", manifest.Tools.Node)
 	fmt.Fprintf(identity, "tool.osv-scanner=%s\n", manifest.Tools.OSVScanner)
 	fmt.Fprintf(identity, "tool.pnpm=%s\n", manifest.Tools.PNPM)
+	fmt.Fprintf(identity, "tool.python=%s\n", manifest.Tools.Python)
 	fmt.Fprintf(identity, "tool.ruff=%s\n", manifest.Tools.Ruff)
 	fmt.Fprintf(identity, "tool.shellcheck=%s\n", manifest.Tools.Shellcheck)
 	fmt.Fprintf(identity, "tool.staticcheck=%s\n", manifest.Tools.Staticcheck)
 	fmt.Fprintf(identity, "tool.ty=%s\n", manifest.Tools.Ty)
+	fmt.Fprintf(identity, "tool.vulture=%s\n", manifest.Tools.Vulture)
 	digest := sha256.Sum256([]byte(identity.String()))
 	return hex.EncodeToString(digest[:])
 }
@@ -314,9 +318,9 @@ func validateManifestIdentity(manifest Manifest, source string) error {
 	for _, pin := range []struct{ tool, version string }{
 		{"Go", manifest.Tools.Go}, {"govulncheck", manifest.Tools.Govulncheck},
 		{"Node", manifest.Tools.Node}, {"OSV-Scanner", manifest.Tools.OSVScanner},
-		{"pnpm", manifest.Tools.PNPM}, {"Ruff", manifest.Tools.Ruff},
+		{"pnpm", manifest.Tools.PNPM}, {"Python", manifest.Tools.Python}, {"Ruff", manifest.Tools.Ruff},
 		{"ShellCheck", manifest.Tools.Shellcheck}, {"staticcheck", manifest.Tools.Staticcheck},
-		{"ty", manifest.Tools.Ty},
+		{"ty", manifest.Tools.Ty}, {"Vulture", manifest.Tools.Vulture},
 	} {
 		if !versionPattern.MatchString(pin.version) {
 			return fmt.Errorf("%s records the unusable %s version %q", source, pin.tool, pin.version)

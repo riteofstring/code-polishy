@@ -57,7 +57,9 @@ func checkResolvedPythonReleaseAge(ctx context.Context, repo repository.Reposito
 			Message: err.Error(),
 		}}
 	}
-	return releaseAgeFindings(ctx, repo, packages, time.Now().UTC())
+	findings := pythonGitSourceCoverageFindings(packages)
+	findings = append(findings, releaseAgeFindings(ctx, repo, packages, time.Now().UTC())...)
+	return uniqueFindings(findings)
 }
 
 func filepathDirectory(path string) string {
@@ -74,7 +76,7 @@ type releaseObservation struct {
 }
 
 func releaseAgeFindings(ctx context.Context, repo repository.Repository, packages []resolvedPackage, now time.Time) []policy.Finding {
-	observations := observeReleases(ctx, repo, packages)
+	observations := observeReleases(ctx, repo, registryReleasePackages(packages))
 	cutoff := now.AddDate(0, 0, -repo.Config.SupplyChain.MinimumReleaseAgeDays)
 	findings := []policy.Finding{}
 	for _, observation := range observations {
@@ -106,6 +108,42 @@ func releaseAgeFindings(ctx context.Context, repo repository.Repository, package
 	}
 	sort.Slice(findings, func(left, right int) bool {
 		return findings[left].Path+"\x00"+findings[left].Subject < findings[right].Path+"\x00"+findings[right].Subject
+	})
+	return uniqueFindings(findings)
+}
+
+func registryReleasePackages(packages []resolvedPackage) []resolvedPackage {
+	registry := []resolvedPackage{}
+	for _, item := range packages {
+		if item.Source.Kind != "" && item.Source.Kind != "registry" {
+			continue
+		}
+		registry = append(registry, item)
+	}
+	return registry
+}
+
+func pythonGitSourceCoverageFindings(packages []resolvedPackage) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, item := range packages {
+		if item.Source.Kind != "git" {
+			continue
+		}
+		subject := item.Name + "@" + item.Source.Git.Identity()
+		findings = append(findings,
+			policy.Finding{
+				Check: "supplyChain.releaseAgeCoverage", Path: item.Scope, Subject: subject,
+				Message: "Git source has no registry release timestamp, so release-age coverage is unavailable",
+			},
+			policy.Finding{
+				Check: "policy.securityScanner", Path: item.Scope, Subject: subject,
+				Message: "Git source vulnerability coverage is unavailable without a scanner that can assess the resolved repository commit",
+			},
+		)
+	}
+	sort.Slice(findings, func(left, right int) bool {
+		return findings[left].Check+"\x00"+findings[left].Path+"\x00"+findings[left].Subject <
+			findings[right].Check+"\x00"+findings[right].Path+"\x00"+findings[right].Subject
 	})
 	return uniqueFindings(findings)
 }

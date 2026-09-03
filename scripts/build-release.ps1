@@ -28,15 +28,62 @@ try {
     Copy-Item -LiteralPath $Source -Destination $Destination -Recurse
   }
 
+  function Assert-ReleasePythonCarrier([string]$Root) {
+    $PythonRelease = (Get-Content -Raw -LiteralPath (Join-Path $Root 'tools/python-version.txt')).Trim()
+    if ($PythonRelease -notmatch '^(?<version>[0-9]+\.[0-9]+\.[0-9]+)\+[0-9]{8}$') {
+      throw 'The release stage has an invalid CPython carrier pin.'
+    }
+    $PythonVersion = $Matches.version
+    $PythonRoot = Join-Path $Root '.tools/python/windows-x64'
+    $Python = Join-Path $PythonRoot 'python.exe'
+    $PythonMarker = Join-Path $PythonRoot '.code-polishy-python-release'
+    if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or -not (Test-Path -LiteralPath $PythonMarker -PathType Leaf)) {
+      throw 'The release stage has no policy-owned CPython carrier.'
+    }
+    $PythonReported = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    if ($LASTEXITCODE -ne 0 -or $PythonReported.Count -ne 1 -or $PythonReported[0].Trim() -ne $PythonVersion -or
+        (Get-Content -Raw -LiteralPath $PythonMarker).Trim() -ne $PythonRelease) {
+      throw "The release stage does not carry CPython $PythonRelease."
+    }
+    $VultureRelease = (Get-Content -Raw -LiteralPath (Join-Path $Root 'tools/vulture-version.txt')).Trim()
+    if ($VultureRelease -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') {
+      throw 'The release stage has an invalid Vulture carrier pin.'
+    }
+    $VultureMarker = Join-Path $PythonRoot '.code-polishy-vulture-release'
+    if (-not (Test-Path -LiteralPath $VultureMarker -PathType Leaf) -or
+        (Get-Content -Raw -LiteralPath $VultureMarker).Trim() -ne $VultureRelease) {
+      throw "The release stage does not carry Vulture $VultureRelease."
+    }
+    $SitePackagesProbe = @(& $Python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+    if ($LASTEXITCODE -ne 0 -or $SitePackagesProbe.Count -ne 1) {
+      throw 'The release stage CPython carrier did not resolve one site-packages directory.'
+    }
+    $SitePackages = $SitePackagesProbe[0].Trim()
+    $PythonPrefix = ((Resolve-Path -LiteralPath $PythonRoot).Path.TrimEnd('\') + '\')
+    if (-not $SitePackages.StartsWith($PythonPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $SitePackages -PathType Container)) {
+      throw 'The release stage CPython carrier names an external site-packages directory.'
+    }
+    $VultureReported = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+    $VultureExitCode = $LASTEXITCODE
+    $VultureMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')
+    if ($VultureExitCode -ne 0 -or $VultureReported.Count -ne 1 -or $VultureReported[0].Trim() -ne $VultureRelease -or
+        $VultureMetadata.Count -ne 1 -or $VultureMetadata[0].Name -ne "vulture-$VultureRelease.dist-info") {
+      throw "The release stage does not carry Vulture $VultureRelease."
+    }
+  }
+
   foreach ($Relative in @(
     'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','artifact-security',
     'scripts/go_version.txt','tools/govulncheck-version.txt','tools/node-version.txt','tools/osv-scanner-version.txt',
-    'tools/pnpm-version.txt','tools/ruff-version.txt','tools/shellcheck-version.txt','tools/staticcheck-version.txt',
-    'tools/ty-version.txt','tools/ty.toml',
+    'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
+    'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
+    'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',
     'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
-    '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64'
+    '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64'
   )) { Copy-ReleasePath $Relative }
+  Assert-ReleasePythonCarrier $Stage
 
   $StageBin = Join-Path $Stage '.tools/bin'
   New-Item -ItemType Directory -Force -Path $StageBin | Out-Null

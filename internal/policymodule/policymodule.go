@@ -3,8 +3,6 @@ package policymodule
 import (
 	"encoding/hex"
 	"fmt"
-	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -21,7 +19,8 @@ type Resolution struct {
 
 func Resolve(repo repository.Repository, files []string) Resolution {
 	packages, packageFindings := discoverNodePackages(repo, files)
-	activations := discover(repo, files, packages)
+	pythonInventory := repo.PythonProjectInventory(files)
+	activations := discover(repo, files, packages, pythonInventory)
 	activations = appendEnabledOverrides(activations, repo.Config.PolicyModules.Overrides)
 	activations = applyDisabledOverrides(activations, repo.Config.PolicyModules.Overrides)
 	activations = uniqueActivations(activations)
@@ -30,9 +29,11 @@ func Resolve(repo repository.Repository, files []string) Resolution {
 	for _, activation := range activations {
 		switch activation.Name {
 		case "ruff":
-			applyRuff(repo, files, activation, &resolution)
+			applyRuff(repo, activation, pythonInventory, &resolution)
 		case "ty":
-			applyTy(repo, files, activation, &resolution)
+			applyTy(repo, activation, pythonInventory, &resolution)
+		case "vulture":
+			applyVulture(repo, activation, pythonInventory, &resolution)
 		case "react":
 			applyReact(packages, activation, &resolution)
 		case "electron":
@@ -60,13 +61,12 @@ func Notes(active []policy.ActivePolicyModule) []string {
 	return notes
 }
 
-func discover(repo repository.Repository, files []string, packages []nodePackage) []policy.ActivePolicyModule {
+func discover(repo repository.Repository, files []string, packages []nodePackage, pythonInventory repository.PythonProjectInventory) []policy.ActivePolicyModule {
 	active := []policy.ActivePolicyModule{}
-	for _, root := range pythonRoots(repo, files) {
+	for _, root := range pythonRoots(pythonInventory) {
 		active = append(active, activation("ruff", root, "Python source"))
-	}
-	for _, root := range tyRoots(repo, files) {
 		active = append(active, activation("ty", root, "Python source"))
+		active = append(active, activation("vulture", root, "Python source"))
 	}
 	for _, pkg := range packages {
 		if pkg.hasDependency("react") {
@@ -156,30 +156,8 @@ func uniqueFindings(findings []policy.Finding) []policy.Finding {
 	return result
 }
 
-func modulesFor(repo repository.Repository, files []string, root, language string) []string {
-	modules := []string{}
-	for _, path := range files {
-		if repo.Language(path) == language && insideRoot(path, root) {
-			modules = append(modules, repo.ModuleNames(path)...)
-		}
-	}
-	sort.Strings(modules)
-	return slices.Compact(modules)
-}
-
 func insideRoot(path, root string) bool {
 	return root == "." || path == root || strings.HasPrefix(path, root+"/")
-}
-
-func rootedPatterns(root string, patterns ...string) []string {
-	if root == "." {
-		return append([]string{}, patterns...)
-	}
-	result := make([]string, 0, len(patterns))
-	for _, pattern := range patterns {
-		result = append(result, filepath.ToSlash(filepath.Join(root, filepath.FromSlash(pattern))))
-	}
-	return result
 }
 
 func finding(name, root, subject, message string) policy.Finding {

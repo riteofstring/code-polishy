@@ -54,11 +54,19 @@ capability declarations:
 
 Mutation testing is optional. Projects may add supplemental mutation suites and
 use `tests.requiredSupplementalKinds` to make mutation, CRAP, fuzz hardening,
-or another deliberate test-strength layer mandatory for that target.
+or another deliberate test-strength layer mandatory for a selected hardening
+event. The declarations do not schedule supplemental execution: ordinary
+development, changed tests, checkpoint and merge gates, guidance
+synchronization, and lock upgrades report it as `NOT RUN`.
 
 Kinds and tools are otherwise open. A Playwright browser workflow and an
 Electron CDP harness can both be `browser`; a local screenshot comparator and a
 hosted service can both be `visual`. The target owns how evidence is produced.
+That command also owns framework-specific skip semantics: configure the test
+runner or a repository wrapper to return nonzero when no tests execute or an
+unexpected test skips. Code Polishy treats an exit-zero suite command as
+successful and does not infer executed or skipped counts from human-readable
+output.
 
 ## Execution profiles
 
@@ -91,11 +99,12 @@ code-polishy merge-gate --base MERGE_TARGET
   workflow.
 - `test-levels` and its compatibility alias `test-plan` execute no tests. They
   show a terminal-safe ASCII table of all four scopes, changed and impacted
-  modules, and their cost mix. For an ordinary Markdown-only delta, they add a
-  first-class documentation row with zero application suites. With a trusted
-  base, they report the exact policy-selected level, reasons, and the one
-  `merge-gate` execution path; without a base, they report diagnostic advice
-  only.
+  modules, and their cost mix. Its supplemental row is availability information,
+  not a recommendation or execution trigger. For an ordinary Markdown-only
+  delta, they add a first-class documentation row with zero application suites.
+  With a trusted base, they report the exact policy-selected level, reasons,
+  and the one `merge-gate` execution path; without a base, they report
+  diagnostic advice only.
 - `--recommended` runs focused suites for impacted modules plus repository
   suites marked recommended whose `paths` match the change. Without `--base`,
   it uses the working tree compared with `HEAD`. With `--base TASK_BASE`, it
@@ -103,12 +112,20 @@ code-polishy merge-gate --base MERGE_TARGET
   worktree changes, and untracked files.
 - `--all` runs every suite marked `full`; it does not include supplemental
   test-strength work.
-- `--supplemental` runs every separately declared supplemental suite. Use an
-  exact `--suite` for one module's mutation or risk analysis.
+- `--supplemental` runs every separately declared supplemental suite only when
+  the caller explicitly requests it, a checked-in workflow explicitly invokes
+  it for that event, or the release checklist selects one run after a stable
+  release candidate has stopped changing. The first stable release candidate
+  runs the full set once. After failure, use exact `--suite` runs for failed
+  suites and passed suites invalidated by changes to their tested production
+  files or tests, or their own commands or configuration. That evidence
+  composes with still-valid passed suites. Repeat the full set only when shared
+  mutation infrastructure, toolchain, or selection changes, or impact cannot
+  be bounded.
 - `verify` runs the full test profile and then build providers.
 - `gate` adds strict coverage, repository-wide code health, and online
   supply-chain enforcement. Neither `verify` nor `gate` silently runs
-  supplemental suites.
+  supplemental suites, even when they are declared or their kinds are required.
 - `checkpoint-gate` accepts one clean committed task on a long-lived branch.
   It no-ops when the supplied base yields no governed candidate paths, runs the
   documentation contract for ordinary Markdown, and runs affected checks and
@@ -158,8 +175,9 @@ selection expands to the whole repository, when at least 20 governed paths
 change, when at least three modules change directly, or when dependency impact
 reaches at least two thirds of a graph with three or more modules. It advises
 recommended for narrower application work. A non-documentation deletion or a
-policy, dependency, workflow, container, ESLint, Knip, Ruff, `ty`, TypeScript,
-or OSV input expands analysis to the whole repository.
+policy, dependency, workflow, container, ESLint, Knip, Ruff, Vulture, carried
+CPython, `ty`, TypeScript, OSV, or `scope.pythonDynamicReferences` input expands
+analysis to the whole repository.
 
 ## Default documentation merge gate
 
@@ -222,7 +240,8 @@ optional at this boundary. The gate then runs the normal change-aware policy
 check for the selected files and focused suites for changed modules plus reverse
 dependents, forcing and deduplicating any selected feature suites. It stops
 after a failed phase and never runs merge-only builds, supply-chain work, full
-suites, or supplemental suites.
+suites, or supplemental suites, even when they are declared or their kinds are
+required.
 
 After a complete pass, Code Polishy verifies that HEAD stayed unchanged and
 records checkpoint evidence for the accepted candidate. A checkpoint that runs
@@ -320,9 +339,11 @@ reverse dependents, applicable build providers, and offline supply-chain
 verification. The full decision invokes the unchanged complete gate with
 repository-wide checks, full ordinary tests and builds, online supply-chain,
 and artifact enforcement. Supplemental mutation and risk suites are distinct
-from every ordinary level. `test --supplemental` runs them as a separate local
-stage. Credentialed, destructive, and live-provider work remains an external
-gate.
+from every ordinary level. `test --supplemental` runs them as a separate stage
+only when an explicit caller request, event-specific checked-in workflow, or
+stable-candidate release checklist selects it; release retry evidence follows
+the exact-suite invalidation rule above. Credentialed, destructive, and
+live-provider work remains an external gate.
 
 ### Resume a failed merge gate
 
@@ -415,9 +436,13 @@ capture-intent`. Capture each later correction before acting on it. During
    validation, so do not run `test --changed` immediately beforehand for the
    same candidate. Report only pass/fail and actionable findings to the user;
    managed report and log paths retain the detailed evidence.
-7. Run `test --supplemental` after a green ordinary gate when the caller or
-   checked-in workflow requires local hardening. Focused, recommended, full,
-   `verify`, `gate`, and `merge-gate` exclude supplemental execution.
+7. Run `test --supplemental` after a green ordinary gate only when the caller
+   explicitly requests local hardening, a checked-in workflow explicitly
+   invokes it for that event, or the stable-candidate release checklist selects
+   it. Focused, recommended, full, `verify`, `gate`, and `merge-gate` exclude
+   supplemental execution. After a failed stable-candidate run, use exact
+   failed or invalidated suites under the supplemental retry rule rather than
+   restarting every suite.
 
 Do not run a checkpoint after every edit or chat turn, and do not silently turn
 a request for focused feedback into an ordinary merge checkpoint, `verify`, or

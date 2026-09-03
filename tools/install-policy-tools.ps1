@@ -13,14 +13,21 @@ function Read-Pin([string]$Relative) {
 }
 
 $Checksums = @{}
-Get-Content (Join-Path $PolicyRoot 'tools/windows_tool_checksums.txt') | ForEach-Object {
-  $Line = $_.Trim()
-  if ($Line -and -not $Line.StartsWith('#')) {
-    $Parts = $Line -split '\s+'
-    if ($Parts.Count -ne 2 -or $Checksums.ContainsKey($Parts[0])) { throw "Malformed Windows checksum inventory line: $Line" }
-    $Checksums[$Parts[0]] = $Parts[1]
+function Add-Checksums([string]$Relative) {
+  Get-Content (Join-Path $PolicyRoot $Relative) | ForEach-Object {
+    $Line = $_.Trim()
+    if ($Line -and -not $Line.StartsWith('#')) {
+      $Parts = $Line -split '\s+'
+      if ($Parts.Count -ne 2 -or $Checksums.ContainsKey($Parts[0]) -or $Parts[1] -notmatch '^[0-9a-f]{64}$') {
+        throw "Malformed checksum inventory line in ${Relative}: $Line"
+      }
+      $Checksums[$Parts[0]] = $Parts[1]
+    }
   }
 }
+Add-Checksums 'tools/windows_tool_checksums.txt'
+Add-Checksums 'tools/python_runtime_checksums.txt'
+Add-Checksums 'tools/vulture_wheel_checksums.txt'
 
 $Scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("code-polishy-tools-" + [guid]::NewGuid().ToString('N'))
 $BundleInstallation = $null
@@ -39,6 +46,39 @@ try {
     if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Destination) | Out-Null
     Move-Item -LiteralPath $Staging -Destination $Destination
+  }
+
+  function Restore-Vulture(
+    [string]$SitePackages,
+    [string]$Marker,
+    [string]$Backup,
+    [string]$Version,
+    [bool]$NewPackageInstalled,
+    [bool]$NewMetadataInstalled,
+    [bool]$NewMarkerInstalled
+  ) {
+    $Package = Join-Path $SitePackages 'vulture'
+    if ($NewPackageInstalled -and (Test-Path -LiteralPath $Package -PathType Container)) {
+      Remove-Item -LiteralPath $Package -Recurse -Force
+    }
+    $Metadata = Join-Path $SitePackages "vulture-$Version.dist-info"
+    if ($NewMetadataInstalled -and (Test-Path -LiteralPath $Metadata -PathType Container)) {
+      Remove-Item -LiteralPath $Metadata -Recurse -Force
+    }
+    if ($NewMarkerInstalled -and (Test-Path -LiteralPath $Marker -PathType Leaf)) {
+      Remove-Item -LiteralPath $Marker -Force
+    }
+    $PreviousPackage = Join-Path $Backup 'vulture'
+    if (Test-Path -LiteralPath $PreviousPackage -PathType Container) {
+      Move-Item -LiteralPath $PreviousPackage -Destination $Package
+    }
+    foreach ($Previous in @(Get-ChildItem -LiteralPath $Backup -Directory -Filter 'vulture-*.dist-info')) {
+      Move-Item -LiteralPath $Previous.FullName -Destination $SitePackages
+    }
+    $PreviousMarker = Join-Path $Backup 'marker'
+    if (Test-Path -LiteralPath $PreviousMarker -PathType Leaf) {
+      Move-Item -LiteralPath $PreviousMarker -Destination $Marker
+    }
   }
 
   $GoVersion = (Read-Pin 'scripts/go_version.txt').TrimStart('g','o')
@@ -125,6 +165,156 @@ try {
     throw 'Pinned ty verification failed.'
   }
 
+  $PythonRelease = Read-Pin 'tools/python-version.txt'
+  if ($PythonRelease -notmatch '^(?<version>[0-9]+\.[0-9]+\.[0-9]+)\+(?<tag>[0-9]{8})$') {
+    throw 'tools/python-version.txt must pin CPython and a python-build-standalone tag.'
+  }
+  $PythonVersion = $Matches.version
+  $PythonTag = $Matches.tag
+  $PythonRoot = Join-Path $PolicyRoot '.tools/python/windows-x64'
+  $Python = Join-Path $PythonRoot 'python.exe'
+  $PythonMarker = Join-Path $PythonRoot '.code-polishy-python-release'
+  $PythonMarkerValue = ''
+  if (Test-Path -LiteralPath $PythonMarker -PathType Leaf) {
+    $PythonMarkerValue = (Get-Content -Raw -LiteralPath $PythonMarker).Trim()
+  }
+  $PythonReported = ''
+  if (Test-Path -LiteralPath $Python -PathType Leaf) {
+    $PythonProbe = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    if ($LASTEXITCODE -eq 0 -and $PythonProbe.Count -eq 1) { $PythonReported = $PythonProbe[0].Trim() }
+  }
+  if ($PythonReported -ne $PythonVersion -or $PythonMarkerValue -ne $PythonRelease) {
+    $PythonAsset = "cpython-$PythonRelease-x86_64-pc-windows-msvc-install_only.tar.gz"
+    $PythonArchive = Get-Verified $PythonAsset "https://github.com/astral-sh/python-build-standalone/releases/download/$PythonTag/$PythonAsset"
+    $PythonExtract = Join-Path $Scratch 'python-extract'
+    New-Item -ItemType Directory -Path $PythonExtract | Out-Null
+    & tar.exe -xzf $PythonArchive -C $PythonExtract
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned CPython extraction failed.' }
+    $PythonStaging = Join-Path $PythonExtract 'python'
+    if (-not (Test-Path -LiteralPath (Join-Path $PythonStaging 'python.exe') -PathType Leaf)) {
+      throw 'Pinned CPython archive did not contain python.exe.'
+    }
+    Replace-Directory $PythonStaging $PythonRoot
+    $Python = Join-Path $PythonRoot 'python.exe'
+    $PythonProbe = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    if ($LASTEXITCODE -ne 0 -or $PythonProbe.Count -ne 1 -or $PythonProbe[0].Trim() -ne $PythonVersion) {
+      throw 'Pinned CPython verification failed.'
+    }
+    Set-Content -NoNewline -Path $PythonMarker -Value $PythonRelease
+  }
+
+  $VultureVersion = Read-Pin 'tools/vulture-version.txt'
+  if ($VultureVersion -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') { throw 'tools/vulture-version.txt must pin a Vulture release.' }
+  $VultureAsset = "vulture-$VultureVersion-py3-none-any.whl"
+  $SitePackagesProbe = @(& $Python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+  if ($LASTEXITCODE -ne 0 -or $SitePackagesProbe.Count -ne 1) { throw 'Pinned CPython did not resolve one site-packages directory.' }
+  $SitePackages = $SitePackagesProbe[0].Trim()
+  $PythonPrefix = ((Resolve-Path -LiteralPath $PythonRoot).Path.TrimEnd('\') + '\')
+  if (-not $SitePackages.StartsWith($PythonPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Pinned CPython names an external site-packages directory.'
+  }
+  $VultureMarker = Join-Path $PythonRoot '.code-polishy-vulture-release'
+  $VultureMarkerValue = ''
+  if (Test-Path -LiteralPath $VultureMarker -PathType Leaf) {
+    $VultureMarkerValue = (Get-Content -Raw -LiteralPath $VultureMarker).Trim()
+  }
+  $VultureProbe = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+  $VultureExitCode = $LASTEXITCODE
+  $VultureMetadata = @()
+  if (Test-Path -LiteralPath $SitePackages -PathType Container) {
+    $VultureMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')
+  }
+  $VultureInstalled = $VultureMarkerValue -eq $VultureVersion -and
+    $VultureExitCode -eq 0 -and $VultureProbe.Count -eq 1 -and $VultureProbe[0].Trim() -eq $VultureVersion -and
+    $VultureMetadata.Count -eq 1 -and $VultureMetadata[0].Name -eq "vulture-$VultureVersion.dist-info"
+  if (-not $VultureInstalled) {
+    $VultureArchive = Get-Verified $VultureAsset "https://files.pythonhosted.org/packages/f5/be/f935130312330614811dae2ea9df3f395f6d63889eb6c2e68c14507152ee/$VultureAsset"
+    $VultureStaging = Join-Path $Scratch 'vulture-extract'
+    New-Item -ItemType Directory -Path $VultureStaging | Out-Null
+    $VultureExtractor = @'
+import pathlib
+import shutil
+import sys
+import zipfile
+
+wheel = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+version = sys.argv[3]
+prefixes = ("vulture/", f"vulture-{version}.dist-info/")
+with zipfile.ZipFile(wheel) as archive:
+    for entry in archive.infolist():
+        name = entry.filename
+        if not name.startswith(prefixes):
+            continue
+        relative = pathlib.PurePosixPath(name)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise SystemExit("Vulture wheel contains an unsafe path")
+        target = destination.joinpath(*relative.parts)
+        if name.endswith("/"):
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with archive.open(entry) as source, target.open("wb") as output:
+            shutil.copyfileobj(source, output)
+'@
+    & $Python -I -c $VultureExtractor $VultureArchive $VultureStaging $VultureVersion
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned Vulture extraction failed.' }
+    $VulturePackage = Join-Path $VultureStaging 'vulture'
+    $VultureMetadata = Join-Path $VultureStaging "vulture-$VultureVersion.dist-info"
+    if (-not (Test-Path -LiteralPath $VulturePackage -PathType Container) -or -not (Test-Path -LiteralPath $VultureMetadata -PathType Container)) {
+      throw 'Pinned Vulture wheel did not contain the expected package.'
+    }
+    New-Item -ItemType Directory -Force -Path $SitePackages | Out-Null
+    $VultureBackup = Join-Path $PythonRoot ('.vulture-backup-' + [guid]::NewGuid().ToString('N'))
+    $VultureReplacing = $false
+    $NewVulturePackageInstalled = $false
+    $NewVultureMetadataInstalled = $false
+    $NewVultureMarkerInstalled = $false
+    $VultureMarkerStaging = Join-Path $VultureStaging 'marker'
+    Set-Content -NoNewline -Path $VultureMarkerStaging -Value $VultureVersion
+    try {
+      New-Item -ItemType Directory -Path $VultureBackup | Out-Null
+      $VultureReplacing = $true
+      $InstalledVulture = Join-Path $SitePackages 'vulture'
+      if (Test-Path -LiteralPath $InstalledVulture -PathType Container) {
+        Move-Item -LiteralPath $InstalledVulture -Destination $VultureBackup
+      }
+      foreach ($Existing in @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')) {
+        Move-Item -LiteralPath $Existing.FullName -Destination $VultureBackup
+      }
+      if (Test-Path -LiteralPath $VultureMarker -PathType Leaf) {
+        Move-Item -LiteralPath $VultureMarker -Destination (Join-Path $VultureBackup 'marker')
+      }
+      Move-Item -LiteralPath $VulturePackage -Destination $InstalledVulture
+      $NewVulturePackageInstalled = $true
+      Move-Item -LiteralPath $VultureMetadata -Destination (Join-Path $SitePackages "vulture-$VultureVersion.dist-info")
+      $NewVultureMetadataInstalled = $true
+      $VultureProbe = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+      $VultureExitCode = $LASTEXITCODE
+      $VultureMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')
+      if ($VultureExitCode -ne 0 -or $VultureProbe.Count -ne 1 -or $VultureProbe[0].Trim() -ne $VultureVersion -or
+          $VultureMetadata.Count -ne 1 -or $VultureMetadata[0].Name -ne "vulture-$VultureVersion.dist-info") {
+        throw 'Pinned Vulture verification failed.'
+      }
+      Move-Item -LiteralPath $VultureMarkerStaging -Destination $VultureMarker
+      $NewVultureMarkerInstalled = $true
+      Remove-Item -LiteralPath $VultureBackup -Recurse -Force
+      $VultureReplacing = $false
+    } catch {
+      $VultureFailure = $_
+      if ($VultureReplacing) {
+        try {
+          Restore-Vulture $SitePackages $VultureMarker $VultureBackup $VultureVersion $NewVulturePackageInstalled $NewVultureMetadataInstalled $NewVultureMarkerInstalled
+          Remove-Item -LiteralPath $VultureBackup -Recurse -Force
+          $VultureReplacing = $false
+        } catch {
+          throw "Pinned Vulture replacement failed and restoration failed: $($_.Exception.Message)"
+        }
+      }
+      throw $VultureFailure
+    }
+  }
+
   $OsvVersion = Read-Pin 'tools/osv-scanner-version.txt'
   $OsvAsset = 'osv-scanner_windows_amd64.exe'
   $Osv = Get-Verified $OsvAsset "https://github.com/google/osv-scanner/releases/download/$OsvVersion/$OsvAsset"
@@ -176,6 +366,8 @@ try {
   & (Join-Path $Bin 'osv-scanner.exe') --version
   & (Join-Path $Bin 'ruff.exe') --version
   & (Join-Path $Bin 'ty.exe') --version
+  & $Python --version
+  & $Python -I -c 'import importlib.metadata; print("vulture " + importlib.metadata.version("vulture"))'
   & (Join-Path $ShellcheckRoot 'shellcheck.exe') --version
   Write-Host 'Installed the checksum-pinned Code Polishy Windows x64 toolchain.'
 } finally {

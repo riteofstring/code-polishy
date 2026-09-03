@@ -296,6 +296,7 @@ var commandHelpPages = []commandHelpPage{
 			"Choose at most one of --changed, --recommended, --all, --supplemental, --module, or --suite.",
 			"Without a selector, tests affected by working-tree changes are selected.",
 			"--base REF requires --changed or --recommended and compares against merge-base(REF, HEAD) plus working-tree changes.",
+			"--supplemental is an explicit hardening selection; declared supplemental suites and tests.requiredSupplementalKinds do not invoke it.",
 		},
 		sideEffects: []string{"Runs configured test commands with their normal streaming output; does not create gate-run artifacts."},
 		exits:       []string{"0 selected suites passed", "1 selected suite failed", "2 invalid usage or operational failure"},
@@ -308,7 +309,7 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"--base REF is optional; without it the working tree is compared with HEAD.",
 		},
-		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files."},
+		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files. Its supplemental row is informational and never selects supplemental execution."},
 		exits:       []string{"0 plan produced", "1 policy findings", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy test-plan --base TASK_BASE"},
 	},
@@ -319,7 +320,7 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"--base REF is optional; without it the working tree is compared with HEAD.",
 		},
-		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files."},
+		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files. Its supplemental row is informational and never selects supplemental execution."},
 		exits:       []string{"0 levels produced", "1 policy findings", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy test-levels --base TASK_BASE"},
 	},

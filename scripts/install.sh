@@ -262,10 +262,14 @@ release_contents=(
   "tools/staticcheck-version.txt"
   "tools/govulncheck-version.txt"
   "tools/osv-scanner-version.txt"
+  "tools/python-version.txt"
+  "tools/python_runtime_checksums.txt"
   "tools/ruff-version.txt"
   "tools/ty-version.txt"
   "tools/ty.toml"
   "tools/trivy-version.txt"
+  "tools/vulture-version.txt"
+  "tools/vulture_wheel_checksums.txt"
   "tools/javascript_bundle_inventory.txt"
 )
 
@@ -290,9 +294,11 @@ case "${javascript_arch_tag}" in
 esac
 go_tool_dir=".tools/go/${javascript_os_tag}-${go_arch_tag}"
 shellcheck_tool_dir=".tools/shellcheck/${javascript_os_tag}-${shellcheck_arch_tag}"
+python_tool_dir=".tools/python/${javascript_platform_tag}"
 policy_tools=(
   "${go_tool_dir}"
   "${shellcheck_tool_dir}"
+  "${python_tool_dir}"
   ".tools/bin/staticcheck"
   ".tools/bin/govulncheck"
   ".tools/bin/osv-scanner"
@@ -319,13 +325,29 @@ carried_tools=(
   "staticcheck:tools/staticcheck-version.txt"
   "govulncheck:tools/govulncheck-version.txt"
   "osv-scanner:tools/osv-scanner-version.txt"
+  "python:tools/python-version.txt"
   "ruff:tools/ruff-version.txt"
   "ty:tools/ty-version.txt"
+  "vulture:tools/vulture-version.txt"
+)
+
+carried_markers=(
+  "python:${python_tool_dir}/.code-polishy-python-release:tools/python-version.txt"
+  "vulture:${python_tool_dir}/.code-polishy-vulture-release:tools/vulture-version.txt"
 )
 
 
 
 pinned_version() {
+  local value
+  value="$(tr -d '[:space:]' <"${policy_root}/$1")"
+  if [[ "$1" == "tools/python-version.txt" ]]; then
+    value="${value%%+*}"
+  fi
+  printf '%s\n' "${value#v}"
+}
+
+pinned_identity() {
   local value
   value="$(tr -d '[:space:]' <"${policy_root}/$1")"
   printf '%s\n' "${value#v}"
@@ -361,17 +383,51 @@ probed_version() {
       javascript_sealed_run "${policy_root}/.tools/bin/osv-scanner" --version |
         awk '/^osv-scanner version:/ { print $3 }'
       ;;
+    python)
+      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+        'import sys; print(".".join(str(value) for value in sys.version_info[:3]))'
+      ;;
     ruff)
       javascript_sealed_run "${policy_root}/.tools/bin/ruff" --version | awk '{ print $2 }'
       ;;
     ty)
       javascript_sealed_run "${policy_root}/.tools/bin/ty" --version | awk '{ print $2 }'
       ;;
+    vulture)
+      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+        'import importlib.metadata; print(importlib.metadata.version("vulture"))'
+      ;;
     *)
       echo "There is no version probe for the carried ${1}." >&2
       exit 1
       ;;
   esac
+}
+
+vulture_metadata_is_exact() {
+  local site_packages metadata expected count=0 malformed=0 exact=""
+  if ! site_packages="$(javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+    'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2>/dev/null)"; then
+    return 1
+  fi
+  if [[ "${site_packages}" == *$'\n'* ]]; then
+    return 1
+  fi
+  case "${site_packages}" in
+    "${policy_root}/${python_tool_dir}"/*) ;;
+    *) return 1 ;;
+  esac
+  expected="${site_packages}/vulture-$(pinned_version "tools/vulture-version.txt").dist-info"
+  shopt -s nullglob
+  for metadata in "${site_packages}"/vulture-*.dist-info; do
+    if [[ ! -d "${metadata}" ]]; then
+      malformed=1
+    fi
+    count=$((count + 1))
+    exact="${metadata}"
+  done
+  shopt -u nullglob
+  [[ "${malformed}" -eq 0 ]] && [[ "${count}" -eq 1 ]] && [[ "${exact}" == "${expected}" ]]
 }
 
 for tool in git find cp mv grep ln readlink mktemp sed; do
@@ -480,6 +536,28 @@ for carried in "${carried_tools[@]}"; do
     exit 1
   fi
 done
+
+for carried in "${carried_markers[@]}"; do
+  carried_tool="${carried%%:*}"
+  carried_remainder="${carried#*:}"
+  marker_path="${carried_remainder%%:*}"
+  marker_pin="${carried_remainder#*:}"
+  expected_identity="$(pinned_identity "${marker_pin}")"
+  if ! reported_identity="$(tr -d '[:space:]' <"${policy_root}/${marker_path}" 2>/dev/null)"; then
+    reported_identity=""
+  fi
+  if [[ "${reported_identity}" != "${expected_identity}" ]]; then
+    echo "The ${carried_tool} carrier marker ${marker_path} reports ${reported_identity:-no version}, and ${marker_pin} pins ${expected_identity}." >&2
+    echo "Run ./tools/install-policy-tools.sh before installing a release." >&2
+    exit 1
+  fi
+done
+
+if ! vulture_metadata_is_exact; then
+  echo "The Vulture carrier at ${python_tool_dir} has missing or stale Vulture metadata." >&2
+  echo "Run ./tools/install-policy-tools.sh before installing a release." >&2
+  exit 1
+fi
 
 mkdir -p "${staging_root}"
 mkdir -p "${staging}/bin"

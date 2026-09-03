@@ -492,7 +492,13 @@ func validateScope(config *Config) error {
 	if err := validatePatterns(config.Scope.Generated, "scope.generated", true); err != nil {
 		return err
 	}
+	if err := validateDataPaths(config); err != nil {
+		return err
+	}
 	if err := validatePatterns(config.Scope.EntryPoints, "scope.entryPoints", true); err != nil {
+		return err
+	}
+	if err := validatePythonDynamicReferences(config.Scope.PythonDynamicReferences); err != nil {
 		return err
 	}
 	if err := validatePatterns(config.Scope.Development, "scope.development", true); err != nil {
@@ -786,7 +792,7 @@ func validatePolicyModules(modules PolicyModules) error {
 }
 
 func validatePolicyModuleIdentity(override PolicyModuleOverride, label string, seen map[string]bool) error {
-	if !slices.Contains([]string{"electron", "osv", "react", "ruff", "ty"}, override.Name) {
+	if !slices.Contains([]string{"electron", "osv", "react", "ruff", "ty", "vulture"}, override.Name) {
 		return fmt.Errorf("%s.name is not a supported conditional policy module", label)
 	}
 	if err := repositoryPath(override.Root, label+".root", false); err != nil {

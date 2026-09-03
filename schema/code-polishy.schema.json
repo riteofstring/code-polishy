@@ -109,7 +109,13 @@
       "properties": {
         "exclude": { "$ref": "#/$defs/paths" },
         "generated": { "$ref": "#/$defs/paths" },
+        "data": { "$ref": "#/$defs/paths" },
         "entryPoints": { "$ref": "#/$defs/paths" },
+        "pythonDynamicReferences": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/pythonDynamicReference" }
+        },
         "development": { "$ref": "#/$defs/paths" },
         "languages": {
           "type": "array",
@@ -127,6 +133,26 @@
           "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
         }
       }
+    },
+    "pythonDynamicReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "module", "symbol"],
+      "properties": {
+        "project": {
+          "allOf": [
+            { "$ref": "#/$defs/exactPath" },
+            { "pattern": "(?:^|/)pyproject\\.toml$" },
+            { "not": { "pattern": "[{}]" } }
+          ]
+        },
+        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "symbol": { "$ref": "#/$defs/pythonIdentifierChain" }
+      }
+    },
+    "pythonIdentifierChain": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
     },
     "complexity": {
       "type": "object",
@@ -672,7 +698,9 @@
             "go-module",
             "go-toolchain",
             "node-runtime",
-            "npm"
+            "npm",
+            "pypi",
+            "python-build-standalone"
           ]
         },
         "locator": {
@@ -838,7 +866,9 @@
       "additionalProperties": false,
       "required": ["name", "mode"],
       "properties": {
-        "name": { "enum": ["electron", "osv", "react", "ruff", "ty"] },
+        "name": {
+          "enum": ["electron", "osv", "react", "ruff", "ty", "vulture"]
+        },
         "root": { "$ref": "#/$defs/path" },
         "mode": { "enum": ["enabled", "disabled"] },
         "reason": { "$ref": "#/$defs/nonemptyString" },

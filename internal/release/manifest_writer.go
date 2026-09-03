@@ -16,11 +16,12 @@ import (
 )
 
 var releasePinPaths = struct {
-	version, goVersion, govulncheck, node, osv, pnpm, ruff, shellcheck, staticcheck, ty string
+	version, goVersion, govulncheck, node, osv, pnpm, python, ruff, shellcheck, staticcheck, ty, vulture string
 }{
 	"VERSION", "scripts/go_version.txt", "tools/govulncheck-version.txt", "tools/node-version.txt",
-	"tools/osv-scanner-version.txt", "tools/pnpm-version.txt", "tools/ruff-version.txt",
-	"tools/shellcheck-version.txt", "tools/staticcheck-version.txt", "tools/ty-version.txt",
+	"tools/osv-scanner-version.txt", "tools/pnpm-version.txt", "tools/python-version.txt",
+	"tools/ruff-version.txt", "tools/shellcheck-version.txt", "tools/staticcheck-version.txt",
+	"tools/ty-version.txt", "tools/vulture-version.txt",
 }
 
 func WriteManifest(releaseDir, sourceRevision string) (Manifest, error) {
@@ -61,8 +62,8 @@ func composeReleaseManifest(root, sourceRevision string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	pins := make([]string, 9)
-	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck, releasePinPaths.ty} {
+	pins := make([]string, 11)
+	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.python, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck, releasePinPaths.ty, releasePinPaths.vulture} {
 		pins[index], err = readReleasePin(root, path, true)
 		if err != nil {
 			return Manifest{}, err
@@ -92,7 +93,7 @@ func readReleasePin(root, relative string, trimV bool) (string, error) {
 
 func newReleaseManifest(version, sourceRevision, host string, pins []string, entries []Entry) Manifest {
 	manifest := Manifest{ManifestVersion: ManifestVersion, CodePolishyVersion: version, SourceRevision: sourceRevision,
-		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Ruff: pins[5], Shellcheck: pins[6], Staticcheck: pins[7], Ty: pins[8]}, Entries: entries, EntryCount: len(entries)}
+		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Python: pins[5], Ruff: pins[6], Shellcheck: pins[7], Staticcheck: pins[8], Ty: pins[9], Vulture: pins[10]}, Entries: entries, EntryCount: len(entries)}
 	manifest.ReleaseDigest = manifest.Identity()
 	manifest.ContentDigest = releaseEntriesDigest(entries)
 	return manifest

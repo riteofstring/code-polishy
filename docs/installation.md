@@ -113,10 +113,11 @@ One release identity has one self-contained policy root per supported host:
   toolchain;
 - the sealed Node runtime and JavaScript tool bundle;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
-  staticcheck, govulncheck, OSV-Scanner, Ruff, and `ty`. A target installs no
-  policy tooling, and none of these is ever taken from an ambient `PATH`, a host
-  installation, or an environment override, so a check decides the same thing
-  on every machine that has the matching host release;
+  staticcheck, govulncheck, OSV-Scanner, Ruff, Vulture `2.16`, `ty`, and the
+  carried CPython `3.12.13+20260728` runtime from python-build-standalone. A
+  target installs no policy tooling, and none of these is ever taken from an
+  ambient `PATH`, a host installation, or an environment override, so a check
+  decides the same thing on every machine that has the matching host release;
 - the version-matched `README.md`, `CHANGELOG.md`, permanent `docs/` tree, and
   documentation catalog;
 - the configuration schema, templates, canonical guidance, pinned tool versions,
@@ -184,11 +185,12 @@ with that reason rather than reinterpreted, so a release installed before the
 manifest changed is reinstalled from its commit rather than read as if it
 recorded what a release records now.
 
-Manifest version 3 was introduced in Code Polishy 0.19.0. Its required
-`tools.ty` field records the carried `ty` 0.0.65 release. A version 2 manifest is
-rejected and reinstalled from its exact source commit; it is never treated as
-evidence that the release carried or verified `ty`. The target configuration
-version is a separate contract.
+Manifest version 4 requires `tools.python` for the carried CPython
+`3.12.13+20260728` runtime and `tools.vulture` for Vulture `2.16`, alongside
+the existing carried tool identities. A version 3 manifest lacks that evidence,
+so it is rejected and reinstalled from its exact source commit; it is never
+treated as evidence that the release carried or verified either tool. The target
+configuration version is a separate contract.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after
@@ -201,14 +203,19 @@ run on Linux, macOS, and Windows.
 Before it stages anything, the installer asks every tool the release will carry
 what version it is and requires the answer to be the version the checked-in pin
 beside it names — the Go toolchain, Node, pnpm, ShellCheck, staticcheck,
-govulncheck, OSV-Scanner, Ruff, and `ty`. The manifest records those versions
-and a target trusts them, and a present file and a byte inventory cannot show
+govulncheck, OSV-Scanner, Ruff, Vulture, `ty`, and carried CPython. The manifest
+records those identities, and a present file and a byte inventory cannot show
 that a local tool cache holds the version the manifest would claim. The two Go
 analyzers are read out of their binaries with the pinned toolchain rather than
 asked: `govulncheck -version` contacts the vulnerability database, and
 installation reaches no network. The engine and the launcher are built here
 from the reviewed commit rather than acquired, so what they are is the source
 revision the manifest already records.
+
+The installer verifies the CPython archive before extraction and the Vulture
+`2.16` wheel before unpacking its pure-Python package into that carried runtime.
+It does not use `pip`, a target `.venv`, or a target Python installation for
+Vulture.
 
 The installer stages a complete release, verifies the staged tree against the
 manifest it just wrote, and only then moves it into place under one name. A

@@ -684,12 +684,13 @@ func TestDoctorReportsMissingReportArtifactIgnoreAtTheOwnedPath(t *testing.T) {
 	}
 }
 
-func TestCheckpointGateRunsChangedScopeAndRecordsAcceptedCandidate(t *testing.T) {
+func TestCheckpointGateRunsChangedScopeWithoutDeclaredSupplementalAndRecordsAcceptedCandidate(t *testing.T) {
 	root := requiredBehaviorReviewCandidate(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	declareSupplementalMutation(&policyEngine.Repository.Config)
 	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 	commandRunner := &recordingEngineRunner{}
 	policyEngine.Runner = commandRunner

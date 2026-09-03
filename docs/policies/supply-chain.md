@@ -34,11 +34,12 @@ The built-in engine currently provides:
   the same bundle and decided against the target's own allowed licenses;
 - Go module/sum ownership, exact module versions, contained local replacements,
   `go mod tidy -diff`, module release age, and pinned `govulncheck`;
-- Python PEP 621 runtime, optional, and dependency-group exact direct pins,
-  `uv.lock` presence, and resolved `uv.lock` PyPI release age;
+- Python PEP 508 runtime, optional, dependency-group, and build-system direct
+  requirements; exact registry and full-commit Git source policy; `uv.lock`
+  presence and Git source/commit agreement; and resolved registry-release age;
 - standalone executable release age from exact checked-in version pins and
-  fixed upstream metadata protocols for Go, Node, Go modules, npm, and GitHub
-  Releases;
+  fixed upstream metadata protocols for Go, Node, Go modules, npm, PyPI,
+  python-build-standalone, and GitHub Releases;
 - conditional policy-owned OSV-Scanner coverage with structured exact findings
   for every supported dependency graph, in addition to native ecosystem
   vulnerability checks;
@@ -83,6 +84,75 @@ lock-aware release-age scanner. Local dependency policy and lock consistency
 use `runOn: ["supply-chain"]`; registry freshness uses
 `runOn: ["supply-chain-online"]`; vulnerability checks use
 `runOn: ["security"]`.
+
+## Python projects and uv lock evidence
+
+Code Polishy reads complete PEP 508 requirements from
+`[project].dependencies`, every `[project.optional-dependencies]` and
+`[dependency-groups]` group, and `[build-system].requires`. It preserves the
+normalized package identity, extras, marker, source kind, version or URL, and
+source location. Malformed TOML or requirements, contradictory declarations,
+and unsupported forms are findings; a parse error never becomes an empty
+dependency list.
+
+A registry requirement must use one exact `==` version. Markers may limit where
+that requirement applies, but cannot weaken the pin. A direct `file:`
+requirement remains allowed only when `supplyChain.allowedDependencyProtocols`
+includes `file:` and its relative path is contained by the manifest boundary.
+Other direct URLs are unsupported.
+
+A named direct Git requirement is accepted only when it uses `git+https://` or
+`git+ssh://` and names exactly one 40-character hexadecimal commit. HTTPS has
+no user information, password, token, dynamic substitution, query, or fragment
+credentials. SSH may name a user but has no password or dynamic substitution.
+The repository path is normalized, and an optional `subdirectory` is a
+normalized relative path that cannot escape the checkout. Tags, branches,
+abbreviated or symbolic refs, SCP shorthand, plain HTTP, the Git protocol,
+embedded credentials, ambiguous `@` parsing, and unknown fragments fail. The
+accepted commit is normalized to lowercase while the normalized source identity
+is retained for lock comparison.
+
+Every Python project needs its own `uv.lock`. For each non-build direct Git
+requirement, the lock must contain exactly one matching package source and
+prove the normalized package, repository source, declared ref, resolved full
+commit, and declared subdirectory agree with `pyproject.toml`. A tag that a
+lock happens to resolve to a commit still fails because the manifest reference
+is mutable. Missing, malformed, unsupported, or mismatched source evidence is
+a lock-consistency finding naming the package.
+
+Build-system requirements receive the same exact-pin and source checks, but
+the `uv.lock` format does not prove every build-isolation dependency. A Python
+project therefore still declares a module-scoped frozen `lock-sync` provider.
+That provider owns the honest installation/lock agreement for facts the lock
+does not encode; it cannot be replaced by a claim that the partial static
+reader proved the full build graph.
+
+Registry releases reach the ordinary release-age and OSV lanes. A Git source
+has no PyPI publication timestamp and cannot be represented honestly as a
+registry release; the online profile reports release-age and vulnerability
+coverage unavailable for that exact source and commit. `dependency-review`
+still inventories accepted Git changes by normalized source and full commit,
+without inventing a PyPI age.
+
+## GitLab CI control inputs
+
+When `.gitlab-ci.yml` or `.gitlab-ci.yaml` exists, it is a policy-sensitive
+control input. Every recursively resolved literal local include becomes one as
+well. Those files cannot be excluded, generated, or classified as `scope.data`.
+The sealed reader parses YAML without executing pipeline scripts, variables, or
+project code. It accepts only literal contained local include paths and reports
+cycles, duplicate inclusion, traversal, missing files, dynamic paths, and
+unsupported include shapes as coverage failures.
+
+Static GitLab checks cover literal images and services at global, `default`,
+and job levels. Every external image must use a full `sha256` digest. A static
+include must use an immutable identity too: a project include needs a full
+40-character commit ref; a remote include needs credential-free HTTPS and a
+supported `sha256-` integrity value; and a component include needs an immutable
+full-commit identity. A literal `include:template` is recorded separately as a
+GitLab-provided built-in template; it has no caller-controlled ref to pin.
+Dynamic, tag-based, or unsupported values fail rather than being guessed.
+Static analysis does not simulate GitLab rules or pipeline execution.
 
 ## pnpm workspace and lock facts
 
@@ -168,11 +238,22 @@ accounts, malicious publishing, and broken releases to be detected before
 adoption.
 
 - A release artifact names one exact checked-in `versionFile`. Its `source` is
-  one of `go-toolchain`, `node-runtime`, `go-module`, `npm`, or
-  `github-release`. Package and repository sources use a validated `locator`;
-  GitHub release tags may add a fixed `tagPrefix`. Arbitrary metadata URLs are
-  not accepted.
+  one of `go-toolchain`, `node-runtime`, `go-module`, `npm`, `pypi`,
+  `python-build-standalone`, or `github-release`. Package and repository sources
+  use a validated `locator`; `pypi` accepts one exact project name and no tag
+  prefix. `python-build-standalone` accepts neither field and requires a
+  `<python-version>+<release-tag>` pin. GitHub release tags may add a fixed
+  `tagPrefix`. Arbitrary metadata URLs are not accepted.
+- Vulture `2.16` and carried CPython
+  `3.12.13+20260728` from python-build-standalone are separate policy-owned
+  release artifacts. The Vulture PyPI wheel and CPython distribution each have
+  their own exact pin, checksum, upstream-age evidence, and release-manifest
+  identity; neither is a target Python dependency or may borrow evidence from a
+  target `uv.lock`.
 - Online checks resolve timestamps directly from the fixed upstream service.
+  PyPI uses the exact project's release JSON and the latest upload timestamp;
+  python-build-standalone resolves the pinned release tag through its fixed
+  GitHub repository.
   A missing pin, non-semantic or source-incompatible version, absent release,
   malformed response, oversized response, or failed request is a finding. A
   checked-in release date is never accepted as proof of age. Changing a
@@ -576,8 +657,13 @@ dependency update is open. A GitHub Actions repository proves this with a
 weekly-or-faster `schedule` workflow containing `code-polishy supply-chain`
 (without `--offline`) or `code-polishy gate`. Other CI systems declare a
 `security-monitoring` provider in the `security` profile as their explicit
-external scheduling contract. Missing recurring coverage is a non-suppressible
-`policy.securityMonitoring` failure.
+external scheduling contract. GitLab schedules are server-side objects, so
+static `.gitlab-ci.yml` analysis can validate only checked-in control inputs and
+pins; it cannot prove that a schedule exists, remains enabled, or completed.
+The provider must meet the explicit success and unavailable-evidence contract
+in [Portability and External Inputs](portability.md#external-security-monitoring-evidence).
+Missing recurring coverage is a non-suppressible `policy.securityMonitoring`
+failure.
 
 Built-in Go dependency subprocesses receive the same small operational
 environment as other commands. If a private module needs additional variables

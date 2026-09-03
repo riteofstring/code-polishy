@@ -104,6 +104,25 @@ EOF
   chmod +x "${path}"
 }
 
+write_python_runtime_tool() {
+  local path="$1" python_version="$2" vulture_version="$3"
+  write_file "${path}" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "-I" && "\${2:-}" == "-c" ]]; then
+  case "\${3:-}" in
+    *sys.version_info*) printf '%s\n' "${python_version}" ;;
+    *sysconfig.get_paths*) printf '%s\n' "\$(cd "\$(dirname "\$0")" && pwd -P)/lib/python3.12/site-packages" ;;
+    *importlib.metadata*) printf '%s\n' "${vulture_version}" ;;
+    *) echo "unexpected Python probe: \$*" >&2; exit 1 ;;
+  esac
+  exit 0
+fi
+echo "unexpected Python invocation: \$*" >&2
+exit 1
+EOF
+  chmod +x "${path}"
+}
+
 
 build_source_checkout() {
   local bundle_source_file
@@ -178,8 +197,14 @@ EOF
   printf 'v0.7.0\n' >"${source_root}/tools/staticcheck-version.txt"
   printf 'v1.3.0\n' >"${source_root}/tools/govulncheck-version.txt"
   printf 'v2.4.0\n' >"${source_root}/tools/osv-scanner-version.txt"
+  printf '3.12.13+20260728\n' >"${source_root}/tools/python-version.txt"
+  printf '%s\n' 'cpython-3.12.13+20260728-x86_64-unknown-linux-gnu-install_only.tar.gz fd9d70e1e1ed3f6caccb4e2eefe570aa07589c8f86ddf0e87f68a96cd14272e1' \
+    >"${source_root}/tools/python_runtime_checksums.txt"
   printf '0.16.0\n' >"${source_root}/tools/ruff-version.txt"
   printf '0.0.65\n' >"${source_root}/tools/ty-version.txt"
+  printf '2.16\n' >"${source_root}/tools/vulture-version.txt"
+  printf '%s\n' 'vulture-2.16-py3-none-any.whl 6e0f1c312cef1c87856957e5c2ca9608834a7c794c2180477f30bf0e4cc58eee' \
+    >"${source_root}/tools/vulture_wheel_checksums.txt"
   printf '0.72.0\n' >"${source_root}/tools/trivy-version.txt"
   write_file "${source_root}/tools/ty.toml" <<'EOF'
 [rules]
@@ -250,7 +275,7 @@ EOF
 }
 EOF
   for bundle_source_file in pnpm-lock.yaml pnpm-workspace.yaml .npmrc runner.mjs \
-    protocol.mjs audit.mjs deadcode.mjs imports.mjs licenses.mjs packages.mjs; do
+    protocol.mjs audit.mjs deadcode.mjs imports.mjs gitlab.mjs licenses.mjs packages.mjs; do
     printf '// disposable %s\n' "${bundle_source_file}" \
       >"${source_root}/tools/javascript/${bundle_source_file}"
   done
@@ -323,6 +348,10 @@ EOF
   write_version_tool "${source_root}/.tools/bin/osv-scanner" --version "osv-scanner version: 2.4.0"
   write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.16.0"
   write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
+  write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+  printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
+  printf '2.16\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vulture-release"
+  mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/vulture-2.16.dist-info"
 
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
@@ -455,7 +484,8 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
 
 for carried in go:1.26.6 node:24.18.0 pnpm:11.13.0 shellcheck:0.11.0 \
-  staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 ruff:0.16.0 ty:0.0.65; do
+  staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
+  ruff:0.16.0 ty:0.0.65 vulture:2.16; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
 done
@@ -476,10 +506,14 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
   tools/staticcheck-version.txt tools/govulncheck-version.txt \
-  tools/osv-scanner-version.txt tools/ruff-version.txt tools/ty-version.txt tools/ty.toml \
+  tools/osv-scanner-version.txt tools/python-version.txt tools/python_runtime_checksums.txt \
+  tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
   ".tools/javascript/${platform_tag}/node/bin/node" \
   ".tools/javascript/${platform_tag}/pnpm/bin/pnpm.cjs" \
+  ".tools/python/${platform_tag}/python" \
+  ".tools/python/${platform_tag}/.code-polishy-python-release" \
+  ".tools/python/${platform_tag}/.code-polishy-vulture-release" \
   .tools/javascript/bundle/runner.mjs \
   ".tools/go/${go_platform_tag}/go/bin/go" \
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
@@ -636,6 +670,77 @@ fi
 write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose ty is not the pinned version changed what is installed"
+
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.99" "2.16"
+if install_release >"${fixture_root}/python-version.log" 2>&1; then
+  fail "a checkout whose CPython is not the pinned version installed a release"
+fi
+if ! grep -q "python" "${fixture_root}/python-version.log" ||
+  ! grep -q "3.12.99" "${fixture_root}/python-version.log"; then
+  fail "the unpinned CPython was refused without naming it and what it reports"
+fi
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose CPython is not the pinned version changed what is installed"
+
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.99"
+if install_release >"${fixture_root}/vulture-version.log" 2>&1; then
+  fail "a checkout whose Vulture is not the pinned version installed a release"
+fi
+if ! grep -q "vulture" "${fixture_root}/vulture-version.log" ||
+  ! grep -q "2.99" "${fixture_root}/vulture-version.log"; then
+  fail "the unpinned Vulture was refused without naming it and what it reports"
+fi
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose Vulture is not the pinned version changed what is installed"
+
+printf '3.12.13+20260727\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
+if install_release >"${fixture_root}/python-marker.log" 2>&1; then
+  fail "a checkout whose CPython carrier marker is not the pinned build installed a release"
+fi
+if ! grep -q "carrier marker" "${fixture_root}/python-marker.log" ||
+  ! grep -q "3.12.13+20260727" "${fixture_root}/python-marker.log"; then
+  fail "the unpinned CPython carrier marker was refused without naming it and what it reports"
+fi
+printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose CPython carrier marker is not the pinned build changed what is installed"
+
+printf '2.15\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vulture-release"
+if install_release >"${fixture_root}/vulture-marker.log" 2>&1; then
+  fail "a checkout whose Vulture carrier marker is not the pinned release installed a release"
+fi
+if ! grep -q "carrier marker" "${fixture_root}/vulture-marker.log" ||
+  ! grep -q "2.15" "${fixture_root}/vulture-marker.log"; then
+  fail "the unpinned Vulture carrier marker was refused without naming it and what it reports"
+fi
+printf '2.16\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vulture-release"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose Vulture carrier marker is not the pinned release changed what is installed"
+
+vulture_metadata_root="${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages"
+rmdir "${vulture_metadata_root}/vulture-2.16.dist-info"
+if install_release >"${fixture_root}/vulture-metadata-missing.log" 2>&1; then
+  fail "a checkout whose Vulture carrier has no metadata installed a release"
+fi
+if ! grep -q "Vulture carrier" "${fixture_root}/vulture-metadata-missing.log"; then
+  fail "missing Vulture carrier metadata was refused without naming the carrier"
+fi
+mkdir -p "${vulture_metadata_root}/vulture-2.16.dist-info"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose Vulture carrier has no metadata changed what is installed"
+
+mkdir -p "${vulture_metadata_root}/vulture-2.15.dist-info"
+if install_release >"${fixture_root}/vulture-metadata.log" 2>&1; then
+  fail "a checkout whose Vulture carrier has stale metadata installed a release"
+fi
+if ! grep -q "Vulture carrier" "${fixture_root}/vulture-metadata.log"; then
+  fail "stale Vulture carrier metadata was refused without naming the carrier"
+fi
+rmdir "${vulture_metadata_root}/vulture-2.15.dist-info"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose Vulture carrier has stale metadata changed what is installed"
 
 
 

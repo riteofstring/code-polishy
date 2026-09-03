@@ -49,7 +49,8 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Host: host, Features: []string{"javascript-bundle"},
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Ty: "0.0.65",
+			PNPM: "11.13.0", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			Ty: "0.0.65", Vulture: "2.16",
 		},
 		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
 	}
@@ -191,12 +192,14 @@ func TestParseManifestRejectsACorruptedRecord(t *testing.T) {
 			broken.Entries = slices.DeleteFunc(broken.Entries, func(entry Entry) bool { return entry.Path == BinaryPath })
 			broken.EntryCount = len(broken.Entries)
 		},
-		"an unusable revision":       func(broken *Manifest) { broken.SourceRevision = "HEAD" },
-		"an unusable host":           func(broken *Manifest) { broken.Host = "Darwin/ARM64" },
-		"an unusable tool pin":       func(broken *Manifest) { broken.Tools.Node = "" },
-		"an unrecorded analyzer":     func(broken *Manifest) { broken.Tools.Staticcheck = "" },
-		"an unrecorded type checker": func(broken *Manifest) { broken.Tools.Ty = "" },
-		"another manifest version":   func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
+		"an unusable revision":         func(broken *Manifest) { broken.SourceRevision = "HEAD" },
+		"an unusable host":             func(broken *Manifest) { broken.Host = "Darwin/ARM64" },
+		"an unusable tool pin":         func(broken *Manifest) { broken.Tools.Node = "" },
+		"an unrecorded analyzer":       func(broken *Manifest) { broken.Tools.Staticcheck = "" },
+		"an unrecorded runtime":        func(broken *Manifest) { broken.Tools.Python = "" },
+		"an unrecorded type checker":   func(broken *Manifest) { broken.Tools.Ty = "" },
+		"an unrecorded dead-code tool": func(broken *Manifest) { broken.Tools.Vulture = "" },
+		"another manifest version":     func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
 	}
 	for name, corrupt := range cases {
 		broken := manifest
@@ -254,10 +257,12 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 		func(tools *Tools) { tools.Node = "24.18.1" },
 		func(tools *Tools) { tools.OSVScanner = "2.4.1" },
 		func(tools *Tools) { tools.PNPM = "11.13.1" },
+		func(tools *Tools) { tools.Python = "3.12.14+20260728" },
 		func(tools *Tools) { tools.Ruff = "0.16.1" },
 		func(tools *Tools) { tools.Shellcheck = "0.11.1" },
 		func(tools *Tools) { tools.Staticcheck = "0.7.1" },
 		func(tools *Tools) { tools.Ty = "0.0.66" },
+		func(tools *Tools) { tools.Vulture = "2.17" },
 	} {
 		other := manifest
 		carried(&other.Tools)

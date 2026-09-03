@@ -217,7 +217,7 @@ func malformedResponseFinding(finding ResponseFinding, capability string) bool {
 func requestFor(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) Request {
 	files := []string{}
 	for _, selected := range selection.Files {
-		if (len(command.Paths) == 0 || policy.MatchesAny(selected, command.Paths)) && moduleMatches(repo, command.Modules, selected) && !repo.IsGenerated(selected) {
+		if packCommandSelects(repo, command, profile, selected) {
 			files = append(files, selected)
 		}
 	}
@@ -234,6 +234,22 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 		}
 	}
 	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile}
+}
+
+func packCommandSelects(repo repository.Repository, command policy.Command, profile, selected string) bool {
+	if (len(command.Paths) > 0 && !policy.MatchesAny(selected, command.Paths)) || !moduleMatches(repo, command.Modules, selected) {
+		return false
+	}
+	if repo.IsData(selected) && command.Adapter.Capability == "format" {
+		return false
+	}
+	if !repo.IsGenerated(selected) {
+		return true
+	}
+	if command.Adapter.Capability == "complexity" {
+		return false
+	}
+	return !(command.Adapter.Capability == "format" && profile == "format")
 }
 
 func moduleMatches(repo repository.Repository, modules []string, selected string) bool {

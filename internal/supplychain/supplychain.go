@@ -1,7 +1,6 @@
 package supplychain
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,14 +19,11 @@ import (
 )
 
 var (
-	exactVersion  = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	fullCommit    = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
-	fullDigest    = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
-	goVersion     = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	pythonExact   = regexp.MustCompile(`^[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_.,-]+\])?==[A-Za-z0-9][A-Za-z0-9.!+_-]*(?:\s*;.*)?$`)
-	pep621Project = regexp.MustCompile(`(?m)^\s*\[project\]\s*(?:#.*)?$`)
-	quotedString  = regexp.MustCompile(`["']([^"']+)["']`)
-	workflowUses  = regexp.MustCompile(`^(?:-\s*)?uses\s*:\s*(.+)$`)
+	exactVersion = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	fullCommit   = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+	fullDigest   = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
+	goVersion    = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	workflowUses = regexp.MustCompile(`^(?:-\s*)?uses\s*:\s*(.+)$`)
 )
 
 type nodeManifest struct {
@@ -78,7 +74,7 @@ func staticPathFindings(repo repository.Repository, path string) []policy.Findin
 		return checkGoModule(repo, path)
 	case name == "go.work":
 		return checkGoWorkspace(repo, path)
-	case name == "pyproject.toml" && pythonProjectSupported(repo, path):
+	case name == "pyproject.toml":
 		return checkPythonProject(repo, path)
 	case name == "osv-scanner.toml":
 		return []policy.Finding{{
@@ -621,55 +617,124 @@ func goWorkspaceLineFindings(repo repository.Repository, path string, lineNumber
 }
 
 func checkPythonProject(repo repository.Repository, path string) []policy.Finding {
-	data, err := repo.Read(path)
+	project, err := repo.ReadPythonProject(path)
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.pythonManifest", Path: path, Subject: path, Message: err.Error()}}
 	}
-	findings := pythonDependencyFindings(repo, path, parsePythonDependencies(string(data)))
-	if !regularFile(filepath.Join(repo.Root, filepath.Dir(path), "uv.lock")) {
-		findings = append(findings, policy.Finding{Check: "supplyChain.lockfile", Path: path, Subject: "uv.lock", Message: "uv.lock is required for Python projects"})
+	if !project.IsPythonProject() {
+		return nil
 	}
-	return findings
+	findings := pythonDependencyFindings(repo, path, project.Requirements)
+	lockPath := pythonLockPath(project.Root)
+	if !regularFile(filepath.Join(repo.Root, filepath.FromSlash(lockPath))) {
+		return append(findings, policy.Finding{Check: "supplyChain.lockfile", Path: path, Subject: lockPath, Message: "uv.lock is required for Python projects"})
+	}
+	data, err := repo.Read(lockPath)
+	if err != nil {
+		return append(findings, policy.Finding{Check: "supplyChain.lockConsistency", Path: lockPath, Subject: "uv:resolved-graph", Message: err.Error()})
+	}
+	packages, err := parseUVLock(data, lockPath)
+	if err != nil {
+		return append(findings, policy.Finding{Check: "supplyChain.lockConsistency", Path: lockPath, Subject: "uv:resolved-graph", Message: err.Error()})
+	}
+	return append(findings, pythonGitLockFindings(project, packages, lockPath)...)
 }
 
-func pythonDependencyFindings(repo repository.Repository, path string, dependencies []string) []policy.Finding {
+func pythonLockPath(root string) string {
+	if root == "." || root == "" {
+		return "uv.lock"
+	}
+	return root + "/uv.lock"
+}
+
+func pythonDependencyFindings(repo repository.Repository, path string, dependencies []repository.PythonRequirement) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, dependency := range dependencies {
-		if pythonExact.MatchString(dependency) {
-			continue
-		}
-		if name, relative, local := pythonFileDependency(dependency); local {
-			if !slices.Contains(repo.Config.SupplyChain.AllowedDependencyProtocols, "file:") {
-				findings = append(findings, policy.Finding{Check: "supplyChain.pythonExactVersion", Path: path, Subject: name, Message: "Python file dependencies are not allowed by policy"})
-			} else if err := validateRelativeFromManifest(repo, path, relative); err != nil {
-				findings = append(findings, policy.Finding{Check: "supplyChain.localDependency", Path: path, Subject: name, Message: err.Error()})
+		switch dependency.Kind {
+		case repository.PythonRegistryRequirement:
+			if _, exact := dependency.ExactRegistryVersion(); exact {
+				continue
 			}
+			findings = append(findings, policy.Finding{
+				Check: "supplyChain.pythonExactVersion", Path: path, Subject: dependency.Name,
+				Message: fmt.Sprintf("Python dependency %q must use == with an exact version", dependency.Raw),
+			})
+		case repository.PythonGitRequirement:
 			continue
+		case repository.PythonFileRequirement:
+			if !slices.Contains(repo.Config.SupplyChain.AllowedDependencyProtocols, "file:") {
+				findings = append(findings, policy.Finding{Check: "supplyChain.pythonExactVersion", Path: path, Subject: dependency.Name, Message: "Python file dependencies are not allowed by policy"})
+			} else if err := validateRelativeFromManifest(repo, path, dependency.FilePath); err != nil {
+				findings = append(findings, policy.Finding{Check: "supplyChain.localDependency", Path: path, Subject: dependency.Name, Message: err.Error()})
+			}
+		default:
+			findings = append(findings, policy.Finding{
+				Check: "supplyChain.pythonSource", Path: path, Subject: dependency.Name,
+				Message: fmt.Sprintf("Python dependency %q uses an unsupported direct URL", dependency.Raw),
+			})
 		}
-		parts := strings.FieldsFunc(dependency, func(character rune) bool {
-			return strings.ContainsRune("=<>~ ", character)
-		})
-		name := dependency
-		if len(parts) > 0 {
-			name = parts[0]
-		}
-		findings = append(findings, policy.Finding{Check: "supplyChain.pythonExactVersion", Path: path, Subject: name, Message: fmt.Sprintf("Python dependency %q must use == with an exact version", dependency)})
 	}
 	return findings
-}
-
-func pythonFileDependency(dependency string) (string, string, bool) {
-	name, relative, found := strings.Cut(dependency, " @ file:")
-	if !found {
-		return "", "", false
-	}
-	relative = strings.TrimSpace(strings.SplitN(relative, ";", 2)[0])
-	return strings.TrimSpace(name), relative, true
 }
 
 func pythonProjectSupported(repo repository.Repository, path string) bool {
-	data, err := repo.Read(path)
-	return err == nil && pep621Project.Match(data)
+	project, err := repo.ReadPythonProject(path)
+	return err == nil && project.IsPythonProject()
+}
+
+func pythonGitLockFindings(project repository.PythonProject, packages []resolvedPackage, lockPath string) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, requirement := range project.Requirements {
+		if requirement.Kind != repository.PythonGitRequirement || requirement.Usage == "build" {
+			continue
+		}
+		finding := pythonGitLockFinding(requirement, matchingResolvedPackages(packages, requirement.Name), lockPath)
+		if finding != nil {
+			findings = append(findings, *finding)
+		}
+	}
+	return findings
+}
+
+func matchingResolvedPackages(packages []resolvedPackage, name string) []resolvedPackage {
+	matches := []resolvedPackage{}
+	for _, item := range packages {
+		if item.Name == name {
+			matches = append(matches, item)
+		}
+	}
+	return matches
+}
+
+func pythonGitLockFinding(requirement repository.PythonRequirement, candidates []resolvedPackage, lockPath string) *policy.Finding {
+	message := pythonGitLockMessage(requirement, candidates)
+	if message == "" {
+		return nil
+	}
+	return &policy.Finding{Check: "supplyChain.lockConsistency", Path: lockPath, Subject: requirement.Name, Message: message}
+}
+
+func pythonGitLockMessage(requirement repository.PythonRequirement, candidates []resolvedPackage) string {
+	if len(candidates) != 1 {
+		return fmt.Sprintf("uv.lock must contain exactly one source record for Git dependency %q", requirement.Name)
+	}
+	locked := candidates[0]
+	if locked.Source.Kind != "git" {
+		return fmt.Sprintf("uv.lock does not retain usable Git source evidence for dependency %q", requirement.Name)
+	}
+	if !requirement.Git.SameRepository(locked.Source.Git) {
+		return fmt.Sprintf("uv.lock Git repository for dependency %q differs from pyproject.toml", requirement.Name)
+	}
+	if requirement.Git.DeclaredRef != locked.Source.Git.DeclaredRef {
+		return fmt.Sprintf("uv.lock Git declared ref for dependency %q differs from pyproject.toml", requirement.Name)
+	}
+	if requirement.Git.Commit != locked.Source.Git.Commit {
+		return fmt.Sprintf("uv.lock Git commit for dependency %q differs from pyproject.toml", requirement.Name)
+	}
+	if requirement.Git.Subdirectory != locked.Source.Git.Subdirectory {
+		return fmt.Sprintf("uv.lock Git subdirectory for dependency %q differs from pyproject.toml", requirement.Name)
+	}
+	return ""
 }
 
 func checkWorkflowPins(repo repository.Repository, path string) []policy.Finding {
@@ -780,48 +845,15 @@ func supplyLockfileName(name string) bool {
 }
 
 func parsePythonDependencies(text string) []string {
-	dependencies := []string{}
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	section := ""
-	inDependencies := false
-	for scanner.Scan() {
-		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
-		if !inDependencies && strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.Trim(line, "[]"))
-			continue
-		}
-		if !inDependencies {
-			if pythonDependencyArray(section, line) {
-				inDependencies = true
-				line = strings.SplitN(line, "[", 2)[1]
-			} else {
-				continue
-			}
-		}
-		for _, match := range quotedString.FindAllStringSubmatch(line, -1) {
-			dependencies = append(dependencies, strings.TrimSpace(match[1]))
-		}
-		if strings.Contains(line, "]") {
-			inDependencies = false
-		}
+	project, err := repository.ParsePythonProject("pyproject.toml", []byte(text))
+	if err != nil {
+		return nil
+	}
+	dependencies := make([]string, 0, len(project.Requirements))
+	for _, requirement := range project.Requirements {
+		dependencies = append(dependencies, requirement.Raw)
 	}
 	return dependencies
-}
-
-func pythonDependencyArray(section, line string) bool {
-	key, value, found := strings.Cut(line, "=")
-	if !found || !strings.Contains(value, "[") {
-		return false
-	}
-	key = strings.TrimSpace(key)
-	switch section {
-	case "project":
-		return key == "dependencies"
-	case "project.optional-dependencies", "dependency-groups":
-		return key != ""
-	default:
-		return false
-	}
 }
 
 func stripTOMLComment(line string) string {

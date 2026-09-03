@@ -128,9 +128,8 @@ write_target_commands() {
     write_file "${target}/scripts/${name}.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
-  printf '%s\n' "$(basename "$0")" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
-fi
+command_log="$(git rev-parse --path-format=absolute --git-common-dir)/code-polishy-command-log"
+printf '%s\n' "$(basename "$0")" >>"${command_log}"
 if [[ "$(basename "$0")" == "build.sh" ]]; then
   transient_marker="$(git rev-parse --git-dir)/code-polishy-fail-build-once"
   if [[ -f "${transient_marker}" ]]; then
@@ -221,8 +220,7 @@ seal_target() {
 run_policy() {
   local target="$1"
   shift
-  CODE_POLISHY_INSTALLED_TEST_LOG="${target}/.git/code-polishy-command-log" \
-    "${launcher}" --repo-root "${target}" "$@" >"${output}" 2>&1
+  "${launcher}" --repo-root "${target}" "$@" >"${output}" 2>&1
 }
 
 excerpt() {
@@ -270,6 +268,7 @@ expect_no_target_commands() {
 }
 
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
+source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
 
 exercise_versioned_documentation() {
   local target="$1" description="$2" before
@@ -370,9 +369,8 @@ write_target_commands "${go_only}"
 write_file "${go_only}/scripts/test.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ -n "${CODE_POLISHY_INSTALLED_TEST_LOG:-}" ]]; then
-  printf '%s\n' "$(basename "$0")" >>"${CODE_POLISHY_INSTALLED_TEST_LOG}"
-fi
+command_log="$(git rev-parse --path-format=absolute --git-common-dir)/code-polishy-command-log"
+printf '%s\n' "$(basename "$0")" >>"${command_log}"
 go test ./...
 EOF
 chmod +x "${go_only}/scripts/test.sh"
@@ -962,5 +960,7 @@ export function Conditional({ enabled }: { enabled: boolean }) {
 EOF
 expect_findings "${react}" "react" check --all
 expect_finding "react" "quality.lint" "src/conditional.tsx" "react-hooks/rules-of-hooks"
+
+exercise_python_adoption_fixture "${fixture_root}" "${real_git}"
 
 echo "The installed release governed every disposable target shape."

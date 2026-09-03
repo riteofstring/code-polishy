@@ -2,7 +2,8 @@
 
 Conditional policy modules keep standard rules in the pinned Code Polishy
 checkout. A consuming repository imports the policy once; it does not copy the
-same Ruff, `ty`, React, Electron, or OSV command definitions into local config.
+same Ruff, Vulture, `ty`, React, Electron, or OSV command definitions into local
+config.
 
 ## Compilation model
 
@@ -40,14 +41,19 @@ suite is a finding rather than a skipped check.
 
 ### Ruff
 
-Any governed `.py` or `.pyi` file activates Ruff. The root is the nearest
-ancestor `ruff.toml`, `.ruff.toml`, or `pyproject.toml` containing `[tool.ruff]`,
-falling back to the repository root.
+Any governed `.py` or `.pyi` file activates Ruff through the shared Python
+project inventory. Its root is the nearest contained `pyproject.toml` project,
+not the nearest target Ruff configuration. Nested projects remain separate;
+the inventory also supplies a contained `src` root when present.
 
 The module uses policy-owned Ruff `0.16.0` for:
 
 - selected-file `ruff format --check` during `check` and `gate`;
-- selected-file `ruff check --no-fix` during `check` and `gate`;
+- selected-file sealed `E4`, `E7`, `E9`, and `F` lint during `check` and `gate`,
+  with `noqa` ignored;
+- selected-file target Ruff additions during `check` and `gate`, after the
+  separate sealed baseline described in
+  [Code Quality](code-quality.md#python-ruff-vulture-and-ty);
 - selected-file, isolated C901 complexity checks during `check` and `gate`;
 - selected-file `ruff format` during `format` or `fix`.
 
@@ -55,24 +61,44 @@ The C901 command ignores target Ruff configuration and `noqa`, and translates
 the shared fails-at threshold of 10 to Ruff's native maximum of 9. A target may
 lower `quality.complexity.python`, but cannot raise or disable it.
 
-Ruff supplies format, lint, complexity, and unused/dead-code coverage. Domain
-architecture and build semantics still need an applicable shared module or
-project-specific provider; Ruff must not be mislabeled as proof it does not
-provide.
+Ruff supplies formatting, lint, and complexity. Its `F` diagnostics are lint,
+not dead-code reachability. Its policy-owned `analyze graph` invocation also
+supplies Python architecture evidence, so a target declares no Python
+architecture provider. Build semantics remain project-specific.
+
+### Vulture
+
+The same Python inventory invokes policy-owned Vulture `2.16` as the sole
+Python `dead-code` provider during `check` and `gate`. It analyzes the full
+governed contained project at fixed 60% confidence through carried CPython
+`3.12.13+20260728` from python-build-standalone; it does not use a target or
+ambient Python interpreter, and target Vulture configuration is ignored.
+
+PEP 621 `project.scripts`, `project.gui-scripts`, and every
+`project.entry-points.*` table infer reachable module symbols. A target may add
+only a dynamic reference that Vulture cannot otherwise see, using
+`scope.pythonDynamicReferences` exact `{project,module,symbol}` objects. Each
+field is required, `project` is the canonical contained-project
+`pyproject.toml` path, `module` and `symbol` are Python identifier chains,
+wildcards are unavailable, and stale or ambiguous references fail. See
+[Code Quality](code-quality.md#python-ruff-vulture-and-ty) for the complete
+reference and coverage contract.
 
 ### ty
 
-Any governed `.py` or `.pyi` file also activates `ty`. Its project root is the
-nearest ancestor containing `ty.toml` or `pyproject.toml`, falling back to the
-repository root. The module runs selected-file `ty check` during `check` and
-`gate` and supplies built-in `typecheck` coverage.
+Any governed `.py` or `.pyi` file also activates `ty` for the same shared
+Python project inventory. The module runs selected-file `ty check` during
+`check` and `gate` and supplies built-in `typecheck` coverage.
 
 The release carries `ty` `0.0.65` and invokes it with the release-owned
 `tools/ty.toml`. That configuration keeps `ty`'s normal diagnostic severity; it
-does not enable every rule or turn warnings into errors. A target `ty.toml` or
-any `pyproject.toml` establishes only the command's project boundary; it does
-not replace or weaken the policy-owned diagnostic configuration. A target
-therefore pins no Python type checker and declares no Python typecheck provider.
+does not enable every rule or turn warnings into errors. A target `ty.toml` does
+not replace or weaken the policy-owned diagnostic configuration. A project with
+dependencies passes only its validated project-local `.venv` to `ty`; ambient
+Python environment variables and executable lookup do not decide the result.
+A target therefore pins no Python type checker and declares no Python typecheck
+provider. Its `.venv` is only `ty`'s explicit dependency input; Vulture uses the
+release-owned CPython runtime instead.
 
 ### The Node quality baseline
 
@@ -144,6 +170,11 @@ suites and may require the kind through `tests.requiredSupplementalKinds`.
 Build tags, workspace roots, thresholds, and mutation commands remain
 project-specific facts.
 
+Those declarations validate the available evidence for a selected hardening
+event; they do not invoke supplemental execution. The caller, an event-specific
+checked-in workflow, or the stable-candidate release checklist must select the
+separate `test --supplemental` stage.
+
 The policy does not infer that a formatter, coverage command, dry run, or
 successful script is mutation evidence. `kind: mutation` must execute an actual
 mutator and fail when its enforced threshold is missed. A repository-scoped
@@ -158,8 +189,9 @@ absence does not block adoption unless the target explicitly requires it.
 
 Checked-in `.feature` files trigger a related executable-specification
 contract: full acceptance execution. Acceptance mutation is optional local
-supplemental hardening invoked through the separate `test --supplemental`
-stage. Merely storing Gherkin does not count as test coverage.
+supplemental hardening selected through the separate `test --supplemental`
+stage only by an explicit hardening trigger. Merely storing Gherkin does not
+count as test coverage.
 
 ## Exact overrides
 

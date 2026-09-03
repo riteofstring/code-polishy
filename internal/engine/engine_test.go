@@ -37,6 +37,21 @@ func TestDoctorAcceptsCompleteContentRepository(t *testing.T) {
 	}
 }
 
+func TestOpenRetainsGitLabInspectionFindings(t *testing.T) {
+	t.Parallel()
+	root := contentRepository(t, nil)
+	writeEngineFile(t, root, ".gitlab-ci.yml", "image: registry.example/app:latest\n", 0o600)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(policyEngine.PolicyModuleFindings, func(finding policy.Finding) bool {
+		return finding.Check == "supplyChain.gitLabImagePin" || finding.Check == "policy.tool" && finding.Subject == "gitlab"
+	}) {
+		t.Fatalf("findings = %+v", policyEngine.PolicyModuleFindings)
+	}
+}
+
 func TestDoctorAndCheckRejectStaleDesignDocumentation(t *testing.T) {
 	t.Parallel()
 	root := contentRepository(t, nil)
@@ -711,78 +726,6 @@ func TestMergeGateSuiteCommandsPreserveConfiguredKinds(t *testing.T) {
 	}
 }
 
-func TestTestPlanDoesNotExecuteSuites(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	writeEngineFile(t, root, "domain/model.go", "package domain\n", 0o600)
-	config := policy.Config{
-		Modules:      []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}},
-		ModuleByName: map[string]int{"domain": 0},
-		Tests: policy.Testing{Suites: []policy.TestSuite{
-			{Name: "domain-unit", Kind: "unit", Scope: "module", Cost: "quick", Modules: []string{"domain"}, RunOn: []string{"focused", "recommended", "full"}},
-			{Name: "repository-full", Kind: "integration", Scope: "repository", Cost: "standard", RunOn: []string{"full"}},
-			{Name: "domain-mutation", Kind: "mutation", Scope: "module", Cost: "expensive", Modules: []string{"domain"}, RunOn: []string{"supplemental"}},
-		}},
-	}
-	commandRunner := &recordingEngineRunner{}
-	policyEngine := Engine{Repository: repository.Repository{Root: root, PolicyRoot: root, Config: config}, Runner: commandRunner}
-	report, err := policyEngine.TestPlan("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(commandRunner.commands) != 0 {
-		t.Fatalf("planner executed suites: %v", commandRunner.commands)
-	}
-	if report.MergePolicy != nil {
-		t.Fatalf("no-base planner reported merge policy: %+v", report.MergePolicy)
-	}
-	if !strings.Contains(strings.Join(report.Notes, "\n"), "ordinary advice: full") {
-		t.Fatalf("plan notes = %v", report.Notes)
-	}
-	if strings.Contains(strings.Join(report.Notes, "\n"), "merge-gate --base") {
-		t.Fatalf("no-base planner claimed a merge-gate command: %v", report.Notes)
-	}
-	notes := strings.Join(report.Notes, "\n")
-	if !strings.Contains(notes, "supplemental") || !strings.Contains(notes, "test --supplemental") || !strings.Contains(notes, "domain-mutation") {
-		t.Fatalf("supplemental plan note missing: %v", report.Notes)
-	}
-	if len(report.Tables) != 1 || !strings.Contains(report.Tables[0].Title, "TEST LEVELS") {
-		t.Fatalf("test-level table = %+v", report.Tables)
-	}
-	seenLevels := map[string]bool{
-		"focused": false, "recommended": false, "full": false, "supplemental": false,
-	}
-	for _, row := range report.Tables[0].Rows {
-		if len(row) == 0 {
-			continue
-		}
-		for level := range seenLevels {
-			if strings.HasPrefix(row[0], level) {
-				seenLevels[level] = true
-			}
-		}
-	}
-	for level, seen := range seenLevels {
-		if !seen {
-			t.Fatalf("test-level table omitted %s: %v", level, report.Tables[0].Rows)
-		}
-	}
-	assertTestLevelHasSuites(t, report.Tables[0], "supplemental")
-	if width := tableWidth(report.Tables[0]); width > 80 {
-		t.Fatalf("test-level table width = %d, want <= 80", width)
-	}
-}
-
-func assertTestLevelHasSuites(t *testing.T, table Table, level string) {
-	t.Helper()
-	index := slices.IndexFunc(table.Rows, func(row []string) bool {
-		return len(row) > 0 && strings.HasPrefix(row[0], level)
-	})
-	if index < 0 || len(table.Rows[index]) < 2 || table.Rows[index][1] == "none" {
-		t.Fatalf("configured %s suites were reported as absent: %v", level, table.Rows)
-	}
-}
-
 func gitEngineOutput(t *testing.T, root string, arguments ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
@@ -892,6 +835,41 @@ func TestVerifyDoesNotRunSupplementalSuites(t *testing.T) {
 	}
 	if !slices.Contains(commandRunner.commands, "full") || slices.Contains(commandRunner.commands, "mutation") {
 		t.Fatalf("verify commands = %v", commandRunner.commands)
+	}
+}
+
+func TestSupplementalSuitesRunOnlyThroughExplicitTestSelection(t *testing.T) {
+	t.Parallel()
+	root := contentRepository(t, nil)
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	declareSupplementalMutation(&policyEngine.Repository.Config)
+	selection := repository.Selection{
+		Candidate: repository.CandidateDelta{AddedOrModified: []string{"content/data.json"}},
+		Files:     []string{"content/data.json"},
+	}
+	for name, request := range map[string]testpolicy.Request{
+		"changed":      {Changed: selection},
+		"supplemental": {Supplemental: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			commandRunner := &recordingEngineRunner{}
+			policyEngine.Runner = commandRunner
+			if _, err := policyEngine.Test(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			if name == "changed" {
+				if !slices.Contains(commandRunner.commands, "focused") || slices.Contains(commandRunner.commands, "mutation") {
+					t.Fatalf("changed test commands = %v", commandRunner.commands)
+				}
+				return
+			}
+			if !slices.Equal(commandRunner.commands, []string{"mutation"}) {
+				t.Fatalf("explicit supplemental test commands = %v", commandRunner.commands)
+			}
+		})
 	}
 }
 
@@ -1155,6 +1133,7 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	declareSupplementalMutation(&policyEngine.Repository.Config)
 	prepareValidBehaviorReviewReceipt(t, policyEngine, root)
 	commandRunner := &recordingEngineRunner{}
 	policyEngine.Runner = commandRunner
@@ -1169,6 +1148,9 @@ func TestMergeGateForcesFullWhenPolicyConfigurationChanges(t *testing.T) {
 		if !slices.Contains(commandRunner.commands, name) {
 			t.Fatalf("full merge gate omitted %q: %v", name, commandRunner.commands)
 		}
+	}
+	if slices.Contains(commandRunner.commands, "mutation") {
+		t.Fatalf("merge gate ran declared supplemental suite: %v", commandRunner.commands)
 	}
 }
 
@@ -1213,6 +1195,7 @@ func TestGateAlwaysReportsFullPolicyLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	declareSupplementalMutation(&policyEngine.Repository.Config)
 	commandRunner := &recordingEngineRunner{}
 	policyEngine.Runner = commandRunner
 	report, err := policyEngine.Gate(context.Background())
@@ -1226,6 +1209,9 @@ func TestGateAlwaysReportsFullPolicyLevel(t *testing.T) {
 		if !slices.Contains(commandRunner.commands, name) {
 			t.Fatalf("full gate omitted %q: %v", name, commandRunner.commands)
 		}
+	}
+	if slices.Contains(commandRunner.commands, "mutation") {
+		t.Fatalf("gate ran declared supplemental suite: %v", commandRunner.commands)
 	}
 }
 
@@ -1272,6 +1258,14 @@ func TestDependencyReviewUsesMergeBaseAndRendersChangeTable(t *testing.T) {
 	if len(commandRunner.commands) != 1 || !slices.Contains(commandRunner.commands, "offline-supply") {
 		t.Fatalf("commands = %v", commandRunner.commands)
 	}
+}
+
+func declareSupplementalMutation(config *policy.Config) {
+	config.Tests.RequiredSupplementalKinds = []string{"mutation"}
+	config.Tests.Suites = append(config.Tests.Suites, policy.TestSuite{
+		Name: "mutation", Kind: "mutation", Scope: "repository", Cost: "expensive",
+		Argv: []string{"true"}, RunOn: []string{"supplemental"},
+	})
 }
 
 func contentRepository(t *testing.T, excludes []string) string {

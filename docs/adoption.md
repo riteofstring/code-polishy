@@ -14,6 +14,9 @@ remains the detailed policy reference and is also linked from that runbook.
 Before editing config, list:
 
 - every executable language, manifest, lockfile, and package root;
+- every Python `.py` and `.pyi` file, each contained `pyproject.toml` project,
+  its `src` layout when present, nested project boundaries, and project-local
+  `.venv` directories;
 - modules that own meaningful concepts, not merely folders named `utils`;
 - dependency direction between those modules;
 - generated, vendored, archived, and build-output paths;
@@ -29,6 +32,14 @@ Before editing config, list:
 
 Inspect what existing green scripts actually select. A command name such as
 `quality` or `test` is not evidence that all packages are covered.
+
+For Python, treat the nearest contained `pyproject.toml` as the project owner.
+A nested project owns its own source and `.venv`; do not let an ancestor
+project absorb it. The shared inventory handles flat, `src`, regular-package,
+and namespace-package layouts. Record target-specific build or product checks,
+but remove any target Python architecture command: the built-in import graph
+enforces module direction. [Architecture Policy](policies/architecture.md)
+owns the exact resolution and coverage rules.
 
 ## 2. Lock the release
 
@@ -89,9 +100,11 @@ or deployment boundaries are often clearer as separate modules.
 The graph must be acyclic. If two modules depend on each other, find the shared
 concept owner or deepen them into one boundary; do not encode the cycle.
 
-For Go, JavaScript, and TypeScript, Code Polishy extracts imports and enforces
-the graph itself. For other languages, connect a target-native architecture
-checker through `checks` with the `architecture` capability.
+For Go, JavaScript, TypeScript, and Python, Code Polishy extracts imports and
+enforces the graph itself. Python source is assigned to its contained project
+before the graph is read, so a nested project and an ancestor with overlapping
+names do not share resolution. For other languages, connect a target-native
+architecture checker through `checks` with the `architecture` capability.
 
 ### Map current design rationale
 
@@ -170,9 +183,36 @@ an apparently valid empty result. See
 
 ## 5. Define scope narrowly
 
-- `scope.generated` remains discoverable and still receives formatting,
-  compiler/lint, tool-coverage, and dependency-direction checks. It skips only
-  edit-oriented text and complexity budgets.
+- `scope.generated` remains discoverable. Generated executable source receives
+  format validation, syntax/compiler, lint, dead-code, tool-coverage, and
+  dependency-direction checks, while `format` never rewrites generator-owned
+  bytes. It skips only edit-oriented text and complexity budgets.
+- `scope.data` is the non-rewrite category for hand-written product data. Use
+  narrow patterns that can match only `.json`, `.jsonc`, `.yaml`, or `.yml`, for
+  example:
+
+  ```json
+  {
+    "scope": {
+      "data": [
+        "product-data/**/*.json",
+        "product-data/**/*.jsonc",
+        "product-data/**/*.yaml",
+        "product-data/**/*.yml"
+      ]
+    }
+  }
+  ```
+
+  Data stays contained, owned, selected by tests and gates, UTF-8 and
+  syntax-validated. Configuration rejects patterns that overlap executable
+  source, custom-language source, generated or excluded paths, dependency
+  manifests, locks, tool configuration, CI, Dockerfiles, or other protected
+  control inputs. `format` leaves its bytes unchanged, and a target command
+  cannot run in the `format` profile while `scope.data` is declared. See
+  [Code Quality](policies/code-quality.md#hand-written-structured-data) for
+  the parse-only behavior.
+
 - `scope.exclude` is outside target selection. It is for dependencies, output,
   immutable vendor trees, or archives governed elsewhere.
 - `scope.entryPoints` names governed source something outside the repository
@@ -181,6 +221,16 @@ an apparently valid empty result. See
   directory, and `*.config.*` modules beside a package manifest are already
   entry points; declare only what those conventions cannot cover, and declare it
   exactly rather than as a broad pattern.
+- `scope.pythonDynamicReferences` is separate from path-level
+  `scope.entryPoints`. It declares only a Python symbol Vulture cannot reach
+  through imports or inferred PEP 621 `project.scripts`,
+  `project.gui-scripts`, or `project.entry-points.*`. Each item is an exact
+  `{project,module,symbol}` object: all fields are required, `project` is the
+  canonical repository-relative contained-project `pyproject.toml` path, and
+  `module` and `symbol` are identifier chains; wildcards are not allowed. A
+  stale or ambiguous reference fails instead of preserving a symbol broadly.
+  [Code Quality](policies/code-quality.md#python-ruff-vulture-and-ty) owns the
+  full Python reachability contract.
 - `scope.development` names governed source that never ships: build and tool
   configuration, scripts, and harnesses. Only that source and tests may import
   a package declared in `devDependencies`, so declare what the product does not
@@ -240,9 +290,15 @@ code-polishy doctor --strict
 The inventory notes show which shared modules were detected and why. The
 standard conditional behavior is:
 
-- Python source activates policy-owned Ruff formatting, linting, unused-code,
-  and C901 complexity checks plus policy-owned `ty` type checking. A target pins
-  and installs neither tool.
+- Python source activates policy-owned Ruff formatting, sealed `E4`, `E7`,
+  `E9`, and `F` lint, and C901 complexity; Vulture `2.16` full-project
+  dead-code analysis at fixed 60% confidence through carried CPython
+  `3.12.13+20260728` from python-build-standalone; and first-class `ty` type
+  checking. The shared project inventory assigns nested projects separately,
+  and a dependency-bearing project uses only its contained `.venv` for `ty`; a
+  missing environment produces a clear coverage finding instead of
+  ambient-Python behavior. A target pins and installs neither tool, its own
+  Python runtime, nor an architecture provider.
 - A target bearing JavaScript or TypeScript is formatted by the sealed,
   policy-owned JavaScript bundle; it pins and installs no formatter itself.
 - A target bearing JavaScript or TypeScript is linted by that same bundle
@@ -258,11 +314,18 @@ standard conditional behavior is:
 - A supported dependency graph adds policy-owned OSV scanning to the online
   vulnerability profile.
 
-Dead code is reported by that same bundle across the whole package tree a file
-belongs to; it pins and installs no analyzer either. A target declares entry
-points the built-in conventions cannot cover in `scope.entryPoints`, which is a
-fact about the repository rather than analyzer configuration. This is imported
-policy, not a target-authored adapter.
+`ty` reports each diagnostic as its own exact finding. For brownfield debt,
+copy that finding's check, path, and fingerprinted subject into one owned,
+justified, expiring exception; do not suppress the command or use an error-count
+ceiling. See
+[Python Ruff, Vulture, and ty](policies/code-quality.md#python-ruff-vulture-and-ty).
+
+JavaScript and TypeScript dead code comes from their sealed bundle across the
+whole package tree a file belongs to; a target pins and installs no analyzer.
+Python dead code comes only from Vulture. Its PEP 621 entry points are inferred;
+use exact `scope.pythonDynamicReferences` only for dynamic symbols those facts
+cannot name, rather than substituting `scope.entryPoints` or a Vulture ignore.
+This is imported policy, not a target-authored adapter.
 
 An incorrect activation may be disabled only by an exact-root
 `policyModules.overrides` entry with `mode: "disabled"`, `reason`, `owner`, and
@@ -279,9 +342,10 @@ check declaring one of those for source Code Polishy already decides is refused
 rather than run beside the built-in one. Each command declares what it proves,
 which modules it covers, and in which profile it may run:
 
-Remove target-selected Python complexity and typecheck providers when adopting
-this release. Ruff C901 and `ty` own those capabilities directly; no legacy
-provider or transition layer runs beside them.
+Remove target-selected Python architecture, complexity, typecheck, and dead-code
+providers when adopting this release. Built-in Ruff graph evidence, Ruff C901,
+Vulture, and `ty` own those capabilities directly; no legacy provider or
+transition layer runs beside them.
 
 ```json
 {
@@ -325,8 +389,11 @@ Common capabilities are:
   itself.
 - `dependency-policy` and `release-age` when the engine does not have a shared
   module for the target package ecosystem.
-- `security-monitoring` for non-GitHub CI that externally schedules the online
-  security profile at least weekly.
+- `security-monitoring` for GitLab or another non-GitHub CI that proves its
+  server-side schedule runs the online security profile at least weekly. It is
+  an external provider, not a claim that static pipeline YAML can prove
+  cadence; use the success and unavailable-evidence contract in
+  [Portability and External Inputs](policies/portability.md#external-security-monitoring-evidence).
 
 For a dependency ecosystem whose manifest is not recognized by the engine,
 add `custom-dependencies` to the owning module's `capabilities`. This makes all
@@ -354,10 +421,10 @@ it is never high risk acceptance. General exceptions cannot waive either
 control, and critical, unknown-severity, or known-exploited findings remain
 blocking.
 
-Go and Shell have built-in quality coverage. Python and common Node stacks gain
-the conditional coverage above. Any capability still shown as missing needs a
-module-scoped provider; a generic parser should not pretend to understand an
-unknown framework's compiler, aliases, generated modules, or dependency graph.
+Go, Shell, Python, and common Node stacks gain the built-in or conditional
+coverage above. Any capability still shown as missing needs a module-scoped
+provider; a generic parser should not pretend to understand an unknown
+framework's compiler, aliases, generated modules, or dependency graph.
 
 ## 8. Declare container artifacts
 
@@ -453,6 +520,14 @@ with `tests.requiredSupplementalKinds: ["mutation"]`:
 }
 ```
 
+Declaring a supplemental suite or `tests.requiredSupplementalKinds` records
+evidence required for a selected hardening event; neither declaration schedules
+the suite. Initial adoption, ordinary edits, changed tests, checkpoint and
+merge gates, guidance synchronization, and a Code Polishy lock upgrade leave
+supplemental hardening `NOT RUN`. Run it only when the caller explicitly
+requests it, a checked-in workflow explicitly invokes it for that event, or the
+release checklist selects a stable release candidate.
+
 Every module needs a focused suite. Content repositories can use schema, link,
 cross-reference, or publication-contract validation instead of conventional
 unit tests. Every repository also needs a full repository suite.
@@ -471,10 +546,14 @@ code-polishy test --suite browser-workflows
 code-polishy test-levels --base origin/main
 code-polishy test --recommended --base origin/main
 code-polishy test --all
-code-polishy test --supplemental
 code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 code-polishy merge-gate --base origin/main
 ```
+
+Use `code-polishy test --supplemental` only for a caller-selected hardening
+stage, an event-specific checked-in workflow, or the stable-candidate release
+checklist. It is not a routine command merely because supplemental evidence is
+declared.
 
 For a candidate containing only ordinary Markdown, run
 `code-polishy format --git-changes` and skip application tests. The final merge
@@ -504,9 +583,10 @@ break unchanged delivery code. `--recommended` adds matching quick and standard
 repository suites. `--all` runs every suite in the full profile, including
 expensive browser/visual/E2E suites. It intentionally excludes supplemental
 mutation and risk analysis. Run `code-polishy test --supplemental` as a
-separate final-hardening stage after ordinary verification when the caller or
-checked-in workflow requires it. Credentialed, destructive, and live-provider
-probes remain external approval gates.
+separate hardening stage only when the caller explicitly requests it, a
+checked-in workflow explicitly invokes it for that event, or the release
+checklist selects a stable release candidate. Credentialed, destructive, and
+live-provider probes remain external approval gates.
 
 For browser and visual suites, use the target's real Chrome/Chromium, Electron,
 Playwright, screenshot-diff, or hosted visual system. Keep deterministic browser
@@ -638,9 +718,9 @@ without making the selection a human approval prompt. Its test reminder keeps
 the merge-wide count and, when the current candidate has a valid checkpoint
 receipt, also shows the latest task slice and its base.
 `test-levels` remains a read-only diagnostic, and it lists supplemental quality
-separately. Credentialed, destructive, production-mutating, and live-provider
-probes remain typed external approval gates. Direct profile commands always
-mean their complete declared profile, not a best-effort subset.
+separately without selecting it. Credentialed, destructive, production-mutating,
+and live-provider probes remain typed external approval gates. Direct profile
+commands always mean their complete declared profile, not a best-effort subset.
 
 ## 13. Upgrade intentionally
 
@@ -648,6 +728,8 @@ The [AI-Agent Setup and Adoption upgrade procedure](ai-adoption.md#upgrades) is
 the authority for both agent-driven and manual upgrades. Select and verify one
 exact annotated version tag, install that release, read the intervening
 `CHANGELOG.md` entries, rewrite `.code-polishy.lock.json` from the exact release,
-adapt the target configuration, and run the required verification. Never
-install from floating `main` or let a check select a release the lock does not
+adapt the target configuration, and run the required ordinary verification. A
+lock upgrade leaves supplemental hardening `NOT RUN` unless the caller, an
+event-specific checked-in workflow, or the stable-candidate release checklist
+selects it. Never install from floating `main` or let a check select a release the lock does not
 name.

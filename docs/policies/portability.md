@@ -79,6 +79,41 @@ version, schema, capability file, required roots, or another stable product
 fact. Merely checking that a directory or `package.json` exists is insufficient
 when an unrelated checkout could satisfy that shape.
 
+## External security-monitoring evidence
+
+GitLab pipeline schedules live on the GitLab server, not in
+`.gitlab-ci.yml`. Checked-in YAML can prove static image and include pins; it
+cannot prove that a schedule exists, is enabled, or has run. A GitLab repository
+with dependency graphs therefore declares one `security-monitoring` provider in
+the `security` profile: a `checks` command with
+`provides: ["security-monitoring"]` and `runOn: ["security"]`. This is an
+external evidence boundary, not a static-YAML heuristic.
+
+The provider succeeds only when it can prove all of these facts for the target
+repository:
+
+- an enabled server-side schedule invokes the online Code Polishy security
+  profile no less often than weekly;
+- the scheduled job uses the repository's locked Code Polishy release;
+- the latest required scheduled run completed successfully within the allowed
+  age; and
+- the schedule, job, and run belong to the intended repository rather than a
+  similarly named project or unrelated pipeline.
+
+Missing credentials, denied API access, an unavailable GitLab API, absent or
+unreadable schedule evidence, or unavailable run evidence is not success. The
+provider exits nonzero and names the unavailable evidence in its command output
+and retained log so Code Polishy reports the provider failure. It must never
+return success merely because a checked-in `.gitlab-ci.yml` looks scheduled.
+
+The provider's GitLab API call is credentialed live work. Keep credentials out
+of configuration and logs, use the least authority needed to read the schedule
+and runs, and invoke that probe only through an explicit external approval
+gate. A repository using another managed scheduler documents an equivalent
+provider with the same success and unavailable-evidence behavior. See
+[Supply-chain Policy](supply-chain.md#gitlab-ci-control-inputs) for the static
+GitLab controls that remain locally enforceable.
+
 ## Test placement and cost
 
 Literal scanning and declaration coverage are core deterministic checks. They

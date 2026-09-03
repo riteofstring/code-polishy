@@ -2,10 +2,40 @@
 
 ## Unreleased
 
-## 0.20.1 - 2026-09-02
+## 0.21.0 - 2026-09-02
 
 - Keep a language-pack staging root writable through its atomic rename, then
   seal the published root so pack installation works on macOS 15.
+- Add one validated Python project inventory for flat, `src`, namespace, and
+  nested layouts, with built-in module-direction enforcement and fail-closed
+  import coverage.
+- Split Python lint from dead-code analysis: seal Ruff `E4`, `E7`, `E9`, and
+  `F` lint plus C901, use policy-owned Vulture 2.16 at fixed 60% confidence
+  through carried CPython `3.12.13+20260728` from python-build-standalone,
+  infer PEP 621 entry points, and accept only exact validated
+  `scope.pythonDynamicReferences`; report `ty` diagnostics separately and
+  select each dependency-bearing project's contained `.venv` explicitly.
+- Accept PEP 508 Git dependencies only at full commits, validate build-system
+  requirements, and require matching Git source and commit evidence in
+  `uv.lock` without inventing registry facts.
+- Govern GitLab CI roots and recursive local fragments as control inputs,
+  require immutable images and external includes, recognize built-in template
+  includes separately, and define the external weekly-monitoring evidence
+  contract that static YAML cannot prove.
+- Recognize shell source by its shebang when an unfamiliar extension, including
+  `.sbatch` and `.sbatch.template`, has no other language owner.
+- Add `scope.data` for parse-validated hand-written JSON and YAML whose bytes
+  formatting never rewrites, while keeping generated executable source under
+  the documented quality and architecture checks.
+- Keep supplemental mutation and risk suites out of ordinary adoption,
+  development, lock upgrades, and gates; run them only for an explicit trigger
+  or once on a frozen release candidate.
+- Make stable-candidate supplemental retry evidence composable: run all suites
+  once, then rerun only failed or invalidated suites; reserve full repeats for
+  shared mutation infrastructure, toolchain, selection, or unbounded impact.
+- Keep canonical agent guidance focused on repository-specific commands, scope
+  boundaries, and expensive-operation warnings; leave longer rationale in
+  on-demand policy documents.
 
 ## 0.20.0 - 2026-09-02
 
@@ -71,9 +101,7 @@
 - Advance the exact release manifest contract to version 3 and record the
   carried `ty` executable.
 
-## 0.18.0 - 2026-08-26
+## 0.18.0 - 2026-08-27
 
 - Apply the 30-day admission policy to standalone third-party executable pins,
   with fixed upstream timestamp resolvers and exact expiring assessments.
-
-## 0.17.0 - 2026-08-26

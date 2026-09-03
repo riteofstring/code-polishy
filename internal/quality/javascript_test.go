@@ -144,7 +144,7 @@ func TestJavaScriptFormatWriteReportsOnlyUndecidedFiles(t *testing.T) {
 	}
 }
 
-func TestJavaScriptFormatSelectsOnlyTheGovernedFiles(t *testing.T) {
+func TestJavaScriptFormatChecksGeneratedExecutableSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"app/schema.generated.ts"}
@@ -164,9 +164,43 @@ func TestJavaScriptFormatSelectsOnlyTheGovernedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `"paths":["app/main.ts","app/style.css","docs/guide.md","package.json"]`
+	want := `"paths":["app/main.ts","app/schema.generated.ts","app/style.css","docs/guide.md","package.json"]`
 	if !strings.Contains(string(request), want) {
 		t.Fatalf("selection = %s, want %s", request, want)
+	}
+}
+
+func TestJavaScriptFormatWritePreservesGeneratedAndDeclaredData(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"app/schema.generated.ts"}
+	repo.Config.Scope.Data = []string{"data/**/*.json"}
+	policyRoot, observed := fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+	repo.PolicyRoot = policyRoot
+	writeQualityFile(t, repo.Root, "app/main.ts", "export {}\n")
+	writeQualityFile(t, repo.Root, "app/schema.generated.ts", "export {}\n")
+	data := "{  \"identity\": \"preserve\"  }\n"
+	writeQualityFile(t, repo.Root, "data/identity.json", data)
+
+	if findings := JavaScriptFormatWrite(t.Context(), repo, []string{"app/main.ts", "app/schema.generated.ts", "data/identity.json"}); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
+	}
+	request, err := os.ReadFile(observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(request), `"paths":["app/main.ts"]`) {
+		t.Fatalf("write selection = %s", request)
+	}
+	if strings.Contains(string(request), "schema.generated.ts") || strings.Contains(string(request), "identity.json") {
+		t.Fatalf("write selected a protected path: %s", request)
+	}
+	preserved, err := os.ReadFile(filepath.Join(repo.Root, "data", "identity.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(preserved) != data {
+		t.Fatalf("data bytes changed: %q", preserved)
 	}
 }
 
@@ -343,7 +377,7 @@ func TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot(t *testing.T) 
 	}
 }
 
-func TestJavaScriptLintSelectsOnlyGovernedSource(t *testing.T) {
+func TestJavaScriptLintChecksGeneratedSourceWithoutComplexityBudget(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"app/schema.generated.ts"}
@@ -360,9 +394,25 @@ func TestJavaScriptLintSelectsOnlyGovernedSource(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	requests := observedRequestLines(t, observed)
-	want := `"paths":["app/component.tsx","app/legacy.cjs","app/main.ts"]`
-	if len(requests) != 1 || !strings.Contains(requests[0], want) {
-		t.Fatalf("requests = %v, want %s", requests, want)
+	generated := `"paths":["app/schema.generated.ts"]`
+	ordinary := `"paths":["app/component.tsx","app/legacy.cjs","app/main.ts"]`
+	if len(requests) != 2 || !strings.Contains(strings.Join(requests, "\n"), generated) ||
+		!strings.Contains(strings.Join(requests, "\n"), ordinary) {
+		t.Fatalf("requests = %v, want generated %s and ordinary %s", requests, generated, ordinary)
+	}
+}
+
+func TestJavaScriptLintSkipsComplexityFindingsForGeneratedSource(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"app/schema.generated.ts"}
+	result := `{"findings":[{"path":"app/schema.generated.ts","line":1,"column":1,"rule":"complexity","message":"too complex"},{"path":"app/schema.generated.ts","line":2,"column":1,"rule":"no-undef","message":"missing name"}],"comments":[],"unsupported":[]}`
+	repo.PolicyRoot, _ = fakeFileBundle(t, result)
+	writeQualityFile(t, repo.Root, "app/schema.generated.ts", "export {}\n")
+
+	findings := JavaScriptLintFindings(t.Context(), repo, []string{"app/schema.generated.ts"})
+	if len(findings) != 1 || findings[0].Check != "quality.lint" || findings[0].Subject != "no-undef" {
+		t.Fatalf("findings = %+v", findings)
 	}
 }
 
@@ -479,7 +529,7 @@ func TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"app/generated/api.ts"}
-	policyRoot, observed := fakeFileBundle(t, typeCheckResult("app/main.ts"))
+	policyRoot, observed := fakeFileBundle(t, typeCheckResult("app/generated/api.ts", "app/main.ts"))
 	repo.PolicyRoot = policyRoot
 	writeQualityFile(t, repo.Root, "tsconfig.json", "{}\n")
 	files := []string{"app/main.ts", "app/legacy.js", "app/generated/api.ts", "docs/guide.md"}
@@ -490,7 +540,7 @@ func TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	requests := observedRequestLines(t, observed)
-	if len(requests) != 1 || !strings.Contains(requests[0], `"paths":["app/main.ts"]`) {
+	if len(requests) != 1 || !strings.Contains(requests[0], `"paths":["app/generated/api.ts","app/main.ts"]`) {
 		t.Fatalf("requests = %v", requests)
 	}
 }

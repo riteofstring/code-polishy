@@ -37,10 +37,18 @@ version before staging a release.
   `eslint-plugin-jsx-a11y`, TypeScript, Knip, `js-yaml`, and `@types/node`.
   `tools/javascript/pnpm-lock.yaml` locks the complete graph and
   `tools/javascript_bundle_inventory.txt` records installed packages and
-  licenses.
+  licenses. Its bounded `js-yaml` operation reads GitLab control files as data;
+  it never executes pipeline configuration or project code.
 - ShellCheck, Ruff, `ty`, OSV-Scanner, and Gremlins are downloaded from their
   official release origins and checked against repository-owned versions and
-  archive digests.
+  archive digests. Ruff supplies isolated Python lint, complexity, and
+  import-graph facts; `ty` supplies structured Python type diagnostics.
+- The release carries Vulture `2.16` and the pinned CPython
+  `3.12.13+20260728` distribution from python-build-standalone as separate
+  policy inputs. The Vulture PyPI wheel is checksum-verified and unpacked into
+  the carried runtime. Their exact pins and checksum inventories ship with the
+  release, while the online supply-chain gate resolves their release age from
+  fixed upstream metadata services; neither comes from a target environment.
 - Trivy is copied from an exact official image digest into the minimal scanner
   image. `artifact-security/scanner-policy.json` records its source,
   configuration, and integrity digests; `artifact-security/scanner.openvex.json`
@@ -54,8 +62,18 @@ keep the sealed bundle portable and minimal.
 
 ## Implementation boundaries
 
-- Go is the only engine runtime. Python remains a supported target ecosystem
-  through the carried Ruff and `ty` executables.
+- Go remains the policy-engine implementation runtime. For Python policy work,
+  the release carries CPython `3.12.13+20260728` from python-build-standalone
+  to run Vulture `2.16`; Code Polishy never executes target Python to discover
+  imports, select a project, or perform dead-code analysis.
+- The repository boundary builds one validated Python project inventory from
+  contained `pyproject.toml` files and reuses it for dependency, quality, and
+  architecture work. A project-local `.venv` is passed only to `ty` explicitly
+  when dependencies require it; Vulture always uses carried CPython. Ambient
+  Python paths and environments are not tool provenance.
+- Python manifests and `uv.lock` are target-owned inputs. Exact Git repository
+  and commit facts remain source facts, not a fabricated PyPI age or
+  vulnerability result when registry evidence is unavailable.
 - Generic JavaScript quality checks run through Code Polishy's sealed bundle,
   independent of target-local development dependencies.
 - Target-specific commands, paths, external inputs, and exceptions live in the

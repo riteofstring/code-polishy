@@ -19,9 +19,15 @@ The default policy is:
 
 Generated, vendored, lock, and build-output files are excluded from
 edit-oriented text and complexity budgets. Generated executable source still
-receives formatting, syntax/compiler, lint, dead-code, coverage, and module
-direction checks. Project-specific generated paths belong in
-`scope.generated`; do not hide production code in that category.
+receives format validation, syntax/compiler, lint, dead-code, coverage, and
+module-direction checks, while format writers leave generator-owned bytes
+alone. Project-specific generated paths belong in `scope.generated`; do not
+hide production code in that category.
+
+Hand-written structured data is a separate governed category. `scope.data`
+keeps its identity-sensitive bytes out of style formatting and formatting
+writes while retaining syntax, schema, security, product-provider, ownership,
+test, and gate coverage.
 
 Markdown (`.md` and `.markdown`, case-insensitive) is excluded from the file
 length budget by default because document length is not evidence of a code
@@ -78,6 +84,22 @@ bound — is a specific coverage finding, never a silent pass. A
 target without JavaScript or TypeScript launches the bundle only when Markdown
 is selected and formats its remaining file types with configured providers.
 
+### Hand-written structured data
+
+`scope.data` names hand-written `.json`, `.jsonc`, `.yaml`, and `.yml` product
+inputs whose bytes may be identity-sensitive. The category is intentionally
+narrow: configuration rejects executable source, dependency and lock inputs,
+tool configuration, CI, Dockerfiles, other policy-sensitive controls, and any
+overlap with `scope.exclude` or `scope.generated`.
+
+Declared data remains a normal governed file. It must be contained, regular,
+size-bounded, UTF-8 text and is parse-validated without a rewrite. It remains
+visible to module ownership, change selection, declared schema/security/product
+providers, tests, and gates. `check` reports malformed data, while every
+formatting path leaves its bytes unchanged. `scope.data` is therefore not an
+exclusion or a way to evade product validation. The configuration patterns and
+format-provider boundary are defined in [Adopting Code Polishy](../adoption.md#5-define-scope-narrowly).
+
 ## Source comments and docstrings
 
 `quality.allowComments` is a boolean and defaults to `true`. When it is omitted
@@ -109,7 +131,9 @@ Where a directive has a required location, matching its bytes alone is
 insufficient.
 
 - A first-byte shebang, `#!<non-empty command>`, where the source language
-  recognizes a shebang.
+  recognizes a shebang. A shell shebang also classifies a file whose extension
+  is otherwise unknown, including multi-extension templates such as
+  `job.sbatch.template`; a known built-in extension keeps its normal language.
 - Python encoding declarations on line 1, or line 2 only when line 1 is blank
   or begins with a comment. The entire comment must match one of these forms,
   where the character classes are literal regular-expression syntax:
@@ -215,11 +239,90 @@ for the mapping schema.
   The run emits nothing into the target tree.
 - Go runs `go vet` with the pinned Go toolchain.
 - Shell runs `bash -n` and the policy-pinned ShellCheck.
-- Python automatically activates policy-owned Ruff formatting, correctness,
-  unused-code, and C901 complexity checks. It also activates policy-owned `ty`
-  type checking with normal diagnostic severity. Python architecture, plus
-  Rust, Java, unknown frameworks, content schemas, SQL, protobuf, and other
-  ecosystems use a target-native provider when no shared module exists.
+- Python automatically activates policy-owned Ruff formatting, sealed lint, and
+  C901 complexity checks; Vulture dead-code analysis; and `ty` type checking
+  with normal diagnostic severity. Python architecture is built in and needs no
+  target-native provider. Rust, Java, unknown frameworks, content schemas, SQL,
+  protobuf, and other ecosystems use a target-native provider when no shared
+  module exists.
+
+### Python Ruff, Vulture, and ty
+
+Python quality uses the same project inventory as Python architecture. Every
+selected `.py` and `.pyi` file must be assigned to one contained project; a
+nested project is analyzed separately. A missing project, malformed inventory,
+escaping path, unreadable input, omitted tool output, or malformed structured
+tool result is a coverage finding, never a clean result.
+
+Ruff has three policy-owned boundaries:
+
+1. An isolated lint baseline runs `E4`, `E7`, `E9`, and `F` with `noqa`
+   ignored. Its findings, including `F` unused-import diagnostics, are lint;
+   they are not Python dead-code reachability findings.
+2. An isolated C901 pass applies Code Polishy's Python complexity ceiling and
+   also ignores `noqa`.
+3. A separate target-configured Ruff pass may add repository rules and style
+   choices, but cannot disable, exclude, or alter either managed pass.
+
+The policy chooses the exact governed files for every pass and parses each
+managed diagnostic into a normal finding. A target Ruff configuration can make
+the target pass stricter; it cannot weaken the sealed lint or complexity
+baseline.
+
+Vulture `2.16` is the sole Python dead-code provider. It analyzes the full
+governed contained project at fixed 60% confidence through the release-carried
+CPython `3.12.13+20260728` from python-build-standalone, rather than a target
+or ambient Python installation. Target Vulture configuration is ignored.
+Missing, unreadable, malformed, or incomplete analysis evidence is a coverage
+finding, never a clean result. Generated Python remains governed by this
+analysis; generated classification does not suppress dead-code coverage.
+
+Vulture infers exact reachable symbols from PEP 621 `project.scripts`,
+`project.gui-scripts`, and every `project.entry-points.*` table. For a symbol
+reached dynamically rather than through a static import or those conventions,
+use optional `scope.pythonDynamicReferences`. Each item requires all three
+exact fields, with no wildcards:
+
+```json
+{
+  "scope": {
+    "pythonDynamicReferences": [
+      {
+        "project": "services/api/pyproject.toml",
+        "module": "service.plugins",
+        "symbol": "load"
+      }
+    ]
+  }
+}
+```
+
+`project` is a canonical repository-relative contained-project manifest path;
+`module` and `symbol` are exact Python identifier chains. Duplicates, globs, and
+other patterns are invalid. Every declared or inferred reference must resolve to
+one current project, module, and symbol; a stale or ambiguous reference fails
+rather than becoming a broad ignore.
+`scope.entryPoints` remains a path-level reachability declaration and cannot
+substitute for this exact Python symbol contract.
+
+`ty` runs with the release-owned configuration and structured output. Each
+diagnostic becomes one `quality.typecheck` finding with the contained path,
+reported line and column, rule, bounded message, and a subject of the form
+`<rule>:<sha256>`. The digest covers that exact diagnostic identity, so an
+exception copied from one finding matches only that finding. Use the central
+exception contract with the exact check, path, and subject; remove it when the
+diagnostic is fixed. A count ceiling is not a substitute: a new error must not
+be hidden by fixing another one.
+
+For a project with any declared dependency, `ty` receives only that project's
+validated `<project>/.venv` through its explicit Python option. A missing,
+escaping, malformed, or interpreter-less environment produces one actionable
+`quality.typecheckCoverage` finding for the project instead of an
+unresolved-import cascade. A dependency-free project uses the sealed
+dependency-free analysis. Ambient `VIRTUAL_ENV`, `PYTHONPATH`, shell startup,
+and executable lookup do not decide the environment.
+That project-local `.venv` is only `ty`'s dependency-resolution input; it never
+selects Vulture's interpreter.
 
 Do not call a repository type-safe because JavaScript syntax parses or because
 only a small handpicked directory is included. Production source should be
@@ -264,7 +367,8 @@ surface, confuses tools and agents, and preserves superseded behavior.
   how it is spelled, so an import that leaves the repository — including through
   a link — reads as absent and the source only it reaches is reported as
   unreachable rather than kept alive by a tree the repository does not contain.
-- Python activates Ruff's unused-code checks automatically. Other languages
+- Python dead-code analysis is Vulture `2.16` at the fixed 60% confidence
+  threshold described above. Ruff `F` remains sealed lint only. Other languages
   need an explicit project command where a reliable tool is available.
 - Delete unused files, exports, dependencies, scripts, routes, config, docs,
   aliases, and tests in the same change that replaces them.
@@ -275,9 +379,10 @@ Generated entry points, plugin discovery, reflection, framework conventions,
 and runtime-loaded assets are reachable without an import. Code Polishy treats
 every test file, every `index`, `main`, or `cli` module at a package root or its
 `src` directory, and every `*.config.*` module beside a package manifest as an
-entry point. Declare anything else in `scope.entryPoints`, which is a fact about
-the repository rather than analyzer configuration. Prefer an exact entry
-declaration over a broad ignore.
+entry point. Declare anything else in path-level `scope.entryPoints`, which is a
+fact about the repository rather than analyzer configuration. Python dynamic
+symbols use the stricter `scope.pythonDynamicReferences` contract above. Prefer
+an exact declaration over a broad ignore.
 
 ## File length
 

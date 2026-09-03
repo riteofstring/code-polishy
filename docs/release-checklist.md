@@ -23,15 +23,23 @@ pushes, or installs state.
    optional skip or validate the exact selected receipt; it runs once for the
    unchanged candidate. Follow the [behavior-review
    workflow](policies/behavior-review.md) rather than creating an intent summary
-   during release preparation. Then run
-   `code-polishy test --supplemental` as this repository's separate
-   release-hardening stage. Credentialed, destructive,
+   during release preparation. After the candidate has stopped changing, run
+   `code-polishy test --supplemental` once as the first stable candidate's
+   separate release-hardening stage. This explicit checklist event is the
+   trigger; declared suites and `tests.requiredSupplementalKinds` alone do not
+   schedule it. After a failure, rerun only failed suites and passed suites
+   invalidated by changes to their tested production files or tests, or their
+   own commands or configuration. Fresh exact `code-polishy test --suite`
+   evidence composes with still-valid passed suites. Repeat every supplemental
+   suite only when shared mutation infrastructure, toolchain, or selection
+   changes, or the impact cannot be bounded. Credentialed, destructive,
    production-mutating, and live-provider probes remain typed external approval
    gates.
    Fast-forwarding a branch, running preflight, creating the annotated tag,
    installing the release, or updating a target lock does
-   not invalidate that result. Rerun the gate only after the candidate commit
-   changes.
+   not invalidate that result. A later candidate source or policy change
+   requires a fresh gate and invalidates supplemental evidence only under the
+   preceding retry rule.
    The unchanged candidate must also pass the native CI lanes on Ubuntu, macOS,
    and Windows. Windows runs the executable, process-containment, journal-lock,
    optional and selected installed behavior-review workflows in PowerShell
@@ -63,12 +71,13 @@ pushes, or installs state.
    move or reuse a published version tag; publish a new patch version for every
    correction.
 6. Exercise the public installation contract from fresh shallow clones of the
-   exact tag. On Linux or macOS, acquire the pinned tools and run
-   `./scripts/install.sh`. On Windows x64, acquire the pinned tools and run
-   `.\scripts\install.ps1`. Confirm each installation reports the same release
-   identity while its manifest carries the correct host-specific entries. The
-   unchanged candidate's native CI run is acceptable Windows evidence; retain
-   its URL with the release evidence. No release asset publication step exists.
+   exact tag. On Linux or macOS, run `./tools/install-policy-tools.sh` and then
+   `./scripts/install.sh`. On Windows x64, run
+   `.\tools\install-policy-tools.ps1` and then `.\scripts\install.ps1`. Confirm
+   each installation reports the same release identity while its manifest
+   carries the correct host-specific entries. The unchanged candidate's native
+   CI run is acceptable Windows evidence; retain its URL with the release
+   evidence. No release asset publication step exists.
 7. Prove an installed candidate before the public lock cutover by writing a
    temporary lock with its release engine, then run
    `./scripts/test-installed-release.sh --prefix PREFIX --lock LOCK`. This

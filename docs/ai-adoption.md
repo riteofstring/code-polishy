@@ -51,14 +51,15 @@ Adoption is complete only when:
   repository and declared application capabilities;
 - every external input has explicit ownership, resolution precedence,
   compatibility diagnostics, and quick/full behavior evidence;
-- declared local supplemental suites are executable and pass as a separately
-  recorded local hardening stage;
+- declared local supplemental suites are configured as separate hardening
+  evidence, with status `NOT RUN` unless an explicit hardening trigger selects
+  them;
 - strict doctor and the ordinary gate pass, or a genuine blocker is reported
   precisely;
 - completed task-owned changes are committed unless the caller explicitly
   requests an uncommitted handoff;
 - the final handoff names the locked release, commands run, findings repaired,
-  local supplemental hardening, and any remaining external action.
+  supplemental hardening status, and any remaining external action.
 
 A config that merely parses is not an adoption. A green placeholder command is
 not evidence.
@@ -79,7 +80,7 @@ Present at least these choices:
 | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source comments (`quality.allowComments`)                                     | `true`                                            | Keep `true` for human-written code or carefully curated existing comments. Recommend `false` only for a repository whose code is written and read entirely by AI and whose durable rationale belongs in mapped design documents. State that choosing `false` makes existing prose comments blocking before changing them. |
 | Adaptive application merge gate (`verification.mergeGate.recommendedModules`) | Omitted, so application changes use the full gate | Configure it only when read-only inventory identifies clearly bounded content modules that can safely use the recommended lane; shared escalation rules still force full when impact expands.                                                                                                                             |
-| Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost.                                                                                                                                                                  |
+| Supplemental mutation or risk suites                                          | None                                              | Keep the default during initial adoption unless the repository already requires a supported suite or the owner deliberately chooses the additional cost; a declaration remains `NOT RUN` until an explicit hardening trigger selects it.                                                                                  |
 | Gherkin methodology                                                           | Do not introduce it                               | Preserve and execute existing governed `.feature` files. Recommend adding Gherkin only when the owner wants executable behavior specifications as a working method.                                                                                                                                                       |
 
 Write the selected `allowComments` value even when it is `true`, so a new
@@ -88,10 +89,11 @@ answers, continue installation, configuration, repair, verification, and commit
 work without asking for permission at each step.
 
 Do not present mandatory or fact-triggered controls as optional. Python Ruff
-complexity, `ty` type checking, formatting, ordinary tests, dependency policy,
-and vulnerability checks activate automatically. Modules, capabilities,
-external inputs, artifact targets, product-input Markdown, and current design
-mappings describe repository facts; declare them whenever those facts exist.
+lint and complexity, Vulture dead-code analysis, `ty` type checking, formatting,
+ordinary tests, dependency policy, and vulnerability checks activate
+automatically. Modules, capabilities, external inputs, artifact targets,
+product-input Markdown, and current design mappings describe repository facts;
+declare them whenever those facts exist.
 Conditional policy modules and their exact, expiring overrides are policy
 mechanisms, not setup preferences. Agent reviews and task sessions remain
 optional workflows selected only when requested or operationally applicable.
@@ -311,8 +313,8 @@ ordinary full behavior suite as described in
 ## 5. Reuse policy-owned tools and add only project-specific providers
 
 Allow source and dependency evidence to activate the shared Go, Shell, Ruff,
-`ty`, Node/TypeScript, React, Electron, and OSV behavior. Do not copy equivalent
-commands into target JSON.
+Vulture, `ty`, Node/TypeScript, React, Electron, and OSV behavior. Do not copy
+equivalent commands into target JSON.
 
 Add target `checks` only for facts that cannot be shared safely, such as:
 
@@ -328,10 +330,11 @@ the modules and capability it covers, have a bounded timeout, and fail when its
 evidence is missing. It must not auto-install packages during a policy check.
 
 The installed release supplies the Go toolchain, ShellCheck, staticcheck,
-govulncheck, Ruff, `ty`, OSV-Scanner, and the sealed JavaScript tooling. Do not
-add target-local copies of those tools or ask a target dependency to satisfy
-shared coverage. A missing or corrupted shared tool means the locked release
-must be installed or repaired; it is not a target dependency gap.
+govulncheck, Ruff, Vulture, its carried CPython runtime, `ty`, OSV-Scanner, and
+the sealed JavaScript tooling. Do not add target-local copies of those tools or
+ask a target dependency to satisfy shared coverage. A missing or corrupted
+shared tool means the locked release must be installed or repaired; it is not a
+target dependency gap.
 
 Use existing target tools where honest for genuinely project-specific
 providers. If such a provider requires a new or updated target dependency,
@@ -392,14 +395,14 @@ When a mutation suite is deliberately declared, it must:
 - restore or discard all mutated state reliably.
 
 Declaring the suite makes it policy-owned local hardening. The ordinary gate
-deliberately excludes supplemental work. This direct adoption workflow runs
-the declared local stage separately after the ordinary gate.
+deliberately excludes supplemental work. A declaration or
+`tests.requiredSupplementalKinds` does not make initial adoption run it.
 
 If governed `.feature` files exist, connect them to a real full acceptance suite
 so the specifications execute. Supplemental acceptance-data mutation remains
-optional local hardening and, when declared, follows the same separate direct
-execution. Credentialed, destructive, production-mutating, and live-provider
-probes remain external approval gates. Do not keep decorative Gherkin.
+optional local hardening and, when selected, follows the same explicit trigger
+rule. Credentialed, destructive, production-mutating, and live-provider probes
+remain external approval gates. Do not keep decorative Gherkin.
 
 ## 7. Install canonical agent guidance and workspace hygiene
 
@@ -450,10 +453,11 @@ The resulting guidance should make these execution boundaries clear:
   conversation, red/green proofs, and a receipt before either checkpoint or
   merge gate; both gates independently rerun cited proofs, and the primary agent
   or harness keeps the subagent packet-only and preserves report custody;
-- local supplemental mutation and risk work runs through its separate direct
-  stage after ordinary acceptance; only credentialed, destructive,
-  production-mutating, and live-provider probes remain external approval
-  gates;
+- local supplemental mutation and risk work is `NOT RUN` unless the caller
+  explicitly requests it, a checked-in workflow explicitly invokes it for that
+  event, or the stable-candidate release checklist selects it; only
+  credentialed, destructive, production-mutating, and live-provider probes
+  remain external approval gates;
 - policy upgrades rerun the complete ordinary gate.
 
 ## 8. Integrate CI without inventing credentials
@@ -487,8 +491,9 @@ code-polishy supply-chain --offline
 code-polishy gate
 ```
 
-`gate` runs ordinary verification and leaves local supplemental hardening to
-its separate command. If it fails,
+`gate` runs ordinary verification and leaves local supplemental hardening `NOT
+RUN` unless an explicit hardening trigger selects its separate command. If it
+fails,
 diagnose and rerun the smallest failing command until repaired; do not
 repeatedly rerun every expensive suite while debugging.
 
@@ -502,17 +507,21 @@ owner, concrete rationale, and near expiry. Because ownership and debt policy
 are human facts, request approval before using that exception to complete the
 baseline.
 
-## 10. Run local supplemental hardening
+## 10. Record supplemental hardening status
 
-After the ordinary gate is green, inspect the declared supplemental suites and
-run the separate policy-owned local hardening stage:
+Supplemental hardening is not an initial-adoption step. After the ordinary gate
+is green, inspect the declared supplemental suites and report `NOT RUN` unless
+the caller explicitly requests them or a checked-in workflow explicitly invokes
+them for that adoption event. The release checklist separately selects its one
+stable-candidate run. When one of those triggers applies, use the separate
+policy-owned stage:
 
 ```sh
 code-polishy test-levels --base origin/main
 code-polishy test --supplemental
 ```
 
-`test-levels` is read-only and executes no supplemental suites.
+`test-levels` is read-only and executes no supplemental suites. A selected
 `test --supplemental` runs every declared supplemental suite. Credentialed,
 destructive, production-mutating, and live-provider probes remain external
 approval gates.
@@ -537,7 +546,8 @@ The final response must include:
 - project-specific providers and why they remain local;
 - test profiles and exact commands actually run;
 - ordinary gate result;
-- local supplemental hardening result and any external approval gate;
+- supplemental hardening result, or `NOT RUN` with its unselected trigger, and
+  any external approval gate;
 - approved exceptions and expiry, if any;
 - remaining external blockers such as a CI runner without the locked release.
 
@@ -554,9 +564,11 @@ When asked to upgrade Code Polishy, the AI agent should:
 4. read every intervening `CHANGELOG.md` entry;
 5. rewrite `.code-polishy.lock.json` by running `lock` from that exact release;
 6. update target configuration directly for changed requirements;
-7. run strict doctor, inspect the test plan, run the ordinary gate, then run
-   the separate policy-owned local supplemental stage;
-8. report the supplemental hardening result separately from external gates;
+7. run strict doctor, inspect the test plan, and run the ordinary gate;
+8. report supplemental hardening as `NOT RUN` unless the caller explicitly
+   requests it, a checked-in workflow explicitly invokes it for that upgrade
+   event, or the stable-candidate release checklist selects its one final run;
+   report a selected hardening result separately from external gates;
 9. commit the new lock and required target changes together unless the caller
    explicitly requests an uncommitted handoff;
 10. delete the temporary source clone; and

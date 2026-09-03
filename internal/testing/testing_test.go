@@ -163,6 +163,7 @@ func TestFullPlanRunsFullProfileOnly(t *testing.T) {
 func TestSupplementalPlanIsSeparateFromFull(t *testing.T) {
 	t.Parallel()
 	config := planningConfig()
+	config.Tests.RequiredSupplementalKinds = []string{"mutation"}
 	config.Tests.Suites = append(config.Tests.Suites, policy.TestSuite{Name: "mutation", Kind: "mutation", Scope: "repository", Cost: "expensive", RunOn: []string{"supplemental"}})
 	repo := repository.Repository{Config: config}
 	plan, err := BuildPlan(repo, Request{Supplemental: true})
@@ -178,6 +179,40 @@ func TestSupplementalPlanIsSeparateFromFull(t *testing.T) {
 	}
 	if slices.Contains(suiteNames(full.Suites), "mutation") {
 		t.Fatalf("full suites = %v", suiteNames(full.Suites))
+	}
+}
+
+func TestDeclaredSupplementalKindsDoNotSelectOrdinaryPlans(t *testing.T) {
+	t.Parallel()
+	config := planningConfig()
+	config.Tests.RequiredSupplementalKinds = []string{"mutation"}
+	config.Tests.Suites = append(config.Tests.Suites, policy.TestSuite{
+		Name: "mutation", Kind: "mutation", Scope: "repository", Cost: "expensive", RunOn: []string{"supplemental"},
+	})
+	repo := repository.Repository{Config: config}
+	requests := map[string]Request{
+		"changed":     {Changed: selectionForPaths("domain/model.go")},
+		"recommended": {Recommended: true, Changed: selectionForPaths("domain/model.go")},
+		"full":        {Full: true},
+	}
+	for name, request := range requests {
+		t.Run(name, func(t *testing.T) {
+			plan, err := BuildPlan(repo, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if slices.Contains(suiteNames(plan.Suites), "mutation") {
+				t.Fatalf("ordinary %s plan selected mutation: %v", name, suiteNames(plan.Suites))
+			}
+		})
+	}
+
+	explicit, err := BuildPlan(repo, Request{Supplemental: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := suiteNames(explicit.Suites); !slices.Equal(got, []string{"mutation"}) {
+		t.Fatalf("explicit supplemental plan = %v", got)
 	}
 }
 

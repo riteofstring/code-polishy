@@ -1,7 +1,6 @@
 package supplychain
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -177,66 +176,32 @@ func directPythonRecords(source inventorySource, path string) ([]dependencyRecor
 	if err != nil {
 		return nil, err
 	}
-	records := []dependencyRecord{}
-	for _, dependency := range pythonReviewDependencies(string(data)) {
-		if !pythonExact.MatchString(dependency.Value) {
-			continue
-		}
-		beforeMarker := strings.SplitN(dependency.Value, ";", 2)[0]
-		parts := strings.SplitN(beforeMarker, "==", 2)
-		name := strings.TrimSpace(strings.SplitN(parts[0], "[", 2)[0])
-		version := strings.TrimSpace(parts[1])
-		records = append(records, dependencyRecord{
-			Ecosystem: "pypi", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: name, Version: version,
-		})
+	project, err := repository.ParsePythonProject(path, data)
+	if err != nil {
+		return nil, err
 	}
-	return records, nil
-}
-
-type pythonReviewDependency struct {
-	Value string
-	Usage string
-}
-
-func pythonReviewDependencies(text string) []pythonReviewDependency {
-	dependencies := []pythonReviewDependency{}
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	section := ""
-	inDependencies := false
-	usage := ""
-	for scanner.Scan() {
-		line := strings.TrimSpace(stripTOMLComment(scanner.Text()))
-		if !inDependencies && strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.Trim(line, "[]"))
-			continue
-		}
-		if !inDependencies {
-			if !pythonDependencyArray(section, line) {
+	records := []dependencyRecord{}
+	for _, dependency := range project.Requirements {
+		switch dependency.Kind {
+		case repository.PythonRegistryRequirement:
+			version, exact := dependency.ExactRegistryVersion()
+			if !exact {
 				continue
 			}
-			inDependencies = true
-			usage = pythonDependencyUsage(section)
-			line = strings.SplitN(line, "[", 2)[1]
-		}
-		for _, match := range quotedString.FindAllStringSubmatch(line, -1) {
-			dependencies = append(dependencies, pythonReviewDependency{Value: strings.TrimSpace(match[1]), Usage: usage})
-		}
-		if strings.Contains(line, "]") {
-			inDependencies = false
+			records = append(records, dependencyRecord{
+				Ecosystem: "pypi", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: version,
+			})
+		case repository.PythonGitRequirement:
+			records = append(records, dependencyRecord{
+				Ecosystem: "git", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: dependency.Git.Identity(),
+			})
+		case repository.PythonFileRequirement:
+			records = append(records, dependencyRecord{
+				Ecosystem: "file", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: "file:" + dependency.FilePath,
+			})
 		}
 	}
-	return dependencies
-}
-
-func pythonDependencyUsage(section string) string {
-	switch section {
-	case "project":
-		return "runtime"
-	case "project.optional-dependencies":
-		return "optional"
-	default:
-		return "development"
-	}
+	return records, nil
 }
 
 func directGoRecords(source inventorySource, path string) ([]dependencyRecord, error) {
@@ -301,12 +266,24 @@ func resolvedLockRecords(ctx context.Context, repo repository.Repository, source
 	}
 	records := make([]dependencyRecord, 0, len(packages))
 	for _, item := range packages {
+		ecosystem, version := resolvedDependencyReviewIdentity(item)
 		records = append(records, dependencyRecord{
-			Ecosystem: item.Ecosystem, Scope: path, Directness: "transitive", Usage: "resolved",
-			Name: item.Name, Version: item.Version,
+			Ecosystem: ecosystem, Scope: path, Directness: "transitive", Usage: "resolved",
+			Name: item.Name, Version: version,
 		})
 	}
 	return records, nil
+}
+
+func resolvedDependencyReviewIdentity(item resolvedPackage) (string, string) {
+	switch item.Source.Kind {
+	case "git":
+		return "git", item.Source.Git.Identity()
+	case "local":
+		return "file", "file:" + item.Source.LocalPath
+	default:
+		return item.Ecosystem, item.Version
+	}
 }
 
 func addDependencyRecords(inventory dependencyInventoryMap, records []dependencyRecord) {

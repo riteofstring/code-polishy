@@ -61,6 +61,31 @@ func TestCommandHelpFormsSkipRepositoryInitialization(t *testing.T) {
 	}
 }
 
+func TestSupplementalHelpRequiresExplicitSelection(t *testing.T) {
+	t.Parallel()
+	testPage, found := commandHelpFor("test")
+	if !found {
+		t.Fatal("test help page is missing")
+	}
+	testOutput := &bytes.Buffer{}
+	testPage.writeTo(testOutput)
+	if !strings.Contains(testOutput.String(), "--supplemental is an explicit hardening selection") ||
+		!strings.Contains(testOutput.String(), "requiredSupplementalKinds do not invoke it") {
+		t.Fatalf("test help does not disclose explicit supplemental selection: %q", testOutput.String())
+	}
+	for _, command := range []string{"test-plan", "test-levels"} {
+		page, found := commandHelpFor(command)
+		if !found {
+			t.Fatalf("%s help page is missing", command)
+		}
+		output := &bytes.Buffer{}
+		page.writeTo(output)
+		if !strings.Contains(output.String(), "supplemental row is informational and never selects supplemental execution") {
+			t.Fatalf("%s help does not disclose informational supplemental output: %q", command, output.String())
+		}
+	}
+}
+
 func TestEveryCatalogCommandSupportsEarlyHelp(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	for _, page := range commandHelpPages {

@@ -33,12 +33,14 @@ var lengthCheckedExtensions = map[string]bool{
 
 func Check(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
 	findings := sourceChecks(repo, selection.Files)
+	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, goToolChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, shellChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, JavaScriptFormatFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptLintFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptTypeCheckFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptDeadCodeFindings(ctx, repo, selection.Files)...)
+	findings = append(findings, PythonQualityFindings(ctx, repo, selection.Files, commandRunner)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")
@@ -59,6 +61,7 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
+	commands = append(commands, pythonQualityCommands(repo, selection.Files)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")
@@ -83,7 +86,7 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 		}
 	}
 	findings = append(findings, JavaScriptFormatWrite(ctx, repo, selection.Files)...)
-	findings = append(findings, RunCommands(ctx, repo, selection, commandRunner, "format")...)
+	findings = append(findings, RunCommands(ctx, repo, formatSelection(repo, selection), commandRunner, "format")...)
 	return findings
 }
 
@@ -118,7 +121,7 @@ func CommandsForProfiles(repo repository.Repository, selection repository.Select
 		if !sliceIntersects(command.RunOn, profiles) || !commandApplies(repo, command, selection) {
 			continue
 		}
-		command, runnable := prepareCommand(repo, command, selection)
+		command, runnable := prepareCommand(repo, command, selection, profiles...)
 		if runnable {
 			commands = append(commands, command)
 		}
@@ -145,7 +148,7 @@ func NamedCommands(repo repository.Repository, names []string) ([]policy.Command
 		if index < 0 {
 			return nil, fmt.Errorf("unknown configured check %q", name)
 		}
-		command, runnable := prepareCommand(repo, repo.Config.Checks[index], selection)
+		command, runnable := prepareCommand(repo, repo.Config.Checks[index], selection, repo.Config.Checks[index].RunOn...)
 		if !runnable {
 			return nil, fmt.Errorf("configured check %q has no selected files to execute", name)
 		}
@@ -176,13 +179,13 @@ func RunNamedCommands(ctx context.Context, repo repository.Repository, commandRu
 	return findings, nil
 }
 
-func prepareCommand(repo repository.Repository, command policy.Command, selection repository.Selection) (policy.Command, bool) {
+func prepareCommand(repo repository.Repository, command policy.Command, selection repository.Selection, profiles ...string) (policy.Command, bool) {
 	if !command.PassFiles {
 		return command, true
 	}
-	selected := selectedCommandPaths(repo, command, selection.Files)
+	selected := selectedCommandPaths(repo, command, selection.Files, profiles...)
 	if len(selected) == 0 && len(command.PassFilePaths) > 0 {
-		selected = commandFileArguments(command.Cwd, command.PassFilePaths)
+		selected = commandFileArguments(command.Cwd, commandEligiblePaths(repo, command, command.PassFilePaths, profiles...))
 	}
 	if len(selected) == 0 {
 		return command, false
@@ -191,7 +194,7 @@ func prepareCommand(repo repository.Repository, command policy.Command, selectio
 	return command, true
 }
 
-func selectedCommandPaths(repo repository.Repository, command policy.Command, files []string) []string {
+func selectedCommandPaths(repo repository.Repository, command policy.Command, files []string, profiles ...string) []string {
 	allowed := map[string]bool{}
 	for _, path := range command.PassFilePaths {
 		allowed[path] = true
@@ -199,16 +202,56 @@ func selectedCommandPaths(repo repository.Repository, command policy.Command, fi
 	selected := []string{}
 	for _, path := range files {
 		if len(allowed) > 0 {
-			if allowed[path] {
+			if allowed[path] && commandEligiblePath(repo, command, path, profiles...) {
 				selected = append(selected, commandFileArgument(command.Cwd, path))
 			}
 			continue
 		}
-		if policy.MatchesAny(path, command.Paths) && !repo.IsGenerated(path) {
+		if policy.MatchesAny(path, command.Paths) && commandEligiblePath(repo, command, path, profiles...) {
 			selected = append(selected, commandFileArgument(command.Cwd, path))
 		}
 	}
 	return selected
+}
+
+func commandEligiblePaths(repo repository.Repository, command policy.Command, paths []string, profiles ...string) []string {
+	selected := []string{}
+	for _, path := range paths {
+		if commandEligiblePath(repo, command, path, profiles...) {
+			selected = append(selected, path)
+		}
+	}
+	return selected
+}
+
+func commandEligiblePath(repo repository.Repository, command policy.Command, path string, profiles ...string) bool {
+	if repo.IsData(path) && slices.Contains(command.Provides, "format") {
+		return false
+	}
+	if !repo.IsGenerated(path) {
+		return true
+	}
+	if slices.Contains(command.Provides, "complexity") {
+		return false
+	}
+	return !(slices.Contains(profiles, "format") && slices.Contains(command.Provides, "format"))
+}
+
+func formatSelection(repo repository.Repository, selection repository.Selection) repository.Selection {
+	filtered := selection
+	filtered.Files = []string{}
+	for _, path := range selection.Files {
+		if !repo.IsData(path) {
+			filtered.Files = append(filtered.Files, path)
+		}
+	}
+	filtered.Candidate.AddedOrModified = []string{}
+	for _, path := range selection.Candidate.AddedOrModified {
+		if !repo.IsData(path) {
+			filtered.Candidate.AddedOrModified = append(filtered.Candidate.AddedOrModified, path)
+		}
+	}
+	return filtered
 }
 
 func commandFileArguments(cwd string, paths []string) []string {
@@ -341,7 +384,7 @@ func builtInProviderFindings(repo repository.Repository, files []string) []polic
 func builtInCoveredSource(repo repository.Repository, files []string, formatted map[string]bool, command policy.Command, capability string) (string, bool) {
 	example := ""
 	for _, path := range files {
-		if repo.IsGenerated(path) || !commandCovers(repo, command, path) {
+		if !commandCovers(repo, command, path) {
 			continue
 		}
 		language := repo.Language(path)
@@ -458,7 +501,7 @@ func requiredShellCheckVersion(repo repository.Repository, shellcheck string) bo
 func sourceChecks(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
-		if repo.IsGenerated(path) {
+		if repo.IsGenerated(path) || repo.IsData(path) {
 			continue
 		}
 		findings = append(findings, checkTextFile(repo, path)...)
@@ -521,7 +564,7 @@ func goToolChecks(ctx context.Context, repo repository.Repository, files []strin
 	}
 	findings := goFormatFindings(ctx, repo, goFiles)
 	for _, path := range goFiles {
-		if !repo.IsGenerated(path) {
+		if !repo.IsGenerated(path) && !repo.IsData(path) {
 			findings = append(findings, goComplexityFindings(repo, path)...)
 		}
 	}
@@ -793,7 +836,7 @@ var builtInCapabilities = []string{"format", "lint", "typecheck", "complexity", 
 
 func builtInCapability(language, capability string) bool {
 	switch language {
-	case "go", "typescript":
+	case "go", "typescript", "python":
 		return slices.Contains(builtInCapabilities, capability)
 	case "shell":
 		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
@@ -826,7 +869,7 @@ func languageFiles(repo repository.Repository, files []string, language string) 
 func editableFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
-		if !repo.IsGenerated(path) {
+		if !repo.IsGenerated(path) && !repo.IsData(path) {
 			selected = append(selected, path)
 		}
 	}

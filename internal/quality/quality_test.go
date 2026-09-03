@@ -237,7 +237,7 @@ func TestCoverageAdmitsManagedBuiltInCommands(t *testing.T) {
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	repo.Config.Checks = []policy.Command{{
-		Name: "policy-ruff-lint", Provides: []string{"lint", "dead-code"}, Modules: []string{"sample"},
+		Name: "policy-managed-lint", Provides: []string{"lint"}, Modules: []string{"sample"},
 		RunOn: []string{"check", "gate"}, Managed: true,
 	}}
 	writeQualityFile(t, repo.Root, "internal/sample/app.ts", "export const value = 1;\n")
@@ -303,14 +303,14 @@ func TestCommandsForProfilesMatchesDirectCommandSelection(t *testing.T) {
 	}
 }
 
-func TestManagedCommandReceivesOnlyMatchingSelectedFiles(t *testing.T) {
+func TestManagedCommandRetainsGeneratedExecutableFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
 	command := policy.Command{Argv: []string{"ruff", "check", "--"}, Paths: []string{"**/*.py"}, PassFiles: true}
 	selection := repository.Selection{Files: []string{"src/a.py", "src/a.go", "generated/client.py"}}
 	prepared, runnable := prepareCommand(repo, command, selection)
-	if !runnable || !slices.Equal(prepared.Argv, []string{"ruff", "check", "--", "src/a.py"}) {
+	if !runnable || !slices.Equal(prepared.Argv, []string{"ruff", "check", "--", "src/a.py", "generated/client.py"}) {
 		t.Fatalf("prepared = %+v, runnable = %v", prepared, runnable)
 	}
 }

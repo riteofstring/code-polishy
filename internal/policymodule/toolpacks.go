@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -13,8 +12,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-func applyRuff(repo repository.Repository, files []string, active policy.ActivePolicyModule, resolution *Resolution) {
-	pythonFiles := filesFor(repo, files, active.Root, "python")
+func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inventory repository.PythonProjectInventory, resolution *Resolution) {
+	pythonFiles := pythonProjectFiles(inventory, active.Root)
 	if len(pythonFiles) == 0 {
 		resolution.Findings = append(resolution.Findings, finding("ruff", active.Root, "python", "enabled Ruff policy did not find governed Python source at this root"))
 		return
@@ -23,43 +22,24 @@ func applyRuff(repo repository.Repository, files []string, active policy.ActiveP
 	if pin := repo.ToolPin("ruff"); pin == "" || !executableVersion(ruff, "ruff "+pin) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ruff", Message: "conditional Python policy requires the Ruff version tools/ruff-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
-	paths := rootedPatterns(active.Root, "**/*.py", "**/*.pyi")
-	modules := modulesFor(repo, files, active.Root, "python")
+	modules := modulesForPythonFiles(repo, pythonFiles)
 	suffix := safeName(active.Root)
-	complexity := repo.Config.Quality.Complexity.Python
-	if complexity == 0 {
-		complexity = policy.MaxPythonComplexity
-	}
 	resolution.Commands = append(resolution.Commands,
 		policy.Command{
 			Name: "policy-ruff-format-" + suffix, Provides: []string{"format"},
-			Argv: []string{ruff, "format", "--check", "--"}, Cwd: ".", Paths: paths, Modules: modules,
-			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
-		},
-		policy.Command{
-			Name: "policy-ruff-lint-" + suffix, Provides: []string{"lint", "dead-code"},
-			Argv: []string{ruff, "check", "--no-fix", "--"}, Cwd: ".", Paths: paths, Modules: modules,
-			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
-		},
-		policy.Command{
-			Name: "policy-ruff-complexity-" + suffix, Provides: []string{"complexity"},
-			Argv: []string{
-				ruff, "check", "--no-fix", "--isolated", "--select", "C901", "--ignore-noqa",
-				"--config", "lint.mccabe.max-complexity = " + strconv.Itoa(complexity-1), "--",
-			},
-			Cwd: ".", Paths: paths, Modules: modules,
-			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
+			Argv: []string{ruff, "format", "--check", "--"}, Cwd: active.Root, Paths: pythonFiles, Modules: modules,
+			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: pythonFiles,
 		},
 		policy.Command{
 			Name: "policy-ruff-write-" + suffix, Provides: []string{"format"},
-			Argv: []string{ruff, "format", "--"}, Cwd: ".", Paths: paths, Modules: modules,
-			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
+			Argv: []string{ruff, "format", "--"}, Cwd: active.Root, Paths: pythonFiles, Modules: modules,
+			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: pythonFiles,
 		},
 	)
 }
 
-func applyTy(repo repository.Repository, files []string, active policy.ActivePolicyModule, resolution *Resolution) {
-	pythonFiles := filesFor(repo, files, active.Root, "python")
+func applyTy(repo repository.Repository, active policy.ActivePolicyModule, inventory repository.PythonProjectInventory, resolution *Resolution) {
+	pythonFiles := pythonProjectFiles(inventory, active.Root)
 	if len(pythonFiles) == 0 {
 		resolution.Findings = append(resolution.Findings, finding("ty", active.Root, "python", "enabled ty policy did not find governed Python source at this root"))
 		return
@@ -68,15 +48,21 @@ func applyTy(repo repository.Repository, files []string, active policy.ActivePol
 	if pin := repo.ToolPin("ty"); pin == "" || !tyExecutableVersion(ty, pin) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ty", Message: "conditional Python policy requires the ty version tools/ty-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
-	paths := rootedPatterns(active.Root, "**/*.py", "**/*.pyi")
-	modules := modulesFor(repo, files, active.Root, "python")
-	suffix := safeName(active.Root)
-	resolution.Commands = append(resolution.Commands, policy.Command{
-		Name: "policy-ty-typecheck-" + suffix, Provides: []string{"typecheck"},
-		Argv: []string{ty, "check", "--config-file", filepath.Join(repo.PolicyRoot, "tools", "ty.toml"), "--project", ".", "--"},
-		Cwd:  active.Root, Paths: paths, Modules: modules,
-		RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true,
-	})
+}
+
+func applyVulture(repo repository.Repository, active policy.ActivePolicyModule, inventory repository.PythonProjectInventory, resolution *Resolution) {
+	pythonFiles := pythonProjectFiles(inventory, active.Root)
+	if len(pythonFiles) == 0 {
+		resolution.Findings = append(resolution.Findings, finding("vulture", active.Root, "python", "enabled Vulture policy did not find governed Python source at this root"))
+		return
+	}
+	python := repo.PythonTool()
+	if !pythonRuntimeVersion(python, repo.ToolPin("python")) {
+		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "python", Message: "conditional Python dead-code policy requires the CPython version tools/python-version.txt pins; run ./tools/install-policy-tools.sh"})
+	}
+	if !vultureRuntimeVersion(python, repo.ToolPin("vulture")) {
+		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "vulture", Message: "conditional Python dead-code policy requires the Vulture version tools/vulture-version.txt pins; run ./tools/install-policy-tools.sh"})
+	}
 }
 
 func applyOSV(repo repository.Repository, files []string, active policy.ActivePolicyModule, resolution *Resolution) {
@@ -90,17 +76,12 @@ func applyOSV(repo repository.Repository, files []string, active policy.ActivePo
 	}
 }
 
-func pythonRoots(repo repository.Repository, files []string) []string {
-	fileSet := map[string]bool{}
-	for _, path := range files {
-		fileSet[path] = true
-	}
+func pythonRoots(inventory repository.PythonProjectInventory) []string {
 	roots := map[string]bool{}
-	for _, path := range files {
-		if repo.Language(path) != "python" {
-			continue
+	for _, project := range inventory.Projects {
+		if len(project.Files) > 0 {
+			roots[project.Root] = true
 		}
-		roots[nearestPythonRoot(repo, path, fileSet)] = true
 	}
 	result := make([]string, 0, len(roots))
 	for root := range roots {
@@ -110,79 +91,22 @@ func pythonRoots(repo repository.Repository, files []string) []string {
 	return result
 }
 
-func tyRoots(repo repository.Repository, files []string) []string {
-	fileSet := map[string]bool{}
+func pythonProjectFiles(inventory repository.PythonProjectInventory, root string) []string {
+	for _, project := range inventory.Projects {
+		if project.Root == root {
+			return append([]string{}, project.Files...)
+		}
+	}
+	return nil
+}
+
+func modulesForPythonFiles(repo repository.Repository, files []string) []string {
+	modules := []string{}
 	for _, path := range files {
-		fileSet[path] = true
+		modules = append(modules, repo.ModuleNames(path)...)
 	}
-	roots := map[string]bool{}
-	for _, path := range files {
-		if repo.Language(path) != "python" {
-			continue
-		}
-		roots[nearestTyRoot(path, fileSet)] = true
-	}
-	result := make([]string, 0, len(roots))
-	for root := range roots {
-		result = append(result, root)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func nearestPythonRoot(repo repository.Repository, path string, files map[string]bool) string {
-	directory := filepath.ToSlash(filepath.Dir(path))
-	for {
-		for _, name := range []string{"ruff.toml", ".ruff.toml"} {
-			candidate := rootFile(directory, name)
-			if files[candidate] {
-				return directory
-			}
-		}
-		pyproject := rootFile(directory, "pyproject.toml")
-		if files[pyproject] {
-			data, err := repo.Read(pyproject)
-			if err == nil && strings.Contains(string(data), "[tool.ruff") {
-				return directory
-			}
-		}
-		if directory == "." {
-			return "."
-		}
-		directory = filepath.ToSlash(filepath.Dir(directory))
-	}
-}
-
-func nearestTyRoot(path string, files map[string]bool) string {
-	directory := filepath.ToSlash(filepath.Dir(path))
-	for {
-		for _, name := range []string{"ty.toml", "pyproject.toml"} {
-			if files[rootFile(directory, name)] {
-				return directory
-			}
-		}
-		if directory == "." {
-			return "."
-		}
-		directory = filepath.ToSlash(filepath.Dir(directory))
-	}
-}
-
-func rootFile(root, name string) string {
-	if root == "." {
-		return name
-	}
-	return root + "/" + name
-}
-
-func filesFor(repo repository.Repository, files []string, root, language string) []string {
-	result := []string{}
-	for _, path := range files {
-		if insideRoot(path, root) && repo.Language(path) == language && !repo.IsGenerated(path) {
-			result = append(result, path)
-		}
-	}
-	return result
+	sort.Strings(modules)
+	return slices.Compact(modules)
 }
 
 func executableVersion(path string, acceptedLines ...string) bool {
@@ -213,6 +137,40 @@ func tyExecutableVersion(path, pin string) bool {
 	}
 	fields := strings.Fields(string(output))
 	return len(fields) >= 2 && fields[0] == "ty" && fields[1] == pin
+}
+
+func pythonRuntimeVersion(path, pin string) bool {
+	version, build, found := strings.Cut(pin, "+")
+	return found && version != "" && pythonBuildTag(build) &&
+		pythonRuntimeOutput(path, "import sys; print(\".\".join(str(value) for value in sys.version_info[:3]))") == version
+}
+
+func pythonBuildTag(value string) bool {
+	if len(value) != 8 {
+		return false
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func vultureRuntimeVersion(path, pin string) bool {
+	return pin != "" && pythonRuntimeOutput(path, "import importlib.metadata; print(importlib.metadata.version(\"vulture\"))") == pin
+}
+
+func pythonRuntimeOutput(path, source string) string {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+		return ""
+	}
+	output, err := runner.ToolOutput(path, "-I", "-c", source)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func hasDependencyGraph(repo repository.Repository, files []string) bool {
