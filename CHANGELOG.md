@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.21.4 - 2026-09-03
+
 - Make recurring external security monitoring opt-in through
   `supplyChain.recurringSecurityMonitoring`, without changing local or CI
   vulnerability checks.
