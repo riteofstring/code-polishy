@@ -17,7 +17,6 @@ const (
 	MaxGoComplexity                         = 12
 	MaxGoTestComplexity                     = 20
 	MaxPythonComplexity                     = 10
-	PythonRuffLineLength                    = 88
 	MaxTypeScriptComplexity                 = 10
 	MaxTypeScriptTestComplexity             = 10
 	MaxTypeScriptDepth                      = 4

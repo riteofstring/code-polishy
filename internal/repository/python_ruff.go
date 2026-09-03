@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+const pythonRuffLineLengthLimit = 88
 
 type PythonRuffSettings struct {
 	RequiresPython string
@@ -61,7 +61,7 @@ func (settings PythonRuffSettings) CommandOptions() ([]string, error) {
 		seen[root] = true
 		roots = append(roots, strconv.Quote(root))
 	}
-	lineLength := strconv.Itoa(policy.PythonRuffLineLength)
+	lineLength := strconv.Itoa(pythonRuffLineLengthLimit)
 	return []string{
 		"--target-version", settings.TargetVersion,
 		"--config", "line-length = " + lineLength,
@@ -200,13 +200,13 @@ func pythonRuffConfigurationCoversSource(directory string, sources []string) boo
 func pythonRuffLineLengthProblem(path, setting string, value pythonTOMLValue) *PythonRuffProblem {
 	lineLength, err := pythonRuffLineLength(value)
 	if err != nil {
-		problem := pythonRuffProblem(PythonRuffLineLengthProblemKind, path, value.line, setting+" must be the integer "+strconv.Itoa(policy.PythonRuffLineLength))
+		problem := pythonRuffProblem(PythonRuffLineLengthProblemKind, path, value.line, setting+" must be the integer "+strconv.Itoa(pythonRuffLineLengthLimit))
 		return &problem
 	}
-	if lineLength == policy.PythonRuffLineLength {
+	if lineLength == pythonRuffLineLengthLimit {
 		return nil
 	}
-	problem := pythonRuffProblem(PythonRuffLineLengthProblemKind, path, value.line, fmt.Sprintf("%s conflicts with the policy-owned line length %d", setting, policy.PythonRuffLineLength))
+	problem := pythonRuffProblem(PythonRuffLineLengthProblemKind, path, value.line, fmt.Sprintf("%s conflicts with the policy-owned line length %d", setting, pythonRuffLineLengthLimit))
 	return &problem
 }
 
