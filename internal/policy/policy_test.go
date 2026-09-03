@@ -307,6 +307,25 @@ func TestExplicitEmptyProtocolsRemainStrict(t *testing.T) {
 	}
 }
 
+func TestRecurringSecurityMonitoringIsOptIn(t *testing.T) {
+	t.Parallel()
+	config, err := Parse([]byte(minimalConfig()), ConfigFilename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.SupplyChain.RecurringSecurityMonitoring {
+		t.Fatal("recurring security monitoring defaulted on")
+	}
+	configured := strings.Replace(minimalConfig(), `"supplyChain":{}`, `"supplyChain":{"recurringSecurityMonitoring":true}`, 1)
+	config, err = Parse([]byte(configured), ConfigFilename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !config.SupplyChain.RecurringSecurityMonitoring {
+		t.Fatal("recurring security monitoring opt-in was ignored")
+	}
+}
+
 func TestLicensePolicyNamesSPDXIdentifiers(t *testing.T) {
 	t.Parallel()
 	allowed := `"allowedLicenses":["MIT","Apache-2.0","GPL-2.0-or-later","LGPL-2.1+","GPL-2.0-only WITH Classpath-exception-2.0"]`

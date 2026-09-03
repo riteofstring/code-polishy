@@ -564,6 +564,7 @@
         "minimumReleaseAgeDays": { "type": "integer", "minimum": 30 },
         "preferredNewDependencyAgeDays": { "type": "integer", "minimum": 30 },
         "auditLevel": { "const": "low" },
+        "recurringSecurityMonitoring": { "type": "boolean", "default": false },
         "allowedDependencyProtocols": {
           "type": "array",
           "uniqueItems": true,

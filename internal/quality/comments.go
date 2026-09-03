@@ -198,7 +198,7 @@ func sourceAnnotationAllowed(repo repository.Repository, path, language string, 
 	case "python":
 		return byteZeroShebang(data, annotation) || pythonEncodingAllowed(data, annotation)
 	case "shell":
-		return byteZeroShebang(data, annotation) || shellcheckSourceAllowed(repo, data, annotation)
+		return byteZeroShebang(data, annotation) || shellcheckSourceAllowed(repo, data, annotation) || shellSBATCHAllowed(data, annotation)
 	case "powershell":
 		return byteZeroShebang(data, annotation)
 	}

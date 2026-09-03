@@ -393,10 +393,11 @@ Common capabilities are:
   itself.
 - `dependency-policy` and `release-age` when the engine does not have a shared
   module for the target package ecosystem.
-- `security-monitoring` for GitLab or another non-GitHub CI that proves its
-  server-side schedule runs the online security profile at least weekly. It is
-  an external provider, not a claim that static pipeline YAML can prove
-  cadence; use the success and unavailable-evidence contract in
+- `security-monitoring` when `supplyChain.recurringSecurityMonitoring` opts a
+  GitLab or another non-GitHub CI repository into proving that its server-side
+  schedule runs the online security profile at least weekly. It is an external
+  provider, not a claim that static pipeline YAML can prove cadence; use the
+  success and unavailable-evidence contract in
   [Portability and External Inputs](policies/portability.md#external-security-monitoring-evidence).
 
 For a dependency ecosystem whose manifest is not recognized by the engine,

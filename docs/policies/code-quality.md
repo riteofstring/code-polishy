@@ -149,6 +149,9 @@ insufficient.
   the immediately following line must be a `source` or `.` command with an
   operand. That operand may be dynamic; the directive supplies ShellCheck with
   its exact canonical repository-relative target.
+- A shell batch directive, `#SBATCH <non-empty argument>`, at column one before
+  executable code. A shebang, blank lines, and other comment lines may precede
+  it; ordinary prose comments remain findings.
 - TypeScript triple-slash references before code, exactly one of
   `/// <reference path="<value>" />`,
   `/// <reference types="<value>" />`,

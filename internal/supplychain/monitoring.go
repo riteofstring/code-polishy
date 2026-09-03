@@ -11,7 +11,7 @@ import (
 )
 
 func securityMonitoringFindings(repo repository.Repository, files []string) []policy.Finding {
-	if !dependencyGraphPresent(repo, files) || hasSecurityMonitoringProvider(repo.Config.Checks) {
+	if !repo.Config.SupplyChain.RecurringSecurityMonitoring || !dependencyGraphPresent(repo, files) || hasSecurityMonitoringProvider(repo.Config.Checks) {
 		return nil
 	}
 	workflows := []string{}

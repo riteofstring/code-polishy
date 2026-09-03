@@ -64,6 +64,7 @@ func TestGitLabConfigurationNeverProvesSecurityMonitoringCadence(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
 	repo.Config.Project.Capabilities = []string{"custom-dependencies"}
+	repo.Config.SupplyChain.RecurringSecurityMonitoring = true
 	writeSupplyFile(t, repo.Root, ".gitlab-ci.yml", "security:\n  script: code-polishy supply-chain\n")
 	files := []string{".gitlab-ci.yml"}
 	findings := securityMonitoringFindings(repo, files)

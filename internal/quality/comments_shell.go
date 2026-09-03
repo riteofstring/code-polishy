@@ -677,6 +677,26 @@ func shellcheckSourceAllowed(repo repository.Repository, data []byte, annotation
 	return shellSourceCommandFollows(data, annotation.offset)
 }
 
+func shellSBATCHAllowed(data []byte, annotation sourceAnnotation) bool {
+	const prefix = "#SBATCH"
+	if !sourceLineStart(data, annotation.offset) || !strings.HasPrefix(annotation.text, prefix) {
+		return false
+	}
+	argument := strings.TrimPrefix(annotation.text, prefix)
+	if argument == "" || !shellHorizontalSpace(argument[0]) || strings.TrimSpace(argument) == "" {
+		return false
+	}
+	for index := 0; index < annotation.offset; {
+		end := lineEnd(data, index)
+		line := strings.TrimLeft(string(data[index:end]), " \t\f")
+		if line != "" && !strings.HasPrefix(line, "#") {
+			return false
+		}
+		index = nextLine(data, end)
+	}
+	return true
+}
+
 func shellSourceCommandFollows(data []byte, offset int) bool {
 	index := nextLine(data, lineEnd(data, offset))
 	index, found := shellNextSourceLine(data, index)

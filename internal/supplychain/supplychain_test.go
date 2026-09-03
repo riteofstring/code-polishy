@@ -464,9 +464,14 @@ func TestSecurityMonitoringRequiresWeeklyOnlineScan(t *testing.T) {
 	repo := supplyRepository(t)
 	writeSupplyFile(t, repo.Root, "package.json", `{"packageManager":"npm@11.0.0"}`+"\n")
 	writeSupplyFile(t, repo.Root, "package-lock.json", "{}\n")
+	files := []string{"package.json", "package-lock.json"}
+	if findings := securityMonitoringFindings(repo, files); len(findings) != 0 {
+		t.Fatalf("monitoring was required without opt-in: %+v", findings)
+	}
+	repo.Config.SupplyChain.RecurringSecurityMonitoring = true
 	path := ".github/workflows/security.yml"
 	writeSupplyFile(t, repo.Root, path, "on:\n  schedule:\n    - cron: '0 4 * * 1'\njobs:\n  scan:\n    steps:\n      - run: ./bin/code-polishy supply-chain\n")
-	files := []string{"package.json", "package-lock.json", path}
+	files = append(files, path)
 	if findings := securityMonitoringFindings(repo, files); len(findings) != 0 {
 		t.Fatalf("weekly scan rejected: %+v", findings)
 	}
@@ -711,7 +716,7 @@ func TestUnsupportedManifestsRequireCompleteProvidersAtTheirLanguageModule(t *te
 			writeSupplyFile(t, repo.Root, testCase.source, "fixture\n")
 			files := []string{testCase.manifest, testCase.source}
 			findings := CoverageFindings(repo, files)
-			if countFindings(findings, "policy.supplyChainCoverage") != 4 || !supplyChecks(findings)["policy.securityMonitoring"] {
+			if countFindings(findings, "policy.supplyChainCoverage") != 4 || supplyChecks(findings)["policy.securityMonitoring"] {
 				t.Fatalf("missing provider contract = %+v", findings)
 			}
 			for _, finding := range findings {
@@ -720,7 +725,7 @@ func TestUnsupportedManifestsRequireCompleteProvidersAtTheirLanguageModule(t *te
 				}
 			}
 			repo.Config.Checks = []policy.Command{{
-				Name: "application-supply-chain", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security", "security-monitoring"},
+				Name: "application-supply-chain", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security"},
 				Modules: []string{"application"}, RunOn: []string{"supply-chain", "supply-chain-online", "security"},
 			}}
 			if findings := CoverageFindings(repo, files); len(findings) != 0 {
@@ -735,7 +740,7 @@ func TestGeneratedScopeCannotHideDependencyManifest(t *testing.T) {
 	repo := supplyRepository(t)
 	repo.Config.Scope.Generated = []string{"Cargo.toml"}
 	findings := CoverageFindings(repo, []string{"Cargo.toml"})
-	if countFindings(findings, "policy.supplyChainCoverage") != 4 || !supplyChecks(findings)["policy.securityMonitoring"] {
+	if countFindings(findings, "policy.supplyChainCoverage") != 4 || supplyChecks(findings)["policy.securityMonitoring"] {
 		t.Fatalf("generated scope must not suppress dependency coverage: %+v", findings)
 	}
 }
@@ -824,11 +829,11 @@ func TestCustomDependencyCapabilityRequiresCompleteProvider(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "beam", Paths: []string{"lib/**"}, Capabilities: []string{"custom-dependencies"}}}
-	if findings := CoverageFindings(repo, nil); countFindings(findings, "policy.supplyChainCoverage") != 4 || !supplyChecks(findings)["policy.securityMonitoring"] {
+	if findings := CoverageFindings(repo, nil); countFindings(findings, "policy.supplyChainCoverage") != 4 || supplyChecks(findings)["policy.securityMonitoring"] {
 		t.Fatalf("expected complete custom dependency contract: %+v", findings)
 	}
 	repo.Config.Checks = []policy.Command{{
-		Name: "mix-supply", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security", "security-monitoring"},
+		Name: "mix-supply", Provides: []string{"dependency-policy", "lock-sync", "release-age", "security"},
 		Modules: []string{"beam"}, RunOn: []string{"supply-chain", "supply-chain-online", "security"},
 	}}
 	if findings := CoverageFindings(repo, nil); len(findings) != 0 {

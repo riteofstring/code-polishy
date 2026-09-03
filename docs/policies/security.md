@@ -64,8 +64,9 @@ tree.
 
 The [Supply-chain Policy](supply-chain.md) requires immutable dependency and CI
 inputs, a release-age delay, lifecycle-script allowlists, and vulnerability
-audits. Native and OSV dependency scans run online at least weekly, not only
-when lockfiles change. A low or moderate finding may be dispositioned only
+audits. Native and OSV dependency scans run in local and CI policy checks;
+repositories can additionally opt into required recurring external monitoring.
+A low or moderate finding may be dispositioned only
 through the exact, independently approved, expiring vulnerability-assessment
 contract. A high finding may only be recorded as an exact `not-affected`
 decision with a `false-positive` or `unreachable` basis; it is never a high

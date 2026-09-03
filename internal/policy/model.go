@@ -254,6 +254,7 @@ type SupplyChain struct {
 	PreferredNewDependencyAgeDays int      `json:"preferredNewDependencyAgeDays,omitempty"`
 	AuditLevel                    string   `json:"auditLevel,omitempty"`
 	AllowedDependencyProtocols    []string `json:"allowedDependencyProtocols,omitempty"`
+	RecurringSecurityMonitoring   bool     `json:"recurringSecurityMonitoring,omitempty"`
 
 	AllowedLicenses            []string                   `json:"allowedLicenses,omitempty"`
 	NPMRegistryURL             string                     `json:"npmRegistryUrl,omitempty"`

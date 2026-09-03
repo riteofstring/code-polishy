@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Make recurring external security monitoring opt-in through
+  `supplyChain.recurringSecurityMonitoring`, without changing local or CI
+  vulnerability checks.
+- Allow nonempty `#SBATCH` directives at column one before executable shell
+  code when prose comments are disabled.
+
 ## 0.21.3 - 2026-09-03
 
 - Derive each managed Ruff invocation's Python target from

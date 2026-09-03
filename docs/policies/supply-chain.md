@@ -651,19 +651,22 @@ graphs with the merge base, prints a stable direct/transitive change table, and
 runs the full online supply-chain profile against the candidate tree. It does
 not install dependencies or execute dependency lifecycle scripts.
 
-Repositories with dependency graphs must also run the online supply-chain
-profile at least weekly so newly disclosed advisories are caught even when no
-dependency update is open. A GitHub Actions repository proves this with a
-weekly-or-faster `schedule` workflow containing `code-polishy supply-chain`
-(without `--offline`) or `code-polishy gate`. Other CI systems declare a
-`security-monitoring` provider in the `security` profile as their explicit
-external scheduling contract. GitLab schedules are server-side objects, so
-static `.gitlab-ci.yml` analysis can validate only checked-in control inputs and
-pins; it cannot prove that a schedule exists, remains enabled, or completed.
-The provider must meet the explicit success and unavailable-evidence contract
-in [Portability and External Inputs](portability.md#external-security-monitoring-evidence).
-Missing recurring coverage is a non-suppressible `policy.securityMonitoring`
-failure.
+Recurring external monitoring is optional and defaults off. Set
+`supplyChain.recurringSecurityMonitoring` to `true` to require the online
+supply-chain profile at least weekly so newly disclosed advisories are caught
+even when no dependency update is open. A GitHub Actions repository proves this
+with a weekly-or-faster `schedule` workflow containing
+`code-polishy supply-chain` (without `--offline`) or `code-polishy gate`. Other
+CI systems declare a `security-monitoring` provider in the `security` profile as
+their explicit external scheduling contract. GitLab schedules are server-side
+objects, so static `.gitlab-ci.yml` analysis can validate only checked-in
+control inputs and pins; it cannot prove that a schedule exists, remains
+enabled, or completed. The provider must meet the explicit success and
+unavailable-evidence contract in
+[Portability and External Inputs](portability.md#external-security-monitoring-evidence).
+When the option is enabled, missing recurring coverage is a non-suppressible
+`policy.securityMonitoring` failure. The option does not change local or CI
+vulnerability and supply-chain checks.
 
 Built-in Go dependency subprocesses receive the same small operational
 environment as other commands. If a private module needs additional variables

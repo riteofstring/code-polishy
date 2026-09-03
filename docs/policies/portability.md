@@ -81,13 +81,19 @@ when an unrelated checkout could satisfy that shape.
 
 ## External security-monitoring evidence
 
-GitLab pipeline schedules live on the GitLab server, not in
-`.gitlab-ci.yml`. Checked-in YAML can prove static image and include pins; it
-cannot prove that a schedule exists, is enabled, or has run. A GitLab repository
-with dependency graphs therefore declares one `security-monitoring` provider in
-the `security` profile: a `checks` command with
+Recurring external monitoring is opt-in through
+`supplyChain.recurringSecurityMonitoring`. GitLab pipeline schedules live on
+the GitLab server, not in `.gitlab-ci.yml`. Checked-in YAML can prove static
+image and include pins; it cannot prove that a schedule exists, is enabled, or
+has run. An opted-in GitLab repository with dependency graphs therefore
+declares one `security-monitoring` provider in the `security` profile: a
+`checks` command with
 `provides: ["security-monitoring"]` and `runOn: ["security"]`. This is an
 external evidence boundary, not a static-YAML heuristic.
+
+Without the opt-in, Code Polishy does not require a provider and emits no
+`policy.securityMonitoring` finding. A provider that is declared still runs in
+the online security profile and fails closed when its evidence is unavailable.
 
 The provider succeeds only when it can prove all of these facts for the target
 repository:

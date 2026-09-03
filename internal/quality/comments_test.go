@@ -162,6 +162,7 @@ func TestSourceCommentAllowedMachineInputs(t *testing.T) {
 		{"python-line-two", "sample/encoding.py", "\n# -*- coding: utf-8 -*-\nvalue = 1\n", ""},
 		{"python-shebang", "sample/shebang.py", "#!/usr/bin/env python3\n# coding=utf-8\nvalue = 1\n", ""},
 		{"shell-shebang", "sample/main.sh", "#!/usr/bin/env bash\nprintf '%s\\n' value\n", ""},
+		{"shell-sbatch", "sample/job.sbatch", "#!/usr/bin/env bash\n\n#SBATCH --job-name=sample\n#SBATCH --time=00:05:00\nprintf '%s\\n' value\n", ""},
 		{"shell-source-dynamic", "sample/main.sh", "# shellcheck source=lib/source.sh\nsource \"${policy_root}/lib/source.sh\"\n", "lib/source.sh"},
 		{"shell-dot-dynamic", "sample/dot.sh", "# shellcheck source=lib/source.sh\n. \"$(pwd)/lib/source.sh\"\n", "lib/source.sh"},
 		{"powershell-shebang", "sample/main.ps1", "#!pwsh\n$value = 1\n", ""},
@@ -301,6 +302,11 @@ func TestSourceCommentDirectiveNearMisses(t *testing.T) {
 		{"shell-source-target", "sample/main.sh", "# shellcheck source=lib/source.css\nsource \"${policy_root}/lib/source.css\"\n", "lib/source.css"},
 		{"shell-source-next-line", "sample/main.sh", "# shellcheck source=lib/source.sh\nprintf '%s\\n' value\nsource lib/source.sh\n", "lib/source.sh"},
 		{"shell-source-operand", "sample/main.sh", "# shellcheck source=lib/source.sh\nsource\n", "lib/source.sh"},
+		{"shell-sbatch-indented", "sample/job.sbatch", "#!/usr/bin/env bash\n #SBATCH --time=00:05:00\nprintf value\n", ""},
+		{"shell-sbatch-after-code", "sample/job.sbatch", "#!/usr/bin/env bash\nprintf value\n#SBATCH --time=00:05:00\n", ""},
+		{"shell-sbatch-empty", "sample/job.sbatch", "#!/usr/bin/env bash\n#SBATCH   \nprintf value\n", ""},
+		{"shell-sbatch-glued", "sample/job.sbatch", "#!/usr/bin/env bash\n#SBATCH--time=00:05:00\nprintf value\n", ""},
+		{"shell-sbatch-ordinary-comment", "sample/job.sbatch", "#!/usr/bin/env bash\n#SBATCH --time=00:05:00\n# prose\nprintf value\n", ""},
 		{"powershell-shebang-position", "sample/main.ps1", "$value = 1\n#!pwsh\n", ""},
 	}
 	for _, testCase := range cases {
