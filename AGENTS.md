@@ -4,6 +4,8 @@
   use the installation prefix's stable launcher when it is absent from `PATH`.
 - Before changing the repository, run `code-polishy docs read agent-workflows`
   and follow its version-matched request-capture and delivery rules.
+- During an upgrade, outgoing guidance governs until the exact incoming release
+  atomically rewrites the lock; that cutover activates incoming guidance.
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
