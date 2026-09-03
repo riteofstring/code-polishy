@@ -148,6 +148,8 @@ try:
 except Exception as z:e(z)
 sys.stdout.write(json.dumps(o,sort_keys=True,separators=(",",":")))`
 
+var pythonVultureProgram = "exec(" + strconv.Quote(pythonVultureAdapter) + ")"
+
 type pythonVultureFile struct {
 	Path    string `json:"path"`
 	Module  string `json:"module"`
@@ -233,7 +235,7 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	return policy.Command{
 		Name:              "policy-vulture-dead-code-" + pythonQualityProjectName(project.Root),
 		Provides:          []string{"dead-code"},
-		Argv:              []string{interpreter, "-I", "-c", pythonVultureAdapter},
+		Argv:              []string{interpreter, "-I", "-c", pythonVultureProgram},
 		Cwd:               ".",
 		Modules:           pythonQualityModules(repo, project.Files),
 		RunOn:             []string{"check", "gate"},

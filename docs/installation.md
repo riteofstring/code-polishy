@@ -180,17 +180,18 @@ release symlinks, every link contributes its exact target: the bundle is linked
 together by pnpm's isolated linker, so retargeting one link would otherwise
 swap the code a release runs without changing an installed file.
 
-The manifest version is exact. A release recorded under another one is rejected
-with that reason rather than reinterpreted, so a release installed before the
-manifest changed is reinstalled from its commit rather than read as if it
-recorded what a release records now.
+Each manifest version has an exact schema and identity calculation. The engine
+accepts only its own version. The stable launcher keeps explicit readers for
+installed manifest versions 2 through 4 so installing a newer release does not
+strand repositories still locked to an older one. It verifies each older
+release using that version's original fields and never invents evidence added
+by a later schema.
 
-Manifest version 4 requires `tools.python` for the carried CPython
-`3.12.13+20260728` runtime and `tools.vulture` for Vulture `2.16`, alongside
-the existing carried tool identities. A version 3 manifest lacks that evidence,
-so it is rejected and reinstalled from its exact source commit; it is never
-treated as evidence that the release carried or verified either tool. The target
-configuration version is a separate contract.
+Manifest version 4 adds `tools.python` for the carried CPython
+`3.12.13+20260728` runtime and `tools.vulture` for Vulture `2.16`. Those fields
+contribute only to version 4 identities; a version 3 release remains bound to
+the smaller tool inventory it originally recorded. The target configuration
+version is a separate contract.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after

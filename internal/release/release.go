@@ -188,16 +188,7 @@ func parseManifest(data []byte, source string) (Manifest, error) {
 }
 
 func ReadManifest(releaseDir string) (Manifest, bool, error) {
-	source := filepath.Join(releaseDir, ManifestFilename)
-	data, err := os.ReadFile(source)
-	if errors.Is(err, os.ErrNotExist) {
-		return Manifest{}, false, nil
-	}
-	if err != nil {
-		return Manifest{}, false, fmt.Errorf("read %s: %w", source, err)
-	}
-	manifest, err := parseManifest(data, source)
-	return manifest, true, err
+	return readManifest(releaseDir, parseManifest)
 }
 
 func (manifest Manifest) Identity() string {
@@ -213,12 +204,18 @@ func (manifest Manifest) Identity() string {
 	fmt.Fprintf(identity, "tool.node=%s\n", manifest.Tools.Node)
 	fmt.Fprintf(identity, "tool.osv-scanner=%s\n", manifest.Tools.OSVScanner)
 	fmt.Fprintf(identity, "tool.pnpm=%s\n", manifest.Tools.PNPM)
-	fmt.Fprintf(identity, "tool.python=%s\n", manifest.Tools.Python)
+	if manifest.ManifestVersion >= 4 {
+		fmt.Fprintf(identity, "tool.python=%s\n", manifest.Tools.Python)
+	}
 	fmt.Fprintf(identity, "tool.ruff=%s\n", manifest.Tools.Ruff)
 	fmt.Fprintf(identity, "tool.shellcheck=%s\n", manifest.Tools.Shellcheck)
 	fmt.Fprintf(identity, "tool.staticcheck=%s\n", manifest.Tools.Staticcheck)
-	fmt.Fprintf(identity, "tool.ty=%s\n", manifest.Tools.Ty)
-	fmt.Fprintf(identity, "tool.vulture=%s\n", manifest.Tools.Vulture)
+	if manifest.ManifestVersion >= 3 {
+		fmt.Fprintf(identity, "tool.ty=%s\n", manifest.Tools.Ty)
+	}
+	if manifest.ManifestVersion >= 4 {
+		fmt.Fprintf(identity, "tool.vulture=%s\n", manifest.Tools.Vulture)
+	}
 	digest := sha256.Sum256([]byte(identity.String()))
 	return hex.EncodeToString(digest[:])
 }
@@ -315,13 +312,22 @@ func validateManifestIdentity(manifest Manifest, source string) error {
 		return fmt.Errorf("%s records the unusable host %q", source, manifest.Host)
 	}
 
-	for _, pin := range []struct{ tool, version string }{
+	pins := []struct{ tool, version string }{
 		{"Go", manifest.Tools.Go}, {"govulncheck", manifest.Tools.Govulncheck},
 		{"Node", manifest.Tools.Node}, {"OSV-Scanner", manifest.Tools.OSVScanner},
-		{"pnpm", manifest.Tools.PNPM}, {"Python", manifest.Tools.Python}, {"Ruff", manifest.Tools.Ruff},
+		{"pnpm", manifest.Tools.PNPM}, {"Ruff", manifest.Tools.Ruff},
 		{"ShellCheck", manifest.Tools.Shellcheck}, {"staticcheck", manifest.Tools.Staticcheck},
-		{"ty", manifest.Tools.Ty}, {"Vulture", manifest.Tools.Vulture},
-	} {
+	}
+	if manifest.ManifestVersion >= 3 {
+		pins = append(pins, struct{ tool, version string }{"ty", manifest.Tools.Ty})
+	}
+	if manifest.ManifestVersion >= 4 {
+		pins = append(pins,
+			struct{ tool, version string }{"Python", manifest.Tools.Python},
+			struct{ tool, version string }{"Vulture", manifest.Tools.Vulture},
+		)
+	}
+	for _, pin := range pins {
 		if !versionPattern.MatchString(pin.version) {
 			return fmt.Errorf("%s records the unusable %s version %q", source, pin.tool, pin.version)
 		}

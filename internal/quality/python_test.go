@@ -132,7 +132,7 @@ func pythonQualityAssertVultureCommand(t *testing.T, repo repository.Repository,
 	t.Helper()
 	if !vulture.SealedEnvironment || !slices.Equal(vulture.Provides, []string{"dead-code"}) ||
 		len(vulture.Argv) != 4 || vulture.Argv[0] != repo.PythonTool() || vulture.Argv[1] != "-I" || vulture.Argv[2] != "-c" ||
-		strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") {
+		strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") || strings.ContainsAny(vulture.Argv[3], "\x00\r\n") {
 		t.Fatalf("Vulture command = %+v", vulture)
 	}
 	pythonQualityAssertVultureRequest(t, vulture.Stdin)

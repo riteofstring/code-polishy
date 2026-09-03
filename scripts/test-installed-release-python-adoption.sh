@@ -226,6 +226,18 @@ python_adoption_write_config() {
   "project": { "kind": "application", "capabilities": [] },
   "scope": {
     "entryPoints": ["src/adoption_api/endpoint.py"],
+    "pythonDynamicReferences": [
+      {
+        "project": "pyproject.toml",
+        "module": "adoption_api.endpoint",
+        "symbol": "endpoint"
+      },
+      {
+        "project": "apps/worker/pyproject.toml",
+        "module": "adoption_worker.worker",
+        "symbol": "run"
+      }
+    ],
     "data": [
       "data/catalog-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json",
       "data/catalog-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210.yaml"

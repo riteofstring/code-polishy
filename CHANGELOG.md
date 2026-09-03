@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.21.1 - 2026-09-02
+
+- Make the policy-owned Vulture adapter safe for durable gate command
+  identities, so Python checkpoint and merge gates can run dead-code analysis.
+- Keep the stable launcher able to verify and run already-installed releases
+  with manifest versions 2 and 3 after installing a manifest-version-4 release.
+
 ## 0.21.0 - 2026-09-02
 
 - Keep a language-pack staging root writable through its atomic rename, then

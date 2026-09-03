@@ -79,6 +79,61 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	return lock
 }
 
+func (installed store) installHistorical(t *testing.T, version int, revision, engine string) release.Lock {
+	t.Helper()
+	host, err := release.Host()
+	if err != nil {
+		t.Fatalf("resolve the host: %v", err)
+	}
+	tools := release.Tools{
+		Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
+		PNPM: "11.13.0", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+	}
+	toolDocument := map[string]string{
+		"go": tools.Go, "govulncheck": tools.Govulncheck, "node": tools.Node,
+		"osv-scanner": tools.OSVScanner, "pnpm": tools.PNPM, "ruff": tools.Ruff,
+		"shellcheck": tools.Shellcheck, "staticcheck": tools.Staticcheck,
+	}
+	if version >= 3 {
+		tools.Ty = "0.0.65"
+		toolDocument["ty"] = tools.Ty
+	}
+	manifest := release.Manifest{
+		ManifestVersion: version, CodePolishyVersion: "9.9.9", SourceRevision: revision,
+		Host: host, Features: []string{"javascript-bundle"}, Tools: tools,
+		Entries: []release.Entry{
+			{Path: bundleLink, Symlink: "../.pnpm/tool"},
+			{Path: bundleFile, SHA256: digestOf(engine + " runner")},
+			{Path: release.BinaryPath, SHA256: digestOf(engine)},
+		},
+	}
+	manifest.EntryCount = len(manifest.Entries)
+	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
+	manifest.ReleaseDigest = manifest.Identity()
+	lock := release.Lock{
+		LockVersion: release.LockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
+		ReleaseDigest: manifest.ReleaseDigest, Features: manifest.Features,
+	}
+	directory := installed.releaseRoot(lock)
+	writeFile(t, directory, release.BinaryPath, engine)
+	writeFile(t, directory, bundleFile, engine+" runner")
+	writeLink(t, directory, bundleLink, "../.pnpm/tool")
+	document := map[string]any{
+		"manifestVersion": manifest.ManifestVersion, "codePolishyVersion": manifest.CodePolishyVersion,
+		"sourceRevision": manifest.SourceRevision, "host": manifest.Host, "features": manifest.Features,
+		"tools": toolDocument, "releaseDigest": manifest.ReleaseDigest, "contentDigest": manifest.ContentDigest,
+		"entryCount": manifest.EntryCount, "entries": manifest.Entries,
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("render the historical manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, release.ManifestFilename), encoded, 0o644); err != nil {
+		t.Fatalf("write the historical manifest: %v", err)
+	}
+	return lock
+}
+
 func writeFile(t *testing.T, directory, relative, content string) {
 	t.Helper()
 	installed := filepath.Join(directory, filepath.FromSlash(relative))
@@ -176,6 +231,17 @@ func TestLauncherRunsTheReleaseTheLockNames(t *testing.T) {
 			"--repo-root", repoRoot, "check", "--all"}
 		if !slices.Equal(argv, wanted) {
 			t.Fatalf("argv = %v, wanted %v", argv, wanted)
+		}
+	}
+}
+
+func TestLauncherRunsInstalledReleasesWithHistoricalManifests(t *testing.T) {
+	installed := newStore(t)
+	for _, version := range []int{2, 3} {
+		lock := installed.installHistorical(t, version, exampleRevision(version), engineBytes)
+		status, stderr, argv := launcherIn(t, installed, repositoryWith(t, &lock), "version")
+		if status != 0 || len(argv) == 0 {
+			t.Fatalf("manifest version %d: status=%d stderr=%s argv=%v", version, status, stderr, argv)
 		}
 	}
 }

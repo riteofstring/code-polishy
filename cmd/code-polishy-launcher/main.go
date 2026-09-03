@@ -40,7 +40,7 @@ func run(executable string, arguments []string, stderr io.Writer, launcher func(
 		))
 	}
 	directory := release.Directory(prefix, lock)
-	manifest, installed, err := release.ReadManifest(directory)
+	manifest, installed, err := release.ReadLauncherManifest(directory)
 	if err != nil {
 		return fail(stderr, err)
 	}
