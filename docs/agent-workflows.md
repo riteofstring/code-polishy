@@ -38,6 +38,15 @@ Code Polishy copies that text into its managed journal. If implementation has
 already started without a capture at the task base, stop and report the missing
 boundary instead of writing a new summary of the request.
 
+An upgrade has one explicit authority transition. The outgoing locked release
+and its installed guidance govern until the exact verified incoming release's
+`lock` command atomically replaces `.code-polishy.lock.json`. That command may
+run while the outgoing lock is active and is the only incoming mutation allowed
+before the cutover. Incoming guidance governs immediately afterward. If the
+outgoing release had no intent-capture requirement, capture the caller's exact
+upgrade request from the new clean lock commit before making any further target
+change.
+
 When the user corrects the implementation, capture that exact correction before
 acting on it. This later append may run while candidate files are staged,
 unstaged, deleted, or untracked. It records the current HEAD and a candidate

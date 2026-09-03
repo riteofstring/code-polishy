@@ -14,7 +14,6 @@ const pythonRuffLineLengthLimit = 88
 type PythonRuffSettings struct {
 	RequiresPython string
 	TargetVersion  string
-	SourceRoots    []string
 }
 
 type PythonRuffProblem struct {
@@ -45,21 +44,29 @@ type pythonTOMLLeaf struct {
 	value pythonTOMLValue
 }
 
-func (settings PythonRuffSettings) CommandOptions() ([]string, error) {
+func (settings PythonRuffSettings) CommandOptions(projectRoot string, sourceRoots []string) ([]string, error) {
 	if settings.TargetVersion == "" {
 		return nil, fmt.Errorf("project.requires-python does not resolve to a supported Ruff target")
 	}
-	if len(settings.SourceRoots) == 0 {
+	if len(sourceRoots) == 0 {
 		return nil, fmt.Errorf("python project has no validated Ruff source root")
 	}
-	roots := make([]string, 0, len(settings.SourceRoots))
+	roots := make([]string, 0, len(sourceRoots))
 	seen := map[string]bool{}
-	for _, root := range settings.SourceRoots {
-		if root == "" || filepath.IsAbs(filepath.FromSlash(root)) || root == ".." || strings.HasPrefix(root, "../") || seen[root] {
+	for _, root := range sourceRoots {
+		relative, err := filepath.Rel(filepath.FromSlash(projectRoot), filepath.FromSlash(root))
+		if err != nil {
 			return nil, fmt.Errorf("python project has an invalid Ruff source root %q", root)
 		}
-		seen[root] = true
-		roots = append(roots, strconv.Quote(root))
+		relative = filepath.ToSlash(relative)
+		if relative == "" {
+			relative = "."
+		}
+		if relative == ".." || strings.HasPrefix(relative, "../") || filepath.IsAbs(filepath.FromSlash(relative)) || seen[relative] {
+			return nil, fmt.Errorf("python project has an invalid Ruff source root %q", root)
+		}
+		seen[relative] = true
+		roots = append(roots, strconv.Quote(relative))
 	}
 	lineLength := strconv.Itoa(pythonRuffLineLengthLimit)
 	return []string{
@@ -71,7 +78,7 @@ func (settings PythonRuffSettings) CommandOptions() ([]string, error) {
 }
 
 func pythonProjectRuffMetadata(manifest string, requireTarget bool, assignments []pythonTOMLAssignment) (PythonRuffSettings, []PythonRuffProblem) {
-	settings := PythonRuffSettings{SourceRoots: []string{"."}}
+	settings := PythonRuffSettings{}
 	problems := []PythonRuffProblem{}
 	versionFound := false
 	for _, leaf := range pythonTOMLLeaves(assignments) {
@@ -109,9 +116,6 @@ func pythonProjectRuffMetadata(manifest string, requireTarget bool, assignments 
 func pythonCompleteRuffSettings(project *PythonProject) {
 	if len(project.Files) > 0 && project.Ruff.TargetVersion == "" && !pythonRuffTargetProblem(project.RuffProblems) {
 		project.RuffProblems = append(project.RuffProblems, pythonRuffProblem(PythonRuffTargetProblemKind, project.Manifest, 0, "project.requires-python is required for policy-owned Ruff analysis"))
-	}
-	if len(project.Ruff.SourceRoots) == 0 {
-		project.Ruff.SourceRoots = []string{"."}
 	}
 }
 

@@ -621,6 +621,7 @@ func (engine *Engine) finishWithAdvisories(findings []policy.Finding, advisories
 func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool) Report {
 	ordered := append([]policy.Finding{}, findings...)
 	sortFindings(ordered)
+	ordered = compactFindings(ordered)
 	kept, releaseAges := policy.ApplyReleaseAgeAssessments(
 		ordered, engine.Repository.Config.SupplyChain.ReleaseAgeAssessments, time.Now().UTC(), enforceUnused,
 	)
@@ -629,6 +630,7 @@ func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []s
 	)
 	kept, suppressed := policy.ApplyExceptions(kept, engine.Repository.Config.Exceptions, time.Now().UTC())
 	sortFindings(kept)
+	kept = compactFindings(kept)
 	sort.Slice(suppressed, func(left, right int) bool {
 		return findingKey(suppressed[left].Finding)+suppressed[left].Exception.ID < findingKey(suppressed[right].Finding)+suppressed[right].Exception.ID
 	})
@@ -645,6 +647,17 @@ func sortFindings(findings []policy.Finding) {
 	sort.Slice(findings, func(left, right int) bool {
 		return findingKey(findings[left]) < findingKey(findings[right])
 	})
+}
+
+func compactFindings(findings []policy.Finding) []policy.Finding {
+	result := make([]policy.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if len(result) > 0 && findingKey(result[len(result)-1]) == findingKey(finding) {
+			continue
+		}
+		result = append(result, finding)
+	}
+	return result
 }
 
 func findingKey(finding policy.Finding) string {

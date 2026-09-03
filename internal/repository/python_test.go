@@ -436,7 +436,7 @@ func TestPythonProjectInventorySeparatesNestedProjectsAndRecordsCandidates(t *te
 	if rootProject.Root != "." {
 		rootProject = inventory.Projects[0]
 	}
-	if rootProject.Root != "." || rootProject.SourceRoot != "src" || rootProject.Venv != ".venv" ||
+	if rootProject.Root != "." || !slices.Equal(rootProject.SourceRoots, []string{".", "src"}) || rootProject.Venv != ".venv" ||
 		!slices.Equal(rootProject.Files, []string{"scripts/task.py", "src/root_package/__init__.py", "src/root_package/service.py"}) {
 		t.Fatalf("root project = %+v", rootProject)
 	}
@@ -448,7 +448,7 @@ func TestPythonProjectInventorySeparatesNestedProjectsAndRecordsCandidates(t *te
 	if childProject.Root == "." {
 		childProject = inventory.Projects[1]
 	}
-	if childProject.Root != "apps/child" || childProject.SourceRoot != "apps/child/src" ||
+	if childProject.Root != "apps/child" || !slices.Equal(childProject.SourceRoots, []string{"apps/child", "apps/child/src"}) ||
 		!slices.Equal(childProject.Files, []string{"apps/child/src/child_package/service.py"}) ||
 		!slices.Equal(childProject.PackageCandidates, []PythonPackageCandidate{{Name: "child_package", Path: "apps/child/src/child_package", Namespace: true}}) {
 		t.Fatalf("child project = %+v", childProject)

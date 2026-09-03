@@ -289,7 +289,7 @@ func handleLockMeta(invocation invocation) int {
 	}
 	lock := release.LockFor(manifest)
 	path := filepath.Join(invocation.repoRoot, release.LockFilename)
-	if err := os.WriteFile(path, release.RenderLock(lock), 0o644); err != nil {
+	if err := release.WriteLock(invocation.repoRoot, lock); err != nil {
 		return operationalError(fmt.Errorf("write %s: %w", path, err))
 	}
 	fmt.Printf("PASS %s requires Code Polishy %s %s\n", release.LockFilename, lock.CodePolishyVersion, lock.ReleaseDigest)

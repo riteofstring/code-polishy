@@ -14,16 +14,16 @@ func TestPythonModuleNameUsesProjectSourceRootAndPackageConventions(t *testing.T
 			project: PythonProject{Root: "."}, source: "app/service.py", module: "app.service", packageName: "app",
 		},
 		"src module": {
-			project: PythonProject{Root: "apps/api", SourceRoot: "apps/api/src"}, source: "apps/api/src/api/service.py", module: "api.service", packageName: "api",
+			project: PythonProject{Root: "apps/api", SourceRoots: []string{"apps/api", "apps/api/src"}}, source: "apps/api/src/api/service.py", module: "api.service", packageName: "api",
 		},
 		"project-root module outside src": {
-			project: PythonProject{Root: "apps/api", SourceRoot: "apps/api/src"}, source: "apps/api/scripts/task.py", module: "scripts.task", packageName: "scripts",
+			project: PythonProject{Root: "apps/api", SourceRoots: []string{"apps/api", "apps/api/src"}}, source: "apps/api/scripts/task.py", module: "scripts.task", packageName: "scripts",
 		},
 		"package initializer": {
-			project: PythonProject{Root: ".", SourceRoot: "src"}, source: "src/api/__init__.py", module: "api", packageName: "api",
+			project: PythonProject{Root: ".", SourceRoots: []string{".", "src"}}, source: "src/api/__init__.py", module: "api", packageName: "api",
 		},
 		"root package initializer": {
-			project: PythonProject{Root: ".", SourceRoot: "src"}, source: "src/__init__.py", module: "", packageName: "",
+			project: PythonProject{Root: ".", SourceRoots: []string{".", "src"}}, source: "src/__init__.py", module: "", packageName: "",
 		},
 		"stub module": {
 			project: PythonProject{Root: "."}, source: "api/protocol.pyi", module: "api.protocol", packageName: "api",

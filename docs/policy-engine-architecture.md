@@ -162,13 +162,15 @@ results.
 
 The Python consumers share the repository inventory rather than independently
 guessing roots. The inventory derives the Ruff target from
-`project.requires-python`, records package roots, and fixes the shared line
-length at 88. `internal/quality` runs the carried Ruff baseline, C901, target
-additions, Vulture `2.16` full-project dead-code analysis, and structured `ty`
-diagnostics. Vulture runs through carried CPython
-`3.12.13+20260728` from python-build-standalone, derives PEP 621 entry-point
-symbols, and accepts only validated exact `scope.pythonDynamicReferences` for
-dynamic symbols. `internal/architecture` asks the same carried Ruff for an
+`project.requires-python`, records project, direct `src`, and in-tree PEP 517
+backend roots, and fixes the shared line length at 88. `internal/quality` runs
+the carried Ruff baseline, C901, target additions, Vulture `2.16` full-project
+dead-code analysis, and structured `ty` diagnostics with those same roots.
+Vulture runs through carried CPython `3.12.13+20260728` from
+python-build-standalone, loads its version-matched standard whitelists, derives
+PEP 621 entry-point and in-tree backend-hook symbols, and accepts only validated
+exact `scope.pythonDynamicReferences` for remaining dynamic symbols.
+`internal/architecture` asks the same carried Ruff for an
 isolated import graph and decides module direction in Go; `internal/supplychain`
 parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
 Target Ruff configuration cannot alter the managed Python target, roots, line

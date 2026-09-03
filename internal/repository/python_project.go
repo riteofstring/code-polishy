@@ -9,13 +9,17 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 type PythonProject struct {
 	Manifest            string
 	Root                string
 	Venv                string
-	SourceRoot          string
+	SourceRoots         []string
+	BuildBackend        PythonBuildBackend
+	BackendPaths        []PythonProjectPath
 	Ruff                PythonRuffSettings
 	RuffProblems        []PythonRuffProblem
 	Files               []string
@@ -60,6 +64,16 @@ type PythonProjectInventory struct {
 	Projects    []PythonProject
 	Assignments []PythonProjectAssignment
 	Problems    []PythonInventoryProblem
+}
+
+func PythonInventoryFinding(problem PythonInventoryProblem) policy.Finding {
+	subject := problem.Subject
+	if subject == "" {
+		subject = string(problem.Kind)
+	}
+	return policy.Finding{
+		Check: "policy.pythonProject", Path: problem.Path, Line: problem.Line, Subject: subject, Message: problem.Message,
+	}
 }
 
 type pythonProjectInventoryCache struct {
@@ -130,7 +144,8 @@ func clonePythonProjectInventory(inventory PythonProjectInventory) PythonProject
 func clonePythonProject(project PythonProject) PythonProject {
 	clone := project
 	clone.Files = slices.Clone(project.Files)
-	clone.Ruff.SourceRoots = slices.Clone(project.Ruff.SourceRoots)
+	clone.SourceRoots = slices.Clone(project.SourceRoots)
+	clone.BackendPaths = slices.Clone(project.BackendPaths)
 	clone.RuffProblems = slices.Clone(project.RuffProblems)
 	clone.PackageCandidates = slices.Clone(project.PackageCandidates)
 	clone.Requirements = slices.Clone(project.Requirements)
@@ -254,6 +269,9 @@ func (repo Repository) completePythonProjectInventory(inventory *PythonProjectIn
 			continue
 		}
 		sort.Strings(project.Files)
+		if problem := pythonProjectModuleLayoutProblem(*project); problem != nil {
+			inventory.Problems = append(inventory.Problems, *problem)
+		}
 		project.PackageCandidates = pythonPackageCandidates(*project)
 		pythonCompleteRuffSettings(project)
 		for _, problem := range project.RuffProblems {
@@ -366,7 +384,7 @@ func (repo Repository) pythonInventoryProject(manifest string) (PythonProject, *
 	if problem := repo.pythonProjectDirectoryProblem(manifest, project.Root, ".venv", true, &project); problem != nil {
 		return PythonProject{}, problem
 	}
-	if problem := repo.pythonProjectDirectoryProblem(manifest, project.Root, "src", false, &project); problem != nil {
+	if problem := repo.pythonProjectSourceRoots(manifest, &project); problem != nil {
 		return PythonProject{}, problem
 	}
 	return project, nil
@@ -406,11 +424,79 @@ func (repo Repository) pythonProjectDirectoryProblem(manifest, root, name string
 	}
 	if venv {
 		project.Venv = directory
-	} else {
-		project.SourceRoot = directory
-		project.Ruff.SourceRoots = []string{".", name}
 	}
 	return nil
+}
+
+func (repo Repository) pythonProjectSourceRoots(manifest string, project *PythonProject) *PythonInventoryProblem {
+	roots := []string{project.Root}
+	for _, declared := range project.BackendPaths {
+		directory := pythonProjectContainedPath(project.Root, declared.Path)
+		found, problem := repo.pythonProjectSourceDirectory(manifest, directory, true)
+		if problem != nil {
+			return problem
+		}
+		if found {
+			roots = append(roots, directory)
+		}
+	}
+	for _, root := range slices.Clone(roots) {
+		directory := pythonProjectContainedPath(root, "src")
+		found, problem := repo.pythonProjectSourceDirectory(manifest, directory, false)
+		if problem != nil {
+			return problem
+		}
+		if found {
+			roots = append(roots, directory)
+		}
+	}
+	project.SourceRoots = uniqueSorted(roots)
+	return nil
+}
+
+func pythonProjectContainedPath(root, relative string) string {
+	if root == "." {
+		return relative
+	}
+	if relative == "." {
+		return root
+	}
+	return root + "/" + relative
+}
+
+func (repo Repository) pythonProjectSourceDirectory(manifest, directory string, required bool) (bool, *PythonInventoryProblem) {
+	abs := filepath.Join(repo.Root, filepath.FromSlash(directory))
+	info, err := os.Lstat(abs)
+	if errors.Is(err, os.ErrNotExist) && !required {
+		return false, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		problem := pythonInventoryProblem(PythonUnsupportedLayoutProblem, manifest, directory, "build-system.backend-path directory does not exist")
+		return false, &problem
+	}
+	if err != nil {
+		problem := pythonInventoryProblem(PythonUnreadableInputProblem, manifest, directory, err.Error())
+		return false, &problem
+	}
+	if !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		problem := pythonInventoryProblem(PythonUnsupportedLayoutProblem, manifest, directory, "Python source root is not a directory")
+		return false, &problem
+	}
+	resolved, resolveErr := repo.Resolve(directory)
+	if resolveErr != nil {
+		problem := pythonInventoryProblem(PythonEscapingPathProblem, manifest, directory, resolveErr.Error())
+		return false, &problem
+	}
+	resolvedInfo, statErr := os.Stat(resolved)
+	if statErr != nil {
+		problem := pythonInventoryProblem(PythonUnreadableInputProblem, manifest, directory, statErr.Error())
+		return false, &problem
+	}
+	if !resolvedInfo.IsDir() {
+		problem := pythonInventoryProblem(PythonUnsupportedLayoutProblem, manifest, directory, "Python source root is not a directory")
+		return false, &problem
+	}
+	return true, nil
 }
 
 func pythonInventoryProblem(kind PythonInventoryProblemKind, path, subject, message string) PythonInventoryProblem {
@@ -485,10 +571,13 @@ func pythonPackageCandidatesForSource(candidates map[string]PythonPackageCandida
 }
 
 func pythonPackageCandidateBase(project PythonProject, source string) string {
-	if project.SourceRoot != "" && pythonPathContains(project.SourceRoot, source) {
-		return project.SourceRoot
+	base := project.Root
+	for _, root := range project.SourceRoots {
+		if pythonPathContains(root, source) && len(root) > len(base) {
+			base = root
+		}
 	}
-	return project.Root
+	return base
 }
 
 func pythonPackageRelativeDirectory(base, source string) (string, bool) {
@@ -588,6 +677,10 @@ func ParsePythonProject(manifest string, data []byte) (PythonProject, error) {
 		return PythonProject{}, fmt.Errorf("parse %s: %w", manifest, err)
 	}
 	project := pythonProjectDefinition(manifest, document.tables, document.assignments)
+	project.BuildBackend, project.BackendPaths, err = pythonProjectBuildMetadata(manifest, document.assignments)
+	if err != nil {
+		return PythonProject{}, err
+	}
 	project.Ruff, project.RuffProblems = pythonProjectRuffMetadata(manifest, project.IsPythonProject(), document.assignments)
 	dynamicReferences, err := pythonProjectDynamicReferences(manifest, document.assignments)
 	if err != nil {

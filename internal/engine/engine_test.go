@@ -1396,6 +1396,17 @@ func captureEngineBehaviorIntent(t *testing.T, root string) {
 	}
 }
 
+func TestCompactFindingsRemovesExactCrossPolicyDuplicates(t *testing.T) {
+	t.Parallel()
+	finding := policy.Finding{Check: "policy.pythonProject", Path: "pyproject.toml", Subject: "src/app.py", Message: "unsupported layout"}
+	findings := []policy.Finding{finding, finding, {Check: "quality.lint", Path: "src/app.py", Subject: "F401", Message: "unused import"}}
+	sortFindings(findings)
+	compacted := compactFindings(findings)
+	if len(compacted) != 2 {
+		t.Fatalf("findings = %+v", compacted)
+	}
+}
+
 func writeEngineFile(t *testing.T, root, path, contents string, mode os.FileMode) {
 	t.Helper()
 	absolute := filepath.Join(root, filepath.FromSlash(path))

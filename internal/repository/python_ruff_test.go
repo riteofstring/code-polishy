@@ -63,7 +63,7 @@ max-line-length = 88
 	}
 	project := inventory.Projects[0]
 	if project.Ruff.RequiresPython != "==3.12.*" || project.Ruff.TargetVersion != "py312" ||
-		!slices.Equal(project.Ruff.SourceRoots, []string{".", "src"}) {
+		!slices.Equal(project.SourceRoots, []string{".", "src"}) {
 		t.Fatalf("Ruff settings = %+v", project.Ruff)
 	}
 	want := []string{
@@ -72,7 +72,7 @@ max-line-length = 88
 		"--config", "lint.pycodestyle.max-line-length = 88",
 		"--config", `src = [".", "src"]`,
 	}
-	options, err := project.Ruff.CommandOptions()
+	options, err := project.Ruff.CommandOptions(project.Root, project.SourceRoots)
 	if err != nil || !slices.Equal(options, want) {
 		t.Fatalf("options = %v, error = %v", options, err)
 	}

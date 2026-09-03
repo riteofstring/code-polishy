@@ -57,6 +57,34 @@ func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *
 	assertPythonGraphPlan(t, repo, graphRunner.commands)
 }
 
+func TestPythonArchitectureUsesInTreeBackendAndNestedSrcRoots(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "runtime", Paths: []string{"packages/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", `[build-system]
+requires = []
+build-backend = "setta_build_backend"
+backend-path = ["packages/setta-runtime"]
+
+[project]
+name = "setta"
+requires-python = ">=3.12"
+dependencies = []
+`)
+	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/setta_build_backend.py", "def build_wheel():\n    return 'setta.whl'\n")
+	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/runtime.py", "value = 1\n")
+	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/tests/test_runtime.py", "from setta import runtime\n")
+	graphRunner := &pythonGraphRunner{outputs: map[string]string{
+		".": `{"packages/setta-runtime/tests/test_runtime.py":["packages/setta-runtime/src/setta/runtime.py"]}`,
+	}}
+	findings := CheckWithRunner(t.Context(), repo, []string{"packages/setta-runtime/tests/test_runtime.py"}, graphRunner)
+	if len(findings) != 0 || len(graphRunner.commands) != 1 {
+		t.Fatalf("commands = %+v, findings = %+v", graphRunner.commands, findings)
+	}
+	if !strings.Contains(strings.Join(graphRunner.commands[0].Argv, "\x00"), `src = [".", "packages/setta-runtime", "packages/setta-runtime/src"]`) {
+		t.Fatalf("graph command = %+v", graphRunner.commands[0])
+	}
+}
+
 func assertPythonForbiddenImportFinding(t *testing.T, findings []policy.Finding) {
 	t.Helper()
 	if len(findings) != 1 || findings[0].Check != "architecture.moduleDependency" || findings[0].Path != "src/web/app.py" || findings[0].Subject != "domain" {
@@ -360,6 +388,22 @@ func TestPythonArchitectureReportsConflictingSourceRoots(t *testing.T) {
 	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" ||
 		!strings.Contains(findings[0].Message, "conflicting source roots") {
 		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestPythonArchitectureReportsUnsupportedLayoutOnceAndStopsGraphAnalysis(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"packages/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"setta\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/first.py", "value = 1\n")
+	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/second.py", "value = 2\n")
+	graphRunner := &pythonGraphRunner{}
+	findings := CheckWithRunner(t.Context(), repo, []string{
+		"packages/setta-runtime/src/setta/first.py", "packages/setta-runtime/src/setta/second.py",
+	}, graphRunner)
+	if len(graphRunner.commands) != 0 || len(findings) != 1 || findings[0].Check != "policy.pythonProject" ||
+		!strings.Contains(findings[0].Message, "Python project layout is unsupported") {
+		t.Fatalf("commands = %+v, findings = %+v", graphRunner.commands, findings)
 	}
 }
 

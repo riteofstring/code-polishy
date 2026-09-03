@@ -298,11 +298,12 @@ standard conditional behavior is:
   88-character line length. Vulture `2.16` provides full-project dead-code
   analysis at fixed 60% confidence through carried CPython
   `3.12.13+20260728` from python-build-standalone; `ty` provides first-class
-  type checking. The shared project inventory assigns nested projects separately,
-  and a dependency-bearing project uses only its contained `.venv` for `ty`; a
-  missing environment produces a clear coverage finding instead of
-  ambient-Python behavior. A target pins and installs neither tool, its own
-  Python runtime, nor an architecture provider.
+  type checking. The shared project inventory assigns nested projects
+  separately and recognizes direct `src` plus in-tree PEP 517 backend roots and
+  their direct `src`; ty receives those roots explicitly. A dependency-bearing
+  project uses only its contained `.venv`; a missing environment produces a
+  clear coverage finding instead of ambient-Python behavior. A target pins and
+  installs neither tool, its own Python runtime, nor an architecture provider.
 - A target bearing JavaScript or TypeScript is formatted by the sealed,
   policy-owned JavaScript bundle; it pins and installs no formatter itself.
 - A target bearing JavaScript or TypeScript is linted by that same bundle
@@ -326,10 +327,11 @@ ceiling. See
 
 JavaScript and TypeScript dead code comes from their sealed bundle across the
 whole package tree a file belongs to; a target pins and installs no analyzer.
-Python dead code comes only from Vulture. Its PEP 621 entry points are inferred;
-use exact `scope.pythonDynamicReferences` only for dynamic symbols those facts
-cannot name, rather than substituting `scope.entryPoints` or a Vulture ignore.
-This is imported policy, not a target-authored adapter.
+Python dead code comes only from Vulture. Its version-matched standard-library
+whitelists, in-tree PEP 517 hooks, and PEP 621 entry points are inferred; use
+exact `scope.pythonDynamicReferences` only for remaining dynamic symbols rather
+than substituting `scope.entryPoints` or a Vulture ignore. This is imported
+policy, not a target-authored adapter.
 
 An incorrect activation may be disabled only by an exact-root
 `policyModules.overrides` entry with `mode: "disabled"`, `reason`, `owner`, and
@@ -738,3 +740,8 @@ lock upgrade leaves supplemental hardening `NOT RUN` unless the caller, an
 event-specific checked-in workflow, or the stable-candidate release checklist
 selects it. Never install from floating `main` or let a check select a release the lock does not
 name.
+
+The outgoing lock and guidance retain authority through candidate verification.
+The exact incoming release's `lock` command is the sole pre-cutover mutation;
+it atomically replaces the lock, after which incoming guidance governs all
+configuration, verification, and delivery work.

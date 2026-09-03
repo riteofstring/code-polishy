@@ -127,12 +127,15 @@ func pythonInventoryFindings(inventory repository.PythonProjectInventory, source
 	invalid := map[string]bool{}
 	findings := []policy.Finding{}
 	for _, problem := range inventory.Problems {
+		relevant := false
 		for _, source := range sources {
-			if invalid[source] || !pythonProblemAffectsSource(problem, source) {
-				continue
+			if pythonProblemAffectsSource(problem, source) {
+				invalid[source] = true
+				relevant = true
 			}
-			invalid[source] = true
-			findings = append(findings, pythonImportCoverage(source, "the Python project inventory cannot cover this source: "+problem.Message))
+		}
+		if relevant {
+			findings = append(findings, repository.PythonInventoryFinding(problem))
 		}
 	}
 	return invalid, findings
@@ -196,7 +199,7 @@ func pythonGraphCommand(repo repository.Repository, project repository.PythonPro
 		paths = append(paths, relative)
 	}
 	sort.Strings(paths)
-	ruffOptions, err := project.Ruff.CommandOptions()
+	ruffOptions, err := project.Ruff.CommandOptions(project.Root, project.SourceRoots)
 	if err != nil {
 		return policy.Command{}, err
 	}

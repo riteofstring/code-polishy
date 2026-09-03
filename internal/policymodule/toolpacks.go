@@ -23,7 +23,7 @@ func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inv
 		resolution.Findings = append(resolution.Findings, configurationFindings...)
 		return
 	}
-	ruffOptions, err := project.Ruff.CommandOptions()
+	ruffOptions, err := project.Ruff.CommandOptions(project.Root, project.SourceRoots)
 	if err != nil {
 		resolution.Findings = append(resolution.Findings, policy.Finding{
 			Check: "policy.pythonRuffConfiguration", Path: project.Manifest, Subject: project.Manifest, Message: err.Error(),

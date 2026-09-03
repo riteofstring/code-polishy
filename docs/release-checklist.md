@@ -85,7 +85,9 @@ pushes, or installs state.
    strict full-candidate behavior review plus target shapes this repository is
    not one of. After publication, move each consuming
    repository's `.code-polishy.lock.json` to the installed release with
-   `<release>/bin/code-polishy lock`, as that repository's own reviewed change.
+   `<release>/bin/code-polishy lock`, as that repository's own reviewed atomic
+   authority cutover. Outgoing guidance governs until this command replaces the
+   lock; incoming guidance governs afterward.
    Rerun the script with its default lock for this repository.
 8. Keep behavior review experimental until real workflows in more than one
    repository cover an optional `NOT RUN` refactor, a user-requested feature, a

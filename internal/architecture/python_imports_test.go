@@ -802,8 +802,8 @@ func TestPythonRelativeImportResolutionStaysWithinTheProject(t *testing.T) {
 func TestPythonImportCoverageRequiresExactLocalGraphEvidence(t *testing.T) {
 	t.Parallel()
 	index := newPythonModuleIndex(repository.PythonProject{
-		Root:       ".",
-		SourceRoot: "src",
+		Root:        ".",
+		SourceRoots: []string{".", "src"},
 		Files: []string{
 			"shared.py",
 			"src/shared.py",

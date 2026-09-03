@@ -257,6 +257,15 @@ nested project is analyzed separately. A missing project, malformed inventory,
 escaping path, unreadable input, omitted tool output, or malformed structured
 tool result is a coverage finding, never a clean result.
 
+The project root is always an import root. A contained top-level `src/` is an
+additional root. For an in-tree PEP 517 backend, every normalized relative
+`build-system.backend-path` directory and its direct `src/`, when present, are
+additional roots. This covers custom-build layouts such as
+`packages/runtime/src/package` without duplicate manifests. A missing or
+escaping backend path, or a file whose roots yield an invalid Python module
+name, produces one `policy.pythonProject` finding on the project and stops its
+dependent Ruff, Vulture, ty, and import-graph work.
+
 Each governed Python project must declare `project.requires-python` with a
 minimum stable Python minor supported by the pinned Ruff (`py37` through
 `py315`). Code Polishy derives the oldest permitted minor and passes it as
@@ -294,11 +303,18 @@ Missing, unreadable, malformed, or incomplete analysis evidence is a coverage
 finding, never a clean result. Generated Python remains governed by this
 analysis; generated classification does not suppress dead-code coverage.
 
-Vulture infers exact reachable symbols from PEP 621 `project.scripts`,
+Vulture loads its pinned release's import-selected standard whitelists for
+contracts such as `ast.NodeVisitor`, `unittest.TestCase`, `unittest.mock`, and
+`ctypes`. Code Polishy supplements them with syntax-bound handling for
+`NodeVisitor` methods, urllib redirect handlers, `HTMLParser` callbacks,
+context-manager exit parameters, exception chaining, and `ZipInfo` metadata.
+It also infers the hooks actually defined by an in-tree PEP 517 build backend
+and exact reachable symbols from PEP 621 `project.scripts`,
 `project.gui-scripts`, and every `project.entry-points.*` table. For a symbol
-reached dynamically rather than through a static import or those conventions,
-use optional `scope.pythonDynamicReferences`. Each item requires all three
-exact fields, with no wildcards:
+reached dynamically through another protocol, use optional
+`scope.pythonDynamicReferences`. Each item requires all three exact fields,
+with no wildcards; a class method such as an HTTP redirect hook uses an exact
+`ClassName.method_name` symbol:
 
 ```json
 {
@@ -338,6 +354,9 @@ escaping, malformed, or interpreter-less environment produces one actionable
 unresolved-import cascade. A dependency-free project uses the sealed
 dependency-free analysis. Ambient `VIRTUAL_ENV`, `PYTHONPATH`, shell startup,
 and executable lookup do not decide the environment.
+Every non-root import root from the shared inventory is passed explicitly as a
+`ty --extra-search-path`, so type resolution and the other Python checks use the
+same package model.
 That project-local `.venv` is only `ty`'s dependency-resolution input; it never
 selects Vulture's interpreter.
 

@@ -127,6 +127,31 @@ func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 	}
 }
 
+func TestWriteLockAtomicallyReplacesAnExistingLock(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	old := Lock{
+		LockVersion: LockVersion, CodePolishyVersion: "9.9.8",
+		ReleaseDigest: otherDigest, Features: []string{"javascript-bundle"},
+	}
+	want := Lock{
+		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
+	}
+	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), old)
+	if err := WriteLock(repoRoot, want); err != nil {
+		t.Fatal(err)
+	}
+	got, present, err := ReadLock(repoRoot)
+	if err != nil || !present || !slices.Equal(got.Features, want.Features) || got.CodePolishyVersion != want.CodePolishyVersion || got.ReleaseDigest != want.ReleaseDigest {
+		t.Fatalf("lock = %+v, present = %v, error = %v", got, present, err)
+	}
+	temporaries, err := filepath.Glob(filepath.Join(repoRoot, ".code-polishy-lock-*.tmp"))
+	if err != nil || len(temporaries) != 0 {
+		t.Fatalf("temporary locks = %v, error = %v", temporaries, err)
+	}
+}
+
 func TestParseLockRejectsWhatItCannotActOnExactly(t *testing.T) {
 	t.Parallel()
 	usable := `"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `"`

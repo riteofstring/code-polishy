@@ -16,15 +16,15 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 1
+const pythonVultureProtocolVersion = 2
 
 const pythonVultureVersion = "2.16"
 
 const pythonVultureInputMaximumBytes = 4 << 20
 
-const pythonVultureAdapter = `import ast,json,os,re,sys
+const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys
 from collections import defaultdict
-P=1
+P=2
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -94,11 +94,55 @@ def cm(f,node,parts):
  d=ds(f,node.body,parts[1])
  if len(d)!=1 or d[0][0]!="d":raise ValueError("class member is stale or ambiguous")
  return r+cm(f,d[0][1],parts[1:])
+def ib(f):
+ r={}
+ for x in f["tree"].body:
+  if isinstance(x,ast.Import):
+   for a in x.names:r[a.asname or a.name.partition(".")[0]]=a.name if a.asname else a.name.partition(".")[0]
+  elif isinstance(x,ast.ImportFrom) and not x.level and x.module:
+   for a in x.names:
+    if a.name!="*":r[a.asname or a.name]=x.module+"."+a.name
+ return r
+def en(x,b):
+ if isinstance(x,ast.Name):return b.get(x.id,x.id)
+ if isinstance(x,ast.Attribute):
+  z=en(x.value,b)
+  return z+"."+x.attr if z else ""
+ return ""
+def ka(f):
+ k=set();b=ib(f);typed=set()
+ protocols={
+  "ast.NodeVisitor":lambda n:n.startswith("visit_"),
+  "ast.NodeTransformer":lambda n:n.startswith("visit_"),
+  "urllib.request.BaseHandler":lambda n:n=="redirect_request" or n in ("default_open","unknown_open","proxy_open") or n.startswith("http_error_") or n.endswith("_open"),
+  "urllib.request.HTTPRedirectHandler":lambda n:n=="redirect_request" or n.startswith("http_error_"),
+  "html.parser.HTMLParser":lambda n:n in ("handle_starttag","handle_startendtag","handle_endtag","handle_data","handle_entityref","handle_charref","handle_comment","handle_decl","unknown_decl"),
+ }
+ for x in ast.walk(f["tree"]):
+  if isinstance(x,ast.ClassDef):
+   tests=[protocols.get(en(y,b)) for y in x.bases]
+   tests=[y for y in tests if y]
+   if tests:
+    for y in x.body:
+     if isinstance(y,(ast.FunctionDef,ast.AsyncFunctionDef)) and any(z(y.name) for z in tests):k.add(c(f,y,y.name))
+  if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef)) and x.name in ("__exit__","__aexit__"):
+   a=x.args
+   for y in a.posonlyargs+a.args+a.kwonlyargs+([a.vararg] if a.vararg else [])+([a.kwarg] if a.kwarg else []):k.add(c(f,y,y.arg))
+  if isinstance(x,(ast.Assign,ast.AnnAssign)):
+   value=x.value
+   if isinstance(value,ast.Call) and en(value.func,b)=="zipfile.ZipInfo":
+    targets=x.targets if isinstance(x,ast.Assign) else [x.target]
+    for y in targets:
+     if isinstance(y,ast.Name):typed.add(y.id)
+  if isinstance(x,ast.Attribute) and isinstance(x.ctx,ast.Store) and x.attr in ("__cause__","__context__","__traceback__","__suppress_context__"):k.add(c(f,x,x.attr))
+ for x in ast.walk(f["tree"]):
+  if isinstance(x,ast.Attribute) and isinstance(x.ctx,ast.Store) and isinstance(x.value,ast.Name) and x.value.id in typed:k.add(c(f,x,x.attr))
+ return k
 try:
  b=sys.stdin.buffer.read(M+1)
  if len(b)>M:raise ValueError("input exceeds limit")
  x=json.loads(b)
- if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references"}:raise ValueError("invalid request")
+ if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends"}:raise ValueError("invalid request")
  if type(x["protocol"]) is not int or x["protocol"]!=P or not isinstance(x["tool_version"],str):raise ValueError("invalid protocol")
  root=q(x["root"])
  if not os.path.isabs(root):raise ValueError("root is not absolute")
@@ -127,6 +171,13 @@ try:
   i=q(r["id"])
   if i in ids or not n(r["module"]) or not n(r["symbol"]):raise ValueError("invalid reference")
   ids.add(i);rs.append(r)
+ if not isinstance(x["backends"],list):raise ValueError("invalid backends")
+ bs=[]
+ for b in x["backends"]:
+  if not isinstance(b,dict) or set(b)!={"id","module","object"}:raise ValueError("invalid backend")
+  i=q(b["id"])
+  if i in ids or not n(b["module"]) or not isinstance(b["object"],str) or (b["object"] and not n(b["object"])):raise ValueError("invalid backend")
+  ids.add(i);bs.append(b)
  mods={}
  for f in fs:
   if f["path"].endswith(".py") and f["module"]:mods.setdefault(f["module"],[]).append(f)
@@ -135,11 +186,43 @@ try:
  v=vc.Vulture()
  for f in fs:
   v.scan(f["source"],filename=f["path"]);o["covered"].append(f["path"])
+ for i in {z.name for z in v.defined_imports}:
+  w="whitelists/"+i+"_whitelist.py"
+  try:d=pkgutil.get_data("vulture",w)
+  except OSError:continue
+  if d is not None:v.scan(d.decode("utf-8"),filename=w)
  keep=set()
+ for f in fs:keep.update(ka(f))
  for r in rs:
   try:
    keep.update(rm(None,r["module"],r["symbol"].split("."),set()));o["resolved"].append(r["id"])
   except Exception as z:o["problems"].append({"id":r["id"],"message":str(z)[:S]})
+ hooks=("build_wheel","build_sdist","get_requires_for_build_wheel","prepare_metadata_for_build_wheel","get_requires_for_build_sdist","build_editable","get_requires_for_build_editable","prepare_metadata_for_build_editable")
+ for b in bs:
+  try:
+   z=mods.get(b["module"],[])
+   if not z:raise ValueError("in-tree build backend module has no runtime .py definition")
+   if len(z)!=1:raise ValueError("in-tree build backend module is ambiguous")
+   f=z[0];body=f["tree"].body
+   if b["object"]:
+    parts=b["object"].split(".");d=ds(f,body,parts[0])
+    if len(d)!=1 or d[0][0]!="d":raise ValueError("in-tree build backend object is stale or ambiguous")
+    node=d[0][1];keep.add(c(f,node,parts[0]))
+    for name in parts[1:]:
+     if not isinstance(node,ast.ClassDef):raise ValueError("in-tree build backend object cannot be resolved statically")
+     d=ds(f,node.body,name)
+     if len(d)!=1 or d[0][0]!="d":raise ValueError("in-tree build backend object is stale or ambiguous")
+     node=d[0][1];keep.add(c(f,node,name))
+    if not isinstance(node,ast.ClassDef):raise ValueError("in-tree build backend object cannot expose hooks statically")
+    body=node.body
+   for name in hooks:
+    d=ds(f,body,name)
+    if len(d)>1:raise ValueError("in-tree build backend hook is ambiguous")
+    if len(d)==1:
+     if d[0][0]=="d":keep.add(c(f,d[0][1],name))
+     else:keep.update(rm(None,b["module"],[name],set()))
+   o["resolved"].append(b["id"])
+  except Exception as z:o["problems"].append({"id":b["id"],"message":str(z)[:S]})
  for z in v.get_unused_code(min_confidence=60):
   a=(str(z.filename),z.first_lineno,z.last_lineno,z.name)
   if a in keep:continue
@@ -162,18 +245,27 @@ type pythonVultureReference struct {
 	Symbol string `json:"symbol"`
 }
 
+type pythonVultureBackend struct {
+	ID     string `json:"id"`
+	Module string `json:"module"`
+	Object string `json:"object"`
+}
+
 type pythonVultureRequest struct {
 	Protocol    int                      `json:"protocol"`
 	ToolVersion string                   `json:"tool_version"`
 	Root        string                   `json:"root"`
 	Files       []pythonVultureFile      `json:"files"`
 	References  []pythonVultureReference `json:"references"`
+	Backends    []pythonVultureBackend   `json:"backends"`
 }
 
 type pythonVultureReferenceOrigin struct {
 	Path    string
 	Line    int
 	Subject string
+	Check   string
+	Message string
 }
 
 type pythonVultureDiagnostic struct {
@@ -221,9 +313,10 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	}
 	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
 	references, _ := pythonVultureReferences(repo, project)
+	backends, _ := pythonVultureBackends(project)
 	request := pythonVultureRequest{
 		Protocol: pythonVultureProtocolVersion, ToolVersion: pythonVultureVersion, Root: repo.Root,
-		Files: files, References: references,
+		Files: files, References: references, Backends: backends,
 	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
@@ -235,7 +328,7 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	return policy.Command{
 		Name:              "policy-vulture-dead-code-" + pythonQualityProjectName(project.Root),
 		Provides:          []string{"dead-code"},
-		Argv:              []string{interpreter, "-I", "-c", pythonVultureProgram},
+		Argv:              []string{interpreter, "-I", "-B", "-c", pythonVultureProgram},
 		Cwd:               ".",
 		Modules:           pythonQualityModules(repo, project.Files),
 		RunOn:             []string{"check", "gate"},
@@ -256,15 +349,37 @@ func pythonVultureReferences(repo repository.Repository, project repository.Pyth
 		}
 		id := pythonVultureConfigReferenceID(reference)
 		references = append(references, pythonVultureReference{ID: id, Module: reference.Module, Symbol: reference.Symbol})
-		origins[id] = pythonVultureReferenceOrigin{Path: configPath, Subject: id}
+		origins[id] = pythonVultureReferenceOrigin{
+			Path: configPath, Subject: id, Check: "policy.pythonDynamicReference",
+			Message: "Python dynamic reference cannot resolve exactly: ",
+		}
 	}
 	for _, reference := range project.DynamicReferences {
 		id := pythonVultureManifestReferenceID(project, reference)
 		references = append(references, pythonVultureReference{ID: id, Module: reference.Module, Symbol: reference.Symbol})
-		origins[id] = pythonVultureReferenceOrigin{Path: project.Manifest, Line: reference.Line, Subject: id}
+		origins[id] = pythonVultureReferenceOrigin{
+			Path: project.Manifest, Line: reference.Line, Subject: id, Check: "policy.pythonDynamicReference",
+			Message: "Python dynamic reference cannot resolve exactly: ",
+		}
 	}
 	sort.Slice(references, func(left, right int) bool { return references[left].ID < references[right].ID })
 	return references, origins
+}
+
+func pythonVultureBackends(project repository.PythonProject) ([]pythonVultureBackend, map[string]pythonVultureReferenceOrigin) {
+	if len(project.BackendPaths) == 0 || project.BuildBackend.Module == "" {
+		return []pythonVultureBackend{}, map[string]pythonVultureReferenceOrigin{}
+	}
+	id := "manifest:" + project.Manifest + ":build-system.build-backend:" + project.BuildBackend.Module
+	if project.BuildBackend.Object != "" {
+		id += ":" + project.BuildBackend.Object
+	}
+	backend := pythonVultureBackend{ID: id, Module: project.BuildBackend.Module, Object: project.BuildBackend.Object}
+	origin := pythonVultureReferenceOrigin{
+		Path: project.Manifest, Line: project.BuildBackend.Line, Subject: id, Check: "policy.pythonBuildBackend",
+		Message: "In-tree Python build backend cannot resolve exactly: ",
+	}
+	return []pythonVultureBackend{backend}, map[string]pythonVultureReferenceOrigin{id: origin}
 }
 
 func pythonVultureConfigReferenceID(reference policy.PythonDynamicReference) string {
@@ -308,12 +423,12 @@ func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, 
 	return findings
 }
 
-func pythonQualityDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool) ([]policy.Finding, map[string][]string) {
-	findings, referenceOnly, unrunnable := pythonQualityConfigDynamicReferenceProjects(repo, projects, selectedByProject)
-	return append(findings, pythonQualityInferredDynamicReferenceFindings(projects, selectedByProject, selectedManifests, referenceOnly, unrunnable)...), referenceOnly
+func pythonQualityDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string) {
+	findings, referenceOnly, unrunnable := pythonQualityConfigDynamicReferenceProjects(repo, projects, selectedByProject, invalidProjects)
+	return append(findings, pythonQualityInferredDynamicReferenceFindings(projects, selectedByProject, selectedManifests, referenceOnly, unrunnable, invalidProjects)...), referenceOnly
 }
 
-func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string) ([]policy.Finding, map[string][]string, map[string]bool) {
+func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string, map[string]bool) {
 	findings := []policy.Finding{}
 	referenceOnly := map[string][]string{}
 	unrunnable := map[string]bool{}
@@ -325,6 +440,9 @@ func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, pro
 				Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
 				Message: "Python dynamic reference names no current contained Python project",
 			})
+			continue
+		}
+		if invalidProjects[project.Manifest] {
 			continue
 		}
 		if _, selected := selectedByProject[project.Manifest]; selected {
@@ -343,10 +461,10 @@ func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, pro
 	return findings, referenceOnly, unrunnable
 }
 
-func pythonQualityInferredDynamicReferenceFindings(projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, referenceOnly map[string][]string, unrunnable map[string]bool) []policy.Finding {
+func pythonQualityInferredDynamicReferenceFindings(projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, referenceOnly map[string][]string, unrunnable map[string]bool, invalidProjects map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, project := range projects {
-		if len(project.DynamicReferences) == 0 || !pythonQualityChecksInferredDynamicReferences(project.Manifest, selectedByProject, selectedManifests, referenceOnly, unrunnable) {
+		if invalidProjects[project.Manifest] || len(project.DynamicReferences) == 0 || !pythonQualityChecksInferredDynamicReferences(project.Manifest, selectedByProject, selectedManifests, referenceOnly, unrunnable) {
 			continue
 		}
 		_, selected := selectedByProject[project.Manifest]
@@ -398,7 +516,11 @@ func pythonVultureFindings(repo repository.Repository, project repository.Python
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture analysis failed: "+response.Error)
 	}
 	references, origins := pythonVultureReferences(repo, project)
-	if err := validatePythonVultureResponse(project.Files, references, response); err != nil {
+	backends, backendOrigins := pythonVultureBackends(project)
+	for id, origin := range backendOrigins {
+		origins[id] = origin
+	}
+	if err := validatePythonVultureResponse(project.Files, references, backends, response); err != nil {
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
 	}
 	findings := pythonVultureReferenceFindings(response.Problems, origins)
@@ -470,11 +592,11 @@ func pythonVultureResponseWireComplete(wire pythonVultureResponseWire) bool {
 		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil
 }
 
-func validatePythonVultureResponse(files []string, references []pythonVultureReference, response pythonVultureResponse) error {
+func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, response pythonVultureResponse) error {
 	if err := validatePythonVultureCovered(files, response.Covered); err != nil {
 		return err
 	}
-	if err := validatePythonVultureReferences(references, response.Resolved, response.Problems); err != nil {
+	if err := validatePythonVultureReferences(references, backends, response.Resolved, response.Problems); err != nil {
 		return err
 	}
 	return validatePythonVultureDiagnostics(files, response.Diagnostics)
@@ -498,28 +620,56 @@ func validatePythonVultureCovered(files, covered []string) error {
 	return nil
 }
 
-func validatePythonVultureReferences(expected []pythonVultureReference, resolved []string, problems []pythonVultureProblem) error {
-	remaining := map[string]bool{}
-	for _, reference := range expected {
-		if remaining[reference.ID] {
-			return fmt.Errorf("policy dynamic references are not unique")
-		}
-		remaining[reference.ID] = true
+func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, resolved []string, problems []pythonVultureProblem) error {
+	remaining, err := pythonVultureRequestedReferences(references, backends)
+	if err != nil {
+		return err
 	}
+	if err := pythonVultureConsumeResolvedReferences(remaining, resolved); err != nil {
+		return err
+	}
+	if err := pythonVultureConsumeReferenceProblems(remaining, problems); err != nil {
+		return err
+	}
+	if len(remaining) != 0 {
+		return fmt.Errorf("reference result omits requested references")
+	}
+	return nil
+}
+
+func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend) (map[string]bool, error) {
+	requested := map[string]bool{}
+	for _, reference := range references {
+		if requested[reference.ID] {
+			return nil, fmt.Errorf("policy dynamic references are not unique")
+		}
+		requested[reference.ID] = true
+	}
+	for _, backend := range backends {
+		if requested[backend.ID] {
+			return nil, fmt.Errorf("vulture references are not unique")
+		}
+		requested[backend.ID] = true
+	}
+	return requested, nil
+}
+
+func pythonVultureConsumeResolvedReferences(remaining map[string]bool, resolved []string) error {
 	for _, id := range resolved {
 		if !remaining[id] {
 			return fmt.Errorf("resolved references are not an exact request")
 		}
 		delete(remaining, id)
 	}
+	return nil
+}
+
+func pythonVultureConsumeReferenceProblems(remaining map[string]bool, problems []pythonVultureProblem) error {
 	for _, problem := range problems {
 		if !remaining[problem.ID] || strings.TrimSpace(problem.Message) == "" || len(problem.Message) > pythonStructuredMessageMaximumBytes {
 			return fmt.Errorf("problem references are not an exact request")
 		}
 		delete(remaining, problem.ID)
-	}
-	if len(remaining) != 0 {
-		return fmt.Errorf("reference result omits requested references")
 	}
 	return nil
 }
@@ -577,8 +727,8 @@ func pythonVultureReferenceFindings(problems []pythonVultureProblem, origins map
 	for _, problem := range problems {
 		origin := origins[problem.ID]
 		findings = append(findings, policy.Finding{
-			Check: "policy.pythonDynamicReference", Path: origin.Path, Line: origin.Line, Subject: origin.Subject,
-			Message: "Python dynamic reference cannot resolve exactly: " + problem.Message,
+			Check: origin.Check, Path: origin.Path, Line: origin.Line, Subject: origin.Subject,
+			Message: origin.Message + problem.Message,
 		})
 	}
 	return findings

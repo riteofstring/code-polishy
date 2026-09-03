@@ -55,9 +55,12 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 	for _, file := range request.Files {
 		covered = append(covered, file.Path)
 	}
-	resolved := make([]string, 0, len(request.References))
+	resolved := make([]string, 0, len(request.References)+len(request.Backends))
 	for _, reference := range request.References {
 		resolved = append(resolved, reference.ID)
+	}
+	for _, backend := range request.Backends {
+		resolved = append(resolved, backend.ID)
 	}
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
@@ -91,6 +94,76 @@ func TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive(t *testing.T)
 	vulture := pythonQualityRequiredCommand(t, runner.commands, "policy-vulture-dead-code-root")
 	pythonQualityAssertVultureCommand(t, repo, vulture)
 	pythonQualityAssertCommandPlan(t, repo, runner.commands)
+}
+
+func TestPythonQualitySharesInTreeBackendSourceRootsWithManagedTools(t *testing.T) {
+	t.Parallel()
+	repo := pythonQualityRepository(t)
+	repo.Config.Modules[0].Paths = append(repo.Config.Modules[0].Paths, "packages/**")
+	writeQualityFile(t, repo.Root, "pyproject.toml", `[build-system]
+requires = []
+build-backend = "setta_build_backend"
+backend-path = ["packages/setta-runtime"]
+
+[project]
+name = "setta"
+requires-python = ">=3.12"
+dependencies = []
+`)
+	writeQualityFile(t, repo.Root, "packages/setta-runtime/setta_build_backend.py", "def build_wheel():\n    return 'setta.whl'\n")
+	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/runtime.py", "value = 1\n")
+	writeQualityFile(t, repo.Root, "packages/setta-runtime/tests/test_runtime.py", "from setta import runtime\n")
+	selected := []string{
+		"packages/setta-runtime/setta_build_backend.py",
+		"packages/setta-runtime/src/setta/runtime.py",
+		"packages/setta-runtime/tests/test_runtime.py",
+	}
+	plan := pythonQualityPlanFor(repo, selected)
+	if len(plan.findings) != 0 || len(plan.projects) != 1 {
+		t.Fatalf("plan = %+v", plan)
+	}
+	commands := plan.projects[0].commands
+	ty := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-ty-typecheck-root")
+	joinedTy := strings.Join(ty.Argv, "\x00")
+	for _, path := range []string{"packages/setta-runtime", "packages/setta-runtime/src"} {
+		if !strings.Contains(joinedTy, "--extra-search-path\x00"+path) {
+			t.Fatalf("ty command lacks source root %q: %+v", path, ty)
+		}
+	}
+	ruff := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-ruff-baseline-root")
+	if !strings.Contains(strings.Join(ruff.Argv, "\x00"), `src = [".", "packages/setta-runtime", "packages/setta-runtime/src"]`) {
+		t.Fatalf("Ruff command = %+v", ruff)
+	}
+	vulture := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-vulture-dead-code-root")
+	request := pythonVultureRequest{}
+	if err := json.Unmarshal(vulture.Stdin, &request); err != nil || len(request.Backends) != 1 ||
+		request.Backends[0].Module != "setta_build_backend" {
+		t.Fatalf("Vulture request = %+v, error = %v", request, err)
+	}
+}
+
+func TestPythonQualityReportsUnsupportedLayoutOnceAndStopsDependentTools(t *testing.T) {
+	t.Parallel()
+	repo := pythonQualityRepository(t)
+	repo.Config.Modules[0].Paths = append(repo.Config.Modules[0].Paths, "packages/**")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"setta\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/first.py", "value = 1\n")
+	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/second.py", "value = 2\n")
+	plan := pythonQualityPlanFor(repo, []string{
+		"packages/setta-runtime/src/setta/first.py", "packages/setta-runtime/src/setta/second.py",
+	})
+	if len(plan.projects) != 0 || len(plan.findings) != 1 || plan.findings[0].Check != "policy.pythonProject" ||
+		!strings.Contains(plan.findings[0].Message, "Python project layout is unsupported") {
+		t.Fatalf("plan = %+v", plan)
+	}
+}
+
+func pythonQualityCommandValues(commands []pythonQualityCommand) []policy.Command {
+	result := make([]policy.Command, 0, len(commands))
+	for _, command := range commands {
+		result = append(result, command.command)
+	}
+	return result
 }
 
 func pythonQualityAssertRuffFindings(t *testing.T, findings []policy.Finding) {
@@ -131,8 +204,9 @@ func pythonQualityAssertRuffTargetCommand(t *testing.T, target policy.Command) {
 func pythonQualityAssertVultureCommand(t *testing.T, repo repository.Repository, vulture policy.Command) {
 	t.Helper()
 	if !vulture.SealedEnvironment || !slices.Equal(vulture.Provides, []string{"dead-code"}) ||
-		len(vulture.Argv) != 4 || vulture.Argv[0] != repo.PythonTool() || vulture.Argv[1] != "-I" || vulture.Argv[2] != "-c" ||
-		strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") || strings.ContainsAny(vulture.Argv[3], "\x00\r\n") {
+		len(vulture.Argv) != 5 || vulture.Argv[0] != repo.PythonTool() || vulture.Argv[1] != "-I" || vulture.Argv[2] != "-B" ||
+		vulture.Argv[3] != "-c" || strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") ||
+		strings.ContainsAny(vulture.Argv[4], "\x00\r\n") {
 		t.Fatalf("Vulture command = %+v", vulture)
 	}
 	pythonQualityAssertVultureRequest(t, vulture.Stdin)
@@ -144,7 +218,7 @@ func pythonQualityAssertVultureRequest(t *testing.T, data []byte) {
 	if err := json.Unmarshal(data, &request); err != nil || request.Protocol != pythonVultureProtocolVersion ||
 		request.ToolVersion != pythonVultureVersion || !slices.EqualFunc(request.Files, []pythonVultureFile{{Path: "src/app.py", Module: "app"}}, func(left, right pythonVultureFile) bool {
 		return left == right
-	}) {
+	}) || len(request.Backends) != 0 {
 		t.Fatalf("Vulture request = %+v, error = %v", request, err)
 	}
 }
@@ -601,6 +675,160 @@ func TestPythonVultureAdapterResolvesExactSameNamedReferencesWhenInstalled(t *te
 	})
 	if left || reexport || !noqa || !right {
 		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestPythonVultureAdapterUsesVersionMatchedDynamicContractsWhenInstalled(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	if !pythonVultureRuntimeInstalled(t, repo) {
+		t.Skip("policy CPython with Vulture is not installed")
+	}
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "src/contracts.py", `import ast
+import ctypes
+import html.parser
+import unittest
+import urllib.request
+import zipfile
+from unittest import mock
+
+class ExampleCase(unittest.TestCase):
+    def setUp(self):
+        self.value = 1
+
+class ExampleVisitor(ast.NodeVisitor):
+    def visit_FunctionDef(self, node):
+        return node
+    def visit_Match(self, node):
+        return node
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *arguments, **keywords):
+        return None
+
+class MarkupParser(html.parser.HTMLParser):
+    def handle_starttag(self, tag, attributes):
+        return None
+
+class Context:
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+def zip_metadata():
+    info = zipfile.ZipInfo("entry")
+    info.compress_type = zipfile.ZIP_DEFLATED
+    return info
+
+def chained(error):
+    problem = RuntimeError()
+    problem.__cause__ = error
+    return problem
+
+library = ctypes.CDLL(None)
+library.printf.argtypes = []
+library.printf.restype = ctypes.c_int
+patched = mock.Mock()
+patched.side_effect = RuntimeError
+`)
+	project := pythonVultureProject(t, repo)
+	command, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := parsePythonVultureResponse(output.Stdout)
+	if err != nil || response.Error != "" {
+		t.Fatalf("response = %+v, error = %v", response, err)
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if slices.Contains([]string{
+			"setUp", "visit_FunctionDef", "visit_Match", "redirect_request", "handle_starttag", "exc_type", "exc_value", "traceback",
+			"compress_type", "__cause__", "argtypes", "restype", "side_effect",
+		}, diagnostic.Name) {
+			t.Fatalf("standard dynamic contract reported dead: %+v", diagnostic)
+		}
+	}
+}
+
+func TestPythonVultureAdapterInfersInTreeBuildBackendHooksWhenInstalled(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	if !pythonVultureRuntimeInstalled(t, repo) {
+		t.Skip("policy CPython with Vulture is not installed")
+	}
+	writeQualityFile(t, repo.Root, "pyproject.toml", `[build-system]
+requires = []
+build-backend = "build_backend"
+backend-path = ["backend"]
+
+[project]
+name = "example"
+requires-python = "==3.12.*"
+dependencies = []
+`)
+	writeQualityFile(t, repo.Root, "backend/build_backend.py", `def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    return "example.whl"
+
+def build_sdist(sdist_directory, config_settings=None):
+    return "example.tar.gz"
+
+def unused_helper():
+    return 1
+`)
+	project := pythonVultureProject(t, repo)
+	command, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := pythonVultureFindings(repo, project, output.Stdout)
+	for _, hook := range []string{"build_wheel", "build_sdist"} {
+		if slices.ContainsFunc(findings, func(finding policy.Finding) bool { return strings.Contains(finding.Message, hook) }) {
+			t.Fatalf("build hook %s reported dead: %+v", hook, findings)
+		}
+	}
+	if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "quality.deadCode" && strings.Contains(finding.Message, "unused_helper")
+	}) {
+		t.Fatalf("unused helper was not reported: %+v", findings)
+	}
+}
+
+func TestPythonVultureExactClassMemberReferenceCoversFrameworkHookWhenInstalled(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	if !pythonVultureRuntimeInstalled(t, repo) {
+		t.Skip("policy CPython with Vulture is not installed")
+	}
+	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
+		Project: "pyproject.toml", Module: "handler", Symbol: "Plugin.on_event",
+	}}
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "src/handler.py", `class Plugin:
+    def on_event(self, event):
+        return None
+`)
+	project := pythonVultureProject(t, repo)
+	command, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := pythonVultureFindings(repo, project, output.Stdout)
+	if slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.pythonDynamicReference" || strings.Contains(finding.Message, "on_event")
+	}) {
+		t.Fatalf("exact framework hook reference was not honored: %+v", findings)
 	}
 }
 

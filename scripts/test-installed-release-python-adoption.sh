@@ -454,11 +454,14 @@ EOF
   expect_absent "python-adoption missing root environment" "^FAIL +quality.typecheck "
   python_adoption_create_venv "${host_python}" "${target}/.venv"
 
-  write_file "${target}/src/adoption_api/changed.py" <<'EOF'
-def changed() -> str:
-    return "changed"
+  write_file "${target}/src/adoption_api/endpoint.py" <<'EOF'
+from adoption_service.render import render
+
+
+def endpoint() -> str:
+    return render() + " changed"
 EOF
-  "${real_git}" -C "${target}" add src/adoption_api/changed.py
+  "${real_git}" -C "${target}" add src/adoption_api/endpoint.py
   "${real_git}" -C "${target}" commit --quiet -m "application candidate"
   : >"${command_log}"
   expect_pass "${target}" "python-adoption changed tests" test --changed --base "${base}"

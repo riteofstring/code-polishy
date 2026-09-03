@@ -278,16 +278,20 @@ already require and run the policy-owned evidence.
 Before Python quality or architecture work, Code Polishy builds one inventory
 from all governed files. Each `.py` and `.pyi` file belongs to its nearest
 contained `pyproject.toml` project. The inventory records the project root, a
-contained `src` root when one exists, the exact project files, regular and
-namespace-package candidates without requiring `__init__.py`, and an existing
-project-local `.venv`. A nested project owns its own files and environment;
-an ancestor cannot absorb it. The manifest is parsed once at this boundary and
-the dependency and quality paths reuse the validated facts.
+contained direct `src` root, every normalized in-tree PEP 517
+`build-system.backend-path` root and its direct `src`, the exact project files,
+regular and namespace-package candidates without requiring `__init__.py`, and
+an existing project-local `.venv`. A nested project owns its own files and
+environment; an ancestor cannot absorb it. The manifest is parsed once at this
+boundary and the dependency and quality paths reuse the validated facts.
 
 No project owner, ambiguous project ownership, unreadable or escaping paths,
-non-regular source, unreadable manifests, and unsupported project layouts are
-coverage failures. Ambient `VIRTUAL_ENV`, `PYTHONPATH`, shell startup files,
-and executable lookup do not select a project or an environment.
+non-regular source, unreadable manifests, and unsupported project layouts fail
+closed. A project-level structural failure is reported once as
+`policy.pythonProject`, and dependent quality and graph analysis stops instead
+of producing one secondary failure per file and tool. Ambient `VIRTUAL_ENV`,
+`PYTHONPATH`, shell startup files, and executable lookup do not select a project
+or an environment.
 
 For each selected project, the pinned Ruff runs `analyze graph` in isolated
 mode. Code Polishy supplies the `project.requires-python`-derived target and
@@ -297,8 +301,9 @@ bounded graph output once. Target Ruff configuration cannot change this
 evidence. Code Polishy, rather than Ruff or a target command, then decides file
 and module ownership, allowed `dependsOn` edges, and coverage.
 
-The built-in resolver covers flat and `src` layouts, nested projects with
-overlapping import names, regular and namespace packages, package
+The built-in resolver covers flat, direct `src`, and in-tree PEP 517 backend
+layouts, nested projects with overlapping import names, regular and namespace
+packages, package
 `__init__.py` re-exports, `.py` and `.pyi` modules, absolute and valid relative
 imports, and exact one-argument `importlib.import_module(...)` or
 `__import__(...)` calls whose argument is one plain string literal.

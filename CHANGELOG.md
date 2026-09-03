@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.21.5 - 2026-09-03
+
+- Support root-owned Python packages below validated in-tree build-backend
+  paths, and share those source roots across Ruff, ty, Vulture, and
+  architecture analysis. Report an unsupported layout once at the project
+  boundary instead of cascading tool failures.
+- Keep Vulture's 60% dead-code baseline while recognizing its version-matched
+  standard-library whitelists, standard syntax-bound Python hooks, and exact
+  in-tree PEP 517 backend hooks. Prevent managed Python analysis from writing
+  bytecode into the sealed installed release.
+- Define the authority transition during a Code Polishy upgrade and replace
+  the repository lock atomically before the incoming guidance takes effect.
+
 ## 0.21.4 - 2026-09-03
 
 - Make recurring external security monitoring opt-in through

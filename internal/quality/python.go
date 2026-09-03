@@ -246,11 +246,11 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 		return pythonQualityPlan{findings: findings}
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
-	findings, invalid := pythonQualityInventoryFindings(sources, inventory)
+	findings, invalid, invalidProjects := pythonQualityInventoryFindings(repo, sources, selectedManifests, inventory)
 	projects, owners := pythonQualityProjectOwners(inventory)
 	selectedByProject, ownershipFindings := pythonQualitySelectedProjects(sources, invalid, owners)
 	findings = append(findings, ownershipFindings...)
-	referenceFindings, referenceOnly := pythonQualityDynamicReferenceProjects(repo, projects, selectedByProject, selectedManifests)
+	referenceFindings, referenceOnly := pythonQualityDynamicReferenceProjects(repo, projects, selectedByProject, selectedManifests, invalidProjects)
 	findings = append(findings, referenceFindings...)
 	planned := []pythonQualityProject{}
 	for _, manifest := range pythonQualityProjectManifests(selectedByProject) {
@@ -294,123 +294,16 @@ func pythonQualityNonDeadCodeCoverage(sources []string, message string) []policy
 	return append(findings, pythonQualityCoverage(sources, "quality.typecheckCoverage", "ty", message)...)
 }
 
-func pythonQualityInventoryFindings(sources []string, inventory repository.PythonProjectInventory) ([]policy.Finding, map[string]bool) {
-	invalid := map[string]bool{}
-	findings := []policy.Finding{}
-	for _, problem := range inventory.Problems {
-		for _, source := range sources {
-			if invalid[source] || !pythonInventoryProblemAffects(problem, source) {
-				continue
-			}
-			invalid[source] = true
-			message := "the Python project inventory cannot cover this source: " + problem.Message
-			findings = append(findings, pythonQualityAllCoverage([]string{source}, message)...)
-		}
-	}
-	return findings, invalid
-}
-
-func pythonQualityProjectOwners(inventory repository.PythonProjectInventory) (map[string]repository.PythonProject, map[string]string) {
-	projects := map[string]repository.PythonProject{}
-	owners := map[string]string{}
-	for _, project := range inventory.Projects {
-		projects[project.Manifest] = project
-		for _, source := range project.Files {
-			owners[source] = project.Manifest
-		}
-	}
-	return projects, owners
-}
-
-func pythonQualitySelectedProjects(sources []string, invalid map[string]bool, owners map[string]string) (map[string][]string, []policy.Finding) {
-	selectedByProject := map[string][]string{}
-	findings := []policy.Finding{}
-	for _, source := range sources {
-		if invalid[source] {
-			continue
-		}
-		manifest, found := owners[source]
-		if found {
-			selectedByProject[manifest] = append(selectedByProject[manifest], source)
-			continue
-		}
-		message := "the Python project inventory did not assign this source to a project"
-		findings = append(findings, pythonQualityAllCoverage([]string{source}, message)...)
-	}
-	return selectedByProject, findings
-}
-
-func pythonQualityProjectManifests(selectedByProject map[string][]string) []string {
-	manifests := make([]string, 0, len(selectedByProject))
-	for manifest := range selectedByProject {
-		manifests = append(manifests, manifest)
-	}
-	sort.Strings(manifests)
-	return manifests
-}
-
-func pythonQualityPlannedProject(repo repository.Repository, manifest string, selected []string, projects map[string]repository.PythonProject) (pythonQualityProject, bool, []policy.Finding) {
-	sources := append([]string{}, selected...)
-	sort.Strings(sources)
-	project, found := projects[manifest]
-	if !found {
-		message := "the Python project inventory returned an unknown project"
-		return pythonQualityProject{}, false, pythonQualityAllCoverage(sources, message)
-	}
-	commands, typecheckProblem, err := pythonQualityProjectCommands(repo, project, sources)
-	if err != nil {
-		message := "the Python project cannot produce a contained quality command: " + err.Error()
-		findings := pythonQualityNonDeadCodeCoverage(sources, message)
-		findings = append(findings, pythonVultureCoverage(project.Files, message)...)
-		return pythonQualityProject{}, false, findings
-	}
-	findings := []policy.Finding{}
-	if typecheckProblem != "" {
-		findings = append(findings, policy.Finding{
-			Check: "quality.typecheckCoverage", Path: project.Manifest, Subject: "ty", Message: typecheckProblem,
-		})
-	}
-	return pythonQualityProject{project: project, sources: sources, commands: commands}, true, findings
-}
-
-func pythonQualitySources(repo repository.Repository, selected []string) []string {
-	seen := map[string]bool{}
-	sources := []string{}
-	for _, source := range selected {
-		if repo.Language(source) != "python" || seen[source] {
-			continue
-		}
-		seen[source] = true
-		sources = append(sources, source)
-	}
-	sort.Strings(sources)
-	return sources
-}
-
-func pythonInventoryProblemAffects(problem repository.PythonInventoryProblem, source string) bool {
-	for _, candidate := range []string{problem.Path, problem.Subject} {
-		if candidate == source {
-			return true
-		}
-		if candidate == "." || candidate != "" && strings.HasPrefix(source, strings.TrimSuffix(candidate, "/")+"/") {
-			return true
-		}
-		if filepath.Base(candidate) == "pyproject.toml" {
-			directory := filepath.ToSlash(filepath.Dir(candidate))
-			if directory == "." || strings.HasPrefix(source, directory+"/") {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func pythonQualityProjectCommands(repo repository.Repository, project repository.PythonProject, sources []string) ([]pythonQualityCommand, string, error) {
 	paths, err := pythonQualityProjectPaths(project, sources)
 	if err != nil {
 		return nil, "", err
 	}
-	ruffOptions, err := project.Ruff.CommandOptions()
+	searchPaths, err := pythonQualityProjectSearchPaths(project)
+	if err != nil {
+		return nil, "", err
+	}
+	ruffOptions, err := project.Ruff.CommandOptions(project.Root, project.SourceRoots)
 	if err != nil {
 		return nil, "", err
 	}
@@ -428,14 +321,14 @@ func pythonQualityProjectCommands(repo repository.Repository, project repository
 	}
 	commands = append(commands, pythonQualityCommand{kind: pythonVultureQualityKind, command: vulture})
 	if len(project.Requirements) == 0 {
-		commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, "")})
+		commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, "")})
 		return commands, "", nil
 	}
 	venv, venvErr := pythonQualityVenv(repo, project)
 	if venvErr != nil {
 		return commands, venvErr.Error(), nil
 	}
-	commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, venv)})
+	commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, venv)})
 	return commands, "", nil
 }
 
@@ -464,6 +357,20 @@ func pythonQualityProjectPaths(project repository.PythonProject, sources []strin
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	return paths, nil
+}
+
+func pythonQualityProjectSearchPaths(project repository.PythonProject) ([]string, error) {
+	paths := []string{}
+	for _, root := range project.SourceRoots {
+		relative, err := pythonQualityProjectPath(project, root)
+		if err != nil {
+			return nil, err
+		}
+		if relative != "." {
+			paths = append(paths, relative)
+		}
+	}
 	return paths, nil
 }
 
@@ -546,7 +453,7 @@ func pythonRuffTargetCommand(repo repository.Repository, project repository.Pyth
 	}
 }
 
-func pythonTyCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string, venv string) policy.Command {
+func pythonTyCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, searchPaths []string, venv string) policy.Command {
 	arguments := []string{
 		repo.PolicyTool("ty"), "check", "--config-file", filepath.Join(repo.PolicyRoot, "tools", "ty.toml"), "--project", ".",
 		"--output-format", "gitlab", "--exit-zero", "--no-progress", "--color", "never",
@@ -554,6 +461,9 @@ func pythonTyCommand(repo repository.Repository, project repository.PythonProjec
 	}
 	if venv != "" {
 		arguments = append(arguments, "--python", venv)
+	}
+	for _, searchPath := range searchPaths {
+		arguments = append(arguments, "--extra-search-path", searchPath)
 	}
 	arguments = append(arguments, "--")
 	arguments = append(arguments, paths...)

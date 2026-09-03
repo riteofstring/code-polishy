@@ -260,8 +260,10 @@ That is the whole file. It carries no path, credential, URL, channel, fallback
 version, or platform-specific digest, so the same lock selects the same release
 on every supported host.
 
-Writing the lock is an explicit operation, and only the release being required
-performs it. Run `lock` from that release, in the target repository:
+Writing the lock is an explicit atomic operation, and only the release being
+required performs it. The outgoing lock and guidance govern until this command
+replaces the file; the incoming release governs afterward. Run `lock` from that
+release, in the target repository:
 
 ```sh
 "${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" lock

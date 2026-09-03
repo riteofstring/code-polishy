@@ -44,10 +44,11 @@ suite is a finding rather than a skipped check.
 Any governed `.py` or `.pyi` file activates Ruff through the shared Python
 project inventory. Its root is the nearest contained `pyproject.toml` project,
 not the nearest target Ruff configuration. Nested projects remain separate;
-the inventory also supplies a contained `src` root when present. Every project
-must declare a `project.requires-python` range with a usable minimum minor;
-Code Polishy passes that derived Ruff target and the validated source roots to
-every managed Ruff invocation.
+the inventory also supplies a contained direct `src` root and normalized
+in-tree PEP 517 `build-system.backend-path` roots plus their direct `src`
+directories. Every project must declare a `project.requires-python` range with
+a usable minimum minor; Code Polishy passes that derived Ruff target and the
+validated source roots to every managed Ruff invocation.
 
 The module uses policy-owned Ruff `0.16.0` for:
 
@@ -83,8 +84,12 @@ governed contained project at fixed 60% confidence through carried CPython
 ambient Python interpreter, and target Vulture configuration is ignored.
 
 PEP 621 `project.scripts`, `project.gui-scripts`, and every
-`project.entry-points.*` table infer reachable module symbols. A target may add
-only a dynamic reference that Vulture cannot otherwise see, using
+`project.entry-points.*` table infer reachable module symbols. In-tree PEP 517
+backends infer their statically defined standard hooks. Vulture's own
+version-matched import whitelists cover supported standard-library dynamic
+contracts, supplemented by Code Polishy's syntax-bound standard protocol
+inventory. A target may add only a dynamic reference that remains invisible,
+using
 `scope.pythonDynamicReferences` exact `{project,module,symbol}` objects. Each
 field is required, `project` is the canonical contained-project
 `pyproject.toml` path, `module` and `symbol` are Python identifier chains,
@@ -104,6 +109,8 @@ does not enable every rule or turn warnings into errors. A target `ty.toml` does
 not replace or weaken the policy-owned diagnostic configuration. A project with
 dependencies passes only its validated project-local `.venv` to `ty`; ambient
 Python environment variables and executable lookup do not decide the result.
+A project's non-root import roots are passed explicitly through repeatable
+`--extra-search-path` options.
 A target therefore pins no Python type checker and declares no Python typecheck
 provider. Its `.venv` is only `ty`'s explicit dependency input; Vulture uses the
 release-owned CPython runtime instead.

@@ -68,9 +68,11 @@ keep the sealed bundle portable and minimal.
   imports, select a project, or perform dead-code analysis.
 - The repository boundary builds one validated Python project inventory from
   contained `pyproject.toml` files and reuses it for dependency, quality, and
-  architecture work. A project-local `.venv` is passed only to `ty` explicitly
-  when dependencies require it; Vulture always uses carried CPython. Ambient
-  Python paths and environments are not tool provenance.
+  architecture work. Its project, direct `src`, and in-tree PEP 517 backend
+  roots are passed explicitly to the consumers. A project-local `.venv` is
+  passed only to `ty` when dependencies require it; Vulture always uses carried
+  CPython and its pinned built-in whitelists. Ambient Python paths and
+  environments are not tool provenance.
 - Python manifests and `uv.lock` are target-owned inputs. Exact Git repository
   and commit facts remain source facts, not a fabricated PyPI age or
   vulnerability result when registry evidence is unavailable.

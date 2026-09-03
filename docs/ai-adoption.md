@@ -557,15 +557,20 @@ The final response must include:
 
 When asked to upgrade Code Polishy, the AI agent should:
 
-1. read the target instructions and preserve its working tree;
+1. read the outgoing locked instructions and preserve the working tree; those
+   instructions govern until the lock cutover;
 2. honor an exact version requested by the caller or resolve the highest stable
    annotated version tag from the authoritative repository; never upgrade from
    floating `main`;
 3. clone and verify that exact tag as described above, then reuse or install its
    exact native release;
 4. read every intervening `CHANGELOG.md` entry;
-5. rewrite `.code-polishy.lock.json` by running `lock` from that exact release;
-6. update target configuration directly for changed requirements;
+5. run `lock` from that exact release as the sole incoming pre-cutover command;
+   it atomically replaces `.code-polishy.lock.json` and transfers authority to
+   the incoming release;
+6. read the incoming `agent-workflows` guide and capture the caller's exact
+   request when it requires capture, then update target configuration directly
+   for changed requirements;
 7. run strict doctor, inspect the test plan, and run the ordinary gate;
 8. report supplemental hardening as `NOT RUN` unless the caller explicitly
    requests it, a checked-in workflow explicitly invokes it for that upgrade

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -26,4 +27,21 @@ func PythonModuleName(project PythonProject, source string) (module, packageName
 		parts = packageParts
 	}
 	return strings.Join(parts, "."), strings.Join(packageParts, ".")
+}
+
+func pythonProjectModuleLayoutProblem(project PythonProject) *PythonInventoryProblem {
+	for _, source := range project.Files {
+		module, packageName := PythonModuleName(project, source)
+		if (module == "" || validPythonEntryPointIdentifierChain(module)) && (packageName == "" || validPythonEntryPointIdentifierChain(packageName)) {
+			continue
+		}
+		problem := pythonInventoryProblem(
+			PythonUnsupportedLayoutProblem,
+			project.Manifest,
+			source,
+			fmt.Sprintf("Python project layout is unsupported: %s resolves to invalid module %q; move the manifest or place the source below a project src or build-system.backend-path root", source, module),
+		)
+		return &problem
+	}
+	return nil
 }
