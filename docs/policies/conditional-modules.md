@@ -49,8 +49,8 @@ the inventory also supplies a contained `src` root when present.
 The module uses policy-owned Ruff `0.16.0` for:
 
 - selected-file `ruff format --check` during `check` and `gate`;
-- selected-file sealed `E4`, `E7`, `E9`, and `F` lint during `check` and `gate`,
-  with `noqa` ignored;
+- selected-file sealed `B`, `C4`, `E`, `F`, `I`, `PIE`, `RUF`, `SIM`, and
+  `UP` lint during `check` and `gate`, with `noqa` ignored;
 - selected-file target Ruff additions during `check` and `gate`, after the
   separate sealed baseline described in
   [Code Quality](code-quality.md#python-ruff-vulture-and-ty);

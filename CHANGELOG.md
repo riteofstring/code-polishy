@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.21.2 - 2026-09-02
+
+- Expand the sealed Python Ruff lint baseline to `B`, `C4`, `E`, `F`, `I`,
+  `PIE`, `RUF`, `SIM`, and `UP`, while keeping `C901` in its dedicated
+  policy-owned complexity pass.
+
 ## 0.21.1 - 2026-09-02
 
 - Make the policy-owned Vulture adapter safe for durable gate command

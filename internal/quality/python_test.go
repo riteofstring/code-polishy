@@ -72,13 +72,13 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 func TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n\n[tool.ruff.lint]\nignore = [\"F401\"]\nselect = [\"I\"]\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n\n[tool.ruff.lint]\nignore = [\"F401\"]\nselect = [\"ANN\"]\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "import unused\n")
 	runner := &pythonQualityRunner{outputs: map[string]string{
 		"policy-ruff-baseline-coverage-root": "src/app.py\n",
-		"policy-ruff-baseline-root":          `[{"code":"F401","filename":"src/app.py","location":{"row":1,"column":1},"message":"unused import"}]`,
+		"policy-ruff-baseline-root":          `[{"code":"B006","filename":"src/app.py","location":{"row":1,"column":1},"message":"mutable default"},{"code":"F401","filename":"src/app.py","location":{"row":1,"column":1},"message":"unused import"}]`,
 		"policy-ruff-complexity-root":        `[]`,
-		"policy-ruff-target-root":            `[{"code":"F401","filename":"src/app.py","location":{"row":1,"column":1},"message":"unused import"},{"code":"I001","filename":"src/app.py","location":{"row":1,"column":1},"message":"import block is un-sorted"}]`,
+		"policy-ruff-target-root":            `[{"code":"ANN201","filename":"src/app.py","location":{"row":1,"column":1},"message":"missing return type"}]`,
 		"policy-ty-typecheck-root":           `[]`,
 	}}
 
@@ -95,10 +95,10 @@ func TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive(t *testing.T)
 
 func pythonQualityAssertRuffFindings(t *testing.T, findings []policy.Finding) {
 	t.Helper()
-	if len(findings) != 2 || findings[0].Check != "quality.lint" || findings[1].Check != "quality.lint" {
+	if len(findings) != 3 || findings[0].Check != "quality.lint" || findings[1].Check != "quality.lint" || findings[2].Check != "quality.lint" {
 		t.Fatalf("findings = %+v", findings)
 	}
-	if findings[0].Subject != "F401" || findings[1].Subject != "I001" {
+	if findings[0].Subject != "ANN201" || findings[1].Subject != "B006" || findings[2].Subject != "F401" {
 		t.Fatalf("findings = %+v", findings)
 	}
 }
@@ -115,7 +115,7 @@ func pythonQualityRequiredCommand(t *testing.T, commands []policy.Command, name 
 func pythonQualityAssertRuffBaselineCommand(t *testing.T, baseline policy.Command) {
 	t.Helper()
 	if !baseline.SealedEnvironment || !slices.Contains(baseline.Argv, "--isolated") ||
-		!slices.Contains(baseline.Argv, "--ignore-noqa") || !slices.Contains(baseline.Argv, "E4,E7,E9,F") ||
+		!slices.Contains(baseline.Argv, "--ignore-noqa") || !slices.Contains(baseline.Argv, pythonRuffBaselineSelection) ||
 		!slices.Equal(baseline.Provides, []string{"lint"}) {
 		t.Fatalf("baseline command = %+v", baseline)
 	}
@@ -327,6 +327,7 @@ func TestPythonQualityRejectsMalformedAndEscapingStructuredOutput(t *testing.T) 
 	}{
 		{name: "omitted ruff", output: "", check: "quality.lintCoverage", command: "policy-ruff-baseline-coverage-root"},
 		{name: "malformed ruff", output: "not JSON", check: "quality.lintCoverage", command: "policy-ruff-baseline-root"},
+		{name: "unexpected ruff family", output: `[{"code":"BLE001","filename":"src/app.py","location":{"row":1,"column":1},"message":"blind exception"}]`, check: "quality.lintCoverage", command: "policy-ruff-baseline-root"},
 		{name: "escaping ty", output: `[{"check_name":"invalid-assignment","description":"wrong","location":{"path":"../../outside.py","lines":{"begin":1}}}]`, check: "quality.typecheckCoverage", command: "policy-ty-typecheck-root"},
 	} {
 		test := test

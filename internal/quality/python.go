@@ -29,6 +29,10 @@ const pythonStructuredDiagnosticMaximum = 10000
 
 const pythonStructuredMessageMaximumBytes = 4096
 
+const pythonRuffBaselineSelection = "B,C4,E,F,I,PIE,RUF,SIM,UP"
+
+const pythonRuffComplexitySelection = "C901"
+
 type pythonQualityKind string
 
 const (
@@ -175,7 +179,7 @@ func pythonQualityRuffLintFindings(repo repository.Repository, project pythonQua
 		return pythonQualityCoverage(project.sources, "quality.lintCoverage", "ruff", "the policy-owned Ruff output cannot be used: "+err.Error())
 	}
 	if baseline && !pythonRuffBaselineDiagnostics(diagnostics) {
-		return pythonQualityCoverage(project.sources, "quality.lintCoverage", "ruff", "the isolated Ruff baseline emitted a diagnostic outside E4, E7, E9, and F")
+		return pythonQualityCoverage(project.sources, "quality.lintCoverage", "ruff", "the isolated Ruff baseline emitted a diagnostic outside "+pythonRuffBaselineSelection)
 	}
 	return pythonRuffDiagnosticFindings(diagnostics, "quality.lint")
 }
@@ -433,7 +437,7 @@ func pythonQualityProjectCommands(repo repository.Repository, project repository
 
 func pythonRuffBaselineCoverageCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", "E4,E7,E9,F",
+		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection,
 		"--no-respect-gitignore", "--no-force-exclude", "--show-files", "--exit-zero", "--",
 	}
 	arguments = append(arguments, paths...)
@@ -488,7 +492,7 @@ func pythonQualityProjectName(root string) string {
 
 func pythonRuffBaselineCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", "E4,E7,E9,F", "--ignore-noqa",
+		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection, "--ignore-noqa",
 		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
 	}
 	arguments = append(arguments, paths...)
@@ -505,7 +509,7 @@ func pythonRuffComplexityCommand(repo repository.Repository, project repository.
 		complexity = policy.MaxPythonComplexity
 	}
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", "C901", "--ignore-noqa",
+		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffComplexitySelection, "--ignore-noqa",
 		"--config", "lint.mccabe.max-complexity = " + strconv.Itoa(complexity-1),
 		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
 	}
@@ -836,7 +840,7 @@ func pythonQualitySelectedSources(sources []string) map[string]bool {
 
 func pythonRuffBaselineDiagnostics(diagnostics []pythonRuffDiagnostic) bool {
 	for _, diagnostic := range diagnostics {
-		if strings.HasPrefix(diagnostic.Code, "F") || strings.HasPrefix(diagnostic.Code, "E4") || strings.HasPrefix(diagnostic.Code, "E7") || strings.HasPrefix(diagnostic.Code, "E9") {
+		if pythonRuffBaselineDiagnostic(diagnostic.Code) {
 			continue
 		}
 		return false
@@ -844,9 +848,30 @@ func pythonRuffBaselineDiagnostics(diagnostics []pythonRuffDiagnostic) bool {
 	return true
 }
 
+func pythonRuffBaselineDiagnostic(code string) bool {
+	for _, prefix := range []string{"B", "C4", "E", "F", "I", "PIE", "RUF", "SIM", "UP"} {
+		if pythonRuffDiagnosticFamily(code, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func pythonRuffDiagnosticFamily(code, prefix string) bool {
+	if !strings.HasPrefix(code, prefix) || len(code) == len(prefix) {
+		return false
+	}
+	for _, character := range code[len(prefix):] {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func pythonRuffComplexityDiagnostics(diagnostics []pythonRuffDiagnostic) bool {
 	for _, diagnostic := range diagnostics {
-		if diagnostic.Code != "C901" {
+		if diagnostic.Code != pythonRuffComplexitySelection {
 			return false
 		}
 	}

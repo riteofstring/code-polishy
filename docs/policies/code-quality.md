@@ -256,9 +256,10 @@ tool result is a coverage finding, never a clean result.
 
 Ruff has three policy-owned boundaries:
 
-1. An isolated lint baseline runs `E4`, `E7`, `E9`, and `F` with `noqa`
-   ignored. Its findings, including `F` unused-import diagnostics, are lint;
-   they are not Python dead-code reachability findings.
+1. An isolated lint baseline runs `B`, `C4`, `E`, `F`, `I`, `PIE`, `RUF`,
+   `SIM`, and `UP` with `noqa` ignored. Its findings, including `F`
+   unused-import diagnostics, are lint; they are not Python dead-code
+   reachability findings.
 2. An isolated C901 pass applies Code Polishy's Python complexity ceiling and
    also ignores `noqa`.
 3. A separate target-configured Ruff pass may add repository rules and style
