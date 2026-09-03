@@ -290,7 +290,8 @@ coverage failures. Ambient `VIRTUAL_ENV`, `PYTHONPATH`, shell startup files,
 and executable lookup do not select a project or an environment.
 
 For each selected project, the pinned Ruff runs `analyze graph` in isolated
-mode. Code Polishy supplies the derived source roots, asks Ruff to detect
+mode. Code Polishy supplies the `project.requires-python`-derived target and
+the validated source roots, including `src` when present, asks Ruff to detect
 literal string imports and imports under type-checking branches, and parses the
 bounded graph output once. Target Ruff configuration cannot change this
 evidence. Code Polishy, rather than Ruff or a target command, then decides file

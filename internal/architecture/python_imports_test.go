@@ -754,7 +754,7 @@ func pythonImportArchitectureFindings(t *testing.T, source string) []policy.Find
 		{Name: "domain", Paths: []string{"src/domain/**"}},
 		{Name: "web", Paths: []string{"src/web/**"}, DependsOn: []string{"domain"}},
 	})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/domain/__init__.py", "")
 	writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 	writeArchitectureFile(t, repo.Root, "src/web/__init__.py", "")

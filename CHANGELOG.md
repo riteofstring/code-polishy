@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.21.3 - 2026-09-03
+
+- Derive each managed Ruff invocation's Python target from
+  `project.requires-python`, pass detected package roots explicitly, and use a
+  shared policy-owned line length of 88 for formatting and linting. Reject
+  missing or unusable Python targets and conflicting Ruff line-length settings
+  before formatting can write.
+
 ## 0.21.2 - 2026-09-02
 
 - Expand the sealed Python Ruff lint baseline to `B`, `C4`, `E`, `F`, `I`,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -197,15 +196,15 @@ func pythonGraphCommand(repo repository.Repository, project repository.PythonPro
 		paths = append(paths, relative)
 	}
 	sort.Strings(paths)
-	roots, err := pythonSourceRoots(project)
+	ruffOptions, err := project.Ruff.CommandOptions()
 	if err != nil {
 		return policy.Command{}, err
 	}
 	arguments := []string{
 		repo.PolicyTool("ruff"), "analyze", "graph", "--quiet", "--isolated",
-		"--detect-string-imports", "--min-dots", "0", "--type-checking-imports",
-		"--config", pythonSourceRootConfig(roots), "--",
 	}
+	arguments = append(arguments, ruffOptions...)
+	arguments = append(arguments, "--detect-string-imports", "--min-dots", "0", "--type-checking-imports", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name:              "policy-ruff-import-graph-" + pythonGraphName(project.Root),
@@ -235,27 +234,4 @@ func pythonProjectPath(project repository.PythonProject, source string) (string,
 		return "", fmt.Errorf("source %q is outside project root %q", source, project.Root)
 	}
 	return relative, nil
-}
-
-func pythonSourceRoots(project repository.PythonProject) ([]string, error) {
-	roots := []string{"."}
-	if project.SourceRoot == "" {
-		return roots, nil
-	}
-	relative, err := pythonProjectPath(project, project.SourceRoot)
-	if err != nil {
-		return nil, err
-	}
-	if relative != "." {
-		roots = append(roots, relative)
-	}
-	return roots, nil
-}
-
-func pythonSourceRootConfig(roots []string) string {
-	values := make([]string, 0, len(roots))
-	for _, root := range roots {
-		values = append(values, strconv.Quote(root))
-	}
-	return "src = [" + strings.Join(values, ", ") + "]"
 }

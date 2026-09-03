@@ -13,7 +13,7 @@ import (
 
 func TestPythonSourceActivatesPinnedRuffTyAndVulturePolicyModules(t *testing.T) {
 	root := t.TempDir()
-	writeModuleFile(t, root, "tools/pyproject.toml", "[project]\nname = \"tools\"\nversion = \"0\"\n")
+	writeModuleFile(t, root, "tools/pyproject.toml", "[project]\nname = \"tools\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeModuleFile(t, root, "tools/check.py", "print('ok')\n")
 	installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
 	pinPolicyTool(t, root, "ruff", "0.16.0")
@@ -47,14 +47,45 @@ func TestPythonSourceActivatesPinnedRuffTyAndVulturePolicyModules(t *testing.T) 
 			!slices.Equal(command.PassFilePaths, []string{"tools/check.py"}) {
 			t.Fatalf("format command = %+v", command)
 		}
+		arguments := strings.Join(command.Argv, "\x00")
+		for _, expected := range []string{
+			"--target-version\x00py312",
+			"--config\x00line-length = 88",
+			"--config\x00lint.pycodestyle.max-line-length = 88",
+			`--config` + "\x00" + `src = ["."]`,
+		} {
+			if !strings.Contains(arguments, expected) {
+				t.Fatalf("format command lacks %q: %+v", expected, command)
+			}
+		}
+	}
+}
+
+func TestRuffConfigurationConflictBlocksFormatting(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeModuleFile(t, root, "pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\n")
+	writeModuleFile(t, root, "ruff.toml", "line-length = 100\n")
+	writeModuleFile(t, root, "app.py", "value = 1\n")
+	installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
+	pinPolicyTool(t, root, "ruff", "0.16.0")
+	installFakePolicyTool(t, root, "ty", "ty 0.0.65 (87de836df 2026-07-29)")
+	pinPolicyTool(t, root, "ty", "0.0.65")
+	installPinnedPythonVulture(t, root)
+	resolution := Resolve(repository.Repository{Root: root, PolicyRoot: root}, []string{"pyproject.toml", "ruff.toml", "app.py"})
+	if len(resolution.Commands) != 0 || !slices.ContainsFunc(resolution.Findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.pythonRuffConfiguration" && finding.Path == "ruff.toml" &&
+			finding.Line == 1 && strings.Contains(finding.Message, "policy-owned line length 88")
+	}) {
+		t.Fatalf("resolution = %+v", resolution)
 	}
 }
 
 func TestPythonPolicyModulesUseProjectBoundaries(t *testing.T) {
 	root := t.TempDir()
-	writeModuleFile(t, root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\n")
+	writeModuleFile(t, root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeModuleFile(t, root, "root.py", "print('ok')\n")
-	writeModuleFile(t, root, "apps/pyproject.toml", "[project]\nname = \"apps\"\nversion = \"0\"\n")
+	writeModuleFile(t, root, "apps/pyproject.toml", "[project]\nname = \"apps\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeModuleFile(t, root, "apps/service/check.py", "print('ok')\n")
 	installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
 	pinPolicyTool(t, root, "ruff", "0.16.0")
@@ -82,7 +113,7 @@ func TestPythonPolicyModulesUseProjectBoundaries(t *testing.T) {
 func TestTyPolicyModuleDoesNotRegisterGenericTypecheckCommand(t *testing.T) {
 	targetRoot := t.TempDir()
 	policyRoot := t.TempDir()
-	writeModuleFile(t, targetRoot, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\n")
+	writeModuleFile(t, targetRoot, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeModuleFile(t, targetRoot, "app/check.py", "print('ok')\n")
 	installFakePolicyTool(t, policyRoot, "ty", "ty 0.0.65 (87de836df 2026-07-29)")
 	pinPolicyTool(t, policyRoot, "ty", "0.0.65")
@@ -114,7 +145,7 @@ func TestTyRequiresAnExactPolicyPin(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			writeModuleFile(t, root, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\n")
+			writeModuleFile(t, root, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeModuleFile(t, root, "app/check.py", "print('ok')\n")
 			installFakePolicyTool(t, root, "ty", test.version)
 			if test.pin != "" {
@@ -141,7 +172,7 @@ func TestVultureRequiresExactPolicyRuntimeAndPackage(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			writeModuleFile(t, root, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\n")
+			writeModuleFile(t, root, "app/pyproject.toml", "[project]\nname = \"app\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeModuleFile(t, root, "app/check.py", "print('ok')\n")
 			installFakePythonRuntime(t, root, test.pythonVersion, test.vultureVersion)
 			if test.pythonPin != "" {
@@ -278,7 +309,7 @@ func TestConditionalToolMustBeTheVersionThePolicyRootPins(t *testing.T) {
 	t.Parallel()
 	for name, pin := range map[string]string{"another version": "0.17.0", "no pin at all": ""} {
 		root := t.TempDir()
-		writeModuleFile(t, root, "app/pyproject.toml", "[tool.ruff]\n")
+		writeModuleFile(t, root, "app/pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\n\n[tool.ruff]\n")
 		writeModuleFile(t, root, "app/check.py", "print('ok')\n")
 		installFakePolicyTool(t, root, "ruff", "ruff 0.16.0")
 		installPinnedPythonVulture(t, root)

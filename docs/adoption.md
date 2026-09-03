@@ -36,10 +36,12 @@ Inspect what existing green scripts actually select. A command name such as
 For Python, treat the nearest contained `pyproject.toml` as the project owner.
 A nested project owns its own source and `.venv`; do not let an ancestor
 project absorb it. The shared inventory handles flat, `src`, regular-package,
-and namespace-package layouts. Record target-specific build or product checks,
-but remove any target Python architecture command: the built-in import graph
-enforces module direction. [Architecture Policy](policies/architecture.md)
-owns the exact resolution and coverage rules.
+and namespace-package layouts. Give every project a `project.requires-python`
+range with a minimum stable minor supported by the pinned Ruff. Record
+target-specific build or product checks, but remove any target Python
+architecture command: the built-in import graph enforces module direction.
+[Architecture Policy](policies/architecture.md) owns the exact resolution and
+coverage rules.
 
 ## 2. Lock the release
 
@@ -290,11 +292,13 @@ code-polishy doctor --strict
 The inventory notes show which shared modules were detected and why. The
 standard conditional behavior is:
 
-- Python source activates policy-owned Ruff formatting, sealed `E4`, `E7`,
-  `E9`, and `F` lint, and C901 complexity; Vulture `2.16` full-project
-  dead-code analysis at fixed 60% confidence through carried CPython
-  `3.12.13+20260728` from python-build-standalone; and first-class `ty` type
-  checking. The shared project inventory assigns nested projects separately,
+- Python source activates policy-owned Ruff formatting, sealed `B`, `C4`, `E`,
+  `F`, `I`, `PIE`, `RUF`, `SIM`, and `UP` lint, and C901 complexity. Ruff uses
+  the project's declared Python target, detected package roots, and the shared
+  88-character line length. Vulture `2.16` provides full-project dead-code
+  analysis at fixed 60% confidence through carried CPython
+  `3.12.13+20260728` from python-build-standalone; `ty` provides first-class
+  type checking. The shared project inventory assigns nested projects separately,
   and a dependency-bearing project uses only its contained `.venv` for `ty`; a
   missing environment produces a clear coverage finding instead of
   ambient-Python behavior. A target pins and installs neither tool, its own

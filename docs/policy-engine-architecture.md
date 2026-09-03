@@ -161,7 +161,9 @@ structured findings. None decides process exit status or prints final policy
 results.
 
 The Python consumers share the repository inventory rather than independently
-guessing roots. `internal/quality` runs the carried Ruff baseline, C901, target
+guessing roots. The inventory derives the Ruff target from
+`project.requires-python`, records package roots, and fixes the shared line
+length at 88. `internal/quality` runs the carried Ruff baseline, C901, target
 additions, Vulture `2.16` full-project dead-code analysis, and structured `ty`
 diagnostics. Vulture runs through carried CPython
 `3.12.13+20260728` from python-build-standalone, derives PEP 621 entry-point
@@ -169,10 +171,10 @@ symbols, and accepts only validated exact `scope.pythonDynamicReferences` for
 dynamic symbols. `internal/architecture` asks the same carried Ruff for an
 isolated import graph and decides module direction in Go; `internal/supplychain`
 parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
-Target Ruff configuration cannot alter the managed baseline or architecture
-graph, target Vulture configuration is ignored, and a dependency-bearing project
-gives `ty` only its explicit contained `.venv`, never an ambient Python
-environment.
+Target Ruff configuration cannot alter the managed Python target, roots, line
+length, baseline, or architecture graph; target Vulture configuration is
+ignored, and a dependency-bearing project gives `ty` only its explicit
+contained `.venv`, never an ambient Python environment.
 
 `internal/portability` performs linear, subprocess-free scans for
 high-confidence machine/checkout assumptions and validates ownership coverage

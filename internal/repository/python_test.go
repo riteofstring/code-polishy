@@ -251,7 +251,7 @@ requires = ["setuptools==70.0.0"]
 func TestReadPythonProjectRecordsProjectVenv(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeFile(t, root, "apps/api/pyproject.toml", "[build-system]\nrequires = []\n")
+	writeFile(t, root, "apps/api/pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\n\n[build-system]\nrequires = []\n")
 	if err := os.MkdirAll(filepath.Join(root, "apps", "api", ".venv"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func preparedPythonProjectInventoryCache(t *testing.T) (Repository, string) {
 	t.Helper()
 	root := t.TempDir()
 	manifest := "apps/api/pyproject.toml"
-	writeFile(t, root, manifest, "[project]\ndependencies = [\"requests[socks] == 2.32.0\"]\n")
+	writeFile(t, root, manifest, "[project]\nrequires-python = \"==3.12.*\"\ndependencies = [\"requests[socks] == 2.32.0\"]\n")
 	writeFile(t, root, "apps/api/src/api/main.py", "")
 	files := []string{"apps/api/src/api/main.py", "./" + manifest}
 	repo, err := (Repository{Root: root}).WithPythonProjectInventory(files)
@@ -348,7 +348,7 @@ func assertPythonProjectReadClone(t *testing.T, repo Repository, manifest string
 func assertUnseenPythonProjectIsNotCached(t *testing.T, repo Repository) {
 	t.Helper()
 	unseen := "apps/other/pyproject.toml"
-	writeFile(t, repo.Root, unseen, "[project]\ndependencies = []\n")
+	writeFile(t, repo.Root, unseen, "[project]\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
 	if _, err := repo.ReadPythonProject(unseen); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ func TestPythonProjectInventoryCacheFreezesManifestErrors(t *testing.T) {
 	if cachedErr == nil {
 		t.Fatal("malformed manifest was accepted")
 	}
-	writeFile(t, root, manifest, "[project]\ndependencies = [\"urllib3 == 2.5.0\"]\n")
+	writeFile(t, root, manifest, "[project]\nrequires-python = \"==3.12.*\"\ndependencies = [\"urllib3 == 2.5.0\"]\n")
 	if _, err := repo.ReadPythonProject(manifest); err == nil || err.Error() != cachedErr.Error() {
 		t.Fatalf("cached error = %v, want %v", err, cachedErr)
 	}
@@ -388,14 +388,14 @@ func TestPythonProjectInventoryCacheFreezesManifestErrors(t *testing.T) {
 func TestPythonProjectInventoryCacheDoesNotReuseDifferentFileSets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeFile(t, root, "pyproject.toml", "[project]\ndependencies = [\"requests == 2.32.0\"]\n")
+	writeFile(t, root, "pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\ndependencies = [\"requests == 2.32.0\"]\n")
 	writeFile(t, root, "src/first.py", "")
 	writeFile(t, root, "src/second.py", "")
 	repo, err := (Repository{Root: root}).WithPythonProjectInventory([]string{"pyproject.toml", "src/first.py"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, root, "pyproject.toml", "[project]\ndependencies = [\"urllib3 == 2.5.0\"]\n")
+	writeFile(t, root, "pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\ndependencies = [\"urllib3 == 2.5.0\"]\n")
 	inventory := repo.PythonProjectInventory([]string{"./pyproject.toml", "src/second.py"})
 	if len(inventory.Projects) != 1 || len(inventory.Projects[0].Requirements) != 1 ||
 		inventory.Projects[0].Requirements[0].Name != "urllib3" || !slices.Equal(inventory.Projects[0].Files, []string{"src/second.py"}) {
@@ -406,11 +406,11 @@ func TestPythonProjectInventoryCacheDoesNotReuseDifferentFileSets(t *testing.T) 
 func TestPythonProjectInventorySeparatesNestedProjectsAndRecordsCandidates(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeFile(t, root, "pyproject.toml", "[project]\ndependencies = []\n")
+	writeFile(t, root, "pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
 	writeFile(t, root, "src/root_package/__init__.py", "")
 	writeFile(t, root, "src/root_package/service.py", "")
 	writeFile(t, root, "scripts/task.py", "")
-	writeFile(t, root, "apps/child/pyproject.toml", "[project]\ndependencies = []\n")
+	writeFile(t, root, "apps/child/pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
 	writeFile(t, root, "apps/child/src/child_package/service.py", "")
 	if err := os.MkdirAll(filepath.Join(root, ".venv"), 0o755); err != nil {
 		t.Fatal(err)
@@ -458,7 +458,7 @@ func TestPythonProjectInventorySeparatesNestedProjectsAndRecordsCandidates(t *te
 func TestPythonProjectInventoryReportsNoOwnerAndUnreadableNestedProject(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeFile(t, root, "outer/pyproject.toml", "[project]\ndependencies = []\n")
+	writeFile(t, root, "outer/pyproject.toml", "[project]\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
 	writeFile(t, root, "outer/nested/pyproject.toml", "[project\ndependencies = []\n")
 	writeFile(t, root, "outer/nested/main.py", "")
 	writeFile(t, root, "orphan.py", "")

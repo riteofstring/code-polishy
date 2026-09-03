@@ -44,7 +44,10 @@ suite is a finding rather than a skipped check.
 Any governed `.py` or `.pyi` file activates Ruff through the shared Python
 project inventory. Its root is the nearest contained `pyproject.toml` project,
 not the nearest target Ruff configuration. Nested projects remain separate;
-the inventory also supplies a contained `src` root when present.
+the inventory also supplies a contained `src` root when present. Every project
+must declare a `project.requires-python` range with a usable minimum minor;
+Code Polishy passes that derived Ruff target and the validated source roots to
+every managed Ruff invocation.
 
 The module uses policy-owned Ruff `0.16.0` for:
 
@@ -60,6 +63,11 @@ The module uses policy-owned Ruff `0.16.0` for:
 The C901 command ignores target Ruff configuration and `noqa`, and translates
 the shared fails-at threshold of 10 to Ruff's native maximum of 9. A target may
 lower `quality.complexity.python`, but cannot raise or disable it.
+
+All Ruff format and lint paths use the policy-owned line length of 88. A target
+may repeat 88, but a malformed or different `line-length` or
+`lint.pycodestyle.max-line-length` in an applicable Ruff configuration fails
+before formatting can write.
 
 Ruff supplies formatting, lint, and complexity. Its `F` diagnostics are lint,
 not dead-code reachability. Its policy-owned `analyze graph` invocation also

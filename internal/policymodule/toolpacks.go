@@ -13,29 +13,59 @@ import (
 )
 
 func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inventory repository.PythonProjectInventory, resolution *Resolution) {
-	pythonFiles := pythonProjectFiles(inventory, active.Root)
-	if len(pythonFiles) == 0 {
+	project, found := pythonProjectAtRoot(inventory, active.Root)
+	if !found || len(project.Files) == 0 {
 		resolution.Findings = append(resolution.Findings, finding("ruff", active.Root, "python", "enabled Ruff policy did not find governed Python source at this root"))
+		return
+	}
+	configurationFindings := pythonRuffConfigurationFindings(inventory, project)
+	if len(configurationFindings) > 0 {
+		resolution.Findings = append(resolution.Findings, configurationFindings...)
+		return
+	}
+	ruffOptions, err := project.Ruff.CommandOptions()
+	if err != nil {
+		resolution.Findings = append(resolution.Findings, policy.Finding{
+			Check: "policy.pythonRuffConfiguration", Path: project.Manifest, Subject: project.Manifest, Message: err.Error(),
+		})
 		return
 	}
 	ruff := repo.PolicyTool("ruff")
 	if pin := repo.ToolPin("ruff"); pin == "" || !executableVersion(ruff, "ruff "+pin) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ruff", Message: "conditional Python policy requires the Ruff version tools/ruff-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
-	modules := modulesForPythonFiles(repo, pythonFiles)
+	modules := modulesForPythonFiles(repo, project.Files)
 	suffix := safeName(active.Root)
+	checkArguments := append([]string{ruff, "format"}, ruffOptions...)
+	checkArguments = append(checkArguments, "--check", "--")
+	writeArguments := append([]string{ruff, "format"}, ruffOptions...)
+	writeArguments = append(writeArguments, "--")
 	resolution.Commands = append(resolution.Commands,
 		policy.Command{
 			Name: "policy-ruff-format-" + suffix, Provides: []string{"format"},
-			Argv: []string{ruff, "format", "--check", "--"}, Cwd: active.Root, Paths: pythonFiles, Modules: modules,
-			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: pythonFiles,
+			Argv: checkArguments, Cwd: active.Root, Paths: project.Files, Modules: modules,
+			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: project.Files,
 		},
 		policy.Command{
 			Name: "policy-ruff-write-" + suffix, Provides: []string{"format"},
-			Argv: []string{ruff, "format", "--"}, Cwd: active.Root, Paths: pythonFiles, Modules: modules,
-			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: pythonFiles,
+			Argv: writeArguments, Cwd: active.Root, Paths: project.Files, Modules: modules,
+			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: project.Files,
 		},
 	)
+}
+
+func pythonRuffConfigurationFindings(inventory repository.PythonProjectInventory, project repository.PythonProject) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, problem := range inventory.Problems {
+		if problem.Kind != repository.PythonRuffConfigurationProblem || problem.Subject != project.Manifest {
+			continue
+		}
+		findings = append(findings, policy.Finding{
+			Check: "policy.pythonRuffConfiguration", Path: problem.Path, Line: problem.Line,
+			Subject: project.Manifest, Message: problem.Message,
+		})
+	}
+	return findings
 }
 
 func applyTy(repo repository.Repository, active policy.ActivePolicyModule, inventory repository.PythonProjectInventory, resolution *Resolution) {
@@ -92,12 +122,20 @@ func pythonRoots(inventory repository.PythonProjectInventory) []string {
 }
 
 func pythonProjectFiles(inventory repository.PythonProjectInventory, root string) []string {
+	project, found := pythonProjectAtRoot(inventory, root)
+	if !found {
+		return nil
+	}
+	return append([]string{}, project.Files...)
+}
+
+func pythonProjectAtRoot(inventory repository.PythonProjectInventory, root string) (repository.PythonProject, bool) {
 	for _, project := range inventory.Projects {
 		if project.Root == root {
-			return append([]string{}, project.Files...)
+			return project, true
 		}
 	}
-	return nil
+	return repository.PythonProject{}, false
 }
 
 func modulesForPythonFiles(repo repository.Repository, files []string) []string {

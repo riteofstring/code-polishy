@@ -111,10 +111,10 @@ checks stay consistent.
 - **Go, JavaScript, and TypeScript:** Formats code and catches likely bugs,
   type errors, unused code, and overly complex functions. Locked dependencies
   are checked for known vulnerabilities.
-- **Python:** Finds each contained project, then runs policy-owned Ruff lint
-  and complexity checks, Vulture dead-code analysis, and `ty`; it checks module
-  direction and validates `uv` dependency facts without relying on a target
-  architecture script.
+- **Python:** Finds each contained project, derives Ruff settings from its
+  declared Python version and package roots, then runs policy-owned formatting,
+  lint, complexity, dead-code, type, module-direction, and `uv` dependency
+  checks.
 - **Shell scripts:** Catches syntax errors and common safety problems.
 
 Code Polishy also rejects empty Go tests and obvious test commands that can

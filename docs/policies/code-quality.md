@@ -254,6 +254,19 @@ nested project is analyzed separately. A missing project, malformed inventory,
 escaping path, unreadable input, omitted tool output, or malformed structured
 tool result is a coverage finding, never a clean result.
 
+Each governed Python project must declare `project.requires-python` with a
+minimum stable Python minor supported by the pinned Ruff (`py37` through
+`py315`). Code Polishy derives the oldest permitted minor and passes it as
+`--target-version` to every managed Ruff format, lint, complexity, and import
+graph invocation. It also passes the validated project roots, including `src`
+when present, so isolated import sorting and graph analysis resolve first-party
+packages consistently.
+
+Ruff format and lint share a policy-owned line length of 88. A target may state
+the same value, but a different or malformed `line-length` or
+`lint.pycodestyle.max-line-length` in `pyproject.toml`, `ruff.toml`, or
+`.ruff.toml` is a configuration finding before any formatter writes.
+
 Ruff has three policy-owned boundaries:
 
 1. An isolated lint baseline runs `B`, `C4`, `E`, `F`, `I`, `PIE`, `RUF`,
@@ -268,7 +281,7 @@ Ruff has three policy-owned boundaries:
 The policy chooses the exact governed files for every pass and parses each
 managed diagnostic into a normal finding. A target Ruff configuration can make
 the target pass stricter; it cannot weaken the sealed lint or complexity
-baseline.
+baseline or alter the managed Python version, source roots, or line length.
 
 Vulture `2.16` is the sole Python dead-code provider. It analyzes the full
 governed contained project at fixed 60% confidence through the release-carried

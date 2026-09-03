@@ -410,13 +410,17 @@ func pythonQualityProjectCommands(repo repository.Repository, project repository
 	if err != nil {
 		return nil, "", err
 	}
+	ruffOptions, err := project.Ruff.CommandOptions()
+	if err != nil {
+		return nil, "", err
+	}
 	modules := pythonQualityModules(repo, sources)
 	suffix := pythonQualityProjectName(project.Root)
 	commands := []pythonQualityCommand{
-		{kind: pythonRuffBaselineCoverageQualityKind, command: pythonRuffBaselineCoverageCommand(repo, project, suffix, modules, paths)},
-		{kind: pythonRuffBaselineQualityKind, command: pythonRuffBaselineCommand(repo, project, suffix, modules, paths)},
-		{kind: pythonRuffComplexityQualityKind, command: pythonRuffComplexityCommand(repo, project, suffix, modules, paths)},
-		{kind: pythonRuffTargetQualityKind, command: pythonRuffTargetCommand(repo, project, suffix, modules, paths)},
+		{kind: pythonRuffBaselineCoverageQualityKind, command: pythonRuffBaselineCoverageCommand(repo, project, suffix, modules, paths, ruffOptions)},
+		{kind: pythonRuffBaselineQualityKind, command: pythonRuffBaselineCommand(repo, project, suffix, modules, paths, ruffOptions)},
+		{kind: pythonRuffComplexityQualityKind, command: pythonRuffComplexityCommand(repo, project, suffix, modules, paths, ruffOptions)},
+		{kind: pythonRuffTargetQualityKind, command: pythonRuffTargetCommand(repo, project, suffix, modules, paths, ruffOptions)},
 	}
 	vulture, err := pythonVultureCommand(repo, project)
 	if err != nil {
@@ -435,11 +439,13 @@ func pythonQualityProjectCommands(repo repository.Repository, project repository
 	return commands, "", nil
 }
 
-func pythonRuffBaselineCoverageCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
+func pythonRuffBaselineCoverageCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, ruffOptions []string) policy.Command {
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection,
-		"--no-respect-gitignore", "--no-force-exclude", "--show-files", "--exit-zero", "--",
+		repo.PolicyTool("ruff"), "check",
 	}
+	arguments = append(arguments, ruffOptions...)
+	arguments = append(arguments, "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection,
+		"--no-respect-gitignore", "--no-force-exclude", "--show-files", "--exit-zero", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name: "policy-ruff-baseline-coverage-" + suffix, Provides: []string{"lint"}, Argv: arguments,
@@ -490,11 +496,13 @@ func pythonQualityProjectName(root string) string {
 	return "x" + hex.EncodeToString([]byte(root))
 }
 
-func pythonRuffBaselineCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
+func pythonRuffBaselineCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, ruffOptions []string) policy.Command {
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection, "--ignore-noqa",
-		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
+		repo.PolicyTool("ruff"), "check",
 	}
+	arguments = append(arguments, ruffOptions...)
+	arguments = append(arguments, "--no-fix", "--isolated", "--select", pythonRuffBaselineSelection, "--ignore-noqa",
+		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name: "policy-ruff-baseline-" + suffix, Provides: []string{"lint"}, Argv: arguments,
@@ -503,16 +511,18 @@ func pythonRuffBaselineCommand(repo repository.Repository, project repository.Py
 	}
 }
 
-func pythonRuffComplexityCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
+func pythonRuffComplexityCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, ruffOptions []string) policy.Command {
 	complexity := repo.Config.Quality.Complexity.Python
 	if complexity == 0 {
 		complexity = policy.MaxPythonComplexity
 	}
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--isolated", "--select", pythonRuffComplexitySelection, "--ignore-noqa",
-		"--config", "lint.mccabe.max-complexity = " + strconv.Itoa(complexity-1),
-		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
+		repo.PolicyTool("ruff"), "check",
 	}
+	arguments = append(arguments, ruffOptions...)
+	arguments = append(arguments, "--no-fix", "--isolated", "--select", pythonRuffComplexitySelection, "--ignore-noqa",
+		"--config", "lint.mccabe.max-complexity = "+strconv.Itoa(complexity-1),
+		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name: "policy-ruff-complexity-" + suffix, Provides: []string{"complexity"}, Argv: arguments,
@@ -521,11 +531,13 @@ func pythonRuffComplexityCommand(repo repository.Repository, project repository.
 	}
 }
 
-func pythonRuffTargetCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths []string) policy.Command {
+func pythonRuffTargetCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, ruffOptions []string) policy.Command {
 	arguments := []string{
-		repo.PolicyTool("ruff"), "check", "--no-fix", "--no-respect-gitignore", "--no-force-exclude",
-		"--output-format", "json", "--exit-zero", "--",
+		repo.PolicyTool("ruff"), "check",
 	}
+	arguments = append(arguments, ruffOptions...)
+	arguments = append(arguments, "--no-fix", "--no-respect-gitignore", "--no-force-exclude",
+		"--output-format", "json", "--exit-zero", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name: "policy-ruff-target-" + suffix, Provides: []string{"lint"}, Argv: arguments,

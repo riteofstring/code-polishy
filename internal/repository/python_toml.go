@@ -308,10 +308,11 @@ func (parser *pythonTOMLParser) value() (pythonTOMLValue, error) {
 	case '{':
 		return parser.inlineTable(line)
 	default:
-		if err := parser.bareValue(); err != nil {
+		text, err := parser.bareValue()
+		if err != nil {
 			return pythonTOMLValue{}, err
 		}
-		return pythonTOMLValue{kind: pythonTOMLOther, line: line}, nil
+		return pythonTOMLValue{kind: pythonTOMLOther, text: text, line: line}, nil
 	}
 }
 
@@ -391,7 +392,7 @@ func (parser *pythonTOMLParser) inlineTable(line int) (pythonTOMLValue, error) {
 	}
 }
 
-func (parser *pythonTOMLParser) bareValue() error {
+func (parser *pythonTOMLParser) bareValue() (string, error) {
 	start := parser.index
 	for !parser.done() && !strings.ContainsRune(" \t\r\n#,]}", rune(parser.peek())) {
 		parser.take()
@@ -405,14 +406,14 @@ func (parser *pythonTOMLParser) bareValue() error {
 			parser.take()
 		}
 		if validPythonTOMLDateTime(value + " " + string(parser.data[timeStart:parser.index])) {
-			return nil
+			return string(parser.data[start:parser.index]), nil
 		}
 		parser.index = checkpoint
 	}
 	if !validPythonTOMLBareValue(value) {
-		return parser.errorf("TOML value %q is malformed", value)
+		return "", parser.errorf("TOML value %q is malformed", value)
 	}
-	return nil
+	return value, nil
 }
 
 func validPythonTOMLBareValue(value string) bool {

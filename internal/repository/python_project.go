@@ -16,6 +16,8 @@ type PythonProject struct {
 	Root                string
 	Venv                string
 	SourceRoot          string
+	Ruff                PythonRuffSettings
+	RuffProblems        []PythonRuffProblem
 	Files               []string
 	PackageCandidates   []PythonPackageCandidate
 	Requirements        []PythonRequirement
@@ -38,11 +40,13 @@ const (
 	PythonEscapingPathProblem      PythonInventoryProblemKind = "escaping-path"
 	PythonUnreadableInputProblem   PythonInventoryProblemKind = "unreadable-input"
 	PythonUnsupportedLayoutProblem PythonInventoryProblemKind = "unsupported-layout"
+	PythonRuffConfigurationProblem PythonInventoryProblemKind = "ruff-configuration"
 )
 
 type PythonInventoryProblem struct {
 	Kind    PythonInventoryProblemKind
 	Path    string
+	Line    int
 	Subject string
 	Message string
 }
@@ -126,6 +130,8 @@ func clonePythonProjectInventory(inventory PythonProjectInventory) PythonProject
 func clonePythonProject(project PythonProject) PythonProject {
 	clone := project
 	clone.Files = slices.Clone(project.Files)
+	clone.Ruff.SourceRoots = slices.Clone(project.Ruff.SourceRoots)
+	clone.RuffProblems = slices.Clone(project.RuffProblems)
 	clone.PackageCandidates = slices.Clone(project.PackageCandidates)
 	clone.Requirements = slices.Clone(project.Requirements)
 	clone.DynamicReferences = slices.Clone(project.DynamicReferences)
@@ -144,6 +150,7 @@ func clonePythonRequirement(requirement PythonRequirement) PythonRequirement {
 
 type pythonInventoryInputs struct {
 	manifests   map[string]bool
+	ruffConfigs []string
 	owners      map[string]string
 	seenSources map[string]bool
 	sources     []string
@@ -156,6 +163,9 @@ func (repo Repository) pythonProjectInventory(files []string) PythonProjectInven
 	projects := repo.pythonInventoryProjects(inputs.manifests, &inventory)
 	repo.assignPythonInventoryFiles(&inventory, projects, inputs.owners, inputs.sources)
 	repo.completePythonProjectInventory(&inventory, projects, inputs.manifests)
+	repo.appendPythonRuffConfigurationProblems(&inventory, inputs.ruffConfigs)
+	pythonInventorySort(&inventory)
+	inventory.Problems = compactPythonInventoryProblems(inventory.Problems)
 	return inventory
 }
 
@@ -179,6 +189,9 @@ func (repo Repository) collectPythonInventoryCandidate(inputs *pythonInventoryIn
 	}
 	if filepath.Base(normalized) == "pyproject.toml" {
 		inputs.manifests[normalized] = true
+	}
+	if pythonRuffConfigurationPath(normalized) {
+		inputs.ruffConfigs = append(inputs.ruffConfigs, normalized)
 	}
 	if pythonSourcePath(normalized) {
 		repo.collectPythonInventorySource(inputs, normalized)
@@ -242,11 +255,13 @@ func (repo Repository) completePythonProjectInventory(inventory *PythonProjectIn
 		}
 		sort.Strings(project.Files)
 		project.PackageCandidates = pythonPackageCandidates(*project)
+		pythonCompleteRuffSettings(project)
+		for _, problem := range project.RuffProblems {
+			inventory.Problems = append(inventory.Problems, pythonRuffInventoryProblem(project.Manifest, problem))
+		}
 		inventory.Projects = append(inventory.Projects, *project)
 	}
 	pythonInventoryAmbiguities(inventory)
-	pythonInventorySort(inventory)
-	inventory.Problems = compactPythonInventoryProblems(inventory.Problems)
 }
 
 func pythonInventorySort(inventory *PythonProjectInventory) {
@@ -259,8 +274,14 @@ func pythonInventorySort(inventory *PythonProjectInventory) {
 	sort.Slice(inventory.Problems, func(left, right int) bool {
 		leftProblem := inventory.Problems[left]
 		rightProblem := inventory.Problems[right]
-		return leftProblem.Path+"\x00"+string(leftProblem.Kind)+"\x00"+leftProblem.Subject+"\x00"+leftProblem.Message <
-			rightProblem.Path+"\x00"+string(rightProblem.Kind)+"\x00"+rightProblem.Subject+"\x00"+rightProblem.Message
+		if leftProblem.Path != rightProblem.Path {
+			return leftProblem.Path < rightProblem.Path
+		}
+		if leftProblem.Line != rightProblem.Line {
+			return leftProblem.Line < rightProblem.Line
+		}
+		return string(leftProblem.Kind)+"\x00"+leftProblem.Subject+"\x00"+leftProblem.Message <
+			string(rightProblem.Kind)+"\x00"+rightProblem.Subject+"\x00"+rightProblem.Message
 	})
 }
 
@@ -387,6 +408,7 @@ func (repo Repository) pythonProjectDirectoryProblem(manifest, root, name string
 		project.Venv = directory
 	} else {
 		project.SourceRoot = directory
+		project.Ruff.SourceRoots = []string{".", name}
 	}
 	return nil
 }
@@ -566,6 +588,7 @@ func ParsePythonProject(manifest string, data []byte) (PythonProject, error) {
 		return PythonProject{}, fmt.Errorf("parse %s: %w", manifest, err)
 	}
 	project := pythonProjectDefinition(manifest, document.tables, document.assignments)
+	project.Ruff, project.RuffProblems = pythonProjectRuffMetadata(manifest, project.IsPythonProject(), document.assignments)
 	dynamicReferences, err := pythonProjectDynamicReferences(manifest, document.assignments)
 	if err != nil {
 		return PythonProject{}, err

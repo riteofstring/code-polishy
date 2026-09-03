@@ -42,7 +42,7 @@ func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *
 		{Name: "domain", Paths: []string{"src/domain/**"}},
 		{Name: "web", Paths: []string{"src/web/**"}},
 	})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n\n[tool.ruff]\nexclude = [\"src/web/app.py\"]\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n\n[tool.ruff]\nexclude = [\"src/web/app.py\"]\n")
 	writeArchitectureFile(t, repo.Root, "src/domain/__init__.py", "")
 	writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 	writeArchitectureFile(t, repo.Root, "src/web/__init__.py", "")
@@ -98,8 +98,15 @@ func assertPythonGraphCommandIsIsolated(t *testing.T, repo repository.Repository
 			t.Fatalf("missing %s in command = %+v", flag, command)
 		}
 	}
-	if !strings.Contains(arguments, `src = [".", "src"]`) {
-		t.Fatalf("source roots = %+v", command.Argv)
+	for _, expected := range []string{
+		"--target-version\x00py312",
+		"--config\x00line-length = 88",
+		"--config\x00lint.pycodestyle.max-line-length = 88",
+		`--config` + "\x00" + `src = [".", "src"]`,
+	} {
+		if !strings.Contains(arguments, expected) {
+			t.Fatalf("Ruff graph command lacks %q: %+v", expected, command)
+		}
 	}
 	minimumDots := slicesIndex(command.Argv, "--min-dots")
 	if minimumDots < 0 || minimumDots+1 >= len(command.Argv) || command.Argv[minimumDots+1] != "0" {
@@ -124,7 +131,7 @@ func assertPythonGraphPlan(t *testing.T, repo repository.Repository, commands []
 func TestPythonArchitectureCoversFlatNamespaceRelativeReexportStubTypeAndLiteralImports(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"**/*.py", "**/*.pyi"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "flat/domain.py", "")
 	writeArchitectureFile(t, repo.Root, "flat/web.py", "from flat import domain\n")
 	writeArchitectureFile(t, repo.Root, "namespace/model.py", "")
@@ -158,10 +165,10 @@ func TestPythonArchitectureScopesOverlappingImportsToEachNestedProject(t *testin
 		{Name: "child-common", Paths: []string{"apps/child/src/common/**"}},
 		{Name: "child-app", Paths: []string{"apps/child/src/child/**"}, DependsOn: []string{"child-common"}},
 	})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/common/model.py", "")
 	writeArchitectureFile(t, repo.Root, "src/root/app.py", "import common.model\n")
-	writeArchitectureFile(t, repo.Root, "apps/child/pyproject.toml", "[project]\nname = \"child\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "apps/child/pyproject.toml", "[project]\nname = \"child\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "apps/child/src/common/model.py", "")
 	writeArchitectureFile(t, repo.Root, "apps/child/src/child/app.py", "import common.model\n")
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{
@@ -183,9 +190,9 @@ func TestPythonArchitectureRejectsCrossProjectGraphTargets(t *testing.T) {
 		{Name: "root-common", Paths: []string{"src/common/**"}},
 		{Name: "child", Paths: []string{"apps/child/src/child/**"}, DependsOn: []string{"root-common"}},
 	})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/common/model.py", "")
-	writeArchitectureFile(t, repo.Root, "apps/child/pyproject.toml", "[project]\nname = \"child\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "apps/child/pyproject.toml", "[project]\nname = \"child\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "apps/child/src/child/app.py", "import common.model\n")
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{
 		"apps/child": `{"src/child/app.py":["../../src/common/model.py"]}`,
@@ -244,7 +251,7 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 				{Name: "domain", Paths: []string{"src/domain/**"}},
 				{Name: "web", Paths: []string{"src/web/**"}},
 			})
-			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 			writeArchitectureFile(t, repo.Root, "src/web/app.py", testCase.source)
 			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": testCase.output}}
@@ -324,7 +331,7 @@ func TestPythonArchitectureCoversAliasedDynamicImportsWithoutGuessing(t *testing
 				{Name: "domain", Paths: []string{"src/domain/**"}},
 				{Name: "web", Paths: []string{"src/web/**"}, DependsOn: []string{"domain"}},
 			})
-			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 			writeArchitectureFile(t, repo.Root, "src/web/app.py", testCase.source)
 			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": testCase.output}}
@@ -342,7 +349,7 @@ func TestPythonArchitectureCoversAliasedDynamicImportsWithoutGuessing(t *testing
 func TestPythonArchitectureReportsConflictingSourceRoots(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"**/*.py"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "shared.py", "")
 	writeArchitectureFile(t, repo.Root, "src/shared.py", "")
 	writeArchitectureFile(t, repo.Root, "src/web/app.py", "import shared\n")
@@ -372,7 +379,7 @@ func TestPythonArchitectureDetectsUnresolvedImportsInValidStatementShapes(t *tes
 				{Name: "domain", Paths: []string{"src/domain/**"}},
 				{Name: "web", Paths: []string{"src/web/**"}},
 			})
-			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 			writeArchitectureFile(t, repo.Root, "src/web/app.py", source)
 			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/web/app.py":[]}`}}
@@ -388,7 +395,7 @@ func TestPythonArchitectureDetectsUnresolvedImportsInValidStatementShapes(t *tes
 func TestPythonArchitectureDoesNotTurnStandardLibraryOrThirdPartyImportsIntoModuleEdges(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/app/**"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/app/main.py", "import json\nimport requests\n")
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/app/main.py":[]}`}}
 	if findings := CheckWithRunner(t.Context(), repo, []string{"src/app/main.py"}, graphRunner); len(findings) != 0 {
@@ -399,7 +406,7 @@ func TestPythonArchitectureDoesNotTurnStandardLibraryOrThirdPartyImportsIntoModu
 func TestPythonArchitectureReportsRuffToolFailure(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"app/**"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "app/main.py", "")
 	graphRunner := &pythonGraphRunner{err: errors.New("Ruff did not start")}
 	findings := CheckWithRunner(t.Context(), repo, []string{"app/main.py"}, graphRunner)
@@ -411,7 +418,7 @@ func TestPythonArchitectureReportsRuffToolFailure(t *testing.T) {
 func TestPythonGraphAcceptsAbsoluteContainedPaths(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"app/**"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "app/main.py", "from . import helper\n")
 	writeArchitectureFile(t, repo.Root, "app/helper.py", "")
 	source := filepath.ToSlash(filepath.Join(repo.Root, "app", "main.py"))
@@ -435,7 +442,7 @@ func TestPythonArchitectureUsesPinnedRuffForOneComponentLiteralDynamicImports(t 
 	if _, err := os.Stat(repo.PolicyTool("ruff")); err != nil {
 		t.Skip("the pinned Ruff executable is unavailable")
 	}
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/model.py", "")
 	writeArchitectureFile(t, repo.Root, "src/app.py", "__import__(\"model\")\n")
 	if findings := Check(t.Context(), repo, []string{"src/app.py"}); len(findings) != 0 {

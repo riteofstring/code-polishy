@@ -91,9 +91,11 @@ work without asking for permission at each step.
 Do not present mandatory or fact-triggered controls as optional. Python Ruff
 lint and complexity, Vulture dead-code analysis, `ty` type checking, formatting,
 ordinary tests, dependency policy, and vulnerability checks activate
-automatically. Modules, capabilities, external inputs, artifact targets,
-product-input Markdown, and current design mappings describe repository facts;
-declare them whenever those facts exist.
+automatically. Every governed Python project needs a `project.requires-python`
+range with a minimum stable minor supported by the pinned Ruff. Modules,
+capabilities, external inputs, artifact targets, product-input Markdown, and
+current design mappings describe repository facts; declare them whenever those
+facts exist.
 Conditional policy modules and their exact, expiring overrides are policy
 mechanisms, not setup preferences. Agent reviews and task sessions remain
 optional workflows selected only when requested or operationally applicable.

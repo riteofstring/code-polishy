@@ -72,7 +72,7 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 func TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n\n[tool.ruff.lint]\nignore = [\"F401\"]\nselect = [\"ANN\"]\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n\n[tool.ruff.lint]\nignore = [\"F401\"]\nselect = [\"ANN\"]\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "import unused\n")
 	runner := &pythonQualityRunner{outputs: map[string]string{
 		"policy-ruff-baseline-coverage-root": "src/app.py\n",
@@ -154,12 +154,33 @@ func pythonQualityAssertCommandPlan(t *testing.T, repo repository.Repository, co
 	if planned := pythonQualityCommands(repo, []string{"src/app.py"}); !slices.EqualFunc(planned, commands, samePythonQualityCommand) {
 		t.Fatalf("planned commands = %+v, run commands = %+v", planned, commands)
 	}
+	ruffCommands := 0
+	for _, command := range commands {
+		if !strings.HasPrefix(command.Name, "policy-ruff-") {
+			continue
+		}
+		ruffCommands++
+		arguments := strings.Join(command.Argv, "\x00")
+		for _, expected := range []string{
+			"--target-version\x00py312",
+			"--config\x00line-length = 88",
+			"--config\x00lint.pycodestyle.max-line-length = 88",
+			`--config` + "\x00" + `src = [".", "src"]`,
+		} {
+			if !strings.Contains(arguments, expected) {
+				t.Fatalf("Ruff command lacks %q: %+v", expected, command)
+			}
+		}
+	}
+	if ruffCommands != 4 {
+		t.Fatalf("Ruff commands = %d in %+v", ruffCommands, commands)
+	}
 }
 
 func TestPythonQualityEmitsOneExactTyFindingPerDiagnostic(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\ndependencies = [\"example==1.0\"]\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\ndependencies = [\"example==1.0\"]\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "first = 1\nsecond = 2\n")
 	writePythonVenv(t, repo.Root, ".venv")
 	absoluteSource := filepath.ToSlash(filepath.Join(repo.Root, "src", "app.py"))
@@ -197,7 +218,7 @@ func TestPythonQualityEmitsOneExactTyFindingPerDiagnostic(t *testing.T) {
 func TestParsePythonTyDiagnosticsAcceptsGitLabPositionsOutput(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "value: int = \"wrong\"\n")
 	inventory := repo.PythonProjectInventory([]string{"pyproject.toml", "src/app.py"})
 	if len(inventory.Projects) != 1 {
@@ -230,7 +251,7 @@ func TestParsePythonTyDiagnosticsAcceptsGitLabPositionsOutput(t *testing.T) {
 func TestPythonQualityReportsPathOnlyTyDiagnosticWithExactIdentity(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
 	runner := &pythonQualityRunner{outputs: map[string]string{
 		"policy-ruff-baseline-coverage-root": "src/app.py\n",
@@ -250,7 +271,7 @@ func TestPythonQualityReportsPathOnlyTyDiagnosticWithExactIdentity(t *testing.T)
 func TestParsePythonTyDiagnosticsRejectsColumnWithoutLine(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
 	inventory := repo.PythonProjectInventory([]string{"pyproject.toml", "src/app.py"})
 	if len(inventory.Projects) != 1 {
@@ -275,7 +296,7 @@ func TestParsePythonRuffDiagnosticsAcceptsPhysicalContainedPath(t *testing.T) {
 		t.Cleanup(func() { _ = os.RemoveAll(root) })
 		repo.Root = root
 	}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "import unused\n")
 	inventory := repo.PythonProjectInventory([]string{"pyproject.toml", "src/app.py"})
 	if len(inventory.Projects) != 1 {
@@ -298,7 +319,7 @@ func TestParsePythonRuffDiagnosticsAcceptsPhysicalContainedPath(t *testing.T) {
 func TestPythonQualityReportsOneMissingEnvironmentFindingWithoutTyCascade(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\ndependencies = [\"example==1.0\"]\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\ndependencies = [\"example==1.0\"]\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
 	runner := &pythonQualityRunner{outputs: map[string]string{
 		"policy-ruff-baseline-coverage-root": "src/app.py\n",
@@ -333,7 +354,7 @@ func TestPythonQualityRejectsMalformedAndEscapingStructuredOutput(t *testing.T) 
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			repo := pythonQualityRepository(t)
-			manifest := "[project]\nname = \"example\"\nversion = \"0\"\n"
+			manifest := "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n"
 			if test.command == "policy-ty-typecheck-root" {
 				manifest += "dependencies = [\"example==1.0\"]\n"
 				writePythonVenv(t, repo.Root, ".venv")
@@ -383,7 +404,7 @@ func TestPythonQualityUsesNestedProjectAndPython312Inventory(t *testing.T) {
 func TestPythonVultureCoversTheWholeSelectedProjectAndFailsClosed(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/first.py", "def first():\n    return 1\n")
 	writeQualityFile(t, repo.Root, "src/second.py", "def second():\n    return 2\n")
 	project := pythonVultureProject(t, repo)
@@ -411,7 +432,7 @@ func TestPythonVultureDynamicReferenceProblemsArePolicyFindings(t *testing.T) {
 	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
 		Project: "pyproject.toml", Module: "app", Symbol: "handler",
 	}}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "app.py", "def handler():\n    return 1\n")
 	project := pythonVultureProject(t, repo)
 	references, _ := pythonVultureReferences(repo, project)
@@ -434,7 +455,7 @@ func TestPythonVultureValidatesUnknownAndUnselectedReferenceProjects(t *testing.
 		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
 			Project: "apps/missing/pyproject.toml", Module: "missing", Symbol: "handler",
 		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 		writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
 		plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
 		if !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
@@ -448,9 +469,9 @@ func TestPythonVultureValidatesUnknownAndUnselectedReferenceProjects(t *testing.
 		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
 			Project: "apps/other/pyproject.toml", Module: "other", Symbol: "missing",
 		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\n")
+		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 		writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
-		writeQualityFile(t, repo.Root, "apps/other/pyproject.toml", "[project]\nname = \"other\"\nversion = \"0\"\n")
+		writeQualityFile(t, repo.Root, "apps/other/pyproject.toml", "[project]\nname = \"other\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 		writeQualityFile(t, repo.Root, "apps/other/other.py", "def handler():\n    return 1\n")
 		plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
 		project := slices.IndexFunc(plan.projects, func(project pythonQualityProject) bool {
@@ -475,7 +496,7 @@ func TestPythonVultureValidatesReferencesWithoutSelectedPythonSource(t *testing.
 		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
 			Project: "pyproject.toml", Module: "app", Symbol: "handler",
 		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 		plan := pythonQualityPlanFor(repo, nil)
 		if len(plan.projects) != 0 || !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
 			return finding.Check == "policy.pythonDynamicReference" && finding.Path == policy.ConfigFilename &&
@@ -486,7 +507,7 @@ func TestPythonVultureValidatesReferencesWithoutSelectedPythonSource(t *testing.
 	})
 	t.Run("inferred reference with only its manifest selected", func(t *testing.T) {
 		repo := pythonQualityRepository(t)
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n\n[project.scripts]\nexample = \"app:handler\"\n")
+		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n\n[project.scripts]\nexample = \"app:handler\"\n")
 		plan := pythonQualityPlanFor(repo, []string{"pyproject.toml"})
 		if len(plan.projects) != 0 || !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
 			return finding.Check == "policy.pythonDynamicReference" && finding.Path == "pyproject.toml" &&
@@ -508,7 +529,7 @@ func TestPythonVultureCommandFailureCoversFullProjectOnce(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
 	repo.PolicyRoot = ""
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/first.py", "value = 1\n")
 	writeQualityFile(t, repo.Root, "src/second.py", "value = 2\n")
 	plan := pythonQualityPlanFor(repo, []string{"src/first.py"})
@@ -521,7 +542,7 @@ func TestPythonVultureCommandFailureCoversFullProjectOnce(t *testing.T) {
 func TestPythonVultureFindingsUseExactHashedSubjects(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/left.py", "def handler():\n    return 1\n")
 	writeQualityFile(t, repo.Root, "src/right.py", "def handler():\n    return 2\n")
 	project := pythonVultureProject(t, repo)
@@ -547,7 +568,7 @@ func TestPythonVultureAdapterResolvesExactSameNamedReferencesWhenInstalled(t *te
 	if !pythonVultureRuntimeInstalled(t, repo) {
 		t.Skip("policy CPython with Vulture is not installed")
 	}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "project = { name = \"example\", version = \"0\", scripts = { example = \"app:handler\" } }\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "project = { name = \"example\", version = \"0\", requires-python = \"==3.12.*\", scripts = { example = \"app:handler\" } }\n")
 	writeQualityFile(t, repo.Root, "src/app/__init__.py", "from .left import handler\n")
 	writeQualityFile(t, repo.Root, "src/app/left.py", "def handler(): # noqa\n    return 1\n\ndef still_dead(): # noqa\n    return 3\n")
 	writeQualityFile(t, repo.Root, "src/app/right.py", "def handler():\n    return 2\n")

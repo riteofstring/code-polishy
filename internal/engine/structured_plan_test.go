@@ -44,7 +44,7 @@ func TestMergeGatePlannedRunnerCapturesStructuredAnalyzerOutput(t *testing.T) {
 func TestPlannedPolicyChecksIncludePythonArchitectureGraph(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeEngineFile(t, root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\n", 0o600)
+	writeEngineFile(t, root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n", 0o600)
 	writeEngineFile(t, root, "src/app.py", "import model\n", 0o600)
 	repo := repository.Repository{
 		Root: root, PolicyRoot: root,
