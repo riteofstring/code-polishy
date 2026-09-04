@@ -68,6 +68,42 @@ unexpected test skips. Code Polishy treats an exit-zero suite command as
 successful and does not infer executed or skipped counts from human-readable
 output.
 
+## Verification checkpoints
+
+Verification follows changed risk, not the number of edits, commits, or chat
+turns:
+
+| Event                                                   | Required verification                             |
+| ------------------------------------------------------- | ------------------------------------------------- |
+| Read-only inspection or status report                   | None                                              |
+| Ordinary prose-only Markdown change                     | Format and documentation checks only              |
+| Clean checkout, fetch, merge, rebase, tag, or push prep | None                                              |
+| Manually resolved source conflict                       | One narrow affected test                          |
+| Coherent runnable source change                         | One narrow affected test                          |
+| Completed source task with no final gate next           | `test --changed`                                  |
+| Final candidate                                         | One base-aware merge gate, owned locally or by CI |
+| Stable release candidate                                | Only explicitly selected supplemental suites      |
+
+Use the first applicable row. A clean merge or rebase means Git applied it
+without manual file edits. A resolved source conflict is a source change; a
+resolved ordinary Markdown conflict remains documentation-only. Committing,
+branch synchronization, tag creation, installation, lock updates, and push
+preparation do not invalidate unchanged evidence or authorize a new run.
+
+An exact test is the smallest named suite or module suite that can observe the
+changed behavior. Run it after a coherent runnable slice, not after every edit.
+`test --changed` is broader task-boundary feedback. Skip it when a final merge
+gate immediately follows over the same candidate because that gate already
+selects the required changed-impact tests. One delivery event has one final-gate
+owner; local and CI gates are both required only when independent evidence was
+explicitly requested.
+
+A stable release candidate is the exact committed tree intended for tagging,
+after ordinary verification passes and planned source and policy changes stop.
+Supplemental selection happens only then. A failing supplemental run is a
+diagnostic boundary: fix and rerun its exact failed or invalidated suites before
+considering another broad run.
+
 ## Execution profiles
 
 ```sh
@@ -444,12 +480,14 @@ capture-intent`. Capture each later correction before acting on it. During
    failed or invalidated suites under the supplemental retry rule rather than
    restarting every suite.
 
-Do not run a checkpoint after every edit or chat turn, and do not silently turn
-a request for focused feedback into an ordinary merge checkpoint, `verify`, or
-`gate`. A checkpoint closes a completed committed task; conversational,
-read-only, and status requests close nothing. An explicit request for a scoped
-command remains scoped feedback. Credentialed, destructive, and live-provider
-checks remain typed external gates. CI may run its checked-in merge workflow.
+Do not run a checkpoint after every edit or chat turn, and do not turn focused
+feedback, documentation, checkout, branch synchronization, conflict-free merge
+or rebase, tagging, lock update, or push preparation into `verify`, `gate`, or a
+checkpoint. After manually resolving a source conflict, run one affected exact
+test; ordinary Markdown still follows the documentation rule. A checkpoint
+closes a completed committed source task. Credentialed, destructive, and
+live-provider checks remain typed external gates. CI may own the one checked-in
+merge workflow for the final candidate.
 
 ## Test stable interfaces
 

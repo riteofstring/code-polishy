@@ -2,14 +2,14 @@
 set -euo pipefail
 
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-mutation-test.XXXXXX")" && pwd -P)"
+fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-mutation-wrapper.XXXXXX")" && pwd -P)"
 cleanup() {
   rm -rf "${fixture_root}"
 }
 trap cleanup EXIT
 
 fail() {
-  echo "go mutation test failure: $1" >&2
+  echo "mutation-wrapper contract failure: $1" >&2
   exit 1
 }
 
@@ -89,4 +89,4 @@ GREMLINS_TEST_MARKER="${marker}" \
   fail "threshold failure exited ${status}, expected 10: $(sed -n '1,10p' "${output}")"
 [[ -f "${marker}" ]] || fail "the configured Gremlins command did not run"
 
-echo "go mutation tests passed"
+echo "mutation-wrapper contract passed"

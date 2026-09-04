@@ -52,33 +52,46 @@ acting on it. This later append may run while candidate files are staged,
 unstaged, deleted, or untracked. It records the current HEAD and a candidate
 state digest; it still runs no tests or AI review.
 
-For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
-documentation findings, and skip application tests without asking the user for
-authorization. During active development, run the narrowest useful exact test
-after a coherent runnable source change. Do not test after every edit or chat
-turn. Use `code-polishy test --changed --base TASK_BASE` when broader feedback
-needs to cover a completed task boundary. Without `--base`, changed-scope tests
-compare the working tree with `HEAD`; with `TASK_BASE`, they compare
-`merge-base(TASK_BASE, HEAD)` plus the working tree. On a long-lived branch,
-finish each completed code-changing task with
+Choose verification from the event that actually changed risk:
+
+| Event                                                     | Action                                            |
+| --------------------------------------------------------- | ------------------------------------------------- |
+| Read-only, conversational, or status request              | None                                              |
+| Ordinary prose-only Markdown change                       | Format and documentation checks only              |
+| Checkout, fetch, clean merge or rebase, tag, or push prep | None                                              |
+| Manually resolved source conflict                         | One affected exact test                           |
+| Coherent runnable source change                           | One affected exact test                           |
+| Completed source task with no final gate next             | `test --changed --base TASK_BASE`                 |
+| Final candidate                                           | One base-aware merge gate, owned locally or by CI |
+| Stable release candidate                                  | Only explicitly selected supplemental suites      |
+
+Use the first applicable row. Repository operations and delivery requests are
+not checkpoints by themselves. A conflict resolution is a new change only for
+the files edited to resolve it; a prose-only conflict stays documentation-only.
+Do not run `test --changed` immediately before a final merge gate over the same
+candidate because the gate already selects changed-impact tests.
+
+Without `--base`, changed-scope tests compare the working tree with `HEAD`;
+with `TASK_BASE`, they compare `merge-base(TASK_BASE, HEAD)` plus the working
+tree. On a long-lived branch, finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
-and completing any selected behavior review. At a merge checkpoint, run one
-`code-polishy merge-gate --base <merge-target>` for the unchanged final
-candidate. Run `code-polishy test --supplemental` only when the caller
-explicitly requests it, a checked-in workflow explicitly invokes it for that
-event, or the release checklist selects one run after a stable release
-candidate has stopped changing. A declared supplemental suite or
-`tests.requiredSupplementalKinds` does not trigger it. Ordinary development,
-changed tests, checkpoint and merge gates, agent-guidance synchronization, and
-Code Polishy lock upgrades leave supplemental hardening `NOT RUN`.
-For release hardening, the first stable candidate runs every supplemental suite
-once. After failure, rerun only failed suites and passes invalidated by changes
-to their tested production files or tests, or their own commands or
-configuration. Exact `test --suite` evidence composes with still-valid passes;
-repeat every suite only when shared mutation infrastructure, toolchain, or
-selection changes, or impact cannot be bounded.
-Conversational, read-only, and status requests do not create checkpoints; an
-invoked checkpoint with no changes is a no-op.
+and completing any selected behavior review. At a genuine merge checkpoint,
+run one `code-polishy merge-gate --base <merge-target>` for the unchanged final
+candidate. Local and CI execution need separate final gates only when the caller
+explicitly requests independent evidence.
+
+A stable release candidate is the exact committed tree intended for tagging,
+with ordinary verification green and no planned source or policy edits. Run
+`code-polishy test --supplemental` only when the caller explicitly requests it,
+a checked-in workflow invokes it for that event, or the release checklist
+selects it. Declarations, including `tests.requiredSupplementalKinds`, do not
+schedule execution. After a supplemental failure, rerun only failed suites and
+passes invalidated by changes to their tested production files or tests, or
+their own commands or configuration. Exact `test --suite` evidence composes
+with still-valid passes. Repeat every suite only when shared mutation
+infrastructure, toolchain, or selection changes, or impact cannot be bounded.
+Ordinary development, gates, guidance synchronization, and lock upgrades leave
+unselected supplemental hardening `NOT RUN`.
 
 When added or modified test files are in the candidate, the default or
 change-aware checkpoints show one prominent, non-blocking test-quality reminder.

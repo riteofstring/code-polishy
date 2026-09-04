@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -509,6 +510,39 @@ func TestRecommendedRepositorySuiteWithoutPathsDoesNotRunWithoutChanges(t *testi
 	}
 	if slices.Contains(suiteNames(plan.Suites), "global-contract") {
 		t.Fatalf("suites = %v", suiteNames(plan.Suites))
+	}
+}
+
+func TestRepositoryPolicySelectsOnlyPathRelevantToolingContracts(t *testing.T) {
+	t.Parallel()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := policy.Load(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.Repository{Root: root, Config: config}
+	tests := []struct {
+		path string
+		want []string
+	}{
+		{path: "scripts/install.sh", want: []string{"mutation-wrapper-contract", "install-contract"}},
+		{path: "scripts/release-preflight.sh", want: []string{"mutation-wrapper-contract", "release-preflight-contract"}},
+		{path: "scripts/test-mutation-wrapper.sh", want: []string{"mutation-wrapper-contract"}},
+		{path: "internal/quality/vulture.go", want: []string{"quality-unit", "engine-unit", "cli-contract"}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.path, func(t *testing.T) {
+			plan, planErr := BuildPlan(repo, Request{Recommended: true, Changed: selectionForPaths(testCase.path)})
+			if planErr != nil {
+				t.Fatal(planErr)
+			}
+			if got := suiteNames(plan.Suites); !slices.Equal(got, testCase.want) {
+				t.Fatalf("suites = %v, want %v", got, testCase.want)
+			}
+		})
 	}
 }
 

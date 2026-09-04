@@ -24,6 +24,8 @@ pushes, or installs state.
    unchanged candidate. Follow the [behavior-review
    workflow](policies/behavior-review.md) rather than creating an intent summary
    during release preparation. After the candidate has stopped changing, run
+   `code-polishy test --suite mutation-wrapper-contract` as the fast harness
+   smoke check. Do not start Gremlins if that contract fails. Then run
    `code-polishy test --supplemental` once as the first stable candidate's
    separate release-hardening stage. This explicit checklist event is the
    trigger; declared suites and `tests.requiredSupplementalKinds` alone do not

@@ -22,6 +22,34 @@
       }
     ]
   },
+  "verification": {
+    "mergeGate": {
+      "recommendedModules": [
+        "policy",
+        "repository",
+        "runner",
+        "gaterun",
+        "finalstate",
+        "behaviorreview",
+        "documentation",
+        "agents",
+        "release",
+        "javascript",
+        "quality",
+        "architecture",
+        "testing",
+        "supplychain",
+        "artifactsecurity",
+        "policymodule",
+        "pack",
+        "portability",
+        "engine",
+        "cli",
+        "launcher",
+        "tooling"
+      ]
+    }
+  },
   "modules": [
     {
       "name": "policy",
@@ -356,11 +384,143 @@
         "runOn": ["focused", "recommended", "full"]
       },
       {
-        "name": "tooling-contract",
+        "name": "mutation-wrapper-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["tooling"],
-        "argv": ["./scripts/test-tooling.sh"],
+        "argv": ["./scripts/test-mutation-wrapper.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "install-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "scripts/install.sh",
+          "scripts/release-manifest.sh",
+          "scripts/release-version.sh",
+          "scripts/test-install.sh",
+          "cmd/code-polishy-launcher/**",
+          "internal/release/**",
+          "templates/**",
+          "tools/*-version.txt",
+          "tools/javascript/**",
+          "tools/javascript-*.sh"
+        ],
+        "argv": ["./scripts/test-install.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "release-preflight-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "CHANGELOG.md",
+          "VERSION",
+          "scripts/release-preflight.sh",
+          "scripts/release-version.sh",
+          "scripts/test-release-preflight.sh"
+        ],
+        "argv": ["./scripts/test-release-preflight.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "javascript-runtime-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "scripts/test-javascript-runtime.sh",
+          "tools/install-javascript-runtime.sh",
+          "tools/javascript-env.sh",
+          "tools/javascript_runtime_binaries.txt",
+          "tools/javascript_runtime_checksums.txt",
+          "tools/node-version.txt",
+          "tools/pnpm-version.txt",
+          "tools/verify-sha256.sh"
+        ],
+        "argv": ["./scripts/test-javascript-runtime.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "javascript-bundle-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "scripts/check-javascript-bundle.sh",
+          "scripts/test-javascript-bundle.sh",
+          "tools/install-javascript-bundle.sh",
+          "tools/javascript-bundle-manifest.sh",
+          "tools/javascript-env.sh",
+          "tools/javascript/**",
+          "tools/javascript_bundle_inventory.txt",
+          "tools/node-version.txt",
+          "tools/pnpm-version.txt",
+          "tools/verify-javascript-bundle-lock.sh",
+          "tools/verify-javascript-bundle-tree.sh"
+        ],
+        "argv": ["./scripts/test-javascript-bundle.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "javascript-runner-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "internal/javascript/**",
+          "scripts/javascript-runner-test-env.sh",
+          "scripts/test-javascript-runner.sh",
+          "tools/javascript/**",
+          "tools/javascript-env.sh",
+          "tools/node-version.txt",
+          "tools/pnpm-version.txt"
+        ],
+        "argv": ["./scripts/test-javascript-runner.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "javascript-project-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "internal/javascript/**",
+          "scripts/javascript-runner-test-env.sh",
+          "scripts/test-javascript-project.sh",
+          "tools/javascript/**",
+          "tools/javascript-env.sh",
+          "tools/node-version.txt",
+          "tools/pnpm-version.txt"
+        ],
+        "argv": ["./scripts/test-javascript-project.sh"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "language-pack-contract",
+        "kind": "contract",
+        "scope": "repository",
+        "cost": "quick",
+        "paths": [
+          "cmd/code-polishy/**",
+          "internal/pack/**",
+          "scripts/go.sh",
+          "tools/fixtures/language-pack/**"
+        ],
+        "argv": [
+          "./scripts/go.sh",
+          "run",
+          "./cmd/code-polishy",
+          "--policy-root",
+          ".",
+          "pack",
+          "verify",
+          "--source",
+          "tools/fixtures/language-pack"
+        ],
         "runOn": ["focused", "recommended", "full"]
       },
       {
@@ -368,7 +528,14 @@
         "kind": "contract",
         "scope": "repository",
         "cost": "standard",
-        "argv": ["go", "test", "-count=1", "./..."],
+        "argv": [
+          "go",
+          "test",
+          "-count=1",
+          "./cmd/code-polishy/...",
+          "-run",
+          "^(TestInstalledReleaseCanVerifyAReleaseTreeWithoutATargetLock|TestInstalledReleaseGovernsOnlyTheRepositoryThatLocksIt)$"
+        ],
         "runOn": ["full"]
       },
       {
