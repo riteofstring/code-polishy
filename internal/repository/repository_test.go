@@ -495,6 +495,39 @@ func TestMergeBaseFilesAtAndReadAtUseExactCommittedTree(t *testing.T) {
 	}
 }
 
+func TestReadRegularFileAtDistinguishesAbsentAndNonRegularPaths(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	writeFile(t, repo.Root, "policy.json", "{\"version\":3}\n")
+	writeFile(t, repo.Root, "nested/value.txt", "value\n")
+	if err := os.Symlink("policy.json", filepath.Join(repo.Root, "linked.json")); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "base")
+	command := exec.Command("git", "-C", repo.Root, "rev-parse", "HEAD")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := strings.TrimSpace(string(output))
+	data, present, err := repo.ReadRegularFileAt(revision, "policy.json")
+	if err != nil || !present || string(data) != "{\"version\":3}\n" {
+		t.Fatalf("regular file data=%q present=%t err=%v", data, present, err)
+	}
+	if data, present, err = repo.ReadRegularFileAt(revision, "missing.json"); err != nil || present || data != nil {
+		t.Fatalf("absent file data=%q present=%t err=%v", data, present, err)
+	}
+	for _, path := range []string{"linked.json", "nested"} {
+		if _, _, err = repo.ReadRegularFileAt(revision, path); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+			t.Fatalf("%s error = %v", path, err)
+		}
+	}
+	if _, _, err = repo.ReadRegularFileAt("main", "policy.json"); err == nil {
+		t.Fatal("non-exact revision was accepted")
+	}
+}
+
 func TestDeletionExpandsChangedSelection(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)

@@ -64,6 +64,39 @@ func TestBehaviorReviewWithoutConfigurationStaysOptionalAndSkipsArtifacts(t *tes
 	assertBehaviorReviewNotRunPlanningReport(t, planningReport, planningErr)
 }
 
+func TestFirstAdoptionAppliesCandidateBehaviorReviewWithoutInventingBasePolicy(t *testing.T) {
+	t.Parallel()
+	root := contentRepository(t, nil)
+	installRequiredBehaviorReviewPolicy(t, root, "merge")
+	installBehaviorReviewTestGuidance(t, root)
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	candidate, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
+	initializeEngineGitRepository(t, root)
+	gitBehaviorReview(t, root, "switch", "-c", "candidate")
+	writeEngineFile(t, root, policy.ConfigFilename, string(candidate), 0o600)
+	writeEngineFile(t, root, "content/data.json", "{\"adopted\":true}\n", 0o600)
+	gitBehaviorReview(t, root, "add", "--all")
+	gitBehaviorReview(t, root, "commit", "-m", "adopt policy")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := policyEngine.PlanMergeGateExecution("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.FirstAdoption || !plan.BehaviorReview.required || !plan.BehaviorReview.status.FullCandidate ||
+		len(plan.BehaviorReview.baseSelectedSuites) != 0 {
+		t.Fatalf("plan = %+v", plan)
+	}
+}
+
 func behaviorReviewWithoutConfigurationCandidate(t *testing.T) (string, *Engine, []byte) {
 	t.Helper()
 	root := contentRepository(t, nil)

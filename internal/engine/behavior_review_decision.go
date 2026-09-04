@@ -85,13 +85,25 @@ type behaviorReviewDecisionInput struct {
 	requested          []string
 }
 
+type behaviorReviewBaseConfiguration struct {
+	Config  policy.Config
+	Path    string
+	Present bool
+}
+
 func (engine *Engine) behaviorReviewDecision(
 	ctx context.Context, selection repository.Selection, boundary BehaviorReviewBoundary,
 ) (behaviorReviewDecision, error) {
-	baseConfig, err := engine.behaviorReviewConfigAt(selection.Base)
+	baseConfiguration, err := engine.behaviorReviewConfigAt(selection.Base)
 	if err != nil {
 		return behaviorReviewDecision{}, err
 	}
+	return engine.behaviorReviewDecisionWithBaseConfiguration(ctx, selection, boundary, baseConfiguration.Config)
+}
+
+func (engine *Engine) behaviorReviewDecisionWithBaseConfiguration(
+	ctx context.Context, selection repository.Selection, boundary BehaviorReviewBoundary, baseConfig policy.Config,
+) (behaviorReviewDecision, error) {
 	if behaviorReviewConfigurationAbsent(engine.Repository.Config, baseConfig) {
 		return emptyBehaviorReviewDecision()
 	}
@@ -182,7 +194,7 @@ func behaviorReviewNotRunDecision(affected, configured, requested []string) (beh
 	}}, nil
 }
 
-func (engine *Engine) behaviorReviewConfigAt(base string) (policy.Config, error) {
+func (engine *Engine) behaviorReviewConfigAt(base string) (behaviorReviewBaseConfiguration, error) {
 	configPath := engine.Repository.Config.ConfigPath
 	if configPath == "" {
 		configPath = policy.ConfigFilename
@@ -193,23 +205,26 @@ func (engine *Engine) behaviorReviewConfigAt(base string) (policy.Config, error)
 		}
 		relative, err := filepath.Rel(engine.Repository.Root, configPath)
 		if err != nil {
-			return policy.Config{}, fmt.Errorf("resolve behavior review base configuration: %w", err)
+			return behaviorReviewBaseConfiguration{}, fmt.Errorf("resolve base configuration: %w", err)
 		}
 		configPath = relative
 	}
 	normalized, err := engine.Repository.NormalizePath(configPath)
 	if err != nil {
-		return policy.Config{}, fmt.Errorf("resolve behavior review base configuration: %w", err)
+		return behaviorReviewBaseConfiguration{}, fmt.Errorf("resolve base configuration: %w", err)
 	}
-	data, err := engine.Repository.ReadAt(base, normalized)
+	data, present, err := engine.Repository.ReadRegularFileAt(base, normalized)
 	if err != nil {
-		return policy.Config{}, fmt.Errorf("read behavior review base configuration: %w", err)
+		return behaviorReviewBaseConfiguration{}, fmt.Errorf("read base configuration: %w", err)
+	}
+	if !present {
+		return behaviorReviewBaseConfiguration{Config: policy.Config{}, Path: normalized, Present: false}, nil
 	}
 	config, err := policy.Parse(data, normalized)
 	if err != nil {
-		return policy.Config{}, fmt.Errorf("parse behavior review base configuration: %w", err)
+		return behaviorReviewBaseConfiguration{}, fmt.Errorf("parse base configuration: %w", err)
 	}
-	return config, nil
+	return behaviorReviewBaseConfiguration{Config: config, Path: normalized, Present: true}, nil
 }
 
 func behaviorReviewFeatureRequirements(

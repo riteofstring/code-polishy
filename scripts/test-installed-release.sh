@@ -268,6 +268,7 @@ expect_no_target_commands() {
 }
 
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
+source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
 
 exercise_versioned_documentation() {
@@ -439,6 +440,7 @@ fi
 expect_absent "go-only activated a JavaScript framework policy module" \
   "conditional policy module: (react|electron)"
 exercise_opt_in_behavior_review_fixtures "${fixture_root}" "${real_git}"
+exercise_first_adoption_fixture "${fixture_root}" "${real_git}"
 write_file "${go_only}/internal/greeting/farewell.go" <<'EOF'
 package greeting
 

@@ -244,6 +244,39 @@ func (repo Repository) ReadAt(revision, path string) ([]byte, error) {
 	return output, nil
 }
 
+func (repo Repository) ReadRegularFileAt(revision, path string) ([]byte, bool, error) {
+	if !exactRevision(revision) {
+		return nil, false, errors.New("revision must be an exact Git object ID")
+	}
+	normalized, err := repo.NormalizePath(path)
+	if err != nil {
+		return nil, false, err
+	}
+	entries, err := repo.gitLines("ls-tree", "-z", revision, "--", ":(literal)"+normalized)
+	if err != nil {
+		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	}
+	if len(entries) == 0 {
+		return nil, false, nil
+	}
+	if len(entries) != 1 {
+		return nil, false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
+	}
+	separator := strings.IndexByte(entries[0], '\t')
+	if separator < 0 || entries[0][separator+1:] != normalized {
+		return nil, false, fmt.Errorf("inspect %s at %s: invalid tree entry", normalized, revision)
+	}
+	fields := strings.Fields(entries[0][:separator])
+	if len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" {
+		return nil, false, fmt.Errorf("inspect %s at %s: path is not a regular file", normalized, revision)
+	}
+	data, err := repo.ReadAt(revision, normalized)
+	if err != nil {
+		return nil, false, err
+	}
+	return data, true, nil
+}
+
 func exactRevision(value string) bool {
 	if len(value) != 40 && len(value) != 64 {
 		return false

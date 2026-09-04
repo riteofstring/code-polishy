@@ -20,12 +20,14 @@ import (
 )
 
 type MergeGateExecutionPlan struct {
-	Level          string
-	Reasons        []string
-	Selection      repository.Selection
-	Tests          testpolicy.Plan
-	Commands       []MergeGateExecutionCommand
-	BehaviorReview behaviorReviewDecision
+	Level                 string
+	Reasons               []string
+	Selection             repository.Selection
+	Tests                 testpolicy.Plan
+	Commands              []MergeGateExecutionCommand
+	BehaviorReview        behaviorReviewDecision
+	FirstAdoption         bool
+	BaseConfigurationPath string
 }
 
 type MergeGateExecutionCommand struct {
@@ -180,6 +182,9 @@ func (engine *Engine) withMergeGateMetadata(ctx context.Context, report Report, 
 		report = withBehaviorReview(report, plan.BehaviorReview.status)
 	}
 	report = engine.withMergeGateTestQualityReminder(ctx, report, plan.Selection)
+	if plan.FirstAdoption {
+		report.Notes = append(report.Notes, firstAdoptionMergeGateReason(plan.BaseConfigurationPath, plan.Selection.Base))
+	}
 	return withMergePolicy(report, plan.Level, base, plan.Reasons)
 }
 
@@ -199,18 +204,33 @@ func (engine *Engine) mergeGateBaseExecutionPlan(base string) (MergeGateExecutio
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
+	baseConfiguration, err := engine.behaviorReviewConfigAt(selection.Base)
+	if err != nil {
+		return MergeGateExecutionPlan{}, err
+	}
 	mergeDecision, err := testpolicy.BuildMergeDecision(engine.Repository, selection)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
-	behaviorDecision, err := engine.behaviorReviewDecision(context.Background(), selection, BehaviorReviewMerge)
+	if !baseConfiguration.Present {
+		mergeDecision.Level = testpolicy.MergeLevelFull
+		mergeDecision.Reasons = []string{firstAdoptionMergeGateReason(baseConfiguration.Path, selection.Base)}
+	}
+	behaviorDecision, err := engine.behaviorReviewDecisionWithBaseConfiguration(
+		context.Background(), selection, BehaviorReviewMerge, baseConfiguration.Config,
+	)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
 	}
 	plan := MergeGateExecutionPlan{
 		Level: mergeDecision.Level, Reasons: append([]string{}, mergeDecision.Reasons...), Selection: selection, BehaviorReview: behaviorDecision,
+		FirstAdoption: !baseConfiguration.Present, BaseConfigurationPath: baseConfiguration.Path,
 	}
 	return plan, nil
+}
+
+func firstAdoptionMergeGateReason(path, base string) string {
+	return fmt.Sprintf("first adoption: base configuration %q is absent at %s; candidate policy governs a full gate", path, base)
 }
 
 func (engine *Engine) planDocumentationMergeGateExecution(plan MergeGateExecutionPlan) (MergeGateExecutionPlan, error) {

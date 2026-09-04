@@ -358,7 +358,7 @@ func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, r
 	}
 	return gaterun.FinalizeOptions{
 		Status: status, Findings: gateRunFindings(report.Findings), TestEvidence: gateRunTestEvidence(report.TestCommands),
-		TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics), BehaviorReview: behaviorReview,
+		Notes: append([]string{}, report.Notes...), TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics), BehaviorReview: behaviorReview,
 	}
 }
 
