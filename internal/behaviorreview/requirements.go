@@ -245,21 +245,10 @@ func requirementIntentsReachCandidate(repo repository.Repository, intents []inte
 }
 
 func configuredFeatureNames(config policy.Config, values []string) ([]string, error) {
-	features := make([]string, 0, len(values))
-	seen := map[string]bool{}
-	for _, value := range values {
-		if !validFeatureName(value) {
-			return nil, fmt.Errorf("%w: behavior review feature %q is malformed", ErrInvalidInput, value)
-		}
-		if _, err := ConfiguredFeatureSelection(config, value, []string{SelectionReasonTaskRequested}); err != nil {
-			return nil, err
-		}
-		if !seen[value] {
-			seen[value] = true
-			features = append(features, value)
-		}
+	features, err := policy.ResolveBehaviorReviewFeatures(config, values)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
-	sort.Strings(features)
 	return features, nil
 }
 

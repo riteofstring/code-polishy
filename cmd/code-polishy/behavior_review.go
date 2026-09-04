@@ -12,6 +12,7 @@ import (
 
 type behaviorReviewOptions struct {
 	action     string
+	format     string
 	base       string
 	intentFile string
 	features   []string
@@ -53,7 +54,9 @@ func handleBehaviorReviewCaptureIntent(ctx context.Context, policyEngine *engine
 	if err != nil {
 		return commandResult{}, err
 	}
-	return commandResult{quiet: true, messages: []string{behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID)}}, nil
+	return behaviorReviewConfirmation(options, behaviorReviewOutputDocument{
+		Capture: &result,
+	}, behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID, result.Features))
 }
 
 func handleBehaviorReviewRequire(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
@@ -69,7 +72,9 @@ func handleBehaviorReviewStatus(ctx context.Context, policyEngine *engine.Engine
 	if err != nil {
 		return commandResult{}, err
 	}
-	return commandResult{quiet: true, messages: []string{behaviorReviewStatusMessage(status)}}, nil
+	return behaviorReviewConfirmation(options, behaviorReviewOutputDocument{
+		Status: &status,
+	}, behaviorReviewStatusMessage(status))
 }
 
 func handleBehaviorReviewPrepare(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
@@ -104,8 +109,8 @@ func behaviorReviewPreparedMessage(packetPath, reviewID string) string {
 	return fmt.Sprintf("Behavior review prepared: %s (review %s)", packetPath, reviewID)
 }
 
-func behaviorReviewIntentCapturedMessage(journalPath, captureID string) string {
-	return fmt.Sprintf("Behavior review intent captured: %s (intent %s)", journalPath, captureID)
+func behaviorReviewIntentCapturedMessage(journalPath, captureID string, features []string) string {
+	return fmt.Sprintf("Behavior review intent captured: %s (intent %s; features %s)", journalPath, captureID, behaviorReviewFeatureList(features))
 }
 
 func behaviorReviewRequirementAddedMessage(journalPath, requirementID string, features []string) string {
@@ -115,6 +120,9 @@ func behaviorReviewRequirementAddedMessage(journalPath, requirementID string, fe
 func behaviorReviewStatusMessage(status engine.BehaviorReviewStatus) string {
 	var output strings.Builder
 	printBehaviorReview(&output, &status, false)
+	if status.ReceiptPath != "" {
+		fmt.Fprintln(&output, "BEHAVIOR REVIEW RECEIPT:", status.ReceiptPath)
+	}
 	for _, list := range []struct {
 		label  string
 		values []string
@@ -126,11 +134,7 @@ func behaviorReviewStatusMessage(status engine.BehaviorReviewStatus) string {
 		{label: "COMPLETED FEATURES", values: status.Completed},
 		{label: "MISSING FEATURES", values: status.Missing},
 	} {
-		values := "none"
-		if len(list.values) > 0 {
-			values = strings.Join(list.values, ", ")
-		}
-		fmt.Fprintf(&output, "%s: %s\n", list.label, values)
+		fmt.Fprintf(&output, "%s: %s\n", list.label, behaviorReviewFeatureList(list.values))
 	}
 	return strings.TrimSuffix(output.String(), "\n")
 }
@@ -147,12 +151,16 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 	if len(arguments) == 0 {
 		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, require, status, prepare, or finalize")
 	}
-	options := behaviorReviewOptions{action: arguments[0]}
+	options := behaviorReviewOptions{action: arguments[0], format: "human"}
 	action, found := behaviorReviewActions[options.action]
 	if !found {
 		return behaviorReviewOptions{}, fmt.Errorf("unknown behavior-review action %q", options.action)
 	}
-	if err := action.parse(&options, arguments[1:]); err != nil {
+	operands, err := parseBehaviorReviewFormat(&options, arguments[1:])
+	if err != nil {
+		return behaviorReviewOptions{}, err
+	}
+	if err := action.parse(&options, operands); err != nil {
 		return behaviorReviewOptions{}, err
 	}
 	return options, nil

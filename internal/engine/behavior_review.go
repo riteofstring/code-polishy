@@ -44,7 +44,9 @@ type checkpointGateReviewPreparation struct {
 	reviewErr     error
 }
 
-func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string, features []string) (behaviorreview.CaptureIntentResult, error) {
+type BehaviorReviewIntentCapture = behaviorreview.CaptureIntentResult
+
+func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string, features []string) (BehaviorReviewIntentCapture, error) {
 	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{
 		IntentPath: intentPath, Features: append([]string{}, features...),
 	})

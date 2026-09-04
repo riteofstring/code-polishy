@@ -116,11 +116,13 @@ func (policy BehaviorReviewPolicy) EffectiveRequiredAt(feature BehaviorReviewFea
 }
 
 type BehaviorReviewFeature struct {
-	Name       string   `json:"name"`
-	Modules    []string `json:"modules,omitempty"`
-	Paths      []string `json:"paths,omitempty"`
-	Suites     []string `json:"suites"`
-	RequiredAt string   `json:"requiredAt,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Aliases     []string `json:"aliases,omitempty"`
+	Modules     []string `json:"modules,omitempty"`
+	Paths       []string `json:"paths,omitempty"`
+	Suites      []string `json:"suites"`
+	RequiredAt  string   `json:"requiredAt,omitempty"`
 }
 
 type MergeGate struct {

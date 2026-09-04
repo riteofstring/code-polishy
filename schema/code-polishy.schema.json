@@ -446,6 +446,7 @@
         },
         "features": {
           "type": "array",
+          "maxItems": 128,
           "items": { "$ref": "#/$defs/behaviorReviewFeature" }
         }
       }
@@ -453,9 +454,20 @@
     "behaviorReviewFeature": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "suites"],
+      "required": ["name", "description", "suites"],
       "properties": {
-        "name": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/identifier", "maxLength": 128 },
+        "description": {
+          "$ref": "#/$defs/nonemptyString",
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
         "modules": { "$ref": "#/$defs/identifierArray" },
         "paths": { "$ref": "#/$defs/paths" },
         "suites": { "$ref": "#/$defs/nonemptyIdentifierArray" },

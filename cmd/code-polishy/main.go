@@ -32,9 +32,9 @@ Commands:
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
-  behavior-review capture-intent --intent-file PATH [--feature NAME...]
+  behavior-review capture-intent --intent-file PATH [--feature NAME...] [--format human|json]
   behavior-review require --base REF --feature NAME...
-  behavior-review status --base REF
+  behavior-review status --base REF [--format human|json]
   behavior-review prepare --base REF
   behavior-review finalize --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]

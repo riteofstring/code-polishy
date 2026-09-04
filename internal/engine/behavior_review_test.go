@@ -169,7 +169,7 @@ func assertBehaviorReviewNotRunPlanningReport(t *testing.T, report Report, err e
 }
 
 func TestTaskRequestedBehaviorReviewFeatureBlocksBeforeMergeCommands(t *testing.T) {
-	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
 	plan, err := policyEngine.PlanMergeGateExecution("main")
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestTaskRequestedBehaviorReviewFeatureBlocksBeforeMergeCommands(t *testing.
 }
 
 func TestMergeRequiredFeatureStaysOptionalAtCheckpointAndBlocksMerge(t *testing.T) {
-	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`, nil)
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`, nil)
 	checkpointRunner := &recordingEngineRunner{}
 	policyEngine.Runner = checkpointRunner
 	checkpoint, err := policyEngine.CheckpointGate(t.Context(), "main")
@@ -221,7 +221,7 @@ func TestMergeRequiredFeatureStaysOptionalAtCheckpointAndBlocksMerge(t *testing.
 }
 
 func TestCheckpointRequiredFeatureBlocksCheckpointAndMerge(t *testing.T) {
-	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`, nil)
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`, nil)
 	checkpointRunner := &recordingEngineRunner{}
 	policyEngine.Runner = checkpointRunner
 	checkpoint, err := policyEngine.CheckpointGate(t.Context(), "main")
@@ -259,8 +259,8 @@ func TestStrictBehaviorReviewSelectsTheFullCandidate(t *testing.T) {
 
 func TestBehaviorReviewUnionsBaseAndCandidateFeatureDefinitions(t *testing.T) {
 	root := contentRepository(t, nil)
-	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
-	candidatePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","paths":["content/data.json"],"suites":["full"]}]}`
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
+	candidatePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","paths":["content/data.json"],"suites":["full"]}]}`
 	installBehaviorReviewPolicy(t, root, basePolicy)
 	initializeEngineGitRepository(t, root)
 	gitBehaviorReview(t, root, "switch", "-c", "candidate")
@@ -294,7 +294,7 @@ func TestBehaviorReviewUnionsBaseAndCandidateFeatureDefinitions(t *testing.T) {
 func TestBehaviorReviewSelectsFeaturesFromDeletedPathsAndReverseDependentModules(t *testing.T) {
 	t.Run("deleted path ownership", func(t *testing.T) {
 		root := contentRepository(t, nil)
-		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"deleted-content","paths":["content/data.json"],"suites":["focused"],"requiredAt":"merge"}]}`)
+		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"deleted-content","description":"Removal of published content.","paths":["content/data.json"],"suites":["focused"],"requiredAt":"merge"}]}`)
 		installBehaviorReviewTestGuidance(t, root)
 		initializeEngineGitRepository(t, root)
 		gitBehaviorReview(t, root, "switch", "-c", "candidate")
@@ -328,7 +328,7 @@ func TestBehaviorReviewSelectsFeaturesFromDeletedPathsAndReverseDependentModules
 			t.Fatal("content module was not extended with a dependent module")
 		}
 		writeEngineFile(t, root, policy.ConfigFilename, updated, 0o600)
-		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"dependent-content","modules":["dependent"],"suites":["focused"],"requiredAt":"merge"}]}`)
+		installBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"dependent-content","description":"Content consumed by dependent modules.","modules":["dependent"],"suites":["focused"],"requiredAt":"merge"}]}`)
 		installBehaviorReviewTestGuidance(t, root)
 		initializeEngineGitRepository(t, root)
 		gitBehaviorReview(t, root, "switch", "-c", "candidate")
@@ -351,7 +351,7 @@ func TestBehaviorReviewSelectsFeaturesFromDeletedPathsAndReverseDependentModules
 
 func TestBehaviorReviewRejectsCandidateSuiteThatWeakensBaseRequiredEvidence(t *testing.T) {
 	root := contentRepository(t, nil)
-	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"],"requiredAt":"checkpoint"}]}`
 	installBehaviorReviewPolicy(t, root, basePolicy)
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
@@ -380,14 +380,14 @@ func TestBehaviorReviewRejectsCandidateSuiteThatWeakensBaseRequiredEvidence(t *t
 }
 
 func TestBehaviorReviewRejectsCandidateSuiteThatWeakensAnySelectedBaseDefinition(t *testing.T) {
-	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`
+	basePolicy := `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"]}]}`
 	for _, test := range []struct {
 		name            string
 		candidatePolicy string
 		captureFeatures []string
 	}{
 		{name: "task requested", candidatePolicy: basePolicy, captureFeatures: []string{"content"}},
-		{name: "candidate required", candidatePolicy: `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`},
+		{name: "candidate required", candidatePolicy: `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"],"requiredAt":"merge"}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := contentRepository(t, nil)
@@ -437,7 +437,7 @@ func TestBehaviorReviewRejectsCandidateSuiteThatWeakensAnySelectedBaseDefinition
 }
 
 func TestBehaviorReviewForcesSelectedSuitesOnce(t *testing.T) {
-	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"first","modules":["content"],"suites":["full"],"requiredAt":"merge"},{"name":"second","modules":["content"],"suites":["full"],"requiredAt":"merge"}]}`, nil)
+	policyEngine, _ := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"first","description":"Primary content behavior.","modules":["content"],"suites":["full"],"requiredAt":"merge"},{"name":"second","description":"Secondary content behavior.","modules":["content"],"suites":["full"],"requiredAt":"merge"}]}`, nil)
 	plan, err := policyEngine.PlanMergeGateExecution("main")
 	if err != nil {
 		t.Fatal(err)
@@ -566,7 +566,7 @@ func TestBehaviorReviewStatusReportsEvidenceBoundFinalStateFindings(t *testing.T
 }
 
 func TestBehaviorReviewGateStatusUsesPreparedPacketSelectionDigest(t *testing.T) {
-	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
 	prepared, err := policyEngine.PrepareBehaviorReview(t.Context(), "main")
 	if err != nil {
 		t.Fatal(err)
@@ -598,7 +598,7 @@ func TestBehaviorReviewGateStatusUsesPreparedPacketSelectionDigest(t *testing.T)
 }
 
 func TestBehaviorReviewStatusStaysRequiredForDirtyTaskSelectedCandidate(t *testing.T) {
-	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
+	policyEngine, root := behaviorReviewContentCandidate(t, `{"defaultRequiredAt":"on-request","features":[{"name":"content","description":"Published content behavior.","modules":["content"],"suites":["focused"]}]}`, []string{"content"})
 	writeEngineFile(t, root, "content/data.json", "{\"updated\":2}\n", 0o600)
 	status, err := policyEngine.BehaviorReviewStatus(t.Context(), "main")
 	if err != nil || status.State != BehaviorReviewRequired || !slices.Equal(status.TaskRequested, []string{"content"}) ||
@@ -630,7 +630,7 @@ func TestDocumentationBehaviorReviewIsOptionalUnlessAFeatureSelectsIt(t *testing
 	})
 	t.Run("selected", func(t *testing.T) {
 		root := documentationRepository(t)
-		installDocumentationBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"documentation","paths":["docs/index.md"],"suites":["docs-product-contract"],"requiredAt":"merge"}]}`)
+		installDocumentationBehaviorReviewPolicy(t, root, `{"defaultRequiredAt":"on-request","features":[{"name":"documentation","description":"Product documentation behavior.","paths":["docs/index.md"],"suites":["docs-product-contract"],"requiredAt":"merge"}]}`)
 		installBehaviorReviewTestGuidance(t, root)
 		initializeEngineGitRepository(t, root)
 		writeEngineFile(t, root, "docs/index.md", "# Updated\n", 0o600)

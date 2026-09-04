@@ -63,15 +63,15 @@ type CaptureIntentOptions struct {
 }
 
 type CaptureIntentResult struct {
-	ID                string
-	Commit            string
-	CandidateSHA256   string
-	IntentSHA256      string
-	JournalSHA256     string
-	JournalPath       string
-	RequirementID     string
-	RequirementSHA256 string
-	Features          []string
+	ID                string   `json:"id"`
+	Commit            string   `json:"commit"`
+	CandidateSHA256   string   `json:"candidate_sha256"`
+	IntentSHA256      string   `json:"intent_sha256"`
+	JournalSHA256     string   `json:"journal_sha256"`
+	JournalPath       string   `json:"journal_path"`
+	RequirementID     string   `json:"requirement_id,omitempty"`
+	RequirementSHA256 string   `json:"requirement_sha256,omitempty"`
+	Features          []string `json:"features"`
 }
 
 type RequireOptions struct {

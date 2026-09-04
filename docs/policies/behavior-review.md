@@ -41,6 +41,8 @@ defaults to `defaultRequiredAt: on-request`:
       "features": [
         {
           "name": "checkout",
+          "description": "Checkout completion and payment confirmation.",
+          "aliases": ["purchase completion"],
           "modules": ["checkout", "payments"],
           "paths": ["web/checkout/**"],
           "suites": ["checkout-contract"],
@@ -48,6 +50,8 @@ defaults to `defaultRequiredAt: on-request`:
         },
         {
           "name": "authentication",
+          "description": "Sign-in, sign-out, and session behavior.",
+          "aliases": ["sign in"],
           "modules": ["auth"],
           "suites": ["auth-contract"],
           "requiredAt": "checkpoint"
@@ -67,10 +71,20 @@ The persistent levels are ordered `on-request < merge < checkpoint`:
   and again at final merge.
 
 A feature can strengthen the repository default and cannot weaken it. Its
-lowercase unique `name` identifies it in commands and reports. `modules`
+lowercase unique `name` identifies it in commands and reports. Each feature
+requires a trimmed `description` of at most 512 UTF-8 bytes. `modules`
 references declared project modules; `paths` contains repository-relative path
 patterns. At least one module or path is required. `suites` names one or more
 configured ordinary suites.
+
+A policy can declare at most 128 features. A feature may declare up to 16
+`aliases`, each at most 256 UTF-8 bytes. Names and aliases must remain unique
+after Unicode NFKC normalization, case folding, and collapsing Unicode
+whitespace. The declared spelling is preserved for display. An explicitly
+supplied `--feature` operand resolves by exact normalized name or alias and
+records only the canonical name. For example, `--feature 'PURCHASE COMPLETION'`
+selects `checkout` above. Partial matches, descriptions, rankings, and keywords
+in intent prose never select a feature.
 
 Feature suites must work in disposable worktrees without credentials or secret
 environment. Supplemental, mutation, live, destructive, credentialed, and
@@ -153,8 +167,21 @@ Inspect the decision without creating a packet or running commands:
 code-polishy behavior-review status --base TASK_BASE
 ```
 
-The status reports configured, affected, task-requested, required, completed,
-and missing features.
+Capture and status always print a confirmation on standard output, including
+when piped, captured by an agent harness, or invoked through the installed
+launcher. Capture reports the canonical requested features and managed journal
+path. Status reports the review state, configured, affected, task-requested,
+required, completed, and missing features, plus the accepted receipt path when
+available. Status remains read-only.
+
+Add `--format json` to either command for one `behavior-review/v1` document
+with `action`, `state`, and the typed `capture` or `status` result. This replaces
+the human confirmation on standard output and does not create a report file:
+
+```sh
+code-polishy behavior-review capture-intent --intent-file PATH --format json
+code-polishy behavior-review status --base TASK_BASE --format json
+```
 
 ## Complete a selected review
 

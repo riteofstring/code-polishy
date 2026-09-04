@@ -1178,8 +1178,8 @@ func featureBehaviorTestConfig() policy.Config {
 	config.Verification = policy.Verification{BehaviorReview: &policy.BehaviorReviewPolicy{
 		DefaultRequiredAt: policy.BehaviorReviewOnRequest,
 		Features: []policy.BehaviorReviewFeature{
-			{Name: "checkout", Modules: []string{"app"}, Suites: []string{"checkout-unit"}, RequiredAt: policy.BehaviorReviewMerge},
-			{Name: "search", Paths: []string{"app.txt"}, Suites: []string{"search-unit"}},
+			{Name: "checkout", Description: "Checkout completion and payment behavior.", Modules: []string{"app"}, Suites: []string{"checkout-unit"}, RequiredAt: policy.BehaviorReviewMerge},
+			{Name: "search", Description: "Search query and result behavior.", Paths: []string{"app.txt"}, Suites: []string{"search-unit"}},
 		},
 	}}
 	config.Tests.Suites = []policy.TestSuite{

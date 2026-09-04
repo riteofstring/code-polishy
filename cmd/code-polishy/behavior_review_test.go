@@ -22,27 +22,27 @@ func TestParseBehaviorReviewOptionsAcceptsStrictFeatureAndReviewRequests(t *test
 		{
 			name:      "capture intent",
 			arguments: []string{"capture-intent", "--feature", "checkout", "--intent-file=intent.md", "--feature=search"},
-			want:      behaviorReviewOptions{action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
+			want:      behaviorReviewOptions{format: "human", action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
 		},
 		{
 			name:      "require",
 			arguments: []string{"require", "--feature=checkout", "--base", "origin/main", "--feature", "search"},
-			want:      behaviorReviewOptions{action: "require", base: "origin/main", features: []string{"checkout", "search"}},
+			want:      behaviorReviewOptions{format: "human", action: "require", base: "origin/main", features: []string{"checkout", "search"}},
 		},
 		{
 			name:      "status",
 			arguments: []string{"status", "--base=origin/main"},
-			want:      behaviorReviewOptions{action: "status", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "status", base: "origin/main"},
 		},
 		{
 			name:      "prepare",
 			arguments: []string{"prepare", "--base", "origin/main"},
-			want:      behaviorReviewOptions{action: "prepare", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "prepare", base: "origin/main"},
 		},
 		{
 			name:      "finalize",
 			arguments: []string{"finalize", "--base=origin/main"},
-			want:      behaviorReviewOptions{action: "finalize", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "finalize", base: "origin/main"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -126,7 +126,7 @@ func TestParseRegressionProofOptionsDefaultsRedExitAndRejectsInvalidRequests(t *
 func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *testing.T) {
 	t.Parallel()
 	for name, message := range map[string]string{
-		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123"),
+		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123", nil),
 		"require":  behaviorReviewRequirementAddedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "requirement-123", []string{"checkout", "search"}),
 		"prepare":  behaviorReviewPreparedMessage(".code-polishy-reports/behavior-review/packet.json", "review-123"),
 		"finalize": behaviorReviewFinalizedMessage(".code-polishy-reports/behavior-review/receipt.json", "review-123"),
@@ -347,6 +347,7 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 		t.Fatalf("finalize status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 
+	assertBehaviorReviewCLIReceiptConfirmation(t, common)
 	assertBehaviorReviewCLIMerge(t, common)
 	assertBehaviorReviewCLICheckpoint(t, common)
 	assertBehaviorReviewCLIArtifacts(t, repositoryRoot, []string{
@@ -531,8 +532,8 @@ func newFeatureBehaviorReviewCLIBaseRepository(t *testing.T) (string, string) {
 	t.Helper()
 	return newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t, `{
   "features": [
-    {"name":"checkout","modules":["application"],"suites":["regression"]},
-    {"name":"search","paths":["value.go"],"suites":["regression"]}
+    {"name":"checkout","description":"Checkout completion and payment behavior.","modules":["application"],"suites":["regression"]},
+    {"name":"search","description":"Search query and result behavior.","paths":["value.go"],"suites":["regression"]}
   ]
 }`)
 }

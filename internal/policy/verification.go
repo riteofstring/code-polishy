@@ -52,7 +52,7 @@ func validateBehaviorReview(config *Config) error {
 			return err
 		}
 	}
-	return nil
+	return validateBehaviorReviewFeatureDescriptions(behaviorReview.Features)
 }
 
 func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string, names map[string]bool) error {
