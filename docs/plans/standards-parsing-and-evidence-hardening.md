@@ -2,6 +2,8 @@
 
 Status: proposed
 
+Target release: v0.23.0
+
 ## Outcome
 
 Keep the policy direction established from v0.18 through v0.22 while reducing
@@ -17,6 +19,24 @@ to validate without weakening any existing standard. Receipt reuse becomes
 explicitly dependent on a suite's complete, enforceable input model, and
 release evidence becomes independently verifiable rather than merely
 well-formed.
+
+v0.23.0 does not ship until every phase and completion criterion in this plan
+is complete. Private implementation commits may land incrementally, but the
+public release is one coherent cutover with no old parser fallbacks, partially
+active receipt contract, or unauthenticated substitute for required publication
+evidence.
+
+## v0.23 release boundary
+
+This entire plan is the v0.23 scope. No required phase may be deferred to a
+later release while v0.23 is declared complete.
+
+Where the plan calls for an evaluation rather than unconditional adoption,
+v0.23 must finish that evaluation and implement its resulting decision. An
+external component is not required when the evaluation proves that a smaller
+existing boundary is stricter or more interoperable. That decision and its
+verification evidence must be recorded before release rather than left as
+future work.
 
 ## Release-direction assessment
 
@@ -94,6 +114,57 @@ carrier must not silently treat newer valid syntax as malformed or absent.
 This implementation belongs to the Python owner. If Python becomes an
 installable first-party pack, the adapter and its dependencies move in that
 same atomic cutover rather than leaving Python semantics in core.
+
+### Intentional computed Python imports
+
+Add `scope.pythonComputedImports` for intentional computed imports such as
+`importlib.import_module(configured_module)`. This is an architecture-evidence
+contract and remains separate from `scope.pythonDynamicReferences`, which only
+describes exact symbol reachability for dead-code analysis. Neither declaration
+may satisfy the other check.
+
+Each computed-import declaration binds all of the following:
+
+- the exact contained `pyproject.toml` project;
+- the exact governed importer path and resolved importer module;
+- the exact containing callable, or an explicit module-scope callsite;
+- the recognized callee, limited initially to `importlib.import_module` and
+  `builtins.__import__` including statically proven aliases;
+- the source line, column, canonical call shape, and argument expression;
+- exactly one target contract: a contained namespace or a validated PEP 621
+  entry-point group;
+- every governed configuration input used to select a module name when the
+  target is configuration-driven.
+
+The source location is diagnostic as well as identifying. The engine binds the
+declaration to the current parsed call expression and source digest so moving,
+rewriting, deleting, or changing the argument makes the declaration stale.
+
+For a namespace target, Code Polishy accepts no wildcard, empty, repository-root,
+or unconstrained top-level namespace. Every configured value must be a valid
+absolute Python module name contained by the declared namespace. The argument
+must be statically traceable through a supported bounded shape to the declared
+governed configuration values or to an exact in-source enumeration. Ambient
+environment, network, installed-package enumeration, arbitrary user input, and
+unparsed executable configuration remain unproven.
+
+For an entry-point target, the group name is exact and resolves only through
+the already validated contained project metadata. The group must exist and
+contain at least one current entry. Each entry's module and symbol remain
+subject to the normal PEP 621 validation and project containment rules.
+
+Code Polishy resolves every possible in-repository target, derives the importer
+and target module owners, and checks every resulting edge against the existing
+module `dependsOn` graph. The declaration never authorizes an architecture
+edge itself and cannot create a second dependency allow-list. If possible
+targets span several modules, every edge must already be permitted.
+
+Reject an undeclared call, an ambiguous or duplicate callsite, an overly broad
+target, an escaping or unresolved local target, an unmodeled configuration
+source, a disallowed architecture edge, a declaration that matches no current
+call, or a declaration whose target set has become empty. A failure remains
+`architecture.importCoverage` or `architecture.moduleDependency` as
+appropriate; it never degrades to an informational warning.
 
 ### Markdown and shell syntax
 
@@ -248,6 +319,8 @@ Do not adopt the following as part of this plan:
    corpora from current observable behavior and the governing standards.
 4. Record performance and resource ceilings for large bounded inputs.
 5. Resolve each parser's future core or language-pack owner.
+6. Inventory every current computed Python import and classify its argument
+   source, possible targets, and architecture owners.
 
 ### Phase 1: Remove configuration drift
 
@@ -258,14 +331,20 @@ Do not adopt the following as part of this plan:
 4. Remove duplicate handwritten structural validation once equivalence is
    proven.
 
-### Phase 2: Replace high-risk syntax implementations
+### Phase 2: Replace high-risk Python and syntax implementations
 
 1. Introduce the batched Python facts adapter and resolve supported syntax
    versions.
-2. Replace Markdown structure parsing with goldmark.
-3. Replace shell lexical and syntax interpretation with `mvdan/sh`.
-4. Compare old and new facts over the frozen corpus and fuzzed inputs.
-5. Remove each old implementation and its fallback in the same coherent
+2. Add the strict `scope.pythonComputedImports` schema and AST-backed callsite
+   validation.
+3. Resolve bounded configured targets and derive every architecture edge from
+   the governed module graph.
+4. Keep dead-code dynamic references and architecture computed imports separate
+   in configuration, validation, findings, documentation, and receipts.
+5. Replace Markdown structure parsing with goldmark.
+6. Replace shell lexical and syntax interpretation with `mvdan/sh`.
+7. Compare old and new facts over the frozen corpus and fuzzed inputs.
+8. Remove each old implementation and its fallback in the same coherent
    cutover after equivalence or an intentional tightening is documented.
 
 ### Phase 3: Strengthen standardized evidence
@@ -305,6 +384,20 @@ Every parser replacement must demonstrate:
   cutover;
 - native Windows, macOS, and Linux behavior where the capability is supported.
 
+Computed-import coverage must additionally prove:
+
+- undeclared computed imports continue to fail closed;
+- an exact declaration accepts only its current callsite and bounded targets;
+- moved, removed, duplicated, or rewritten calls make declarations stale;
+- malformed, wildcard, empty, ambiguous, escaping, and external target domains
+  are rejected;
+- every possible governed target produces an architecture edge checked against
+  the existing `dependsOn` graph;
+- a changed configuration value invalidates evidence and cannot escape its
+  declared namespace or entry-point group;
+- `pythonDynamicReferences` cannot satisfy import coverage and
+  `pythonComputedImports` cannot preserve a Vulture symbol.
+
 Release-evidence work must additionally prove:
 
 - the SBOM conforms to the selected CycloneDX version;
@@ -324,6 +417,9 @@ produce reusable evidence, and unbounded suites always execute.
 - Runtime configuration structure is governed by one shipped schema.
 - Python packaging, Markdown, and shell syntax use maintained standards
   implementations at their correct ownership boundaries.
+- Intentional computed Python imports require exact, non-stale, bounded
+  declarations whose possible targets produce ordinary enforced architecture
+  edges.
 - Workflow checks parse active structure and do not overclaim external state.
 - SPDX handling is either standards-complete or explicitly documented as a
   narrower fail-closed policy.
@@ -335,6 +431,7 @@ produce reusable evidence, and unbounded suites always execute.
   decide pass and fail.
 - Every added dependency is exactly pinned, admitted, reviewed, inventoried,
   and included in release evidence.
+- Every phase and completion criterion is delivered together in v0.23.0.
 
 ## Related plans
 
