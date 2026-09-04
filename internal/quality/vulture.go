@@ -16,7 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 2
+const pythonVultureProtocolVersion = 3
 
 const pythonVultureVersion = "2.16"
 
@@ -24,7 +24,7 @@ const pythonVultureInputMaximumBytes = 4 << 20
 
 const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys
 from collections import defaultdict
-P=2
+P=3
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -232,11 +232,39 @@ def ka(f):
  for x in ast.walk(f["tree"]):
   if isinstance(x,ast.Attribute) and isinstance(x.ctx,ast.Store) and isinstance(x.value,ast.Name) and x.value.id in typed:k.add(c(f,x,x.attr))
  return k
+def fc(mod,parts):
+ z=mods.get(mod,[])
+ if not z:raise ValueError("write module has no runtime .py definition")
+ if len(z)!=1:raise ValueError("write module is ambiguous")
+ f=z[0];body=f["tree"].body;node=None
+ for i,name in enumerate(parts):
+  d=ds(f,body,name)
+  if len(d)!=1 or d[0][0]!="d":raise ValueError("write callable is stale or ambiguous")
+  node=d[0][1]
+  if i<len(parts)-1:
+   if not isinstance(node,ast.ClassDef):raise ValueError("write callable cannot be resolved statically")
+   body=node.body
+ if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):raise ValueError("write target is not a callable")
+ return f,node
+def wn(node):
+ for x in ast.iter_child_nodes(node):
+  if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef,ast.Lambda)):continue
+  yield x;yield from wn(x)
+def xa(a):
+ f,node=fc(a["module"],a["callable"].split("."));b=ib(f);args=node.args
+ parameters=args.posonlyargs+args.args+args.kwonlyargs+([args.vararg] if args.vararg else [])+([args.kwarg] if args.kwarg else [])
+ parameters=[x for x in parameters if x.arg==a["receiver"]]
+ if len(parameters)!=1 or parameters[0].annotation is None:raise ValueError("write receiver has no exact annotated parameter")
+ if en(un(parameters[0].annotation),b)!=a["consumer_type"]:raise ValueError("write receiver annotation does not match consumer type")
+ if any(a["consumer_type"]==m or a["consumer_type"].startswith(m+".") for m in mods):raise ValueError("consumer type is not external")
+ writes=[x for x in wn(node) if isinstance(x,ast.Attribute) and isinstance(x.ctx,ast.Store) and x.lineno==a["line"] and x.attr==a["attribute"] and isinstance(x.value,ast.Name) and x.value.id==a["receiver"]]
+ if len(writes)!=1:raise ValueError("external attribute write is stale or ambiguous")
+ return c(f,writes[0],a["attribute"])
 try:
  b=sys.stdin.buffer.read(M+1)
  if len(b)>M:raise ValueError("input exceeds limit")
  x=json.loads(b)
- if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends"}:raise ValueError("invalid request")
+ if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends","attributes"}:raise ValueError("invalid request")
  if type(x["protocol"]) is not int or x["protocol"]!=P or not isinstance(x["tool_version"],str):raise ValueError("invalid protocol")
  root=q(x["root"])
  if not os.path.isabs(root):raise ValueError("root is not absolute")
@@ -272,6 +300,13 @@ try:
   i=q(b["id"])
   if i in ids or not n(b["module"]) or not isinstance(b["object"],str) or (b["object"] and not n(b["object"])):raise ValueError("invalid backend")
   ids.add(i);bs.append(b)
+ if not isinstance(x["attributes"],list):raise ValueError("invalid attributes")
+ ats=[]
+ for a in x["attributes"]:
+  if not isinstance(a,dict) or set(a)!={"id","module","callable","receiver","attribute","line","consumer_type"}:raise ValueError("invalid attribute")
+  i=q(a["id"])
+  if i in ids or not n(a["module"]) or not n(a["callable"]) or not n(a["receiver"]) or "." in a["receiver"] or not n(a["attribute"]) or "." in a["attribute"] or type(a["line"]) is not int or a["line"]<1 or not n(a["consumer_type"]) or "." not in a["consumer_type"]:raise ValueError("invalid attribute")
+  ids.add(i);ats.append(a)
  mods={}
  for f in fs:
   if f["path"].endswith(".py") and f["module"]:mods.setdefault(f["module"],[]).append(f)
@@ -317,6 +352,10 @@ try:
      else:keep.update(rm(None,b["module"],[name],set()))
    o["resolved"].append(b["id"])
   except Exception as z:o["problems"].append({"id":b["id"],"message":str(z)[:S]})
+ for a in ats:
+  try:
+   keep.add(xa(a));o["resolved"].append(a["id"])
+  except Exception as z:o["problems"].append({"id":a["id"],"message":str(z)[:S]})
  for z in v.get_unused_code(min_confidence=60):
   a=(str(z.filename),z.first_lineno,z.last_lineno,z.name)
   if a in keep:continue
@@ -345,6 +384,16 @@ type pythonVultureBackend struct {
 	Object string `json:"object"`
 }
 
+type pythonVultureAttribute struct {
+	ID           string `json:"id"`
+	Module       string `json:"module"`
+	Callable     string `json:"callable"`
+	Receiver     string `json:"receiver"`
+	Attribute    string `json:"attribute"`
+	Line         int    `json:"line"`
+	ConsumerType string `json:"consumer_type"`
+}
+
 type pythonVultureRequest struct {
 	Protocol    int                      `json:"protocol"`
 	ToolVersion string                   `json:"tool_version"`
@@ -352,6 +401,7 @@ type pythonVultureRequest struct {
 	Files       []pythonVultureFile      `json:"files"`
 	References  []pythonVultureReference `json:"references"`
 	Backends    []pythonVultureBackend   `json:"backends"`
+	Attributes  []pythonVultureAttribute `json:"attributes"`
 }
 
 type pythonVultureReferenceOrigin struct {
@@ -408,9 +458,10 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
 	references, _ := pythonVultureReferences(repo, project)
 	backends, _ := pythonVultureBackends(project)
+	attributes, _ := pythonVultureAttributes(repo, project)
 	request := pythonVultureRequest{
 		Protocol: pythonVultureProtocolVersion, ToolVersion: pythonVultureVersion, Root: repo.Root,
-		Files: files, References: references, Backends: backends,
+		Files: files, References: references, Backends: backends, Attributes: attributes,
 	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
@@ -460,6 +511,28 @@ func pythonVultureReferences(repo repository.Repository, project repository.Pyth
 	return references, origins
 }
 
+func pythonVultureAttributes(repo repository.Repository, project repository.PythonProject) ([]pythonVultureAttribute, map[string]pythonVultureReferenceOrigin) {
+	attributes := []pythonVultureAttribute{}
+	origins := map[string]pythonVultureReferenceOrigin{}
+	configPath := pythonVultureConfigPath(repo)
+	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		if attribute.Project != project.Manifest {
+			continue
+		}
+		id := pythonVultureAttributeID(attribute)
+		attributes = append(attributes, pythonVultureAttribute{
+			ID: id, Module: attribute.Module, Callable: attribute.Callable, Receiver: attribute.Receiver,
+			Attribute: attribute.Attribute, Line: attribute.Line, ConsumerType: attribute.ConsumerType,
+		})
+		origins[id] = pythonVultureReferenceOrigin{
+			Path: configPath, Subject: id, Check: "policy.pythonExternalAttribute",
+			Message: "Python external attribute cannot resolve exactly: ",
+		}
+	}
+	sort.Slice(attributes, func(left, right int) bool { return attributes[left].ID < attributes[right].ID })
+	return attributes, origins
+}
+
 func pythonVultureBackends(project repository.PythonProject) ([]pythonVultureBackend, map[string]pythonVultureReferenceOrigin) {
 	if len(project.BackendPaths) == 0 || project.BuildBackend.Module == "" {
 		return []pythonVultureBackend{}, map[string]pythonVultureReferenceOrigin{}
@@ -482,6 +555,11 @@ func pythonVultureConfigReferenceID(reference policy.PythonDynamicReference) str
 
 func pythonVultureManifestReferenceID(project repository.PythonProject, reference repository.PythonDynamicReference) string {
 	return "manifest:" + project.Manifest + ":" + reference.Table + ":" + reference.Name + ":" + reference.Module + ":" + reference.Symbol
+}
+
+func pythonVultureAttributeID(attribute policy.PythonExternalAttribute) string {
+	return fmt.Sprintf("config:%s:%s:%s:%s.%s:%d:%s", attribute.Project, attribute.Module, attribute.Callable,
+		attribute.Receiver, attribute.Attribute, attribute.Line, attribute.ConsumerType)
 }
 
 func pythonVultureConfigPath(repo repository.Repository) string {
@@ -517,6 +595,18 @@ func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, 
 	return findings
 }
 
+func pythonQualityExternalAttributeInventoryFindings(repo repository.Repository, message string) []policy.Finding {
+	findings := make([]policy.Finding, 0, len(repo.Config.Scope.PythonExternalAttributes))
+	configPath := pythonVultureConfigPath(repo)
+	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		findings = append(findings, policy.Finding{
+			Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
+			Message: "Python external attribute cannot determine its contained project: " + message,
+		})
+	}
+	return findings
+}
+
 func pythonQualityDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string) {
 	findings, referenceOnly, unrunnable := pythonQualityConfigDynamicReferenceProjects(repo, projects, selectedByProject, invalidProjects)
 	return append(findings, pythonQualityInferredDynamicReferenceFindings(projects, selectedByProject, selectedManifests, referenceOnly, unrunnable, invalidProjects)...), referenceOnly
@@ -546,6 +636,31 @@ func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, pro
 			findings = append(findings, policy.Finding{
 				Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
 				Message: "Python dynamic reference names a project with no runtime .py definitions",
+			})
+			unrunnable[project.Manifest] = true
+			continue
+		}
+		referenceOnly[project.Manifest] = nil
+	}
+	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		project, found := projects[attribute.Project]
+		if !found {
+			findings = append(findings, policy.Finding{
+				Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
+				Message: "Python external attribute names no current contained Python project",
+			})
+			continue
+		}
+		if invalidProjects[project.Manifest] {
+			continue
+		}
+		if _, selected := selectedByProject[project.Manifest]; selected {
+			continue
+		}
+		if !pythonQualityProjectHasRuntimeSource(project) {
+			findings = append(findings, policy.Finding{
+				Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
+				Message: "Python external attribute names a project with no runtime .py definitions",
 			})
 			unrunnable[project.Manifest] = true
 			continue
@@ -611,10 +726,14 @@ func pythonVultureFindings(repo repository.Repository, project repository.Python
 	}
 	references, origins := pythonVultureReferences(repo, project)
 	backends, backendOrigins := pythonVultureBackends(project)
+	attributes, attributeOrigins := pythonVultureAttributes(repo, project)
 	for id, origin := range backendOrigins {
 		origins[id] = origin
 	}
-	if err := validatePythonVultureResponse(project.Files, references, backends, response); err != nil {
+	for id, origin := range attributeOrigins {
+		origins[id] = origin
+	}
+	if err := validatePythonVultureResponse(project.Files, references, backends, attributes, response); err != nil {
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
 	}
 	findings := pythonVultureReferenceFindings(response.Problems, origins)
@@ -686,11 +805,11 @@ func pythonVultureResponseWireComplete(wire pythonVultureResponseWire) bool {
 		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil
 }
 
-func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, response pythonVultureResponse) error {
+func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, response pythonVultureResponse) error {
 	if err := validatePythonVultureCovered(files, response.Covered); err != nil {
 		return err
 	}
-	if err := validatePythonVultureReferences(references, backends, response.Resolved, response.Problems); err != nil {
+	if err := validatePythonVultureReferences(references, backends, attributes, response.Resolved, response.Problems); err != nil {
 		return err
 	}
 	return validatePythonVultureDiagnostics(files, response.Diagnostics)
@@ -714,8 +833,8 @@ func validatePythonVultureCovered(files, covered []string) error {
 	return nil
 }
 
-func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, resolved []string, problems []pythonVultureProblem) error {
-	remaining, err := pythonVultureRequestedReferences(references, backends)
+func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, resolved []string, problems []pythonVultureProblem) error {
+	remaining, err := pythonVultureRequestedReferences(references, backends, attributes)
 	if err != nil {
 		return err
 	}
@@ -731,7 +850,7 @@ func validatePythonVultureReferences(references []pythonVultureReference, backen
 	return nil
 }
 
-func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend) (map[string]bool, error) {
+func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute) (map[string]bool, error) {
 	requested := map[string]bool{}
 	for _, reference := range references {
 		if requested[reference.ID] {
@@ -744,6 +863,12 @@ func pythonVultureRequestedReferences(references []pythonVultureReference, backe
 			return nil, fmt.Errorf("vulture references are not unique")
 		}
 		requested[backend.ID] = true
+	}
+	for _, attribute := range attributes {
+		if requested[attribute.ID] {
+			return nil, fmt.Errorf("vulture references are not unique")
+		}
+		requested[attribute.ID] = true
 	}
 	return requested, nil
 }

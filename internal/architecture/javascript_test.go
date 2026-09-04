@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
@@ -177,6 +178,35 @@ func TestJavaScriptArchitectureFailsClosedWithoutTheBundle(t *testing.T) {
 	repo.PolicyRoot = t.TempDir()
 	findings := Check(t.Context(), repo, []string{"web/app.ts"})
 	if len(findings) != 1 || findings[0].Check != "policy.tool" || findings[0].Subject != "javascript-bundle" {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
+func TestGeneratedJavaScriptInheritsSourcePackageDependencies(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	config := policy.Config{
+		Scope: policy.Scope{
+			Generated:           []string{"generated/**"},
+			GeneratedJavaScript: []policy.GeneratedJavaScript{{Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json"}},
+		},
+		Modules: []policy.Module{
+			{Name: "domain", Paths: []string{"packages/domain/**"}},
+			{Name: "app", Paths: []string{"packages/app/**"}, DependsOn: []string{"domain"}},
+		},
+		ModuleByName: map[string]int{"domain": 0, "app": 1},
+	}
+	repo := repository.Repository{Root: root, Config: config}
+	writeArchitectureFile(t, root, "packages/app/package.json", `{"name":"app","dependencies":{"left-pad":"1.0.0"}}`)
+	writeArchitectureFile(t, root, "packages/domain/model.ts", "export const model = 1;\n")
+	writeArchitectureFile(t, root, "generated/client.ts", "export {};\n")
+	files := []string{"generated/client.ts", "packages/app/package.json", "packages/domain/model.ts"}
+	packages := newNodePackages(repo, files)
+	facts := []javascript.ImportFact{
+		{Path: "generated/client.ts", Line: 1, Package: "left-pad", Resolved: "node_modules/left-pad/index.js"},
+		{Path: "generated/client.ts", Line: 2, Resolved: "packages/domain/model.ts"},
+	}
+	if findings := javascriptFactFindings(repo, packages, map[string]bool{"packages/domain/model.ts": true}, facts); len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}
 }

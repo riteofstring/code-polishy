@@ -34,7 +34,7 @@ func CheckWithRunner(ctx context.Context, repo repository.Repository, selected [
 }
 
 func checkGoFile(repo repository.Repository, source string, allFiles []string, modules []repository.GoModule) []policy.Finding {
-	if repo.Language(source) != "go" {
+	if repo.Language(source) != "go" || repo.IsTest(source) {
 		return nil
 	}
 	owners := repo.ModuleNames(source)

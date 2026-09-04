@@ -31,6 +31,9 @@ func pythonQualityInterestedProjects(repo repository.Repository, sources []strin
 	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 		interested[reference.Project] = true
 	}
+	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		interested[attribute.Project] = true
+	}
 	selected := pythonQualitySelectedSources(sources)
 	for _, assignment := range assignments {
 		if selected[assignment.Path] {

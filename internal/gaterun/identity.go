@@ -201,7 +201,28 @@ func validateCommand(command CommandSpec) error {
 	if !validCommandInvocation(command) {
 		return fmt.Errorf("command invocation is invalid")
 	}
-	return validateCommandCollections(command)
+	if err := validateCommandCollections(command); err != nil {
+		return err
+	}
+	if command.Category == OrdinaryTest {
+		if command.SuiteIdentitySHA256 != "" && !validSHA256(command.SuiteIdentitySHA256) {
+			return fmt.Errorf("ordinary test suite receipt identity is invalid")
+		}
+	} else if command.SuiteIdentitySHA256 != "" {
+		return fmt.Errorf("non-test command has a suite receipt identity")
+	}
+	return validateArtifactSpecs(command.Artifacts)
+}
+
+func validateArtifactSpecs(artifacts []ArtifactSpec) error {
+	seen := map[string]bool{}
+	for _, artifact := range artifacts {
+		if !validArtifactRelativePath(artifact.Path) || artifact.Type != "junit" && artifact.Type != "cobertura" || seen[artifact.Path] {
+			return fmt.Errorf("command artifact declaration is invalid")
+		}
+		seen[artifact.Path] = true
+	}
+	return nil
 }
 
 func validCommandIdentity(command CommandSpec) bool {
@@ -374,6 +395,7 @@ func cloneCommand(command CommandSpec) CommandSpec {
 	command.Environment = cloneStrings(command.Environment)
 	command.ExclusiveResources = cloneStrings(command.ExclusiveResources)
 	command.PassFilePaths = cloneStrings(command.PassFilePaths)
+	command.Artifacts = append([]ArtifactSpec{}, command.Artifacts...)
 	return command
 }
 

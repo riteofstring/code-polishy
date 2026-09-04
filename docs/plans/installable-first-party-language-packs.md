@@ -69,9 +69,10 @@ the engine-provided execution directory. Pack installation, selection,
 toolchain, or capability changes invalidate only receipts whose exact identity
 depends on the changed input; an incomplete identity runs again.
 
-The [v0.22 plan](v0.22.md) defines managed artifacts,
-receipt reuse, final-gate ownership, and suite deduplication. Pack work must use
-those engine boundaries rather than reintroducing duplicate full runs.
+The [Verification and Testing Policy](../policies/verification.md) defines
+managed artifacts, receipt reuse, final-gate ownership, and suite
+deduplication. Pack work must use those engine boundaries rather than
+reintroducing duplicate full runs.
 
 ## Official pack set
 

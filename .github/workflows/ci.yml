@@ -12,11 +12,67 @@ permissions:
   contents: read
 
 jobs:
+  classify:
+    name: Classify change
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    outputs:
+      documentation: ${{ steps.level.outputs.documentation }}
+    steps:
+      - name: Check out requested commit and base
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          authorization="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\r\n')"
+          printf '::add-mask::%s\n' "${authorization}"
+          if [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ && ! "${EVENT_BASE}" =~ ^0+$ ]]; then
+            git -c "http.extraheader=AUTHORIZATION: basic ${authorization}" \
+              fetch --no-tags origin "${GITHUB_SHA}" "${EVENT_BASE}"
+            printf 'CODE_POLISHY_MERGE_BASE=%s\n' "${EVENT_BASE}" >>"${GITHUB_ENV}"
+          else
+            git -c "http.extraheader=AUTHORIZATION: basic ${authorization}" \
+              fetch --depth=1 --no-tags origin "${GITHUB_SHA}"
+            printf 'CODE_POLISHY_MERGE_BASE=\n' >>"${GITHUB_ENV}"
+          fi
+          unset authorization
+          git checkout --detach "${GITHUB_SHA}"
+
+      - name: Install pinned Go
+        shell: bash
+        run: ./tools/install-go.sh
+
+      - name: Build policy engine
+        shell: bash
+        run: ./scripts/build.sh
+
+      - name: Classify selected merge level
+        id: level
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'documentation=false\n' >>"${GITHUB_OUTPUT}"
+          if [[ -z "${CODE_POLISHY_MERGE_BASE}" ]]; then
+            exit
+          fi
+          set +e
+          ./.tools/bin/code-polishy test-levels --base "${CODE_POLISHY_MERGE_BASE}" |
+            tee "${RUNNER_TEMP}/code-polishy-test-levels.txt"
+          status="${PIPESTATUS[0]}"
+          set -e
+          if [[ "${status}" -eq 0 ]] &&
+            grep -q '^MERGE GATE: DOCUMENTATION ' "${RUNNER_TEMP}/code-polishy-test-levels.txt"; then
+            printf 'documentation=true\n' >>"${GITHUB_OUTPUT}"
+          fi
+          exit "${status}"
+
   policy:
     name: Policy and tests (ubuntu-24.04)
     runs-on: ubuntu-24.04
-    outputs:
-      documentation: ${{ steps.gate.outputs.documentation }}
     steps:
       - name: Check out requested commit
         shell: bash
@@ -50,27 +106,15 @@ jobs:
         run: ./scripts/build.sh
 
       - name: Run selected policy gate
-        id: gate
         if: github.event_name != 'schedule'
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${CODE_POLISHY_MERGE_BASE}" ]]; then
-            printf 'documentation=false\n' >>"${GITHUB_OUTPUT}"
             ./.tools/bin/code-polishy gate
             exit
           fi
-          set +e
-          ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}" |
-            tee "${RUNNER_TEMP}/code-polishy-gate-output.txt"
-          status="${PIPESTATUS[0]}"
-          set -e
-          if grep -q '^MERGE GATE: DOCUMENTATION ' "${RUNNER_TEMP}/code-polishy-gate-output.txt"; then
-            printf 'documentation=true\n' >>"${GITHUB_OUTPUT}"
-          else
-            printf 'documentation=false\n' >>"${GITHUB_OUTPUT}"
-          fi
-          exit "${status}"
+          ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}"
 
       - name: Run weekly online dependency security scan
         if: github.event_name == 'schedule'
@@ -79,8 +123,8 @@ jobs:
 
   macos:
     name: Policy and tests (macos-15)
-    needs: policy
-    if: github.event_name != 'schedule' && needs.policy.outputs.documentation != 'true'
+    needs: classify
+    if: always() && !cancelled() && github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
     runs-on: macos-15
     steps:
       - name: Check out requested commit
@@ -126,8 +170,8 @@ jobs:
 
   windows:
     name: Native Windows contracts
-    needs: policy
-    if: github.event_name != 'schedule' && needs.policy.outputs.documentation != 'true'
+    needs: classify
+    if: always() && !cancelled() && github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
     runs-on: windows-2025
     steps:
       - name: Check out requested commit

@@ -15,6 +15,7 @@ const (
 	expectedLegacyClaudeRedirect = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 	installedIgnoreMessage       = "installed .gitignore report-artifact rule"
 	currentIgnoreMessage         = ".gitignore report-artifact rule is already current"
+	expectedArtifactIgnores      = reportsIgnorePattern + "\n" + testArtifactsIgnorePattern + "\n"
 )
 
 func TestInstallCreatesMissingCanonicalFiles(t *testing.T) {
@@ -31,7 +32,7 @@ func TestInstallCreatesMissingCanonicalFiles(t *testing.T) {
 	}
 	assertFile(t, filepath.Join(repoRoot, agentsTargetFilename), []byte(canonicalAgentsText), 0o644)
 	assertFile(t, filepath.Join(repoRoot, claudeTargetFilename), []byte(expectedClaudeImport), 0o644)
-	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(reportsIgnorePattern+"\n"), 0o644)
+	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o644)
 }
 
 func TestInstallAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
@@ -43,7 +44,7 @@ func TestInstallAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	ignorePath := filepath.Join(repoRoot, ignoreTargetFilename)
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
-	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\n"), 0o640)
+	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
 
 	message, err := install(repoRoot, policyRoot, func(_, _ string) error {
 		return errors.New("idempotent install attempted a replacement")
@@ -56,7 +57,7 @@ func TestInstallAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	assertFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
-	assertFile(t, ignorePath, []byte(reportsIgnorePattern+"\n"), 0o640)
+	assertFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
 }
 
 func TestInstallAddsMissingClaudeForExactCanonicalAgents(t *testing.T) {
@@ -75,7 +76,7 @@ func TestInstallAddsMissingClaudeForExactCanonicalAgents(t *testing.T) {
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	assertFile(t, filepath.Join(repoRoot, claudeTargetFilename), []byte(expectedClaudeImport), 0o644)
-	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(reportsIgnorePattern+"\n"), 0o644)
+	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o644)
 }
 
 func TestSyncUpgradesTheExactLegacyClaudeRedirect(t *testing.T) {
@@ -87,7 +88,7 @@ func TestSyncUpgradesTheExactLegacyClaudeRedirect(t *testing.T) {
 	ignorePath := filepath.Join(repoRoot, ignoreTargetFilename)
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(strings.ReplaceAll(expectedLegacyClaudeRedirect, "\n", "\r\n")), 0o640)
-	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\n"), 0o600)
+	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o600)
 
 	status := Check(repoRoot, policyRoot)
 	if status.Current || !strings.Contains(status.Message, "CLAUDE.md canonical import is stale") {
@@ -121,7 +122,7 @@ func TestInstallAppendsReportIgnoreRuleWithoutReplacingProjectRules(t *testing.T
 	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+installedIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
-	assertFile(t, ignorePath, []byte("dist/\r\n.env\r\n"+reportsIgnorePattern+"\r\n"), 0o640)
+	assertFile(t, ignorePath, []byte("dist/\r\n.env\r\n"+reportsIgnorePattern+"\r\n"+testArtifactsIgnorePattern+"\r\n"), 0o640)
 }
 
 func TestInstallPreservesNoncanonicalAgentsAndReportsConflict(t *testing.T) {
@@ -248,14 +249,14 @@ func TestSyncReplacesTheEntireStaleAgentsFileAndPreservesItsMode(t *testing.T) {
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o640)
 	assertFile(t, filepath.Join(repoRoot, claudeTargetFilename), []byte(expectedClaudeImport), 0o644)
-	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(reportsIgnorePattern+"\n"), 0o644)
+	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o644)
 	status := Check(repoRoot, policyRoot)
 	if !status.Current {
 		t.Fatalf("synchronized guidance is not current: %+v", status)
 	}
 }
 
-func TestInstallAndSyncCarrySupplementalExecutionBoundary(t *testing.T) {
+func TestInstallAndSyncCarryExecutionBoundaries(t *testing.T) {
 	t.Parallel()
 	workingDirectory, err := os.Getwd()
 	if err != nil {
@@ -270,10 +271,12 @@ func TestInstallAndSyncCarrySupplementalExecutionBoundary(t *testing.T) {
 	boundaries := [][]byte{
 		[]byte("Run supplemental suites only when"),
 		[]byte("`tests.requiredSupplementalKinds`, never authorize execution"),
+		[]byte("test --supplemental --resume"),
+		[]byte("verification.finalGateOwner"),
 	}
 	for _, boundary := range boundaries {
 		if !bytes.Contains(canonical, boundary) {
-			t.Fatalf("canonical guidance omits supplemental execution boundary %q: %q", boundary, canonical)
+			t.Fatalf("canonical guidance omits execution boundary %q: %q", boundary, canonical)
 		}
 	}
 	cases := map[string]func(string, string) (string, error){
@@ -298,7 +301,7 @@ func TestInstallAndSyncCarrySupplementalExecutionBoundary(t *testing.T) {
 			}
 			for _, boundary := range boundaries {
 				if !bytes.Contains(installed, boundary) {
-					t.Fatalf("%s guidance omits supplemental execution boundary %q: %q", name, boundary, installed)
+					t.Fatalf("%s guidance omits execution boundary %q: %q", name, boundary, installed)
 				}
 			}
 		})
@@ -314,7 +317,7 @@ func TestSyncAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	ignorePath := filepath.Join(repoRoot, ignoreTargetFilename)
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
-	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\n"), 0o640)
+	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
 
 	message, err := sync(repoRoot, policyRoot, func(_, _ string) error {
 		return errors.New("idempotent sync attempted a replacement")
@@ -327,7 +330,7 @@ func TestSyncAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	assertFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
-	assertFile(t, ignorePath, []byte(reportsIgnorePattern+"\n"), 0o640)
+	assertFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
 }
 
 func TestInstallSyncAndCheckAcceptWholeFileCRLFCanonicalGuidance(t *testing.T) {
@@ -341,7 +344,7 @@ func TestInstallSyncAndCheckAcceptWholeFileCRLFCanonicalGuidance(t *testing.T) {
 	crlfClaude := []byte(strings.ReplaceAll(expectedClaudeImport, "\n", "\r\n"))
 	writeFile(t, agentsPath, crlfAgents, 0o600)
 	writeFile(t, claudePath, crlfClaude, 0o640)
-	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\r\n"), 0o640)
+	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\r\n"+testArtifactsIgnorePattern+"\r\n"), 0o640)
 	replace := func(_, _ string) error { return errors.New("canonical CRLF guidance attempted a replacement") }
 
 	message, err := install(repoRoot, policyRoot, replace)
@@ -364,7 +367,7 @@ func TestInstallSyncAndCheckAcceptWholeFileCRLFCanonicalGuidance(t *testing.T) {
 	}
 	assertFile(t, agentsPath, crlfAgents, 0o600)
 	assertFile(t, claudePath, crlfClaude, 0o640)
-	assertFile(t, ignorePath, []byte(reportsIgnorePattern+"\r\n"), 0o640)
+	assertFile(t, ignorePath, []byte(reportsIgnorePattern+"\r\n"+testArtifactsIgnorePattern+"\r\n"), 0o640)
 
 	mixedAgents := []byte(strings.Replace(canonicalAgentsText, "\n", "\r\n", 1))
 	writeFile(t, agentsPath, mixedAgents, 0o600)
@@ -419,7 +422,7 @@ func TestCheckComparesTheEntireCanonicalAgentsFile(t *testing.T) {
 		status.Issues[0].Path != ignoreTargetFilename || status.Issues[0].Subject != "workspace-ignore" {
 		t.Fatalf("missing report ignore status = %+v", status)
 	}
-	writeFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(reportsIgnorePattern+"\n"), 0o600)
+	writeFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o600)
 	status = Check(repoRoot, policyRoot)
 	if !status.Current || !strings.Contains(status.Message, "AGENTS.md canonical guidance is current") ||
 		!strings.Contains(status.Message, "CLAUDE.md import is current") ||

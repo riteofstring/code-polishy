@@ -49,14 +49,12 @@
 - Run supplemental suites only when the caller explicitly requests them, a
   checked-in event workflow invokes them, or the version-matched release
   checklist selects them. Declarations, including
-  `tests.requiredSupplementalKinds`, never authorize execution. Credentialed,
-  destructive, and live-provider probes require a named external approval gate.
-- The first stable release candidate runs all supplemental suites once. After a
-  failure, rerun only failed suites plus passes invalidated by changes to their
-  tested production files or tests, or their own commands or configuration.
-  Exact `code-polishy test --suite` evidence composes with remaining valid
-  passes; rerun all only when shared mutation infrastructure, toolchain, or
-  selection changes, or impact cannot be bounded.
+  `tests.requiredSupplementalKinds`, never authorize execution. Exact reruns
+  record receipts. On a stable candidate, use `test --supplemental --resume` to
+  run only missing, failed, expired, or invalidated suites. Run all only without
+  a trusted baseline, after shared infrastructure, toolchain, or selection
+  changes, or when impact is unbounded. Credentialed, destructive, and
+  live-provider probes require a named external approval gate.
 
 ## Reviews and delivery
 
@@ -76,10 +74,11 @@
   gate will not immediately follow. Resolve the merge base from an explicit
   target, checked-in guidance, `origin/HEAD`, then `origin/main` or
   `origin/master`.
-- Run one successful `code-polishy merge-gate --base <merge-target>` for the
-  final candidate and let it select the level. Resume only an unchanged failed
-  candidate; source or policy changes require a fresh gate. Summarize the result
-  in plain language.
+- Honor `verification.finalGateOwner`. Use `code-polishy merge-gate --base REF`
+  once, locally or in its checked-in CI workflow. Duplicate only when the caller
+  requests independent evidence.
+  An exact passed identity executes nothing. Resume only an unchanged failed
+  candidate. Summarize the result in plain language.
 - Commit all completed task-owned changes after required verification unless the
   caller explicitly requests an uncommitted handoff. Keep commits coherent and
   free of unrelated user work. Push, publish, and pull-request operations require

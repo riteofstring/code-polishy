@@ -50,6 +50,9 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/identifier" }
     },
+    "nonemptyIdentifierArray": {
+      "allOf": [{ "$ref": "#/$defs/identifierArray" }, { "minItems": 1 }]
+    },
     "path": {
       "type": "string",
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
@@ -58,6 +61,9 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/path" }
+    },
+    "nonemptyPaths": {
+      "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
     },
     "exactPath": {
       "allOf": [
@@ -110,11 +116,22 @@
         "exclude": { "$ref": "#/$defs/paths" },
         "generated": { "$ref": "#/$defs/paths" },
         "data": { "$ref": "#/$defs/paths" },
+        "tests": { "$ref": "#/$defs/paths" },
         "entryPoints": { "$ref": "#/$defs/paths" },
+        "generatedJavaScript": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/generatedJavaScript" }
+        },
         "pythonDynamicReferences": {
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/pythonDynamicReference" }
+        },
+        "pythonExternalAttributes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/pythonExternalAttribute" }
         },
         "development": { "$ref": "#/$defs/paths" },
         "languages": {
@@ -129,8 +146,20 @@
       "required": ["name", "paths"],
       "properties": {
         "name": { "$ref": "#/$defs/identifier" },
-        "paths": {
-          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
+        "paths": { "$ref": "#/$defs/nonemptyPaths" }
+      }
+    },
+    "generatedJavaScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "sourcePackage"],
+      "properties": {
+        "paths": { "$ref": "#/$defs/nonemptyPaths" },
+        "sourcePackage": {
+          "allOf": [
+            { "$ref": "#/$defs/exactPath" },
+            { "pattern": "(?:^|/)package\\.json$" }
+          ]
         }
       }
     },
@@ -148,6 +177,42 @@
         },
         "module": { "$ref": "#/$defs/pythonIdentifierChain" },
         "symbol": { "$ref": "#/$defs/pythonIdentifierChain" }
+      }
+    },
+    "pythonExternalAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "module",
+        "callable",
+        "receiver",
+        "attribute",
+        "line",
+        "consumerType"
+      ],
+      "properties": {
+        "project": {
+          "allOf": [
+            { "$ref": "#/$defs/exactPath" },
+            { "pattern": "(?:^|/)pyproject\\.toml$" },
+            { "not": { "pattern": "[{}]" } }
+          ]
+        },
+        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "callable": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "receiver": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "attribute": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "line": { "type": "integer", "minimum": 1 },
+        "consumerType": {
+          "allOf": [
+            { "$ref": "#/$defs/pythonIdentifierChain" },
+            { "pattern": "\\." }
+          ]
+        }
       }
     },
     "pythonIdentifierChain": {
@@ -248,9 +313,7 @@
         "name": { "$ref": "#/$defs/identifier" },
         "kind": { "enum": ["directory", "file", "repository", "service"] },
         "module": { "$ref": "#/$defs/identifier" },
-        "sourcePaths": {
-          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
-        },
+        "sourcePaths": { "$ref": "#/$defs/nonemptyPaths" },
         "resolution": {
           "type": "array",
           "minItems": 1,
@@ -276,6 +339,11 @@
       "description": "Behavior-review and merge-gate selection facts, with optional checked-in merge-target guidance.",
       "additionalProperties": false,
       "properties": {
+        "finalGateOwner": {
+          "enum": ["local", "ci"],
+          "default": "local",
+          "description": "One owner for final merge-gate execution; CI ownership requires a literal checked-in workflow command."
+        },
         "trustedMergeTarget": {
           "type": "string",
           "minLength": 1,
@@ -308,9 +376,7 @@
         "name": { "$ref": "#/$defs/identifier" },
         "modules": { "$ref": "#/$defs/identifierArray" },
         "paths": { "$ref": "#/$defs/paths" },
-        "suites": {
-          "allOf": [{ "$ref": "#/$defs/identifierArray" }, { "minItems": 1 }]
-        },
+        "suites": { "$ref": "#/$defs/nonemptyIdentifierArray" },
         "requiredAt": { "enum": ["merge", "checkpoint"] }
       },
       "anyOf": [
@@ -330,9 +396,7 @@
       "additionalProperties": false,
       "required": ["recommendedModules"],
       "properties": {
-        "recommendedModules": {
-          "allOf": [{ "$ref": "#/$defs/identifierArray" }, { "minItems": 1 }]
-        }
+        "recommendedModules": { "$ref": "#/$defs/nonemptyIdentifierArray" }
       }
     },
     "module": {
@@ -341,9 +405,7 @@
       "required": ["name", "paths"],
       "properties": {
         "name": { "$ref": "#/$defs/identifier" },
-        "paths": {
-          "allOf": [{ "$ref": "#/$defs/paths" }, { "minItems": 1 }]
-        },
+        "paths": { "$ref": "#/$defs/nonemptyPaths" },
         "dependsOn": { "$ref": "#/$defs/identifierArray" },
         "capabilities": { "$ref": "#/$defs/identifierArray" }
       }
@@ -379,12 +441,7 @@
           "required": ["name", "provides", "argv"],
           "properties": {
             "name": { "$ref": "#/$defs/identifier" },
-            "provides": {
-              "allOf": [
-                { "$ref": "#/$defs/identifierArray" },
-                { "minItems": 1 }
-              ]
-            },
+            "provides": { "$ref": "#/$defs/nonemptyIdentifierArray" },
             "argv": { "$ref": "#/$defs/argv" },
             "cwd": { "$ref": "#/$defs/path" },
             "paths": { "$ref": "#/$defs/paths" },
@@ -448,6 +505,12 @@
             "argv": { "$ref": "#/$defs/argv" },
             "cwd": { "$ref": "#/$defs/path" },
             "paths": { "$ref": "#/$defs/paths" },
+            "extraInputs": { "$ref": "#/$defs/paths" },
+            "covers": { "$ref": "#/$defs/identifierArray" },
+            "artifacts": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/testArtifact" }
+            },
             "runOn": {
               "type": "array",
               "minItems": 1,
@@ -555,6 +618,21 @@
           "minItems": 1,
           "items": { "$ref": "#/$defs/testSuite" }
         }
+      }
+    },
+    "testArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type"],
+      "properties": {
+        "path": {
+          "allOf": [
+            { "$ref": "#/$defs/exactPath" },
+            { "pattern": "\\.[xX][mM][lL]$" }
+          ]
+        },
+        "type": { "enum": ["junit", "cobertura"] },
+        "required": { "type": "boolean", "default": false }
       }
     },
     "supplyChain": {

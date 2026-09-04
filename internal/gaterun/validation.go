@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	pathpkg "path"
 	"reflect"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
 type loadedReport struct {
@@ -265,7 +268,7 @@ func validateReportHeader(report Report) error {
 	if !validReportHeader(report) {
 		return fmt.Errorf("%w: gate run report header is invalid", ErrInvalidArtifact)
 	}
-	if report.Commands == nil || report.Findings == nil || report.Notes == nil || report.TestEvidence == nil || report.TestDiagnostics == nil {
+	if report.Commands == nil || report.Findings == nil || report.Notes == nil || report.TestEvidence == nil || report.TestDiagnostics == nil || report.SuiteSatisfactions == nil {
 		return fmt.Errorf("%w: gate run report collections are missing", ErrInvalidArtifact)
 	}
 	return validateFindingLocations(report.Findings)
@@ -310,7 +313,33 @@ func validateReportOutcomes(report Report, expected Identity) error {
 	if report.Status == RunPassed && !completedSuccessfully(expected.Commands, report.Commands) {
 		return fmt.Errorf("%w: passed gate run outcomes are incomplete", ErrInvalidArtifact)
 	}
-	return validateReportTestEvidence(report)
+	if err := validateReportTestEvidence(report); err != nil {
+		return err
+	}
+	return validateSuiteSatisfactions(report.SuiteSatisfactions, report.Commands)
+}
+
+func validateSuiteSatisfactions(satisfactions []SuiteSatisfaction, outcomes []CommandOutcome) error {
+	seen := map[string]bool{}
+	for _, satisfaction := range satisfactions {
+		outcome, found := outcomeNamed(outcomes, satisfaction.ExecutedBy)
+		if !validSuiteSatisfactionHeader(satisfaction, seen) || !validSuiteSatisfactionOutcome(satisfaction, outcome, found) {
+			return fmt.Errorf("%w: suite satisfaction is invalid", ErrInvalidArtifact)
+		}
+		seen[satisfaction.Suite] = true
+	}
+	return nil
+}
+
+func validSuiteSatisfactionHeader(satisfaction SuiteSatisfaction, seen map[string]bool) bool {
+	return validToken(satisfaction.Suite) && validToken(satisfaction.ExecutedBy) && satisfaction.Suite != satisfaction.ExecutedBy &&
+		(satisfaction.Reason == "covered" || satisfaction.Reason == "duplicate-command") && !seen[satisfaction.Suite]
+}
+
+func validSuiteSatisfactionOutcome(satisfaction SuiteSatisfaction, outcome CommandOutcome, found bool) bool {
+	return found && outcome.Category == OrdinaryTest && outcome.Status == Passed && satisfaction.ReceiptPath == outcome.ReceiptPath &&
+		satisfaction.ReceiptSHA256 == outcome.ReceiptSHA256 && validArtifactDisplayPath(satisfaction.ReceiptPath) &&
+		validSHA256(satisfaction.ReceiptSHA256)
 }
 
 func validateOrderedOutcome(outcomes []CommandOutcome, index int, outcome CommandOutcome, expected Identity) error {
@@ -329,7 +358,7 @@ func validateOutcome(identity Identity, outcome CommandOutcome) error {
 		return fmt.Errorf("%w: command outcome identity is invalid", ErrInvalidArtifact)
 	}
 	if outcome.Reused {
-		return validateReusedOutcome(identity, reference, outcome)
+		return validateReusedOutcome(reference, outcome)
 	}
 	planned, found, err := validatedPlannedAttempt(outcome.Attempts)
 	if err != nil {
@@ -360,12 +389,25 @@ func validatedPlannedAttempt(attempts []Attempt) (Attempt, bool, error) {
 	return planned, found, nil
 }
 
-func validateReusedOutcome(identity Identity, reference CommandRef, outcome CommandOutcome) error {
-	if identity.Gate != MergeGate || reference.Spec.Category != OrdinaryTest || outcome.Status != Passed || len(outcome.Attempts) != 0 ||
-		outcome.ReceiptPath == "" || !validSHA256(outcome.ReceiptSHA256) {
+func validateReusedOutcome(reference CommandRef, outcome CommandOutcome) error {
+	if !validReusedOutcome(reference, outcome) {
 		return fmt.Errorf("%w: reused command outcome is invalid", ErrInvalidArtifact)
 	}
+	external := outcome.ReuseSourcePath != "" || outcome.ReuseSourceSHA256 != "" || outcome.PriorDurationMilliseconds != 0
+	if external && !validReuseSource(reference, outcome) {
+		return fmt.Errorf("%w: reused command source is invalid", ErrInvalidArtifact)
+	}
 	return nil
+}
+
+func validReusedOutcome(reference CommandRef, outcome CommandOutcome) bool {
+	return reference.Spec.Category == OrdinaryTest && outcome.Status == Passed && len(outcome.Attempts) == 0 &&
+		outcome.ReceiptPath != "" && validSHA256(outcome.ReceiptSHA256)
+}
+
+func validReuseSource(reference CommandRef, outcome CommandOutcome) bool {
+	return reference.Spec.SuiteIdentitySHA256 != "" && validArtifactDisplayPath(outcome.ReuseSourcePath) &&
+		validSHA256(outcome.ReuseSourceSHA256) && outcome.PriorDurationMilliseconds >= 0
 }
 
 func validateOutcomeReceipt(reference CommandRef, outcome CommandOutcome) error {
@@ -375,6 +417,9 @@ func validateOutcomeReceipt(reference CommandRef, outcome CommandOutcome) error 
 	}
 	if !requiresReceipt && (outcome.ReceiptPath != "" || outcome.ReceiptSHA256 != "") {
 		return fmt.Errorf("%w: command outcome has an ineligible receipt", ErrInvalidArtifact)
+	}
+	if outcome.ReuseSourcePath != "" || outcome.ReuseSourceSHA256 != "" || outcome.PriorDurationMilliseconds != 0 {
+		return fmt.Errorf("%w: executed command outcome has reuse provenance", ErrInvalidArtifact)
 	}
 	return nil
 }
@@ -427,7 +472,32 @@ func validateTestEvidence(evidence TestEvidence) error {
 	if !validTestEvidenceHeader(evidence) || !validTestEvidenceCollections(evidence) || !validTestEvidenceStatus(evidence) {
 		return fmt.Errorf("%w: test evidence is invalid", ErrInvalidArtifact)
 	}
+	if evidence.Reused {
+		if !validArtifactDisplayPath(evidence.ReceiptSourcePath) || !validSHA256(evidence.ReceiptSourceSHA256) || evidence.LogPath != "" || evidence.Diagnostic {
+			return fmt.Errorf("%w: reused test evidence is invalid", ErrInvalidArtifact)
+		}
+	} else if evidence.ReceiptSourcePath != "" || evidence.ReceiptSourceSHA256 != "" {
+		return fmt.Errorf("%w: executed test evidence has reuse provenance", ErrInvalidArtifact)
+	}
+	return validateTestArtifacts(evidence.Artifacts)
+}
+
+func validateTestArtifacts(artifacts []TestArtifact) error {
+	seen := map[string]bool{}
+	for _, artifact := range artifacts {
+		if !validToken(artifact.Suite) || !validArtifactRelativePath(artifact.Path) ||
+			artifact.Type != "junit" && artifact.Type != "cobertura" || artifact.Size < 0 || artifact.Size > 32<<20 ||
+			!validSHA256(artifact.SHA256) || seen[artifact.Path] {
+			return fmt.Errorf("%w: test artifact evidence is invalid", ErrInvalidArtifact)
+		}
+		seen[artifact.Path] = true
+	}
 	return nil
+}
+
+func validArtifactRelativePath(value string) bool {
+	return value != "" && value != "." && !strings.HasPrefix(value, "/") && !strings.Contains(value, "\\") &&
+		pathpkg.Clean(value) == value
 }
 
 func validTestEvidenceHeader(evidence TestEvidence) bool {
@@ -575,7 +645,27 @@ func validateStoredReusedReceipt(run *Run, reference CommandRef, outcome Command
 	if !receiptHasSource(receipt) {
 		return fmt.Errorf("%w: reused command receipt has no provenance", ErrStaleArtifact)
 	}
+	if receipt.ExternalSourcePath != "" {
+		return validateExternalSuiteReceipt(run, reference, outcome, receipt)
+	}
 	return validateReusedReceiptProvenance(run, reference, receipt)
+}
+
+func validateExternalSuiteReceipt(run *Run, reference CommandRef, outcome CommandOutcome, receipt Receipt) error {
+	if reference.Spec.SuiteIdentitySHA256 == "" || outcome.ReuseSourcePath != receipt.ExternalSourcePath ||
+		outcome.ReuseSourceSHA256 != receipt.ExternalSourceSHA256 ||
+		outcome.PriorDurationMilliseconds != receipt.ExternalSourceDurationMilliseconds {
+		return fmt.Errorf("%w: external suite receipt provenance is stale", ErrStaleArtifact)
+	}
+	reusable, err := testreceipt.LoadDigest(run.repositoryRoot, reference.Spec.SuiteIdentitySHA256)
+	if err != nil {
+		return err
+	}
+	if reusable.Path != receipt.ExternalSourcePath || reusable.Receipt.SHA256 != receipt.ExternalSourceSHA256 ||
+		reusable.Receipt.DurationMillis != receipt.ExternalSourceDurationMilliseconds {
+		return fmt.Errorf("%w: external suite receipt changed", ErrStaleArtifact)
+	}
+	return nil
 }
 
 func validateReusedReceiptProvenance(run *Run, reference CommandRef, receipt Receipt) error {
@@ -707,19 +797,33 @@ func receiptMatchesRun(receipt Receipt, gate GateKind, runSHA256, executionID st
 }
 
 func receiptMatchesCommand(receipt Receipt, reference CommandRef) bool {
+	validEvidence := validSHA256(receipt.LogSHA256)
+	if receipt.ExternalSourcePath != "" {
+		validEvidence = receipt.LogSHA256 == "" && validArtifactDisplayPath(receipt.ExternalSourcePath) &&
+			validSHA256(receipt.ExternalSourceSHA256) && receipt.ExternalSourceDurationMilliseconds >= 0
+	}
 	return receipt.CommandSHA256 == reference.SHA256 && receipt.Category == OrdinaryTest && receipt.Status == Passed &&
-		validSHA256(receipt.LogSHA256) && validSHA256(receipt.SHA256)
+		validEvidence && validSHA256(receipt.SHA256)
 }
 
 func receiptHasSource(receipt Receipt) bool {
-	return receipt.SourceExecutionID != "" || receipt.SourceReceiptSHA256 != ""
+	return receipt.SourceExecutionID != "" || receipt.SourceReceiptSHA256 != "" || receipt.ExternalSourcePath != "" || receipt.ExternalSourceSHA256 != ""
 }
 
 func validReceiptSource(receipt Receipt) bool {
 	if !receiptHasSource(receipt) {
-		return true
+		return receipt.ExternalSourceDurationMilliseconds == 0
 	}
-	return validExecutionID(receipt.SourceExecutionID) && validSHA256(receipt.SourceReceiptSHA256)
+	internal := receipt.SourceExecutionID != "" || receipt.SourceReceiptSHA256 != ""
+	external := receipt.ExternalSourcePath != "" || receipt.ExternalSourceSHA256 != ""
+	if internal == external {
+		return false
+	}
+	if internal {
+		return validExecutionID(receipt.SourceExecutionID) && validSHA256(receipt.SourceReceiptSHA256) && receipt.ExternalSourceDurationMilliseconds == 0
+	}
+	return validArtifactDisplayPath(receipt.ExternalSourcePath) && validSHA256(receipt.ExternalSourceSHA256) &&
+		receipt.ExternalSourceDurationMilliseconds >= 0
 }
 
 func outcomeAt(outcomes []CommandOutcome, index int) (CommandOutcome, bool) {
@@ -778,6 +882,7 @@ func cloneOneTestEvidence(evidence TestEvidence) TestEvidence {
 	evidence.ChangedModuleOverlap = cloneStrings(evidence.ChangedModuleOverlap)
 	evidence.ImpactedModuleOverlap = cloneStrings(evidence.ImpactedModuleOverlap)
 	evidence.ChangedPathOverlap = cloneStrings(evidence.ChangedPathOverlap)
+	evidence.Artifacts = append([]TestArtifact{}, evidence.Artifacts...)
 	return evidence
 }
 
@@ -810,6 +915,7 @@ func cloneReport(report Report) Report {
 	report.Notes = cloneStrings(report.Notes)
 	report.TestEvidence = cloneTestEvidence(report.TestEvidence)
 	report.TestDiagnostics = cloneTestDiagnostics(report.TestDiagnostics)
+	report.SuiteSatisfactions = append([]SuiteSatisfaction{}, report.SuiteSatisfactions...)
 	report.BehaviorReview = cloneBehaviorReview(report.BehaviorReview)
 	return report
 }

@@ -1,5 +1,13 @@
 import { writeFileSync } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  sep,
+} from "node:path";
 
 import prettier from "./node_modules/prettier/index.mjs";
 import eslint from "./node_modules/eslint/lib/api.js";
@@ -46,7 +54,11 @@ const OPERATIONS = {
   },
   parse: { fields: ["root", "paths"], run: parse },
   lint: { fields: ["root", "paths", "limits", "activation"], run: lint },
-  typecheck: { fields: ["root", "paths", "project"], run: typecheck },
+  typecheck: {
+    fields: ["root", "paths", "project"],
+    optionalFields: ["inheritedPaths"],
+    run: typecheck,
+  },
   deadcode: { fields: ["root", "directory", "workspaces"], run: deadcode },
   imports: { fields: ["root", "paths"], run: imports },
   gitlab: { fields: ["root", "paths", "governedPaths"], run: gitlab },
@@ -561,10 +573,21 @@ function projectProgramInput(request, unsupportedPaths) {
   for (const reason of refusals) {
     unsupportedPaths.push(unsupported(request.project, reason));
   }
+  const projectDirectory = dirname(absolute);
+  const externalRoots = request.inheritedPaths
+    .map((path) => join(request.root, path))
+    .filter((path) => {
+      const relation = relative(projectDirectory, path);
+      return (
+        relation === ".." ||
+        relation.startsWith(`..${sep}`) ||
+        isAbsolute(relation)
+      );
+    });
   return refusals.length > 0
     ? null
     : {
-        rootNames: parsed.fileNames,
+        rootNames: [...new Set([...parsed.fileNames, ...externalRoots])],
         options: { ...parsed.options, ...TYPECHECK_OPTIONS },
       };
 }
@@ -677,6 +700,18 @@ function requireLimits(limits) {
   }
 }
 
+function requireInheritedPaths(request) {
+  requireContainedPaths(request.inheritedPaths);
+  const selected = new Set(request.paths);
+  const inherited = new Set();
+  for (const path of request.inheritedPaths) {
+    if (!selected.has(path) || inherited.has(path)) {
+      fail("the typecheck request declares an invalid inherited path");
+    }
+    inherited.add(path);
+  }
+}
+
 function requireActivation(activation) {
   requireExactObject(activation, "the lint activation", [
     "reactHooks",
@@ -744,23 +779,42 @@ function decodeOperation(text) {
 
 function decodeRequest(text) {
   const request = decodeOperation(text);
+  const optional = OPERATIONS[request.operation].optionalFields ?? [];
+  for (const field of optional) {
+    if (!(field in request)) {
+      request[field] = [];
+    }
+  }
 
   const admitted = BASE_REQUEST_FIELDS.concat(
     OPERATIONS[request.operation].fields,
+    optional,
   );
   requireExactObject(request, "the request", admitted);
+  requireRequestPaths(request, admitted);
+  requireRequestPolicyFields(request, admitted);
+  return request;
+}
+
+function requireRequestPaths(request, admitted) {
   if (admitted.includes("root")) {
     requireContainedRoot(request.root);
   }
   if (admitted.includes("paths")) {
     requireContainedPaths(request.paths);
   }
+  if (admitted.includes("project")) {
+    requireContainedPath(request.project);
+  }
+  if (admitted.includes("inheritedPaths")) {
+    requireInheritedPaths(request);
+  }
+}
+
+function requireRequestPolicyFields(request, admitted) {
   if (admitted.includes("limits")) {
     requireLimits(request.limits);
     requireActivation(request.activation);
-  }
-  if (admitted.includes("project")) {
-    requireContainedPath(request.project);
   }
   if (admitted.includes("directory")) {
     requireContainedPath(request.directory);
@@ -771,7 +825,6 @@ function decodeRequest(text) {
   if (admitted.includes("governedPaths")) {
     requireGitLabGovernedPaths(request.governedPaths);
   }
-  return request;
 }
 
 requireSealedLaunch();

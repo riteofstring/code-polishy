@@ -189,6 +189,32 @@ an apparently valid empty result. See
   format validation, syntax/compiler, lint, dead-code, tool-coverage, and
   dependency-direction checks, while `format` never rewrites generator-owned
   bytes. It skips only edit-oriented text and complexity budgets.
+- `scope.tests` adds repository-specific test locations to the built-in naming
+  conventions. Every governed executable test must still belong to exactly one
+  module and be included by that module's quick focused suite. Its imports do
+  not create production dependency edges.
+- `scope.generatedJavaScript` gives generated JavaScript or TypeScript the
+  package context of one real source package without a fake manifest or lock in
+  the output tree:
+
+  ```json
+  {
+    "scope": {
+      "generated": ["generated/client/**"],
+      "generatedJavaScript": [
+        {
+          "paths": ["generated/client/**/*.ts"],
+          "sourcePackage": "packages/client/package.json"
+        }
+      ]
+    }
+  }
+  ```
+
+  Each output must exist, be generated JavaScript/TypeScript, and match exactly
+  one non-generated source package. It inherits that package's workspace,
+  lockfile, TypeScript, lint, dead-code, dependency, and module context.
+
 - `scope.data` is the non-rewrite category for hand-written product data. Use
   narrow patterns that can match only `.json`, `.jsonc`, `.yaml`, or `.yml`, for
   example:
@@ -233,6 +259,34 @@ an apparently valid empty result. See
   stale or ambiguous reference fails instead of preserving a symbol broadly.
   [Code Quality](policies/code-quality.md#python-ruff-vulture-and-ty) owns the
   full Python reachability contract.
+- `scope.pythonExternalAttributes` models an exact assignment to a typed object
+  that an external runtime reads later. Each item names the project, module,
+  containing callable, receiver parameter, attribute, source line, and qualified
+  external consumer type:
+
+  ```json
+  {
+    "scope": {
+      "pythonExternalAttributes": [
+        {
+          "project": "pyproject.toml",
+          "module": "service.runtime",
+          "callable": "configure",
+          "receiver": "settings",
+          "attribute": "timeout",
+          "line": 18,
+          "consumerType": "vendor.runtime.Settings"
+        }
+      ]
+    }
+  }
+  ```
+
+  The receiver must have that exact external type annotation and the named line
+  must contain the exact attribute write. Wildcards, stale sites, local consumer
+  types, and broad name-based suppression are rejected; adjacent attributes
+  remain visible to Vulture.
+
 - `scope.development` names governed source that never ships: build and tool
   configuration, scripts, and harnesses. Only that source and tests may import
   a package declared in `devDependencies`, so declare what the product does not
@@ -497,6 +551,53 @@ Standard repository suites can join the impact-based recommended set:
 }
 ```
 
+Suites that produce CI evidence declare it explicitly and write only inside
+their managed attempt directory:
+
+```json
+{
+  "name": "python-integration",
+  "kind": "integration",
+  "scope": "repository",
+  "argv": [
+    "pytest",
+    "--junitxml={artifactDir}/junit.xml",
+    "--cov-report=xml:{artifactDir}/coverage.xml"
+  ],
+  "artifacts": [
+    { "path": "junit.xml", "type": "junit", "required": true },
+    { "path": "coverage.xml", "type": "cobertura", "required": true }
+  ],
+  "runOn": ["full"]
+}
+```
+
+The command can alternatively read `CODE_POLISHY_ARTIFACT_DIR` and
+`CODE_POLISHY_EXECUTION_ID`. Code Polishy validates and digests declared XML;
+it does not infer test or skip counts from it. See
+[Verification and Testing Policy](policies/verification.md#managed-test-artifacts).
+
+Use `extraInputs` for bounded files outside the owned module closure that can
+change a suite's result. This lets Code Polishy invalidate reusable evidence
+without treating every repository file as input. A broader suite may declare
+`covers` only for named compatible component suites:
+
+```json
+{
+  "name": "service-integration",
+  "kind": "integration",
+  "scope": "repository",
+  "argv": ["./scripts/test-service.sh"],
+  "extraInputs": ["testdata/contracts/**"],
+  "covers": ["service-unit"],
+  "runOn": ["full"]
+}
+```
+
+Coverage is explicit and acyclic; Code Polishy never guesses it from command
+text. Exact duplicate compatible commands also execute once. Plans and reports
+show which suite satisfied each requirement.
+
 Expensive repository suites remain full-only:
 
 ```json
@@ -664,6 +765,12 @@ removal from an already governed base, or a candidate without a valid
 configuration or lock fails closed. See
 [First-time adoption](policies/verification.md#first-time-adoption).
 
+Choose one final-gate owner. Omission means `local`; CI-owned delivery declares
+`"finalGateOwner": "ci"` under `verification` and checks in a GitHub or governed
+GitLab workflow containing the literal `code-polishy merge-gate --base`
+command. This avoids routine duplicate local and CI gates without waiving the
+gate.
+
 Each checkpoint or merge gate that executes work writes a managed versioned JSON
 report and bounded command logs below `.code-polishy-reports/<gate>/`. The
 report is the durable record of the command plan, exact base and candidate,
@@ -672,13 +779,23 @@ status. Terminal output stays concise: phase progress, a bounded failure tail,
 and the affected log path. Retain the JSON report and logs when CI needs audit
 evidence; do not make archived verbose terminal output the audit surface.
 
-`merge-gate --base REF --resume` is available only after a failed merge-gate
-report with the same content identity. It reuses eligible successful ordinary
-test suites only. Checks, builds, supply-chain and artifact-security phases,
-behavior-proof replays, failed phases, and phases without a valid receipt run
-again. A changed exact base, candidate, release, configuration, command plan,
-platform, or declared command environment invalidates reuse. A normal merge
-gate does not reuse prior work.
+An exact already-passed merge gate executes no commands. New gate identities
+automatically reuse successful suites only when the complete receipt identity
+still matches; all non-test phases run. `merge-gate --base REF --resume`
+additionally resumes eligible ordinary suites from the same otherwise-identical
+failed gate. `test --supplemental --resume` applies exact reuse to a selected
+supplemental retry.
+
+CI can move receipts through its trusted artifact boundary:
+
+```sh
+code-polishy test-receipts export --output PATH
+code-polishy test-receipts import --source PATH --sha256 DIGEST
+```
+
+Export prints the bundle SHA-256. Import verifies it and atomically replaces one
+authenticated CI bundle. This composes whole-suite evidence; it does not
+aggregate partial or sharded results.
 
 ### Keep behavior and final-state evidence in custody
 
@@ -711,10 +828,10 @@ need no AI artifact and retain their ordinary gate runtime. See
 [Behavior and Final-State Review](policies/behavior-review.md) before relying on
 the workflow.
 
-The runner must already have the locked release installed; Code Polishy is
-never downloaded during a check. Bootstrap target dependencies from frozen
-inputs before strict doctor, because doctor verifies that declared executables
-exist.
+The runner must either have the locked release installed or execute its exact
+digest-pinned OCI image; Code Polishy is never downloaded during a check.
+Bootstrap target dependencies from frozen inputs before strict doctor, because
+doctor verifies that declared executables exist.
 
 Agents can inspect the exact installed operating contract with
 `code-polishy docs list`, locate a topic with `docs find`, and read it with

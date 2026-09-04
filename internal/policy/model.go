@@ -8,6 +8,8 @@ const (
 	BehaviorReviewOnRequest  = "on-request"
 	BehaviorReviewMerge      = "merge"
 	BehaviorReviewCheckpoint = "checkpoint"
+	FinalGateOwnerLocal      = "local"
+	FinalGateOwnerCI         = "ci"
 
 	ConfigFilename = ".code-polishy.json"
 
@@ -32,7 +34,7 @@ const (
 )
 
 var DefaultExcludes = []string{
-	".git/**", ".tools/**", ".code-polishy-reports/**", "node_modules/**", "**/node_modules/**",
+	".git/**", ".tools/**", ".code-polishy-reports/**", ".code-polishy-artifacts/**", "node_modules/**", "**/node_modules/**",
 	".venv/**", "**/.venv/**",
 	"dist/**", "**/dist/**", "build/**", "**/build/**", "coverage/**",
 	"**/coverage/**", "playwright-report/**", "**/playwright-report/**",
@@ -44,7 +46,7 @@ var DefaultGenerated = []string{
 }
 
 var DefaultTestPatterns = []string{
-	"**/*_test.go", "**/*.test.*", "**/*.spec.*", "tests/**",
+	"**/*_test.go", "**/test_*.py", "**/*_test.py", "**/*.test.*", "**/*.spec.*", "tests/**",
 	"**/tests/**", "__tests__/**", "**/__tests__/**",
 }
 
@@ -88,6 +90,14 @@ type Verification struct {
 	BehaviorReview     *BehaviorReviewPolicy `json:"behaviorReview,omitempty"`
 	MergeGate          *MergeGate            `json:"mergeGate,omitempty"`
 	TrustedMergeTarget string                `json:"trustedMergeTarget,omitempty"`
+	FinalGateOwner     string                `json:"finalGateOwner,omitempty"`
+}
+
+func (verification Verification) EffectiveFinalGateOwner() string {
+	if verification.FinalGateOwner == "" {
+		return FinalGateOwnerLocal
+	}
+	return verification.FinalGateOwner
 }
 
 type BehaviorReviewPolicy struct {
@@ -123,18 +133,36 @@ type Scope struct {
 	Exclude   []string `json:"exclude,omitempty"`
 	Generated []string `json:"generated,omitempty"`
 	Data      []string `json:"data,omitempty"`
+	Tests     []string `json:"tests,omitempty"`
 
-	EntryPoints             []string                 `json:"entryPoints,omitempty"`
-	PythonDynamicReferences []PythonDynamicReference `json:"pythonDynamicReferences,omitempty"`
+	EntryPoints              []string                  `json:"entryPoints,omitempty"`
+	GeneratedJavaScript      []GeneratedJavaScript     `json:"generatedJavaScript,omitempty"`
+	PythonDynamicReferences  []PythonDynamicReference  `json:"pythonDynamicReferences,omitempty"`
+	PythonExternalAttributes []PythonExternalAttribute `json:"pythonExternalAttributes,omitempty"`
 
 	Development []string       `json:"development,omitempty"`
 	Languages   []LanguageRule `json:"languages,omitempty"`
+}
+
+type GeneratedJavaScript struct {
+	Paths         []string `json:"paths"`
+	SourcePackage string   `json:"sourcePackage"`
 }
 
 type PythonDynamicReference struct {
 	Project string `json:"project"`
 	Module  string `json:"module"`
 	Symbol  string `json:"symbol"`
+}
+
+type PythonExternalAttribute struct {
+	Project      string `json:"project"`
+	Module       string `json:"module"`
+	Callable     string `json:"callable"`
+	Receiver     string `json:"receiver"`
+	Attribute    string `json:"attribute"`
+	Line         int    `json:"line"`
+	ConsumerType string `json:"consumerType"`
 }
 
 type LanguageRule struct {
@@ -201,22 +229,26 @@ type Module struct {
 }
 
 type Command struct {
-	Name               string       `json:"name"`
-	Provides           []string     `json:"provides,omitempty"`
-	Argv               []string     `json:"argv"`
-	Cwd                string       `json:"cwd,omitempty"`
-	Paths              []string     `json:"paths,omitempty"`
-	Modules            []string     `json:"modules,omitempty"`
-	RunOn              []string     `json:"runOn,omitempty"`
-	Environment        []string     `json:"environment,omitempty"`
-	ExclusiveResources []string     `json:"exclusiveResources"`
-	TimeoutSeconds     int          `json:"timeoutSeconds,omitempty"`
-	Managed            bool         `json:"-"`
-	PassFiles          bool         `json:"-"`
-	PassFilePaths      []string     `json:"-"`
-	SealedEnvironment  bool         `json:"-"`
-	Adapter            *PackAdapter `json:"-"`
-	Stdin              []byte       `json:"-"`
+	Name                  string         `json:"name"`
+	Provides              []string       `json:"provides,omitempty"`
+	Argv                  []string       `json:"argv"`
+	Cwd                   string         `json:"cwd,omitempty"`
+	Paths                 []string       `json:"paths,omitempty"`
+	Modules               []string       `json:"modules,omitempty"`
+	RunOn                 []string       `json:"runOn,omitempty"`
+	Environment           []string       `json:"environment,omitempty"`
+	ExclusiveResources    []string       `json:"exclusiveResources"`
+	TimeoutSeconds        int            `json:"timeoutSeconds,omitempty"`
+	Managed               bool           `json:"-"`
+	PassFiles             bool           `json:"-"`
+	PassFilePaths         []string       `json:"-"`
+	SealedEnvironment     bool           `json:"-"`
+	Adapter               *PackAdapter   `json:"-"`
+	Stdin                 []byte         `json:"-"`
+	EnvironmentOverrides  []string       `json:"-"`
+	TestArtifacts         []TestArtifact `json:"-"`
+	TestArtifactSuite     string         `json:"-"`
+	TestArtifactDirectory string         `json:"-"`
 }
 
 type PackAdapter struct {
@@ -235,18 +267,27 @@ type Testing struct {
 }
 
 type TestSuite struct {
-	Name               string   `json:"name"`
-	Kind               string   `json:"kind"`
-	Scope              string   `json:"scope"`
-	Cost               string   `json:"cost,omitempty"`
-	Modules            []string `json:"modules,omitempty"`
-	Argv               []string `json:"argv"`
-	Cwd                string   `json:"cwd,omitempty"`
-	Paths              []string `json:"paths,omitempty"`
-	RunOn              []string `json:"runOn,omitempty"`
-	Environment        []string `json:"environment,omitempty"`
-	ExclusiveResources []string `json:"exclusiveResources"`
-	TimeoutSeconds     int      `json:"timeoutSeconds,omitempty"`
+	Name               string         `json:"name"`
+	Kind               string         `json:"kind"`
+	Scope              string         `json:"scope"`
+	Cost               string         `json:"cost,omitempty"`
+	Modules            []string       `json:"modules,omitempty"`
+	Argv               []string       `json:"argv"`
+	Cwd                string         `json:"cwd,omitempty"`
+	Paths              []string       `json:"paths,omitempty"`
+	ExtraInputs        []string       `json:"extraInputs,omitempty"`
+	Covers             []string       `json:"covers,omitempty"`
+	Artifacts          []TestArtifact `json:"artifacts,omitempty"`
+	RunOn              []string       `json:"runOn,omitempty"`
+	Environment        []string       `json:"environment,omitempty"`
+	ExclusiveResources []string       `json:"exclusiveResources"`
+	TimeoutSeconds     int            `json:"timeoutSeconds,omitempty"`
+}
+
+type TestArtifact struct {
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Required bool   `json:"required,omitempty"`
 }
 
 type SupplyChain struct {

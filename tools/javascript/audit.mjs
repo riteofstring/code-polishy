@@ -15,6 +15,14 @@ const MAXIMUM_ADVISORY_VERSIONS = 500;
 
 const MAXIMUM_REPORT_BYTES = 16 * 1024 * 1024;
 
+const AUDIT_NETWORK_ARGUMENTS = [
+  "--fetch-retries=4",
+  "--fetch-retry-factor=2",
+  "--fetch-retry-mintimeout=1000",
+  "--fetch-retry-maxtimeout=5000",
+  "--fetch-timeout=60000",
+];
+
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 
 function pinnedPNPM() {
@@ -39,6 +47,7 @@ function runPinnedPNPM(directory) {
       directory,
       "--registry",
       REGISTRY,
+      ...AUDIT_NETWORK_ARGUMENTS,
     ],
     { cwd: directory, encoding: "utf8", maxBuffer: MAXIMUM_REPORT_BYTES },
   );

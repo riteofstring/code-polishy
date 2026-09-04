@@ -187,20 +187,80 @@ func extractReleaseZip(archive, destination string) error {
 		return err
 	}
 	defer reader.Close()
-	if len(reader.File) == 0 || len(reader.File) > 100000 {
-		return errors.New("release bundle has an invalid entry count")
+	links, err := validateReleaseZip(reader.File)
+	if err != nil {
+		return err
+	}
+	return extractReleaseZipEntries(reader.File, destination, links)
+}
+
+func validateReleaseZip(entries []*zip.File) (map[string]string, error) {
+	if len(entries) == 0 || len(entries) > 100000 {
+		return nil, errors.New("release bundle has an invalid entry count")
 	}
 	var total uint64
-	for _, entry := range reader.File {
+	paths := make(map[string]struct{}, len(entries))
+	links := make(map[string]string)
+	for _, entry := range entries {
+		relative, err := validateReleaseZipEntry(entry)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := paths[relative]; exists {
+			return nil, fmt.Errorf("release bundle repeats path %q", relative)
+		}
+		paths[relative] = struct{}{}
+		target, err := validatedArchiveLink(entry, relative)
+		if err != nil {
+			return nil, err
+		}
+		if target != "" {
+			links[relative] = target
+		}
+		total += entry.UncompressedSize64
+		if total > uint64(maximumReleaseBundleBytes) {
+			return nil, errors.New("expanded release bundle exceeds the size limit")
+		}
+	}
+	if err := validateArchiveLinkAncestors(paths, links); err != nil {
+		return nil, err
+	}
+	return links, nil
+}
+
+func validatedArchiveLink(entry *zip.File, relative string) (string, error) {
+	if entry.FileInfo().Mode()&os.ModeSymlink == 0 {
+		return "", nil
+	}
+	target, err := readArchiveLink(entry)
+	if err != nil {
+		return "", err
+	}
+	if err := validateArchiveLink(relative, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func validateArchiveLinkAncestors(paths map[string]struct{}, links map[string]string) error {
+	for link := range links {
+		prefix := link + "/"
+		for candidate := range paths {
+			if strings.HasPrefix(candidate, prefix) {
+				return fmt.Errorf("release bundle link %q is an ancestor of another entry", link)
+			}
+		}
+	}
+	return nil
+}
+
+func extractReleaseZipEntries(entries []*zip.File, destination string, links map[string]string) error {
+	for _, entry := range entries {
 		relative, err := validateReleaseZipEntry(entry)
 		if err != nil {
 			return err
 		}
-		total += entry.UncompressedSize64
-		if total > uint64(maximumReleaseBundleBytes) {
-			return errors.New("expanded release bundle exceeds the size limit")
-		}
-		if err := extractReleaseZipEntry(entry, filepath.Join(destination, relative)); err != nil {
+		if err := extractReleaseZipEntry(entry, filepath.Join(destination, relative), links[relative]); err != nil {
 			return err
 		}
 	}
@@ -208,8 +268,8 @@ func extractReleaseZip(archive, destination string) error {
 }
 
 func validateReleaseZipEntry(entry *zip.File) (string, error) {
-	if strings.Contains(entry.Name, "\\") || entry.FileInfo().Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("release bundle contains unsupported link or path %q", entry.Name)
+	if strings.Contains(entry.Name, "\\") {
+		return "", fmt.Errorf("release bundle contains unsupported path %q", entry.Name)
 	}
 	relative := filepath.Clean(filepath.FromSlash(entry.Name))
 	if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
@@ -218,9 +278,18 @@ func validateReleaseZipEntry(entry *zip.File) (string, error) {
 	return relative, nil
 }
 
-func extractReleaseZipEntry(entry *zip.File, installed string) error {
+func extractReleaseZipEntry(entry *zip.File, installed, linkTarget string) error {
 	if entry.FileInfo().IsDir() {
 		return os.MkdirAll(installed, 0o755)
+	}
+	if entry.FileInfo().Mode()&os.ModeSymlink != 0 {
+		if linkTarget == "" {
+			return fmt.Errorf("release bundle link has no validated target: %q", entry.Name)
+		}
+		if err := os.MkdirAll(filepath.Dir(installed), 0o755); err != nil {
+			return err
+		}
+		return os.Symlink(linkTarget, installed)
 	}
 	if !entry.Mode().IsRegular() {
 		return fmt.Errorf("release bundle entry is not a regular file: %q", entry.Name)

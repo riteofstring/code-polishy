@@ -47,6 +47,7 @@ type Report struct {
 	TestQualityReminder *TestQualityReminder
 	TestCommands        []TestCommandEvidence
 	TestDiagnostics     []TestFailureDiagnostic
+	TestAggregations    []testpolicy.SuiteAggregation
 	Findings            []policy.Finding
 	Advisories          []policy.Advisory
 	Suppressed          []policy.Suppressed
@@ -177,6 +178,7 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 		}
 	}
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
+	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, portability.CoverageFindings(engine.Repository, files)...)
@@ -241,6 +243,7 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 	}
 	findings := engine.Repository.DesignDocumentFindings()
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
+	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, portability.CoverageFindings(engine.Repository, files)...)
@@ -252,7 +255,27 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 }
 
 func (engine *Engine) Architecture(ctx context.Context, selection repository.Selection) Report {
-	return engine.finish(architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner), []string{fmt.Sprintf("checked architecture for %d files", len(selection.Files))})
+	report := engine.finish(architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner), []string{fmt.Sprintf("checked architecture for %d files", len(selection.Files))})
+	files, err := engine.Repository.AllFiles()
+	if err == nil {
+		report.Tables = append(report.Tables, architectureSummaryTable(architecture.Summary(engine.Repository, files)))
+	}
+	return report
+}
+
+func architectureSummaryTable(summaries []architecture.ModuleSummary) Table {
+	rows := make([][]string, 0, len(summaries))
+	for _, summary := range summaries {
+		rows = append(rows, []string{
+			summary.Name, fmt.Sprint(summary.Production), fmt.Sprint(summary.Tests), fmt.Sprint(summary.Incoming),
+			fmt.Sprint(summary.Outgoing), fmt.Sprint(summary.FocusedSuites),
+		})
+	}
+	return Table{
+		Title:   "ARCHITECTURE SUMMARY",
+		Columns: []string{"MODULE", "PRODUCTION", "TESTS", "IN", "OUT", "FOCUSED"},
+		Rows:    rows,
+	}
 }
 
 func (engine *Engine) Format(ctx context.Context, selection repository.Selection) Report {
@@ -286,11 +309,17 @@ func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stop
 	if err != nil {
 		return Report{}, err
 	}
-	return engine.testExactPlan(ctx, plan, request.Changed, stopAfterFailure)
+	controller, err := newTestReceiptController(engine, plan.Suites, request.Supplemental && request.Resume)
+	if err != nil {
+		return Report{}, err
+	}
+	receiptEngine := *engine
+	receiptEngine.Runner = &testReceiptRunner{delegate: engine.Runner, controller: controller}
+	return receiptEngine.testExactPlan(ctx, plan, request.Changed, stopAfterFailure)
 }
 
 func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, selection repository.Selection, stopAfterFailure bool) (Report, error) {
-	notes := []string{}
+	notes := testAggregationNotes(plan.Aggregations)
 	if len(plan.ChangedModules) > 0 {
 		label := "changed modules: "
 		if selection.All {
@@ -315,8 +344,12 @@ func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, s
 	}
 	runResult := runSuites(ctx, engine.Repository, engine.Runner, plan, reporter)
 	notes = append(notes, fmt.Sprintf("ran %d test suites", len(plan.Suites)))
+	if provider, ok := engine.Runner.(interface{ ReceiptNotes() []string }); ok {
+		notes = append(notes, provider.ReceiptNotes()...)
+	}
 	report := engine.finish(runResult.Findings, notes)
 	report.TestCommands = engine.testCommandEvidence(plan, selection, runResult.Executions, "working-tree")
+	report.TestAggregations = append([]testpolicy.SuiteAggregation{}, plan.Aggregations...)
 	if stopAfterFailure {
 		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, runResult.Executions)
 		report.TestDiagnostics = diagnostics
@@ -339,11 +372,76 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 		return Report{}, err
 	}
 	report := engine.testPlanReport(base, selection, advice, selectedLevel, mergePolicy, ordinaryNotes)
+	selectedSuites := testPlanSuites(advice, selectedLevel)
+	if aggregations := testPlanAggregations(advice, selectedLevel); len(aggregations) > 0 {
+		report.Tables = append(report.Tables, testAggregationTable(aggregations))
+	}
+	if len(selectedSuites) > 0 {
+		controller, controllerErr := newTestReceiptController(engine, selectedSuites, base != "")
+		if controllerErr != nil {
+			return Report{}, controllerErr
+		}
+		report.Tables = append(report.Tables, testReceiptPlanTable(controller.Decisions()))
+	}
 	report, err = engine.withTestPlanBehaviorReview(base, report)
 	if err != nil {
 		return Report{}, err
 	}
 	return engine.withTestQualityReminder(report, selection.Candidate), nil
+}
+
+func testAggregationNotes(aggregations []testpolicy.SuiteAggregation) []string {
+	notes := make([]string, 0, len(aggregations))
+	for _, aggregation := range aggregations {
+		notes = append(notes, fmt.Sprintf("test suite %s is satisfied by %s (%s)", aggregation.Suite, aggregation.ExecutedBy, aggregation.Reason))
+	}
+	return notes
+}
+
+func testPlanAggregations(advice testpolicy.Advice, level string) []testpolicy.SuiteAggregation {
+	switch level {
+	case "focused":
+		return advice.FocusedAggregations
+	case testpolicy.MergeLevelRecommended:
+		return advice.RecommendedAggregations
+	case testpolicy.MergeLevelFull:
+		return advice.FullAggregations
+	default:
+		return nil
+	}
+}
+
+func testAggregationTable(aggregations []testpolicy.SuiteAggregation) Table {
+	rows := make([][]string, 0, len(aggregations))
+	for _, aggregation := range aggregations {
+		rows = append(rows, []string{aggregation.Suite, aggregation.ExecutedBy, aggregation.Reason})
+	}
+	return Table{Title: "TEST SUITE AGGREGATION", Columns: []string{"REQUIREMENT", "EXECUTED BY", "REASON"}, Rows: rows}
+}
+
+func testPlanSuites(advice testpolicy.Advice, level string) []policy.TestSuite {
+	switch level {
+	case "focused":
+		return advice.Focused
+	case testpolicy.MergeLevelRecommended:
+		return advice.Recommended
+	case testpolicy.MergeLevelFull:
+		return advice.Full
+	default:
+		return nil
+	}
+}
+
+func testReceiptPlanTable(decisions []testReceiptDecision) Table {
+	rows := make([][]string, 0, len(decisions))
+	for _, decision := range decisions {
+		rows = append(rows, []string{decision.Suite, decision.Action, decision.Prior, decision.Reason})
+	}
+	return Table{
+		Title:   "TEST RECEIPT PLAN",
+		Columns: []string{"SUITE", "ACTION", "PRIOR", "REASON"},
+		Rows:    rows,
+	}
 }
 
 func (engine *Engine) testPlanReport(
@@ -742,6 +840,7 @@ func (engine *Engine) combine(left, right Report) Report {
 		TestQualityReminder: combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		TestCommands:        append(append([]TestCommandEvidence{}, left.TestCommands...), right.TestCommands...),
 		TestDiagnostics:     append(append([]TestFailureDiagnostic{}, left.TestDiagnostics...), right.TestDiagnostics...),
+		TestAggregations:    append(append([]testpolicy.SuiteAggregation{}, left.TestAggregations...), right.TestAggregations...),
 		Findings:            append(append([]policy.Finding{}, left.Findings...), right.Findings...),
 		Advisories:          mergeAdvisories(left.Advisories, right.Advisories),
 		Suppressed:          append(append([]policy.Suppressed{}, left.Suppressed...), right.Suppressed...),

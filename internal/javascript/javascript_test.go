@@ -630,12 +630,12 @@ func TestADeadCodeRequestRefusesAnIncompleteTree(t *testing.T) {
 			"outside"},
 		{"a package that selects nothing", ".",
 			[]DeadCodeWorkspace{{Root: ".", Project: []string{}}}, "selects no files"},
-		{"a file another package owns", ".",
+		{"a file outside the tree", "packages",
 			[]DeadCodeWorkspace{{Root: "packages/web", Project: []string{"src/a.ts"}}},
-			"which it does not contain"},
+			"outside"},
 		{"an uncontained entry point", ".",
 			[]DeadCodeWorkspace{{Root: ".", Entry: []string{"../a.ts"}, Project: []string{"a.ts"}}},
-			"which it does not contain"},
+			"outside"},
 	}
 	for _, test := range tests {
 		_, err := bundle.DeadCode(context.Background(), "/target", test.directory, test.packages)

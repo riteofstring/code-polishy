@@ -545,6 +545,41 @@ func TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript(t *testing.T) {
 	}
 }
 
+func TestGeneratedJavaScriptUsesItsSourcePackageTypeProject(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"generated/**"}
+	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
+		Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json",
+	}}
+	policyRoot, observed := fakeFileBundle(t, typeCheckResult("generated/api.ts"))
+	repo.PolicyRoot = policyRoot
+	writeQualityFile(t, repo.Root, "packages/app/package.json", "{}\n")
+	writeQualityFile(t, repo.Root, "packages/app/tsconfig.json", "{}\n")
+	writeQualityFile(t, repo.Root, "generated/api.ts", "export {};\n")
+	if findings := JavaScriptTypeCheckFindings(t.Context(), repo, []string{"generated/api.ts"}); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
+	}
+	requests := observedRequestLines(t, observed)
+	if len(requests) != 1 || !strings.Contains(requests[0], `"project":"packages/app/tsconfig.json"`) {
+		t.Fatalf("requests = %v", requests)
+	}
+}
+
+func TestGeneratedJavaScriptInheritsSourcePackageLintActivation(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"generated/**"}
+	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
+		Paths: []string{"generated/**"}, SourcePackage: "packages/web/package.json",
+	}}
+	repo.Config.JavaScriptLintScopes = []policy.JavaScriptLintScope{{Root: "packages/web", ReactHooks: true, JSXAccessibility: true}}
+	activation := javascriptLintActivation(repo, "generated/view.tsx")
+	if !activation.ReactHooks || !activation.JSXAccessibility {
+		t.Fatalf("activation = %+v", activation)
+	}
+}
+
 func TestJavaScriptDeadCodeIgnoresTargetsWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -573,6 +608,28 @@ func TestJavaScriptDeadCodeRunsOnlyForSelectionsItDependsOn(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	if requests := observedRequestLines(t, observed); len(requests) != 1 {
+		t.Fatalf("requests = %v", requests)
+	}
+}
+
+func TestGeneratedJavaScriptUsesItsSourcePackageDeadCodeWorkspace(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"generated/**"}
+	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
+		Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json",
+	}}
+	policyRoot, observed := fakeFileBundle(t, deadCodeResult("generated/api.ts", "packages/app/src/index.ts"))
+	repo.PolicyRoot = policyRoot
+	writeQualityFile(t, repo.Root, "packages/app/package.json", "{}\n")
+	writeQualityFile(t, repo.Root, "packages/app/src/index.ts", "export {};\n")
+	writeQualityFile(t, repo.Root, "generated/api.ts", "export {};\n")
+	if findings := JavaScriptDeadCodeFindings(t.Context(), repo, []string{"generated/api.ts"}); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
+	}
+	requests := observedRequestLines(t, observed)
+	if len(requests) != 1 || !strings.Contains(requests[0], `"directory":"."`) ||
+		!strings.Contains(requests[0], `"root":"packages/app"`) || !strings.Contains(requests[0], `"generated/api.ts"`) {
 		t.Fatalf("requests = %v", requests)
 	}
 }

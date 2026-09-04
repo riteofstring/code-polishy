@@ -81,6 +81,38 @@ func TestInstallLocalBundleRejectsRemoteAndRelativeSources(t *testing.T) {
 	}
 }
 
+func TestInstallLocalBundleRejectsEscapingLinks(t *testing.T) {
+	archive := filepath.Join(t.TempDir(), "bundle.zip")
+	file, err := os.Create(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(file)
+	header := &zip.FileHeader{Name: "inside/link", Method: zip.Store}
+	header.SetMode(os.ModeSymlink | 0o777)
+	entry, err := writer.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(entry, "../../outside"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	if _, err := InstallLocalBundle(archive, hex.EncodeToString(digest[:]), t.TempDir()); err == nil {
+		t.Fatal("release bundle accepted an escaping link")
+	}
+}
+
 func zipDirectory(t *testing.T, root string) string {
 	t.Helper()
 	archive := filepath.Join(t.TempDir(), "release.zip")

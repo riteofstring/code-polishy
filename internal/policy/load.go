@@ -210,130 +210,6 @@ func validate(config *Config) error {
 	return validateExceptions(config.Exceptions)
 }
 
-func validateVerification(config *Config) error {
-	if target := config.Verification.TrustedMergeTarget; target != "" {
-		if strings.TrimSpace(target) != target || strings.HasPrefix(target, "-") || strings.ContainsAny(target, " \t\r\n\x00") {
-			return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
-		}
-	}
-	if err := validateBehaviorReview(config); err != nil {
-		return err
-	}
-	mergeGate := config.Verification.MergeGate
-	if mergeGate == nil {
-		return nil
-	}
-	if len(mergeGate.RecommendedModules) == 0 {
-		return errors.New("verification.mergeGate.recommendedModules must not be empty")
-	}
-	if err := validateUniqueStrings(mergeGate.RecommendedModules, "verification.mergeGate.recommendedModules", true); err != nil {
-		return err
-	}
-	for _, module := range mergeGate.RecommendedModules {
-		if _, exists := config.ModuleByName[module]; !exists {
-			return fmt.Errorf("verification.mergeGate.recommendedModules references unknown module %q", module)
-		}
-	}
-	return nil
-}
-
-func validateBehaviorReview(config *Config) error {
-	behaviorReview := config.Verification.BehaviorReview
-	if behaviorReview == nil {
-		return nil
-	}
-	if err := allowedValues([]string{behaviorReview.DefaultRequiredAt}, []string{BehaviorReviewOnRequest, BehaviorReviewMerge, BehaviorReviewCheckpoint}, "verification.behaviorReview.defaultRequiredAt"); err != nil {
-		return err
-	}
-	featureNames := map[string]bool{}
-	for index, feature := range behaviorReview.Features {
-		label := fmt.Sprintf("verification.behaviorReview.features[%d]", index)
-		if err := validateBehaviorReviewFeature(config, *behaviorReview, feature, label, featureNames); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string, names map[string]bool) error {
-	if err := validateBehaviorReviewFeatureScope(config, feature, label, names); err != nil {
-		return err
-	}
-	if err := validateBehaviorReviewFeatureSuites(config, feature, label); err != nil {
-		return err
-	}
-	return validateBehaviorReviewFeatureRequirement(behaviorReview, feature, label)
-}
-
-func validateBehaviorReviewFeatureScope(config *Config, feature BehaviorReviewFeature, label string, names map[string]bool) error {
-	if err := identifier(feature.Name, label+".name"); err != nil {
-		return err
-	}
-	if names[feature.Name] {
-		return fmt.Errorf("duplicate behavior review feature name %q", feature.Name)
-	}
-	names[feature.Name] = true
-	if len(feature.Modules) == 0 && len(feature.Paths) == 0 {
-		return fmt.Errorf("%s must define at least one module or path", label)
-	}
-	if err := validateCommandModules(config, feature.Modules, label); err != nil {
-		return err
-	}
-	if err := validatePatterns(feature.Paths, label+".paths", false); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateBehaviorReviewFeatureSuites(config *Config, feature BehaviorReviewFeature, label string) error {
-	if len(feature.Suites) == 0 {
-		return fmt.Errorf("%s.suites must not be empty", label)
-	}
-	if err := validateUniqueStrings(feature.Suites, label+".suites", true); err != nil {
-		return err
-	}
-	for _, suiteName := range feature.Suites {
-		suite, err := referencedSuite(config.Tests.Suites, suiteName, label+".suites")
-		if err != nil {
-			return err
-		}
-		if !BehaviorReviewSuiteAllowed(suite) {
-			return fmt.Errorf("%s.suites references ineligible suite %q; behavior review evidence must be ordinary, non-credentialed, and non-destructive", label, suiteName)
-		}
-	}
-	return nil
-}
-
-func validateBehaviorReviewFeatureRequirement(behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string) error {
-	if feature.RequiredAt != "" && !slices.Contains([]string{BehaviorReviewMerge, BehaviorReviewCheckpoint}, feature.RequiredAt) {
-		return fmt.Errorf("%s.requiredAt must be merge or checkpoint when set", label)
-	}
-	if behaviorReviewRequirementRank(behaviorReview.EffectiveRequiredAt(feature)) < behaviorReviewRequirementRank(behaviorReview.DefaultRequiredAt) {
-		return fmt.Errorf("%s.requiredAt cannot weaken verification.behaviorReview.defaultRequiredAt", label)
-	}
-	return nil
-}
-
-func BehaviorReviewSuiteAllowed(suite TestSuite) bool {
-	return !slices.Contains(suite.RunOn, "supplemental") &&
-		!supplementalOnlyKind(suite.Kind) &&
-		!slices.Contains([]string{"live", "credentialed", "destructive"}, suite.Kind) &&
-		len(suite.Environment) == 0
-}
-
-func behaviorReviewRequirementRank(requiredAt string) int {
-	switch requiredAt {
-	case BehaviorReviewOnRequest:
-		return 0
-	case BehaviorReviewMerge:
-		return 1
-	case BehaviorReviewCheckpoint:
-		return 2
-	default:
-		return -1
-	}
-}
-
 func validatePortability(config *Config) error {
 	seen := map[string]bool{}
 	for index, input := range config.Portability.ExternalInputs {
@@ -495,10 +371,19 @@ func validateScope(config *Config) error {
 	if err := validateDataPaths(config); err != nil {
 		return err
 	}
+	if err := validatePatterns(config.Scope.Tests, "scope.tests", true); err != nil {
+		return err
+	}
 	if err := validatePatterns(config.Scope.EntryPoints, "scope.entryPoints", true); err != nil {
 		return err
 	}
+	if err := validateGeneratedJavaScript(config.Scope.GeneratedJavaScript); err != nil {
+		return err
+	}
 	if err := validatePythonDynamicReferences(config.Scope.PythonDynamicReferences); err != nil {
+		return err
+	}
+	if err := validatePythonExternalAttributes(config.Scope.PythonExternalAttributes); err != nil {
 		return err
 	}
 	if err := validatePatterns(config.Scope.Development, "scope.development", true); err != nil {
@@ -564,7 +449,7 @@ func validateTests(config *Config) error {
 			return err
 		}
 	}
-	return nil
+	return validateTestCoverageRelations(config.Tests.Suites)
 }
 
 func validateTestSuite(config *Config, suite *TestSuite, index int, names map[string]bool) error {
@@ -582,7 +467,96 @@ func validateTestSuite(config *Config, suite *TestSuite, index int, names map[st
 	if err := validateTestEvidence(suite, label); err != nil {
 		return err
 	}
+	if err := validatePatterns(suite.ExtraInputs, label+".extraInputs", false); err != nil {
+		return err
+	}
+	if err := validateUniqueStrings(suite.Covers, label+".covers", true); err != nil {
+		return err
+	}
+	if err := validateTestArtifacts(suite.Artifacts, label); err != nil {
+		return err
+	}
 	return validateTestProfiles(suite, label)
+}
+
+func validateTestCoverageRelations(suites []TestSuite) error {
+	byName := map[string]TestSuite{}
+	for _, suite := range suites {
+		byName[suite.Name] = suite
+	}
+	coveredBy := map[string]string{}
+	for _, suite := range suites {
+		for _, targetName := range suite.Covers {
+			target, found := byName[targetName]
+			if !found {
+				return fmt.Errorf("test suite %q covers unknown suite %q", suite.Name, targetName)
+			}
+			if targetName == suite.Name {
+				return fmt.Errorf("test suite %q cannot cover itself", suite.Name)
+			}
+			if owner := coveredBy[targetName]; owner != "" {
+				return fmt.Errorf("test suite %q is covered by both %q and %q", targetName, owner, suite.Name)
+			}
+			if err := validateTestCoverageCompatibility(suite, target); err != nil {
+				return err
+			}
+			coveredBy[targetName] = suite.Name
+		}
+	}
+	for name := range byName {
+		seen := map[string]bool{name: true}
+		for owner := coveredBy[name]; owner != ""; owner = coveredBy[owner] {
+			if seen[owner] {
+				return fmt.Errorf("test suite coverage contains a cycle through %q", owner)
+			}
+			seen[owner] = true
+		}
+	}
+	return nil
+}
+
+func validateTestCoverageCompatibility(covering, target TestSuite) error {
+	label := fmt.Sprintf("test suite %q cannot cover %q", covering.Name, target.Name)
+	if slices.Contains(covering.RunOn, "supplemental") != slices.Contains(target.RunOn, "supplemental") {
+		return fmt.Errorf("%s across ordinary and supplemental profiles", label)
+	}
+	if covering.Scope == "module" && !slices.Equal(covering.Modules, target.Modules) {
+		return fmt.Errorf("%s across different module ownership", label)
+	}
+	if covering.TimeoutSeconds > target.TimeoutSeconds {
+		return fmt.Errorf("%s with a weaker timeout limit", label)
+	}
+	for field, values := range map[string][][]string{
+		"environment":         {target.Environment, covering.Environment},
+		"exclusive resources": {target.ExclusiveResources, covering.ExclusiveResources},
+		"extra inputs":        {target.ExtraInputs, covering.ExtraInputs},
+	} {
+		if !stringSetContains(values[1], values[0]) {
+			return fmt.Errorf("%s with mismatched %s", label, field)
+		}
+	}
+	if !artifactSetContains(covering.Artifacts, target.Artifacts) {
+		return fmt.Errorf("%s with mismatched artifact evidence", label)
+	}
+	return nil
+}
+
+func stringSetContains(container, required []string) bool {
+	for _, value := range required {
+		if !slices.Contains(container, value) {
+			return false
+		}
+	}
+	return true
+}
+
+func artifactSetContains(container, required []TestArtifact) bool {
+	for _, expected := range required {
+		if !slices.Contains(container, expected) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateTestProfiles(suite *TestSuite, label string) error {

@@ -66,10 +66,12 @@ an aid, not proof of compliance.
 6. Record a user-visible contract change in the changelog.
 
 The stable-release supplemental retry rule earns canonical space because it
-prevents repeated expensive hardening without weakening evidence: run the full
-set once, then rerun failed or invalidated suites by exact name. Targeted
-evidence composes with still-valid passes; only shared mutation infrastructure,
-toolchain, or selection changes, or unbounded impact, require a full repeat.
+prevents repeated expensive hardening without weakening evidence. Reuse exact
+receipts and rerun only missing, failed, expired, or invalidated suites. A full
+run is needed only without a trusted baseline, after shared mutation
+infrastructure, toolchain, or selection changes, or when impact is unbounded.
+The final-gate-owner reminder prevents an equally costly duplicate local and CI
+gate while preserving one required owner.
 
 ## Size budget
 

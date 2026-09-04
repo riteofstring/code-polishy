@@ -451,7 +451,7 @@ func (repo Repository) IsData(path string) bool {
 }
 
 func (repo Repository) IsTest(path string) bool {
-	return policy.IsTestPath(path)
+	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Scope.Tests)
 }
 
 func (repo Repository) IsDevelopment(path string) bool {
@@ -599,6 +599,9 @@ func (repo Repository) IsExecutableSource(path string) bool {
 }
 
 func (repo Repository) ModuleNames(path string) []string {
+	if repo.IsGenerated(path) && repo.Language(path) == "typescript" {
+		path = repo.JavaScriptContextPath(path)
+	}
 	names := []string{}
 	for _, module := range repo.Config.Modules {
 		if policy.MatchesAny(path, module.Paths) {

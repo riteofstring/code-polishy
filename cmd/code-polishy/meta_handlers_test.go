@@ -139,10 +139,34 @@ func TestReleaseManifestMetaRejectsAmbiguousInvocations(t *testing.T) {
 		{arguments: []string{"unknown"}},
 		{arguments: []string{"verify", "--unknown"}},
 		{arguments: []string{"verify", "extra"}},
+		{arguments: []string{"archive", "--root", "root"}},
+		{arguments: []string{"publish", "--archive", "archive"}},
+		{arguments: []string{"index", "--output", "index.json"}},
+		{arguments: []string{"oci-context", "--descriptor", "release.json", "--template", "Containerfile"}},
 	}
 	for _, invocation := range tests {
 		if got := handleReleaseManifestMeta(invocation); got != 2 {
 			t.Fatalf("invocation = %+v, status = %d", invocation, got)
 		}
+	}
+}
+
+func TestReleaseManifestPublicationModesRejectCrossModeFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		invoke func(releaseManifestOptions) int
+		value  releaseManifestOptions
+	}{
+		{name: "archive", invoke: archiveReleaseManifest, value: releaseManifestOptions{root: "root", output: "archive.zip", source: "source"}},
+		{name: "publish", invoke: publishReleaseManifest, value: releaseManifestOptions{archive: "archive.zip", destination: "published", root: "root"}},
+		{name: "index", invoke: indexReleaseManifest, value: releaseManifestOptions{output: "index.json", descriptors: []string{"release.json"}, archive: "archive.zip"}},
+		{name: "oci-context", invoke: ociContextReleaseManifest, value: releaseManifestOptions{descriptor: "release.json", template: "Containerfile", destination: "context", output: "archive.zip"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if status := test.invoke(test.value); status != 2 {
+				t.Fatalf("status = %d", status)
+			}
+		})
 	}
 }

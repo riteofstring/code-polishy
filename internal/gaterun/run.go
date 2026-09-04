@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
 type reportPointer struct {
@@ -53,6 +55,22 @@ func (run *Run) ReportPath() string {
 		return ""
 	}
 	return run.reportPath
+}
+
+func (run *Run) ExecutionID() string {
+	if run == nil {
+		return ""
+	}
+	return run.executionID
+}
+
+func StoredReportPath(report Report) (string, error) {
+	identitySHA256, err := report.Identity.Digest()
+	if err != nil || report.IdentitySHA256 != identitySHA256 || !validExecutionID(report.ExecutionID) {
+		return "", fmt.Errorf("%w: gate report identity is invalid", ErrInvalidInput)
+	}
+	return reportsDirectory + "/" + string(report.Identity.Gate) + "/" + identitySHA256 + "/" +
+		executionsDirectory + "/" + report.ExecutionID + "/" + reportFilename, nil
 }
 
 func (run *Run) RecordAttempt(index int, input AttemptInput, log LogResult) (CommandOutcome, error) {
@@ -146,16 +164,61 @@ func (run *Run) RecordReuse(index int, reusable ReusableReceipt) (CommandOutcome
 	entry.Reused = true
 	entry.ReceiptPath = path
 	entry.ReceiptSHA256 = receipt.SHA256
+	if reusable.Receipt.ExternalSourcePath != "" {
+		entry.ReuseSourcePath = reusable.Receipt.ExternalSourcePath
+		entry.ReuseSourceSHA256 = reusable.Receipt.ExternalSourceSHA256
+		entry.PriorDurationMilliseconds = reusable.Receipt.ExternalSourceDurationMilliseconds
+	}
+	run.commands[index] = entry
+	return cloneCommandOutcome(entry), nil
+}
+
+func (run *Run) RecordSuiteReuse(index int, source SuiteReuse) (CommandOutcome, error) {
+	entry, reference, err := run.suiteReusableEntry(index)
+	if err != nil {
+		return CommandOutcome{}, err
+	}
+	if reference.Spec.SuiteIdentitySHA256 == "" || source.IdentitySHA256 != reference.Spec.SuiteIdentitySHA256 ||
+		source.DurationMillis < 0 || !validSHA256(source.ReceiptSHA256) {
+		return CommandOutcome{}, fmt.Errorf("%w: suite receipt reuse input is invalid", ErrInvalidInput)
+	}
+	reusable, err := testreceipt.LoadDigest(run.repositoryRoot, source.IdentitySHA256)
+	if err != nil {
+		return CommandOutcome{}, err
+	}
+	if reusable.Path != source.ReceiptPath || reusable.Receipt.SHA256 != source.ReceiptSHA256 ||
+		reusable.Receipt.DurationMillis != source.DurationMillis {
+		return CommandOutcome{}, fmt.Errorf("%w: suite receipt changed after validation", ErrStaleArtifact)
+	}
+	receipt, path, err := run.writeSuiteReusedReceipt(reference, source)
+	if err != nil {
+		return CommandOutcome{}, err
+	}
+	entry.Status = Passed
+	entry.Reused = true
+	entry.ReceiptPath = path
+	entry.ReceiptSHA256 = receipt.SHA256
+	entry.ReuseSourcePath = source.ReceiptPath
+	entry.ReuseSourceSHA256 = source.ReceiptSHA256
+	entry.PriorDurationMilliseconds = source.DurationMillis
 	run.commands[index] = entry
 	return cloneCommandOutcome(entry), nil
 }
 
 func (run *Run) reusableEntry(index int) (CommandOutcome, CommandRef, error) {
-	if err := run.reuseAvailabilityError(index); err != nil {
+	entry, reference, err := run.suiteReusableEntry(index)
+	if err != nil {
 		return CommandOutcome{}, CommandRef{}, err
 	}
 	if run.identity.Gate != MergeGate {
 		return CommandOutcome{}, CommandRef{}, fmt.Errorf("%w: only merge gate runs can reuse receipts", ErrIneligible)
+	}
+	return entry, reference, nil
+}
+
+func (run *Run) suiteReusableEntry(index int) (CommandOutcome, CommandRef, error) {
+	if err := run.reuseAvailabilityError(index); err != nil {
+		return CommandOutcome{}, CommandRef{}, err
 	}
 	entry, err := run.commandOutcome(index)
 	if err != nil {
@@ -305,12 +368,17 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	satisfactions, err := deriveSuiteSatisfactions(options.SuiteSatisfactions, commands)
+	if err != nil {
+		return Report{}, err
+	}
 	report := Report{
 		Version: Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256, ExecutionID: run.executionID,
 		Status: options.Status, StartedAt: run.startedAt, CompletedAt: completedAt,
 		Commands: commands, Findings: cloneFindings(options.Findings), Notes: cloneStrings(options.Notes),
 		TestEvidence: cloneTestEvidence(options.TestEvidence), TestDiagnostics: cloneTestDiagnostics(options.TestDiagnostics),
-		BehaviorReview: cloneBehaviorReview(options.BehaviorReview),
+		SuiteSatisfactions: satisfactions,
+		BehaviorReview:     cloneBehaviorReview(options.BehaviorReview),
 	}
 	if err := validateReport(report, run.identity); err != nil {
 		return Report{}, err
@@ -321,6 +389,33 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 	}
 	report.SHA256 = digest
 	return report, nil
+}
+
+func deriveSuiteSatisfactions(inputs []SuiteSatisfactionInput, commands []CommandOutcome) ([]SuiteSatisfaction, error) {
+	result := make([]SuiteSatisfaction, 0, len(inputs))
+	for _, input := range inputs {
+		outcome, found := outcomeNamed(commands, input.ExecutedBy)
+		if !found || outcome.Category != OrdinaryTest {
+			return nil, fmt.Errorf("%w: suite satisfaction has no ordinary test representative", ErrInvalidInput)
+		}
+		if outcome.Status != Passed {
+			continue
+		}
+		result = append(result, SuiteSatisfaction{
+			Suite: input.Suite, ExecutedBy: input.ExecutedBy, Reason: input.Reason,
+			ReceiptPath: outcome.ReceiptPath, ReceiptSHA256: outcome.ReceiptSHA256,
+		})
+	}
+	return result, nil
+}
+
+func outcomeNamed(commands []CommandOutcome, name string) (CommandOutcome, bool) {
+	for _, command := range commands {
+		if command.Name == name {
+			return command, true
+		}
+	}
+	return CommandOutcome{}, false
 }
 
 func (run *Run) writeLatestReportPointer(report Report) error {
@@ -447,11 +542,30 @@ func (run *Run) writePassedReceipt(reference CommandRef, attempt Attempt) (Recei
 }
 
 func (run *Run) writeReusedReceipt(reference CommandRef, reusable ReusableReceipt) (Receipt, string, error) {
+	if reusable.Receipt.ExternalSourcePath != "" {
+		receipt := Receipt{
+			Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
+			Category: OrdinaryTest, Status: Passed, ExternalSourcePath: reusable.Receipt.ExternalSourcePath,
+			ExternalSourceSHA256:               reusable.Receipt.ExternalSourceSHA256,
+			ExternalSourceDurationMilliseconds: reusable.Receipt.ExternalSourceDurationMilliseconds,
+		}
+		return run.writeReceipt(reference, receipt)
+	}
 	sourceExecutionID, sourceReceiptSHA256 := sourceReceiptIdentity(reusable.Receipt)
 	receipt := Receipt{
 		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID, CommandSHA256: reference.SHA256,
 		Category: OrdinaryTest, Status: Passed, LogSHA256: reusable.Receipt.LogSHA256,
 		SourceExecutionID: sourceExecutionID, SourceReceiptSHA256: sourceReceiptSHA256,
+	}
+	return run.writeReceipt(reference, receipt)
+}
+
+func (run *Run) writeSuiteReusedReceipt(reference CommandRef, source SuiteReuse) (Receipt, string, error) {
+	receipt := Receipt{
+		Version: Version, Gate: run.identity.Gate, RunSHA256: run.runSHA256, ExecutionID: run.executionID,
+		CommandSHA256: reference.SHA256, Category: OrdinaryTest, Status: Passed,
+		ExternalSourcePath: source.ReceiptPath, ExternalSourceSHA256: source.ReceiptSHA256,
+		ExternalSourceDurationMilliseconds: source.DurationMillis,
 	}
 	return run.writeReceipt(reference, receipt)
 }

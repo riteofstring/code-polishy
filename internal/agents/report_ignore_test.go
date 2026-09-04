@@ -50,6 +50,13 @@ func TestInstallKeepsGeneratedReportsOutOfGitStatus(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(reportDirectory, "report.json"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	testArtifactDirectory := filepath.Join(repoRoot, ".code-polishy-artifacts", "run-00000000000000000000000000000000")
+	if err := os.MkdirAll(testArtifactDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(testArtifactDirectory, "junit.xml"), []byte("<testsuite/>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	command := exec.Command("git", "status", "--short", "--untracked-files=all")
 	command.Dir = repoRoot
 	output, err := command.CombinedOutput()
@@ -68,9 +75,11 @@ func TestInstallKeepsGeneratedReportsOutOfGitStatus(t *testing.T) {
 
 func assertReportsIgnoredByGit(t *testing.T, repoRoot string) {
 	t.Helper()
-	command := exec.Command("git", "-C", repoRoot, "check-ignore", "--no-index", "--quiet", "--", ".code-polishy-reports/")
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("report artifacts are visible to Git: %v\n%s", err, output)
+	for _, path := range []string{".code-polishy-reports/", ".code-polishy-artifacts/"} {
+		command := exec.Command("git", "-C", repoRoot, "check-ignore", "--no-index", "--quiet", "--", path)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("workspace artifacts are visible to Git: %v\n%s", err, output)
+		}
 	}
 }
 

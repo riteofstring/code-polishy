@@ -191,9 +191,9 @@ Capability names define outcomes rather than tools. A pack may use Cargo,
 Clippy, Gradle, Ruff, Composer, or another ecosystem tool, and must omit any
 optional capability it cannot support faithfully.
 
-The [v0.22 plan](v0.22.md) owns the corresponding
-artifact, receipt-reuse, final-gate, and suite-deduplication design. This pack
-protocol supplies exact inputs to that engine policy; it does not create a
+The [Verification and Testing Policy](../policies/verification.md) owns the
+artifact, receipt-reuse, final-gate, and suite-deduplication contracts. This
+pack protocol supplies exact inputs to that engine policy; it does not create a
 second scheduler.
 
 ## Scale requirements

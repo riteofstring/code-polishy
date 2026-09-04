@@ -25,7 +25,7 @@ Commands:
   pack <install|verify|root>
   agents <install|sync|check>
   lock
-  release-manifest <write|verify|materialize> [options]
+  release-manifest <write|verify|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
   check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
@@ -38,9 +38,11 @@ Commands:
   behavior-review prepare --base REF
   behavior-review finalize --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
-  test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental|--module NAME...|--suite NAME...]
+  test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental [--resume]|--module NAME...|--suite NAME...]
   test-plan [--base REF]
   test-levels [--base REF]
+  test-receipts export --output PATH
+  test-receipts import --source PATH --sha256 DIGEST
   verify [--tests-only]
   architecture [--git-changes|--staged|--all|--files PATH...]
   supply-chain [--offline]
@@ -362,6 +364,7 @@ func commandHandlers() map[string]commandHandler {
 		"test":              handleTest,
 		"test-plan":         handleTestPlan,
 		"test-levels":       handleTestLevels,
+		"test-receipts":     handleTestReceipts,
 		"verify":            handleVerify,
 		"supply-chain":      handleSupplyChain,
 		"dependency-review": handleDependencyReview,
@@ -607,6 +610,7 @@ func parseTestOptions(arguments []string) (testOptions, error) {
 	flags.StringVar(&options.base, "base", "", "compare with the merge base of this Git ref")
 	flags.BoolVar(&options.request.Full, "all", false, "run the full profile")
 	flags.BoolVar(&options.request.Supplemental, "supplemental", false, "run explicitly selected supplemental hardening suites")
+	flags.BoolVar(&options.request.Resume, "resume", false, "reuse still-valid supplemental suite receipts")
 	flags.Var((*stringList)(&options.request.Modules), "module", "run focused suites for a module")
 	flags.Var((*stringList)(&options.request.Suites), "suite", "run a named suite")
 	if err := flags.Parse(arguments); err != nil {
@@ -628,6 +632,9 @@ func validateTestOptions(options testOptions) error {
 	}
 	if options.base != "" && !options.request.Recommended && !options.changed {
 		return fmt.Errorf("--base requires --changed or --recommended")
+	}
+	if options.request.Resume && !options.request.Supplemental {
+		return fmt.Errorf("--resume requires --supplemental")
 	}
 	return nil
 }

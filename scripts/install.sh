@@ -27,10 +27,12 @@ default_prefix="${HOME}/.local/share/code-polishy"
 prefix="${default_prefix}"
 requested_command_root=""
 requested_path_profile=""
+publication_dir=""
 add_to_path=false
+build_only=false
 
 usage() {
-  echo "usage: install.sh [--prefix DIR] [--command-dir DIR] [--add-to-path [--path-profile FILE]]" >&2
+  echo "usage: install.sh [--prefix DIR] [--command-dir DIR] [--add-to-path [--path-profile FILE]] [--publication-dir DIR --build-only]" >&2
   exit 2
 }
 
@@ -77,6 +79,21 @@ while (($#)); do
       add_to_path=true
       shift
       ;;
+    --publication-dir)
+      if (($# < 2)); then
+        usage
+      fi
+      publication_dir="$(require_path_argument --publication-dir "$2")"
+      shift 2
+      ;;
+    --publication-dir=*)
+      publication_dir="$(require_path_argument --publication-dir "${1#*=}")"
+      shift
+      ;;
+    --build-only)
+      build_only=true
+      shift
+      ;;
     --path-profile)
       if (($# < 2)); then
         usage
@@ -94,6 +111,14 @@ done
 if [[ -n "${requested_path_profile}" && "${add_to_path}" != true ]]; then
   echo "--path-profile requires --add-to-path" >&2
   exit 2
+fi
+if [[ "${build_only}" == true && -z "${publication_dir}" ]]; then
+  echo "--build-only requires --publication-dir" >&2
+  exit 2
+fi
+if [[ -n "${publication_dir}" && -e "${publication_dir}" ]]; then
+  echo "The publication directory already exists: ${publication_dir}" >&2
+  exit 1
 fi
 
 launcher_root="${prefix}/bin"
@@ -632,6 +657,17 @@ release_digest="$("${release_manifest}" write "${staging}" "${source_revision}")
 if [[ ! "${release_digest}" =~ ^[0-9a-f]{64}$ ]]; then
   echo "The staged release recorded no usable release digest." >&2
   exit 1
+fi
+if [[ -n "${publication_dir}" ]]; then
+  release_archive="${scratch}/release.zip"
+  "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest archive \
+    --root "${staging}" --output "${release_archive}"
+  "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest publish \
+    --archive "${release_archive}" --destination "${publication_dir}"
+fi
+if [[ "${build_only}" == true ]]; then
+  echo "Built the portable Code Polishy publication at ${publication_dir}."
+  exit 0
 fi
 release_id="${code_polishy_version}-${release_digest}"
 destination="${staging_root}/${release_id}"

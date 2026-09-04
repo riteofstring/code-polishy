@@ -585,7 +585,7 @@ func writeBehaviorReviewCLICanonicalGuidance(t *testing.T, root string) {
 		}
 		writeBehaviorReviewCLIFile(t, root, name, string(contents))
 	}
-	writeBehaviorReviewCLIFile(t, root, ".gitignore", "/.code-polishy-reports/\n")
+	writeBehaviorReviewCLIFile(t, root, ".gitignore", "/.code-polishy-reports/\n/.code-polishy-artifacts/\n")
 }
 
 func commitBehaviorReviewCLICandidate(t *testing.T, root string) {

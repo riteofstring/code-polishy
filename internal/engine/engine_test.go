@@ -792,7 +792,7 @@ func TestTestPlanWithBaseReportsPolicySelectedMergeLevelWithoutExecutingSuites(t
 			if !strings.Contains(strings.Join(report.Notes, "\n"), "merge-gate --base main") {
 				t.Fatalf("plan notes = %v", report.Notes)
 			}
-			if len(report.Tables) != 1 || !strings.Contains(report.Tables[0].Title, "TEST LEVELS") {
+			if len(report.Tables) < 1 || !strings.Contains(report.Tables[0].Title, "TEST LEVELS") {
 				t.Fatalf("test-level table = %+v", report.Tables)
 			}
 			if width := tableWidth(report.Tables[0]); width > 80 {
@@ -824,7 +824,7 @@ func tableWidth(table Table) int {
 func TestVerifyDoesNotRunSupplementalSuites(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	config := policy.Config{Tests: policy.Testing{Suites: []policy.TestSuite{
+	config := policy.Config{Version: policy.ConfigVersion, Tests: policy.Testing{Suites: []policy.TestSuite{
 		{Name: "full", Kind: "contract", Scope: "repository", Cost: "standard", RunOn: []string{"full"}},
 		{Name: "mutation", Kind: "mutation", Scope: "repository", Cost: "expensive", RunOn: []string{"supplemental"}},
 	}}}

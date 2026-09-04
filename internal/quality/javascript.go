@@ -203,6 +203,7 @@ func javascriptLimit(value, fallback int) int {
 }
 
 func javascriptLintActivation(repo repository.Repository, path string) javascript.LintActivation {
+	path = repo.JavaScriptContextPath(path)
 	activation := javascript.LintActivation{}
 	nearest := ""
 	for _, scope := range repo.Config.JavaScriptLintScopes {
@@ -354,7 +355,7 @@ func JavaScriptTypeCheckFindings(ctx context.Context, repo repository.Repository
 	defer cancel()
 	bundle := javascript.Bundle{PolicyRoot: repo.PolicyRoot}
 	for _, project := range projects {
-		result, err := bundle.TypeCheck(ctx, repo.Root, project.project, project.paths)
+		result, err := bundle.TypeCheckInherited(ctx, repo.Root, project.project, project.paths, project.inherited)
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
 		}
@@ -364,8 +365,9 @@ func JavaScriptTypeCheckFindings(ctx context.Context, repo repository.Repository
 }
 
 type javascriptTypeCheckProject struct {
-	project string
-	paths   []string
+	project   string
+	paths     []string
+	inherited []string
 }
 
 func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []string) ([]javascriptTypeCheckProject, []string) {
@@ -373,7 +375,8 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 	grouped := map[string][]string{}
 	ungoverned := []string{}
 	for _, path := range javascriptTypeCheckFiles(repo, files) {
-		project, governed := javascriptNearestProject(configurations, path)
+		contextPath := repo.JavaScriptContextPath(path)
+		project, governed := javascriptNearestProject(configurations, contextPath)
 		if !governed {
 			ungoverned = append(ungoverned, path)
 			continue
@@ -387,7 +390,13 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 	sort.Strings(names)
 	projects := make([]javascriptTypeCheckProject, 0, len(names))
 	for _, name := range names {
-		projects = append(projects, javascriptTypeCheckProject{project: name, paths: grouped[name]})
+		inherited := []string{}
+		for _, path := range grouped[name] {
+			if _, found := repo.GeneratedJavaScriptOwner(path); found {
+				inherited = append(inherited, path)
+			}
+		}
+		projects = append(projects, javascriptTypeCheckProject{project: name, paths: grouped[name], inherited: inherited})
 	}
 	return projects, ungoverned
 }
@@ -539,7 +548,7 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 				"the policy-owned dead-code analyzer does not analyze this file"})
 			continue
 		}
-		owner, owned := javascriptOwningPackage(packages, path)
+		owner, owned := javascriptOwningPackage(packages, repo.JavaScriptContextPath(path))
 		if !owned {
 			uncovered = append(uncovered, javascriptUncoveredFile{path,
 				"no package.json governs this file, so no package declares what it belongs to"})
@@ -551,6 +560,9 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 			grouped[owner] = workspace
 		}
 		workspace.Project = append(workspace.Project, path)
+		if _, inherited := repo.GeneratedJavaScriptOwner(path); inherited {
+			workspace.Inherited = append(workspace.Inherited, path)
+		}
 		if javascriptEntryPoint(repo, owner, path) {
 			workspace.Entry = append(workspace.Entry, path)
 		}
@@ -586,7 +598,8 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 	for root, workspace := range grouped {
 		sort.Strings(workspace.Entry)
 		sort.Strings(workspace.Project)
-		directory := javascriptOutermostPackage(packages, root)
+		sort.Strings(workspace.Inherited)
+		directory := javascriptDeadCodeDirectory(packages, root, workspace.Project)
 		trees[directory] = append(trees[directory], *workspace)
 	}
 	directories := make([]string, 0, len(trees))
@@ -603,6 +616,19 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 		analyses = append(analyses, javascriptDeadCodeAnalysis{directory: directory, workspaces: workspaces})
 	}
 	return analyses
+}
+
+func javascriptDeadCodeDirectory(packages map[string]bool, root string, paths []string) string {
+	directory := javascriptOutermostPackage(packages, root)
+	for _, path := range paths {
+		for !javascriptScopeOwns(directory, path) {
+			if directory == "." {
+				return directory
+			}
+			directory = filepath.ToSlash(filepath.Dir(directory))
+		}
+	}
+	return directory
 }
 
 func javascriptOutermostPackage(packages map[string]bool, root string) string {

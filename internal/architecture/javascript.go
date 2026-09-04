@@ -79,6 +79,9 @@ func javascriptImportSources(repo repository.Repository, selected []string) ([]s
 }
 
 func javascriptImportFinding(repo repository.Repository, governed map[string]bool, fact javascript.ImportFact) (policy.Finding, bool) {
+	if repo.IsTest(fact.Path) {
+		return policy.Finding{}, false
+	}
 	if fact.Resolved == "" || !governed[fact.Resolved] {
 		return policy.Finding{}, false
 	}
@@ -163,6 +166,7 @@ func newNodePackages(repo repository.Repository, allFiles []string) *nodePackage
 }
 
 func (packages *nodePackages) owning(path string) (nodePackage, bool) {
+	path = packages.repo.JavaScriptContextPath(path)
 	directory := filepath.ToSlash(filepath.Dir(path))
 	for {
 		if packages.owners[directory] {

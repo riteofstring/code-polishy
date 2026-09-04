@@ -272,7 +272,8 @@ func (output *boundedOutput) Write(data []byte) (int, error) {
 
 func commandEnvironment(specification policy.Command, pathEntries []string) ([]string, func(), error) {
 	if !specification.SealedEnvironment {
-		return EnvironmentWithPath(specification.Environment, pathEntries), func() {}, nil
+		environment, err := applyEnvironmentOverrides(EnvironmentWithPath(specification.Environment, pathEntries), specification.EnvironmentOverrides)
+		return environment, func() {}, err
 	}
 	root, err := os.MkdirTemp("", "code-polishy-command-")
 	if err != nil {
@@ -299,7 +300,56 @@ func commandEnvironment(specification policy.Command, pathEntries []string) ([]s
 		"npm_config_globalconfig=" + absentConfiguration,
 	}
 	environment = append(environment, explicitlySelectedEnvironment(specification.Environment)...)
+	environment, err = applyEnvironmentOverrides(environment, specification.EnvironmentOverrides)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return nil, nil, err
+	}
 	return environment, func() { _ = os.RemoveAll(root) }, nil
+}
+
+func applyEnvironmentOverrides(environment, overrides []string) ([]string, error) {
+	if len(overrides) == 0 {
+		return environment, nil
+	}
+	names := map[string]bool{}
+	parsed := make([]string, 0, len(overrides))
+	for _, override := range overrides {
+		name, value, found := strings.Cut(override, "=")
+		if !found || !validEnvironmentOverrideName(name) || strings.ContainsRune(value, 0) || names[name] {
+			return nil, errors.New("command environment override is invalid")
+		}
+		names[name] = true
+		parsed = append(parsed, override)
+	}
+	result := make([]string, 0, len(environment)+len(parsed))
+	for _, entry := range environment {
+		name, _, found := strings.Cut(entry, "=")
+		if !found || !names[name] {
+			result = append(result, entry)
+		}
+	}
+	return append(result, parsed...), nil
+}
+
+func validEnvironmentOverrideName(name string) bool {
+	if name == "" || asciiDigit(rune(name[0])) {
+		return false
+	}
+	for _, character := range name {
+		if character != '_' && !asciiLetter(character) && !asciiDigit(character) {
+			return false
+		}
+	}
+	return true
+}
+
+func asciiLetter(character rune) bool {
+	return character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z'
+}
+
+func asciiDigit(character rune) bool {
+	return character >= '0' && character <= '9'
 }
 
 func explicitlySelectedEnvironment(requested []string) []string {

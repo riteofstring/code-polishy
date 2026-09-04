@@ -52,6 +52,14 @@ var (
 	hostPattern     = regexp.MustCompile(`^[a-z0-9]+-[a-z0-9]+$`)
 )
 
+var supportedReleaseHosts = []string{
+	"darwin-arm64",
+	"darwin-x64",
+	"linux-arm64",
+	"linux-x64",
+	"windows-x64",
+}
+
 type Lock struct {
 	LockVersion        int      `json:"lockVersion"`
 	CodePolishyVersion string   `json:"codePolishyVersion"`
@@ -308,10 +316,23 @@ func validateManifestIdentity(manifest Manifest, source string) error {
 	if !revisionPattern.MatchString(manifest.SourceRevision) {
 		return fmt.Errorf("%s records the unusable source revision %q", source, manifest.SourceRevision)
 	}
-	if !hostPattern.MatchString(manifest.Host) {
+	if !hostPattern.MatchString(manifest.Host) || !slices.Contains(supportedReleaseHosts, manifest.Host) {
 		return fmt.Errorf("%s records the unusable host %q", source, manifest.Host)
 	}
 
+	if err := validateManifestToolPins(manifest, source); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(manifest.ReleaseDigest) || !digestPattern.MatchString(manifest.ContentDigest) {
+		return fmt.Errorf("%s records an unusable release or content digest", source)
+	}
+	if err := validateFeatures(manifest.Features); err != nil {
+		return fmt.Errorf("%s %w", source, err)
+	}
+	return nil
+}
+
+func validateManifestToolPins(manifest Manifest, source string) error {
 	pins := []struct{ tool, version string }{
 		{"Go", manifest.Tools.Go}, {"govulncheck", manifest.Tools.Govulncheck},
 		{"Node", manifest.Tools.Node}, {"OSV-Scanner", manifest.Tools.OSVScanner},
@@ -332,12 +353,6 @@ func validateManifestIdentity(manifest Manifest, source string) error {
 			return fmt.Errorf("%s records the unusable %s version %q", source, pin.tool, pin.version)
 		}
 	}
-	if !digestPattern.MatchString(manifest.ReleaseDigest) || !digestPattern.MatchString(manifest.ContentDigest) {
-		return fmt.Errorf("%s records an unusable release or content digest", source)
-	}
-	if err := validateFeatures(manifest.Features); err != nil {
-		return fmt.Errorf("%s %w", source, err)
-	}
 	return nil
 }
 
@@ -357,10 +372,14 @@ func validateEntries(manifest Manifest, source string) error {
 			return fmt.Errorf("%s does not record its entries once each in order, at %q", source, entry.Path)
 		}
 	}
+	binaryPath := "bin/code-polishy"
+	if manifest.Host == "windows-x64" {
+		binaryPath = "bin/code-polishy.exe"
+	}
 	if !slices.ContainsFunc(manifest.Entries, func(entry Entry) bool {
-		return entry.Path == BinaryPath && entry.SHA256 != ""
+		return entry.Path == binaryPath && entry.SHA256 != ""
 	}) {
-		return fmt.Errorf("%s records no %s, so it is not a release that can run", source, BinaryPath)
+		return fmt.Errorf("%s records no %s, so it is not a release that can run", source, binaryPath)
 	}
 	if releaseEntriesDigest(manifest.Entries) != manifest.ContentDigest {
 		return fmt.Errorf("%s content digest does not match its entry list", source)

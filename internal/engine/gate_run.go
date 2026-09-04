@@ -17,6 +17,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/testartifact"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
 type MergeGateOptions struct {
@@ -31,18 +33,24 @@ type gateRunController struct {
 	workingTreeCandidate bool
 	behaviorReview       gaterun.BehaviorReview
 	behaviorStatus       BehaviorReviewStatus
+	artifactExecution    *testartifact.Execution
+	alreadyPassed        *gaterun.Report
+	alreadyPassedPath    string
 }
 
 type gateArtifactRunner struct {
-	delegate    runner.Runner
-	run         *gaterun.Run
-	expected    []MergeGateExecutionCommand
-	reusable    map[int]gaterun.ReusableReceipt
-	logPaths    map[testLogKey]string
-	failedTests map[string]int
-	progress    io.Writer
-	next        int
-	err         error
+	delegate          runner.Runner
+	run               *gaterun.Run
+	expected          []MergeGateExecutionCommand
+	reusable          map[int]gaterun.ReusableReceipt
+	logPaths          map[testLogKey]string
+	failedTests       map[string]int
+	artifacts         map[testLogKey][]testartifact.Record
+	artifactExecution *testartifact.Execution
+	receipts          *testReceiptController
+	progress          io.Writer
+	next              int
+	err               error
 }
 
 type testLogKey struct {
@@ -56,9 +64,26 @@ type gateDiagnosticRunner struct {
 
 func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorStatus BehaviorReviewStatus, resume bool) (*gateRunController, error) {
 	behaviorReview := gaterunBehaviorReview(behaviorStatus)
-	identity, err := gateRunIdentity(engine, gate, requestedBase, exactBase, candidate, level, commands, behaviorReview)
+	receipts, err := gateTestReceiptController(engine, commands)
 	if err != nil {
 		return nil, err
+	}
+	identity, err := gateRunIdentity(engine, gate, requestedBase, exactBase, candidate, level, commands, behaviorReview, receipts)
+	if err != nil {
+		return nil, err
+	}
+	if gate == gaterun.MergeGate {
+		prior, loadErr := gaterun.LoadReport(engine.Repository.Root, identity)
+		if loadErr == nil && prior.Status == gaterun.RunPassed {
+			path, pathErr := gaterun.StoredReportPath(prior)
+			if pathErr != nil {
+				return nil, pathErr
+			}
+			return &gateRunController{
+				candidate: candidate, requestedBase: requestedBase, behaviorReview: behaviorReview,
+				behaviorStatus: cloneBehaviorReviewStatus(behaviorStatus), alreadyPassed: &prior, alreadyPassedPath: path,
+			}, nil
+		}
 	}
 	reusable, err := reusableGateReceipts(engine.Repository.Root, gate, identity, resume)
 	if err != nil {
@@ -68,10 +93,15 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 	if err != nil {
 		return nil, err
 	}
-	commandRunner := newGateArtifactRunner(engine, run, commands, reusable)
+	artifactExecution, err := testartifact.Start(engine.Repository.Root, run.ExecutionID())
+	if err != nil {
+		return nil, err
+	}
+	commandRunner := newGateArtifactRunner(engine, run, commands, reusable, artifactExecution, receipts)
 	return &gateRunController{
 		run: run, runner: commandRunner, candidate: candidate, requestedBase: requestedBase,
 		behaviorReview: behaviorReview, behaviorStatus: cloneBehaviorReviewStatus(behaviorStatus),
+		artifactExecution: artifactExecution,
 	}, nil
 }
 
@@ -111,15 +141,36 @@ func reusableGateOutcome(outcome gaterun.CommandOutcome) bool {
 	return outcome.Category == gaterun.OrdinaryTest && outcome.Status == gaterun.Passed && outcome.ReceiptPath != ""
 }
 
-func newGateArtifactRunner(engine *Engine, run *gaterun.Run, commands []MergeGateExecutionCommand, reusable map[int]gaterun.ReusableReceipt) *gateArtifactRunner {
+func newGateArtifactRunner(engine *Engine, run *gaterun.Run, commands []MergeGateExecutionCommand, reusable map[int]gaterun.ReusableReceipt, artifacts *testartifact.Execution, receipts *testReceiptController) *gateArtifactRunner {
 	progress := engine.Output
 	if progress == nil {
 		progress = io.Discard
 	}
+	receipts.RenderPlan()
 	return &gateArtifactRunner{
 		delegate: engine.Runner, run: run, expected: commands, reusable: reusable,
-		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, progress: progress,
+		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, artifacts: map[testLogKey][]testartifact.Record{}, progress: progress,
+		artifactExecution: artifacts, receipts: receipts,
 	}
+}
+
+func gateTestReceiptController(engine *Engine, commands []MergeGateExecutionCommand) (*testReceiptController, error) {
+	suites := []policy.TestSuite{}
+	configured := map[string]policy.TestSuite{}
+	for _, suite := range engine.Repository.Config.Tests.Suites {
+		configured[suite.Name] = suite
+	}
+	for _, command := range commands {
+		if command.Category != gaterun.OrdinaryTest {
+			continue
+		}
+		suite, found := configured[command.Command.Name]
+		if !found {
+			return nil, fmt.Errorf("planned test suite %q is absent from the loaded configuration", command.Command.Name)
+		}
+		suites = append(suites, suite)
+	}
+	return newTestReceiptController(engine, suites, true)
 }
 
 func gateCandidateIdentity(repo repository.Repository, selection repository.Selection, allowWorkingTree bool) (string, bool, error) {
@@ -178,7 +229,7 @@ func workingTreeCandidateDigest(root string, selection repository.Selection) (st
 	return gaterun.ContentSHA256(payload), nil
 }
 
-func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorReview gaterun.BehaviorReview) (gaterun.Identity, error) {
+func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorReview gaterun.BehaviorReview, receipts *testReceiptController) (gaterun.Identity, error) {
 	configuration, err := json.Marshal(engine.Repository.Config)
 	if err != nil {
 		return gaterun.Identity{}, fmt.Errorf("encode loaded policy configuration: %w", err)
@@ -195,7 +246,7 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 	specifications := make([]gaterun.CommandSpec, 0, len(commands))
 	environmentNames := map[string]bool{}
 	for _, command := range commands {
-		specifications = append(specifications, gateRunCommandSpec(command))
+		specifications = append(specifications, gateRunCommandSpec(command, receipts))
 		for _, name := range command.Command.Environment {
 			environmentNames[name] = true
 		}
@@ -225,16 +276,31 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 	})
 }
 
-func gateRunCommandSpec(planned MergeGateExecutionCommand) gaterun.CommandSpec {
+func gateRunCommandSpec(planned MergeGateExecutionCommand, receipts *testReceiptController) gaterun.CommandSpec {
 	command := planned.Command
-	return gaterun.CommandSpec{
+	specification := gaterun.CommandSpec{
 		Category: planned.Category, Scope: planned.Scope, Cost: planned.Cost, Name: command.Name,
 		Provides: append([]string{}, command.Provides...), Argv: append([]string{}, command.Argv...), Cwd: command.Cwd,
 		Paths: append([]string{}, command.Paths...), Modules: append([]string{}, command.Modules...), RunOn: append([]string{}, command.RunOn...),
 		Environment: append([]string{}, command.Environment...), ExclusiveResources: append([]string{}, command.ExclusiveResources...),
 		TimeoutSeconds: command.TimeoutSeconds, Managed: command.Managed, PassFiles: command.PassFiles,
 		PassFilePaths: append([]string{}, command.PassFilePaths...), SealedEnvironment: command.SealedEnvironment,
+		Artifacts: gateRunArtifactSpecs(command.TestArtifacts),
 	}
+	if receipts != nil {
+		if identity, found := receipts.identities[command.Name]; found {
+			specification.SuiteIdentitySHA256, _ = identity.Digest()
+		}
+	}
+	return specification
+}
+
+func gateRunArtifactSpecs(artifacts []policy.TestArtifact) []gaterun.ArtifactSpec {
+	result := make([]gaterun.ArtifactSpec, len(artifacts))
+	for index, artifact := range artifacts {
+		result[index] = gaterun.ArtifactSpec{Path: artifact.Path, Type: artifact.Type, Required: artifact.Required}
+	}
+	return result
 }
 
 func gateBehaviorProofCommands(plan behaviorreview.GateReplayPlan) ([]MergeGateExecutionCommand, error) {
@@ -276,7 +342,7 @@ func gateBehaviorProofCommands(plan behaviorreview.GateReplayPlan) ([]MergeGateE
 
 func (controller *gateRunController) finalize(engine *Engine, report Report, gateErr error) (Report, error) {
 	controller.attachTestLogPaths(&report)
-	operationalErr := errors.Join(controller.runner.err, controller.candidateIntegrityError(engine))
+	operationalErr := errors.Join(controller.runner.err, controller.completeArtifacts(), controller.candidateIntegrityError(engine))
 	status := gateRunStatus(report, gateErr, operationalErr)
 	final, finalizeErr := controller.finalizeArtifact(status, report)
 	if finalizeErr != nil {
@@ -292,7 +358,7 @@ func (controller *gateRunController) finalize(engine *Engine, report Report, gat
 
 func (controller *gateRunController) preparePassed(engine *Engine, report *Report) (*gaterun.PreparedFinalization, error) {
 	controller.attachTestLogPaths(report)
-	if err := errors.Join(controller.runner.err, controller.candidateIntegrityError(engine)); err != nil {
+	if err := errors.Join(controller.runner.err, controller.completeArtifacts(), controller.candidateIntegrityError(engine)); err != nil {
 		return nil, err
 	}
 	return controller.run.PrepareFinalization(controller.finalizeOptions(gaterun.RunPassed, *report))
@@ -300,6 +366,7 @@ func (controller *gateRunController) preparePassed(engine *Engine, report *Repor
 
 func (controller *gateRunController) finalizeOperational(report Report, cause error) (Report, error) {
 	controller.attachTestLogPaths(&report)
+	cause = errors.Join(cause, controller.completeArtifacts())
 	final, err := controller.run.Finalize(controller.finalizeOptions(gaterun.RunOperational, report))
 	if err != nil {
 		report.GateRunPolicy = controller.gateRunPolicy(gaterun.RunOperational, gaterun.Report{})
@@ -307,6 +374,19 @@ func (controller *gateRunController) finalizeOperational(report Report, cause er
 	}
 	report.GateRunPolicy = controller.gateRunPolicy(gaterun.RunOperational, final)
 	return report, cause
+}
+
+func (controller *gateRunController) completeArtifacts() error {
+	if controller == nil || controller.artifactExecution == nil {
+		return nil
+	}
+	execution := controller.artifactExecution
+	controller.artifactExecution = nil
+	err := execution.Complete()
+	if err != nil {
+		_ = execution.Abandon()
+	}
+	return err
 }
 
 func (controller *gateRunController) attachTestLogPaths(report *Report) {
@@ -358,8 +438,19 @@ func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, r
 	}
 	return gaterun.FinalizeOptions{
 		Status: status, Findings: gateRunFindings(report.Findings), TestEvidence: gateRunTestEvidence(report.TestCommands),
-		Notes: append([]string{}, report.Notes...), TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics), BehaviorReview: behaviorReview,
+		Notes: append([]string{}, report.Notes...), TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics),
+		SuiteSatisfactions: gateRunSuiteSatisfactions(report.TestAggregations), BehaviorReview: behaviorReview,
 	}
+}
+
+func gateRunSuiteSatisfactions(aggregations []testpolicy.SuiteAggregation) []gaterun.SuiteSatisfactionInput {
+	result := make([]gaterun.SuiteSatisfactionInput, 0, len(aggregations))
+	for _, aggregation := range aggregations {
+		result = append(result, gaterun.SuiteSatisfactionInput{
+			Suite: aggregation.Suite, ExecutedBy: aggregation.ExecutedBy, Reason: aggregation.Reason,
+		})
+	}
+	return result
 }
 
 func gateRunFindings(findings []policy.Finding) []gaterun.Finding {
@@ -399,9 +490,22 @@ func gateRunTestEvidence(commands []TestCommandEvidence) []gaterun.TestEvidence 
 			ChangedPathOverlap: append([]string{}, command.ChangedPathOverlap...), Status: status,
 			FailureCategory: gaterun.FailureCategory(command.FailureCategory), FailureMessage: command.FailureMessage,
 			Attempt: command.Attempt, LogPath: command.LogPath, Diagnostic: command.Attempt > 1 || command.Target != "working-tree",
+			Artifacts: gateRunTestArtifacts(command.Artifacts),
+			Reused:    command.Reused, ReceiptSourcePath: command.ReceiptPath, ReceiptSourceSHA256: command.ReceiptSHA256,
 		})
 	}
 	return evidence
+}
+
+func gateRunTestArtifacts(records []testartifact.Record) []gaterun.TestArtifact {
+	artifacts := make([]gaterun.TestArtifact, len(records))
+	for index, record := range records {
+		artifacts[index] = gaterun.TestArtifact{
+			Suite: record.Suite, Path: record.Path, Type: record.Type, Required: record.Required,
+			Size: record.Size, SHA256: record.SHA256,
+		}
+	}
+	return artifacts
 }
 
 func gateRunTestDiagnostics(diagnostics []TestFailureDiagnostic) []gaterun.TestDiagnostic {

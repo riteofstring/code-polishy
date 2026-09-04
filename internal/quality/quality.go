@@ -275,6 +275,7 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
+	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
 	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)
 	findings = append(findings, customLanguageRuleFindings(repo, files)...)
 	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule)...)

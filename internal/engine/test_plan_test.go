@@ -25,6 +25,7 @@ func testPlanWithoutExecutingSuites(t *testing.T) (Report, *recordingEngineRunne
 	root := t.TempDir()
 	writeEngineFile(t, root, "domain/model.go", "package domain\n", 0o600)
 	config := policy.Config{
+		Version:      3,
 		Modules:      []policy.Module{{Name: "domain", Paths: []string{"domain/**"}}},
 		ModuleByName: map[string]int{"domain": 0},
 		Tests: policy.Testing{RequiredSupplementalKinds: []string{"mutation"}, Suites: []policy.TestSuite{
@@ -75,7 +76,7 @@ func assertSupplementalTestPlanNotes(t *testing.T, report Report, notes string) 
 
 func testPlanTable(t *testing.T, report Report) Table {
 	t.Helper()
-	if len(report.Tables) != 1 || !strings.Contains(report.Tables[0].Title, "TEST LEVELS") {
+	if len(report.Tables) < 1 || !strings.Contains(report.Tables[0].Title, "TEST LEVELS") {
 		t.Fatalf("test-level table = %+v", report.Tables)
 	}
 	return report.Tables[0]

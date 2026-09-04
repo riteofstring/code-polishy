@@ -19,7 +19,7 @@ and aliases. Search is local, bounded, and deterministic.
 ## Start here
 
 - [Installation](installation.md) explains exact-tag source installation,
-  native releases, manifests, and target locks.
+  portable archives, OCI execution, manifests, and target locks.
 - [AI-Agent Setup and Adoption](ai-adoption.md) is the authoritative procedural
   runbook for setup and upgrades performed by a coding agent.
 - [Adopting Code Polishy](adoption.md) is the detailed project-modeling
@@ -60,7 +60,7 @@ and aliases. Search is local, bounded, and deterministic.
   strict no-comment boundary.
 - [Source Provenance](source-provenance.md) records public design references,
   toolchain origins, and implementation boundaries.
-- [Release Checklist](release-checklist.md) defines the immutable annotated-tag
-  release process.
+- [Release Checklist](release-checklist.md) defines immutable tags, native
+  publications, and digest-pinned OCI releases.
 - [Adding a Language Pack](adding-a-language.md) defines local language
   packs, conformance verification, exact installation, and adapter protocol.

@@ -1,10 +1,10 @@
 # Installation
 
 Code Polishy runs from one verified native release built from an exact reviewed
-source version. The version tag is the distribution contract; GitHub Release
-assets are not part of installation. This page describes source installation,
-what it produces, how a target selects the exact release it requires, and what
-makes that release acceptable to run. Target configuration is covered in
+source version. The source tag, portable archive, and Linux OCI image all bind
+to that same commit and internal release digest. This page describes source and
+portable installation, how a target selects the exact release it requires, and
+what makes that release acceptable to run. Target configuration is covered in
 [Adoption](adoption.md).
 
 ## Agent-first workflow
@@ -48,10 +48,9 @@ From a verified checkout on Windows x64, in PowerShell:
 ```
 
 Windows requires Git and PowerShell but does not need WSL or Git Bash. The
-PowerShell installer locally builds a temporary native ZIP, verifies its
-checksum and complete release manifest, installs it atomically, and deletes the
-ZIP. That archive is an internal staging boundary, not a downloaded or
-published release asset.
+PowerShell installer locally builds the same deterministic native ZIP format,
+verifies its checksum and complete release manifest, installs it atomically,
+and deletes its temporary archive.
 
 When Windows does not grant symlink creation privilege, pnpm materializes its
 isolated dependency graph with absolute directory junctions. The tool installer
@@ -78,6 +77,92 @@ fixed upstream publication metadata and enforces the shared 30-day minimum.
 Checksum verification proves which bytes were acquired; release-age admission
 proves the selected upstream release has matured or carries one exact,
 expiring assessment.
+
+## Portable archives
+
+Each supported host publishes one deterministic ZIP and adjacent checksum,
+internal manifest, CycloneDX 1.6 SBOM, SLSA provenance, and machine-readable
+release descriptor. The five hosts are `darwin-arm64`, `darwin-x64`,
+`linux-arm64`, `linux-x64`, and `windows-x64`. The descriptor binds every
+sidecar, the archive SHA-256, host-specific content digest, shared release
+digest, version, and source revision.
+
+From a clean Linux or macOS release checkout with tools already installed:
+
+```sh
+./scripts/build-release.sh --output /absolute/path/to/publication
+```
+
+On Windows x64:
+
+```powershell
+.\scripts\build-release.ps1 -Output C:\release\code-polishy.zip -PublicationDirectory C:\release\publication
+```
+
+Each command refuses an existing destination and publishes atomically. After
+all native builders finish, combine the five descriptors with repeated
+`--artifact-descriptor` options:
+
+```sh
+code-polishy release-manifest index \
+  --artifact-descriptor /release/darwin-arm64/*.release.json \
+  --artifact-descriptor /release/darwin-x64/*.release.json \
+  --artifact-descriptor /release/linux-arm64/*.release.json \
+  --artifact-descriptor /release/linux-x64/*.release.json \
+  --artifact-descriptor /release/windows-x64/*.release.json \
+  --output /release/code-polishy-release-index.json
+```
+
+The index is written only when every descriptor and sidecar validates, all five
+hosts appear exactly once, and every host names one version and source commit.
+Downloading and digest custody belong to the caller or CI. Given already
+acquired bytes and their trusted SHA-256, installation remains local:
+
+```sh
+code-polishy install-bundle \
+  --source /absolute/path/code-polishy-<version>-<host>.zip \
+  --sha256 <archive-sha256> \
+  --prefix /opt/code-polishy
+```
+
+The installer accepts no URL, tag, redirect, or relative source. It verifies the
+archive digest, host, complete internal manifest, and launcher before atomically
+publishing the release and stable launcher.
+
+## Digest-pinned OCI execution
+
+Linux images are built from the verified publication archive instead of a
+second release tree. On the matching Linux architecture:
+
+```sh
+./scripts/build-oci-image.sh \
+  --publication-dir /release/linux-x64 \
+  --image registry.example/code-polishy:v<VERSION> \
+  --push
+```
+
+Buildx emits SBOM and provenance attestations and prints the registry's exact
+image digest. Tags aid discovery only. Every workflow and invocation uses the
+reported `registry.example/code-polishy@sha256:...` identity. The image runs as
+non-root user 65532, starts in `/workspace`, keeps the stable launcher on
+`PATH`, and verifies its internal release on every command.
+
+A GitLab job may use the image directly:
+
+```yaml
+policy:
+  image:
+    name: registry.example/code-polishy@sha256:<digest>
+    entrypoint: [""]
+  script:
+    - code-polishy merge-gate --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+```
+
+The equivalent GitHub Actions job sets
+`container: registry.example/code-polishy@sha256:<digest>` and runs the same
+command after checkout. Private or self-managed GitLab needs only registry
+access or a mirrored digest; Code Polishy needs no GitLab account, API token,
+monitoring provider, or machine-global runner installation.
 
 The Unix prefix defaults to `~/.local/share/code-polishy`; the Windows prefix
 defaults to `%LOCALAPPDATA%\CodePolishy`. Releases are installed under
@@ -333,7 +418,8 @@ Development still runs the source runner. This repository's `AGENTS.md` is the
 same exact canonical file every target receives, so the installed release
 governs the checkout without a guidance exception. `agents sync` replaces that
 whole file when a later locked release changes the canonical contract and
-repairs the root `.gitignore` rule that keeps report artifacts workspace-local.
+repairs the root `.gitignore` rules that keep report and test artifacts
+workspace-local.
 
 ## Exercising an installed release
 

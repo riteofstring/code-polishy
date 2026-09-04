@@ -319,6 +319,39 @@ func TestParseTestRequestRejectsSupplementalWithFull(t *testing.T) {
 	}
 }
 
+func TestParseTestOptionsAllowsResumeOnlyForSupplemental(t *testing.T) {
+	t.Parallel()
+	options, err := parseTestOptions([]string{"--supplemental", "--resume"})
+	if err != nil || validateTestOptions(options) != nil || !options.request.Resume {
+		t.Fatalf("options = %+v, error = %v", options, err)
+	}
+	options, err = parseTestOptions([]string{"--resume"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateTestOptions(options); err == nil {
+		t.Fatal("test --resume without --supplemental was accepted")
+	}
+}
+
+func TestParseTestReceiptOptionsRequiresOneCompleteMode(t *testing.T) {
+	t.Parallel()
+	output := filepath.Join(t.TempDir(), "receipts.json")
+	options, err := parseTestReceiptOptions([]string{"export", "--output", output})
+	if err != nil || options.mode != "export" || options.output != output {
+		t.Fatalf("export options = %+v, error = %v", options, err)
+	}
+	options, err = parseTestReceiptOptions([]string{"import", "--source", output, "--sha256", strings.Repeat("a", 64)})
+	if err != nil || options.mode != "import" || options.source != output {
+		t.Fatalf("import options = %+v, error = %v", options, err)
+	}
+	for _, arguments := range [][]string{{}, {"export"}, {"import", "--source", output}, {"unknown"}} {
+		if _, err := parseTestReceiptOptions(arguments); err == nil {
+			t.Fatalf("accepted incomplete options %v", arguments)
+		}
+	}
+}
+
 func TestParseBaseOption(t *testing.T) {
 	t.Parallel()
 	base, err := parseBaseOption("test-plan", []string{"--base", "origin/main"})

@@ -208,6 +208,12 @@ be acyclic. Omitting `dependsOn` means the module may use only itself and
 external packages. That makes foundational domain modules independent by
 construction.
 
+Tests use the same one-module ownership map to say which production boundary
+they verify, but their imports are omitted from the production graph. A test may
+exercise collaborators or span modules without authorizing the owning module's
+production code to depend on them. `scope.tests` adds unconventional test paths;
+every governed test must be included by a quick focused suite for its owner.
+
 The Go adapter parses imports with Go's parser, resolves every nested `go.mod`,
 and rejects an internal import whose target module is not a declared direct
 dependency.
@@ -221,6 +227,13 @@ workspace link points at all resolve the way the ecosystem resolves them.
 Static and dynamic imports, `export ... from`, type-only imports, and a literal
 `require` are all edges. Resolution reads only inside the repository, so a
 specifier that climbs out of it names nothing.
+
+Generated JavaScript and TypeScript may declare one
+`scope.generatedJavaScript[].sourcePackage`. The output inherits that real
+package's workspace, manifest, lockfile, TypeScript resolution, dependency
+context, and module owner. It stays generated and non-rewritable; no synthetic
+package boundary is accepted. Missing, overlapping, stale, non-generated, or
+cyclic ownership fails before import evidence is trusted.
 
 An import that names nothing the repository governs crosses no declared module
 boundary: an external package resolves into an installed tree, and a package
@@ -352,6 +365,15 @@ classes impossible.
 Architecture exceptions use the central exception list, matching the exact
 architecture check, source path, and target subject. There is no permanent
 per-module ignore list, and policy coverage itself cannot be exempted.
+
+## Architecture summary
+
+`code-polishy architecture` always reports, per module, production-file count,
+test-file count, incoming and outgoing declared dependencies, and quick focused
+suite count. These facts make oversized or overly central modules visible for
+review. Names, file counts, percentages, and dependency degree are not arbitrary
+blocking thresholds; exact ownership, acyclic direction, import evidence, and
+focused test coverage remain the enforced invariants.
 
 ## Architecture review template
 

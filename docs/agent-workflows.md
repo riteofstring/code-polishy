@@ -78,7 +78,9 @@ tree. On a long-lived branch, finish each completed code-changing task with
 and completing any selected behavior review. At a genuine merge checkpoint,
 run one `code-polishy merge-gate --base <merge-target>` for the unchanged final
 candidate. Local and CI execution need separate final gates only when the caller
-explicitly requests independent evidence.
+explicitly requests independent evidence. Honor `verification.finalGateOwner`:
+`local` is the default, while `ci` means the checked-in workflow owns that one
+final execution.
 
 A stable release candidate is the exact committed tree intended for tagging,
 with ordinary verification green and no planned source or policy edits. Run
@@ -117,13 +119,29 @@ A merge reminder always preserves the merge-target-wide changed-test count. If
 a valid checkpoint receipt is bound to the candidate, it also names the latest
 task slice and its base. This advisory data never changes merge selection.
 
-Use `code-polishy merge-gate --base <merge-target> --resume` only to retry a
-failed merge gate. It can reuse a successful ordinary test suite with a valid
-receipt from the same content identity. Changes to the exact base, candidate,
-release, configuration, command plan, platform, or declared command environment
-prevent reuse. All non-test phases, behavior-proof replays, failed commands,
-and commands without valid receipts run again; a normal merge gate does not
-reuse prior work.
+An identical passed merge-gate identity reports `already-passed` and executes no
+validation commands. A new gate automatically reuses successful suite receipts
+only when their complete release, platform, toolchain, command, configuration,
+environment, ownership, and file-input identities still match. All non-test
+phases, behavior-proof replays, failed commands, and unbounded suites execute.
+
+Use `code-polishy merge-gate --base <merge-target> --resume` only to retry an
+otherwise-identical failed merge gate. It can additionally resume successful
+ordinary suites from that failed report. For an explicitly selected
+supplemental retry, use `code-polishy test --supplemental --resume`.
+
+CI may export current unexpired local receipts and import one bundle whose
+SHA-256 arrives through a trusted CI boundary:
+
+```sh
+code-polishy test-receipts export --output /tmp/test-receipts.json
+code-polishy test-receipts import \
+  --source /tmp/test-receipts.json \
+  --sha256 <trusted-bundle-sha256>
+```
+
+The bundle composes exact evidence; it does not aggregate partial shards or
+turn an incompatible receipt into a pass.
 
 Commit all completed task-owned changes after required verification unless the
 caller explicitly requests an uncommitted handoff. Keep each commit coherent

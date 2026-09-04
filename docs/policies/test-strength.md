@@ -101,7 +101,7 @@ trigger selects it:
 
 ```sh
 code-polishy test --suite orders-mutation
-code-polishy test --supplemental
+code-polishy test --supplemental --resume
 ```
 
 `test --supplemental` executes supplemental work directly. `test --all`,
@@ -110,13 +110,12 @@ code-polishy test --supplemental
 a trusted base, reports the level that `merge-gate` will select. It lists
 impact-relevant supplemental quality separately but executes none of it.
 
-The first stable release candidate runs the full supplemental set once. After a
-failure, run exact `test --suite` commands only for failed suites and passed
-suites invalidated by changes to their tested production files or tests, or
-their own commands or configuration. Fresh targeted evidence composes with
-still-valid passed suites. Repeat the full set only when shared mutation
-infrastructure, toolchain, or selection changes, or the impact cannot be
-bounded.
+At a stable release candidate, use `test --supplemental --resume` so exact
+receipts satisfy unchanged suites and only missing, failed, expired, or
+invalidated suites run. Run the full set only without a trusted baseline, after
+shared mutation infrastructure, toolchain, or selection changes, or when impact
+cannot be bounded. After a failure, exact `test --suite` evidence composes with
+remaining valid receipts.
 
 An AI collaborator should first stabilize focused tests and, at an ordinary
 merge checkpoint, run `merge-gate --base <merge-target>` without asking the

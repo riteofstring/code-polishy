@@ -274,6 +274,28 @@ func TestFinalizeBindsTypedTestEvidenceAndDiagnosticState(t *testing.T) {
 	}
 }
 
+func TestFinalizeBindsSuiteSatisfactionToRepresentativeReceipt(t *testing.T) {
+	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "aggregate")})
+	run := startRun(t, t.TempDir(), identity)
+	representative := recordAttempt(t, run, 0, Passed, 0, "passed", "", 16)
+	report, err := run.Finalize(FinalizeOptions{
+		Status: RunPassed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview,
+		SuiteSatisfactions: []SuiteSatisfactionInput{{Suite: "component", ExecutedBy: "aggregate", Reason: "covered"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.SuiteSatisfactions) != 1 || report.SuiteSatisfactions[0].ReceiptPath != representative.ReceiptPath ||
+		report.SuiteSatisfactions[0].ReceiptSHA256 != representative.ReceiptSHA256 {
+		t.Fatalf("suite satisfaction = %+v, representative = %+v", report.SuiteSatisfactions, representative)
+	}
+	tampered := cloneReport(report)
+	tampered.SuiteSatisfactions[0].ReceiptSHA256 = strings.Repeat("a", 64)
+	if err := validateReport(tampered, identity); !errors.Is(err, ErrInvalidArtifact) {
+		t.Fatalf("validateReport() error = %v, want invalid artifact", err)
+	}
+}
+
 func TestFinalizeRecordsBehaviorReviewReplayFailure(t *testing.T) {
 	for _, withReceipt := range []bool{false, true} {
 		t.Run(fmt.Sprintf("receipt=%t", withReceipt), func(t *testing.T) {

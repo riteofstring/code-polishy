@@ -23,6 +23,7 @@
     ]
   },
   "verification": {
+    "finalGateOwner": "ci",
     "mergeGate": {
       "recommendedModules": [
         "policy",
@@ -67,7 +68,18 @@
     },
     {
       "name": "gaterun",
-      "paths": ["internal/gaterun/**"]
+      "paths": ["internal/gaterun/**"],
+      "dependsOn": ["testreceipt"]
+    },
+    {
+      "name": "testartifact",
+      "paths": ["internal/testartifact/**"],
+      "dependsOn": ["policy"]
+    },
+    {
+      "name": "testreceipt",
+      "paths": ["internal/testreceipt/**"],
+      "dependsOn": ["policy", "testartifact"]
     },
     {
       "name": "finalstate",
@@ -109,7 +121,7 @@
     {
       "name": "testing",
       "paths": ["internal/testing/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["policy", "repository", "runner", "testartifact"]
     },
     {
       "name": "supplychain",
@@ -155,6 +167,8 @@
         "repository",
         "runner",
         "supplychain",
+        "testartifact",
+        "testreceipt",
         "testing"
       ]
     },
@@ -170,7 +184,8 @@
         "policy",
         "release",
         "runner",
-        "testing"
+        "testing",
+        "testreceipt"
       ]
     },
     {
@@ -182,6 +197,7 @@
       "name": "tooling",
       "paths": [
         "bin/**",
+        "release/**",
         "scripts/**",
         "skills/**",
         "templates/CLAUDE.md",
@@ -202,6 +218,8 @@
         "repository",
         "runner",
         "gaterun",
+        "testartifact",
+        "testreceipt",
         "finalstate",
         "behaviorreview",
         "documentation",
@@ -261,6 +279,20 @@
         "scope": "module",
         "modules": ["gaterun"],
         "argv": ["go", "test", "-count=1", "./internal/gaterun/..."]
+      },
+      {
+        "name": "testartifact-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["testartifact"],
+        "argv": ["go", "test", "-count=1", "./internal/testartifact/..."]
+      },
+      {
+        "name": "testreceipt-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["testreceipt"],
+        "argv": ["go", "test", "-count=1", "./internal/testreceipt/..."]
       },
       {
         "name": "finalstate-unit",
@@ -398,11 +430,15 @@
         "cost": "quick",
         "paths": [
           "scripts/install.sh",
+          "scripts/build-oci-image.sh",
+          "scripts/build-release.ps1",
+          "scripts/build-release.sh",
           "scripts/release-manifest.sh",
           "scripts/release-version.sh",
           "scripts/test-install.sh",
           "cmd/code-polishy-launcher/**",
           "internal/release/**",
+          "release/**",
           "templates/**",
           "tools/*-version.txt",
           "tools/javascript/**",
@@ -542,47 +578,38 @@
         "name": "policy-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["policy"],
         "argv": ["./scripts/go-mutation.sh", "./internal/policy"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "repository-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["repository"],
         "argv": ["./scripts/go-mutation.sh", "./internal/repository"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "runner-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["runner"],
         "argv": ["./scripts/go-mutation.sh", "./internal/runner"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "gaterun-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["gaterun"],
         "argv": ["./scripts/go-mutation.sh", "./internal/gaterun"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "behaviorreview-artifacts-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["behaviorreview"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -590,14 +617,12 @@
           "--exclude-files",
           "(^|/)(intent|proof|requirements|review|review_material|selection)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "behaviorreview-intent-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["behaviorreview"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -605,14 +630,12 @@
           "--exclude-files",
           "(^|/)(artifact.*|checkpoint|common|final_state|proof|review|types)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "behaviorreview-proof-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["behaviorreview"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -620,54 +643,44 @@
           "--exclude-files",
           "(^|/)(artifact.*|checkpoint|common|final_state|intent|requirements|review_material|selection|types)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "documentation-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["documentation"],
         "argv": ["./scripts/go-mutation.sh", "./internal/documentation"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "agents-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["agents"],
         "argv": ["./scripts/go-mutation.sh", "./internal/agents"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "release-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["release"],
         "argv": ["./scripts/go-mutation.sh", "./internal/release"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "javascript-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["javascript"],
         "argv": ["./scripts/go-mutation.sh", "./internal/javascript"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-comments-core-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -676,14 +689,12 @@
           "--exclude-files",
           "(^|/)(comments_(python|shell|web)|javascript|markdown.*|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-comments-python-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -692,14 +703,12 @@
           "--exclude-files",
           "(^|/)(comments|comments_(shell|web)|javascript|markdown.*|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-comments-shell-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -710,14 +719,12 @@
           "--exclude-files",
           "(^|/)(comments|comments_(python|web)|javascript|markdown.*|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-comments-web-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -726,14 +733,12 @@
           "--exclude-files",
           "(^|/)(comments|comments_(python|shell)|javascript|markdown.*|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-analysis-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -742,14 +747,12 @@
           "--exclude-files",
           "(^|/)(comments.*|markdown.*|vulture)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-vulture-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -758,14 +761,12 @@
           "--exclude-files",
           "(^|/)(comments.*|data|javascript|markdown.*|python|python_inventory|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "quality-markdown-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -774,24 +775,20 @@
           "--exclude-files",
           "(^|/)(comments.*|javascript|quality)[.]go$"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "architecture-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["architecture"],
         "argv": ["./scripts/go-mutation.sh", "./internal/architecture"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "testing-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["testing"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -799,44 +796,36 @@
           "--timeout-coefficient",
           "8"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "supplychain-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["supplychain"],
         "argv": ["./scripts/go-mutation.sh", "./internal/supplychain"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "artifactsecurity-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["artifactsecurity"],
         "argv": ["./scripts/go-mutation.sh", "./internal/artifactsecurity"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "policymodule-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["policymodule"],
         "argv": ["./scripts/go-mutation.sh", "./internal/policymodule"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "portability-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["portability"],
         "argv": [
           "./scripts/go-mutation.sh",
@@ -844,37 +833,30 @@
           "--timeout-coefficient",
           "7"
         ],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "engine-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["engine"],
         "argv": ["./scripts/go-mutation.sh", "./internal/engine"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "cli-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["cli"],
         "argv": ["./scripts/go-mutation.sh", "./cmd/code-polishy"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       },
       {
         "name": "launcher-mutation",
         "kind": "mutation",
         "scope": "module",
-        "cost": "expensive",
         "modules": ["launcher"],
         "argv": ["./scripts/go-mutation.sh", "./cmd/code-polishy-launcher"],
-        "runOn": ["supplemental"],
         "timeoutSeconds": 3600
       }
     ]

@@ -284,6 +284,9 @@ func pythonModuleDependencyFindings(
 }
 
 func pythonSourceModuleDependencyFindings(repo repository.Repository, source string, dependencies map[string]bool) []policy.Finding {
+	if repo.IsTest(source) {
+		return nil
+	}
 	findings := []policy.Finding{}
 	sourceOwners := repo.ModuleNames(source)
 	for target := range dependencies {

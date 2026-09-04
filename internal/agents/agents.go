@@ -17,7 +17,9 @@ const (
 	claudeTargetFilename       = "CLAUDE.md"
 	ignoreTargetFilename       = ".gitignore"
 	reportsIgnorePattern       = "/.code-polishy-reports/"
+	testArtifactsIgnorePattern = "/.code-polishy-artifacts/"
 	reportsDirectoryPath       = ".code-polishy-reports/"
+	testArtifactsDirectoryPath = ".code-polishy-artifacts/"
 	claudeImport               = "@AGENTS.md\n"
 	legacyClaudeRedirect       = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 )
@@ -280,7 +282,7 @@ func planReportIgnore(existing targetState, current bool) (mutation, bool, strin
 }
 
 func reportArtifactsIgnored(repoRoot string, contents []byte) (bool, error) {
-	if !containsReportIgnoreRule(contents) {
+	if !containsArtifactIgnoreRules(contents) {
 		return false, nil
 	}
 	if _, err := os.Lstat(filepath.Join(repoRoot, ".git")); errors.Is(err, os.ErrNotExist) {
@@ -288,22 +290,27 @@ func reportArtifactsIgnored(repoRoot string, contents []byte) (bool, error) {
 	} else if err != nil {
 		return false, fmt.Errorf("inspect Git repository metadata: %w", err)
 	}
-	command := exec.Command("git", "-C", repoRoot, "check-ignore", "--no-index", "--quiet", "--", reportsDirectoryPath)
-	if err := command.Run(); err == nil {
-		return true, nil
-	} else {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
-			return false, nil
+	for _, path := range []string{reportsDirectoryPath, testArtifactsDirectoryPath} {
+		command := exec.Command("git", "-C", repoRoot, "check-ignore", "--no-index", "--quiet", "--", path)
+		if err := command.Run(); err != nil {
+			var exitError *exec.ExitError
+			if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
+				return false, nil
+			}
+			return false, fmt.Errorf("verify report-artifact ignore behavior with Git: %w", err)
 		}
-		return false, fmt.Errorf("verify report-artifact ignore behavior with Git: %w", err)
 	}
+	return true, nil
 }
 
-func containsReportIgnoreRule(contents []byte) bool {
+func containsArtifactIgnoreRules(contents []byte) bool {
+	return containsExactIgnoreRule(contents, reportsIgnorePattern) && containsExactIgnoreRule(contents, testArtifactsIgnorePattern)
+}
+
+func containsExactIgnoreRule(contents []byte, pattern string) bool {
 	for _, line := range bytes.Split(contents, []byte("\n")) {
 		line = bytes.TrimSuffix(line, []byte("\r"))
-		if bytes.Equal(line, []byte(reportsIgnorePattern)) {
+		if bytes.Equal(line, []byte(pattern)) {
 			return true
 		}
 	}
@@ -319,8 +326,11 @@ func appendReportIgnore(contents []byte) []byte {
 	if len(updated) > 0 && !bytes.HasSuffix(updated, []byte("\n")) {
 		updated = append(updated, lineEnding...)
 	}
-	updated = append(updated, []byte(reportsIgnorePattern)...)
-	return append(updated, lineEnding...)
+	for _, pattern := range []string{reportsIgnorePattern, testArtifactsIgnorePattern} {
+		updated = append(updated, []byte(pattern)...)
+		updated = append(updated, lineEnding...)
+	}
+	return updated
 }
 
 type checkStatus struct {

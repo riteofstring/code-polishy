@@ -100,6 +100,15 @@ formatting path leaves its bytes unchanged. `scope.data` is therefore not an
 exclusion or a way to evade product validation. The configuration patterns and
 format-provider boundary are defined in [Adopting Code Polishy](../adoption.md#5-define-scope-narrowly).
 
+Generated JavaScript and TypeScript can inherit one real source package's
+analysis context through `scope.generatedJavaScript`. Each declaration maps
+exact generated paths to a contained `sourcePackage` manifest. The output stays
+non-rewritable, but uses that package's workspace, lock, TypeScript project,
+sealed lint activation, dead-code tree, dependency declarations, and module
+ownership. Missing, overlapping, non-generated, stale, or recursively generated
+owners are policy findings; a generated tree never needs a synthetic
+`package.json` or lockfile.
+
 ## Source comments and docstrings
 
 `quality.allowComments` is a boolean and defaults to `true`. When it is omitted
@@ -350,6 +359,34 @@ rather than becoming a broad ignore.
 `scope.entryPoints` remains a path-level reachability declaration and cannot
 substitute for this exact Python symbol contract.
 
+For an attribute written on a configuration object that an external runtime
+reads later, use `scope.pythonExternalAttributes` instead of preserving every
+same-named attribute:
+
+```json
+{
+  "scope": {
+    "pythonExternalAttributes": [
+      {
+        "project": "pyproject.toml",
+        "module": "service.runtime",
+        "callable": "configure",
+        "receiver": "settings",
+        "attribute": "timeout",
+        "line": 18,
+        "consumerType": "vendor.runtime.Settings"
+      }
+    ]
+  }
+}
+```
+
+The declaration resolves one current module and callable, an exactly annotated
+receiver parameter whose qualified type is external to the project, and one
+`receiver.attribute` write at the exact line. Only that assignment is treated
+as externally consumed. Wildcards, local or unresolved consumer types, stale
+lines, ambiguous callables, and adjacent unread attributes remain findings.
+
 `ty` runs with the release-owned configuration and structured output. Each
 diagnostic becomes one `quality.typecheck` finding with the contained path,
 reported line and column, rule, bounded message, and a subject of the form
@@ -415,6 +452,8 @@ surface, confuses tools and agents, and preserves superseded behavior.
   how it is spelled, so an import that leaves the repository — including through
   a link — reads as absent and the source only it reaches is reported as
   unreachable rather than kept alive by a tree the repository does not contain.
+  Generated JavaScript declared through `scope.generatedJavaScript` participates
+  in its source package's same dead-code tree.
 - Python dead-code analysis is Vulture `2.16` at the fixed 60% confidence
   threshold described above. Ruff `F` remains sealed lint only. Other languages
   need an explicit project command where a reliable tool is available.

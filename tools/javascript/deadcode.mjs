@@ -49,16 +49,28 @@ function insideDirectory(directory, path) {
 }
 
 function requireWorkspace(directory, workspace) {
+  if (!("inherited" in workspace)) {
+    workspace.inherited = [];
+  }
   requireExactObject(workspace, "a dead-code workspace", [
     "root",
     "entry",
     "project",
+    "inherited",
   ]);
   const named = JSON.stringify(workspace.root);
   requireContainedPath(workspace.root);
   if (!insideDirectory(directory, workspace.root)) {
     fail(`the dead-code workspace ${named} is outside the analyzed directory`);
   }
+  requireWorkspaceCollections(workspace, named);
+  const inherited = requireInheritedPaths(directory, workspace, named);
+  const owned = requireOwnedPaths(directory, workspace, inherited, named);
+  requireInheritedOwnership(inherited, owned, named);
+  requireWorkspaceEntries(workspace.entry, owned, named);
+}
+
+function requireWorkspaceCollections(workspace, named) {
   if (!Array.isArray(workspace.project) || workspace.project.length === 0) {
     fail(`the dead-code workspace ${named} selects no files`);
   }
@@ -67,17 +79,54 @@ function requireWorkspace(directory, workspace) {
       `the dead-code workspace ${named} declares entry points that are not an array`,
     );
   }
+  if (!Array.isArray(workspace.inherited)) {
+    fail(`the dead-code workspace ${named} has no inherited-path array`);
+  }
+}
+
+function requireInheritedPaths(directory, workspace, named) {
+  const inherited = new Set();
+  for (const path of workspace.inherited) {
+    requireContainedPath(path);
+    if (!insideDirectory(directory, path) || inherited.has(path)) {
+      fail(
+        `the dead-code workspace ${named} declares an invalid inherited path`,
+      );
+    }
+    inherited.add(path);
+  }
+  return inherited;
+}
+
+function requireOwnedPaths(directory, workspace, inherited, named) {
   const owned = new Set();
   for (const path of workspace.project) {
     requireContainedPath(path);
-    if (!insideDirectory(workspace.root, path)) {
+    if (
+      !insideDirectory(directory, path) ||
+      (!insideDirectory(workspace.root, path) && !inherited.has(path))
+    ) {
       fail(
-        `the dead-code workspace ${named} selects ${JSON.stringify(path)}, which it does not contain`,
+        `the dead-code workspace ${named} selects ${JSON.stringify(path)} outside the analyzed directory`,
       );
     }
     owned.add(path);
   }
-  for (const path of workspace.entry) {
+  return owned;
+}
+
+function requireInheritedOwnership(inherited, owned, named) {
+  for (const path of inherited) {
+    if (!owned.has(path)) {
+      fail(
+        `the dead-code workspace ${named} inherits a path it does not select`,
+      );
+    }
+  }
+}
+
+function requireWorkspaceEntries(entries, owned, named) {
+  for (const path of entries) {
     requireContainedPath(path);
     if (!owned.has(path)) {
       fail(
@@ -176,8 +225,18 @@ async function configurationFor(request, covered, unsupportedPaths) {
     workspaces[containedName(request.directory, workspace.root)] = {
       entry: workspace.entry
         .filter((path) => analyzed.has(path))
-        .map((path) => containedName(workspace.root, path)),
-      project: project.map((path) => containedName(workspace.root, path)),
+        .map((path) =>
+          relative(
+            join(request.root, workspace.root),
+            join(request.root, path),
+          ).replaceAll("\\", "/"),
+        ),
+      project: project.map((path) =>
+        relative(
+          join(request.root, workspace.root),
+          join(request.root, path),
+        ).replaceAll("\\", "/"),
+      ),
     };
   }
   const configuration = { workspaces };

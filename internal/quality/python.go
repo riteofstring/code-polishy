@@ -235,7 +235,7 @@ func pythonQualityCommands(repo repository.Repository, selected []string) []poli
 func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQualityPlan {
 	sources := pythonQualitySources(repo, selected)
 	selectedManifests := pythonQualitySelectedManifests(repo, selected)
-	if len(sources) == 0 && len(repo.Config.Scope.PythonDynamicReferences) == 0 && len(selectedManifests) == 0 {
+	if len(sources) == 0 && len(repo.Config.Scope.PythonDynamicReferences) == 0 && len(repo.Config.Scope.PythonExternalAttributes) == 0 && len(selectedManifests) == 0 {
 		return pythonQualityPlan{}
 	}
 	allFiles, err := repo.AllFiles()
@@ -243,6 +243,7 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 		message := "the Python project inventory is unavailable: " + err.Error()
 		findings := pythonQualityAllCoverage(sources, message)
 		findings = append(findings, pythonQualityDynamicReferenceInventoryFindings(repo, message)...)
+		findings = append(findings, pythonQualityExternalAttributeInventoryFindings(repo, message)...)
 		return pythonQualityPlan{findings: findings}
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
@@ -260,6 +261,14 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 			planned = append(planned, project)
 		}
 	}
+	planned, findings = pythonQualityReferenceOnlyProjects(repo, projects, selectedByProject, referenceOnly, planned, findings)
+	sort.Slice(planned, func(left, right int) bool {
+		return planned[left].project.Manifest < planned[right].project.Manifest
+	})
+	return pythonQualityPlan{projects: planned, findings: findings}
+}
+
+func pythonQualityReferenceOnlyProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject, referenceOnly map[string][]string, planned []pythonQualityProject, findings []policy.Finding) ([]pythonQualityProject, []policy.Finding) {
 	for _, manifest := range pythonQualityProjectManifests(referenceOnly) {
 		if _, selected := selectedByProject[manifest]; selected {
 			continue
@@ -277,10 +286,7 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 			project: project, commands: []pythonQualityCommand{{kind: pythonVultureQualityKind, command: command}},
 		})
 	}
-	sort.Slice(planned, func(left, right int) bool {
-		return planned[left].project.Manifest < planned[right].project.Manifest
-	})
-	return pythonQualityPlan{projects: planned, findings: findings}
+	return planned, findings
 }
 
 func pythonQualityAllCoverage(sources []string, message string) []policy.Finding {

@@ -1,0 +1,151 @@
+package policy
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+)
+
+func validateVerification(config *Config) error {
+	if err := validateFinalGateOwner(config.Verification.FinalGateOwner); err != nil {
+		return err
+	}
+	if err := validateTrustedMergeTarget(config.Verification.TrustedMergeTarget); err != nil {
+		return err
+	}
+	if err := validateBehaviorReview(config); err != nil {
+		return err
+	}
+	return validateMergeGate(config)
+}
+
+func validateFinalGateOwner(owner string) error {
+	if owner == "" {
+		return nil
+	}
+	return allowedValues([]string{owner}, []string{FinalGateOwnerLocal, FinalGateOwnerCI}, "verification.finalGateOwner")
+}
+
+func validateTrustedMergeTarget(target string) error {
+	if target == "" {
+		return nil
+	}
+	if strings.TrimSpace(target) != target || strings.HasPrefix(target, "-") || strings.ContainsAny(target, " \t\r\n\x00") {
+		return errors.New("verification.trustedMergeTarget must be a non-option Git reference without whitespace")
+	}
+	return nil
+}
+
+func validateMergeGate(config *Config) error {
+	mergeGate := config.Verification.MergeGate
+	if mergeGate == nil {
+		return nil
+	}
+	if len(mergeGate.RecommendedModules) == 0 {
+		return errors.New("verification.mergeGate.recommendedModules must not be empty")
+	}
+	if err := validateUniqueStrings(mergeGate.RecommendedModules, "verification.mergeGate.recommendedModules", true); err != nil {
+		return err
+	}
+	for _, module := range mergeGate.RecommendedModules {
+		if _, exists := config.ModuleByName[module]; !exists {
+			return fmt.Errorf("verification.mergeGate.recommendedModules references unknown module %q", module)
+		}
+	}
+	return nil
+}
+
+func validateBehaviorReview(config *Config) error {
+	behaviorReview := config.Verification.BehaviorReview
+	if behaviorReview == nil {
+		return nil
+	}
+	if err := allowedValues([]string{behaviorReview.DefaultRequiredAt}, []string{BehaviorReviewOnRequest, BehaviorReviewMerge, BehaviorReviewCheckpoint}, "verification.behaviorReview.defaultRequiredAt"); err != nil {
+		return err
+	}
+	featureNames := map[string]bool{}
+	for index, feature := range behaviorReview.Features {
+		label := fmt.Sprintf("verification.behaviorReview.features[%d]", index)
+		if err := validateBehaviorReviewFeature(config, *behaviorReview, feature, label, featureNames); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string, names map[string]bool) error {
+	if err := validateBehaviorReviewFeatureScope(config, feature, label, names); err != nil {
+		return err
+	}
+	if err := validateBehaviorReviewFeatureSuites(config, feature, label); err != nil {
+		return err
+	}
+	return validateBehaviorReviewFeatureRequirement(behaviorReview, feature, label)
+}
+
+func validateBehaviorReviewFeatureScope(config *Config, feature BehaviorReviewFeature, label string, names map[string]bool) error {
+	if err := identifier(feature.Name, label+".name"); err != nil {
+		return err
+	}
+	if names[feature.Name] {
+		return fmt.Errorf("duplicate behavior review feature name %q", feature.Name)
+	}
+	names[feature.Name] = true
+	if len(feature.Modules) == 0 && len(feature.Paths) == 0 {
+		return fmt.Errorf("%s must define at least one module or path", label)
+	}
+	if err := validateCommandModules(config, feature.Modules, label); err != nil {
+		return err
+	}
+	return validatePatterns(feature.Paths, label+".paths", false)
+}
+
+func validateBehaviorReviewFeatureSuites(config *Config, feature BehaviorReviewFeature, label string) error {
+	if len(feature.Suites) == 0 {
+		return fmt.Errorf("%s.suites must not be empty", label)
+	}
+	if err := validateUniqueStrings(feature.Suites, label+".suites", true); err != nil {
+		return err
+	}
+	for _, suiteName := range feature.Suites {
+		suite, err := referencedSuite(config.Tests.Suites, suiteName, label+".suites")
+		if err != nil {
+			return err
+		}
+		if !BehaviorReviewSuiteAllowed(suite) {
+			return fmt.Errorf("%s.suites references ineligible suite %q; behavior review evidence must be ordinary, non-credentialed, and non-destructive", label, suiteName)
+		}
+	}
+	return nil
+}
+
+func validateBehaviorReviewFeatureRequirement(behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string) error {
+	if feature.RequiredAt != "" && !slices.Contains([]string{BehaviorReviewMerge, BehaviorReviewCheckpoint}, feature.RequiredAt) {
+		return fmt.Errorf("%s.requiredAt must be merge or checkpoint when set", label)
+	}
+	if behaviorReviewRequirementRank(behaviorReview.EffectiveRequiredAt(feature)) < behaviorReviewRequirementRank(behaviorReview.DefaultRequiredAt) {
+		return fmt.Errorf("%s.requiredAt cannot weaken verification.behaviorReview.defaultRequiredAt", label)
+	}
+	return nil
+}
+
+func BehaviorReviewSuiteAllowed(suite TestSuite) bool {
+	return !slices.Contains(suite.RunOn, "supplemental") &&
+		!supplementalOnlyKind(suite.Kind) &&
+		!slices.Contains([]string{"live", "credentialed", "destructive"}, suite.Kind) &&
+		len(suite.Environment) == 0
+}
+
+func behaviorReviewRequirementRank(requiredAt string) int {
+	switch requiredAt {
+	case BehaviorReviewOnRequest:
+		return 0
+	case BehaviorReviewMerge:
+		return 1
+	case BehaviorReviewCheckpoint:
+		return 2
+	default:
+		return -1
+	}
+}

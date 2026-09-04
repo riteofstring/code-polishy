@@ -1,0 +1,29 @@
+FROM docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+
+ARG CODE_POLISHY_VERSION
+ARG CODE_POLISHY_SOURCE_REVISION
+ARG CODE_POLISHY_RELEASE_DIGEST
+ARG CODE_POLISHY_BUNDLE_SHA256
+
+LABEL org.opencontainers.image.source="https://github.com/riteofstring/code-polishy" \
+      org.opencontainers.image.version="${CODE_POLISHY_VERSION}" \
+      org.opencontainers.image.revision="${CODE_POLISHY_SOURCE_REVISION}" \
+      io.code-polishy.release-digest="${CODE_POLISHY_RELEASE_DIGEST}" \
+      io.code-polishy.bundle-sha256="${CODE_POLISHY_BUNDLE_SHA256}"
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY root/ /
+
+ENV HOME=/tmp \
+    PATH=/opt/code-polishy/bin:${PATH} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=safe.directory \
+    GIT_CONFIG_VALUE_0=/workspace
+
+USER 65532:65532
+WORKDIR /workspace
+ENTRYPOINT ["/opt/code-polishy/bin/code-polishy"]

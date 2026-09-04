@@ -35,7 +35,8 @@ never reaches execution.
 `internal/repository` owns Git selection, deletions, staged/worktree safety,
 segment-aware globs, containment, language detection, module ownership,
 immutable-base change boundaries, nested Go module discovery, the shared
-Python project inventory, and the exact clean-candidate, ancestor, binary-patch,
+Python project inventory, explicit test classification, generated-JavaScript
+source-package ownership, and the exact clean-candidate, ancestor, binary-patch,
 and disposable-worktree primitives. The Python inventory parses each contained
 `pyproject.toml` once, assigns `.py` and `.pyi` files to their nearest project,
 and provides project roots, `src` roots, namespace candidates, and project-local
@@ -76,6 +77,19 @@ descendant-held streams remain. Platform process IDs, process-group IDs, Job
 handles, signals, and control operations are private implementation details of
 this boundary. Callers may select Run or Handoff and consume the observable
 result; they may not perform host-specific process control.
+
+`internal/testartifact` owns one private writable directory per execution and
+validates declared JUnit and Cobertura outputs without changing command success.
+`internal/testreceipt` fingerprints complete bounded suite inputs, stores
+content-addressed successful receipts, and imports or exports one digest-bound
+CI bundle. Neither module trusts terminal text as evidence.
+
+`internal/release` owns the installed manifest and the portable transport around
+it. It writes deterministic verified ZIP archives, atomic host publication
+directories with checksum, manifest, CycloneDX SBOM, SLSA provenance, and a
+descriptor, validates the five-host publication index, and prepares Linux OCI
+contexts only by installing the already verified archive. Archive and image
+transport never create a second release identity.
 
 `internal/javascript` is the one adapter to the sealed, policy-owned JavaScript
 tool bundle, and is launched only for a target that actually bears JavaScript or
@@ -170,8 +184,10 @@ Vulture runs through carried CPython `3.12.13+20260728` from
 python-build-standalone, loads its version-matched standard whitelists, derives
 PEP 621 entry-point, in-tree backend-hook, and exact Pydantic model symbols, and
 accepts only validated exact `scope.pythonDynamicReferences` for remaining
-dynamic symbols. All policy-owned Python execution passes through one isolated,
-no-bytecode command boundary.
+dynamic symbols. Exact `scope.pythonExternalAttributes` declarations resolve
+one typed receiver write consumed by an external runtime without preserving
+same-named unread attributes. All policy-owned Python execution passes through
+one isolated, no-bytecode command boundary.
 `internal/architecture` asks the same carried Ruff for an
 isolated import graph and decides module direction in Go; `internal/supplychain`
 parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
@@ -230,8 +246,9 @@ path safety uniform.
 
 ## Module and test planning
 
-Modules are named DAG nodes. Every executable file has exactly one owner.
-Focused test suites attach to nodes:
+Modules are named DAG nodes. Every executable file has exactly one owner. Tests
+use those owners as verification metadata while only production imports form
+the DAG. Focused test suites attach to nodes:
 
 ```text
 explicit module ---> that module's focused suites
@@ -259,8 +276,13 @@ checkpoint delta ---> unchanged ---> no-op
                  ---> complete pass ---> accepted-HEAD receipt
 
 merge execution ---> gate-run owner ---> immutable command attempts + failure evidence
-                                      ---> explicit resume ---> matching passed ordinary tests only
-                                      ---> proofs/checks/builds/security always execute
+                                      ---> exact passed identity ---> already-passed, no commands
+                                      ---> exact suite receipt ---> reuse matching ordinary test
+                                      ---> explicit failed-run resume ---> matching passed tests
+                                      ---> proofs/checks/builds/security execute for new identities
+
+suite plan ---> explicit covers + exact duplicate commands ---> one execution
+           ---> every named requirement ---> one receipt satisfaction
 
 full profile ---> every suite marked full
 
@@ -317,12 +339,14 @@ automatically.
 The gate-run owner gives checkpoint and merge execution a single durable
 artifact contract. It binds the exact candidate, base, loaded policy, locked
 release, platform, effective command environment, and complete command plan to
-bounded logs and a versioned report. A normal run executes every phase. An
-explicit merge resume may reuse only a validated passed ordinary-test receipt
-from an otherwise identical failed run; behavior proofs, checks, builds,
-supply-chain work, and artifact security remain fresh. A reused suite receives
-a receipt in the current execution with validated provenance to the original
-executed suite, preserving safe chained retries after repeated late failures.
+bounded logs and a versioned report. An exact passed gate returns its existing
+report without executing commands. A new identity may reuse only suite receipts
+whose complete release, platform, toolchain, command, configuration,
+environment, ownership, and file inputs still match; behavior proofs, checks,
+builds, supply-chain work, and artifact security remain fresh. Explicit merge
+resume also accepts successful ordinary suites from an otherwise identical
+failed report. A reused suite receives a receipt in the current execution with
+validated provenance.
 
 ## Fail-closed planning
 

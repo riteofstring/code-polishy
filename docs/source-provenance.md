@@ -15,6 +15,11 @@ These public projects informed specific policy concepts:
   missing coverage to identify risky functions.
 - [mutate4go](https://github.com/unclebob/mutate4go) demonstrates focused
   differential mutation and explicit handling of surviving mutations.
+- [CycloneDX 1.6](https://cyclonedx.org/specification/overview/) defines the
+  published native-release SBOM shape.
+- [SLSA provenance 1.0](https://slsa.dev/spec/v1.0/provenance) and the
+  [in-toto statement](https://in-toto.io/Statement/v1) define release
+  provenance; OCI image attestations are emitted by Docker Buildx.
 
 Code Polishy implements its own policy engine and uses the independently
 maintained Apache-licensed Gremlins release for supplemental Go mutation tests.
@@ -53,6 +58,10 @@ version before staging a release.
   image. `artifact-security/scanner-policy.json` records its source,
   configuration, and integrity digests; `artifact-security/scanner.openvex.json`
   records reviewed vulnerability applicability.
+- Portable Linux releases use one digest-pinned Ubuntu base only for the OCI
+  transport. The image installs Git and CA certificates, copies an already
+  verified native release tree, runs as non-root, and does not replace the
+  archive's internal release identity.
 
 Two JavaScript packages intentionally remain on constrained release lines.
 Knip stays on the last selected release before its parser and resolver required

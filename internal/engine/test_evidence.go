@@ -11,6 +11,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/testartifact"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
@@ -50,6 +51,10 @@ type TestCommandEvidence struct {
 	FailureMessage        string
 	Attempt               int
 	LogPath               string
+	Artifacts             []testartifact.Record
+	Reused                bool
+	ReceiptPath           string
+	ReceiptSHA256         string
 }
 
 type TestFailureDiagnostic struct {
@@ -87,7 +92,9 @@ func (engine *Engine) testCommandEvidence(plan testpolicy.Plan, selection reposi
 			ImpactedModuleOverlap: stringIntersection(suite.Modules, plan.ImpactedModules),
 			ChangedPathOverlap:    engine.suiteChangedPathOverlap(suite, changedPaths),
 			Result:                execution.Result, FailureCategory: execution.FailureCategory, FailureMessage: execution.FailureMessage,
-			Attempt: execution.Attempt,
+			Attempt:   execution.Attempt,
+			Artifacts: append([]testartifact.Record{}, execution.Artifacts...),
+			Reused:    execution.Reused, ReceiptPath: execution.ReceiptPath, ReceiptSHA256: execution.ReceiptSHA256,
 		}
 		result = append(result, evidence)
 	}
@@ -223,7 +230,10 @@ func sameTestSuiteIdentity(candidate, baseline policy.TestSuite) bool {
 func sameTestSuiteCollections(candidate, baseline policy.TestSuite) bool {
 	return slices.Equal(candidate.Modules, baseline.Modules) && slices.Equal(candidate.Argv, baseline.Argv) &&
 		slices.Equal(candidate.Paths, baseline.Paths) && slices.Equal(candidate.RunOn, baseline.RunOn) &&
-		slices.Equal(candidate.Environment, baseline.Environment) && slices.Equal(candidate.ExclusiveResources, baseline.ExclusiveResources)
+		slices.Equal(candidate.ExtraInputs, baseline.ExtraInputs) &&
+		slices.Equal(candidate.Covers, baseline.Covers) &&
+		slices.Equal(candidate.Environment, baseline.Environment) && slices.Equal(candidate.ExclusiveResources, baseline.ExclusiveResources) &&
+		slices.Equal(candidate.Artifacts, baseline.Artifacts)
 }
 
 func AttachTestCommandLogPath(report *Report, name string, attempt int, logPath string) bool {

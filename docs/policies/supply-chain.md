@@ -351,9 +351,11 @@ missing-coverage finding, never a workspace that declared nothing.
   package is not there to be read, so none of them can redirect the audit,
   suppress a result, or run target code. Advisories are reported as identities,
   packages, severities, and exact affected releases; the severity threshold and
-  every assessment stay in Go. pnpm's nonzero exit when advisories are present
-  is a valid audit report; only a refused, unreadable, or malformed JSON report
-  is an audit failure. A reported version that is no exact release is
+  every assessment stay in Go. Registry transport gets five attempts, each
+  bounded to 60 seconds, with one-to-five-second retry delays. pnpm's nonzero
+  exit when advisories are present is a valid audit report; an exhausted,
+  refused, unreadable, or malformed JSON report is an audit failure. A reported
+  version that is no exact release is
   missing coverage, whether it is the only one the advisory named or one of
   several, so a partly readable advisory never passes as a decided one.
 - No other package manager ships inside the bundle, so a Node manifest that

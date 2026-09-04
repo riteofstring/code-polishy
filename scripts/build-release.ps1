@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Output,
-  [string]$SourceRevision = ''
+  [string]$SourceRevision = '',
+  [string]$PublicationDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,12 @@ $PolicyRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Local Windows release builds currently require x64.' }
 if (-not [System.IO.Path]::IsPathRooted($Output)) { $Output = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Output)) }
 if (Test-Path -LiteralPath $Output) { throw "Local release output already exists: $Output" }
+if ($PublicationDirectory -and -not [System.IO.Path]::IsPathRooted($PublicationDirectory)) {
+  $PublicationDirectory = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $PublicationDirectory))
+}
+if ($PublicationDirectory -and (Test-Path -LiteralPath $PublicationDirectory)) {
+  throw "Release publication directory already exists: $PublicationDirectory"
+}
 
 if (-not $SourceRevision) { $SourceRevision = (& git.exe -C $PolicyRoot rev-parse HEAD).Trim() }
 if ($SourceRevision -notmatch '^[0-9a-f]{40}$') { throw 'A release requires an exact lowercase source revision.' }
@@ -146,9 +153,12 @@ try {
   & $Engine --policy-root $Stage release-manifest verify --root $Stage
   if ($LASTEXITCODE -ne 0) { throw 'Native release verification failed.' }
 
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
-  Compress-Archive -Path (Join-Path $Stage '*') -DestinationPath $Output -CompressionLevel Optimal
-  $BundleDigest = (Get-FileHash -Algorithm SHA256 $Output).Hash.ToLowerInvariant()
+  $BundleDigest = (& $Engine --policy-root $Stage release-manifest archive --root $Stage --output $Output).Trim()
+  if ($LASTEXITCODE -ne 0 -or $BundleDigest -notmatch '^[0-9a-f]{64}$') { throw 'Native release archive creation failed.' }
+  if ($PublicationDirectory) {
+    & $Engine --policy-root $Stage release-manifest publish --archive $Output --destination $PublicationDirectory
+    if ($LASTEXITCODE -ne 0) { throw 'Native release publication metadata creation failed.' }
+  }
   Write-Output "releaseDigest=$ReleaseDigest"
   Write-Output "archiveSHA256=$BundleDigest"
   Write-Output "archive=$Output"

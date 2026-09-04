@@ -55,12 +55,15 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 	for _, file := range request.Files {
 		covered = append(covered, file.Path)
 	}
-	resolved := make([]string, 0, len(request.References)+len(request.Backends))
+	resolved := make([]string, 0, len(request.References)+len(request.Backends)+len(request.Attributes))
 	for _, reference := range request.References {
 		resolved = append(resolved, reference.ID)
 	}
 	for _, backend := range request.Backends {
 		resolved = append(resolved, backend.ID)
+	}
+	for _, attribute := range request.Attributes {
+		resolved = append(resolved, attribute.ID)
 	}
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
@@ -218,7 +221,7 @@ func pythonQualityAssertVultureRequest(t *testing.T, data []byte) {
 	if err := json.Unmarshal(data, &request); err != nil || request.Protocol != pythonVultureProtocolVersion ||
 		request.ToolVersion != pythonVultureVersion || !slices.EqualFunc(request.Files, []pythonVultureFile{{Path: "src/app.py", Module: "app"}}, func(left, right pythonVultureFile) bool {
 		return left == right
-	}) || len(request.Backends) != 0 {
+	}) || len(request.Backends) != 0 || len(request.Attributes) != 0 {
 		t.Fatalf("Vulture request = %+v, error = %v", request, err)
 	}
 }
@@ -522,6 +525,23 @@ func TestPythonVultureDynamicReferenceProblemsArePolicyFindings(t *testing.T) {
 	}
 }
 
+func TestPythonVultureValidatesExternalAttributesWithoutSelectedSource(t *testing.T) {
+	t.Parallel()
+	repo := pythonQualityRepository(t)
+	repo.Config.Scope.PythonExternalAttributes = []policy.PythonExternalAttribute{{
+		Project: "apps/plugin/pyproject.toml", Module: "plugin", Callable: "configure", Receiver: "settings",
+		Attribute: "output_path", Line: 4, ConsumerType: "external.runtime.Settings",
+	}}
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nrequires-python = \"==3.12.*\"\n")
+	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
+	plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
+	if !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.pythonExternalAttribute" && strings.Contains(finding.Message, "no current contained Python project")
+	}) {
+		t.Fatalf("plan = %+v", plan)
+	}
+}
+
 func TestPythonVultureValidatesUnknownAndUnselectedReferenceProjects(t *testing.T) {
 	t.Parallel()
 	t.Run("unknown project", func(t *testing.T) {
@@ -751,6 +771,65 @@ patched.side_effect = RuntimeError
 		}, diagnostic.Name) {
 			t.Fatalf("standard dynamic contract reported dead: %+v", diagnostic)
 		}
+	}
+}
+
+func TestPythonVultureAdapterKeepsOnlyExactExternalAttributeWritesWhenInstalled(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	if !pythonVultureRuntimeInstalled(t, repo) {
+		t.Skip("policy CPython with Vulture is not installed")
+	}
+	repo.Config.Scope.PythonExternalAttributes = []policy.PythonExternalAttribute{{
+		Project: "pyproject.toml", Module: "plugin", Callable: "configure", Receiver: "settings",
+		Attribute: "output_path", Line: 4, ConsumerType: "external.runtime.Settings",
+	}}
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "src/plugin.py", `from external.runtime import Settings
+
+def configure(settings: Settings):
+    settings.output_path = "result"
+    settings.unused_path = "unused"
+`)
+	project := pythonVultureProject(t, repo)
+	command, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := parsePythonVultureResponse(output.Stdout)
+	if err != nil || response.Error != "" || len(response.Problems) != 0 {
+		t.Fatalf("response = %+v, error = %v", response, err)
+	}
+	if !slices.Contains(response.Resolved, pythonVultureAttributeID(repo.Config.Scope.PythonExternalAttributes[0])) {
+		t.Fatalf("resolved = %v", response.Resolved)
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if diagnostic.Name == "output_path" {
+			t.Fatalf("declared external attribute reported dead: %+v", diagnostic)
+		}
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool { return diagnostic.Name == "unused_path" }) {
+		t.Fatalf("adjacent unused attribute was hidden: %+v", response.Diagnostics)
+	}
+
+	repo.Config.Scope.PythonExternalAttributes[0].Line = 5
+	stale, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, staleOutput, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := pythonVultureFindings(repo, project, staleOutput.Stdout)
+	if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.pythonExternalAttribute" && strings.Contains(finding.Message, "stale or ambiguous")
+	}) {
+		t.Fatalf("findings = %+v", findings)
 	}
 }
 

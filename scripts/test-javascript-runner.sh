@@ -538,6 +538,16 @@ if [[ -e "${project_source}/tsconfig.tsbuildinfo" ]] || [[ -n "$(find "${project
   fail "typecheck emitted into the target tree"
 fi
 
+mkdir -p "${target}/generated"
+printf 'export const external: number = "text";\n' >"${target}/generated/external.ts"
+printf '{"protocolVersion":3,"operation":"typecheck","root":"%s","paths":["generated/external.ts"],"project":"project/tsconfig.json","inheritedPaths":["generated/external.ts"]}' "${target}" |
+  run_runner >"${typecheck_response}" || fail "the runner rejected an inherited external project root"
+if ! grep -qF '"path":"generated/external.ts"' "${typecheck_response}" ||
+  ! grep -qF '"code":2322' "${typecheck_response}" ||
+  ! grep -qF '"covered":["generated/external.ts"]' "${typecheck_response}"; then
+  fail "typecheck did not apply the project context to an external generated root: $(cat "${typecheck_response}")"
+fi
+
 
 
 mkdir -p "${project_source}/strict"
@@ -692,6 +702,15 @@ fi
 if [[ -e "${deadcode_target}/node_modules" ]] ||
   [[ -n "$(find "${deadcode_target}" -name 'policy-knip.json' -print -quit)" ]]; then
   fail "the dead-code analysis wrote into the target tree"
+fi
+
+mkdir -p "${deadcode_target}/generated"
+printf 'export const inherited = () => 7;\n' >"${deadcode_target}/generated/client.ts"
+deadcode_request . \
+  '[{"root":"packages/web","entry":[],"project":["generated/client.ts"],"inherited":["generated/client.ts"]}]' |
+  run_runner >"${deadcode_response}" || fail "the runner rejected generated source owned by another package"
+if ! grep -qF '"covered":["generated/client.ts"]' "${deadcode_response}"; then
+  fail "deadcode did not apply the source package context to generated output: $(cat "${deadcode_response}")"
 fi
 
 
@@ -923,10 +942,6 @@ expect_runner_rejected "a relative root" \
   '{"protocolVersion":3,"operation":"format","root":"target","paths":["src/formatted.ts"]}'
 expect_runner_rejected "an unnormal root" \
   '{"protocolVersion":3,"operation":"format","root":"'"${target}"'/../target","paths":["src/formatted.ts"]}'
-
-
-
-
 expect_runner_rejected "an unsupported operation" '{"protocolVersion":3,"operation":"install"}'
 expect_runner_rejected "a typecheck request without a project" \
   '{"protocolVersion":3,"operation":"typecheck","root":"'"${target}"'","paths":["project/src/ok.ts"]}'
@@ -952,9 +967,6 @@ fi
 if ! grep -q 'byte limit' "${fixture_root}/out"; then
   fail "an oversized request was not rejected for its size"
 fi
-
-
-
 expect_runner_rejected "an injected Node option" \
   '{"protocolVersion":3,"operation":"provenance"}' env NODE_OPTIONS=--no-warnings
 expect_runner_rejected "an injected module path" \
@@ -964,10 +976,6 @@ if printf '{"protocolVersion":3,"operation":"provenance"}' |
     >"${fixture_root}/out" 2>&1; then
   fail "a runner launched with extra Node options was accepted"
 fi
-
-
-
-
 unpinned="${fixture_root}/unpinned"
 mkdir -p "${unpinned}"
 cp "${runner_sources[@]}" "${unpinned}/"
@@ -978,6 +986,4 @@ if printf '{"protocolVersion":3,"operation":"provenance"}' |
     >"${fixture_root}/out" 2>&1; then
   fail "a runner requiring another Node version was accepted"
 fi
-
-
 echo "test-javascript-runner: all checks passed"

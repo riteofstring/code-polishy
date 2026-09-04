@@ -2,6 +2,8 @@ package testing
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -13,12 +15,14 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
 
 type Request struct {
 	Full          bool
 	Recommended   bool
 	Supplemental  bool
+	Resume        bool
 	Modules       []string
 	Suites        []string
 	Changed       repository.Selection
@@ -27,11 +31,18 @@ type Request struct {
 
 type Plan struct {
 	Suites          []policy.TestSuite
+	Aggregations    []SuiteAggregation
 	ChangedModules  []string
 	ImpactedModules []string
 	SelectionBase   string
 	Level           string
 	Reasons         []string
+}
+
+type SuiteAggregation struct {
+	Suite      string
+	ExecutedBy string
+	Reason     string
 }
 
 type RunResult struct {
@@ -46,6 +57,15 @@ type SuiteExecution struct {
 	FailureCategory runner.FailureCategory
 	FailureMessage  string
 	Attempt         int
+	Artifacts       []testartifact.Record
+	Reused          bool
+	ReceiptPath     string
+	ReceiptSHA256   string
+}
+
+type SuiteReuseController interface {
+	ReuseSuite(policy.TestSuite, int) (SuiteExecution, bool, error)
+	RecordSuite(SuiteExecution) error
 }
 
 func (execution SuiteExecution) Failed() bool {
@@ -53,15 +73,19 @@ func (execution SuiteExecution) Failed() bool {
 }
 
 type Advice struct {
-	ChangedModules  []string
-	ImpactedModules []string
-	Focused         []policy.TestSuite
-	Recommended     []policy.TestSuite
-	Full            []policy.TestSuite
-	AllSupplemental []policy.TestSuite
-	Supplemental    []policy.TestSuite
-	Suggested       string
-	Reasons         []string
+	ChangedModules           []string
+	ImpactedModules          []string
+	Focused                  []policy.TestSuite
+	Recommended              []policy.TestSuite
+	Full                     []policy.TestSuite
+	AllSupplemental          []policy.TestSuite
+	Supplemental             []policy.TestSuite
+	FocusedAggregations      []SuiteAggregation
+	RecommendedAggregations  []SuiteAggregation
+	FullAggregations         []SuiteAggregation
+	SupplementalAggregations []SuiteAggregation
+	Suggested                string
+	Reasons                  []string
 }
 
 const (
@@ -76,6 +100,15 @@ type MergeDecision struct {
 }
 
 func BuildPlan(repo repository.Repository, request Request) (Plan, error) {
+	plan, err := buildUnaggregatedPlan(repo, request)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan.Suites, plan.Aggregations = aggregateSelectedSuites(plan.Suites)
+	return plan, nil
+}
+
+func buildUnaggregatedPlan(repo repository.Repository, request Request) (Plan, error) {
 	if plan, selected := documentationPlan(repo, request); selected {
 		return plan, nil
 	}
@@ -164,8 +197,114 @@ func BuildAdvice(repo repository.Repository, selection repository.Selection) (Ad
 		ChangedModules: recommended.ChangedModules, ImpactedModules: recommended.ImpactedModules,
 		Focused: focused.Suites, Recommended: recommended.Suites, Full: full.Suites,
 		AllSupplemental: allSupplemental.Suites, Supplemental: uniqueSuites(supplemental),
+		FocusedAggregations: focused.Aggregations, RecommendedAggregations: recommended.Aggregations,
+		FullAggregations: full.Aggregations, SupplementalAggregations: allSupplemental.Aggregations,
 		Suggested: suggested, Reasons: reasons,
 	}, nil
+}
+
+func aggregateSelectedSuites(suites []policy.TestSuite) ([]policy.TestSuite, []SuiteAggregation) {
+	unique := uniqueSuites(suites)
+	selected := selectedSuiteNames(unique)
+	redirect, reasons := coveredSuiteRedirects(suites, selected)
+	withoutCovered := suitesWithoutRedirect(unique, redirect)
+	kept := deduplicateSuites(withoutCovered, redirect, reasons)
+	return kept, suiteAggregations(suites, redirect, reasons)
+}
+
+func selectedSuiteNames(suites []policy.TestSuite) map[string]bool {
+	selected := map[string]bool{}
+	for _, suite := range suites {
+		selected[suite.Name] = true
+	}
+	return selected
+}
+
+func coveredSuiteRedirects(suites []policy.TestSuite, selected map[string]bool) (map[string]string, map[string]string) {
+	redirect := map[string]string{}
+	reasons := map[string]string{}
+	for _, suite := range suites {
+		if !selected[suite.Name] {
+			continue
+		}
+		for _, target := range suite.Covers {
+			if selected[target] {
+				redirect[target] = suite.Name
+				reasons[target] = "covered"
+			}
+		}
+	}
+	return redirect, reasons
+}
+
+func suitesWithoutRedirect(suites []policy.TestSuite, redirect map[string]string) []policy.TestSuite {
+	withoutCovered := []policy.TestSuite{}
+	for _, suite := range suites {
+		if redirect[suite.Name] == "" {
+			withoutCovered = append(withoutCovered, suite)
+		}
+	}
+	return withoutCovered
+}
+
+func deduplicateSuites(suites []policy.TestSuite, redirect, reasons map[string]string) []policy.TestSuite {
+	executions := map[string]string{}
+	kept := []policy.TestSuite{}
+	for _, suite := range suites {
+		key, eligible := duplicateSuiteKey(suite)
+		if prior := executions[key]; eligible && prior != "" {
+			redirect[suite.Name] = prior
+			reasons[suite.Name] = "duplicate-command"
+			continue
+		}
+		if eligible {
+			executions[key] = suite.Name
+		}
+		kept = append(kept, suite)
+	}
+	return kept
+}
+
+func suiteAggregations(suites []policy.TestSuite, redirect, reasons map[string]string) []SuiteAggregation {
+	aggregations := make([]SuiteAggregation, 0, len(redirect))
+	for _, suite := range suites {
+		if redirect[suite.Name] == "" {
+			continue
+		}
+		executedBy := resolveSuiteExecution(redirect, redirect[suite.Name])
+		aggregations = append(aggregations, SuiteAggregation{Suite: suite.Name, ExecutedBy: executedBy, Reason: reasons[suite.Name]})
+	}
+	sort.Slice(aggregations, func(left, right int) bool { return aggregations[left].Suite < aggregations[right].Suite })
+	return aggregations
+}
+
+func duplicateSuiteKey(suite policy.TestSuite) (string, bool) {
+	if len(suite.Argv) == 0 || len(suite.Artifacts) > 0 {
+		return "", false
+	}
+	payload := struct {
+		Argv               []string
+		Cwd                string
+		Scope              string
+		Modules            []string
+		Paths              []string
+		ExtraInputs        []string
+		Environment        []string
+		ExclusiveResources []string
+		TimeoutSeconds     int
+	}{
+		suite.Argv, suite.Cwd, suite.Scope, suite.Modules, suite.Paths, suite.ExtraInputs,
+		suite.Environment, suite.ExclusiveResources, suite.TimeoutSeconds,
+	}
+	data, err := json.Marshal(payload)
+	return string(data), err == nil
+}
+
+func resolveSuiteExecution(redirect map[string]string, name string) string {
+	for redirect[name] != "" {
+		name = redirect[name]
+	}
+	return name
 }
 
 func BuildMergeDecision(repo repository.Repository, selection repository.Selection) (MergeDecision, error) {
@@ -296,38 +435,135 @@ func RunUntilFailureWithEvidence(ctx context.Context, repo repository.Repository
 
 func run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter, stopAfterFailure bool) RunResult {
 	runResult := RunResult{}
+	var artifactExecution *testartifact.Execution
+	reuse := suiteReuseController(commandRunner)
 	for index, suite := range plan.Suites {
-		runContext := ctx
-		if reporter != nil {
-			reporter.CommandWaiting(index)
-			runContext = runner.WithResourceWaitObserver(ctx, func(elapsed time.Duration) {
-				reporter.CommandResourceWaiting(index, elapsed)
-			})
-		}
-		execution := ExecuteSuite(runContext, repo.Root, commandRunner, suite, 1)
+		runContext := suiteRunContext(ctx, reporter, index)
+		execution := runOneSuite(runContext, repo.Root, commandRunner, suite, reuse, &artifactExecution)
 		runResult.Executions = append(runResult.Executions, execution)
-		if reporter != nil {
-			status := executionStatusPassed
-			if execution.Failed() {
-				status = executionStatusFailed
-			}
-			reporter.CommandFinished(index, ExecutionResult{
-				Status: status, ExecutionDuration: execution.Result.ExecutionDuration,
-				ResourceWait: execution.Result.ResourceWait, ResourceWaitKnown: execution.ResultKnown,
-			})
-		}
+		reportSuiteExecution(reporter, index, execution)
 		if execution.Failed() {
 			runResult.Findings = append(runResult.Findings, policy.Finding{Check: "test." + suite.Kind, Path: "repository", Subject: suite.Name, Message: execution.FailureMessage})
 			if stopAfterFailure {
-				return runResult
+				break
 			}
+		}
+	}
+	if artifactExecution != nil {
+		if err := artifactExecution.Complete(); err != nil {
+			runResult.Findings = append(runResult.Findings, policy.Finding{Check: "test.artifacts", Path: testartifact.RootName, Subject: artifactExecution.ID(), Message: err.Error()})
 		}
 	}
 	return runResult
 }
 
+func suiteRunContext(ctx context.Context, reporter *ExecutionReporter, index int) context.Context {
+	if reporter == nil {
+		return ctx
+	}
+	reporter.CommandWaiting(index)
+	return runner.WithResourceWaitObserver(ctx, func(elapsed time.Duration) {
+		reporter.CommandResourceWaiting(index, elapsed)
+	})
+}
+
+func runOneSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, reuse SuiteReuseController, artifacts **testartifact.Execution) SuiteExecution {
+	execution, reused, err := reusableSuiteExecution(reuse, suite, 1)
+	if err != nil {
+		return failedSuiteExecution(suite, 1, err)
+	}
+	if reused {
+		return execution
+	}
+	if *artifacts == nil && !runnerManagesTestArtifacts(commandRunner) {
+		*artifacts, err = testartifact.Start(root, "")
+	}
+	if err != nil {
+		return failedSuiteExecution(suite, 1, err)
+	}
+	execution = executeSuite(ctx, root, commandRunner, suite, 1, *artifacts)
+	if !execution.Failed() && reuse != nil {
+		if err := reuse.RecordSuite(execution); err != nil {
+			execution.FailureCategory = runner.FailureOperational
+			execution.FailureMessage = err.Error()
+		}
+	}
+	return execution
+}
+
+func reportSuiteExecution(reporter *ExecutionReporter, index int, execution SuiteExecution) {
+	if reporter == nil {
+		return
+	}
+	status := executionStatusPassed
+	if execution.Failed() {
+		status = executionStatusFailed
+	}
+	reporter.CommandFinished(index, ExecutionResult{
+		Status: status, ExecutionDuration: execution.Result.ExecutionDuration,
+		ResourceWait: execution.Result.ResourceWait, ResourceWaitKnown: execution.ResultKnown,
+	})
+}
+
+func reusableSuiteExecution(controller SuiteReuseController, suite policy.TestSuite, attempt int) (SuiteExecution, bool, error) {
+	if controller == nil {
+		return SuiteExecution{}, false, nil
+	}
+	execution, reusable, err := controller.ReuseSuite(suite, attempt)
+	if err != nil || !reusable {
+		return SuiteExecution{}, reusable, err
+	}
+	execution.Suite = cloneSuite(suite)
+	execution.Attempt = attempt
+	execution.Reused = true
+	return execution, true, nil
+}
+
+func suiteReuseController(commandRunner runner.Runner) SuiteReuseController {
+	controller, _ := commandRunner.(SuiteReuseController)
+	return controller
+}
+
 func ExecuteSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int) SuiteExecution {
-	result, resultKnown, err := runSuite(ctx, root, commandRunner, suiteCommand(suite))
+	if runnerManagesTestArtifacts(commandRunner) {
+		return executeSuite(ctx, root, commandRunner, suite, attempt, nil)
+	}
+	execution, err := testartifact.Start(root, "")
+	if err != nil {
+		return failedSuiteExecution(suite, attempt, err)
+	}
+	result := executeSuite(ctx, root, commandRunner, suite, attempt, execution)
+	if completeErr := execution.Complete(); completeErr != nil {
+		result.FailureCategory = runner.FailureOperational
+		if result.FailureMessage == "" {
+			result.FailureMessage = completeErr.Error()
+		} else {
+			result.FailureMessage = errors.Join(errors.New(result.FailureMessage), completeErr).Error()
+		}
+	}
+	return result
+}
+
+func executeSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int, artifactExecution *testartifact.Execution) SuiteExecution {
+	command := suiteCommand(suite)
+	if artifactExecution != nil {
+		prepared, err := artifactExecution.PrepareCommand(suite, command)
+		if err != nil {
+			return failedSuiteExecution(suite, attempt, err)
+		}
+		command = prepared
+	}
+	result, resultKnown, err := runSuite(ctx, root, commandRunner, command)
+	artifacts := []testartifact.Record{}
+	if artifactExecution != nil {
+		var artifactErr error
+		artifacts, artifactErr = artifactExecution.ValidateCommand(command)
+		err = errors.Join(err, artifactErr)
+	} else if provider, ok := commandRunner.(interface {
+		TestArtifacts(string, int) []testartifact.Record
+	}); ok {
+		artifacts = provider.TestArtifacts(suite.Name, attempt)
+	}
 	category := runner.FailureCategoryFor(ctx, result, err)
 	if err != nil {
 		result.FailureCategory = category
@@ -335,11 +571,24 @@ func ExecuteSuite(ctx context.Context, root string, commandRunner runner.Runner,
 	execution := SuiteExecution{
 		Suite: cloneSuite(suite), Result: result, ResultKnown: resultKnown,
 		FailureCategory: category, Attempt: attempt,
+		Artifacts: append([]testartifact.Record{}, artifacts...),
 	}
 	if err != nil {
 		execution.FailureMessage = err.Error()
 	}
 	return execution
+}
+
+func failedSuiteExecution(suite policy.TestSuite, attempt int, err error) SuiteExecution {
+	return SuiteExecution{
+		Suite: cloneSuite(suite), Result: runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational},
+		ResultKnown: true, FailureCategory: runner.FailureOperational, FailureMessage: err.Error(), Attempt: attempt,
+	}
+}
+
+func runnerManagesTestArtifacts(commandRunner runner.Runner) bool {
+	managed, ok := commandRunner.(interface{ ManagesTestArtifacts() bool })
+	return ok && managed.ManagesTestArtifacts()
 }
 
 func suiteCommand(suite policy.TestSuite) policy.Command {
@@ -348,6 +597,7 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
 		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
 		TimeoutSeconds: suite.TimeoutSeconds,
+		TestArtifacts:  append([]policy.TestArtifact{}, suite.Artifacts...),
 	}
 }
 
@@ -355,9 +605,12 @@ func cloneSuite(suite policy.TestSuite) policy.TestSuite {
 	suite.Modules = append([]string{}, suite.Modules...)
 	suite.Argv = append([]string{}, suite.Argv...)
 	suite.Paths = append([]string{}, suite.Paths...)
+	suite.ExtraInputs = append([]string{}, suite.ExtraInputs...)
+	suite.Covers = append([]string{}, suite.Covers...)
 	suite.RunOn = append([]string{}, suite.RunOn...)
 	suite.Environment = append([]string{}, suite.Environment...)
 	suite.ExclusiveResources = append([]string{}, suite.ExclusiveResources...)
+	suite.Artifacts = append([]policy.TestArtifact{}, suite.Artifacts...)
 	return suite
 }
 
@@ -407,7 +660,53 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, requiredKindFindings(config)...)
 	findings = append(findings, requiredSupplementalKindFindings(config)...)
 	findings = append(findings, gherkinCoverageFindings(config.Tests.Suites, files)...)
+	findings = append(findings, testOwnershipFindings(repo, files)...)
 	return findings
+}
+
+func testOwnershipFindings(repo repository.Repository, files []string) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, path := range files {
+		if !repo.IsExecutableSource(path) || !repo.IsTest(path) {
+			continue
+		}
+		owners := repo.ModuleNames(path)
+		if len(owners) != 1 {
+			findings = append(findings, policy.Finding{
+				Check: "policy.testOwnership", Path: path, Subject: "module",
+				Message: fmt.Sprintf("governed test source belongs to %d modules; exactly one is required", len(owners)),
+			})
+			continue
+		}
+		if !focusedSuiteOwnsTest(repo.Config, owners[0], path) {
+			findings = append(findings, policy.Finding{
+				Check: "policy.testOwnership", Path: path, Subject: owners[0],
+				Message: "no quick focused suite for the owning module includes this test path",
+			})
+		}
+	}
+	return findings
+}
+
+func focusedSuiteOwnsTest(config policy.Config, module, path string) bool {
+	moduleIndex, found := config.ModuleByName[module]
+	if !found {
+		return false
+	}
+	for _, suite := range config.Tests.Suites {
+		if suite.Scope != "module" || suite.Cost != "quick" || !slices.Contains(suite.RunOn, "focused") ||
+			!slices.Contains(suite.Modules, module) {
+			continue
+		}
+		patterns := suite.Paths
+		if len(patterns) == 0 {
+			patterns = config.Modules[moduleIndex].Paths
+		}
+		if policy.MatchesAny(path, patterns) {
+			return true
+		}
+	}
+	return false
 }
 
 func Notes(_ repository.Repository, files []string) []string {

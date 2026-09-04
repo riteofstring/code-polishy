@@ -17,6 +17,11 @@ Every test suite declares:
 - one or more execution profiles: the nested `focused`, `recommended`, and
   `full` profiles, or the isolated `supplemental` profile.
 
+A suite may also declare bounded `extraInputs`, exact JUnit or Cobertura XML
+outputs under `artifacts`, and compatible component suites it `covers`. Code
+Polishy gives each attempt a private managed directory, validates declared
+outputs after the command exits, and records their digests in gate evidence.
+
 Module suites default to quick and all three profiles. Repository suites
 default to standard and full only. Browser, visual, E2E, performance, and live
 suites default to expensive. Mutation, acceptance-mutation, Gherkin-mutation,
@@ -29,9 +34,12 @@ Explicit values may refine ordinary defaults, but:
   recommended, or full;
 - mutation and related test-strength kinds must remain supplemental.
 
-Every module must have at least one module-scoped focused suite. Every
-repository must have at least one repository-scoped full suite. A project may
-also list `tests.requiredKinds` to make specific layers mandatory.
+Every governed test source, including a path selected by `scope.tests`, belongs
+to exactly one production module. That ownership says what the test verifies;
+test imports never become production dependency edges. Every module must have
+at least one quick module-scoped focused suite whose paths include its owned
+tests. Every repository must have at least one repository-scoped full suite. A
+project may also list `tests.requiredKinds` to make specific layers mandatory.
 
 Built-in project capabilities imply these repository-scoped full-profile
 requirements:
@@ -114,7 +122,9 @@ code-polishy test-levels [--base TASK_BASE]
 code-polishy test-plan [--base TASK_BASE]
 code-polishy test --recommended [--base TASK_BASE]
 code-polishy test --all
-code-polishy test --supplemental
+code-polishy test --supplemental [--resume]
+code-polishy test-receipts export --output PATH
+code-polishy test-receipts import --source PATH --sha256 DIGEST
 code-polishy verify [--tests-only]
 code-polishy gate
 code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
@@ -139,8 +149,8 @@ code-polishy merge-gate --base MERGE_TARGET
   not a recommendation or execution trigger. For an ordinary Markdown-only
   delta, they add a first-class documentation row with zero application suites.
   With a trusted base, they report the exact policy-selected level, reasons,
-  and the one `merge-gate` execution path; without a base, they report
-  diagnostic advice only.
+  the one `merge-gate` execution path, and whether each selected suite has
+  reusable exact evidence; without a base, they report diagnostic advice only.
 - `--recommended` runs focused suites for impacted modules plus repository
   suites marked recommended whose `paths` match the change. Without `--base`,
   it uses the working tree compared with `HEAD`. With `--base TASK_BASE`, it
@@ -151,13 +161,11 @@ code-polishy merge-gate --base MERGE_TARGET
 - `--supplemental` runs every separately declared supplemental suite only when
   the caller explicitly requests it, a checked-in workflow explicitly invokes
   it for that event, or the release checklist selects one run after a stable
-  release candidate has stopped changing. The first stable release candidate
-  runs the full set once. After failure, use exact `--suite` runs for failed
-  suites and passed suites invalidated by changes to their tested production
-  files or tests, or their own commands or configuration. That evidence
-  composes with still-valid passed suites. Repeat the full set only when shared
-  mutation infrastructure, toolchain, or selection changes, or impact cannot
-  be bounded.
+  release candidate has stopped changing. Use `--supplemental --resume` to
+  reuse exact receipts and run only missing, failed, expired, or invalidated
+  suites. Run the full set only without a trusted baseline, after shared
+  mutation infrastructure, toolchain, or selection changes, or when impact
+  cannot be bounded.
 - `verify` runs the full test profile and then build providers.
 - `gate` adds strict coverage, repository-wide code health, and online
   supply-chain enforcement. Neither `verify` nor `gate` silently runs
@@ -175,6 +183,110 @@ code-polishy merge-gate --base MERGE_TARGET
   concise behavior status, phase progress, and a final result. On failure it
   prints a bounded failure tail and the path to the corresponding managed log;
   direct `test` commands keep their normal streaming output.
+
+## Managed test artifacts
+
+Declare machine-readable outputs on the suite that creates them:
+
+```json
+{
+  "name": "application-integration",
+  "kind": "integration",
+  "scope": "repository",
+  "argv": ["pytest", "--junitxml={artifactDir}/junit.xml"],
+  "artifacts": [
+    { "path": "junit.xml", "type": "junit", "required": true },
+    { "path": "coverage.xml", "type": "cobertura" }
+  ]
+}
+```
+
+Each suite attempt receives its own directory below
+`.code-polishy-artifacts/<execution-id>/`. The command receives the absolute
+attempt directory in `CODE_POLISHY_ARTIFACT_DIR` and the run identifier in
+`CODE_POLISHY_EXECUTION_ID`. The literal `{artifactDir}` and `{executionId}`
+tokens in argument-array entries expand to the same values without a shell.
+Artifact paths are relative to the attempt directory.
+
+After the command exits, Code Polishy rejects escaping paths, links, special
+files, files over 32 MiB, malformed XML, the wrong XML root, and a missing
+required output. JUnit accepts `testsuite` or `testsuites`; Cobertura accepts
+`coverage`. A valid artifact is retained even when the command fails, and the
+command's nonzero exit remains the suite result. Gate reports record its path,
+type, size, and SHA-256 digest.
+
+The current execution and two earlier completed owned executions are retained.
+Later runs prune only completed directories with a valid Code Polishy owner
+manifest; active, linked, special, and unknown entries are never removed. Keep
+both `/.code-polishy-reports/` and `/.code-polishy-artifacts/` in the root
+`.gitignore`; `code-polishy agents sync` repairs both rules.
+
+## Reusable test evidence
+
+A successful eligible suite writes a content-addressed receipt valid for 30
+days. Its identity binds the locked release, policy schema and configuration,
+OS and architecture, suite command and limits, declared environment, approved
+tool versions, module dependency closure, owned tests, control inputs,
+`extraInputs`, and every selected file's mode and digest. A repository command
+whose executable or inputs cannot be bounded simply runs and produces no
+reusable identity.
+
+Merge gates automatically reuse exact matching suite receipts, including after
+an unrelated change that leaves the complete suite identity unchanged. An
+identical already-passed merge-gate identity executes no validation commands
+and reports `already-passed`. Checks, builds, security work, behavior proofs,
+failed suites, and suites without complete identities always execute.
+
+`test --supplemental --resume` gives the same exact reuse to an explicitly
+selected supplemental retry. Ordinary direct `test` commands execute normally
+and record eligible passes for later gates or supplemental retries.
+`merge-gate --resume` is narrower: it resumes successful ordinary suites from
+the same otherwise-identical failed gate report while all other phases rerun.
+
+CI can move reusable evidence through one bounded bundle:
+
+```sh
+code-polishy test-receipts export --output /tmp/test-receipts.json
+code-polishy test-receipts import \
+  --source /tmp/test-receipts.json \
+  --sha256 <trusted-bundle-sha256>
+```
+
+Export creates a new file from current unexpired local receipts and prints its
+SHA-256. Import accepts only a regular file matching the caller-supplied digest
+and atomically replaces the repository's one CI bundle. The digest must arrive
+through the CI system's trusted artifact or metadata boundary; Code Polishy
+does not sign or download it. Missing, corrupt, expired, incompatible, or
+unauthenticated evidence is ignored for reuse and never becomes a pass.
+
+Declare the one final-gate owner explicitly when CI owns delivery:
+
+```json
+{
+  "verification": {
+    "finalGateOwner": "ci"
+  }
+}
+```
+
+The default is `local`. `ci` requires a checked-in GitHub or governed GitLab
+workflow containing the literal `code-polishy merge-gate --base` command.
+Choosing an owner avoids routinely running the same final gate twice; it never
+waives the gate.
+
+## Suite aggregation
+
+Code Polishy executes exact duplicate suite commands once when their command,
+scope, modules, paths, extra inputs, environment, resources, and timeout are
+identical and neither declares artifacts. The report attaches that receipt to
+every equivalent requirement.
+
+A broader suite may explicitly name component suites in `covers`. Coverage must
+be acyclic and compatible in ordinary or supplemental class, ownership, inputs,
+resources, artifacts, and timeout. Unknown, cyclic, or weaker relationships are
+configuration errors. Code Polishy never infers coverage from command text.
+Plans and gate reports show each requirement, the suite that executed for it,
+and whether the reason was `covered` or `duplicate-command`.
 
 ## Test-quality reminder
 
@@ -339,6 +451,14 @@ the current staged, unstaged, and untracked work. It exposes no `--files`,
 trusted PR base SHA or push-before SHA; a missing, option-like, or invalid base
 fails instead of guessing.
 
+CI may run `test-levels --base REF` in a separate read-only classification job
+before platform fan-out. That job needs only the candidate engine and its pinned
+Go toolchain. Only a successful explicit documentation result may suppress
+platform lanes; a failed, missing, or ambiguous result selects them. Platform
+lanes depend on classification rather than on completion of the primary gate,
+so source verification starts in parallel while documentation-only changes
+still avoid unnecessary runners.
+
 Each merge gate writes a versioned JSON run report and bounded per-command logs
 below `.code-polishy-reports/merge-gate/`. The report is the machine-readable
 record of the selected command plan, attempts, durations, reuse decisions,
@@ -404,23 +524,20 @@ forces the full ordinary gate. No base suite, receipt, exception, or passing
 policy fact is invented. The run report records `first-adoption` and the exact
 configuration path proved absent at the base.
 
-### Resume a failed merge gate
+### Gate reuse and failed-run resume
 
-`merge-gate --base REF --resume` is an explicit retry mode. It may reuse only a
-successful ordinary test-suite command from a prior failed merge-gate report
-with the same content identity and a valid local receipt. The identity binds
-the exact merge base and candidate, locked Code Polishy release, loaded
-configuration, full command plan, platform, and declared command environment
-inputs. A candidate, base, policy level, release, configuration, command-plan,
-platform, environment, failed-command, or invalid-receipt change prevents
-reuse.
+Every merge gate first checks for an exact prior passed gate identity. If one
+exists, it reports `already-passed` and executes no validation command. For a
+new gate identity, exact matching suite receipts may still be reused while all
+non-test phases execute. This is automatic and fails closed under the reusable
+evidence contract above.
 
-Checks, builds, supply-chain commands, artifact-security commands, behavior
-proof replays, failed commands, and commands without valid receipts always run
-again. A normal `merge-gate` run never reuses receipts. Resume does not reduce
-scope, and final clean-candidate validation still applies. Local receipt
-digests establish content identity rather than a signature; CI may keep the
-report directory in a stronger custody boundary.
+`merge-gate --base REF --resume` additionally resumes successful ordinary
+test-suite commands from a prior failed merge-gate report with the same gate
+identity. Checks, builds, supply-chain commands, artifact-security commands,
+behavior proof replays, failed commands, and commands without valid receipts
+run again. Resume does not reduce scope, and final clean-candidate validation
+still applies.
 
 Every reused suite gets a new receipt inside the current execution. That
 receipt carries validated provenance back to the original executed suite, so a

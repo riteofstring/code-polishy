@@ -98,7 +98,7 @@
       "id": "installation",
       "path": "docs/installation.md",
       "title": "Installation",
-      "summary": "Install native releases and understand manifests, launchers, and repository locks.",
+      "summary": "Install source, archive, or OCI releases and understand manifests, launchers, and repository locks.",
       "aliases": ["install"],
       "public": true
     },

@@ -416,6 +416,10 @@ type TypeDiagnostic struct {
 }
 
 func (bundle Bundle) TypeCheck(ctx context.Context, root, project string, paths []string) (TypeCheckResult, error) {
+	return bundle.TypeCheckInherited(ctx, root, project, paths, nil)
+}
+
+func (bundle Bundle) TypeCheckInherited(ctx context.Context, root, project string, paths, inherited []string) (TypeCheckResult, error) {
 	payload, err := fileRequest(OperationTypeCheck, root, paths)
 	if err != nil {
 		return TypeCheckResult{}, err
@@ -424,6 +428,10 @@ func (bundle Bundle) TypeCheck(ctx context.Context, root, project string, paths 
 		return TypeCheckResult{}, fmt.Errorf("the %s request names project %q, not a contained repository-relative path", OperationTypeCheck, project)
 	}
 	payload.Project = project
+	if err := validateInheritedPaths(paths, inherited); err != nil {
+		return TypeCheckResult{}, err
+	}
+	payload.InheritedPaths = append([]string{}, inherited...)
 	result, err := bundle.exchange(ctx, payload, typeCheckTimeout)
 	if err != nil {
 		return TypeCheckResult{}, err
@@ -435,10 +443,22 @@ func (bundle Bundle) TypeCheck(ctx context.Context, root, project string, paths 
 	return reported, nil
 }
 
+func validateInheritedPaths(paths, inherited []string) error {
+	seen := map[string]bool{}
+	for _, path := range inherited {
+		if !containedPath(path) || !slices.Contains(paths, path) || seen[path] {
+			return fmt.Errorf("the %s request declares invalid inherited path %q", OperationTypeCheck, path)
+		}
+		seen[path] = true
+	}
+	return nil
+}
+
 type DeadCodeWorkspace struct {
-	Root    string   `json:"root"`
-	Entry   []string `json:"entry"`
-	Project []string `json:"project"`
+	Root      string   `json:"root"`
+	Entry     []string `json:"entry"`
+	Project   []string `json:"project"`
+	Inherited []string `json:"inherited,omitempty"`
 }
 
 type DeadCodeResult struct {
@@ -732,9 +752,25 @@ func containedWorkspace(directory string, workspace DeadCodeWorkspace) error {
 	if len(workspace.Project) == 0 {
 		return fmt.Errorf("the %s package %q selects no files", OperationDeadCode, workspace.Root)
 	}
+	if err := validateInheritedWorkspacePaths(directory, workspace); err != nil {
+		return err
+	}
+	return validateWorkspacePaths(directory, workspace)
+}
+
+func validateInheritedWorkspacePaths(directory string, workspace DeadCodeWorkspace) error {
+	for _, path := range workspace.Inherited {
+		if !containedPath(path) || !containsPath(directory, path) || !slices.Contains(workspace.Project, path) {
+			return fmt.Errorf("the %s package %q declares invalid inherited path %q", OperationDeadCode, workspace.Root, path)
+		}
+	}
+	return nil
+}
+
+func validateWorkspacePaths(directory string, workspace DeadCodeWorkspace) error {
 	for _, path := range slices.Concat(workspace.Project, workspace.Entry) {
-		if !containedPath(path) || !containsPath(workspace.Root, path) {
-			return fmt.Errorf("the %s package %q selects %q, which it does not contain", OperationDeadCode, workspace.Root, path)
+		if !containedPath(path) || !containsPath(directory, path) || !containsPath(workspace.Root, path) && !slices.Contains(workspace.Inherited, path) {
+			return fmt.Errorf("the %s package %q selects %q outside %q", OperationDeadCode, workspace.Root, path, directory)
 		}
 	}
 	return nil
@@ -780,6 +816,7 @@ type request struct {
 	Limits          *LintLimits         `json:"limits,omitempty"`
 	Activation      *LintActivation     `json:"activation,omitempty"`
 	Project         string              `json:"project,omitempty"`
+	InheritedPaths  []string            `json:"inheritedPaths,omitempty"`
 	Directory       string              `json:"directory,omitempty"`
 	Workspaces      []DeadCodeWorkspace `json:"workspaces,omitempty"`
 	GovernedPaths   []string            `json:"governedPaths,omitempty"`

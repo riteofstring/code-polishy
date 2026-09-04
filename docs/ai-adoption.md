@@ -192,7 +192,17 @@ If the release and launcher are already valid, reuse them without rebuilding or
 downloading anything.
 
 When the required release is absent, run the platform-native commands from the
-clean selected checkout.
+clean selected checkout. A caller may instead supply an already acquired native
+archive and its digest from a trusted publication descriptor; install it with
+
+```sh
+code-polishy install-bundle \
+  --source ABSOLUTE_PATH \
+  --sha256 DIGEST \
+  --prefix PREFIX
+```
+
+The installer performs no download and accepts no URL or mutable tag.
 
 On Linux or macOS:
 
@@ -213,8 +223,7 @@ checked-in checksum-verifying installers. It may use unauthenticated HTTPS
 artifact downloads; it must not use a GitHub API, token, or ambient substitute.
 The source installer performs no network access, builds the verified checkout,
 verifies every staged byte, and atomically installs the native release. The
-Windows installer uses a locally built temporary ZIP as an internal staging
-boundary and deletes it; it never downloads or publishes a release bundle. If
+Windows installer uses a locally built temporary ZIP and deletes it. If
 either command fails, report the exact failure rather than weakening pins or
 using another tool.
 
@@ -422,11 +431,13 @@ when absent, keeping `AGENTS.md` as the single guidance authority. If
 `CLAUDE.md` differs,
 the command preserves its bytes and changes neither guidance file; resolve that
 explicit conflict before retrying. The same validated transaction appends the
-exact `/.code-polishy-reports/` rule to the repository's root `.gitignore` when
-needed while preserving existing project rules, line endings, and file mode.
+exact `/.code-polishy-reports/` and `/.code-polishy-artifacts/` rules to the
+repository's root `.gitignore` when needed while preserving existing project
+rules, line endings, and file mode.
 Use `agents sync` after later Code Polishy upgrades; it requires an existing
 file, replaces the entire stale `AGENTS.md`, upgrades the exact former managed
-Claude redirect to the import, and repairs a missing report ignore rule.
+Claude redirect to the import, and repairs missing report or artifact ignore
+rules.
 `agents check` and `doctor --strict` reject a missing rule. Do not hand-copy or
 duplicate the canonical policy text.
 
@@ -481,10 +492,12 @@ unmanaged baseline.
 All actions and containers must satisfy Code Polishy pinning rules. Do not add a
 floating GitHub Action merely for convenience.
 
-The runner must already have the locked release installed, because a check
-never downloads Code Polishy. If that runner image is not prepared, make the
-expectation explicit and report the one required human administrative action;
-do not weaken the lock or add a download step.
+Declare `verification.finalGateOwner` as `ci` when this checked-in workflow owns
+the delivery gate; omission means `local`. CI may use either a runner with the
+locked release installed or the official image at an exact OCI digest. The
+image carries the same verified release and runs the same command from the
+checkout; registry authentication and mirroring remain CI-owned. A check never
+downloads Code Polishy or chooses a fallback release.
 
 ## 9. Establish the baseline without hiding debt
 

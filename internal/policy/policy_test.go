@@ -491,6 +491,21 @@ func TestLoadAcceptsCheckedInTrustedMergeTarget(t *testing.T) {
 	}
 }
 
+func TestLoadAcceptsOneFinalGateOwner(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{FinalGateOwnerLocal, FinalGateOwnerCI} {
+		configText := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"finalGateOwner":"`+owner+`"},"checks":[]`, 1)
+		config, err := Load(writeConfig(t, configText), "")
+		if err != nil || config.Verification.EffectiveFinalGateOwner() != owner {
+			t.Fatalf("owner = %q, effective = %q, error = %v", owner, config.Verification.EffectiveFinalGateOwner(), err)
+		}
+	}
+	invalid := strings.Replace(minimalConfig(), `"checks":[]`, `"verification":{"finalGateOwner":"both"},"checks":[]`, 1)
+	if _, err := Load(writeConfig(t, invalid), ""); err == nil || !strings.Contains(err.Error(), "finalGateOwner") {
+		t.Fatalf("expected invalid final-gate owner error, got %v", err)
+	}
+}
+
 func TestLoadRejectsInvalidMergeGateModules(t *testing.T) {
 	t.Parallel()
 	for name, modules := range map[string]string{
@@ -1480,7 +1495,6 @@ func writeConfig(t *testing.T, contents string) string {
 	}
 	return root
 }
-
 func minimalConfig() string {
 	return `{"version":3,"project":{"kind":"content"},"quality":{},"modules":[{"name":"content","paths":["content/**"]}],"checks":[],"tests":{"suites":[{"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},{"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}]},"supplyChain":{},"exceptions":[]}`
 }

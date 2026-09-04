@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Version            = 2
+	Version            = 4
 	DefaultStreamLimit = 1 << 20
 	MaximumStreamLimit = 8 << 20
 )
@@ -126,23 +126,31 @@ type EnvironmentFingerprint struct {
 }
 
 type CommandSpec struct {
-	Category           CommandCategory `json:"category"`
-	Scope              string          `json:"scope"`
-	Cost               string          `json:"cost"`
-	Name               string          `json:"name"`
-	Provides           []string        `json:"provides"`
-	Argv               []string        `json:"argv"`
-	Cwd                string          `json:"cwd"`
-	Paths              []string        `json:"paths"`
-	Modules            []string        `json:"modules"`
-	RunOn              []string        `json:"run_on"`
-	Environment        []string        `json:"environment"`
-	ExclusiveResources []string        `json:"exclusive_resources"`
-	TimeoutSeconds     int             `json:"timeout_seconds"`
-	Managed            bool            `json:"managed"`
-	PassFiles          bool            `json:"pass_files"`
-	PassFilePaths      []string        `json:"pass_file_paths"`
-	SealedEnvironment  bool            `json:"sealed_environment"`
+	Category            CommandCategory `json:"category"`
+	Scope               string          `json:"scope"`
+	Cost                string          `json:"cost"`
+	Name                string          `json:"name"`
+	Provides            []string        `json:"provides"`
+	Argv                []string        `json:"argv"`
+	Cwd                 string          `json:"cwd"`
+	Paths               []string        `json:"paths"`
+	Modules             []string        `json:"modules"`
+	RunOn               []string        `json:"run_on"`
+	Environment         []string        `json:"environment"`
+	ExclusiveResources  []string        `json:"exclusive_resources"`
+	TimeoutSeconds      int             `json:"timeout_seconds"`
+	Managed             bool            `json:"managed"`
+	PassFiles           bool            `json:"pass_files"`
+	PassFilePaths       []string        `json:"pass_file_paths"`
+	SealedEnvironment   bool            `json:"sealed_environment"`
+	Artifacts           []ArtifactSpec  `json:"artifacts"`
+	SuiteIdentitySHA256 string          `json:"suite_identity_sha256,omitempty"`
+}
+
+type ArtifactSpec struct {
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
 }
 
 type BehaviorReviewFeatureSelection struct {
@@ -227,15 +235,18 @@ type Attempt struct {
 }
 
 type CommandOutcome struct {
-	CommandIndex  int             `json:"command_index"`
-	CommandSHA256 string          `json:"command_sha256"`
-	Name          string          `json:"name"`
-	Category      CommandCategory `json:"category"`
-	Status        CommandStatus   `json:"status"`
-	Reused        bool            `json:"reused"`
-	Attempts      []Attempt       `json:"attempts"`
-	ReceiptPath   string          `json:"receipt_path,omitempty"`
-	ReceiptSHA256 string          `json:"receipt_sha256,omitempty"`
+	CommandIndex              int             `json:"command_index"`
+	CommandSHA256             string          `json:"command_sha256"`
+	Name                      string          `json:"name"`
+	Category                  CommandCategory `json:"category"`
+	Status                    CommandStatus   `json:"status"`
+	Reused                    bool            `json:"reused"`
+	Attempts                  []Attempt       `json:"attempts"`
+	ReceiptPath               string          `json:"receipt_path,omitempty"`
+	ReceiptSHA256             string          `json:"receipt_sha256,omitempty"`
+	ReuseSourcePath           string          `json:"reuse_source_path,omitempty"`
+	ReuseSourceSHA256         string          `json:"reuse_source_sha256,omitempty"`
+	PriorDurationMilliseconds int64           `json:"prior_duration_milliseconds,omitempty"`
 }
 
 type Finding struct {
@@ -248,20 +259,21 @@ type Finding struct {
 }
 
 type Report struct {
-	Version         int              `json:"version"`
-	Identity        Identity         `json:"identity"`
-	IdentitySHA256  string           `json:"identity_sha256"`
-	ExecutionID     string           `json:"execution_id"`
-	Status          RunStatus        `json:"status"`
-	StartedAt       time.Time        `json:"started_at"`
-	CompletedAt     time.Time        `json:"completed_at"`
-	Commands        []CommandOutcome `json:"commands"`
-	Findings        []Finding        `json:"findings"`
-	Notes           []string         `json:"notes"`
-	TestEvidence    []TestEvidence   `json:"test_evidence"`
-	TestDiagnostics []TestDiagnostic `json:"test_diagnostics"`
-	BehaviorReview  BehaviorReview   `json:"behavior_review"`
-	SHA256          string           `json:"sha256"`
+	Version            int                 `json:"version"`
+	Identity           Identity            `json:"identity"`
+	IdentitySHA256     string              `json:"identity_sha256"`
+	ExecutionID        string              `json:"execution_id"`
+	Status             RunStatus           `json:"status"`
+	StartedAt          time.Time           `json:"started_at"`
+	CompletedAt        time.Time           `json:"completed_at"`
+	Commands           []CommandOutcome    `json:"commands"`
+	Findings           []Finding           `json:"findings"`
+	Notes              []string            `json:"notes"`
+	TestEvidence       []TestEvidence      `json:"test_evidence"`
+	TestDiagnostics    []TestDiagnostic    `json:"test_diagnostics"`
+	SuiteSatisfactions []SuiteSatisfaction `json:"suite_satisfactions"`
+	BehaviorReview     BehaviorReview      `json:"behavior_review"`
+	SHA256             string              `json:"sha256"`
 }
 
 type TestEvidence struct {
@@ -283,6 +295,19 @@ type TestEvidence struct {
 	Attempt               int             `json:"attempt"`
 	LogPath               string          `json:"log_path,omitempty"`
 	Diagnostic            bool            `json:"diagnostic"`
+	Artifacts             []TestArtifact  `json:"artifacts"`
+	Reused                bool            `json:"reused"`
+	ReceiptSourcePath     string          `json:"receipt_source_path,omitempty"`
+	ReceiptSourceSHA256   string          `json:"receipt_source_sha256,omitempty"`
+}
+
+type TestArtifact struct {
+	Suite    string `json:"suite"`
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	Size     int64  `json:"size"`
+	SHA256   string `json:"sha256"`
 }
 
 type TestDiagnostic struct {
@@ -292,14 +317,29 @@ type TestDiagnostic struct {
 	BaselineReplay *TestEvidence `json:"baseline_replay,omitempty"`
 }
 
+type SuiteSatisfactionInput struct {
+	Suite      string
+	ExecutedBy string
+	Reason     string
+}
+
+type SuiteSatisfaction struct {
+	Suite         string `json:"suite"`
+	ExecutedBy    string `json:"executed_by"`
+	Reason        string `json:"reason"`
+	ReceiptPath   string `json:"receipt_path"`
+	ReceiptSHA256 string `json:"receipt_sha256"`
+}
+
 type FinalizeOptions struct {
-	Status          RunStatus
-	Findings        []Finding
-	Notes           []string
-	TestEvidence    []TestEvidence
-	TestDiagnostics []TestDiagnostic
-	BehaviorReview  BehaviorReview
-	CompletedAt     time.Time
+	Status             RunStatus
+	Findings           []Finding
+	Notes              []string
+	TestEvidence       []TestEvidence
+	TestDiagnostics    []TestDiagnostic
+	SuiteSatisfactions []SuiteSatisfactionInput
+	BehaviorReview     BehaviorReview
+	CompletedAt        time.Time
 }
 
 type ExecutionEvidence struct {
@@ -316,22 +356,32 @@ type PreparedFinalization struct {
 }
 
 type Receipt struct {
-	Version             int             `json:"version"`
-	Gate                GateKind        `json:"gate"`
-	RunSHA256           string          `json:"run_sha256"`
-	ExecutionID         string          `json:"execution_id"`
-	CommandSHA256       string          `json:"command_sha256"`
-	Category            CommandCategory `json:"category"`
-	Status              CommandStatus   `json:"status"`
-	LogSHA256           string          `json:"log_sha256"`
-	SourceExecutionID   string          `json:"source_execution_id,omitempty"`
-	SourceReceiptSHA256 string          `json:"source_receipt_sha256,omitempty"`
-	SHA256              string          `json:"sha256"`
+	Version                            int             `json:"version"`
+	Gate                               GateKind        `json:"gate"`
+	RunSHA256                          string          `json:"run_sha256"`
+	ExecutionID                        string          `json:"execution_id"`
+	CommandSHA256                      string          `json:"command_sha256"`
+	Category                           CommandCategory `json:"category"`
+	Status                             CommandStatus   `json:"status"`
+	LogSHA256                          string          `json:"log_sha256"`
+	SourceExecutionID                  string          `json:"source_execution_id,omitempty"`
+	SourceReceiptSHA256                string          `json:"source_receipt_sha256,omitempty"`
+	ExternalSourcePath                 string          `json:"external_source_path,omitempty"`
+	ExternalSourceSHA256               string          `json:"external_source_sha256,omitempty"`
+	ExternalSourceDurationMilliseconds int64           `json:"external_source_duration_milliseconds,omitempty"`
+	SHA256                             string          `json:"sha256"`
 }
 
 type ReusableReceipt struct {
 	Receipt Receipt
 	Path    string
+}
+
+type SuiteReuse struct {
+	IdentitySHA256 string
+	ReceiptPath    string
+	ReceiptSHA256  string
+	DurationMillis int64
 }
 
 type LogOptions struct {

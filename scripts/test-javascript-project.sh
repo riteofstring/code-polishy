@@ -631,8 +631,16 @@ expect_audit_argument --json
 expect_audit_argument --dir
 expect_audit_argument --registry
 expect_audit_argument https://registry.npmjs.org/
+expect_audit_argument --fetch-retries=4
+expect_audit_argument --fetch-retry-factor=2
+expect_audit_argument --fetch-retry-mintimeout=1000
+expect_audit_argument --fetch-retry-maxtimeout=5000
+expect_audit_argument --fetch-timeout=60000
 if grep -qF -- "--audit-level" "${audit_arguments}"; then
   fail "the audit let the tool decide the severity threshold: $(cat "${audit_arguments}")"
+fi
+if grep -qxF -- "--ignore-registry-errors" "${audit_arguments}"; then
+  fail "the audit ignored a registry failure: $(cat "${audit_arguments}")"
 fi
 
 

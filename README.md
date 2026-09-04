@@ -47,6 +47,9 @@ Each repo keeps its current Code Polishy version until you choose to upgrade.
 A new setup uses the latest stable version tag. Ask for a tag such as `v1.2.3`
 when you need a specific version.
 
+Releases also publish checksum-bound native archives. Linux CI can run the same
+release from a digest-pinned OCI image without installing it on the runner.
+
 Git is required. Allow about 1 GB of disk space. Windows x64 works without WSL
 or Git Bash.
 
@@ -79,8 +82,11 @@ code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 # Enforce the policy before merge
 code-polishy merge-gate --base origin/main
 
-# After a failed merge gate, reuse only matching passed ordinary tests
+# After a failed merge gate, resume its matching passed ordinary tests
 code-polishy merge-gate --base origin/main --resume
+
+# Move exact reusable suite evidence through a trusted CI artifact boundary
+code-polishy test-receipts export --output /tmp/test-receipts.json
 ```
 
 Before coding, Code Polishy can bind the original request to the starting
@@ -88,7 +94,9 @@ commit. The checkpoint gate validates one completed task, and the merge gate
 validates the whole branch. Each reports whether behavior review was optional,
 required, passed, or failed; selected reviews replay their proofs and force the
 configured feature suites. Gate reports stay under `.code-polishy-reports`.
-Resume never reuses checks, builds, security work, or behavior proofs.
+An identical passed gate executes no commands, and a new gate can reuse only
+suite receipts whose complete inputs still match. Checks, builds, security work,
+and behavior proofs remain fresh for new gate identities.
 Agents can use `code-polishy docs list`, `docs find`, and `docs read` to retrieve
 the exact documentation shipped with the repository's locked release.
 

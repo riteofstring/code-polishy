@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	"github.com/riteofstring/code-polishy/internal/supplychain"
+	"github.com/riteofstring/code-polishy/internal/testartifact"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
@@ -67,6 +68,9 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 	if err != nil {
 		return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), err
 	}
+	if execution.controller.alreadyPassed != nil {
+		return engine.alreadyPassedMergeGate(ctx, base, plan, execution.controller), nil
+	}
 	if execution.reviewErr != nil {
 		return engine.finalizeMergeGateReviewError(ctx, base, plan, execution)
 	}
@@ -75,6 +79,21 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 		return execution.controller.finalize(engine, report, nil)
 	}
 	return engine.executeMergeGateCommands(ctx, base, plan, execution)
+}
+
+func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) Report {
+	reused := []string{}
+	for _, command := range controller.alreadyPassed.Commands {
+		if command.Category == gaterun.OrdinaryTest {
+			reused = append(reused, command.Name)
+		}
+	}
+	report := Report{
+		BehaviorReview: &controller.behaviorStatus,
+		GateRunPolicy:  &GateRunPolicy{Status: "already-passed", ReportPath: controller.alreadyPassedPath, ReusedPhases: reused},
+		Notes:          []string{"the exact gate identity already passed; no validation commands executed"},
+	}
+	return engine.withMergeGateMetadata(ctx, report, base, plan)
 }
 
 func (engine *Engine) prepareMergeGateExecution(ctx context.Context, base string, plan MergeGateExecutionPlan, options MergeGateOptions) (mergeGateExecution, error) {
@@ -340,6 +359,19 @@ func (engine *Engine) forceBehaviorReviewSuites(plan testpolicy.Plan, decision b
 		return testpolicy.Plan{}, err
 	}
 	plan.Suites = selected
+	if len(plan.Aggregations) > 0 {
+		requiredSet := map[string]bool{}
+		for _, name := range decision.requiredSuites {
+			requiredSet[name] = true
+		}
+		kept := plan.Aggregations[:0]
+		for _, aggregation := range plan.Aggregations {
+			if !requiredSet[aggregation.Suite] {
+				kept = append(kept, aggregation)
+			}
+		}
+		plan.Aggregations = kept
+	}
 	return plan, nil
 }
 
@@ -410,6 +442,7 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
 		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
 		TimeoutSeconds: suite.TimeoutSeconds,
+		TestArtifacts:  append([]policy.TestArtifact{}, suite.Artifacts...),
 	}
 }
 
@@ -428,6 +461,48 @@ func (commandRunner *mergeGatePlannedRunner) TestDiagnosticRunner() runner.Runne
 		}
 	}
 	return commandRunner.delegate
+}
+
+func (commandRunner *mergeGatePlannedRunner) ManagesTestArtifacts() bool { return true }
+
+func (commandRunner *mergeGatePlannedRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
+	if provider, ok := commandRunner.delegate.(interface {
+		TestArtifacts(string, int) []testartifact.Record
+	}); ok {
+		return provider.TestArtifacts(name, attempt)
+	}
+	return []testartifact.Record{}
+}
+
+func (commandRunner *mergeGatePlannedRunner) ReuseSuite(suite policy.TestSuite, attempt int) (testpolicy.SuiteExecution, bool, error) {
+	if commandRunner.err != nil || commandRunner.next >= len(commandRunner.expected) ||
+		!samePolicyCommand(commandRunner.expected[commandRunner.next].Command, suiteCommand(suite)) {
+		return testpolicy.SuiteExecution{}, false, nil
+	}
+	controller, ok := commandRunner.delegate.(testpolicy.SuiteReuseController)
+	if !ok {
+		return testpolicy.SuiteExecution{}, false, nil
+	}
+	execution, reused, err := controller.ReuseSuite(suite, attempt)
+	if err != nil || !reused {
+		return execution, reused, err
+	}
+	commandRunner.next++
+	return execution, true, nil
+}
+
+func (commandRunner *mergeGatePlannedRunner) RecordSuite(execution testpolicy.SuiteExecution) error {
+	if controller, ok := commandRunner.delegate.(testpolicy.SuiteReuseController); ok {
+		return controller.RecordSuite(execution)
+	}
+	return nil
+}
+
+func (commandRunner *mergeGatePlannedRunner) ReceiptNotes() []string {
+	if provider, ok := commandRunner.delegate.(interface{ ReceiptNotes() []string }); ok {
+		return provider.ReceiptNotes()
+	}
+	return nil
 }
 
 func (commandRunner *mergeGatePlannedRunner) Run(ctx context.Context, root string, command policy.Command) error {
@@ -512,7 +587,8 @@ func samePolicyCommandCollections(expected, actual policy.Command) bool {
 	return slices.Equal(expected.Argv, actual.Argv) && slices.Equal(expected.Provides, actual.Provides) &&
 		slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
 		slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.Environment, actual.Environment) &&
-		slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths)
+		slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths) &&
+		slices.Equal(expected.TestArtifacts, actual.TestArtifacts)
 }
 
 func (engine *Engine) fullGate(ctx context.Context) (Report, error) {

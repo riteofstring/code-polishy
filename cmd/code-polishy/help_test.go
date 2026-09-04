@@ -18,7 +18,7 @@ func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 	publicCommands := []string{
 		"version", "docs", "pack", "agents", "lock", "release-manifest", "change-boundary", "task-session",
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
-		"test", "test-plan", "test-levels", "verify", "architecture", "supply-chain",
+		"test", "test-plan", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
 	}
 	for _, command := range publicCommands {

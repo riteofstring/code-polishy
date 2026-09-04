@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.22.0 - 2026-09-03
+
+- Publish deterministic verified native archives with checksums, internal
+  manifests, CycloneDX SBOMs, SLSA provenance, one five-host release index, and
+  digest-pinned non-root Linux OCI images built from those same archives.
+- Give every test execution a managed artifact directory, validate declared
+  JUnit and Cobertura XML, retain digest-bound evidence in gate reports, and
+  safely prune only older completed Code Polishy-owned runs.
+- Reuse successful suites only when their complete release, platform,
+  toolchain, command, configuration, environment, ownership, and file-input
+  identities match; support authenticated CI receipt bundles, exact
+  supplemental resume, already-passed gates, and one declared final-gate owner.
+- Separate test ownership from the production dependency graph, require every
+  governed test to have one module and focused suite, expose architecture
+  concentration facts, and execute exact duplicate or explicitly covered suites
+  only once while retaining evidence for every requirement.
+- Let generated JavaScript and TypeScript inherit the real source package's
+  workspace, toolchain, TypeScript, lint, dead-code, dependency, and module
+  context without synthetic manifests or lockfiles.
+- Model exact typed Python attribute writes consumed by external runtimes while
+  rejecting stale or broad declarations and leaving adjacent unused attributes
+  visible to Vulture.
+- Let the native pnpm audit survive short registry outages with five bounded
+  attempts while continuing to fail closed after retry exhaustion.
+- Classify documentation-only CI changes in a cheap independent job so Ubuntu,
+  macOS, and Windows verification can start in parallel for source changes.
+
 ## 0.21.6 - 2026-09-03
 
 - Keep sealed installations immutable across all policy-owned Python and

@@ -14,6 +14,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/testartifact"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
 type gateProofCaptureRunner struct {
@@ -112,6 +114,56 @@ func (commandRunner *gateArtifactRunner) RunWithOutput(ctx context.Context, root
 	return commandRunner.runNext(ctx, root, command, true)
 }
 
+func (commandRunner *gateArtifactRunner) ManagesTestArtifacts() bool { return true }
+
+func (commandRunner *gateArtifactRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
+	return append([]testartifact.Record{}, commandRunner.artifacts[testLogKey{name: name, attempt: attempt}]...)
+}
+
+func (commandRunner *gateArtifactRunner) ReuseSuite(suite policy.TestSuite, attempt int) (testpolicy.SuiteExecution, bool, error) {
+	if commandRunner.receipts == nil || attempt != 1 {
+		return testpolicy.SuiteExecution{}, false, nil
+	}
+	index := commandRunner.next
+	if index >= len(commandRunner.expected) || commandRunner.expected[index].Category != gaterun.OrdinaryTest ||
+		commandRunner.expected[index].Command.Name != suite.Name {
+		return testpolicy.SuiteExecution{}, false, nil
+	}
+	execution, reusable, err := commandRunner.receipts.ReuseSuite(suite, attempt)
+	if err != nil || !reusable {
+		return testpolicy.SuiteExecution{}, reusable, err
+	}
+	identity := commandRunner.receipts.identities[suite.Name]
+	identitySHA256, err := identity.Digest()
+	if err != nil {
+		return testpolicy.SuiteExecution{}, false, err
+	}
+	if _, err := commandRunner.run.RecordSuiteReuse(index, gaterun.SuiteReuse{
+		IdentitySHA256: identitySHA256, ReceiptPath: execution.ReceiptPath,
+		ReceiptSHA256: execution.ReceiptSHA256, DurationMillis: execution.Result.ExecutionDuration.Milliseconds(),
+	}); err != nil {
+		commandRunner.err = err
+		return testpolicy.SuiteExecution{}, false, err
+	}
+	commandRunner.next++
+	commandRunner.artifacts[testLogKey{name: suite.Name, attempt: attempt}] = append([]testartifact.Record{}, execution.Artifacts...)
+	return execution, true, nil
+}
+
+func (commandRunner *gateArtifactRunner) RecordSuite(execution testpolicy.SuiteExecution) error {
+	if commandRunner.receipts == nil {
+		return nil
+	}
+	return commandRunner.receipts.RecordSuite(execution)
+}
+
+func (commandRunner *gateArtifactRunner) ReceiptNotes() []string {
+	if commandRunner.receipts == nil {
+		return nil
+	}
+	return commandRunner.receipts.Notes()
+}
+
 func (commandRunner *gateArtifactRunner) TestDiagnosticRunner() runner.Runner {
 	return &gateDiagnosticRunner{parent: commandRunner}
 }
@@ -147,12 +199,23 @@ func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root strin
 
 func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root string, index int, command policy.Command, captureOutput, diagnostic bool) (runner.Result, runner.Output, error) {
 	fmt.Fprintf(commandRunner.progress, "RUN %s\n", command.Name)
+	actual, err := commandRunner.prepareCommand(index, command)
+	if err != nil {
+		commandRunner.err = err
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+	}
 	commandLog, err := commandRunner.run.OpenCommandLog(index, gaterun.LogOptions{})
 	if err != nil {
 		commandRunner.err = err
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
-	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, command, commandLog.Stdout(), commandLog.Stderr(), captureOutput)
+	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput)
+	artifacts := []testartifact.Record{}
+	if commandRunner.expected[index].Category == gaterun.OrdinaryTest {
+		var artifactErr error
+		artifacts, artifactErr = commandRunner.artifactExecution.ValidateCommand(actual)
+		runErr = errors.Join(runErr, artifactErr)
+	}
 	logResult, logErr := commandLog.Close()
 	if logErr != nil {
 		commandRunner.err = logErr
@@ -180,6 +243,7 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 	attempt := outcome.Attempts[len(outcome.Attempts)-1]
 	if commandRunner.expected[index].Category == gaterun.OrdinaryTest {
 		commandRunner.logPaths[testLogKey{name: command.Name, attempt: attempt.Number}] = attempt.LogPath
+		commandRunner.artifacts[testLogKey{name: command.Name, attempt: attempt.Number}] = append([]testartifact.Record{}, artifacts...)
 	}
 	if runErr == nil {
 		fmt.Fprintf(commandRunner.progress, "PASS %s (%s)\n", command.Name, conciseDuration(result.ExecutionDuration))
@@ -191,6 +255,14 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 	}
 	fmt.Fprintln(commandRunner.progress, "LOG", attempt.LogPath)
 	return result, output, runErr
+}
+
+func (commandRunner *gateArtifactRunner) prepareCommand(index int, command policy.Command) (policy.Command, error) {
+	if commandRunner.expected[index].Category != gaterun.OrdinaryTest {
+		return command, nil
+	}
+	suite := policy.TestSuite{Name: command.Name, Artifacts: command.TestArtifacts}
+	return commandRunner.artifactExecution.PrepareCommand(suite, command)
 }
 
 func (commandRunner *gateArtifactRunner) runDiagnostic(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
@@ -211,6 +283,12 @@ func (diagnostic *gateDiagnosticRunner) Run(ctx context.Context, root string, co
 
 func (diagnostic *gateDiagnosticRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
 	return diagnostic.parent.runDiagnostic(ctx, root, command)
+}
+
+func (diagnostic *gateDiagnosticRunner) ManagesTestArtifacts() bool { return true }
+
+func (diagnostic *gateDiagnosticRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
+	return diagnostic.parent.TestArtifacts(name, attempt)
 }
 
 func runGateCommand(ctx context.Context, commandRunner runner.Runner, root string, command policy.Command, stdout, stderr io.Writer, captureOutput bool) (runner.Result, runner.Output, error) {
