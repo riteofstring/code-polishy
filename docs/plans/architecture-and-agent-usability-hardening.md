@@ -8,8 +8,9 @@ Target release: v0.24.0
 
 Prevent a repository from appearing architecturally clean merely because its
 code was placed inside one permissive module, make test ownership independent
-of production path ownership, and make every policy result directly usable by
-an automated coding agent.
+of production path ownership, close exact Python reachability gaps without
+creating symbol allowlists, and make every policy result directly usable by an
+automated coding agent.
 
 This plan follows v0.23.0. It must preserve the stricter parser, dependency,
 evidence, and publication boundaries delivered there. Before implementation,
@@ -24,14 +25,16 @@ before v0.24.0 is complete.
 ## Evidence baseline
 
 The adoption feedback behind this plan was collected from Code Polishy
-v0.21.x. v0.22 already closed part of it, so this plan implements the remaining
-delta instead of describing those capabilities as absent.
+v0.21.x, with a later Python-focused sample believed to include both v0.21.x
+and v0.22. v0.22 already closed part of it, so this plan implements the
+remaining delta instead of describing those capabilities as absent.
 
 | Feedback area           | Already present in v0.22                                                                                                                                                                                                                              | Remaining work                                                                                                                                                                                        |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Architecture visibility | `architecture` reports production files, test files, incoming and outgoing dependencies, and quick focused suites per module. Durable guidance already favors concept ownership and deep modules over catch-all ownership and forwarding-only splits. | Enforce cycles below the declared module level, identify suspiciously vacuous topology, and require a graph review before adoption or an architecture rewrite.                                        |
 | Test ownership          | Every governed test must resolve to one production module and be included by a quick focused suite.                                                                                                                                                   | Stop deriving ownership implicitly from production module paths. Declare the owner and primary focused suite directly and provide useful unmapped-test diagnostics.                                   |
 | Agent diagnostics       | Merge and checkpoint gates write JSON reports and bounded command logs.                                                                                                                                                                               | Make ordinary policy output summary-first and bounded, give every command a complete structured report, add SARIF and stable finding identities, and attach exact remediation and rerun instructions. |
+| Python reachability     | v0.22 infers exact Pydantic import aliases, re-exports, local subclass chains, fields, `model_config`, validators, serializers, and computed fields. It also supports exact dynamic symbols and external attribute writes through typed parameters.   | Infer TypedDict literal-key reads, support exact external writes through typed locals and `self`, and prevent free-standing or generated symbol inventories from suppressing dead-code findings.      |
 
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
@@ -54,6 +57,9 @@ the observable outcome.
 - Remediation uses repository and lockfile facts already available to the
   evaluation. It never queries for the newest dependency or silently edits,
   installs, upgrades, or executes lifecycle scripts.
+- Dynamic reachability is evidence about one real consumer boundary, not a
+  symbol allowlist. A declaration without independently resolvable consumer
+  evidence is invalid even when every named symbol currently exists.
 - Machine output is versioned, deterministic, path-normalized, size-bounded,
   and independent of terminal prose.
 
@@ -239,6 +245,121 @@ configuration alternative per candidate. The structured remediation always
 states that an agent must choose based on the behavior the test verifies, not
 merely its directory.
 
+## Exact Python reachability
+
+Preserve v0.22's Pydantic behavior as frozen regression coverage. Exact imports
+and aliases of supported Pydantic bases and decorators, local subclasses and
+re-exports, model fields, `Field` and `PrivateAttr` declarations,
+`model_config`, validators, serializers, and computed fields remain inferred
+without target configuration. Lookalikes, unresolved aliases, wildcard
+imports, `ClassVar` members, and ordinary methods remain visible to dead-code
+analysis.
+
+Treat v0.23's `scope.pythonComputedImports` as a separate prerequisite. It owns
+architecture evidence for one computed import callsite and must continue to
+reject an undeclared, ambiguous, wildcard, escaping, or stale local import.
+Dead-code reachability cannot satisfy that architecture check, and a computed-
+import declaration alone cannot preserve a Vulture symbol.
+
+### TypedDict literal-key reads
+
+Extend the released Python AST facts rather than scanning strings or adding a
+second parser. Recognize exact local TypedDict definitions created through
+`typing.TypedDict` or `typing_extensions.TypedDict`, including statically
+resolvable import aliases, re-exports, local inheritance, and the class and
+functional declaration forms.
+
+When a receiver's annotation, exact constructor, or supported local alias
+resolves to one TypedDict, a subscript load with one plain string literal keeps
+only that exact declared key reachable:
+
+```python
+payload: RequestPayload
+name = payload["name"]
+```
+
+The same key spelling in another TypedDict, an unrelated string constant, a
+dynamic key, an unresolved or union receiver, `Any`, a wildcard import, and a
+mapping whose type cannot be proven provide no exemption. Duplicate keys,
+ambiguous definitions, escaping re-exports, unsupported type expressions, or a
+fact response that omits a selected file fail coverage rather than preserving
+all fields.
+
+Do not infer broader dictionary API semantics in this phase. Calls such as
+`get`, `pop`, `setdefault`, iteration, unpacking, or serialization require their
+own exact fact contract and fixtures before they can preserve a field. This
+keeps a literal-key improvement from becoming name-based reachability.
+
+### Exact external writes
+
+Replace the flat `scope.pythonExternalAttributes` receiver fields with one
+discriminated, exact receiver binding. Each declaration continues to name one
+contained project, module, containing callable, written attribute, and external
+consumer contract. It additionally binds the write line and column and one of
+these receiver forms:
+
+- `parameter`: one exactly annotated callable parameter at its signature
+  location;
+- `local`: one exactly annotated local binding at a stated line and column,
+  with no ambiguous rebinding before the write; or
+- `self`: the exact receiver of one resolved method whose enclosing local class
+  has a statically proven external base, protocol, decorator, or registration
+  callsite named by the declaration.
+
+The parameter or local annotation must resolve through exact imports and
+aliases to the declared external type. A `self` declaration must prove the
+external consumer boundary; merely naming a local class or writing
+`self.attribute` is insufficient. Each form resolves one AST assignment with
+the expected receiver and attribute at the exact source location. Moving the
+binding or write, changing its type or consumer, shadowing or rebinding the
+receiver, changing the callable, or producing more than one match makes the
+declaration stale or ambiguous.
+
+Only the identified assignment is externally consumed. Adjacent writes, the
+same attribute on another receiver, nested receiver chains, unannotated locals,
+local-only types, and inferred duck typing remain visible. The new schema
+rejects v0.22's parameter-only flat object; there is no compatibility decoder.
+
+### Evidence-bound dynamic symbols
+
+Replace free-standing `scope.pythonDynamicReferences`
+`{project,module,symbol}` entries with two discriminated declaration forms that
+identify an independently resolvable consumer. Support only evidence kinds
+with strict syntax and ownership contracts:
+
+- `target` binds one exact module and symbol to either a governed callsite or an
+  external protocol, base, decorator, or entry-point contract. A callsite names
+  its project, module, callable, line, column, recognized call shape, and target
+  argument. An external contract names its admitted distribution, qualified
+  type or decorator, member, and exact local implementation binding.
+- `registry` binds one contained governed configuration or registry path, its
+  structural selector, and the exact consuming callsite. Code Polishy derives
+  the current bounded target set from that source; configuration does not list
+  the targets again.
+
+PEP 621 entry points, in-tree build hooks, Pydantic contracts, and other facts
+Code Polishy can already infer remain inferred. A target must not repeat them
+as configured reachability. A consumer and target must belong to the declared
+project, resolve exactly once, and still be connected by the declared contract.
+Missing, duplicate, stale, ambiguous, wildcard, unbounded, external-to-project,
+or unsupported evidence is a non-suppressible `policy.pythonReachability`
+failure.
+
+The resulting registry fact set records every resolved target and participates
+in dead-code evidence identity.
+
+No setup, adoption, remediation, or autofix path may translate Vulture findings
+into `pythonDynamicReferences`, `pythonExternalAttributes`, `scope.entryPoints`,
+or another reachability list. Dead-code remediation recommends deletion unless
+the engine has already found one concrete consumer boundary; in that case it
+may show only the single evidence-bound declaration for that boundary.
+
+Do not use an arbitrary small item limit as the semantic defense. A legitimate
+registry can have many entries and an agent can work around a numeric ceiling.
+Protocol-level count and byte ceilings still prevent resource exhaustion, while
+the required one-to-one or one-to-bounded-registry consumer evidence prevents a
+large ungrounded inventory from changing the result.
+
 ## Canonical finding contract
 
 Replace message-shaped findings with a versioned Code-Polishy-owned finding
@@ -356,6 +477,10 @@ be adopted as an exact declaration.
   than defining a lossy second finding type.
 - Use the v0.23 runtime JSON Schema authority for the new test and report
   contracts.
+- Extend the released batched Python AST facts and Vulture adapter for
+  TypedDict, receiver-binding, and consumer evidence. Do not add another
+  Python parser, dead-code analyzer, typechecker, or runtime dependency for
+  these cases.
 - Reuse the bounded clean-context review and receipt primitives where their
   trust and identity contracts match. Do not fork a general plugin or AI
   framework.
@@ -369,7 +494,8 @@ be adopted as an exact declaration.
 
 1. Land or select the released v0.23 tree and inventory its parser, finding,
    report, schema, review, dependency, and receipt boundaries.
-2. Convert the v0.21.x adoption examples into exact regression fixtures.
+2. Convert the v0.21.x and v0.22 adoption examples into exact regression
+   fixtures, retaining the source release for each example.
 3. Mark each v0.21 concern as closed by v0.22, closed by v0.23, or still open.
 4. Remove redundant work from this plan without weakening its outcomes.
 5. Freeze current exit codes, gate identities, report custody, and supported-
@@ -418,7 +544,22 @@ be adopted as an exact declaration.
    broad rewrite and verify the same graph at delivery.
 5. Complete one self-hosting architecture review for Code Polishy.
 
-### Phase 5: Complete remediation coverage
+### Phase 5: Harden Python reachability
+
+1. Freeze v0.22's Pydantic inference and v0.23's computed-import boundaries as
+   regression contracts.
+2. Add exact TypedDict definition, alias, re-export, inheritance, receiver, and
+   literal-subscript facts to the existing Python adapter.
+3. Replace external-attribute receiver strings with exact parameter, typed-
+   local, and proven-`self` binding variants.
+4. Replace free-standing Python dynamic symbols with the required callsite,
+   governed-registry, or external-contract consumer evidence.
+5. Remove every parameter-only decoder and unbound
+   `{project,module,symbol}` configuration path.
+6. Update adoption and remediation guidance so no agent or command turns dead-
+   code findings into a generated reachability inventory.
+
+### Phase 6: Complete remediation coverage
 
 1. Give every built-in finding an owned remediation and valid next command.
 2. Resolve exact direct versions from each authoritative lock scope.
@@ -426,7 +567,7 @@ be adopted as an exact declaration.
 4. Verify that suggestions never perform network resolution or bypass
    dependency review.
 
-### Phase 6: Release the atomic contract
+### Phase 7: Release the atomic contract
 
 1. Update permanent policy, adoption, agent, schema, CLI, and release docs.
 2. Remove superseded types, renderers, schema fields, messages-as-identities,
@@ -479,6 +620,33 @@ Test-ownership fixtures must prove:
 - ambiguous tests show bounded alternatives without a fabricated owner; and
 - test imports cannot authorize a production architecture edge.
 
+Python-reachability fixtures must prove:
+
+- every v0.22 Pydantic alias, re-export, local subclass, field,
+  `model_config`, validator, serializer, and computed-field case remains live,
+  while lookalikes and unrelated members remain dead;
+- every v0.23 computed-import declaration remains exact, bounded, stale-
+  checked, and separate from dead-code reachability;
+- a literal subscript read keeps only the matching field of one exactly
+  resolved local TypedDict;
+- identical keys in another TypedDict, unrelated string literals, dynamic
+  keys, `Any`, unions, unresolved aliases, and unsupported mapping operations
+  preserve nothing;
+- class and functional TypedDict declarations, exact aliases, local
+  inheritance, and re-exports agree across supported platforms;
+- parameter, typed-local, and `self` external writes each resolve one receiver
+  binding, one write, and one independently proven external consumer;
+- a moved binding or write, rebinding, shadowing, local consumer, adjacent
+  attribute, nested receiver, or ambiguous AST match fails specifically;
+- every configured dynamic symbol resolves through one current exact callsite,
+  governed registry, or admitted external contract;
+- one governed registry declaration derives its bounded current target set
+  without copying those targets into configuration;
+- a free-standing, duplicated, wildcard, stale, unsupported, or unbound symbol
+  declaration fails and cannot be suppressed; and
+- neither setup, remediation, nor agent guidance offers bulk generation from
+  Vulture findings or broad entry-point inventories.
+
 Reporting fixtures must prove:
 
 - human output starts with complete totals, remains within its selected bound,
@@ -505,8 +673,9 @@ Dependency-remediation fixtures must prove:
 - the suggested exact version still receives all ordinary vulnerability,
   release-age, license, and dependency-review checks.
 
-The final candidate must also prove that old configuration fields and output
-types are absent, the Code Polishy repository passes under explicit test
+The final candidate must also prove that old configuration fields, unbound
+Python reachability declarations, parameter-only external-write objects, and
+output types are absent, the Code Polishy repository passes under explicit test
 ownership, and every new dependency or standards snapshot is present in the
 complete release inventory and authenticated evidence.
 
@@ -522,6 +691,15 @@ complete release inventory and authenticated evidence.
   source rewrites, and delivery proves the candidate retained that graph.
 - Every governed test has one explicit production owner and primary quick
   focused suite independent of production module path matching.
+- TypedDict literal-key access preserves only the exact field reached through a
+  statically proven local type.
+- Externally consumed Python writes support exact parameters, typed locals, and
+  `self` receivers without preserving adjacent or unproven attributes.
+- Every configured Python dynamic symbol is bound to one current independently
+  resolvable consumer; a free-standing or bulk-generated reference inventory
+  cannot change the dead-code result.
+- Python computed-import architecture evidence remains exact and separate from
+  dead-code reachability.
 - Human output is bounded and summary-first; complete JSON reports always
   remain available.
 - JSON and SARIF expose stable rule IDs, semantic fingerprints, related
@@ -532,8 +710,8 @@ complete release inventory and authenticated evidence.
   unsolicited upgrade.
 - Every finding provides a precise remediation and the narrowest safe next
   command.
-- No v0.21 or v0.22 compatibility path, old test-ownership inference, or dual
-  report model remains.
+- No v0.21 or v0.22 compatibility path, old test-ownership inference, unbound
+  Python reachability form, or dual report model remains.
 - Every phase and completion criterion is delivered together in v0.24.0.
 
 ## Related plans
