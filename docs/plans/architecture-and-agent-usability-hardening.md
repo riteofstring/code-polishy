@@ -53,6 +53,17 @@ installed releases for a formatter and created a temporary source/output
 synchronization script. v0.24 must make both paths unambiguous without weakening
 the underlying checks.
 
+A later v0.23 adoption exposed a third boundary: one Python project with more
+than 1,000 governed source files and more than 8 MiB of source could not cross
+the whole-project `python-facts/v1` request limit. The gate could not complete
+and expanded the one unavailable project fact set into 1,349 cascading
+findings. That failure also made the existing Pydantic and computed plug-in-
+import claims impossible to trust at the reported scale. Preserve the exact
+oversized project and its direct and inherited `BaseModel`, annotated-field,
+`model_config`, and computed-import cases as regressions. Treat the real-model
+Pydantic false positives as reported defects to fix, not as behavior already
+proved by v0.22 fixtures.
+
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
 the observable outcome.
@@ -104,7 +115,8 @@ The graph is an engine fact contract, not a second parser:
 
 - JavaScript and TypeScript consume resolved facts from the sealed language
   adapter.
-- Python consumes the released v0.23 Python and Ruff fact boundaries.
+- Python consumes the released v0.23 Python and Ruff fact boundaries through
+  the bounded project partitioning contract below.
 - Go retains package semantics. An import edge targets a package rather than an
   invented file; a package cycle reports one real importing file as the witness
   for each edge.
@@ -271,15 +283,54 @@ configuration alternative per candidate. The structured remediation always
 states that an agent must choose based on the behavior the test verifies, not
 merely its directory.
 
+## Bounded Python-facts projects
+
+Replace the one-request-per-project Python source path with deterministic,
+bounded partitioning. A project coordinator sorts normalized source paths,
+packs complete files into requests whose actual encoded form stays within the
+existing item and byte ceilings, and processes one bounded request and response
+at a time. It never builds or transmits one JSON object containing every source
+byte in the project. Individual source, AST, token, response, time, graph, batch
+count, and aggregate compact-fact limits remain explicit and fail closed.
+
+Partitioning is a transport detail, not a semantic boundary. Each source is
+accepted exactly once, every response is bound to its requested paths and
+digests, and the coordinator resolves imports, aliases, re-exports,
+inheritance, TypedDicts, Pydantic contracts, and computed imports over the
+validated union of compact facts from all partitions. When a fact requires
+project-wide context, use a bounded extract-then-resolve pass; do not duplicate
+the whole project into every request or let partition order change the result.
+The partition plan and normalized fact-set identity are deterministic across
+supported platforms and participate in graph and reusable-evidence identities.
+
+A missing, duplicate, reordered, oversized, malformed, timed-out, or
+digest-mismatched partition fails the project before downstream graph or
+reachability policy can claim clean evidence. Emit one non-suppressible,
+project-scoped `architecture.pythonFactsCoverage` finding with bounded related
+partition evidence instead of one derivative finding per source, import, or
+symbol. Other independently established project findings remain visible; only
+cascades whose prerequisite is the failed fact set are withheld.
+
+The regression fixture generates more than 1,000 contained Python files whose
+combined encoded source exceeds 8 MiB. It proves deterministic multi-partition
+coverage, cross-partition imports and re-exports, bounded peak transport,
+exactly-once fact custody, stable identity, one project-level failure for every
+corrupted-partition variant, and no accidental clean pass.
+
 ## Exact Python reachability
 
-Preserve v0.22's Pydantic behavior as frozen regression coverage. Exact imports
+Revalidate and repair Pydantic behavior rather than assuming the v0.22 fixture
+proved it. Add the exact reported direct `BaseModel` subclass, inherited local
+subclass, annotated-field, and `model_config` cases as independent regressions,
+including the import and re-export spellings from the adoption. Exact imports
 and aliases of supported Pydantic bases and decorators, local subclasses and
 re-exports, model fields, `Field` and `PrivateAttr` declarations,
-`model_config`, validators, serializers, and computed fields remain inferred
-without target configuration. Lookalikes, unresolved aliases, wildcard
-imports, `ClassVar` members, and ordinary methods remain visible to dead-code
-analysis.
+`model_config`, validators, serializers, and computed fields must then be
+inferred without target configuration. Lookalikes, unresolved aliases,
+wildcard imports, `ClassVar` members, and ordinary methods remain visible to
+dead-code analysis. A passing synthetic aggregate fixture does not close a
+reported case unless that exact source shape also passes through the installed
+end-to-end command.
 
 Treat v0.23's `scope.pythonComputedImports` as a separate prerequisite. It owns
 architecture evidence for one computed import callsite and must continue to
@@ -695,7 +746,9 @@ be adopted as an exact declaration.
 ### Phase 2: Enforce source-level cycles
 
 1. Define and bound `source-dependency-graph/v1`.
-2. Adapt each supported language's existing resolved facts once.
+2. Adapt each supported language's existing resolved facts once, replacing the
+   whole-project Python request with the deterministic bounded project
+   partitioning contract.
 3. Add deterministic strongly connected component analysis before module
    projection.
 4. Emit production, generated, and test-only cycle findings with complete
@@ -727,8 +780,9 @@ be adopted as an exact declaration.
 
 ### Phase 5: Harden Python reachability
 
-1. Freeze v0.22's Pydantic inference and v0.23's computed-import boundaries as
-   regression contracts.
+1. Reproduce and fix the reported direct and inherited `BaseModel`, annotated-
+   field, and `model_config` failures through the installed end-to-end command;
+   retain the valid v0.22 Pydantic cases as additional regressions.
 2. Add exact TypedDict definition, alias, re-export, inheritance, receiver, and
    literal-subscript facts to the existing Python adapter.
 3. Replace external-attribute receiver strings with exact parameter, typed-
@@ -739,6 +793,9 @@ be adopted as an exact declaration.
    `{project,module,symbol}` configuration path.
 6. Update adoption and remediation guidance so no agent or command turns dead-
    code findings into a generated reachability inventory.
+7. Revalidate computed plug-in imports end to end on the partitioned transport,
+   including a callsite and its target or governed registry in different
+   partitions.
 
 ### Phase 6: Complete remediation coverage
 
@@ -811,7 +868,9 @@ Test-ownership fixtures must prove:
 
 Python-reachability fixtures must prove:
 
-- every v0.22 Pydantic alias, re-export, local subclass, field,
+- each exact reported direct and inherited `BaseModel`, annotated-field, and
+  `model_config` source shape passes the installed end-to-end command;
+- every remaining v0.22 Pydantic alias, re-export, local subclass, field,
   `model_config`, validator, serializer, and computed-field case remains live,
   while lookalikes and unrelated members remain dead;
 - every v0.23 computed-import declaration remains exact, bounded, stale-
@@ -835,6 +894,22 @@ Python-reachability fixtures must prove:
   declaration fails and cannot be suppressed; and
 - neither setup, remediation, nor agent guidance offers bulk generation from
   Vulture findings or broad entry-point inventories.
+
+Python-facts partitioning fixtures must prove:
+
+- a generated project with more than 1,000 governed Python files and more than
+  8 MiB of encoded source completes through multiple deterministic bounded
+  partitions;
+- files, imports, aliases, re-exports, inheritance, Pydantic reachability, and
+  computed plug-in imports retain identical semantics across partition
+  boundaries and across supported platforms;
+- each source and digest is accepted exactly once and partition ordering cannot
+  change the normalized project fact identity;
+- per-source, per-partition, response, time, item, aggregate compact-fact, and
+  graph resource limits remain enforced; and
+- a missing, duplicated, reordered, oversized, malformed, timed-out, or stale
+  partition produces one `architecture.pythonFactsCoverage` finding for the
+  project and no dependent per-file cascade.
 
 Reporting fixtures must prove:
 
@@ -931,7 +1006,11 @@ complete release inventory and authenticated evidence.
   resolvable consumer; a free-standing or bulk-generated reference inventory
   cannot change the dead-code result.
 - Python computed-import architecture evidence remains exact and separate from
-  dead-code reachability.
+  dead-code reachability, including when callsites and targets cross Python-
+  facts partitions.
+- Python projects larger than one fact request are processed through
+  deterministic bounded partitions with project-wide semantics and one
+  project-level fail-closed coverage result.
 - File, contained-directory, and module evaluation selectors are bounded and
   deterministic, and every report distinguishes requested selection from
   analyzer context and finding relation.
