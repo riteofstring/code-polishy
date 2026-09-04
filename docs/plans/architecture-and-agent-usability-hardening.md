@@ -12,7 +12,8 @@ of production path ownership, close exact Python reachability gaps without
 creating symbol allowlists, distinguish requested evaluation scope from the
 broader context a sound analyzer must read, make generated-source failures
 safely repairable, and make every policy result directly usable by an automated
-coding agent.
+coding agent. Surface relevant repository operational procedures through
+declarative handoffs while keeping managed agent guidance canonical.
 
 This plan follows v0.23.0. It must preserve the stricter parser, dependency,
 evidence, and publication boundaries delivered there. Before implementation,
@@ -71,6 +72,13 @@ external `package.module:object` plug-in. v0.24 adds that composition contract
 without turning it into local-symbol reachability or a general dynamic-import
 escape hatch.
 
+Further adoption feedback identifies two workflow gaps. Repositories need to
+surface their own authentication, release, and deployment procedures without
+editing canonical managed `AGENTS.md`. A file-scoped invocation such as
+`code-polishy check --files AGENTS.md` also unexpectedly starts repository-wide
+Python dead-code analysis. Preserve that invocation as a regression: explaining
+an expansion in a report does not make an unrelated analyzer applicable.
+
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
 the observable outcome.
@@ -90,7 +98,9 @@ the observable outcome.
 - A focused selector limits the requested evaluation boundary, not the context
   a sound package or project analyzer may read. Reports identify both sets and
   never present an unselected context finding as though the caller selected its
-  path.
+  path. Select applicable analyzers before expanding their context; the
+  existence of a language elsewhere in the repository is not an applicability
+  trigger.
 - Rendering filters never alter evaluation scope, the complete report, or the
   process exit status.
 - Remediation uses repository and lockfile facts already available to the
@@ -110,6 +120,10 @@ the observable outcome.
   its canonical identity.
 - Machine output is versioned, deterministic, path-normalized, size-bounded,
   and independent of terminal prose.
+- Managed `AGENTS.md` remains completely canonical. Repository operational
+  handoffs are declared in configuration and resolved from relevant task
+  context; they introduce no editable guidance sections or local policy
+  overrides.
 
 ## Canonical source dependency graph
 
@@ -512,12 +526,26 @@ selected candidate introduced it. `global` is reserved for one repository- or
 policy-wide occurrence. Code Polishy does not fabricate causality when no base
 or analyzer evidence proves it.
 
-Whole-package dead-code and type analysis may therefore remain strict and may
-fail a focused invocation, but its output must say that it expanded analysis,
-why it did so, and which findings are contextual. This classification is not a
-baseline, exception, suppression, or weaker exit status. It lets an agent
-distinguish its requested work from the broader clean-repository requirement
-without treating either as green.
+First determine analyzer applicability from the selected source, an exact
+selected project configuration or other declared analyzer input, or an
+explicit repository-wide evaluation boundary. Only then expand the package or
+project context required by that applicable analyzer. A selected control or
+product-input Markdown file remains subject to its own source rules, but that
+classification alone does not select every language analyzer in the repository.
+In particular, `code-polishy check --files AGENTS.md` must not invoke Python
+facts, Vulture, or another Python dead-code command merely because Python source
+exists elsewhere in the repository.
+
+Applicable whole-package dead-code and type analysis remains strict and may
+fail a focused invocation. Its output must say that it expanded analysis, why
+the selected input requires it, and which findings are contextual. Unrelated
+projects are not part of that expansion. Genuinely repository-wide checks run
+through an explicit repository-wide command or a workflow that selects them;
+shared configuration and lock validation necessary to interpret the focused
+request remains explicit global policy evidence. Help and reports distinguish
+those checks from package context. An analyzer that was not selected cannot be
+reported as having passed. This classification introduces no baseline,
+exception, suppression, or weaker result for work that actually ran.
 
 Make evaluation selectors usable without shell-generated path inventories:
 
@@ -761,11 +789,11 @@ selector. It validates all inputs before mutation, atomically performs the same
 intent capture as `behavior-review capture-intent`, and returns one bounded
 `task-start/v1` packet containing the locked version, capture identity,
 canonical explicitly requested features, applicable workflows, configured
-guards, requested and expanded selection, current design context, and ordered
-required next actions. It runs no tests, reviews, package operations, or
-repository-controlled commands. The component commands remain authoritative;
-the task-start packet composes their facts and must agree with their separate
-outputs.
+guards, requested and expanded selection, current design context, relevant
+operational handoffs, and ordered required next actions. It runs no tests,
+reviews, package operations, or repository-controlled commands. The component
+commands remain authoritative; the task-start packet composes their facts and
+must agree with their separate outputs.
 
 After an atomic lock upgrade, print a bounded capability delta between the
 outgoing and incoming authenticated release catalogs: added, removed, and
@@ -774,6 +802,44 @@ If either authenticated catalog is unavailable, say that the delta is
 unavailable rather than guessing from changelog prose. The same delta is
 available in a deterministic machine document and from repository-aware
 capability inspection after the upgrade.
+
+## Repository operational handoffs
+
+Add bounded `documentation.handoffs` declarations in `.code-polishy.json`.
+Each entry has one stable name, a concise description, one repository-owned
+Markdown document, and exact applicability through named situations or declared
+source/module scopes. Include authentication, release, and deployment as
+documented situations. Permit exact repository-specific situation identifiers
+without inventing a keyword classifier. A matching situation or source/module
+scope selects the entry; overlapping triggers select it once.
+
+Keep managed `AGENTS.md` byte-for-byte canonical for the locked release. Its
+generic workflow instructions may direct an agent to context discovery, but
+must not interpolate repository-specific text, document links, or editable
+sections. The repository owns handoff content and updates it through ordinary
+reviewed changes.
+
+Resolve handoffs automatically through the normal context and task workflows,
+including `design-context` and `task-start`. Use their selected files/modules,
+the actual command or workflow situation, and an optional exact `--situation`
+operand. Expose applicable handoff names, descriptions, paths, selection
+reasons, and document identities as a distinct bounded context category. Load
+only selected handoff documents, alongside the current mapped design context;
+do not scan or include every repository document for every task. Standalone
+context output and the composed task-start packet must agree.
+
+Validate unique identifiers, bounded descriptions and selectors, declared
+module references, and contained, existing, readable, nonempty UTF-8 Markdown
+documents. Reject missing, stale, ambiguous, escaping, symlink, and special-file
+targets with exact configuration and path diagnostics. Reference validation
+must not turn into indiscriminate document loading. Relevant invalid handoffs
+block context composition before intent capture or another mutation; doctor
+validates the full declared inventory.
+
+Handoff discovery reads procedures; it does not execute document commands,
+retrieve credentials, grant authorization, or weaken locked policy and
+workflow approval requirements. Update the runtime and shipped schema, normal
+workflow help, permanent guidance, and repository examples together.
 
 ## Exact-version remediation
 
@@ -810,6 +876,8 @@ be adopted as an exact declaration.
 - Extend the existing repository selection boundary with normalized directory
   and module expansion. Analyzer adapters receive the requested selection and
   read-only context separately; they do not rediscover or redefine either.
+  Select analyzer applicability before context expansion, independently of
+  unrelated ecosystem inventory.
 - Use the v0.23 runtime JSON Schema authority for the new test and report
   contracts and for exact generated-source producer ownership.
 - Extend the released batched Python AST facts and Vulture adapter for
@@ -819,6 +887,10 @@ be adopted as an exact declaration.
 - Reuse the bounded clean-context review and receipt primitives where their
   trust and identity contracts match. Do not fork a general plugin or AI
   framework.
+- Resolve operational handoffs through the existing configuration and
+  repository-context boundaries. Keep their applicability distinct from
+  behavior-feature activation and keep the generated agent-guidance template
+  canonical.
 - Any new dependency or pinned standards data follows the full v0.23 supply-
   chain lanes before it enters the candidate and appears in the release SBOM
   and authenticated publication evidence.
@@ -859,6 +931,8 @@ be adopted as an exact declaration.
 8. Make warning, protected-output, no-write, exit-status, and subcommand-help
    text derive from the same structured result.
 9. Implement and schema-test JSON and the selected single SARIF serializer.
+10. Fix scoped analyzer applicability, preserve required project context, and
+    separate explicit repository-wide checks from file-scoped execution.
 
 ### Phase 2: Enforce source-level cycles
 
@@ -945,6 +1019,9 @@ be adopted as an exact declaration.
    captured, and launcher-mediated execution.
 4. Add the routing table and atomic bounded `task-start/v1` composition.
 5. Add authenticated upgrade capability deltas and unavailable evidence.
+6. Add declarative operational handoffs, exact context selection and reference
+   validation, then compose the same selected facts into context commands and
+   task start without customizing managed `AGENTS.md`.
 
 ### Phase 8: Release the atomic contract
 
@@ -1080,6 +1157,15 @@ Selection and command-surface fixtures must prove:
   produces the same normalized requested selection on every supported platform;
 - module evaluation selects exactly the declared module while package analyzers
   receive only the separately recorded context they require;
+- in a repository containing Python source, installed
+  `code-polishy check --files AGENTS.md` validates that selected guidance but
+  invokes no Python facts or dead-code command and reports no Python pass;
+- selecting a Python source or applicable project input still runs its required
+  project analysis, preserves strict contextual findings, and excludes
+  unrelated projects;
+- explicit repository-wide selection and workflow-selected gates retain their
+  full analyzer coverage, while focused Markdown checks retain the applicable
+  managed-guidance and control/product-input rules;
 - missing, escaping, empty, overlapping, symlink, and special-file operands
   receive specific bounded outcomes and cannot produce an accidental pass;
 - findings inside the selection, connected through exact analyzer evidence,
@@ -1118,6 +1204,25 @@ Capability and task-start fixtures must prove:
 - an upgrade reports an authenticated added, removed, and changed capability
   delta, while a missing outgoing catalog reports unavailable evidence without
   inventing a delta.
+
+Operational-handoff fixtures must prove:
+
+- authentication, release, deployment, and an exact repository-specific
+  situation each surface only their declared applicable procedures through
+  normal context commands and task start;
+- file/module triggers and situation triggers select the same bounded,
+  deterministic entries, and overlapping triggers do not duplicate documents;
+- adding or changing handoffs never changes canonical managed `AGENTS.md` or
+  introduces an editable repository-specific section;
+- missing, stale, duplicate, invalid, escaping, symlink, special-file, and
+  unreadable references produce actionable diagnostics; relevant invalid
+  handoffs prevent task-start mutation, and doctor checks the full inventory;
+- unrelated repository documents and unselected handoff bodies are not read or
+  copied into the task packet;
+- selected document content and identity agree across standalone context,
+  human output, machine output, and task-start composition; and
+- discovery performs no document command, credential lookup, feature
+  activation, or authorization change.
 
 Generated-source remediation fixtures must prove:
 
@@ -1186,13 +1291,18 @@ complete release inventory and authenticated evidence.
   project-level fail-closed coverage result.
 - File, contained-directory, and module evaluation selectors are bounded and
   deterministic, and every report distinguishes requested selection from
-  analyzer context and finding relation.
+  analyzer context and finding relation. Unrelated language analyzers never
+  run merely because their ecosystem exists elsewhere in the repository;
+  repository-wide checks have an explicit execution boundary.
 - Human output is bounded and summary-first; complete JSON reports always
   remain available.
 - Repository-aware capability discovery, exact feature aliases, visible intent
   and status confirmations, authenticated upgrade deltas, and `task-start/v1`
   expose the applicable locked workflows without activating a feature from
   natural-language keywords.
+- Declarative repository operational handoffs surface only relevant validated
+  procedures through normal workflow/context commands and task start, without
+  customizing managed `AGENTS.md` or loading every repository document.
 - JSON and SARIF expose stable rule IDs, semantic fingerprints, related
   locations, grouping fields, and structured remediation.
 - Global findings appear once, and display filters cannot turn a failed full
