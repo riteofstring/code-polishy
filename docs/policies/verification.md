@@ -465,10 +465,14 @@ fails instead of guessing.
 CI may run `test-levels --base REF` in a separate read-only classification job
 before platform fan-out. That job needs only the candidate engine and its pinned
 Go toolchain. Only a successful explicit documentation result may suppress
-platform lanes; a failed, missing, or ambiguous result selects them. Platform
-lanes depend on classification rather than on completion of the primary gate,
-so source verification starts in parallel while documentation-only changes
-still avoid unnecessary runners.
+full verification. The primary Ubuntu gate and the macOS and Windows lanes wait
+for classification. A documentation result gives the Ubuntu gate only the
+pinned Go toolchain and sealed JavaScript runtime and formatter needed for the
+built-in documentation contract, and suppresses the macOS and Windows lanes. A
+failed, missing, or ambiguous result selects the full Ubuntu toolchain and both
+platform lanes. This short serialization keeps the classification result
+authoritative and avoids provisioning the full Ubuntu policy toolchain for a
+documentation-only change.
 
 Each merge gate writes a versioned JSON run report and bounded per-command logs
 below `.code-polishy-reports/merge-gate/`. The report is the machine-readable

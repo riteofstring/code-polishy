@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Route the Ubuntu CI gate through change classification so documentation-only
+  candidates install only their documentation toolchain, while source,
+  ambiguous, and failed classifications retain the full fail-safe platform
+  workflow.
+
 ## 0.23.0 - 2026-09-04
 
 - Validate runtime configuration against the shipped JSON Schema before typed

@@ -72,6 +72,8 @@ jobs:
 
   policy:
     name: Policy and tests (ubuntu-24.04)
+    needs: classify
+    if: always() && !cancelled()
     runs-on: ubuntu-24.04
     steps:
       - name: Check out requested commit
@@ -97,7 +99,17 @@ jobs:
           unset authorization
           git checkout --detach "${GITHUB_SHA}"
 
-      - name: Install pinned policy toolchain
+      - name: Install documentation policy toolchain
+        if: github.event_name != 'schedule' && needs.classify.result == 'success' && needs.classify.outputs.documentation == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./tools/install-go.sh
+          ./tools/install-javascript-runtime.sh
+          ./tools/install-javascript-bundle.sh
+
+      - name: Install full pinned policy toolchain
+        if: github.event_name == 'schedule' || needs.classify.result != 'success' || needs.classify.outputs.documentation != 'true'
         shell: bash
         run: ./tools/install-policy-tools.sh
 
