@@ -740,7 +740,23 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments.*|markdown.*)[.]go$"
+          "(^|/)(comments.*|markdown.*|vulture)[.]go$"
+        ],
+        "runOn": ["supplemental"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "quality-vulture-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "cost": "expensive",
+        "modules": ["quality"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/quality",
+          "--conditionals-boundary=false",
+          "--exclude-files",
+          "(^|/)(comments.*|data|javascript|markdown.*|python|python_inventory|quality)[.]go$"
         ],
         "runOn": ["supplemental"],
         "timeoutSeconds": 3600

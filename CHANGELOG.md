@@ -16,6 +16,8 @@
 - Use base-aware CI selection, skip platform jobs for ordinary Markdown, split
   the old nine-command tooling bundle by affected paths, and state that clean
   Git operations and pre-gate `test --changed` reruns require no new evidence.
+- Split Vulture mutation coverage from unrelated quality analysis so a bounded
+  dead-code change can run and retry one exact supplemental suite.
 
 ## 0.21.5 - 2026-09-03
 
