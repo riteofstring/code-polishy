@@ -312,7 +312,7 @@ jobs:
           }
           if ($docsList -notlike '*agent-workflows*Agent Workflows*' -or
               $docsList -notlike '*behavior-review*Behavior and Final-State Review*' -or
-              $docsList -notlike '*adding-a-language*Adding a Community Language*') {
+              $docsList -notlike '*adding-a-language*Adding a Language Pack*') {
             throw "Installed native documentation list omitted required topics: $docsList"
           }
           $docsFind = (& $launcher --repo-root $target docs find behavior review 2>&1 | Out-String)
