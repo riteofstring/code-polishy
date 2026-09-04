@@ -262,19 +262,26 @@ func (repo Repository) ReadRegularFileAt(revision, path string) ([]byte, bool, e
 	if len(entries) != 1 {
 		return nil, false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
 	}
-	separator := strings.IndexByte(entries[0], '\t')
-	if separator < 0 || entries[0][separator+1:] != normalized {
-		return nil, false, fmt.Errorf("inspect %s at %s: invalid tree entry", normalized, revision)
-	}
-	fields := strings.Fields(entries[0][:separator])
-	if len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" {
-		return nil, false, fmt.Errorf("inspect %s at %s: path is not a regular file", normalized, revision)
+	if err := validateRegularFileTreeEntry(entries[0], normalized); err != nil {
+		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
 	}
 	data, err := repo.ReadAt(revision, normalized)
 	if err != nil {
 		return nil, false, err
 	}
 	return data, true, nil
+}
+
+func validateRegularFileTreeEntry(entry, path string) error {
+	separator := strings.IndexByte(entry, '\t')
+	if separator < 0 || entry[separator+1:] != path {
+		return errors.New("invalid tree entry")
+	}
+	fields := strings.Fields(entry[:separator])
+	if len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" {
+		return errors.New("path is not a regular file")
+	}
+	return nil
 }
 
 func exactRevision(value string) bool {

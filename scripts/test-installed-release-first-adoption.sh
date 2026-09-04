@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 exercise_first_adoption_fixture() {
-  local fixture_root="$1" real_git="$2"
+  local fixture_root="$1" real_git="$2" lock="$3" output="$4"
   local target="${fixture_root}/first-adoption"
   local command_log base
 

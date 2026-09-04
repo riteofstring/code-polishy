@@ -37,7 +37,7 @@ lock="${policy_root}/.code-polishy.lock.json"
 fixture=""
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture python-adoption]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|python-adoption]" >&2
   exit 2
 }
 
@@ -79,9 +79,10 @@ while (($#)); do
     *) usage ;;
   esac
 done
-if [[ -n "${fixture}" && "${fixture}" != "python-adoption" ]]; then
-  usage
-fi
+case "${fixture}" in
+  "" | first-adoption | python-adoption) ;;
+  *) usage ;;
+esac
 
 fail() {
   echo "installed release test failure: $1" >&2
@@ -286,11 +287,18 @@ source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
 
-if [[ "${fixture}" == "python-adoption" ]]; then
-  exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
-  echo "The installed release passed the Python adoption fixture."
-  exit 0
-fi
+case "${fixture}" in
+  first-adoption)
+    exercise_first_adoption_fixture "${fixture_root}" "${real_git}" "${lock}" "${output}"
+    echo "The installed release passed the first-adoption fixture."
+    exit 0
+    ;;
+  python-adoption)
+    exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
+    echo "The installed release passed the Python adoption fixture."
+    exit 0
+    ;;
+esac
 
 exercise_versioned_documentation() {
   local target="$1" description="$2" before
@@ -461,7 +469,7 @@ fi
 expect_absent "go-only activated a JavaScript framework policy module" \
   "conditional policy module: (react|electron)"
 exercise_opt_in_behavior_review_fixtures "${fixture_root}" "${real_git}"
-exercise_first_adoption_fixture "${fixture_root}" "${real_git}"
+exercise_first_adoption_fixture "${fixture_root}" "${real_git}" "${lock}" "${output}"
 write_file "${go_only}/internal/greeting/farewell.go" <<'EOF'
 package greeting
 
