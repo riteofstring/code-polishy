@@ -23,6 +23,14 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		t.Fatalf("resolve the host: %v", err)
 	}
 	directory := t.TempDir()
+	files = maps.Clone(files)
+	if files == nil {
+		files = map[string]string{}
+	}
+	files[".tools/javascript/bundle/node_modules/.package-map.json"] = `{"packages":{".":{"url":"..","dependencies":{"fixture":"fixture@1.0.0"}},"fixture@1.0.0":{"url":"./fixture","dependencies":{"fixture":"fixture@1.0.0"}}}}`
+	files["tools/javascript_bundle_inventory.txt"] = "fixture@1.0.0\tMIT\n"
+	files[".tools/python/fixture/lib/python3.12/site-packages/packaging-26.3.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: packaging\nVersion: 26.3\n\n"
+	files[".tools/python/fixture/lib/python3.12/site-packages/vulture-2.16.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: vulture\nVersion: 2.16\nRequires-Dist: packaging>=25\n\n"
 	paths := append(slices.Collect(maps.Keys(files)), slices.Collect(maps.Keys(links))...)
 	slices.Sort(paths)
 	entries := []Entry{}
@@ -49,7 +57,7 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Host: host, Features: []string{"javascript-bundle"},
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
 			Ty: "0.0.65", Vulture: "2.16",
 		},
 		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
@@ -222,6 +230,7 @@ func TestParseManifestRejectsACorruptedRecord(t *testing.T) {
 		"an unusable tool pin":         func(broken *Manifest) { broken.Tools.Node = "" },
 		"an unrecorded analyzer":       func(broken *Manifest) { broken.Tools.Staticcheck = "" },
 		"an unrecorded runtime":        func(broken *Manifest) { broken.Tools.Python = "" },
+		"an unrecorded Python library": func(broken *Manifest) { broken.Tools.Packaging = "" },
 		"an unrecorded type checker":   func(broken *Manifest) { broken.Tools.Ty = "" },
 		"an unrecorded dead-code tool": func(broken *Manifest) { broken.Tools.Vulture = "" },
 		"another manifest version":     func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
@@ -282,6 +291,7 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 		func(tools *Tools) { tools.Node = "24.18.1" },
 		func(tools *Tools) { tools.OSVScanner = "2.4.1" },
 		func(tools *Tools) { tools.PNPM = "11.13.1" },
+		func(tools *Tools) { tools.Packaging = "26.4" },
 		func(tools *Tools) { tools.Python = "3.12.14+20260728" },
 		func(tools *Tools) { tools.Ruff = "0.16.1" },
 		func(tools *Tools) { tools.Shellcheck = "0.11.1" },

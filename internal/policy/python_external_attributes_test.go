@@ -28,11 +28,11 @@ func TestScopePythonExternalAttributesRejectsBroadOrIncompleteContracts(t *testi
 		declaration string
 		want        string
 	}{
-		"wildcard module":  {strings.Replace(valid, `"module":"plugin"`, `"module":"plugin.*"`, 1), "Python identifier chain"},
-		"receiver chain":   {strings.Replace(valid, `"receiver":"settings"`, `"receiver":"self.settings"`, 1), "one Python identifier"},
-		"unqualified type": {strings.Replace(valid, `"consumerType":"external.Settings"`, `"consumerType":"Settings"`, 1), "qualified external Python type"},
-		"zero line":        {strings.Replace(valid, `"line":12`, `"line":0`, 1), "must be positive"},
-		"unknown field":    {valid + `,"wildcard":true`, "unknown field"},
+		"wildcard module":  {strings.Replace(valid, `"module":"plugin"`, `"module":"plugin.*"`, 1), schemaRejection},
+		"receiver chain":   {strings.Replace(valid, `"receiver":"settings"`, `"receiver":"self.settings"`, 1), schemaRejection},
+		"unqualified type": {strings.Replace(valid, `"consumerType":"external.Settings"`, `"consumerType":"Settings"`, 1), schemaRejection},
+		"zero line":        {strings.Replace(valid, `"line":12`, `"line":0`, 1), schemaRejection},
+		"unknown field":    {valid + `,"wildcard":true`, schemaRejection},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {

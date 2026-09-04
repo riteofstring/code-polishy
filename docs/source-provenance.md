@@ -18,8 +18,9 @@ These public projects informed specific policy concepts:
 - [CycloneDX 1.6](https://cyclonedx.org/specification/overview/) defines the
   published native-release SBOM shape.
 - [SLSA provenance 1.0](https://slsa.dev/spec/v1.0/provenance) and the
-  [in-toto statement](https://in-toto.io/Statement/v1) define release
-  provenance; OCI image attestations are emitted by Docker Buildx.
+  [in-toto statement](https://in-toto.io/Statement/v1) define the deterministic
+  native-release metadata shape. That local metadata authenticates no identity;
+  OCI image attestations are emitted separately by Docker Buildx.
 
 Code Polishy implements its own policy engine and uses the independently
 maintained Apache-licensed Gremlins release for supplemental Go mutation tests.
@@ -72,19 +73,32 @@ keep the sealed bundle portable and minimal.
 ## Implementation boundaries
 
 - Go remains the policy-engine implementation runtime. For Python policy work,
-  the release carries CPython `3.12.13+20260728` from python-build-standalone
-  to run Vulture `2.16`; Code Polishy never executes target Python to discover
+  the release carries CPython `3.12.13+20260728` from
+  python-build-standalone, PyPA `packaging` `26.3`, and Vulture `2.16`.
+  `packaging` comes from one exact hash-verified wheel represented by the
+  policy-owned `pyproject.toml` and frozen `uv.lock`; the carried runtime has no
+  pip or ensurepip. Code Polishy never executes target Python to discover
   imports, select a project, or perform dead-code analysis.
 - The repository boundary builds one validated Python project inventory from
   contained `pyproject.toml` files and reuses it for dependency, quality, and
-  architecture work. Its project, direct `src`, and in-tree PEP 517 backend
-  roots are passed explicitly to the consumers. A project-local `.venv` is
-  passed only to `ty` when dependencies require it; Vulture always uses carried
-  CPython and its pinned built-in whitelists. Ambient Python paths and
-  environments are not tool provenance.
+  architecture work. One batched `python-facts/v1` process uses CPython 3.12
+  `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release. Its
+  project, direct `src`, and in-tree PEP 517 backend roots are passed explicitly
+  to consumers. A project-local `.venv` is passed only to `ty` when dependencies
+  require it; Vulture always uses carried CPython and its pinned built-in
+  whitelists. Ambient Python paths and environments are not tool provenance.
 - Python manifests and `uv.lock` are target-owned inputs. Exact Git repository
   and commit facts remain source facts, not a fabricated PyPI age or
   vulnerability result when registry evidence is unavailable.
+- GitHub Actions structure comes only from the bounded `workflow-facts/v1`
+  adapter over actionlint `v1.7.12`. Static workflow facts establish checked-in
+  triggers, schedules, reachability, commands, and full action pins; provider
+  APIs remain responsible for branch protection, enabled schedules, and recent
+  successful runs.
+- SPDX identifiers and exceptions come only from the embedded
+  license-list-data `v3.28.0` snapshot at commit
+  `c4a7237ec8f4654e867546f9f409749300f1bf4c`, whose source files and manifest
+  are digest-reconciled before policy uses them.
 - Generic JavaScript quality checks run through Code Polishy's sealed bundle,
   independent of target-local development dependencies.
 - Target-specific commands, paths, external inputs, and exceptions live in the

@@ -8,23 +8,17 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	workflowfacts "github.com/riteofstring/code-polishy/internal/workflow"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 func securityMonitoringFindings(repo repository.Repository, files []string) []policy.Finding {
 	if !repo.Config.SupplyChain.RecurringSecurityMonitoring || !dependencyGraphPresent(repo, files) || hasSecurityMonitoringProvider(repo.Config.Checks) {
 		return nil
 	}
-	workflows := []string{}
-	for _, path := range files {
-		if strings.HasPrefix(path, ".github/workflows/") && slices.Contains([]string{".yml", ".yaml"}, filepath.Ext(path)) {
-			workflows = append(workflows, path)
-		}
-	}
-	for _, path := range workflows {
-		data, err := repo.Read(path)
-		if err == nil && workflowRunsWeeklySecurity(string(data)) {
-			return nil
-		}
+	workflows := securityWorkflowPaths(files)
+	if hasWeeklySecurityWorkflow(repo, workflows) {
+		return nil
 	}
 	message := "dependency graphs require an online code-polishy supply-chain scan at least weekly"
 	if len(workflows) == 0 {
@@ -35,6 +29,32 @@ func securityMonitoringFindings(repo repository.Repository, files []string) []po
 	return []policy.Finding{{
 		Check: "policy.securityMonitoring", Path: policy.ConfigFilename, Subject: "weekly-online-scan", Message: message,
 	}}
+}
+
+func securityWorkflowPaths(files []string) []string {
+	workflows := []string{}
+	for _, path := range files {
+		workflowPath := strings.HasPrefix(path, ".github/workflows/")
+		workflowExtension := slices.Contains([]string{".yml", ".yaml"}, filepath.Ext(path))
+		if workflowPath && workflowExtension {
+			workflows = append(workflows, path)
+		}
+	}
+	return workflows
+}
+
+func hasWeeklySecurityWorkflow(repo repository.Repository, workflows []string) bool {
+	for _, path := range workflows {
+		data, err := repo.Read(path)
+		if err != nil {
+			continue
+		}
+		facts, parseErr := workflowfacts.Parse(path, data)
+		if parseErr == nil && workflowFactsRunWeeklySecurity(facts) {
+			return true
+		}
+	}
+	return false
 }
 
 func dependencyGraphPresent(repo repository.Repository, files []string) bool {
@@ -68,104 +88,95 @@ func hasSecurityMonitoringProvider(commands []policy.Command) bool {
 }
 
 func workflowRunsWeeklySecurity(contents string) bool {
-	state := workflowSecurityState{onIndent: -1, scheduleIndent: -1, runBlockIndent: -1}
-	for _, raw := range strings.Split(contents, "\n") {
-		line := strings.TrimSpace(strings.SplitN(raw, "#", 2)[0])
-		if line == "" {
-			continue
+	facts, err := workflowfacts.Parse("workflow.yml", []byte(contents))
+	return err == nil && workflowFactsRunWeeklySecurity(facts)
+}
+
+func workflowFactsRunWeeklySecurity(facts workflowfacts.Facts) bool {
+	hasSchedule := false
+	for _, schedule := range facts.Schedules {
+		if cronRunsAtLeastWeekly(schedule.Cron) {
+			hasSchedule = true
+			break
 		}
-		indent := len(raw) - len(strings.TrimLeft(raw, " "))
-		state.observeSchedule(line, indent)
-		state.observeRun(line, indent)
 	}
-	return state.hasSchedule && state.hasOnlineScan
-}
-
-type workflowSecurityState struct {
-	hasSchedule    bool
-	hasOnlineScan  bool
-	onIndent       int
-	scheduleIndent int
-	runBlockIndent int
-}
-
-func (state *workflowSecurityState) observeSchedule(line string, indent int) {
-	switch {
-	case line == "on:":
-		state.onIndent = indent
-		state.scheduleIndent = -1
-	case state.onIndent >= 0 && indent <= state.onIndent:
-		state.onIndent = -1
-		state.scheduleIndent = -1
-	case state.onIndent >= 0 && line == "schedule:":
-		state.scheduleIndent = indent
-	case state.scheduleIndent >= 0 && indent <= state.scheduleIndent:
-		state.scheduleIndent = -1
-	}
-	if state.scheduleIndent < 0 {
-		return
-	}
-	cron, found := workflowCron(line)
-	if found && cronRunsAtLeastWeekly(cron) {
-		state.hasSchedule = true
-	}
-}
-
-func (state *workflowSecurityState) observeRun(line string, indent int) {
-	if state.runBlockIndent >= 0 && indent > state.runBlockIndent && onlineSecurityCommand(line) {
-		state.hasOnlineScan = true
-	}
-	if state.runBlockIndent >= 0 && indent <= state.runBlockIndent {
-		state.runBlockIndent = -1
-	}
-	value, run := workflowRunValue(line)
-	if !run {
-		return
-	}
-	if multilineWorkflowRun(value) {
-		state.runBlockIndent = indent
-		return
-	}
-	if onlineSecurityCommand(value) {
-		state.hasOnlineScan = true
-	}
-}
-
-func multilineWorkflowRun(value string) bool {
-	return value == "|" || value == ">" || strings.HasPrefix(value, "|-") || strings.HasPrefix(value, ">-")
-}
-
-func workflowRunValue(line string) (string, bool) {
-	if strings.HasPrefix(line, "- run:") {
-		return strings.TrimSpace(strings.TrimPrefix(line, "- run:")), true
-	}
-	if strings.HasPrefix(line, "run:") {
-		return strings.TrimSpace(strings.TrimPrefix(line, "run:")), true
-	}
-	return "", false
-}
-
-func workflowCron(line string) (string, bool) {
-	if strings.HasPrefix(line, "- cron:") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "- cron:"))
-	} else if strings.HasPrefix(line, "cron:") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "cron:"))
-	} else {
-		return "", false
-	}
-	line = strings.Trim(line, `"'`)
-	return line, line != ""
-}
-
-func onlineSecurityCommand(line string) bool {
-	line = strings.ToLower(line)
-	if !strings.Contains(line, "code-polishy") {
+	if !hasSchedule {
 		return false
 	}
-	if strings.Contains(line, "code-polishy gate") {
-		return true
+	for _, job := range facts.Jobs {
+		if !workflowJobRunsOnSchedule(facts.Jobs, job.ID, map[string]bool{}) {
+			continue
+		}
+		for _, step := range job.Steps {
+			if step.RunsOnSchedule && onlineSecurityCommand(step.Run) {
+				return true
+			}
+		}
 	}
-	return strings.Contains(line, "code-polishy supply-chain") && !strings.Contains(line, "--offline")
+	return false
+}
+
+func workflowJobRunsOnSchedule(jobs []workflowfacts.Job, id string, visiting map[string]bool) bool {
+	if visiting[id] {
+		return false
+	}
+	var selected *workflowfacts.Job
+	for index := range jobs {
+		if jobs[index].ID == id {
+			selected = &jobs[index]
+			break
+		}
+	}
+	if selected == nil || !selected.RunsOnSchedule {
+		return false
+	}
+	visiting[id] = true
+	defer delete(visiting, id)
+	for _, dependency := range selected.Needs {
+		if !workflowJobRunsOnSchedule(jobs, dependency, visiting) {
+			return false
+		}
+	}
+	return true
+}
+
+func onlineSecurityCommand(source string) bool {
+	parsed, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(source), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(parsed, func(node syntax.Node) bool {
+		call, ok := node.(*syntax.CallExpr)
+		if !ok || len(call.Args) < 2 {
+			return !found
+		}
+		arguments := make([]string, len(call.Args))
+		for index, word := range call.Args {
+			arguments[index] = word.Lit()
+			if arguments[index] == "" {
+				return !found
+			}
+		}
+		executable := strings.TrimSuffix(strings.ToLower(filepath.Base(strings.ReplaceAll(arguments[0], "\\", "/"))), ".exe")
+		if executable != "code-polishy" {
+			return !found
+		}
+		switch arguments[1] {
+		case "gate":
+			found = true
+		case "supply-chain":
+			found = true
+			for _, argument := range arguments[2:] {
+				if strings.HasPrefix(argument, "--offline") {
+					found = false
+					break
+				}
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 func cronRunsAtLeastWeekly(expression string) bool {

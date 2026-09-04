@@ -1,15 +1,11 @@
 package policy
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
 
 func validateModules(config *Config) error {
-	if len(config.Modules) == 0 {
-		return errors.New("modules must contain at least one named module")
-	}
 	config.ModuleByName = make(map[string]int, len(config.Modules))
 	for index, module := range config.Modules {
 		if err := validateModuleDefinition(module, index, config.ModuleByName); err != nil {
@@ -30,23 +26,10 @@ func validateModules(config *Config) error {
 }
 
 func validateModuleDefinition(module Module, index int, existing map[string]int) error {
-	label := fmt.Sprintf("modules[%d]", index)
-	if err := identifier(module.Name, label+".name"); err != nil {
-		return err
-	}
 	if _, exists := existing[module.Name]; exists {
 		return fmt.Errorf("duplicate module name %q", module.Name)
 	}
-	if len(module.Paths) == 0 {
-		return fmt.Errorf("%s.paths must not be empty", label)
-	}
-	if err := validatePatterns(module.Paths, label+".paths", false); err != nil {
-		return err
-	}
-	if err := validateUniqueStrings(module.DependsOn, label+".dependsOn", true); err != nil {
-		return err
-	}
-	return validateUniqueStrings(module.Capabilities, label+".capabilities", true)
+	return nil
 }
 
 func validateArtifactTargetModules(config *Config) error {

@@ -1,32 +1,27 @@
 {
   "$schema": "schema/code-polishy.schema.json",
   "version": 3,
-  "project": {
-    "kind": "tooling",
-    "capabilities": ["cli"]
-  },
+  "project": { "kind": "tooling", "capabilities": ["cli"] },
   "scope": {
-    "exclude": [],
-    "generated": [],
+    "data": [
+      "internal/spdx/data/exceptions.json",
+      "internal/spdx/data/licenses.json"
+    ],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
       "tools/javascript/runner.mjs"
     ]
   },
-  "quality": {},
   "documentation": {
-    "design": [
-      {
-        "path": "docs/design/agent-guidance.md",
-        "module": "agents"
-      }
-    ]
+    "design": [{ "path": "docs/design/agent-guidance.md", "module": "agents" }]
   },
   "verification": {
     "finalGateOwner": "ci",
     "mergeGate": {
       "recommendedModules": [
         "policy",
+        "spdx",
+        "pythonfacts",
         "repository",
         "runner",
         "gaterun",
@@ -40,6 +35,7 @@
         "architecture",
         "testing",
         "supplychain",
+        "workflow",
         "artifactsecurity",
         "policymodule",
         "pack",
@@ -52,14 +48,17 @@
     }
   },
   "modules": [
+    { "name": "spdx", "paths": ["internal/spdx/**"] },
+    { "name": "pythonfacts", "paths": ["internal/pythonfacts/**"] },
     {
       "name": "policy",
-      "paths": ["internal/policy/**"]
+      "paths": ["internal/policy/**", "schema/schema.go"],
+      "dependsOn": ["spdx"]
     },
     {
       "name": "repository",
       "paths": ["internal/repository/**"],
-      "dependsOn": ["policy"]
+      "dependsOn": ["policy", "pythonfacts"]
     },
     {
       "name": "runner",
@@ -81,19 +80,13 @@
       "paths": ["internal/testreceipt/**"],
       "dependsOn": ["policy", "testartifact"]
     },
-    {
-      "name": "finalstate",
-      "paths": ["internal/finalstate/**"]
-    },
+    { "name": "finalstate", "paths": ["internal/finalstate/**"] },
     {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
       "dependsOn": ["finalstate", "gaterun", "policy", "repository", "runner"]
     },
-    {
-      "name": "documentation",
-      "paths": ["internal/documentation/**"]
-    },
+    { "name": "documentation", "paths": ["internal/documentation/**"] },
     {
       "name": "agents",
       "paths": ["AGENTS.md", "internal/agents/**", "templates/AGENTS.md"]
@@ -101,7 +94,7 @@
     {
       "name": "release",
       "paths": ["internal/release/**"],
-      "dependsOn": ["policy"]
+      "dependsOn": ["policy", "pythonfacts"]
     },
     {
       "name": "javascript",
@@ -116,7 +109,13 @@
     {
       "name": "architecture",
       "paths": ["internal/architecture/**"],
-      "dependsOn": ["javascript", "policy", "repository", "runner"]
+      "dependsOn": [
+        "javascript",
+        "policy",
+        "pythonfacts",
+        "repository",
+        "runner"
+      ]
     },
     {
       "name": "testing",
@@ -126,8 +125,16 @@
     {
       "name": "supplychain",
       "paths": ["internal/supplychain/**"],
-      "dependsOn": ["javascript", "policy", "repository", "runner"]
+      "dependsOn": [
+        "javascript",
+        "policy",
+        "repository",
+        "runner",
+        "spdx",
+        "workflow"
+      ]
     },
+    { "name": "workflow", "paths": ["internal/workflow/**"] },
     {
       "name": "artifactsecurity",
       "paths": ["internal/artifactsecurity/**"],
@@ -160,6 +167,8 @@
         "gaterun",
         "pack",
         "policy",
+        "spdx",
+        "pythonfacts",
         "policymodule",
         "portability",
         "quality",
@@ -167,6 +176,7 @@
         "repository",
         "runner",
         "supplychain",
+        "workflow",
         "testartifact",
         "testreceipt",
         "testing"
@@ -215,6 +225,8 @@
       "argv": ["./scripts/build.sh"],
       "modules": [
         "policy",
+        "spdx",
+        "pythonfacts",
         "repository",
         "runner",
         "gaterun",
@@ -230,6 +242,7 @@
         "architecture",
         "testing",
         "supplychain",
+        "workflow",
         "artifactsecurity",
         "pack",
         "policymodule",
@@ -246,12 +259,33 @@
       "provides": ["lock-sync"],
       "argv": ["./scripts/check-javascript-bundle.sh"],
       "runOn": ["supply-chain"]
+    },
+    {
+      "name": "python-facts-lock",
+      "provides": ["lock-sync"],
+      "argv": ["./scripts/check-python-facts-lock.sh"],
+      "modules": ["pythonfacts"],
+      "runOn": ["supply-chain"]
     }
   ],
   "tests": {
     "requiredKinds": ["unit", "contract"],
     "requiredSupplementalKinds": ["mutation"],
     "suites": [
+      {
+        "name": "spdx-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["spdx"],
+        "argv": ["go", "test", "-count=1", "./internal/spdx/..."]
+      },
+      {
+        "name": "pythonfacts-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["pythonfacts"],
+        "argv": ["go", "test", "-count=1", "./internal/pythonfacts/..."]
+      },
       {
         "name": "policy-unit",
         "kind": "unit",
@@ -365,6 +399,13 @@
         "argv": ["go", "test", "-count=1", "./internal/supplychain/..."]
       },
       {
+        "name": "workflow-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["workflow"],
+        "argv": ["go", "test", "-count=1", "./internal/workflow/..."]
+      },
+      {
         "name": "artifactsecurity-unit",
         "kind": "unit",
         "scope": "module",
@@ -404,24 +445,21 @@
         "kind": "contract",
         "scope": "module",
         "modules": ["cli"],
-        "argv": ["go", "test", "-count=1", "./cmd/code-polishy/..."],
-        "runOn": ["focused", "recommended", "full"]
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy/..."]
       },
       {
         "name": "launcher-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["launcher"],
-        "argv": ["go", "test", "-count=1", "./cmd/code-polishy-launcher/..."],
-        "runOn": ["focused", "recommended", "full"]
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy-launcher/..."]
       },
       {
         "name": "mutation-wrapper-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["tooling"],
-        "argv": ["./scripts/test-mutation-wrapper.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "argv": ["./scripts/test-mutation-wrapper.sh"]
       },
       {
         "name": "install-contract",
@@ -429,20 +467,18 @@
         "scope": "repository",
         "cost": "quick",
         "paths": [
-          "scripts/install.sh",
-          "scripts/build-oci-image.sh",
-          "scripts/build-release.ps1",
-          "scripts/build-release.sh",
+          "scripts/*install.sh",
+          "scripts/build-*",
           "scripts/release-manifest.sh",
           "scripts/release-version.sh",
-          "scripts/test-install.sh",
           "cmd/code-polishy-launcher/**",
           "internal/release/**",
           "release/**",
           "templates/**",
           "tools/*-version.txt",
-          "tools/javascript/**",
-          "tools/javascript-*.sh"
+          "tools/install-p*",
+          "tools/javascript**",
+          "tools/packaging_wheel_checksums.txt"
         ],
         "argv": ["./scripts/test-install.sh"],
         "runOn": ["focused", "recommended", "full"]
@@ -469,10 +505,7 @@
         "cost": "quick",
         "paths": [
           "scripts/test-javascript-runtime.sh",
-          "tools/install-javascript-runtime.sh",
-          "tools/javascript-env.sh",
-          "tools/javascript_runtime_binaries.txt",
-          "tools/javascript_runtime_checksums.txt",
+          "tools/*javascript*",
           "tools/node-version.txt",
           "tools/pnpm-version.txt",
           "tools/verify-sha256.sh"
@@ -486,17 +519,11 @@
         "scope": "repository",
         "cost": "quick",
         "paths": [
-          "scripts/check-javascript-bundle.sh",
-          "scripts/test-javascript-bundle.sh",
-          "tools/install-javascript-bundle.sh",
-          "tools/javascript-bundle-manifest.sh",
-          "tools/javascript-env.sh",
+          "scripts/*javascript-bundle.sh",
+          "tools/*javascript*",
           "tools/javascript/**",
-          "tools/javascript_bundle_inventory.txt",
           "tools/node-version.txt",
-          "tools/pnpm-version.txt",
-          "tools/verify-javascript-bundle-lock.sh",
-          "tools/verify-javascript-bundle-tree.sh"
+          "tools/pnpm-version.txt"
         ],
         "argv": ["./scripts/test-javascript-bundle.sh"],
         "runOn": ["focused", "recommended", "full"]
@@ -508,10 +535,8 @@
         "cost": "quick",
         "paths": [
           "internal/javascript/**",
-          "scripts/javascript-runner-test-env.sh",
-          "scripts/test-javascript-runner.sh",
-          "tools/javascript/**",
-          "tools/javascript-env.sh",
+          "scripts/*javascript-runner*.sh",
+          "tools/javascript**",
           "tools/node-version.txt",
           "tools/pnpm-version.txt"
         ],
@@ -563,7 +588,6 @@
         "name": "repository-full",
         "kind": "contract",
         "scope": "repository",
-        "cost": "standard",
         "argv": [
           "go",
           "test",
@@ -571,8 +595,7 @@
           "./cmd/code-polishy/...",
           "-run",
           "^(TestInstalledReleaseCanVerifyAReleaseTreeWithoutATargetLock|TestInstalledReleaseGovernsOnlyTheRepositoryThatLocksIt)$"
-        ],
-        "runOn": ["full"]
+        ]
       },
       {
         "name": "policy-mutation",
@@ -580,6 +603,22 @@
         "scope": "module",
         "modules": ["policy"],
         "argv": ["./scripts/go-mutation.sh", "./internal/policy"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "spdx-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["spdx"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/spdx"],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "pythonfacts-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["pythonfacts"],
+        "argv": ["./scripts/go-mutation.sh", "./internal/pythonfacts"],
         "timeoutSeconds": 3600
       },
       {
@@ -928,6 +967,12 @@
         "locator": "vulture"
       },
       {
+        "name": "packaging",
+        "versionFile": "tools/packaging-version.txt",
+        "source": "pypi",
+        "locator": "packaging"
+      },
+      {
         "name": "trivy",
         "versionFile": "tools/trivy-version.txt",
         "source": "github-release",
@@ -950,6 +995,5 @@
         "expires": "2026-09-12"
       }
     ]
-  },
-  "exceptions": []
+  }
 }

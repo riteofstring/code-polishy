@@ -223,19 +223,29 @@ both `/.code-polishy-reports/` and `/.code-polishy-artifacts/` in the root
 
 ## Reusable test evidence
 
-A successful eligible suite writes a content-addressed receipt valid for 30
-days. Its identity binds the locked release, policy schema and configuration,
-OS and architecture, suite command and limits, declared environment, approved
-tool versions, module dependency closure, owned tests, control inputs,
-`extraInputs`, and every selected file's mode and digest. A repository command
-whose executable or inputs cannot be bounded simply runs and produces no
-reusable identity.
+A suite is reusable across candidates only when it declares `"reusable": true`.
+Omission and `false` mean that every candidate executes the suite and no
+reusable receipt is written. A successful reusable suite writes a
+content-addressed receipt valid for 30 days. Its identity binds the locked
+release, policy schema and configuration, OS and architecture, suite command
+and limits, declared environment, approved tool versions, module dependency
+closure, owned tests, control inputs, `extraInputs`, and every selected file's
+mode and digest.
 
-Merge gates automatically reuse exact matching suite receipts, including after
-an unrelated change that leaves the complete suite identity unchanged. An
-identical already-passed merge-gate identity executes no validation commands
-and reports `already-passed`. Checks, builds, security work, behavior proofs,
-failed suites, and suites without complete identities always execute.
+Fresh reusable execution runs from a sealed read-only view containing exactly
+those repository inputs. The suite receives a sealed environment, may write
+only through its declared artifact boundary, and is checked after execution
+for changed, removed, special, or undeclared paths. Absolute ambient argv paths,
+unversioned tools, incomplete inputs, external exclusive resources, and suites
+whose execution view cannot be enforced are rejected for reuse. Such work must
+be declared non-reusable and executes for every candidate.
+
+Merge gates automatically reuse exact matching receipts from explicitly
+reusable suites, including after an unrelated change that leaves the complete
+suite identity unchanged. An identical already-passed merge-gate identity
+executes no validation commands and reports `already-passed`. Checks, builds,
+security work, behavior proofs, failed suites, and non-reusable suites always
+execute.
 
 `test --supplemental --resume` gives the same exact reuse to an explicitly
 selected supplemental retry. Ordinary direct `test` commands execute normally
@@ -283,8 +293,9 @@ every equivalent requirement.
 
 A broader suite may explicitly name component suites in `covers`. Coverage must
 be acyclic and compatible in ordinary or supplemental class, ownership, inputs,
-resources, artifacts, and timeout. Unknown, cyclic, or weaker relationships are
-configuration errors. Code Polishy never infers coverage from command text.
+resources, artifacts, timeout, and reuse authority. A reusable aggregate cannot
+satisfy a non-reusable requirement. Unknown, cyclic, or weaker relationships
+are configuration errors. Code Polishy never infers coverage from command text.
 Plans and gate reports show each requirement, the suite that executed for it,
 and whether the reason was `covered` or `duplicate-command`.
 
@@ -528,9 +539,9 @@ configuration path proved absent at the base.
 
 Every merge gate first checks for an exact prior passed gate identity. If one
 exists, it reports `already-passed` and executes no validation command. For a
-new gate identity, exact matching suite receipts may still be reused while all
-non-test phases execute. This is automatic and fails closed under the reusable
-evidence contract above.
+new gate identity, exact matching receipts from suites that explicitly declare
+`reusable: true` may still be reused while all non-test phases execute. This is
+automatic and fails closed under the reusable evidence contract above.
 
 `merge-gate --base REF --resume` additionally resumes successful ordinary
 test-suite commands from a prior failed merge-gate report with the same gate

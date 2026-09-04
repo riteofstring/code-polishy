@@ -46,6 +46,20 @@ type manifestToolsV3 struct {
 	Ty          string `json:"ty"`
 }
 
+type manifestToolsV4 struct {
+	Go          string `json:"go"`
+	Govulncheck string `json:"govulncheck"`
+	Node        string `json:"node"`
+	OSVScanner  string `json:"osv-scanner"`
+	PNPM        string `json:"pnpm"`
+	Python      string `json:"python"`
+	Ruff        string `json:"ruff"`
+	Shellcheck  string `json:"shellcheck"`
+	Staticcheck string `json:"staticcheck"`
+	Ty          string `json:"ty"`
+	Vulture     string `json:"vulture"`
+}
+
 func ReadLauncherManifest(releaseDir string) (Manifest, bool, error) {
 	return readManifest(releaseDir, parseLauncherManifest)
 }
@@ -99,7 +113,14 @@ func parseHistoricalManifestTools(data []byte, source string, version int) (Tool
 		}
 		return wire.tools(), nil
 	}
-	wire := manifestToolsV3{}
+	if version == 3 {
+		wire := manifestToolsV3{}
+		if err := decodeExactly(data, source+" tools", &wire); err != nil {
+			return Tools{}, err
+		}
+		return wire.tools(), nil
+	}
+	wire := manifestToolsV4{}
 	if err := decodeExactly(data, source+" tools", &wire); err != nil {
 		return Tools{}, err
 	}
@@ -126,5 +147,13 @@ func (wire manifestToolsV3) tools() Tools {
 	return Tools{
 		Go: wire.Go, Govulncheck: wire.Govulncheck, Node: wire.Node, OSVScanner: wire.OSVScanner,
 		PNPM: wire.PNPM, Ruff: wire.Ruff, Shellcheck: wire.Shellcheck, Staticcheck: wire.Staticcheck, Ty: wire.Ty,
+	}
+}
+
+func (wire manifestToolsV4) tools() Tools {
+	return Tools{
+		Go: wire.Go, Govulncheck: wire.Govulncheck, Node: wire.Node, OSVScanner: wire.OSVScanner,
+		PNPM: wire.PNPM, Python: wire.Python, Ruff: wire.Ruff, Shellcheck: wire.Shellcheck,
+		Staticcheck: wire.Staticcheck, Ty: wire.Ty, Vulture: wire.Vulture,
 	}
 }

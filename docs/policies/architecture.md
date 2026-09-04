@@ -316,17 +316,39 @@ and module ownership, allowed `dependsOn` edges, and coverage.
 
 The built-in resolver covers flat, direct `src`, and in-tree PEP 517 backend
 layouts, nested projects with overlapping import names, regular and namespace
-packages, package
-`__init__.py` re-exports, `.py` and `.pyi` modules, absolute and valid relative
-imports, and exact one-argument `importlib.import_module(...)` or
-`__import__(...)` calls whose argument is one plain string literal.
+packages, package `__init__.py` re-exports, `.py` and `.pyi` modules, absolute
+and valid relative imports, and exact one-argument calls through statically
+proved aliases of `importlib.import_module` and `builtins.__import__`.
 Standard-library and third-party imports create no repository module edge.
 
-Computed, formatted, concatenated, escaped, triple-quoted, or multi-argument
-dynamic imports are unproven. Parenthesized references to a known import
-function are also unproven instead of disappearing from coverage. Calls and
-arguments may use ordinary whitespace or an explicit line continuation without
-changing an otherwise exact literal into computed evidence.
+A plain literal target is resolved directly. Any other recognized computed
+call must have one exact `scope.pythonComputedImports` declaration. The Python
+facts adapter binds the current source digest, project, importer module,
+containing callable or module scope, callee, one-based line and column,
+canonical AST shape, and canonical argument expression. Moving or rewriting
+the call, changing its alias, adding another match, or changing the source makes
+the declaration stale.
+
+The target contract is either a contained namespace or one current PEP 621
+entry-point group. A namespace declaration names an exact in-source target set,
+one or more exact JSON configuration paths and non-root JSON pointers, or both.
+Each JSON input carries its current digest and may select only one module name
+or an array of module names beneath the declared non-top-level namespace. An
+entry-point declaration resolves only the validated entries already present in
+the same contained project. Empty, wildcard, escaping, external, ambiguous,
+unresolved, environment-derived, or network-derived target domains fail
+coverage.
+
+Every possible target becomes an ordinary local import edge. It must resolve to
+one governed file and its source module must already allow the target owner in
+`dependsOn`; the declaration is evidence, not a second dependency allow-list.
+`scope.pythonDynamicReferences` remains a separate exact Vulture reachability
+contract and cannot satisfy computed-import coverage in either direction.
+
+Computed shapes outside the bounded enumeration, governed-JSON, and PEP 621
+entry-point forms are unproven. Multi-argument calls and parenthesized
+references to a known import function are also unproven instead of disappearing
+from coverage.
 
 Every local edge must resolve to one contained governed Python file in the same
 project and to exactly one repository module. An omitted selected file,

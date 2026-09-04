@@ -15,9 +15,15 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	cdx "github.com/CycloneDX/cyclonedx-go"
+	provenancev1 "github.com/in-toto/attestation/go/predicates/provenance/v1"
+	intoto "github.com/in-toto/attestation/go/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-const PublicationVersion = 1
+const PublicationVersion = 2
 
 type PublishedFile struct {
 	Name   string `json:"name"`
@@ -32,14 +38,14 @@ type PublishedManifest struct {
 }
 
 type PublicationArtifact struct {
-	DescriptorVersion  int               `json:"descriptorVersion"`
-	CodePolishyVersion string            `json:"codePolishyVersion"`
-	SourceRevision     string            `json:"sourceRevision"`
-	Host               string            `json:"host"`
-	Archive            PublishedFile     `json:"archive"`
-	Manifest           PublishedManifest `json:"manifest"`
-	SBOM               PublishedFile     `json:"sbom"`
-	Provenance         PublishedFile     `json:"provenance"`
+	DescriptorVersion     int               `json:"descriptorVersion"`
+	CodePolishyVersion    string            `json:"codePolishyVersion"`
+	SourceRevision        string            `json:"sourceRevision"`
+	Host                  string            `json:"host"`
+	Archive               PublishedFile     `json:"archive"`
+	Manifest              PublishedManifest `json:"manifest"`
+	SBOM                  PublishedFile     `json:"sbom"`
+	DeterministicMetadata PublishedFile     `json:"deterministicMetadata"`
 }
 
 type PublicationIndex struct {
@@ -141,10 +147,10 @@ type publicationSource struct {
 }
 
 type publicationPayload struct {
-	artifact                       PublicationArtifact
-	descriptorName                 string
-	descriptorBytes, manifestBytes []byte
-	sbomBytes, provenanceBytes     []byte
+	artifact                              PublicationArtifact
+	descriptorName                        string
+	descriptorBytes, manifestBytes        []byte
+	sbomBytes, deterministicMetadataBytes []byte
 }
 
 func inspectPublicationArchive(archive, parent string) (publicationSource, error) {
@@ -202,23 +208,23 @@ func composePublication(source publicationSource) (publicationPayload, error) {
 	archiveName := base + ".zip"
 	manifestName := base + ".release-manifest.json"
 	sbomName := base + ".sbom.cdx.json"
-	provenanceName := base + ".provenance.intoto.json"
+	deterministicMetadataName := base + ".build-metadata.intoto.json"
 	descriptorName := base + ".release.json"
-	sbom, err := renderReleaseSBOM(manifest, archiveName, source.archiveDigest)
+	sbom, err := renderReleaseSBOM(manifest, source.inspection, archiveName, source.archiveDigest)
 	if err != nil {
 		return publicationPayload{}, err
 	}
-	provenance, err := renderReleaseProvenance(manifest, archiveName, source.archiveDigest, manifestName, digestBytes(source.manifestBytes), sbomName, digestBytes(sbom))
+	deterministicMetadata, err := renderReleaseDeterministicMetadata(manifest, archiveName, source.archiveDigest, manifestName, digestBytes(source.manifestBytes), sbomName, digestBytes(sbom))
 	if err != nil {
 		return publicationPayload{}, err
 	}
 	artifact := PublicationArtifact{
 		DescriptorVersion: PublicationVersion, CodePolishyVersion: manifest.CodePolishyVersion,
 		SourceRevision: manifest.SourceRevision, Host: manifest.Host,
-		Archive:    PublishedFile{Name: archiveName, SHA256: source.archiveDigest, Size: source.archiveSize},
-		Manifest:   PublishedManifest{PublishedFile: PublishedFile{Name: manifestName, SHA256: digestBytes(source.manifestBytes), Size: int64(len(source.manifestBytes))}, ReleaseDigest: manifest.ReleaseDigest, ContentDigest: manifest.ContentDigest},
-		SBOM:       PublishedFile{Name: sbomName, SHA256: digestBytes(sbom), Size: int64(len(sbom))},
-		Provenance: PublishedFile{Name: provenanceName, SHA256: digestBytes(provenance), Size: int64(len(provenance))},
+		Archive:               PublishedFile{Name: archiveName, SHA256: source.archiveDigest, Size: source.archiveSize},
+		Manifest:              PublishedManifest{PublishedFile: PublishedFile{Name: manifestName, SHA256: digestBytes(source.manifestBytes), Size: int64(len(source.manifestBytes))}, ReleaseDigest: manifest.ReleaseDigest, ContentDigest: manifest.ContentDigest},
+		SBOM:                  PublishedFile{Name: sbomName, SHA256: digestBytes(sbom), Size: int64(len(sbom))},
+		DeterministicMetadata: PublishedFile{Name: deterministicMetadataName, SHA256: digestBytes(deterministicMetadata), Size: int64(len(deterministicMetadata))},
 	}
 	if err := validatePublicationArtifact(artifact); err != nil {
 		return publicationPayload{}, err
@@ -227,7 +233,7 @@ func composePublication(source publicationSource) (publicationPayload, error) {
 	if err != nil {
 		return publicationPayload{}, err
 	}
-	return publicationPayload{artifact, descriptorName, descriptor, source.manifestBytes, sbom, provenance}, nil
+	return publicationPayload{artifact, descriptorName, descriptor, source.manifestBytes, sbom, deterministicMetadata}, nil
 }
 
 func writePublicationDirectory(archive, parent, final string, payload publicationPayload) error {
@@ -245,10 +251,10 @@ func writePublicationDirectory(archive, parent, final string, payload publicatio
 		return err
 	}
 	files := map[string][]byte{
-		payload.artifact.Archive.Name + ".sha256": []byte(payload.artifact.Archive.SHA256 + "  " + payload.artifact.Archive.Name + "\n"),
-		payload.artifact.Manifest.Name:            payload.manifestBytes,
-		payload.artifact.SBOM.Name:                payload.sbomBytes,
-		payload.artifact.Provenance.Name:          payload.provenanceBytes,
+		payload.artifact.Archive.Name + ".sha256":   []byte(payload.artifact.Archive.SHA256 + "  " + payload.artifact.Archive.Name + "\n"),
+		payload.artifact.Manifest.Name:              payload.manifestBytes,
+		payload.artifact.SBOM.Name:                  payload.sbomBytes,
+		payload.artifact.DeterministicMetadata.Name: payload.deterministicMetadataBytes,
 	}
 	files[payload.descriptorName] = payload.descriptorBytes
 	for name, data := range files {
@@ -491,77 +497,53 @@ func verifyReleaseArchive(archive string) error {
 	return manifest.Verify(directory)
 }
 
-func renderReleaseSBOM(manifest Manifest, archiveName, archiveDigest string) ([]byte, error) {
-	type hash struct {
-		Algorithm string `json:"alg"`
-		Content   string `json:"content"`
+func renderReleaseDeterministicMetadata(manifest Manifest, archiveName, archiveDigest, manifestName, manifestDigest, sbomName, sbomDigest string) ([]byte, error) {
+	externalParameters, err := structpb.NewStruct(map[string]any{"host": manifest.Host, "version": manifest.CodePolishyVersion})
+	if err != nil {
+		return nil, err
 	}
-	type property struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
+	internalParameters, err := structpb.NewStruct(map[string]any{"contentDigest": manifest.ContentDigest, "releaseDigest": manifest.ReleaseDigest})
+	if err != nil {
+		return nil, err
 	}
-	type component struct {
-		Type       string     `json:"type"`
-		BOMRef     string     `json:"bom-ref"`
-		Name       string     `json:"name"`
-		Version    string     `json:"version"`
-		Hashes     []hash     `json:"hashes,omitempty"`
-		Properties []property `json:"properties,omitempty"`
-	}
-	tools := []struct{ name, version string }{
-		{"go", manifest.Tools.Go}, {"govulncheck", manifest.Tools.Govulncheck}, {"node", manifest.Tools.Node},
-		{"osv-scanner", manifest.Tools.OSVScanner}, {"pnpm", manifest.Tools.PNPM}, {"python", manifest.Tools.Python},
-		{"ruff", manifest.Tools.Ruff}, {"shellcheck", manifest.Tools.Shellcheck}, {"staticcheck", manifest.Tools.Staticcheck},
-		{"ty", manifest.Tools.Ty}, {"vulture", manifest.Tools.Vulture},
-	}
-	components := make([]component, 0, len(tools))
-	for _, tool := range tools {
-		components = append(components, component{Type: "application", BOMRef: "tool:" + tool.name + "@" + tool.version, Name: tool.name, Version: tool.version})
-	}
-	document := struct {
-		BOMFormat    string `json:"bomFormat"`
-		SpecVersion  string `json:"specVersion"`
-		SerialNumber string `json:"serialNumber"`
-		Version      int    `json:"version"`
-		Metadata     struct {
-			Component component `json:"component"`
-		} `json:"metadata"`
-		Components []component `json:"components"`
-	}{BOMFormat: "CycloneDX", SpecVersion: "1.6", SerialNumber: deterministicURN(archiveDigest), Version: 1, Components: components}
-	document.Metadata.Component = component{
-		Type: "application", BOMRef: "pkg:generic/code-polishy@" + manifest.CodePolishyVersion,
-		Name: "code-polishy", Version: manifest.CodePolishyVersion, Hashes: []hash{{Algorithm: "SHA-256", Content: archiveDigest}},
-		Properties: []property{
-			{Name: "code-polishy:archive-name", Value: archiveName},
-			{Name: "code-polishy:content-digest", Value: manifest.ContentDigest},
-			{Name: "code-polishy:host", Value: manifest.Host},
-			{Name: "code-polishy:release-digest", Value: manifest.ReleaseDigest},
-			{Name: "code-polishy:source-revision", Value: manifest.SourceRevision},
-		},
-	}
-	return renderJSON(document)
-}
-
-func renderReleaseProvenance(manifest Manifest, archiveName, archiveDigest, manifestName, manifestDigest, sbomName, sbomDigest string) ([]byte, error) {
-	document := map[string]any{
-		"_type":         "https://in-toto.io/Statement/v1",
-		"subject":       []any{map[string]any{"name": archiveName, "digest": map[string]string{"sha256": archiveDigest}}},
-		"predicateType": "https://slsa.dev/provenance/v1",
-		"predicate": map[string]any{
-			"buildDefinition": map[string]any{
-				"buildType":          "https://github.com/riteofstring/code-polishy/release/portable/v1",
-				"externalParameters": map[string]string{"host": manifest.Host, "version": manifest.CodePolishyVersion},
-				"internalParameters": map[string]string{"contentDigest": manifest.ContentDigest, "releaseDigest": manifest.ReleaseDigest},
-				"resolvedDependencies": []any{
-					map[string]any{"uri": "git+https://github.com/riteofstring/code-polishy@" + manifest.SourceRevision, "digest": map[string]string{"sha1": manifest.SourceRevision}},
-					map[string]any{"uri": "file:" + manifestName, "digest": map[string]string{"sha256": manifestDigest}},
-					map[string]any{"uri": "file:" + sbomName, "digest": map[string]string{"sha256": sbomDigest}},
-				},
+	predicate := &provenancev1.Provenance{
+		BuildDefinition: &provenancev1.BuildDefinition{
+			BuildType:          "https://github.com/riteofstring/code-polishy/release/deterministic-metadata/v1",
+			ExternalParameters: externalParameters,
+			InternalParameters: internalParameters,
+			ResolvedDependencies: []*intoto.ResourceDescriptor{
+				{Uri: "git+https://github.com/riteofstring/code-polishy@" + manifest.SourceRevision, Digest: map[string]string{"gitCommit": manifest.SourceRevision}},
+				{Uri: "file:" + manifestName, Digest: map[string]string{"sha256": manifestDigest}},
+				{Uri: "file:" + sbomName, Digest: map[string]string{"sha256": sbomDigest}},
 			},
-			"runDetails": map[string]any{"builder": map[string]string{"id": "https://github.com/riteofstring/code-polishy"}},
 		},
+		RunDetails: &provenancev1.RunDetails{Builder: &provenancev1.Builder{Id: "https://github.com/riteofstring/code-polishy/deterministic-local-metadata"}},
 	}
-	return renderJSON(document)
+	if err := predicate.Validate(); err != nil {
+		return nil, fmt.Errorf("validate deterministic build metadata: %w", err)
+	}
+	predicateJSON, err := protojson.Marshal(predicate)
+	if err != nil {
+		return nil, err
+	}
+	predicateStruct := &structpb.Struct{}
+	if err := protojson.Unmarshal(predicateJSON, predicateStruct); err != nil {
+		return nil, err
+	}
+	statement := &intoto.Statement{
+		Type:          intoto.StatementTypeUri,
+		Subject:       []*intoto.ResourceDescriptor{{Name: archiveName, Digest: map[string]string{"sha256": archiveDigest}}},
+		PredicateType: "https://slsa.dev/provenance/v1",
+		Predicate:     predicateStruct,
+	}
+	if err := statement.Validate(); err != nil {
+		return nil, fmt.Errorf("validate deterministic in-toto metadata: %w", err)
+	}
+	data, err := protojson.MarshalOptions{Indent: "  "}.Marshal(statement)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
 }
 
 func validatePublicationArtifact(artifact PublicationArtifact) error {
@@ -577,7 +559,7 @@ func validatePublicationArtifact(artifact PublicationArtifact) error {
 		{artifact.Archive, base + ".zip"},
 		{artifact.Manifest.PublishedFile, base + ".release-manifest.json"},
 		{artifact.SBOM, base + ".sbom.cdx.json"},
-		{artifact.Provenance, base + ".provenance.intoto.json"},
+		{artifact.DeterministicMetadata, base + ".build-metadata.intoto.json"},
 	}
 	for _, candidate := range files {
 		if candidate.file.Name != candidate.name || !digestPattern.MatchString(candidate.file.SHA256) || candidate.file.Size <= 0 {
@@ -600,11 +582,11 @@ func verifyPublishedFiles(root string, artifact PublicationArtifact) error {
 	if err := verifyPublishedSBOM(root, artifact); err != nil {
 		return err
 	}
-	return verifyPublishedProvenance(root, artifact)
+	return verifyPublishedDeterministicMetadata(root, artifact)
 }
 
 func verifyPublishedDigests(root string, artifact PublicationArtifact) error {
-	for _, published := range []PublishedFile{artifact.Archive, artifact.Manifest.PublishedFile, artifact.SBOM, artifact.Provenance} {
+	for _, published := range []PublishedFile{artifact.Archive, artifact.Manifest.PublishedFile, artifact.SBOM, artifact.DeterministicMetadata} {
 		path := filepath.Join(root, published.Name)
 		info, err := os.Lstat(path)
 		if err != nil {
@@ -643,47 +625,125 @@ func verifyPublishedManifest(root string, artifact PublicationArtifact) error {
 }
 
 func verifyPublishedSBOM(root string, artifact PublicationArtifact) error {
-	var sbom struct {
-		BOMFormat    string          `json:"bomFormat"`
-		SpecVersion  string          `json:"specVersion"`
-		SerialNumber string          `json:"serialNumber"`
-		Version      int             `json:"version"`
-		Metadata     json.RawMessage `json:"metadata"`
-		Components   json.RawMessage `json:"components"`
-	}
-	if data, err := os.ReadFile(filepath.Join(root, artifact.SBOM.Name)); err != nil {
-		return err
-	} else if err := decodeExactly(data, artifact.SBOM.Name, &sbom); err != nil {
+	data, err := os.ReadFile(filepath.Join(root, artifact.SBOM.Name))
+	if err != nil {
 		return err
 	}
-	if sbom.BOMFormat != "CycloneDX" || sbom.SpecVersion != "1.6" || sbom.Version != 1 ||
-		sbom.SerialNumber == "" || len(sbom.Metadata) == 0 || len(sbom.Components) == 0 {
+	sbom, err := decodePublishedSBOM(data)
+	if err != nil {
+		return err
+	}
+	if !validPublishedSBOMIdentity(sbom) {
 		return errors.New("published release SBOM has an invalid identity")
+	}
+	inspection, manifest, err := inspectPublishedArchive(root, artifact.Archive)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(inspection)
+	expected, err := renderReleaseSBOM(manifest, inspection, artifact.Archive.Name, artifact.Archive.SHA256)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(data, expected) {
+		return errors.New("published release SBOM is not the complete canonical archive inventory")
 	}
 	return nil
 }
 
-func verifyPublishedProvenance(root string, artifact PublicationArtifact) error {
-	var provenance struct {
-		Type          string `json:"_type"`
-		PredicateType string `json:"predicateType"`
-		Subject       []struct {
-			Name   string            `json:"name"`
-			Digest map[string]string `json:"digest"`
-		} `json:"subject"`
-		Predicate json.RawMessage `json:"predicate"`
+func decodePublishedSBOM(data []byte) (*cdx.BOM, error) {
+	sbom := &cdx.BOM{}
+	if err := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON).Decode(sbom); err != nil {
+		return nil, fmt.Errorf("decode published release SBOM: %w", err)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, artifact.Provenance.Name)); err != nil {
-		return err
-	} else if err := decodeExactly(data, artifact.Provenance.Name, &provenance); err != nil {
+	return sbom, nil
+}
+
+func validPublishedSBOMIdentity(sbom *cdx.BOM) bool {
+	if sbom.BOMFormat != cdx.BOMFormat || sbom.SpecVersion != cdx.SpecVersion1_6 || sbom.Version != 1 || sbom.SerialNumber == "" {
+		return false
+	}
+	if sbom.Metadata == nil || sbom.Metadata.Component == nil {
+		return false
+	}
+	if sbom.Components == nil || len(*sbom.Components) == 0 {
+		return false
+	}
+	return sbom.Dependencies != nil && len(*sbom.Dependencies) > 0
+}
+
+func inspectPublishedArchive(root string, archive PublishedFile) (string, Manifest, error) {
+	inspection, err := os.MkdirTemp(root, ".code-polishy-sbom-verify-")
+	if err != nil {
+		return "", Manifest{}, err
+	}
+	valid := false
+	defer func() {
+		if !valid {
+			_ = os.RemoveAll(inspection)
+		}
+	}()
+	if err := extractReleaseZip(filepath.Join(root, archive.Name), inspection); err != nil {
+		return "", Manifest{}, err
+	}
+	manifest, present, err := ReadManifest(inspection)
+	if err != nil || !present {
+		if err == nil {
+			err = errors.New("published release archive has no manifest")
+		}
+		return "", Manifest{}, err
+	}
+	valid = true
+	return inspection, manifest, nil
+}
+
+func verifyPublishedDeterministicMetadata(root string, artifact PublicationArtifact) error {
+	data, err := os.ReadFile(filepath.Join(root, artifact.DeterministicMetadata.Name))
+	if err != nil {
 		return err
 	}
-	if provenance.Type != "https://in-toto.io/Statement/v1" || provenance.PredicateType != "https://slsa.dev/provenance/v1" ||
-		len(provenance.Subject) != 1 || provenance.Subject[0].Name != artifact.Archive.Name ||
-		provenance.Subject[0].Digest["sha256"] != artifact.Archive.SHA256 || len(provenance.Predicate) == 0 {
-		return errors.New("published release provenance does not match its descriptor")
+	statement, err := publishedBuildStatement(data, artifact.Archive)
+	if err != nil {
+		return err
+	}
+	predicate, err := publishedBuildPredicate(statement)
+	if err != nil {
+		return err
+	}
+	if predicate.RunDetails.Builder.Id != "https://github.com/riteofstring/code-polishy/deterministic-local-metadata" {
+		return errors.New("published deterministic build metadata has an invalid local metadata identity")
 	}
 	return nil
+}
+
+func publishedBuildStatement(data []byte, archive PublishedFile) (*intoto.Statement, error) {
+	statement := &intoto.Statement{}
+	if err := protojson.Unmarshal(data, statement); err != nil {
+		return nil, fmt.Errorf("decode deterministic build metadata: %w", err)
+	}
+	if err := statement.Validate(); err != nil {
+		return nil, fmt.Errorf("validate deterministic build metadata: %w", err)
+	}
+	if statement.PredicateType != "https://slsa.dev/provenance/v1" || len(statement.Subject) != 1 ||
+		statement.Subject[0].Name != archive.Name || statement.Subject[0].Digest["sha256"] != archive.SHA256 {
+		return nil, errors.New("published deterministic build metadata does not match its descriptor")
+	}
+	return statement, nil
+}
+
+func publishedBuildPredicate(statement *intoto.Statement) (*provenancev1.Provenance, error) {
+	predicateJSON, err := protojson.Marshal(statement.Predicate)
+	if err != nil {
+		return nil, err
+	}
+	predicate := &provenancev1.Provenance{}
+	if err := protojson.Unmarshal(predicateJSON, predicate); err != nil {
+		return nil, fmt.Errorf("decode deterministic SLSA metadata: %w", err)
+	}
+	if err := predicate.Validate(); err != nil {
+		return nil, fmt.Errorf("validate deterministic SLSA metadata: %w", err)
+	}
+	return predicate, nil
 }
 
 func regularAbsolutePath(value string) (string, error) {

@@ -10,6 +10,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/spdx"
 )
 
 const licenseFactsBudget = 10 * time.Minute
@@ -87,11 +88,7 @@ func licenseAdmitted(expression string, allowed map[string]bool) error {
 	if strings.TrimSpace(expression) == "" {
 		return errors.New("resolved package declares no license, which supplyChain.allowedLicenses does not admit")
 	}
-	reader := &licenseReader{tokens: licenseTokens(expression), allowed: allowed}
-	admitted, err := reader.disjunction()
-	if err == nil && reader.position != len(reader.tokens) {
-		err = fmt.Errorf("unexpected %q", reader.tokens[reader.position])
-	}
+	admitted, err := spdx.Admitted(expression, allowed)
 	if err != nil {
 		return fmt.Errorf("resolved package declares %q, which is not a readable SPDX expression: %s", expression, err)
 	}
@@ -99,94 +96,4 @@ func licenseAdmitted(expression string, allowed map[string]bool) error {
 		return fmt.Errorf("resolved package declares %q, which supplyChain.allowedLicenses does not admit", expression)
 	}
 	return nil
-}
-
-func licenseTokens(expression string) []string {
-	spaced := strings.ReplaceAll(strings.ReplaceAll(expression, "(", " ( "), ")", " ) ")
-	return strings.Fields(spaced)
-}
-
-type licenseReader struct {
-	tokens   []string
-	position int
-	allowed  map[string]bool
-}
-
-func (reader *licenseReader) disjunction() (bool, error) {
-	admitted, err := reader.conjunction()
-	if err != nil {
-		return false, err
-	}
-	for reader.accept("OR") {
-		alternative, err := reader.conjunction()
-		if err != nil {
-			return false, err
-		}
-		admitted = admitted || alternative
-	}
-	return admitted, nil
-}
-
-func (reader *licenseReader) conjunction() (bool, error) {
-	admitted, err := reader.term()
-	if err != nil {
-		return false, err
-	}
-	for reader.accept("AND") {
-		additional, err := reader.term()
-		if err != nil {
-			return false, err
-		}
-		admitted = admitted && additional
-	}
-	return admitted, nil
-}
-
-func (reader *licenseReader) term() (bool, error) {
-	if reader.accept("(") {
-		admitted, err := reader.disjunction()
-		if err != nil {
-			return false, err
-		}
-		if !reader.accept(")") {
-			return false, errors.New("a group is never closed")
-		}
-		return admitted, nil
-	}
-	license, err := reader.identifier()
-	if err != nil {
-		return false, err
-	}
-	if reader.accept("WITH") {
-		exception, err := reader.identifier()
-		if err != nil {
-			return false, err
-		}
-		license += " WITH " + exception
-	}
-	return reader.allowed[strings.ToLower(license)], nil
-}
-
-func (reader *licenseReader) identifier() (string, error) {
-	if reader.position == len(reader.tokens) {
-		return "", errors.New("a license is missing")
-	}
-	token := reader.tokens[reader.position]
-	if !policy.IsLicenseIdentifier(token) || licenseOperator(token) {
-		return "", fmt.Errorf("%q is not a license identifier", token)
-	}
-	reader.position++
-	return token, nil
-}
-
-func (reader *licenseReader) accept(token string) bool {
-	if reader.position == len(reader.tokens) || reader.tokens[reader.position] != token {
-		return false
-	}
-	reader.position++
-	return true
-}
-
-func licenseOperator(token string) bool {
-	return token == "AND" || token == "OR" || token == "WITH"
 }

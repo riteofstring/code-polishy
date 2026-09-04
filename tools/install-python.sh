@@ -47,7 +47,10 @@ runtime_release() {
 
 if [[ -x "${python_bin}" ]] && [[ -f "${release_marker}" ]] &&
   [[ "$(runtime_release "${release_marker}")" == "${python_release}" ]] &&
-  [[ "$(python_reported_version "${python_bin}" 2>/dev/null)" == "${python_version}" ]]; then
+  [[ "$(python_reported_version "${python_bin}" 2>/dev/null)" == "${python_version}" ]] &&
+  [[ ! -e "${runtime_root}/bin/pip" ]] && [[ ! -e "${runtime_root}/bin/pip3" ]] &&
+  [[ ! -e "${runtime_root}/bin/pip3.12" ]] && [[ ! -e "${runtime_root}/lib/python3.12/ensurepip" ]] &&
+  [[ ! -e "${runtime_root}/lib/python3.12/site-packages/pip" ]]; then
   echo "CPython ${python_release} is already installed at ${runtime_root}."
   exit 0
 fi
@@ -67,6 +70,9 @@ curl -fsSL "${url}" -o "${archive_path}"
 
 mkdir -p "${staging}"
 tar -xzf "${archive_path}" --strip-components=1 -C "${staging}"
+rm -rf "${staging}/bin/pip" "${staging}/bin/pip3" "${staging}/bin/pip3.12" \
+  "${staging}/lib/python3.12/ensurepip" "${staging}/lib/python3.12/site-packages/pip" \
+  "${staging}"/lib/python3.12/site-packages/pip-*.dist-info
 staged_python="${staging}/bin/python3.12"
 if [[ ! -x "${staged_python}" ]] || [[ "$(python_reported_version "${staged_python}" 2>/dev/null)" != "${python_version}" ]]; then
   echo "The CPython archive did not contain the expected ${python_version} runtime." >&2

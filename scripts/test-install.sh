@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 
@@ -32,10 +22,6 @@ release_list="${fixture_root}/releases.txt"
 launcher_binary="${fixture_root}/code-polishy-launcher"
 real_git="$(command -v git)"
 
-
-
-
-
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 fail() {
@@ -54,8 +40,6 @@ case "$(uname -m)" in
   *) fail "unsupported test architecture $(uname -m)" ;;
 esac
 platform_tag="${os_tag}-${arch_tag}"
-
-
 
 case "${arch_tag}" in
   arm64)
@@ -88,8 +72,6 @@ EOF
   chmod +x "$1"
 }
 
-
-
 write_version_tool() {
   local path="$1" probe="$2" reported="$3"
   write_file "${path}" <<EOF
@@ -105,14 +87,15 @@ EOF
 }
 
 write_python_runtime_tool() {
-  local path="$1" python_version="$2" vulture_version="$3"
+  local path="$1" python_version="$2" vulture_version="$3" packaging_version="$4"
   write_file "${path}" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "-I" && "\${2:-}" == "-B" && "\${3:-}" == "-c" ]]; then
   case "\${4:-}" in
     *sys.version_info*) printf '%s\n' "${python_version}" ;;
     *sysconfig.get_paths*) printf '%s\n' "\$(cd "\$(dirname "\$0")" && pwd -P)/lib/python3.12/site-packages" ;;
-    *importlib.metadata*) printf '%s\n' "${vulture_version}" ;;
+    *'version("packaging")'*) printf '%s\n' "${packaging_version}" ;;
+    *'version("vulture")'*) printf '%s\n' "${vulture_version}" ;;
     *) echo "unexpected Python probe: \$*" >&2; exit 1 ;;
   esac
   exit 0
@@ -197,6 +180,12 @@ EOF
   printf 'v0.7.0\n' >"${source_root}/tools/staticcheck-version.txt"
   printf 'v1.3.0\n' >"${source_root}/tools/govulncheck-version.txt"
   printf 'v2.4.0\n' >"${source_root}/tools/osv-scanner-version.txt"
+  printf '26.3\n' >"${source_root}/tools/packaging-version.txt"
+  printf '%s\n' 'packaging-26.3-py3-none-any.whl d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c' \
+    >"${source_root}/tools/packaging_wheel_checksums.txt"
+  mkdir -p "${source_root}/internal/pythonfacts"
+  printf '[project]\nname="fixture"\nversion="9.9.9"\n' >"${source_root}/internal/pythonfacts/pyproject.toml"
+  printf 'version = 1\nrevision = 3\n' >"${source_root}/internal/pythonfacts/uv.lock"
   printf '3.12.13+20260728\n' >"${source_root}/tools/python-version.txt"
   printf '%s\n' 'cpython-3.12.13+20260728-x86_64-unknown-linux-gnu-install_only.tar.gz fd9d70e1e1ed3f6caccb4e2eefe570aa07589c8f86ddf0e87f68a96cd14272e1' \
     >"${source_root}/tools/python_runtime_checksums.txt"
@@ -238,10 +227,6 @@ exit 0
 EOF
   chmod +x "${source_root}/tools/shellcheck.sh"
 
-
-
-
-
   write_file "${source_root}/scripts/build.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -280,9 +265,6 @@ EOF
       >"${source_root}/tools/javascript/${bundle_source_file}"
   done
 
-
-
-
   write_file "${source_root}/.tools/javascript/${platform_tag}/node/bin/node" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "${source_root}/tools/javascript/bundle-manifest.mjs" ]]; then
@@ -315,12 +297,6 @@ EOF
   "${source_root}/tools/javascript-bundle-manifest.sh" write \
     "${source_root}/.tools/javascript/bundle"
 
-
-
-
-
-
-
   write_file "${source_root}/.tools/go/${go_platform_tag}/go/bin/go" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
@@ -348,9 +324,11 @@ EOF
   write_version_tool "${source_root}/.tools/bin/osv-scanner" --version "osv-scanner version: 2.4.0"
   write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.16.0"
   write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
-  write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+  write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
   printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
+  printf '26.3\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-packaging-release"
   printf '2.16\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vulture-release"
+  mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/packaging-26.3.dist-info"
   mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/vulture-2.16.dist-info"
 
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
@@ -362,9 +340,6 @@ EOF
   "${real_git}" -C "${source_root}" add -A
   "${real_git}" -C "${source_root}" commit --quiet -m "disposable checkout"
 }
-
-
-
 
 build_command_shims() {
   mkdir -p "${shim_bin}"
@@ -416,9 +391,6 @@ manifest_field() {
   awk -v key="\"$2\":" '$1 == key { value = $2; gsub(/[",]/, "", value); print value; exit }' "$1"
 }
 
-
-
-
 write_target_lock() {
   local target="$1"
   local manifest="$2"
@@ -437,8 +409,6 @@ EOF
 
 build_source_checkout
 build_command_shims
-
-
 
 mkdir -p "${command_root}"
 ln -s "${fixture_root}/unrelated-command" "${command_link}"
@@ -481,9 +451,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 [[ "$(manifest_field "${manifest}" codePolishyVersion)" == "9.9.9" ]] ||
   fail "the release does not record the checkout version"
 
-
-
-for carried in go:1.26.6 node:24.18.0 pnpm:11.13.0 shellcheck:0.11.0 \
+for carried in go:1.26.6 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
   staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
   ruff:0.16.0 ty:0.0.65 vulture:2.16; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
@@ -496,9 +464,6 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 [[ "${release_digest}" != "${content_digest}" ]] ||
   fail "the host-independent digest is the installed-bytes digest"
 
-
-
-
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md docs/catalog.json schema/code-polishy.schema.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
@@ -507,13 +472,17 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
   tools/staticcheck-version.txt tools/govulncheck-version.txt \
   tools/osv-scanner-version.txt tools/python-version.txt tools/python_runtime_checksums.txt \
+  internal/pythonfacts/pyproject.toml internal/pythonfacts/uv.lock \
+  tools/packaging-version.txt tools/packaging_wheel_checksums.txt \
   tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
   ".tools/javascript/${platform_tag}/node/bin/node" \
   ".tools/javascript/${platform_tag}/pnpm/bin/pnpm.cjs" \
   ".tools/python/${platform_tag}/python" \
+  ".tools/python/${platform_tag}/.code-polishy-packaging-release" \
   ".tools/python/${platform_tag}/.code-polishy-python-release" \
   ".tools/python/${platform_tag}/.code-polishy-vulture-release" \
+  ".tools/python/${platform_tag}/lib/python3.12/site-packages/packaging-26.3.dist-info" \
   .tools/javascript/bundle/runner.mjs \
   ".tools/go/${go_platform_tag}/go/bin/go" \
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
@@ -565,8 +534,6 @@ grep -Fq 'Command discovery: code-polishy already resolves to the installed laun
   "${fixture_root}/discoverable-reinstall.log" ||
   fail "installer did not recognize the stable launcher already on PATH"
 
-
-
 install_release --add-to-path --path-profile "${path_profile}" \
   >"${fixture_root}/add-to-path.log"
 grep -Fq '# Code Polishy PATH' "${path_profile}" ||
@@ -579,8 +546,6 @@ install_release --add-to-path --path-profile "${path_profile}" \
 [[ "$(grep -Fc '# Code Polishy PATH' "${path_profile}")" == "1" ]] ||
   fail "--add-to-path duplicated its profile entry"
 
-
-
 cp "${path_profile}" "${fixture_root}/expected-shell-profile"
 printf 'export PATH=/unrelated:"%s" # Code Polishy PATH\n' "\$PATH" >"${path_profile}"
 if install_release --add-to-path --path-profile "${path_profile}" \
@@ -591,8 +556,6 @@ grep -q "Refusing to replace the existing Code Polishy PATH entry" \
   "${fixture_root}/path-profile-collision.log" ||
   fail "a changed PATH entry was refused without naming the conflict"
 mv "${fixture_root}/expected-shell-profile" "${path_profile}"
-
-
 
 printf 'tampered\n' >>"${release}/bin/code-polishy"
 install_release >"${fixture_root}/replace.log"
@@ -616,8 +579,6 @@ grep -q "is not clean" "${fixture_root}/dirty.log" ||
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a dirty checkout changed what is installed"
 
-
-
 "${real_git}" -C "${source_root}" config status.showUntrackedFiles no
 if install_release >"${fixture_root}/hidden-dirty.log" 2>&1; then
   fail "a dirty checkout with status.showUntrackedFiles=no installed a release"
@@ -629,9 +590,6 @@ rm "${source_root}/scratch.txt"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a config-hidden dirty checkout changed what is installed"
 
-
-
-
 mv "${source_root}/.tools/bin/osv-scanner" "${fixture_root}/held-osv-scanner"
 if install_release >"${fixture_root}/missing-tool.log" 2>&1; then
   fail "a checkout missing a pinned tool installed a release"
@@ -641,11 +599,6 @@ grep -q ".tools/bin/osv-scanner" "${fixture_root}/missing-tool.log" ||
 mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout missing a pinned tool changed what is installed"
-
-
-
-
-
 
 write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.99.0"
 if install_release >"${fixture_root}/tool-version.log" 2>&1; then
@@ -671,7 +624,7 @@ write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836d
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose ty is not the pinned version changed what is installed"
 
-write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.99" "2.16"
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.99" "2.16" "26.3"
 if install_release >"${fixture_root}/python-version.log" 2>&1; then
   fail "a checkout whose CPython is not the pinned version installed a release"
 fi
@@ -679,11 +632,11 @@ if ! grep -q "python" "${fixture_root}/python-version.log" ||
   ! grep -q "3.12.99" "${fixture_root}/python-version.log"; then
   fail "the unpinned CPython was refused without naming it and what it reports"
 fi
-write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose CPython is not the pinned version changed what is installed"
 
-write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.99"
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.99" "26.3"
 if install_release >"${fixture_root}/vulture-version.log" 2>&1; then
   fail "a checkout whose Vulture is not the pinned version installed a release"
 fi
@@ -691,9 +644,21 @@ if ! grep -q "vulture" "${fixture_root}/vulture-version.log" ||
   ! grep -q "2.99" "${fixture_root}/vulture-version.log"; then
   fail "the unpinned Vulture was refused without naming it and what it reports"
 fi
-write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16"
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose Vulture is not the pinned version changed what is installed"
+
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.99"
+if install_release >"${fixture_root}/packaging-version.log" 2>&1; then
+  fail "a checkout whose packaging is not the pinned version installed a release"
+fi
+if ! grep -q "packaging" "${fixture_root}/packaging-version.log" ||
+  ! grep -q "26.99" "${fixture_root}/packaging-version.log"; then
+  fail "the unpinned packaging distribution was refused without naming it and what it reports"
+fi
+write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose packaging is not the pinned version changed what is installed"
 
 printf '3.12.13+20260727\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
 if install_release >"${fixture_root}/python-marker.log" 2>&1; then
@@ -719,6 +684,18 @@ printf '2.16\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vul
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose Vulture carrier marker is not the pinned release changed what is installed"
 
+printf '26.2\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-packaging-release"
+if install_release >"${fixture_root}/packaging-marker.log" 2>&1; then
+  fail "a checkout whose packaging carrier marker is not the pinned release installed a release"
+fi
+if ! grep -q "carrier marker" "${fixture_root}/packaging-marker.log" ||
+  ! grep -q "26.2" "${fixture_root}/packaging-marker.log"; then
+  fail "the unpinned packaging carrier marker was refused without naming it and what it reports"
+fi
+printf '26.3\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-packaging-release"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose packaging carrier marker is not the pinned release changed what is installed"
+
 vulture_metadata_root="${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages"
 rmdir "${vulture_metadata_root}/vulture-2.16.dist-info"
 if install_release >"${fixture_root}/vulture-metadata-missing.log" 2>&1; then
@@ -742,8 +719,27 @@ rmdir "${vulture_metadata_root}/vulture-2.15.dist-info"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose Vulture carrier has stale metadata changed what is installed"
 
+rmdir "${vulture_metadata_root}/packaging-26.3.dist-info"
+if install_release >"${fixture_root}/packaging-metadata-missing.log" 2>&1; then
+  fail "a checkout whose packaging carrier has no metadata installed a release"
+fi
+if ! grep -q "packaging carrier" "${fixture_root}/packaging-metadata-missing.log"; then
+  fail "missing packaging carrier metadata was refused without naming the carrier"
+fi
+mkdir -p "${vulture_metadata_root}/packaging-26.3.dist-info"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose packaging carrier has no metadata changed what is installed"
 
-
+mkdir -p "${vulture_metadata_root}/packaging-26.2.dist-info"
+if install_release >"${fixture_root}/packaging-metadata.log" 2>&1; then
+  fail "a checkout whose packaging carrier has stale metadata installed a release"
+fi
+if ! grep -q "packaging carrier" "${fixture_root}/packaging-metadata.log"; then
+  fail "stale packaging carrier metadata was refused without naming the carrier"
+fi
+rmdir "${vulture_metadata_root}/packaging-26.2.dist-info"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout whose packaging carrier has stale metadata changed what is installed"
 
 sed 's#golang.org/x/vuln\\tv1.3.0#golang.org/x/vuln\\tv1.3.1#' \
   "${source_root}/.tools/go/${go_platform_tag}/go/bin/go" >"${fixture_root}/other-go"
@@ -758,15 +754,10 @@ cp "${fixture_root}/held-go" "${source_root}/.tools/go/${go_platform_tag}/go/bin
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout whose govulncheck is not the pinned version changed what is installed"
 
-
-
 commit_checkout() {
   "${real_git}" -C "${source_root}" add -A
   "${real_git}" -C "${source_root}" commit --quiet -m "$1"
 }
-
-
-
 
 write_file "${source_root}/templates/check_policy.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -782,8 +773,6 @@ grep -q "templates/check_policy.sh" "${fixture_root}/retired-path.log" ||
   fail "a release carrying a retired path was installed anyway"
 rm "${source_root}/templates/check_policy.sh"
 commit_checkout "disposable retired wrapper removed"
-
-
 
 write_file "${source_root}/templates/AGENTS.md" <<'EOF'
 # Canonical guidance
@@ -806,10 +795,6 @@ if [[ -n "$(find "${prefix}/releases" -mindepth 1 -maxdepth 1 -name '.staging-*'
   fail "a refused release left a staging tree behind"
 fi
 
-
-
-
-
 printf '9. 9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable whitespace version"
 if install_release >"${fixture_root}/version.log" 2>&1; then
@@ -821,8 +806,6 @@ grep -q "carries whitespace" "${fixture_root}/version.log" ||
   fail "a whitespace-carrying VERSION changed what is installed"
 printf '9.9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable version restored"
-
-
 
 build_marker="${fixture_root}/fail-the-build"
 : >"${build_marker}"
@@ -914,8 +897,6 @@ second_release="$(installed_release 2)"
   "$(manifest_field "${second_release}/release-manifest.json" releaseDigest)" ]] ||
   fail "two reviewed commits share one release digest"
 
-
-
 [[ -x "${prefix}/bin/code-polishy" ]] || fail "the installer did not install the launcher"
 launcher="${command_link}"
 [[ -x "${launcher}" ]] || fail "the managed command link is not executable"
@@ -928,8 +909,6 @@ if (cd "${target}" && "${launcher}" check) >"${fixture_root}/unlocked.log" 2>&1;
 fi
 grep -q ".code-polishy.lock.json" "${fixture_root}/unlocked.log" ||
   fail "a target with no lock was not told which file to write"
-
-
 
 newer_release="${first_release}"
 if [[ "${newer_release}" == "${release}" ]]; then
@@ -960,10 +939,6 @@ grep -q "${missing_digest}" "${fixture_root}/missing.log" ||
   fail "a missing release did not name the digest the target requires"
 grep -q "./scripts/install.sh" "${fixture_root}/missing.log" ||
   fail "a missing release did not name the local installation step"
-
-
-
-
 
 write_target_lock "${target}" "${release}/release-manifest.json"
 added="${release}/.tools/javascript/bundle/added.mjs"

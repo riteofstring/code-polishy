@@ -25,7 +25,7 @@ const (
 	ManifestFilename = "release-manifest.json"
 
 	LockVersion     = 1
-	ManifestVersion = 4
+	ManifestVersion = 5
 
 	releasesDirectory = "releases"
 )
@@ -86,6 +86,7 @@ type Tools struct {
 	Node        string `json:"node"`
 	OSVScanner  string `json:"osv-scanner"`
 	PNPM        string `json:"pnpm"`
+	Packaging   string `json:"packaging"`
 	Python      string `json:"python"`
 	Ruff        string `json:"ruff"`
 	Shellcheck  string `json:"shellcheck"`
@@ -212,6 +213,9 @@ func (manifest Manifest) Identity() string {
 	fmt.Fprintf(identity, "tool.node=%s\n", manifest.Tools.Node)
 	fmt.Fprintf(identity, "tool.osv-scanner=%s\n", manifest.Tools.OSVScanner)
 	fmt.Fprintf(identity, "tool.pnpm=%s\n", manifest.Tools.PNPM)
+	if manifest.ManifestVersion >= 5 {
+		fmt.Fprintf(identity, "tool.packaging=%s\n", manifest.Tools.Packaging)
+	}
 	if manifest.ManifestVersion >= 4 {
 		fmt.Fprintf(identity, "tool.python=%s\n", manifest.Tools.Python)
 	}
@@ -347,6 +351,9 @@ func validateManifestToolPins(manifest Manifest, source string) error {
 			struct{ tool, version string }{"Python", manifest.Tools.Python},
 			struct{ tool, version string }{"Vulture", manifest.Tools.Vulture},
 		)
+	}
+	if manifest.ManifestVersion >= 5 {
+		pins = append(pins, struct{ tool, version string }{"packaging", manifest.Tools.Packaging})
 	}
 	for _, pin := range pins {
 		if !versionPattern.MatchString(pin.version) {

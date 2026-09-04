@@ -10,7 +10,7 @@ import (
 
 const (
 	Version             = 1
-	IdentityVersion     = 1
+	IdentityVersion     = 2
 	Retention           = 30 * 24 * time.Hour
 	maximumReceiptBytes = 2 << 20
 	rootDirectory       = ".code-polishy-reports"

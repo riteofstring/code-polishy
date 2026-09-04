@@ -1,11 +1,15 @@
 package architecture
 
 import (
-	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -16,9 +20,30 @@ type pythonImportReference struct {
 	Literal bool
 }
 
-type pythonImportToken struct {
-	Value string
-	Line  int
+type pythonComputedImportFact struct {
+	Callee          string
+	Callable        string
+	Line            int
+	Column          int
+	EndLine         int
+	EndColumn       int
+	Argument        string
+	Shape           string
+	Targets         []string
+	Configuration   []pythonComputedConfigurationFact
+	EntryPointGroup string
+	EvidenceError   string
+}
+
+type pythonComputedConfigurationFact struct {
+	Path        string
+	JSONPointer string
+}
+
+type pythonSourceFact struct {
+	SHA256          string
+	Imports         []pythonImportReference
+	ComputedImports []pythonComputedImportFact
 }
 
 type pythonModuleIndex struct {
@@ -65,775 +90,116 @@ func pythonConflictingModulePaths(paths []string) bool {
 	return len(locations) > 1
 }
 
-func pythonImportReferences(data []byte) []pythonImportReference {
-	code := pythonCode(data)
-	references := pythonStaticImportReferences(code)
-	return append(references, pythonDynamicImportReferences(data, code)...)
-}
-
-type pythonCodeScanner struct {
-	source []byte
-	code   []byte
-	index  int
-	quote  byte
-	triple bool
-}
-
-func pythonCode(data []byte) []byte {
-	scanner := pythonCodeScanner{source: data, code: append([]byte{}, data...)}
-	for scanner.index < len(scanner.code) {
-		scanner.scan()
-	}
-	return scanner.code
-}
-
-func (scanner *pythonCodeScanner) scan() {
-	if scanner.quote != 0 {
-		scanner.consumeString()
-		return
-	}
-	switch scanner.source[scanner.index] {
-	case '#':
-		scanner.consumeComment()
-	case '\'', '"':
-		scanner.openString()
-	default:
-		scanner.index++
-	}
-}
-
-func (scanner *pythonCodeScanner) consumeString() {
-	if scanner.endsTripleString() {
-		scanner.closeTripleString()
-		return
-	}
-	if scanner.endsString() {
-		scanner.closeString()
-		return
-	}
-	if scanner.consumeEscapedCharacter() {
-		return
-	}
-	scanner.maskStringCharacter()
-}
-
-func (scanner *pythonCodeScanner) endsTripleString() bool {
-	return scanner.triple && scanner.index+2 < len(scanner.code) &&
-		scanner.source[scanner.index] == scanner.quote && scanner.source[scanner.index+1] == scanner.quote && scanner.source[scanner.index+2] == scanner.quote
-}
-
-func (scanner *pythonCodeScanner) closeTripleString() {
-	scanner.code[scanner.index], scanner.code[scanner.index+1], scanner.code[scanner.index+2] = ' ', ' ', ' '
-	scanner.index += 3
-	scanner.quote = 0
-}
-
-func (scanner *pythonCodeScanner) endsString() bool {
-	return !scanner.triple && scanner.source[scanner.index] == scanner.quote
-}
-
-func (scanner *pythonCodeScanner) closeString() {
-	scanner.code[scanner.index] = ' '
-	scanner.index++
-	scanner.quote = 0
-}
-
-func (scanner *pythonCodeScanner) consumeEscapedCharacter() bool {
-	if scanner.source[scanner.index] != '\\' || scanner.index+1 >= len(scanner.code) {
-		return false
-	}
-	scanner.code[scanner.index] = ' '
-	scanner.index++
-	if scanner.source[scanner.index] == '\n' {
-		return true
-	}
-	scanner.code[scanner.index] = ' '
-	scanner.index++
-	return true
-}
-
-func (scanner *pythonCodeScanner) maskStringCharacter() {
-	if scanner.source[scanner.index] != '\n' {
-		scanner.code[scanner.index] = ' '
-	}
-	scanner.index++
-}
-
-func (scanner *pythonCodeScanner) consumeComment() {
-	for scanner.index < len(scanner.code) && scanner.source[scanner.index] != '\n' {
-		scanner.code[scanner.index] = ' '
-		scanner.index++
-	}
-}
-
-func (scanner *pythonCodeScanner) openString() {
-	scanner.quote = scanner.source[scanner.index]
-	scanner.triple = scanner.index+2 < len(scanner.code) && scanner.source[scanner.index+1] == scanner.quote && scanner.source[scanner.index+2] == scanner.quote
-	scanner.code[scanner.index] = ' '
-	scanner.index++
-	if scanner.triple {
-		scanner.code[scanner.index], scanner.code[scanner.index+1] = ' ', ' '
-		scanner.index += 2
-	}
-}
-
-func pythonStaticImportReferences(code []byte) []pythonImportReference {
-	references := []pythonImportReference{}
-	tokens := pythonImportTokens(code)
-	for index := 0; index < len(tokens); {
-		switch tokens[index].Value {
-		case "from":
-			reference, next, found := pythonFromImportReference(tokens, index)
-			if found {
-				references = append(references, reference)
-				index = next
-				continue
-			}
-		case "import":
-			imports, next, found := pythonDirectImportReferences(tokens, index)
-			if found {
-				references = append(references, imports...)
-				index = next
-				continue
-			}
+func pythonSourceFacts(repo repository.Repository, sources []string) (map[string]pythonSourceFact, error) {
+	inputs := make([]pythonfacts.Input, 0, len(sources))
+	data := make(map[string][]byte, len(sources))
+	for _, source := range sources {
+		contents, err := repo.Read(source)
+		if err != nil {
+			return nil, fmt.Errorf("read %s for python-facts: %w", source, err)
 		}
-		index++
+		data[source] = contents
+		inputs = append(inputs, pythonfacts.Input{Path: source, Source: string(contents)})
 	}
-	return references
-}
-
-type pythonImportTokenScanner struct {
-	code  []byte
-	index int
-	line  int
-}
-
-func pythonImportTokens(code []byte) []pythonImportToken {
-	scanner := pythonImportTokenScanner{code: code, line: 1}
-	tokens := []pythonImportToken{}
-	for scanner.index < len(scanner.code) {
-		if scanner.consumeContinuedLine() || scanner.consumeNewline(&tokens) || scanner.consumeIdentifier(&tokens) {
-			continue
+	python := repo.PythonTool()
+	if !filepath.IsAbs(python) {
+		var err error
+		python, err = pythonfacts.DefaultInterpreter()
+		if err != nil {
+			return nil, err
 		}
-		scanner.consumeSymbol(&tokens)
-		scanner.index++
-	}
-	return tokens
-}
-
-func (scanner *pythonImportTokenScanner) consumeContinuedLine() bool {
-	if scanner.index+2 < len(scanner.code) && scanner.code[scanner.index] == '\\' && scanner.code[scanner.index+1] == '\r' && scanner.code[scanner.index+2] == '\n' {
-		scanner.index += 3
-		scanner.line++
-		return true
-	}
-	if scanner.index+1 < len(scanner.code) && scanner.code[scanner.index] == '\\' && scanner.code[scanner.index+1] == '\n' {
-		scanner.index += 2
-		scanner.line++
-		return true
-	}
-	return false
-}
-
-func (scanner *pythonImportTokenScanner) consumeNewline(tokens *[]pythonImportToken) bool {
-	if scanner.code[scanner.index] != '\n' {
-		return false
-	}
-	*tokens = append(*tokens, pythonImportToken{Value: "\n", Line: scanner.line})
-	scanner.index++
-	scanner.line++
-	return true
-}
-
-func (scanner *pythonImportTokenScanner) consumeIdentifier(tokens *[]pythonImportToken) bool {
-	if !pythonIdentifierByte(scanner.code[scanner.index]) || scanner.code[scanner.index] >= '0' && scanner.code[scanner.index] <= '9' {
-		return false
-	}
-	start := scanner.index
-	for scanner.index < len(scanner.code) && pythonIdentifierByte(scanner.code[scanner.index]) {
-		scanner.index++
-	}
-	*tokens = append(*tokens, pythonImportToken{Value: string(scanner.code[start:scanner.index]), Line: scanner.line})
-	return true
-}
-
-func (scanner *pythonImportTokenScanner) consumeSymbol(tokens *[]pythonImportToken) {
-	if strings.ContainsRune(".,;()*", rune(scanner.code[scanner.index])) {
-		*tokens = append(*tokens, pythonImportToken{Value: string(scanner.code[scanner.index]), Line: scanner.line})
-	}
-}
-
-func pythonFromImportReference(tokens []pythonImportToken, start int) (pythonImportReference, int, bool) {
-	module, next, found := pythonTokenImportPath(tokens, start+1)
-	if !found || next >= len(tokens) || tokens[next].Value != "import" {
-		return pythonImportReference{}, start + 1, false
-	}
-	names, next, found := pythonImportedNames(tokens, next+1)
-	if !found {
-		return pythonImportReference{}, start + 1, false
-	}
-	return pythonImportReference{Module: module, Names: names, Line: tokens[start].Line, Literal: true}, next, true
-}
-
-func pythonDirectImportReferences(tokens []pythonImportToken, start int) ([]pythonImportReference, int, bool) {
-	references := []pythonImportReference{}
-	next := start + 1
-	for {
-		module, afterModule, found := pythonTokenImportPath(tokens, next)
-		if !found {
-			return nil, start + 1, false
-		}
-		next = afterModule
-		if next < len(tokens) && tokens[next].Value == "as" {
-			next++
-			if next >= len(tokens) || !pythonIdentifier(tokens[next].Value) {
-				return nil, start + 1, false
-			}
-			next++
-		}
-		references = append(references, pythonImportReference{Module: module, Line: tokens[start].Line, Literal: true})
-		if next >= len(tokens) || pythonImportTerminator(tokens[next].Value) {
-			return references, next, true
-		}
-		if tokens[next].Value != "," {
-			return nil, start + 1, false
-		}
-		next++
-	}
-}
-
-func pythonTokenImportPath(tokens []pythonImportToken, start int) (string, int, bool) {
-	if start >= len(tokens) {
-		return "", start, false
-	}
-	dots, start := pythonImportDots(tokens, start)
-	component, found := pythonImportPathComponent(tokens, start)
-	if !found {
-		return pythonRelativeImportPath(dots, start)
-	}
-	return pythonQualifiedImportPath(tokens, dots, component, start+1)
-}
-
-func pythonImportDots(tokens []pythonImportToken, start int) (string, int) {
-	dots := ""
-	for start < len(tokens) && tokens[start].Value == "." {
-		dots += "."
-		start++
-	}
-	return dots, start
-}
-
-func pythonImportPathComponent(tokens []pythonImportToken, index int) (string, bool) {
-	if index >= len(tokens) {
-		return "", false
-	}
-	value := tokens[index].Value
-	return value, pythonIdentifier(value) && value != "import"
-}
-
-func pythonRelativeImportPath(dots string, index int) (string, int, bool) {
-	if dots == "" {
-		return "", index, false
-	}
-	return dots, index, true
-}
-
-func pythonQualifiedImportPath(tokens []pythonImportToken, dots, first string, index int) (string, int, bool) {
-	parts := []string{first}
-	for index < len(tokens) && tokens[index].Value == "." {
-		component, found := pythonImportPathComponent(tokens, index+1)
-		if !found {
-			return "", index, false
-		}
-		parts = append(parts, component)
-		index += 2
-	}
-	return dots + strings.Join(parts, "."), index, true
-}
-
-type pythonImportedNameParser struct {
-	tokens        []pythonImportToken
-	index         int
-	parenthesized bool
-	names         []string
-}
-
-func pythonImportedNames(tokens []pythonImportToken, start int) ([]string, int, bool) {
-	parser := pythonImportedNameParser{tokens: tokens, index: start, parenthesized: start < len(tokens) && tokens[start].Value == "("}
-	if parser.parenthesized {
-		parser.index++
-	}
-	return parser.parse()
-}
-
-func (parser *pythonImportedNameParser) parse() ([]string, int, bool) {
-	for {
-		if names, next, found, done := parser.completeBeforeName(); done {
-			return names, next, found
-		}
-		name, found := parser.readName()
-		if !found || !parser.readAlias() {
-			return nil, parser.index, false
-		}
-		parser.names = append(parser.names, name)
-		if names, next, found, done := parser.completeAfterName(); done {
-			return names, next, found
+	} else if _, err := os.Stat(python); err != nil {
+		python, err = pythonfacts.DefaultInterpreter()
+		if err != nil {
+			return nil, err
 		}
 	}
-}
-
-func (parser *pythonImportedNameParser) completeBeforeName() ([]string, int, bool, bool) {
-	if parser.parenthesized {
-		parser.index = pythonSkipImportNewlines(parser.tokens, parser.index)
-		if parser.index < len(parser.tokens) && parser.tokens[parser.index].Value == ")" {
-			return parser.names, parser.index + 1, len(parser.names) > 0, true
+	response, err := pythonfacts.Analyze(python, pythonfacts.Request{Sources: inputs})
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]pythonSourceFact, len(sources))
+	for index, source := range sources {
+		fact := response.Sources[index]
+		if fact.Error != "" {
+			return nil, fmt.Errorf("parse %s: %s", source, fact.Error)
 		}
-	}
-	if parser.index >= len(parser.tokens) || pythonImportTerminator(parser.tokens[parser.index].Value) {
-		return parser.names, parser.index, !parser.parenthesized && len(parser.names) > 0, true
-	}
-	return nil, 0, false, false
-}
-
-func (parser *pythonImportedNameParser) readName() (string, bool) {
-	name := parser.tokens[parser.index].Value
-	if name != "*" && !pythonIdentifier(name) {
-		return "", false
-	}
-	parser.index++
-	return name, true
-}
-
-func (parser *pythonImportedNameParser) readAlias() bool {
-	if parser.index >= len(parser.tokens) || parser.tokens[parser.index].Value != "as" {
-		return true
-	}
-	parser.index++
-	if parser.index >= len(parser.tokens) || !pythonIdentifier(parser.tokens[parser.index].Value) {
-		return false
-	}
-	parser.index++
-	return true
-}
-
-func (parser *pythonImportedNameParser) completeAfterName() ([]string, int, bool, bool) {
-	parser.skipNewlinesAfterName()
-	if parser.nextIs(",") {
-		return parser.completeAfterNameComma()
-	}
-	return parser.completeAfterNameEnd()
-}
-
-func (parser *pythonImportedNameParser) skipNewlinesAfterName() {
-	if parser.parenthesized {
-		parser.index = pythonSkipImportNewlines(parser.tokens, parser.index)
-	}
-}
-
-func (parser *pythonImportedNameParser) nextIs(value string) bool {
-	return parser.index < len(parser.tokens) && parser.tokens[parser.index].Value == value
-}
-
-func (parser *pythonImportedNameParser) completeAfterNameComma() ([]string, int, bool, bool) {
-	parser.index++
-	if !parser.parenthesized && parser.importListEnded() {
-		return nil, parser.index, false, true
-	}
-	return nil, 0, false, false
-}
-
-func (parser *pythonImportedNameParser) completeAfterNameEnd() ([]string, int, bool, bool) {
-	if parser.parenthesized && parser.nextIs(")") {
-		return parser.names, parser.index + 1, true, true
-	}
-	if !parser.parenthesized && parser.importListEnded() {
-		return parser.names, parser.index, true, true
-	}
-	return nil, parser.index, false, true
-}
-
-func (parser *pythonImportedNameParser) importListEnded() bool {
-	return parser.index >= len(parser.tokens) || pythonImportTerminator(parser.tokens[parser.index].Value)
-}
-
-func pythonSkipImportNewlines(tokens []pythonImportToken, start int) int {
-	for start < len(tokens) && tokens[start].Value == "\n" {
-		start++
-	}
-	return start
-}
-
-func pythonImportTerminator(value string) bool {
-	return value == "\n" || value == ";"
-}
-
-func pythonIdentifier(value string) bool {
-	for index, character := range value {
-		if !(character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || index > 0 && character >= '0' && character <= '9') {
-			return false
+		converted, err := pythonSourceFactFromAdapter(fact, data[source])
+		if err != nil {
+			return nil, fmt.Errorf("parse %s facts: %w", source, err)
 		}
+		result[source] = converted
 	}
-	return value != ""
+	return result, nil
 }
 
-func pythonDynamicImportReferences(data, code []byte) []pythonImportReference {
-	references := []pythonImportReference{}
-	for _, name := range pythonDynamicImportNames(code) {
-		for offset := 0; offset < len(code); {
-			index := bytes.Index(code[offset:], []byte(name))
-			if index < 0 {
-				break
-			}
-			index += offset
-			offset = index + len(name)
-			if !pythonCallBoundary(code, index, len(name)) {
-				continue
-			}
-			argument, literal, found := pythonCallImportArgument(data, code, index+len(name))
-			if !found {
-				continue
-			}
-			references = append(references, pythonImportReference{
-				Module: argument, Line: bytes.Count(code[:index], []byte("\n")) + 1, Literal: literal,
-			})
+func pythonSourceFactFromAdapter(fact pythonfacts.Source, data []byte) (pythonSourceFact, error) {
+	digest := sha256.Sum256(data)
+	if fact.SHA256 != hex.EncodeToString(digest[:]) {
+		return pythonSourceFact{}, fmt.Errorf("source digest does not match")
+	}
+	result := pythonSourceFact{SHA256: fact.SHA256}
+	for _, reference := range fact.Imports {
+		converted, err := pythonImportFactFromAdapter(reference)
+		if err != nil {
+			return pythonSourceFact{}, err
 		}
+		result.Imports = append(result.Imports, converted)
 	}
-	return references
-}
-
-func pythonDynamicImportNames(code []byte) []string {
-	names := map[string]bool{"importlib.import_module": true, "__import__": true}
-	tokens := pythonImportTokens(code)
-	for index := 0; index < len(tokens); {
-		next := index + 1
-		switch tokens[index].Value {
-		case "import":
-			next = pythonImportlibAliases(tokens, index, names)
-		case "from":
-			next = pythonImportlibFunctionAliases(tokens, index, names)
+	for _, computed := range fact.ComputedImports {
+		converted, err := pythonComputedFactFromAdapter(computed)
+		if err != nil {
+			return pythonSourceFact{}, err
 		}
-		if next > index+1 {
-			index = next
-			continue
+		result.ComputedImports = append(result.ComputedImports, converted)
+	}
+	return result, nil
+}
+
+func pythonImportFactFromAdapter(reference pythonfacts.Import) (pythonImportReference, error) {
+	if reference.Module == "" || reference.Line <= 0 || !reference.Literal {
+		return pythonImportReference{}, fmt.Errorf("import fact is invalid")
+	}
+	names := []string(nil)
+	if len(reference.Names) > 0 {
+		names = append(names, reference.Names...)
+	}
+	return pythonImportReference{Module: reference.Module, Names: names, Line: reference.Line, Literal: true}, nil
+}
+
+func pythonComputedFactFromAdapter(computed pythonfacts.ComputedImport) (pythonComputedImportFact, error) {
+	if !validPythonComputedFact(computed) {
+		return pythonComputedImportFact{}, fmt.Errorf("computed import fact is invalid")
+	}
+	converted := pythonComputedImportFact{
+		Callee: computed.Callee, Callable: computed.Callable, Line: computed.Line, Column: computed.Column,
+		EndLine: computed.EndLine, EndColumn: computed.EndColumn, Argument: computed.Argument, Shape: computed.Shape,
+		Targets: append([]string{}, computed.Targets...), EntryPointGroup: computed.EntryPointGroup, EvidenceError: computed.EvidenceError,
+	}
+	for _, input := range computed.Configuration {
+		if input.Path == "" || input.JSONPointer == "" {
+			return pythonComputedImportFact{}, fmt.Errorf("computed import configuration fact is invalid")
 		}
-		index++
+		converted.Configuration = append(converted.Configuration, pythonComputedConfigurationFact{Path: input.Path, JSONPointer: input.JSONPointer})
 	}
-	result := make([]string, 0, len(names))
-	for name := range names {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
+	return converted, nil
 }
 
-func pythonImportlibAliases(tokens []pythonImportToken, start int, names map[string]bool) int {
-	staged := map[string]bool{}
-	index := start + 1
-	for {
-		module, binding, aliased, next, found := pythonImportlibAlias(tokens, index)
-		if !found {
-			return start + 1
-		}
-		pythonRecordImportlibAlias(staged, module, binding, aliased)
-		index = next
-		if pythonImportListDone(tokens, index) {
-			pythonCommitImportNames(names, staged)
-			return index
-		}
-		if tokens[index].Value != "," {
-			return start + 1
-		}
-		index++
-	}
+func validPythonComputedFact(computed pythonfacts.ComputedImport) bool {
+	return validPythonComputedCallee(computed.Callee) && validPythonComputedPosition(computed) && validPythonComputedBounds(computed)
 }
 
-func pythonCommitImportNames(names, staged map[string]bool) {
-	for name := range staged {
-		names[name] = true
-	}
+func validPythonComputedCallee(callee string) bool {
+	return callee == "importlib.import_module" || callee == "builtins.__import__"
 }
 
-func pythonImportlibAlias(tokens []pythonImportToken, index int) (string, string, bool, int, bool) {
-	module, next, found := pythonTokenImportPath(tokens, index)
-	if !found {
-		return "", "", false, index, false
-	}
-	binding := strings.Split(module, ".")[0]
-	aliased := false
-	if next < len(tokens) && tokens[next].Value == "as" {
-		aliased = true
-		next++
-		if next >= len(tokens) || !pythonIdentifier(tokens[next].Value) {
-			return "", "", false, next, false
-		}
-		binding = tokens[next].Value
-		next++
-	}
-	return module, binding, aliased, next, true
+func validPythonComputedPosition(computed pythonfacts.ComputedImport) bool {
+	return computed.Callable != "" && computed.Line > 0 && computed.Column > 0 && computed.EndLine >= computed.Line
 }
 
-func pythonRecordImportlibAlias(names map[string]bool, module, binding string, aliased bool) {
-	switch {
-	case module == "importlib" || strings.HasPrefix(module, "importlib.") && !aliased:
-		names[binding+".import_module"] = true
-	case module == "builtins":
-		names[binding+".__import__"] = true
-	}
-}
-
-func pythonImportListDone(tokens []pythonImportToken, index int) bool {
-	return index >= len(tokens) || pythonImportTerminator(tokens[index].Value)
-}
-
-type pythonImportlibFunctionParser struct {
-	tokens        []pythonImportToken
-	index         int
-	parenthesized bool
-	names         map[string]bool
-	module        string
-	failure       int
-}
-
-func pythonImportlibFunctionAliases(tokens []pythonImportToken, start int, names map[string]bool) int {
-	module, next, found := pythonTokenImportPath(tokens, start+1)
-	if !found || (module != "importlib" && module != "builtins") || next >= len(tokens) || tokens[next].Value != "import" {
-		return start + 1
-	}
-	staged := map[string]bool{}
-	parser := pythonImportlibFunctionParser{
-		tokens: tokens, index: next + 1, names: staged, module: module, failure: start + 1,
-	}
-	parser.parenthesized = parser.index < len(tokens) && tokens[parser.index].Value == "("
-	if parser.parenthesized {
-		parser.index++
-	}
-	parsed := parser.parse()
-	if parsed > start+1 {
-		pythonCommitImportNames(names, staged)
-	}
-	return parsed
-}
-
-func (parser *pythonImportlibFunctionParser) parse() int {
-	for {
-		if next, done := parser.completeBeforeImport(); done {
-			return next
-		}
-		imported, binding, found := parser.readImport()
-		if !found {
-			return parser.failure
-		}
-		parser.record(imported, binding)
-		if next, done := parser.completeAfterImport(); done {
-			return next
-		}
-	}
-}
-
-func (parser *pythonImportlibFunctionParser) completeBeforeImport() (int, bool) {
-	if parser.parenthesized {
-		parser.index = pythonSkipImportNewlines(parser.tokens, parser.index)
-		if parser.index < len(parser.tokens) && parser.tokens[parser.index].Value == ")" {
-			return parser.index + 1, true
-		}
-	}
-	if parser.index >= len(parser.tokens) || pythonImportTerminator(parser.tokens[parser.index].Value) {
-		return parser.index, true
-	}
-	return 0, false
-}
-
-func (parser *pythonImportlibFunctionParser) readImport() (string, string, bool) {
-	imported := parser.tokens[parser.index].Value
-	if imported != "*" && !pythonIdentifier(imported) {
-		return "", "", false
-	}
-	parser.index++
-	binding := imported
-	if parser.index < len(parser.tokens) && parser.tokens[parser.index].Value == "as" {
-		parser.index++
-		if parser.index >= len(parser.tokens) || !pythonIdentifier(parser.tokens[parser.index].Value) {
-			return "", "", false
-		}
-		binding = parser.tokens[parser.index].Value
-		parser.index++
-	}
-	return imported, binding, true
-}
-
-func (parser *pythonImportlibFunctionParser) record(imported, binding string) {
-	if parser.module == "importlib" && imported == "import_module" {
-		parser.names[binding] = true
-	}
-	if parser.module == "builtins" && imported == "__import__" {
-		parser.names[binding] = true
-	}
-	if imported == "*" {
-		if parser.module == "importlib" {
-			parser.names["import_module"] = true
-		}
-		if parser.module == "builtins" {
-			parser.names["__import__"] = true
-		}
-	}
-}
-
-func (parser *pythonImportlibFunctionParser) completeAfterImport() (int, bool) {
-	if parser.parenthesized {
-		parser.index = pythonSkipImportNewlines(parser.tokens, parser.index)
-	}
-	if parser.index >= len(parser.tokens) || pythonImportTerminator(parser.tokens[parser.index].Value) {
-		return parser.index, true
-	}
-	if parser.parenthesized && parser.tokens[parser.index].Value == ")" {
-		return parser.index + 1, true
-	}
-	if parser.tokens[parser.index].Value != "," {
-		return parser.failure, true
-	}
-	parser.index++
-	if !parser.parenthesized && (parser.index >= len(parser.tokens) || pythonImportTerminator(parser.tokens[parser.index].Value)) {
-		return parser.failure, true
-	}
-	return 0, false
-}
-
-func pythonCallBoundary(code []byte, start, length int) bool {
-	if start > 0 && (pythonIdentifierByte(code[start-1]) || code[start-1] == '.') {
-		return false
-	}
-	end := start + length
-	return end >= len(code) || !pythonIdentifierByte(code[end])
-}
-
-func pythonIdentifierByte(value byte) bool {
-	return value == '_' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9'
-}
-
-func pythonCallImportArgument(data, code []byte, index int) (string, bool, bool) {
-	start, found := pythonCallArgumentStart(data, code, index)
-	if !found {
-		return pythonParenthesizedCallImportArgument(data, code, index)
-	}
-	argument, end, literal := pythonPlainImportString(data, start)
-	if !literal {
-		return "", false, true
-	}
-	end = pythonSkipCallSpace(data, end)
-	if end >= len(code) || code[end] != ')' {
-		return "", false, true
-	}
-	return argument, true, true
-}
-
-func pythonCallArgumentStart(data, code []byte, index int) (int, bool) {
-	index = pythonSkipCallStartSpace(data, index)
-	if index >= len(code) || code[index] != '(' {
-		return 0, false
-	}
-	return pythonSkipCallSpace(data, index+1), true
-}
-
-func pythonParenthesizedCallImportArgument(data, code []byte, index int) (string, bool, bool) {
-	index = pythonSkipCallStartSpace(data, index)
-	if index >= len(code) || code[index] != ')' {
-		return "", false, false
-	}
-	if _, found := pythonCallArgumentStart(data, code, index+1); !found {
-		return "", false, false
-	}
-	return "", false, true
-}
-
-func pythonSkipCallStartSpace(data []byte, index int) int {
-	for index < len(data) {
-		if data[index] == ' ' || data[index] == '\t' {
-			index++
-			continue
-		}
-		if data[index] == '\\' && index+1 < len(data) && data[index+1] == '\n' {
-			index += 2
-			continue
-		}
-		if data[index] == '\\' && index+2 < len(data) && data[index+1] == '\r' && data[index+2] == '\n' {
-			index += 3
-			continue
-		}
-		break
-	}
-	return index
-}
-
-func pythonSkipCallSpace(data []byte, index int) int {
-	for index < len(data) {
-		if pythonSpace(data[index]) {
-			index++
-			continue
-		}
-		if data[index] == '\\' && index+1 < len(data) && data[index+1] == '\n' {
-			index += 2
-			continue
-		}
-		if data[index] == '\\' && index+2 < len(data) && data[index+1] == '\r' && data[index+2] == '\n' {
-			index += 3
-			continue
-		}
-		break
-	}
-	return index
-}
-
-func pythonPlainImportString(data []byte, index int) (string, int, bool) {
-	index = pythonPlainImportStringStart(data, index)
-	if index >= len(data) || !pythonImportStringQuote(data[index]) {
-		return "", index, false
-	}
-	if pythonTripleImportString(data, index) {
-		return "", index, false
-	}
-	return pythonReadPlainImportString(data, data[index], index+1)
-}
-
-func pythonPlainImportStringStart(data []byte, index int) int {
-	if index < len(data) && pythonPlainStringPrefix(data[index]) {
-		return index + 1
-	}
-	return index
-}
-
-func pythonImportStringQuote(value byte) bool {
-	return value == '\'' || value == '"'
-}
-
-func pythonTripleImportString(data []byte, index int) bool {
-	return index+2 < len(data) && data[index+1] == data[index] && data[index+2] == data[index]
-}
-
-func pythonReadPlainImportString(data []byte, quote byte, index int) (string, int, bool) {
-	value := strings.Builder{}
-	for index < len(data) {
-		if data[index] == quote {
-			return value.String(), index + 1, true
-		}
-		if pythonUnsafeImportStringByte(data[index]) {
-			return "", index, false
-		}
-		value.WriteByte(data[index])
-		index++
-	}
-	return "", index, false
-}
-
-func pythonUnsafeImportStringByte(value byte) bool {
-	return value == '\\' || value == '\n' || value == '\r'
-}
-
-func pythonPlainStringPrefix(value byte) bool {
-	return value == 'r' || value == 'R' || value == 'b' || value == 'B' || value == 'u' || value == 'U'
-}
-
-func pythonSpace(value byte) bool {
-	return value == ' ' || value == '\t' || value == '\n' || value == '\r'
+func validPythonComputedBounds(computed pythonfacts.ComputedImport) bool {
+	return computed.Shape != "" && len(computed.Shape) <= 16384 && len(computed.Argument) <= 4096 &&
+		len(computed.Targets) <= 4096 && len(computed.Configuration) <= 4096
 }
 
 func pythonUnprovenImport(index pythonModuleIndex, source string, reference pythonImportReference, dependencies map[string]bool) string {

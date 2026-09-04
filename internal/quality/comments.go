@@ -21,9 +21,10 @@ type sourceText struct {
 }
 
 type sourceAnnotation struct {
-	offset  int
-	text    string
-	allowed bool
+	offset             int
+	text               string
+	allowed            bool
+	shellSourceFollows bool
 }
 
 type sourceCommentScan struct {

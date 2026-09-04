@@ -132,7 +132,7 @@ var commandHelpPages = []commandHelpPage{
 			"verify validates the existing manifest at --root.",
 			"materialize copies a closed source tree to a new dereferenced destination.",
 			"archive creates one checksum-stable ZIP from a verified release root.",
-			"publish creates the archive checksum, manifest, SBOM, provenance, and descriptor atomically.",
+			"publish creates the archive checksum, manifest, SBOM, deterministic provenance metadata, and descriptor atomically.",
 			"index combines every supported host descriptor into one verified release index.",
 			"oci-context installs one Linux archive through the bundle verifier into a new image context.",
 			"This command accepts no global --config option.",

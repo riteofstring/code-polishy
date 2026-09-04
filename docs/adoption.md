@@ -780,11 +780,13 @@ and the affected log path. Retain the JSON report and logs when CI needs audit
 evidence; do not make archived verbose terminal output the audit surface.
 
 An exact already-passed merge gate executes no commands. New gate identities
-automatically reuse successful suites only when the complete receipt identity
-still matches; all non-test phases run. `merge-gate --base REF --resume`
-additionally resumes eligible ordinary suites from the same otherwise-identical
-failed gate. `test --supplemental --resume` applies exact reuse to a selected
-supplemental retry.
+reuse successful suites only when the suite explicitly declares
+`"reusable": true`, its complete receipt identity still matches, and its sealed
+read-only execution view was enforced. Suites that omit the flag execute for
+every candidate and never write reusable receipts. All non-test phases run.
+`merge-gate --base REF --resume` additionally resumes eligible ordinary suites
+from the same otherwise-identical failed gate. `test --supplemental --resume`
+applies exact reuse to a selected supplemental retry.
 
 CI can move receipts through its trusted artifact boundary:
 

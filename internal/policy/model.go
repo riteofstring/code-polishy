@@ -1,6 +1,9 @@
 package policy
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const ConfigVersion = 3
 
@@ -138,6 +141,7 @@ type Scope struct {
 	EntryPoints              []string                  `json:"entryPoints,omitempty"`
 	GeneratedJavaScript      []GeneratedJavaScript     `json:"generatedJavaScript,omitempty"`
 	PythonDynamicReferences  []PythonDynamicReference  `json:"pythonDynamicReferences,omitempty"`
+	PythonComputedImports    []PythonComputedImport    `json:"pythonComputedImports,omitempty"`
 	PythonExternalAttributes []PythonExternalAttribute `json:"pythonExternalAttributes,omitempty"`
 
 	Development []string       `json:"development,omitempty"`
@@ -153,6 +157,30 @@ type PythonDynamicReference struct {
 	Project string `json:"project"`
 	Module  string `json:"module"`
 	Symbol  string `json:"symbol"`
+}
+
+type PythonComputedImport struct {
+	Project         string                      `json:"project"`
+	Importer        string                      `json:"importer"`
+	Module          string                      `json:"module"`
+	Callable        string                      `json:"callable,omitempty"`
+	ModuleScope     bool                        `json:"moduleScope,omitempty"`
+	Callee          string                      `json:"callee"`
+	Line            int                         `json:"line"`
+	Column          int                         `json:"column"`
+	Shape           string                      `json:"shape"`
+	Argument        string                      `json:"argument"`
+	SourceSHA256    string                      `json:"sourceSha256"`
+	Namespace       string                      `json:"namespace,omitempty"`
+	EntryPointGroup string                      `json:"entryPointGroup,omitempty"`
+	Targets         []string                    `json:"targets,omitempty"`
+	Configuration   []PythonComputedImportInput `json:"configuration,omitempty"`
+}
+
+type PythonComputedImportInput struct {
+	Path        string `json:"path"`
+	JSONPointer string `json:"jsonPointer"`
+	SHA256      string `json:"sha256"`
 }
 
 type PythonExternalAttribute struct {
@@ -270,6 +298,7 @@ type TestSuite struct {
 	Name               string         `json:"name"`
 	Kind               string         `json:"kind"`
 	Scope              string         `json:"scope"`
+	Reusable           bool           `json:"reusable,omitempty"`
 	Cost               string         `json:"cost,omitempty"`
 	Modules            []string       `json:"modules,omitempty"`
 	Argv               []string       `json:"argv"`
@@ -398,6 +427,25 @@ type PolicyModuleOverride struct {
 	Reason  string `json:"reason,omitempty"`
 	Owner   string `json:"owner,omitempty"`
 	Expires Date   `json:"expires,omitempty"`
+}
+
+func (override PolicyModuleOverride) MarshalJSON() ([]byte, error) {
+	type wireOverride struct {
+		Name    string `json:"name"`
+		Root    string `json:"root,omitempty"`
+		Mode    string `json:"mode"`
+		Reason  string `json:"reason,omitempty"`
+		Owner   string `json:"owner,omitempty"`
+		Expires *Date  `json:"expires,omitempty"`
+	}
+	var expires *Date
+	if !override.Expires.IsZero() {
+		expires = &override.Expires
+	}
+	return json.Marshal(wireOverride{
+		Name: override.Name, Root: override.Root, Mode: override.Mode,
+		Reason: override.Reason, Owner: override.Owner, Expires: expires,
+	})
 }
 
 type ActivePolicyModule struct {

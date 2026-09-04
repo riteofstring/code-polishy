@@ -8,9 +8,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 )
 
 type PythonProject struct {
@@ -238,8 +238,11 @@ func (repo Repository) collectPythonInventorySource(inputs *pythonInventoryInput
 
 func (repo Repository) pythonInventoryProjects(manifests map[string]bool, inventory *PythonProjectInventory) map[string]*PythonProject {
 	projects := map[string]*PythonProject{}
-	for _, manifest := range sortedPythonManifestPaths(manifests) {
-		project, problem := repo.pythonInventoryProject(manifest)
+	paths := sortedPythonManifestPaths(manifests)
+	results := repo.readPythonProjects(paths)
+	for index, manifest := range paths {
+		result := results[index]
+		project, problem := repo.pythonInventoryProject(manifest, result.project, result.err)
 		if problem != nil {
 			inventory.Problems = append(inventory.Problems, *problem)
 			continue
@@ -371,8 +374,7 @@ func (repo Repository) nearestPythonManifest(source string) (string, *PythonInve
 	}
 }
 
-func (repo Repository) pythonInventoryProject(manifest string) (PythonProject, *PythonInventoryProblem) {
-	project, err := repo.ReadPythonProject(manifest)
+func (repo Repository) pythonInventoryProject(manifest string, project PythonProject, err error) (PythonProject, *PythonInventoryProblem) {
 	if err != nil {
 		kind := PythonUnreadableInputProblem
 		if strings.Contains(err.Error(), "outside the repository") || strings.Contains(err.Error(), "stay inside") {
@@ -388,6 +390,40 @@ func (repo Repository) pythonInventoryProject(manifest string) (PythonProject, *
 		return PythonProject{}, problem
 	}
 	return project, nil
+}
+
+func (repo Repository) readPythonProjects(manifests []string) []pythonProjectReadResult {
+	results := make([]pythonProjectReadResult, len(manifests))
+	inputs := make([]pythonfacts.Input, 0, len(manifests))
+	indexes := make([]int, 0, len(manifests))
+	for index, manifest := range manifests {
+		data, err := repo.Read(manifest)
+		if err != nil {
+			results[index].err = err
+			continue
+		}
+		inputs = append(inputs, pythonfacts.Input{Path: manifest, Source: string(data)})
+		indexes = append(indexes, index)
+	}
+	parsed, failures, err := parsePythonManifestsWith(repo.PythonTool(), inputs)
+	for inputIndex, resultIndex := range indexes {
+		if err != nil {
+			results[resultIndex].err = fmt.Errorf("parse %s: %w", manifests[resultIndex], err)
+			continue
+		}
+		if failures[inputIndex] != nil {
+			results[resultIndex].err = failures[inputIndex]
+			continue
+		}
+		results[resultIndex].project, results[resultIndex].err = pythonProjectFromParsed(manifests[resultIndex], parsed[inputIndex])
+	}
+	if cache := repo.pythonProjectCache; cache != nil && cache.building {
+		for index, manifest := range manifests {
+			result := results[index]
+			cache.manifestReads[manifest] = pythonProjectReadResult{project: clonePythonProject(result.project), err: result.err}
+		}
+	}
+	return results
 }
 
 func (repo Repository) pythonProjectDirectoryProblem(manifest, root, name string, venv bool, project *PythonProject) *PythonInventoryProblem {
@@ -652,7 +688,7 @@ func (repo Repository) readPythonProject(normalized string) (PythonProject, erro
 	if err != nil {
 		return PythonProject{}, err
 	}
-	project, err := ParsePythonProject(normalized, data)
+	project, err := parsePythonProjectWith(repo.PythonTool(), normalized, data)
 	if err != nil {
 		return PythonProject{}, err
 	}
@@ -669,25 +705,35 @@ func (repo Repository) readPythonProject(normalized string) (PythonProject, erro
 }
 
 func ParsePythonProject(manifest string, data []byte) (PythonProject, error) {
-	if !utf8.Valid(data) {
-		return PythonProject{}, fmt.Errorf("parse %s: manifest is not valid UTF-8", manifest)
-	}
-	document, err := parsePythonTOML(data)
-	if err != nil {
-		return PythonProject{}, fmt.Errorf("parse %s: %w", manifest, err)
-	}
-	project := pythonProjectDefinition(manifest, document.tables, document.assignments)
-	project.BuildBackend, project.BackendPaths, err = pythonProjectBuildMetadata(manifest, document.assignments)
+	python, err := pythonfacts.DefaultInterpreter()
 	if err != nil {
 		return PythonProject{}, err
 	}
-	project.Ruff, project.RuffProblems = pythonProjectRuffMetadata(manifest, project.IsPythonProject(), document.assignments)
-	dynamicReferences, err := pythonProjectDynamicReferences(manifest, document.assignments)
+	return parsePythonProjectWith(python, manifest, data)
+}
+
+func parsePythonProjectWith(python, manifest string, data []byte) (PythonProject, error) {
+	parsed, err := parsePythonManifestWith(python, manifest, data)
+	if err != nil {
+		return PythonProject{}, err
+	}
+	return pythonProjectFromParsed(manifest, parsed)
+}
+
+func pythonProjectFromParsed(manifest string, parsed pythonParsedManifest) (PythonProject, error) {
+	var err error
+	project := pythonProjectDefinition(manifest, parsed.document.tables, parsed.document.assignments)
+	project.BuildBackend, project.BackendPaths, err = pythonProjectBuildMetadata(manifest, parsed.document.assignments)
+	if err != nil {
+		return PythonProject{}, err
+	}
+	project.Ruff, project.RuffProblems = pythonProjectRuffMetadata(manifest, project.IsPythonProject(), parsed.document.assignments, parsed.specifiers)
+	dynamicReferences, err := pythonProjectDynamicReferences(manifest, parsed.document.assignments)
 	if err != nil {
 		return PythonProject{}, err
 	}
 	project.DynamicReferences = dynamicReferences
-	requirements, err := pythonProjectRequirements(manifest, document.assignments)
+	requirements, err := pythonProjectRequirements(manifest, parsed.document.assignments, parsed.requirements)
 	if err != nil {
 		return PythonProject{}, err
 	}
@@ -752,14 +798,14 @@ func pythonProjectAssignmentRoot(assignment pythonTOMLAssignment) string {
 	return ""
 }
 
-func pythonProjectRequirements(manifest string, assignments []pythonTOMLAssignment) ([]PythonRequirement, error) {
+func pythonProjectRequirements(manifest string, assignments []pythonTOMLAssignment, facts map[string]pythonfacts.Requirement) ([]PythonRequirement, error) {
 	requirements := []PythonRequirement{}
 	for _, assignment := range assignments {
 		usage, group, dependency := pythonDependencyAssignment(assignment)
 		if !dependency {
 			continue
 		}
-		values, err := pythonAssignmentRequirements(manifest, assignment, usage, group)
+		values, err := pythonAssignmentRequirements(manifest, assignment, usage, group, facts)
 		if err != nil {
 			return nil, err
 		}
@@ -768,13 +814,13 @@ func pythonProjectRequirements(manifest string, assignments []pythonTOMLAssignme
 	return requirements, nil
 }
 
-func pythonAssignmentRequirements(manifest string, assignment pythonTOMLAssignment, usage, group string) ([]PythonRequirement, error) {
+func pythonAssignmentRequirements(manifest string, assignment pythonTOMLAssignment, usage, group string, facts map[string]pythonfacts.Requirement) ([]PythonRequirement, error) {
 	if assignment.value.kind != pythonTOMLArray {
 		return nil, pythonManifestError(manifest, assignment.line, "%s must be an array of requirement strings", assignment.key)
 	}
 	requirements := make([]PythonRequirement, 0, len(assignment.value.array))
 	for element, value := range assignment.value.array {
-		requirement, err := pythonAssignmentRequirement(manifest, assignment, usage, group, element, value)
+		requirement, err := pythonAssignmentRequirement(manifest, assignment, usage, group, element, value, facts)
 		if err != nil {
 			return nil, err
 		}
@@ -783,11 +829,15 @@ func pythonAssignmentRequirements(manifest string, assignment pythonTOMLAssignme
 	return requirements, nil
 }
 
-func pythonAssignmentRequirement(manifest string, assignment pythonTOMLAssignment, usage, group string, element int, value pythonTOMLValue) (PythonRequirement, error) {
+func pythonAssignmentRequirement(manifest string, assignment pythonTOMLAssignment, usage, group string, element int, value pythonTOMLValue, facts map[string]pythonfacts.Requirement) (PythonRequirement, error) {
 	if value.kind != pythonTOMLString {
 		return PythonRequirement{}, pythonManifestError(manifest, value.line, "%s must contain only requirement strings", assignment.key)
 	}
-	requirement, err := ParsePythonRequirement(value.text)
+	fact, found := facts[value.text]
+	if !found {
+		return PythonRequirement{}, pythonManifestError(manifest, value.line, "python-facts omitted requirement %q", value.text)
+	}
+	requirement, err := pythonRequirementFact(fact)
 	if err != nil {
 		return PythonRequirement{}, pythonManifestError(manifest, value.line, "invalid requirement %q: %v", value.text, err)
 	}
@@ -861,47 +911,8 @@ func pythonMarkersOverlap(left, right PythonRequirement) bool {
 	if left.markerKey == right.markerKey || left.markerKey == "" || right.markerKey == "" {
 		return true
 	}
-	leftVariable, leftValue, leftExact := pythonSimpleMarkerEquality(left.Marker)
-	rightVariable, rightValue, rightExact := pythonSimpleMarkerEquality(right.Marker)
-	return !leftExact || !rightExact || leftVariable != rightVariable || leftValue == rightValue
-}
-
-func pythonSimpleMarkerEquality(marker string) (string, string, bool) {
-	tokens, err := pythonMarkerTokens(marker)
-	if err != nil || len(tokens) != 3 || tokens[1].kind != pythonMarkerOperator || tokens[1].text != "==" {
-		return "", "", false
-	}
-	variable, literal, found := pythonMarkerEqualityOperands(tokens[0], tokens[2])
-	if !found || !pythonMarkerExactStringVariable(variable) {
-		return "", "", false
-	}
-	return variable, literal, true
-}
-
-func pythonMarkerEqualityOperands(left, right pythonMarkerToken) (string, string, bool) {
-	if left.kind == pythonMarkerIdentifier && right.kind == pythonMarkerString {
-		literal, valid := pythonSimpleMarkerString(right.text)
-		return left.text, literal, valid
-	}
-	if left.kind == pythonMarkerString && right.kind == pythonMarkerIdentifier {
-		literal, valid := pythonSimpleMarkerString(left.text)
-		return right.text, literal, valid
-	}
-	return "", "", false
-}
-
-func pythonSimpleMarkerString(value string) (string, bool) {
-	if len(value) < 2 || value[0] != value[len(value)-1] || value[0] != '\'' && value[0] != '"' || strings.Contains(value, "\\") {
-		return "", false
-	}
-	return value[1 : len(value)-1], true
-}
-
-func pythonMarkerExactStringVariable(value string) bool {
-	return map[string]bool{
-		"implementation_name": true, "os_name": true, "platform_machine": true,
-		"platform_python_implementation": true, "platform_system": true, "sys_platform": true,
-	}[value]
+	return left.markerVariable == "" || right.markerVariable == "" ||
+		left.markerVariable != right.markerVariable || left.markerValue == right.markerValue
 }
 
 func pythonManifestError(manifest string, line int, format string, arguments ...any) error {

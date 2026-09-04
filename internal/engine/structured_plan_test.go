@@ -46,13 +46,14 @@ func TestPlannedPolicyChecksIncludePythonArchitectureGraph(t *testing.T) {
 	root := t.TempDir()
 	writeEngineFile(t, root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n", 0o600)
 	writeEngineFile(t, root, "src/app.py", "import model\n", 0o600)
+	writeEngineFile(t, root, "tools/ruff-version.txt", "0.16.0\n", 0o600)
 	repo := repository.Repository{
 		Root: root, PolicyRoot: root,
 		Config: policy.Config{Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}}, ModuleByName: map[string]int{"application": 0}},
 	}
 	commands := plannedPolicyCheckCommands(repo, repository.Selection{Files: []string{"src/app.py"}}, "check")
 	for _, command := range commands {
-		if strings.HasPrefix(command.Name, "policy-ruff-import-graph-") {
+		if strings.HasPrefix(command.Name, "ruff-graph-facts-v1-") {
 			return
 		}
 	}

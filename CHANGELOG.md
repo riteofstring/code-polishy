@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.23.0 - 2026-09-04
+
+- Validate runtime configuration against the shipped JSON Schema before typed
+  decoding, while retaining explicit defaults and semantic relationship checks.
+- Replace handwritten Python packaging and source interpretation with one
+  bounded adapter backed by the carried CPython runtime and PyPA `packaging`,
+  including exact computed-import declarations and a pinned Ruff graph
+  protocol.
+- Replace handwritten Markdown, shell, and GitHub Actions structure parsing
+  with goldmark, `mvdan/sh`, and actionlint while keeping Code Polishy's policy
+  decisions fail closed and removing duplicate parser authority.
+- Pin the official SPDX license and exception data, retain a bounded
+  fail-closed expression grammar, and reject identifiers outside the admitted
+  snapshot.
+- Generate complete release dependency graphs with official CycloneDX models
+  and deterministic in-toto provenance metadata without presenting local
+  metadata as authenticated publication evidence.
+- Limit cross-candidate test-receipt reuse to explicitly reusable suites with
+  complete enforceable inputs and a sealed read-only execution view.
+- Require exact, independently approved, expiring vulnerability assessments
+  and complete release-age and vulnerability coverage for newly adopted
+  dependency forms.
+
 ## 0.22.0 - 2026-09-03
 
 - Publish deterministic verified native archives with checksums, internal

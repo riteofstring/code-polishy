@@ -28,6 +28,7 @@ function Add-Checksums([string]$Relative) {
 Add-Checksums 'tools/windows_tool_checksums.txt'
 Add-Checksums 'tools/python_runtime_checksums.txt'
 Add-Checksums 'tools/vulture_wheel_checksums.txt'
+Add-Checksums 'tools/packaging_wheel_checksums.txt'
 
 $Scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("code-polishy-tools-" + [guid]::NewGuid().ToString('N'))
 $BundleInstallation = $null
@@ -183,7 +184,9 @@ try {
     $PythonProbe = @(& $Python -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
     if ($LASTEXITCODE -eq 0 -and $PythonProbe.Count -eq 1) { $PythonReported = $PythonProbe[0].Trim() }
   }
-  if ($PythonReported -ne $PythonVersion -or $PythonMarkerValue -ne $PythonRelease) {
+  $PythonCarriesPip = @('Scripts/pip.exe','Scripts/pip3.exe','Scripts/pip3.12.exe','Lib/ensurepip','Lib/site-packages/pip') |
+    Where-Object { Test-Path -LiteralPath (Join-Path $PythonRoot $_) }
+  if ($PythonReported -ne $PythonVersion -or $PythonMarkerValue -ne $PythonRelease -or $PythonCarriesPip.Count -ne 0) {
     $PythonAsset = "cpython-$PythonRelease-x86_64-pc-windows-msvc-install_only.tar.gz"
     $PythonArchive = Get-Verified $PythonAsset "https://github.com/astral-sh/python-build-standalone/releases/download/$PythonTag/$PythonAsset"
     $PythonExtract = Join-Path $Scratch 'python-extract'
@@ -193,6 +196,13 @@ try {
     $PythonStaging = Join-Path $PythonExtract 'python'
     if (-not (Test-Path -LiteralPath (Join-Path $PythonStaging 'python.exe') -PathType Leaf)) {
       throw 'Pinned CPython archive did not contain python.exe.'
+    }
+    foreach ($Relative in @('Scripts/pip.exe','Scripts/pip3.exe','Scripts/pip3.12.exe','Lib/ensurepip','Lib/site-packages/pip')) {
+      $Target = Join-Path $PythonStaging $Relative
+      if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Recurse -Force }
+    }
+    foreach ($Metadata in @(Get-ChildItem -LiteralPath (Join-Path $PythonStaging 'Lib/site-packages') -Directory -Filter 'pip-*.dist-info')) {
+      Remove-Item -LiteralPath $Metadata.FullName -Recurse -Force
     }
     Replace-Directory $PythonStaging $PythonRoot
     $Python = Join-Path $PythonRoot 'python.exe'
@@ -312,6 +322,126 @@ with zipfile.ZipFile(wheel) as archive:
         }
       }
       throw $VultureFailure
+    }
+  }
+
+  $PackagingVersion = Read-Pin 'tools/packaging-version.txt'
+  if ($PackagingVersion -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') { throw 'tools/packaging-version.txt must pin a packaging release.' }
+  $PackagingAsset = "packaging-$PackagingVersion-py3-none-any.whl"
+  $PackagingMarker = Join-Path $PythonRoot '.code-polishy-packaging-release'
+  $PackagingMarkerValue = ''
+  if (Test-Path -LiteralPath $PackagingMarker -PathType Leaf) {
+    $PackagingMarkerValue = (Get-Content -Raw -LiteralPath $PackagingMarker).Trim()
+  }
+  $PackagingProbe = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("packaging"))')
+  $PackagingExitCode = $LASTEXITCODE
+  $PackagingMetadata = @()
+  if (Test-Path -LiteralPath $SitePackages -PathType Container) {
+    $PackagingMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'packaging-*.dist-info')
+  }
+  $PackagingInstalled = $PackagingMarkerValue -eq $PackagingVersion -and
+    $PackagingExitCode -eq 0 -and $PackagingProbe.Count -eq 1 -and $PackagingProbe[0].Trim() -eq $PackagingVersion -and
+    $PackagingMetadata.Count -eq 1 -and $PackagingMetadata[0].Name -eq "packaging-$PackagingVersion.dist-info"
+  if (-not $PackagingInstalled) {
+    $PackagingArchive = Get-Verified $PackagingAsset "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/$PackagingAsset"
+    $PackagingStaging = Join-Path $Scratch 'packaging-extract'
+    New-Item -ItemType Directory -Path $PackagingStaging | Out-Null
+    $PackagingExtractor = @'
+import pathlib
+import shutil
+import sys
+import zipfile
+
+wheel = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+version = sys.argv[3]
+prefixes = ("packaging/", f"packaging-{version}.dist-info/")
+with zipfile.ZipFile(wheel) as archive:
+    for entry in archive.infolist():
+        name = entry.filename
+        if not name.startswith(prefixes):
+            continue
+        relative = pathlib.PurePosixPath(name)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise SystemExit("packaging wheel contains an unsafe path")
+        target = destination.joinpath(*relative.parts)
+        if name.endswith("/"):
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with archive.open(entry) as source, target.open("wb") as output:
+            shutil.copyfileobj(source, output)
+'@
+    & $Python -I -B -c $PackagingExtractor $PackagingArchive $PackagingStaging $PackagingVersion
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned packaging extraction failed.' }
+    $PackagingPackage = Join-Path $PackagingStaging 'packaging'
+    $PackagingMetadata = Join-Path $PackagingStaging "packaging-$PackagingVersion.dist-info"
+    if (-not (Test-Path -LiteralPath $PackagingPackage -PathType Container) -or -not (Test-Path -LiteralPath $PackagingMetadata -PathType Container)) {
+      throw 'Pinned packaging wheel did not contain the expected distribution.'
+    }
+    $PackagingBackup = Join-Path $PythonRoot ('.packaging-backup-' + [guid]::NewGuid().ToString('N'))
+    $InstalledPackaging = Join-Path $SitePackages 'packaging'
+    New-Item -ItemType Directory -Path $PackagingBackup | Out-Null
+    try {
+      if (Test-Path -LiteralPath $InstalledPackaging -PathType Container) {
+        Move-Item -LiteralPath $InstalledPackaging -Destination $PackagingBackup
+      }
+      foreach ($Existing in @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'packaging-*.dist-info')) {
+        Move-Item -LiteralPath $Existing.FullName -Destination $PackagingBackup
+      }
+      if (Test-Path -LiteralPath $PackagingMarker -PathType Leaf) {
+        Move-Item -LiteralPath $PackagingMarker -Destination (Join-Path $PackagingBackup 'marker')
+      }
+      Move-Item -LiteralPath $PackagingPackage -Destination $InstalledPackaging
+      Move-Item -LiteralPath $PackagingMetadata -Destination (Join-Path $SitePackages "packaging-$PackagingVersion.dist-info")
+      Set-Content -NoNewline -Path $PackagingMarker -Value $PackagingVersion
+      $PackagingProbe = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("packaging"))')
+      $PackagingMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'packaging-*.dist-info')
+      if ($LASTEXITCODE -ne 0 -or $PackagingProbe.Count -ne 1 -or $PackagingProbe[0].Trim() -ne $PackagingVersion -or
+          $PackagingMetadata.Count -ne 1 -or $PackagingMetadata[0].Name -ne "packaging-$PackagingVersion.dist-info") {
+        throw 'Pinned packaging verification failed.'
+      }
+      Remove-Item -LiteralPath $PackagingBackup -Recurse -Force
+    } catch {
+      $PackagingFailure = $_
+      if (Test-Path -LiteralPath $InstalledPackaging) { Remove-Item -LiteralPath $InstalledPackaging -Recurse -Force }
+      $CurrentMetadata = Join-Path $SitePackages "packaging-$PackagingVersion.dist-info"
+      if (Test-Path -LiteralPath $CurrentMetadata) { Remove-Item -LiteralPath $CurrentMetadata -Recurse -Force }
+      if (Test-Path -LiteralPath $PackagingMarker) { Remove-Item -LiteralPath $PackagingMarker -Force }
+      $PreviousPackage = Join-Path $PackagingBackup 'packaging'
+      if (Test-Path -LiteralPath $PreviousPackage) { Move-Item -LiteralPath $PreviousPackage -Destination $InstalledPackaging }
+      foreach ($Previous in @(Get-ChildItem -LiteralPath $PackagingBackup -Directory -Filter 'packaging-*.dist-info')) {
+        Move-Item -LiteralPath $Previous.FullName -Destination $SitePackages
+      }
+      $PreviousMarker = Join-Path $PackagingBackup 'marker'
+      if (Test-Path -LiteralPath $PreviousMarker) { Move-Item -LiteralPath $PreviousMarker -Destination $PackagingMarker }
+      Remove-Item -LiteralPath $PackagingBackup -Recurse -Force
+      throw $PackagingFailure
+    }
+  }
+
+  $FactsEnvironment = Join-Path $PolicyRoot 'internal/pythonfacts/.venv'
+  $FactsPython = Join-Path $FactsEnvironment 'Scripts/python.exe'
+  function Test-PythonFactsEnvironment {
+    if (-not (Test-Path -LiteralPath (Join-Path $FactsEnvironment 'pyvenv.cfg') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $FactsPython -PathType Leaf) -or
+        (Test-Path -LiteralPath (Join-Path $FactsEnvironment 'Scripts/pip.exe'))) {
+      return $false
+    }
+    $FactsProbe = @(& $FactsPython -I -B -c 'import importlib.metadata,sys; print(".".join(str(value) for value in sys.version_info[:3])); print(importlib.metadata.version("packaging"))')
+    return $LASTEXITCODE -eq 0 -and $FactsProbe.Count -eq 2 -and
+      $FactsProbe[0].Trim() -eq $PythonVersion -and $FactsProbe[1].Trim() -eq $PackagingVersion
+  }
+  if (-not (Test-PythonFactsEnvironment)) {
+    if (Test-Path -LiteralPath $FactsEnvironment) {
+      Remove-Item -LiteralPath $FactsEnvironment -Recurse -Force
+    }
+    & $Python -I -B -m venv --without-pip --system-site-packages $FactsEnvironment
+    if ($LASTEXITCODE -ne 0 -or -not (Test-PythonFactsEnvironment)) {
+      if (Test-Path -LiteralPath $FactsEnvironment) {
+        Remove-Item -LiteralPath $FactsEnvironment -Recurse -Force
+      }
+      throw 'The contained Python facts environment failed verification.'
     }
   }
 

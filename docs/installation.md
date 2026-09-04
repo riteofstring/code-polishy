@@ -81,8 +81,10 @@ expiring assessment.
 ## Portable archives
 
 Each supported host publishes one deterministic ZIP and adjacent checksum,
-internal manifest, CycloneDX 1.6 SBOM, SLSA provenance, and machine-readable
-release descriptor. The five hosts are `darwin-arm64`, `darwin-x64`,
+internal manifest, CycloneDX 1.6 SBOM, deterministic in-toto/SLSA provenance
+metadata, and machine-readable release descriptor. This local metadata binds
+inputs and outputs but does not authenticate a builder or publisher. The five
+hosts are `darwin-arm64`, `darwin-x64`,
 `linux-arm64`, `linux-x64`, and `windows-x64`. The descriptor binds every
 sidecar, the archive SHA-256, host-specific content digest, shared release
 digest, version, and source revision.
@@ -198,8 +200,9 @@ One release identity has one self-contained policy root per supported host:
   toolchain;
 - the sealed Node runtime and JavaScript tool bundle;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
-  staticcheck, govulncheck, OSV-Scanner, Ruff, Vulture `2.16`, `ty`, and the
-  carried CPython `3.12.13+20260728` runtime from python-build-standalone. A
+  staticcheck, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
+  `2.16`, `ty`, and the carried CPython `3.12.13+20260728` runtime from
+  python-build-standalone. A
   target installs no policy tooling, and none of these is ever taken from an
   ambient `PATH`, a host installation, or an environment override, so a check
   decides the same thing on every machine that has the matching host release;
@@ -278,6 +281,10 @@ contribute only to version 4 identities; a version 3 release remains bound to
 the smaller tool inventory it originally recorded. The target configuration
 version is a separate contract.
 
+Manifest version 5 adds `tools.packaging` for PyPA `packaging` `26.3`. That
+field contributes only to version 5 identities; launchers continue validating
+older manifests against the exact smaller inventory of their own version.
+
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after
 installation, or copied from another host fails verification and is reinstalled
@@ -297,19 +304,19 @@ homes, temporary files, and target output remain outside the release tree.
 Before it stages anything, the installer asks every tool the release will carry
 what version it is and requires the answer to be the version the checked-in pin
 beside it names — the Go toolchain, Node, pnpm, ShellCheck, staticcheck,
-govulncheck, OSV-Scanner, Ruff, Vulture, `ty`, and carried CPython. The manifest
-records those identities, and a present file and a byte inventory cannot show
-that a local tool cache holds the version the manifest would claim. The two Go
-analyzers are read out of their binaries with the pinned toolchain rather than
-asked: `govulncheck -version` contacts the vulnerability database, and
-installation reaches no network. The engine and the launcher are built here
-from the reviewed commit rather than acquired, so what they are is the source
-revision the manifest already records.
+govulncheck, OSV-Scanner, Ruff, PyPA `packaging`, Vulture, `ty`, and carried
+CPython. The manifest records those identities, and a present file and a byte
+inventory cannot show that a local tool cache holds the version the manifest
+would claim. The two Go analyzers are read out of their binaries with the pinned
+toolchain rather than asked: `govulncheck -version` contacts the vulnerability
+database, and installation reaches no network. The engine and the launcher are
+built here from the reviewed commit rather than acquired, so what they are is
+the source revision the manifest already records.
 
-The installer verifies the CPython archive before extraction and the Vulture
-`2.16` wheel before unpacking its pure-Python package into that carried runtime.
-It does not use `pip`, a target `.venv`, or a target Python installation for
-Vulture.
+The installer verifies the CPython archive before extraction and the exact
+`packaging` `26.3` and Vulture `2.16` wheels before unpacking their pure-Python
+packages into that carried runtime. It removes `pip` and `ensurepip` and does
+not use a target `.venv` or target Python installation for either package.
 
 The installer stages a complete release, verifies the staged tree against the
 manifest it just wrote, and only then moves it into place under one name. A

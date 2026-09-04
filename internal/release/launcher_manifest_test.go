@@ -8,7 +8,7 @@ import (
 
 func TestLauncherManifestReadsHistoricalSchemasWithoutReinterpretingThem(t *testing.T) {
 	t.Parallel()
-	for _, version := range []int{2, 3} {
+	for _, version := range []int{2, 3, 4} {
 		data, expected := historicalManifest(t, version)
 		manifest, err := parseLauncherManifest(data, ManifestFilename)
 		if err != nil {
@@ -49,10 +49,14 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 	t.Helper()
 	_, manifest := exampleRelease(t)
 	manifest.ManifestVersion = version
+	manifest.Tools.Packaging = ""
 	manifest.Tools.Python = ""
 	manifest.Tools.Vulture = ""
 	if version == 2 {
 		manifest.Tools.Ty = ""
+	} else if version == 4 {
+		manifest.Tools.Python = "3.12.13+20260728"
+		manifest.Tools.Vulture = "2.16"
 	}
 	manifest.ReleaseDigest = manifest.Identity()
 	tools := historicalManifestTools(t, manifest)
@@ -75,9 +79,16 @@ func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 	if manifest.ManifestVersion == 2 {
 		return render(t, base)
 	}
-	return render(t, manifestToolsV3{
+	if manifest.ManifestVersion == 3 {
+		return render(t, manifestToolsV3{
+			Go: base.Go, Govulncheck: base.Govulncheck, Node: base.Node, OSVScanner: base.OSVScanner,
+			PNPM: base.PNPM, Ruff: base.Ruff, Shellcheck: base.Shellcheck, Staticcheck: base.Staticcheck,
+			Ty: manifest.Tools.Ty,
+		})
+	}
+	return render(t, manifestToolsV4{
 		Go: base.Go, Govulncheck: base.Govulncheck, Node: base.Node, OSVScanner: base.OSVScanner,
 		PNPM: base.PNPM, Ruff: base.Ruff, Shellcheck: base.Shellcheck, Staticcheck: base.Staticcheck,
-		Ty: manifest.Tools.Ty,
+		Ty: manifest.Tools.Ty, Python: manifest.Tools.Python, Vulture: manifest.Tools.Vulture,
 	})
 }

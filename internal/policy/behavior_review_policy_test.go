@@ -78,11 +78,11 @@ func TestBehaviorReviewPolicyRejectsInvalidConfiguration(t *testing.T) {
 	}{
 		"unknown policy field": {
 			config: func() string { return behaviorReviewConfig(`{"typo":true}`) },
-			want:   "unknown field",
+			want:   schemaRejection,
 		},
 		"invalid default level": {
 			config: func() string { return behaviorReviewConfig(`{"defaultRequiredAt":"always"}`) },
-			want:   "defaultRequiredAt contains unsupported value",
+			want:   schemaRejection,
 		},
 		"duplicate names": {
 			config: func() string {
@@ -100,19 +100,19 @@ func TestBehaviorReviewPolicyRejectsInvalidConfiguration(t *testing.T) {
 			config: func() string {
 				return behaviorReviewConfig(`{"features":[{"name":"checkout","suites":["content-test"]}]}`)
 			},
-			want: "must define at least one module or path",
+			want: schemaRejection,
 		},
 		"invalid path": {
 			config: func() string {
 				return behaviorReviewConfig(`{"features":[{"name":"checkout","paths":["../checkout/**"],"suites":["content-test"]}]}`)
 			},
-			want: "stay inside the repository",
+			want: schemaRejection,
 		},
 		"empty suites": {
 			config: func() string {
 				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":[]}]}`)
 			},
-			want: "suites must not be empty",
+			want: schemaRejection,
 		},
 		"unknown suite": {
 			config: func() string {
@@ -159,13 +159,13 @@ func TestBehaviorReviewPolicyRejectsInvalidConfiguration(t *testing.T) {
 			config: func() string {
 				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"],"typo":true}]}`)
 			},
-			want: "unknown field",
+			want: schemaRejection,
 		},
 		"feature cannot explicitly use on request": {
 			config: func() string {
 				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"],"requiredAt":"on-request"}]}`)
 			},
-			want: "requiredAt must be merge or checkpoint",
+			want: schemaRejection,
 		},
 		"feature cannot weaken default": {
 			config: func() string {

@@ -78,11 +78,31 @@ try {
         $VultureMetadata.Count -ne 1 -or $VultureMetadata[0].Name -ne "vulture-$VultureRelease.dist-info") {
       throw "The release stage does not carry Vulture $VultureRelease."
     }
+    $PackagingRelease = (Get-Content -Raw -LiteralPath (Join-Path $Root 'tools/packaging-version.txt')).Trim()
+    if ($PackagingRelease -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') {
+      throw 'The release stage has an invalid packaging carrier pin.'
+    }
+    $PackagingMarker = Join-Path $PythonRoot '.code-polishy-packaging-release'
+    $PackagingReported = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("packaging"))')
+    $PackagingExitCode = $LASTEXITCODE
+    $PackagingMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'packaging-*.dist-info')
+    if (-not (Test-Path -LiteralPath $PackagingMarker -PathType Leaf) -or
+        (Get-Content -Raw -LiteralPath $PackagingMarker).Trim() -ne $PackagingRelease -or
+        $PackagingExitCode -ne 0 -or $PackagingReported.Count -ne 1 -or $PackagingReported[0].Trim() -ne $PackagingRelease -or
+        $PackagingMetadata.Count -ne 1 -or $PackagingMetadata[0].Name -ne "packaging-$PackagingRelease.dist-info") {
+      throw "The release stage does not carry packaging $PackagingRelease."
+    }
+    foreach ($Relative in @('Scripts/pip.exe','Scripts/pip3.exe','Scripts/pip3.12.exe','Lib/ensurepip','Lib/site-packages/pip')) {
+      if (Test-Path -LiteralPath (Join-Path $PythonRoot $Relative)) {
+        throw "The release stage carries the ungoverned Python installer $Relative."
+      }
+    }
   }
 
   foreach ($Relative in @(
     'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','artifact-security',
     'scripts/go_version.txt','tools/govulncheck-version.txt','tools/node-version.txt','tools/osv-scanner-version.txt',
+    'internal/pythonfacts/pyproject.toml','internal/pythonfacts/uv.lock','tools/packaging-version.txt','tools/packaging_wheel_checksums.txt',
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
     'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',

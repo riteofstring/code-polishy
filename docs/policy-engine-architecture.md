@@ -80,16 +80,20 @@ result; they may not perform host-specific process control.
 
 `internal/testartifact` owns one private writable directory per execution and
 validates declared JUnit and Cobertura outputs without changing command success.
-`internal/testreceipt` fingerprints complete bounded suite inputs, stores
-content-addressed successful receipts, and imports or exports one digest-bound
-CI bundle. Neither module trusts terminal text as evidence.
+`internal/testreceipt` fingerprints complete bounded inputs only for suites
+that explicitly opt into reuse, stores content-addressed successful receipts,
+and imports or exports one digest-bound CI bundle. Fresh reusable execution
+runs from an engine-owned sealed read-only view of the exact identity inputs;
+non-reusable suites always execute. Neither module trusts terminal text as
+evidence.
 
 `internal/release` owns the installed manifest and the portable transport around
 it. It writes deterministic verified ZIP archives, atomic host publication
-directories with checksum, manifest, CycloneDX SBOM, SLSA provenance, and a
-descriptor, validates the five-host publication index, and prepares Linux OCI
-contexts only by installing the already verified archive. Archive and image
-transport never create a second release identity.
+directories with checksum, manifest, CycloneDX SBOM, deterministic in-toto/SLSA
+provenance metadata, and a descriptor, validates the five-host publication
+index, and prepares Linux OCI contexts only by installing the already verified
+archive. The local metadata does not authenticate a builder or publisher.
+Archive and image transport never create a second release identity.
 
 `internal/javascript` is the one adapter to the sealed, policy-owned JavaScript
 tool bundle, and is launched only for a target that actually bears JavaScript or
@@ -340,13 +344,14 @@ The gate-run owner gives checkpoint and merge execution a single durable
 artifact contract. It binds the exact candidate, base, loaded policy, locked
 release, platform, effective command environment, and complete command plan to
 bounded logs and a versioned report. An exact passed gate returns its existing
-report without executing commands. A new identity may reuse only suite receipts
-whose complete release, platform, toolchain, command, configuration,
-environment, ownership, and file inputs still match; behavior proofs, checks,
-builds, supply-chain work, and artifact security remain fresh. Explicit merge
-resume also accepts successful ordinary suites from an otherwise identical
-failed report. A reused suite receives a receipt in the current execution with
-validated provenance.
+report without executing commands. A new identity may reuse only explicitly
+reusable suite receipts whose sealed execution view was enforced and whose
+complete release, platform, toolchain, command, configuration, environment,
+ownership, and file inputs still match; behavior proofs, checks, builds,
+supply-chain work, artifact security, and non-reusable suites remain fresh.
+Explicit merge resume also accepts successful reusable ordinary suites from an
+otherwise identical failed report. A reused suite receives a receipt in the
+current execution with validated provenance.
 
 ## Fail-closed planning
 

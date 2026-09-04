@@ -441,13 +441,15 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
 		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
 		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
-		TimeoutSeconds: suite.TimeoutSeconds,
-		TestArtifacts:  append([]policy.TestArtifact{}, suite.Artifacts...),
+		TimeoutSeconds:    suite.TimeoutSeconds,
+		SealedEnvironment: suite.Reusable,
+		TestArtifacts:     append([]policy.TestArtifact{}, suite.Artifacts...),
 	}
 }
 
 type mergeGatePlannedRunner struct {
 	root     string
+	viewRoot string
 	delegate runner.Runner
 	expected []MergeGateExecutionCommand
 	next     int
@@ -505,6 +507,21 @@ func (commandRunner *mergeGatePlannedRunner) ReceiptNotes() []string {
 	return nil
 }
 
+func (commandRunner *mergeGatePlannedRunner) PrepareSuiteView(suite policy.TestSuite) (string, func() error, error) {
+	if controller, ok := commandRunner.delegate.(testpolicy.SuiteExecutionViewController); ok {
+		root, cleanup, err := controller.PrepareSuiteView(suite)
+		if err != nil {
+			return "", nil, err
+		}
+		commandRunner.viewRoot = root
+		return root, func() error {
+			commandRunner.viewRoot = ""
+			return cleanup()
+		}, nil
+	}
+	return "", nil, errors.New("test execution view controller is unavailable")
+}
+
 func (commandRunner *mergeGatePlannedRunner) Run(ctx context.Context, root string, command policy.Command) error {
 	_, err := commandRunner.RunWithResult(ctx, root, command)
 	return err
@@ -551,7 +568,7 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 	if commandRunner.err != nil {
 		return commandRunner.err
 	}
-	if root != commandRunner.root || commandRunner.next >= len(commandRunner.expected) {
+	if (root != commandRunner.root && root != commandRunner.viewRoot) || commandRunner.next >= len(commandRunner.expected) {
 		commandRunner.err = fmt.Errorf("merge gate started a command outside its execution plan at position %d", commandRunner.next+1)
 		return commandRunner.err
 	}

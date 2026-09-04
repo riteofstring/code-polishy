@@ -191,3 +191,7 @@ func (commandRunner *testReceiptRunner) RecordSuite(execution testpolicy.SuiteEx
 func (commandRunner *testReceiptRunner) ReceiptNotes() []string {
 	return commandRunner.controller.Notes()
 }
+
+func (commandRunner *testReceiptRunner) PrepareSuiteView(suite policy.TestSuite) (string, func() error, error) {
+	return commandRunner.controller.PrepareSuiteView(suite)
+}

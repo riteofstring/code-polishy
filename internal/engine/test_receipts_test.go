@@ -10,12 +10,13 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/repository"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
 func TestSuiteReceiptIdentityTracksBoundedInputs(t *testing.T) {
 	t.Parallel()
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +35,7 @@ func TestSuiteReceiptIdentityTracksBoundedInputs(t *testing.T) {
 
 func TestSuiteReceiptIdentityTracksContainedRunnerAndExtraInputs(t *testing.T) {
 	t.Parallel()
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	writeEngineFile(t, root, "scripts/test.sh", "#!/bin/sh\nexit 0\n", 0o700)
 	writeEngineFile(t, root, "fixtures/input.txt", "first\n", 0o600)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
@@ -58,7 +59,7 @@ func TestSuiteReceiptIdentityTracksContainedRunnerAndExtraInputs(t *testing.T) {
 
 func TestSuiteReceiptIdentityRejectsUnversionedExternalTool(t *testing.T) {
 	t.Parallel()
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +70,57 @@ func TestSuiteReceiptIdentityRejectsUnversionedExternalTool(t *testing.T) {
 	if err != nil || reason == "" {
 		t.Fatalf("reason = %q, error = %v", reason, err)
 	}
+}
+
+func TestSuiteReceiptIdentityRequiresExplicitReuse(t *testing.T) {
+	t.Parallel()
+	root := reusableContentRepository(t, nil)
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	suite := policyEngine.Repository.Config.Tests.Suites[0]
+	suite.Reusable = false
+	_, reason, err := policyEngine.suiteReceiptIdentity(suite)
+	if err != nil || reason != "suite is not explicitly reusable" {
+		t.Fatalf("reason = %q, error = %v", reason, err)
+	}
+}
+
+func TestReusableExecutionViewExposesOnlyDeclaredInputsAndRejectsWrites(t *testing.T) {
+	t.Parallel()
+	repositoryRoot := t.TempDir()
+	writeEngineFile(t, repositoryRoot, "declared/input.txt", "declared\n", 0o600)
+	writeEngineFile(t, repositoryRoot, "undeclared/input.txt", "ambient\n", 0o600)
+	repository := repositoryFixture(t, repositoryRoot)
+	inputs, reason, err := hashSuiteReceiptInputs(repository, []string{"declared/input.txt"})
+	if err != nil || reason != "" {
+		t.Fatalf("inputs reason = %q, error = %v", reason, err)
+	}
+	view, err := createSuiteExecutionView(repositoryRoot, ".", inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(view.root, "declared", "input.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(view.root, "undeclared", "input.txt")); !os.IsNotExist(err) {
+		t.Fatalf("undeclared input was exposed: %v", err)
+	}
+	if err := os.Chmod(filepath.Join(view.root, "declared"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(view.root, "declared", "written.txt"), []byte("write\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.close(); err == nil || !strings.Contains(err.Error(), "undeclared") {
+		t.Fatalf("view write error = %v", err)
+	}
+}
+
+func repositoryFixture(t *testing.T, root string) repository.Repository {
+	t.Helper()
+	return repository.Repository{Root: root}
 }
 
 func receiptIdentityDigest(t *testing.T, policyEngine *Engine, suite policy.TestSuite) string {
@@ -86,7 +138,7 @@ func receiptIdentityDigest(t *testing.T, policyEngine *Engine, suite policy.Test
 
 func TestSuiteReceiptInputRejectsLinkedRunner(t *testing.T) {
 	t.Parallel()
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	outside := filepath.Join(t.TempDir(), "runner")
 	if err := os.WriteFile(outside, []byte("runner\n"), 0o700); err != nil {
 		t.Fatal(err)
@@ -110,13 +162,13 @@ func TestSuiteReceiptInputRejectsLinkedRunner(t *testing.T) {
 }
 
 func TestSupplementalResumeReusesExactPassedSuite(t *testing.T) {
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	suite := policy.TestSuite{
-		Name: "content-mutation", Kind: "mutation", Scope: "module", Cost: "expensive", Modules: []string{"content"},
+		Name: "content-mutation", Kind: "mutation", Scope: "module", Reusable: true, Cost: "expensive", Modules: []string{"content"},
 		Argv: []string{"go", "test", "./content/..."}, Cwd: ".", RunOn: []string{"supplemental"},
 		ExclusiveResources: []string{}, TimeoutSeconds: 3600,
 	}
@@ -136,13 +188,13 @@ func TestSupplementalResumeReusesExactPassedSuite(t *testing.T) {
 }
 
 func TestExactSuitePassComposesWithSupplementalResume(t *testing.T) {
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	suite := policy.TestSuite{
-		Name: "content-mutation", Kind: "mutation", Scope: "module", Cost: "expensive", Modules: []string{"content"},
+		Name: "content-mutation", Kind: "mutation", Scope: "module", Reusable: true, Cost: "expensive", Modules: []string{"content"},
 		Argv: []string{"go", "test", "./content/..."}, Cwd: ".", RunOn: []string{"supplemental"},
 		ExclusiveResources: []string{}, TimeoutSeconds: 3600,
 	}
@@ -162,7 +214,7 @@ func TestExactSuitePassComposesWithSupplementalResume(t *testing.T) {
 }
 
 func TestMergeGateReturnsAlreadyPassedForExactSuccessfulIdentity(t *testing.T) {
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
@@ -193,7 +245,7 @@ func TestMergeGateReturnsAlreadyPassedForExactSuccessfulIdentity(t *testing.T) {
 }
 
 func TestMergeGateReusesOnlyUnchangedSuitesAcrossCandidates(t *testing.T) {
-	root := contentRepository(t, nil)
+	root := reusableContentRepository(t, nil)
 	configPath := filepath.Join(root, policy.ConfigFilename)
 	configuration, err := os.ReadFile(configPath)
 	if err != nil {
@@ -203,10 +255,10 @@ func TestMergeGateReusesOnlyUnchangedSuitesAcrossCandidates(t *testing.T) {
 		`"modules": [{"name":"content","paths":["content/**"]}]`,
 		`"modules": [{"name":"content","paths":["content/**"]},{"name":"a","paths":["a/**"]},{"name":"b","paths":["b/**"]}]`, 1)
 	configured = strings.Replace(configured,
-		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},`,
-		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},
-    {"name":"a-focused","kind":"content","scope":"module","modules":["a"],"argv":["go","test","./a/..."]},
-    {"name":"b-focused","kind":"content","scope":"module","modules":["b"],"argv":["go","test","./b/..."]},`, 1)
+		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"reusable":true,"argv":["go","test","./..."]},`,
+		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"reusable":true,"argv":["go","test","./..."]},
+    {"name":"a-focused","kind":"content","scope":"module","modules":["a"],"reusable":true,"argv":["go","test","./a/..."]},
+    {"name":"b-focused","kind":"content","scope":"module","modules":["b"],"reusable":true,"argv":["go","test","./b/..."]},`, 1)
 	if configured == string(configuration) {
 		t.Fatal("content fixture configuration did not change")
 	}
@@ -266,4 +318,26 @@ type countingReceiptRunner struct{ runs int }
 func (commandRunner *countingReceiptRunner) Run(context.Context, string, policy.Command) error {
 	commandRunner.runs++
 	return nil
+}
+
+func reusableContentRepository(t *testing.T, excludes []string) string {
+	t.Helper()
+	root := contentRepository(t, excludes)
+	enableReusableContentSuites(t, root)
+	return root
+}
+
+func enableReusableContentSuites(t *testing.T, root string) {
+	t.Helper()
+	path := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured := strings.ReplaceAll(string(data), `"scope":"module","modules":["content"],"argv"`, `"scope":"module","modules":["content"],"reusable":true,"argv"`)
+	configured = strings.ReplaceAll(configured, `"scope":"repository","argv"`, `"scope":"repository","reusable":true,"argv"`)
+	if configured == string(data) {
+		t.Fatal("content suites were not made reusable")
+	}
+	writeEngineFile(t, root, policy.ConfigFilename, configured, 0o600)
 }

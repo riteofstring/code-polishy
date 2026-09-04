@@ -143,23 +143,23 @@ func TestDocumentationProductInputsRejectNonExactOrNonMarkdownPaths(t *testing.T
 	}{
 		"duplicate": {
 			paths: `["docs/site.md","docs/site.md"]`,
-			want:  "must not contain duplicate",
+			want:  schemaRejection,
 		},
 		"glob": {
 			paths: `["docs/*.md"]`,
-			want:  "concrete repository path",
+			want:  schemaRejection,
 		},
 		"escape": {
 			paths: `["../docs/site.md"]`,
-			want:  "stay inside the repository",
+			want:  schemaRejection,
 		},
 		"noncanonical": {
 			paths: `["./docs/site.md"]`,
-			want:  "canonical repository-relative path",
+			want:  schemaRejection,
 		},
 		"non markdown": {
 			paths: `["docs/site.txt"]`,
-			want:  "must name a Markdown file",
+			want:  schemaRejection,
 		},
 	}
 	for name, test := range cases {
@@ -183,11 +183,11 @@ func TestDocumentationDesignMappingsRejectAmbiguousOrUnboundedTargets(t *testing
 	}{
 		"requires one selector": {
 			documentation: `{"design":[{"path":"docs/design/content.md"}]}`,
-			want:          "exactly one of module or sourcePaths",
+			want:          schemaRejection,
 		},
 		"rejects both selectors": {
 			documentation: `{"design":[{"path":"docs/design/content.md","module":"content","sourcePaths":["content/file.go"]}]}`,
-			want:          "exactly one of module or sourcePaths",
+			want:          schemaRejection,
 		},
 		"rejects unknown module": {
 			documentation: `{"design":[{"path":"docs/design/content.md","module":"missing"}]}`,
@@ -207,23 +207,23 @@ func TestDocumentationDesignMappingsRejectAmbiguousOrUnboundedTargets(t *testing
 		},
 		"rejects glob document path": {
 			documentation: `{"design":[{"path":"docs/design/*.md","module":"content"}]}`,
-			want:          "concrete repository path",
+			want:          schemaRejection,
 		},
 		"rejects historical document path": {
 			documentation: `{"design":[{"path":"docs/history/content.md","module":"content"}]}`,
-			want:          "under docs/design",
+			want:          schemaRejection,
 		},
 		"rejects non markdown document path": {
 			documentation: `{"design":[{"path":"docs/design/content.markdown","module":"content"}]}`,
-			want:          "under docs/design",
+			want:          schemaRejection,
 		},
 		"rejects noncanonical document path": {
 			documentation: `{"design":[{"path":"./docs/design/content.md","module":"content"}]}`,
-			want:          "canonical repository-relative path",
+			want:          schemaRejection,
 		},
 		"rejects glob source path": {
 			documentation: `{"design":[{"path":"docs/design/content.md","sourcePaths":["content/*.go"]}]}`,
-			want:          "concrete repository path",
+			want:          schemaRejection,
 		},
 		"rejects unmatched source": {
 			documentation: `{"design":[{"path":"docs/design/content.md","sourcePaths":["other/file.go"]}]}`,
@@ -262,11 +262,11 @@ func TestLoadNormalizesAndValidatesExclusiveResources(t *testing.T) {
 		t.Fatalf("exclusive resources = %v", got)
 	}
 	duplicated := strings.Replace(minimalConfig(), `"argv":["go","test","./..."]`, `"argv":["go","test","./..."],"exclusiveResources":["performance","performance"]`, 1)
-	if _, err := Load(writeConfig(t, duplicated), ""); err == nil || !strings.Contains(err.Error(), "duplicate identifier") {
+	if _, err := Load(writeConfig(t, duplicated), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected duplicate exclusive-resource error, got %v", err)
 	}
 	invalid := strings.Replace(minimalConfig(), `"argv":["go","test","./..."]`, `"argv":["go","test","./..."],"exclusiveResources":["../host"]`, 1)
-	if _, err := Load(writeConfig(t, invalid), ""); err == nil || !strings.Contains(err.Error(), "lowercase dotted or dashed identifier") {
+	if _, err := Load(writeConfig(t, invalid), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected invalid exclusive-resource error, got %v", err)
 	}
 }
@@ -274,15 +274,15 @@ func TestLoadNormalizesAndValidatesExclusiveResources(t *testing.T) {
 func TestFocusedSuitesAreQuickAndIncludedInBroaderProfiles(t *testing.T) {
 	t.Parallel()
 	withoutRecommended := strings.Replace(minimalConfig(), `"modules":["content"],"argv":["go","test","./..."]`, `"modules":["content"],"argv":["go","test","./..."],"runOn":["focused","full"]`, 1)
-	if _, err := Load(writeConfig(t, withoutRecommended), ""); err == nil || !strings.Contains(err.Error(), "include recommended") {
+	if _, err := Load(writeConfig(t, withoutRecommended), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected focused hierarchy error, got %v", err)
 	}
 	withoutFull := strings.Replace(minimalConfig(), `"modules":["content"],"argv":["go","test","./..."]`, `"modules":["content"],"argv":["go","test","./..."],"runOn":["focused","recommended"]`, 1)
-	if _, err := Load(writeConfig(t, withoutFull), ""); err == nil || !strings.Contains(err.Error(), "include full") {
+	if _, err := Load(writeConfig(t, withoutFull), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected recommended hierarchy error, got %v", err)
 	}
 	standardFocused := strings.Replace(minimalConfig(), `"modules":["content"],"argv":["go","test","./..."]`, `"modules":["content"],"argv":["go","test","./..."],"cost":"standard"`, 1)
-	if _, err := Load(writeConfig(t, standardFocused), ""); err == nil || !strings.Contains(err.Error(), "must be quick") {
+	if _, err := Load(writeConfig(t, standardFocused), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected focused cost error, got %v", err)
 	}
 }
@@ -290,7 +290,7 @@ func TestFocusedSuitesAreQuickAndIncludedInBroaderProfiles(t *testing.T) {
 func TestExpensiveSuiteCannotEnterRecommendedProfile(t *testing.T) {
 	t.Parallel()
 	config := strings.Replace(minimalConfig(), `"scope":"repository","argv":["go","test","./..."]`, `"scope":"repository","argv":["go","test","./..."],"cost":"expensive","runOn":["recommended","full"]`, 1)
-	if _, err := Load(writeConfig(t, config), ""); err == nil || !strings.Contains(err.Error(), "cannot be expensive") {
+	if _, err := Load(writeConfig(t, config), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected recommended cost error, got %v", err)
 	}
 }
@@ -447,7 +447,7 @@ func TestLoadReadsOnlyTheCurrentConfigVersion(t *testing.T) {
 			t.Parallel()
 			root := writeConfig(t, strings.Replace(minimalConfig(), `"version":3`, `"version":`+version, 1))
 			_, err := Load(root, "")
-			if err == nil || !strings.Contains(err.Error(), "unsupported policy version "+version+"; expected 3") {
+			if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 				t.Fatalf("expected version %s to be refused, got %v", version, err)
 			}
 		})
@@ -458,7 +458,7 @@ func TestLoadRejectsUnknownConfiguration(t *testing.T) {
 	t.Parallel()
 	root := writeConfig(t, strings.Replace(minimalConfig(), `"kind":"content"`, `"kind":"content","typo":true`, 1))
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected unknown-field error, got %v", err)
 	}
 }
@@ -565,7 +565,7 @@ func TestExternalInputsRequireCheapContractAndOrdinaryBehaviorEvidence(t *testin
 	}
 
 	invalidSibling := strings.Replace(configText, `"../shared-content"`, `"/Users/alice/catalog"`, 1)
-	if _, err := Load(writeConfig(t, invalidSibling), ""); err == nil || !strings.Contains(err.Error(), "parent-relative") {
+	if _, err := Load(writeConfig(t, invalidSibling), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected sibling-path error, got %v", err)
 	}
 
@@ -594,12 +594,12 @@ func TestConditionalPolicyModuleOverridesAreExactAndGoverned(t *testing.T) {
 	}
 
 	missingGovernance := strings.Replace(minimalConfig(), `"quality":{}`, `"policyModules":{"overrides":[{"name":"react","mode":"disabled"}]},"quality":{}`, 1)
-	if _, err := Load(writeConfig(t, missingGovernance), ""); err == nil || !strings.Contains(err.Error(), "reason") {
+	if _, err := Load(writeConfig(t, missingGovernance), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected governed-disable error, got %v", err)
 	}
 
 	unknown := strings.Replace(minimalConfig(), `"quality":{}`, `"policyModules":{"overrides":[{"name":"django","mode":"enabled"}]},"quality":{}`, 1)
-	if _, err := Load(writeConfig(t, unknown), ""); err == nil || !strings.Contains(err.Error(), "supported conditional") {
+	if _, err := Load(writeConfig(t, unknown), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected unknown-module error, got %v", err)
 	}
 }
@@ -621,7 +621,7 @@ func TestLoadRejectsWeakenedBudgets(t *testing.T) {
 	config := strings.Replace(minimalConfig(), `"quality":{}`, `"quality":{"maxFileLines":1001}`, 1)
 	root := writeConfig(t, config)
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "between 1 and 1000") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected budget error, got %v", err)
 	}
 }
@@ -773,7 +773,7 @@ func TestLoadRejectsExplicitEmptyRunProfiles(t *testing.T) {
 	t.Parallel()
 	config := strings.Replace(minimalConfig(), `"checks":[]`, `"checks":[{"name":"lint","provides":["lint"],"argv":["true"],"runOn":[]}]`, 1)
 	_, err := Load(writeConfig(t, config), "")
-	if err == nil || !strings.Contains(err.Error(), "must not be empty") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected empty-profile error, got %v", err)
 	}
 }
@@ -785,7 +785,7 @@ func TestLoadRejectsWildcardException(t *testing.T) {
 	config := strings.Replace(minimalConfig(), `"exceptions":[]`, exception, 1)
 	root := writeConfig(t, config)
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "wildcard") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected wildcard error, got %v", err)
 	}
 }
@@ -994,9 +994,12 @@ func TestVulnerabilityAssessmentValidationRequiresBoundedIndependentApproval(t *
 	if err := validate(assessment); err != nil {
 		t.Fatalf("valid assessment: %v", err)
 	}
+	if err := validateVulnerabilityAssessmentSchema(t, assessment); err != nil {
+		t.Fatalf("valid assessment schema: %v", err)
+	}
 	high := assessment
 	high.Severity = "high"
-	if err := validate(high); err == nil || !strings.Contains(err.Error(), "severity") {
+	if err := validateVulnerabilityAssessmentSchema(t, high); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected severity error, got %v", err)
 	}
 	broad := assessment
@@ -1027,26 +1030,39 @@ func TestHighNotAffectedVulnerabilityAssessmentDispositionMatrix(t *testing.T) {
 	if err := validate(assessment); err != nil {
 		t.Fatalf("high not-affected assessment was rejected: %v", err)
 	}
+	if err := validateVulnerabilityAssessmentSchema(t, assessment); err != nil {
+		t.Fatalf("high not-affected assessment schema was rejected: %v", err)
+	}
 	falsePositive := assessment
 	falsePositive.Basis = "false-positive"
-	if err := validate(falsePositive); err != nil {
+	if err := validateVulnerabilityAssessmentSchema(t, falsePositive); err != nil {
 		t.Fatalf("high false-positive assessment was rejected: %v", err)
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
 		riskAccepted := assessment
 		riskAccepted.Status = "risk-accepted"
 		riskAccepted.Basis = basis
-		if err := validate(riskAccepted); err == nil || !strings.Contains(err.Error(), "status") {
+		if err := validateVulnerabilityAssessmentSchema(t, riskAccepted); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 			t.Fatalf("high risk acceptance with %q was not rejected by disposition: %v", basis, err)
 		}
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
 		wrongBasis := assessment
 		wrongBasis.Basis = basis
-		if err := validate(wrongBasis); err == nil || !strings.Contains(err.Error(), "basis") {
+		if err := validateVulnerabilityAssessmentSchema(t, wrongBasis); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 			t.Fatalf("high not-affected assessment accepted unrelated basis %q: %v", basis, err)
 		}
 	}
+}
+
+func validateVulnerabilityAssessmentSchema(t testing.TB, assessment VulnerabilityAssessment) error {
+	t.Helper()
+	encoded, err := json.Marshal(assessment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := strings.Replace(minimalConfig(), `"supplyChain":{}`, `"supplyChain":{"vulnerabilityAssessments":[`+string(encoded)+`]}`, 1)
+	return validateRuntimeSchema([]byte(configuration))
 }
 
 func TestHighNotAffectedAssessmentReviewWindowIncludesExpiryDate(t *testing.T) {
@@ -1189,13 +1205,13 @@ func TestLoadValidatesVulnerabilityAndOverrideGovernance(t *testing.T) {
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
 		highRiskAccepted := strings.Replace(highNotAffected, `"status":"not-affected","basis":"unreachable"`, `"status":"risk-accepted","basis":"`+basis+`"`, 1)
-		if _, err := Load(writeConfig(t, highRiskAccepted), ""); err == nil || !strings.Contains(err.Error(), "status") {
+		if _, err := Load(writeConfig(t, highRiskAccepted), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 			t.Fatalf("high risk-accepted governance config with %s was accepted: %v", basis, err)
 		}
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
 		wrongBasis := strings.Replace(highNotAffected, `"basis":"unreachable"`, `"basis":"`+basis+`"`, 1)
-		if _, err := Load(writeConfig(t, wrongBasis), ""); err == nil || !strings.Contains(err.Error(), "basis") {
+		if _, err := Load(writeConfig(t, wrongBasis), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 			t.Fatalf("high not-affected governance config with %s was accepted: %v", basis, err)
 		}
 	}
@@ -1222,7 +1238,7 @@ func TestLoadValidatesArtifactSecurityTargetModes(t *testing.T) {
 
 	invalid := strings.Replace(supply, `"context":"content"`, `"context":"content","archive":"content/image.tar"`, 1)
 	configText = strings.Replace(minimalConfig(), `"supplyChain":{}`, invalid, 1)
-	if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), "dockerfile mode") {
+	if _, err := Load(writeConfig(t, configText), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected target-mode error, got %v", err)
 	}
 }
@@ -1232,7 +1248,7 @@ func TestLoadRejectsInvalidEnvironmentVariableName(t *testing.T) {
 	config := strings.Replace(minimalConfig(), `"checks":[]`, `"checks":[{"name":"lint","provides":["lint"],"argv":["true"],"environment":["NOT-VALID"]}]`, 1)
 	root := writeConfig(t, config)
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "environment variable") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected environment error, got %v", err)
 	}
 }
@@ -1242,7 +1258,7 @@ func TestModuleSuiteNeedsModules(t *testing.T) {
 	config := strings.Replace(minimalConfig(), `"modules":["content"]`, `"modules":[]`, 1)
 	root := writeConfig(t, config)
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "exactly one module") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected module suite error, got %v", err)
 	}
 }
@@ -1253,7 +1269,7 @@ func TestModuleSuiteCannotHideCrossModuleExecution(t *testing.T) {
 	config = strings.Replace(config, `"modules":[{"name":"content","paths":["content/**"]}]`, `"modules":[{"name":"content","paths":["content/**"]},{"name":"other","paths":["other/**"]}]`, 1)
 	root := writeConfig(t, config)
 	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), "exactly one module") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected single-module suite error, got %v", err)
 	}
 }
@@ -1329,7 +1345,7 @@ func TestSupplementalSuiteCannotLeakIntoFullProfile(t *testing.T) {
 	t.Parallel()
 	config := strings.Replace(minimalConfig(), `"kind":"content","scope":"module"`, `"kind":"mutation","scope":"module","cost":"expensive","runOn":["full","supplemental"]`, 1)
 	_, err := Load(writeConfig(t, config), "")
-	if err == nil || !strings.Contains(err.Error(), "only supplemental") {
+	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected isolated supplemental error, got %v", err)
 	}
 }
@@ -1347,60 +1363,9 @@ func TestTestSuiteRejectsObviousNoOpAndPassWithoutTests(t *testing.T) {
 }
 
 func TestCheckedInSchemaAndTemplatesLoad(t *testing.T) {
-	type schemaProperty struct {
-		Const string   `json:"const"`
-		Enum  []string `json:"enum"`
-	}
-	type schemaRule struct {
-		If struct {
-			Properties map[string]schemaProperty `json:"properties"`
-		} `json:"if"`
-		Then struct {
-			Properties map[string]schemaProperty `json:"properties"`
-		} `json:"then"`
-	}
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
-	}
-	schemaData, err := os.ReadFile(filepath.Join(repositoryRoot, "schema", "code-polishy.schema.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var schema struct {
-		Properties struct {
-			Version struct {
-				Const int `json:"const"`
-			} `json:"version"`
-		} `json:"properties"`
-		Defs struct {
-			VulnerabilityAssessment struct {
-				Properties map[string]schemaProperty `json:"properties"`
-				AllOf      []schemaRule              `json:"allOf"`
-			} `json:"vulnerabilityAssessment"`
-		} `json:"$defs"`
-	}
-	if err := json.Unmarshal(schemaData, &schema); err != nil {
-		t.Fatalf("schema is not valid JSON: %v", err)
-	}
-
-	if schema.Properties.Version.Const != ConfigVersion {
-		t.Errorf("schema version const = %d, parser expects %d", schema.Properties.Version.Const, ConfigVersion)
-	}
-	assessmentSchema := schema.Defs.VulnerabilityAssessment
-	if !slices.Equal(assessmentSchema.Properties["severity"].Enum, []string{"low", "moderate", "high"}) {
-		t.Errorf("schema severity values = %v", assessmentSchema.Properties["severity"].Enum)
-	}
-	highNotAffectedRule := false
-	for _, rule := range assessmentSchema.AllOf {
-		if rule.If.Properties["severity"].Const != "high" {
-			continue
-		}
-		highNotAffectedRule = rule.Then.Properties["status"].Const == "not-affected" &&
-			slices.Equal(rule.Then.Properties["basis"].Enum, []string{"false-positive", "unreachable"})
-	}
-	if !highNotAffectedRule {
-		t.Error("schema does not restrict high assessments to not-affected false-positive or unreachable decisions")
 	}
 	configurations := []string{
 		filepath.Join(repositoryRoot, ".code-polishy.json"),
@@ -1466,23 +1431,6 @@ func TestCheckedInToolVersionPinsHaveReleaseAgeCoverage(t *testing.T) {
 	for path := range pins {
 		if !covered[path] {
 			t.Errorf("tool version pin %s has no release-age source", path)
-		}
-	}
-}
-
-func TestPackSelectionRequiresOneExactIdentityPerName(t *testing.T) {
-	valid := strings.Replace(minimalConfig(), `"modules":`, `"packs":[{"name":"community-rust","version":"1.2.3","digest":"`+strings.Repeat("a", 64)+`"}],"modules":`, 1)
-	config, err := Parse([]byte(valid), ConfigFilename)
-	if err != nil || len(config.Packs) != 1 {
-		t.Fatalf("valid pack selection failed: %+v %v", config.Packs, err)
-	}
-	for _, mutation := range []string{
-		strings.Replace(valid, `"version":"1.2.3"`, `"version":"latest"`, 1),
-		strings.Replace(valid, strings.Repeat("a", 64), "sha256:missing", 1),
-		strings.Replace(valid, `],"modules":`, `,{"name":"community-rust","version":"1.2.4","digest":"`+strings.Repeat("b", 64)+`"}],"modules":`, 1),
-	} {
-		if _, err := Parse([]byte(mutation), ConfigFilename); err == nil {
-			t.Fatal("invalid pack selection passed")
 		}
 	}
 }

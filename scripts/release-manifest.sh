@@ -21,7 +21,7 @@ set -euo pipefail
 
 
 release_manifest_name="release-manifest.json"
-release_manifest_version=4
+release_manifest_version=5
 
 
 
@@ -39,6 +39,7 @@ release_pin_files=(
   "tools/node-version.txt"
   "tools/osv-scanner-version.txt"
   "tools/pnpm-version.txt"
+  "tools/packaging-version.txt"
   "tools/python-version.txt"
   "tools/ruff-version.txt"
   "tools/shellcheck-version.txt"
@@ -140,12 +141,13 @@ govulncheck_version="$(read_tool_pin "${release_pin_files[2]}")"
 node_version="$(read_tool_pin "${release_pin_files[3]}")"
 osv_scanner_version="$(read_tool_pin "${release_pin_files[4]}")"
 pnpm_version="$(read_tool_pin "${release_pin_files[5]}")"
-python_version="$(read_tool_pin "${release_pin_files[6]}")"
-ruff_version="$(read_tool_pin "${release_pin_files[7]}")"
-shellcheck_version="$(read_tool_pin "${release_pin_files[8]}")"
-staticcheck_version="$(read_tool_pin "${release_pin_files[9]}")"
-ty_version="$(read_tool_pin "${release_pin_files[10]}")"
-vulture_version="$(read_tool_pin "${release_pin_files[11]}")"
+packaging_version="$(read_tool_pin "${release_pin_files[6]}")"
+python_version="$(read_tool_pin "${release_pin_files[7]}")"
+ruff_version="$(read_tool_pin "${release_pin_files[8]}")"
+shellcheck_version="$(read_tool_pin "${release_pin_files[9]}")"
+staticcheck_version="$(read_tool_pin "${release_pin_files[10]}")"
+ty_version="$(read_tool_pin "${release_pin_files[11]}")"
+vulture_version="$(read_tool_pin "${release_pin_files[12]}")"
 
 
 
@@ -251,6 +253,7 @@ release_identity() {
   printf 'tool.node=%s\n' "${node_version}"
   printf 'tool.osv-scanner=%s\n' "${osv_scanner_version}"
   printf 'tool.pnpm=%s\n' "${pnpm_version}"
+  printf 'tool.packaging=%s\n' "${packaging_version}"
   printf 'tool.python=%s\n' "${python_version}"
   printf 'tool.ruff=%s\n' "${ruff_version}"
   printf 'tool.shellcheck=%s\n' "${shellcheck_version}"
@@ -289,6 +292,7 @@ $(render_features)
     "node": "${node_version}",
     "osv-scanner": "${osv_scanner_version}",
     "pnpm": "${pnpm_version}",
+    "packaging": "${packaging_version}",
     "python": "${python_version}",
     "ruff": "${ruff_version}",
     "shellcheck": "${shellcheck_version}",

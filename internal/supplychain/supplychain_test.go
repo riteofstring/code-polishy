@@ -470,12 +470,12 @@ func TestSecurityMonitoringRequiresWeeklyOnlineScan(t *testing.T) {
 	}
 	repo.Config.SupplyChain.RecurringSecurityMonitoring = true
 	path := ".github/workflows/security.yml"
-	writeSupplyFile(t, repo.Root, path, "on:\n  schedule:\n    - cron: '0 4 * * 1'\njobs:\n  scan:\n    steps:\n      - run: ./bin/code-polishy supply-chain\n")
+	writeSupplyFile(t, repo.Root, path, "on:\n  schedule:\n    - cron: '0 4 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./bin/code-polishy supply-chain\n")
 	files = append(files, path)
 	if findings := securityMonitoringFindings(repo, files); len(findings) != 0 {
 		t.Fatalf("weekly scan rejected: %+v", findings)
 	}
-	writeSupplyFile(t, repo.Root, path, "on:\n  schedule:\n    - cron: '0 4 1 * *'\njobs:\n  scan:\n    steps:\n      - run: ./bin/code-polishy supply-chain --offline\n")
+	writeSupplyFile(t, repo.Root, path, "on:\n  schedule:\n    - cron: '0 4 1 * *'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./bin/code-polishy supply-chain --offline\n")
 	if findings := securityMonitoringFindings(repo, files); len(findings) != 1 {
 		t.Fatalf("monthly offline scan accepted: %+v", findings)
 	}
@@ -501,41 +501,66 @@ func TestWeeklySecurityWorkflowRecognizesSupportedSchedulesAndRunForms(t *testin
 	}{
 		{
 			name:     "named weekday range and gate",
-			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON-FRI'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON-FRI'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 			accepted: true,
 		},
 		{
 			name:     "seven day interval and multiline online scan",
-			workflow: "on:\n  schedule:\n    cron: '*/15 0,12 */7 * *'\n  push:\njobs:\n  scan:\n    steps:\n      - run: |\n          code-polishy supply-chain\n      - name: record result\n",
+			workflow: "on:\n  schedule:\n    - cron: '*/15 0,12 */7 * *'\n  push:\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          code-polishy supply-chain\n      - name: record result\n        run: echo complete\n",
 			accepted: true,
 		},
 		{
 			name:     "interval exceeds one week",
-			workflow: "on:\n  schedule:\n    - cron: '0 0 */8 * *'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 */8 * *'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 		{
 			name:     "weekday outside cron range",
-			workflow: "on:\n  schedule:\n    - cron: '0 0 * * 8'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * 8'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 		{
 			name:     "zero minute step",
-			workflow: "on:\n  schedule:\n    - cron: '*/0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n    - cron: '*/0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 		{
 			name:     "offline multiline scan",
-			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: >-\n          code-polishy supply-chain --offline\n",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: >-\n          code-polishy supply-chain --offline\n",
 		},
 		{
 			name:     "schedule outside the on block",
-			workflow: "on:\n  push:\nschedule:\n  - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  push:\nschedule:\n  - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 		{
 			name:     "cron under a sibling event",
-			workflow: "on:\n  schedule:\n  push:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n  push:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 		{
 			name:     "command after multiline run block",
-			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    steps:\n      - run: |\n          echo complete\n      - name: publish\n        env:\n          COMMAND: code-polishy gate\n",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo complete\n      - name: publish\n        run: echo \"$COMMAND\"\n        env:\n          COMMAND: code-polishy gate\n",
+		},
+		{
+			name:     "echoed command",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo code-polishy gate\n",
+		},
+		{
+			name:     "commented command",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: '# code-polishy gate'\n",
+		},
+		{
+			name:     "externally conditional job",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
+		},
+		{
+			name:     "externally conditional step",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - if: github.event_name == 'push'\n        run: code-polishy gate\n",
+		},
+		{
+			name:     "scheduled step",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - if: github.event_name == 'schedule'\n        run: code-polishy gate\n",
+			accepted: true,
+		},
+		{
+			name:     "conditional dependency",
+			workflow: "on:\n  schedule:\n    - cron: '0 0 * * MON'\njobs:\n  prepare:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo prepare\n  scan:\n    needs: prepare\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy gate\n",
 		},
 	}
 	for _, testCase := range cases {
@@ -661,7 +686,7 @@ func TestNewDependencyAgeAdvisoriesUseRegistryEvidence(t *testing.T) {
 func TestWorkflowRequiresFullActionCommit(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	writeSupplyFile(t, repo.Root, ".github/workflows/ci.yml", "steps:\n  - uses: actions/checkout@v4\n  - uses: ./local\n  - run: echo 'uses: ignored/example@v1'\n")
+	writeSupplyFile(t, repo.Root, ".github/workflows/ci.yml", "on: push\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: ./local\n      - run: \"echo 'uses: ignored/example@v1'\"\n")
 	findings := checkWorkflowPins(repo, ".github/workflows/ci.yml")
 	if len(findings) != 1 || findings[0].Subject != "actions/checkout@v4" {
 		t.Fatalf("findings = %+v", findings)
@@ -1028,9 +1053,17 @@ func TestPythonGitLockMatchesRepositoryAcrossSSHUsers(t *testing.T) {
 func TestUVLockRetainsGitSourceFacts(t *testing.T) {
 	t.Parallel()
 	commit := "0123456789abcdef0123456789abcdef01234567"
-	packages, err := parseUVLock([]byte("[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = {\n  git = \"https://github.com/example/private-tool.git?subdirectory=src%2Ftool&rev="+commit+"#"+commit+"\",\n}\n"), "uv.lock")
+	packages, err := parseUVLock([]byte("[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"https://github.com/example/private-tool.git?subdirectory=src%2Ftool&rev="+commit+"#"+commit+"\" }\n"), "uv.lock")
 	if err != nil || len(packages) != 1 || packages[0].Source.Kind != "git" || packages[0].Source.Git.DeclaredRef != commit || packages[0].Source.Git.Commit != commit || packages[0].Source.Git.Subdirectory != "src/tool" {
 		t.Fatalf("packages = %+v, err = %v", packages, err)
+	}
+}
+
+func TestUVLockRejectsNonstandardMultilineInlineTables(t *testing.T) {
+	t.Parallel()
+	_, err := parseUVLock([]byte("[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = {\n  git = \"https://github.com/example/private-tool.git\",\n}\n"), "uv.lock")
+	if err == nil {
+		t.Fatal("nonstandard multiline inline table was accepted")
 	}
 }
 

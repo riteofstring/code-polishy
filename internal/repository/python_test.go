@@ -34,8 +34,8 @@ requires = ["hatchling == 1.25.0"]
 		t.Fatalf("project = %+v", project)
 	}
 	requests := project.Requirements[0]
-	if requests.Name != "requests" || !slices.Equal(requests.Extras, []string{"socks"}) || requests.Version != ">=2.31,<3" ||
-		requests.Marker != `python_version >= '3.10' and os_name == "posix"` || requests.Usage != "runtime" || requests.Location.Line != 3 {
+	if requests.Name != "requests" || !slices.Equal(requests.Extras, []string{"socks"}) || requests.Version != "<3,>=2.31" ||
+		requests.Marker != `python_version >= "3.10" and os_name == "posix"` || requests.Usage != "runtime" || requests.Location.Line != 3 {
 		t.Fatalf("registry requirement = %+v", requests)
 	}
 	git := project.Requirements[1]
@@ -80,7 +80,7 @@ func TestParsePythonRequirementAcceptsDirectURLBeforeMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requirement.Kind != PythonURLRequirement || requirement.URL != "https://packages.example.test/example-1.0.0.whl" || requirement.Marker != "python_version >= '3.10'" {
+	if requirement.Kind != PythonURLRequirement || requirement.URL != "https://packages.example.test/example-1.0.0.whl" || requirement.Marker != `python_version >= "3.10"` {
 		t.Fatalf("requirement = %+v", requirement)
 	}
 }
@@ -91,7 +91,7 @@ func TestParsePythonRequirementAcceptsParenthesizedVersionListsAndMarkers(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requirement.Version != ">=2.31,<3" || len(requirement.Specifiers) != 2 || requirement.Marker == "" {
+	if requirement.Version != "<3,>=2.31" || len(requirement.Specifiers) != 2 || requirement.Marker == "" {
 		t.Fatalf("requirement = %+v", requirement)
 	}
 	if _, err := ParsePythonRequirement("requests >=2.31,"); err != nil {

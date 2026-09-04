@@ -43,7 +43,8 @@ The built-in engine currently provides:
 - conditional policy-owned OSV-Scanner coverage with structured exact findings
   for every supported dependency graph, in addition to native ecosystem
   vulnerability checks;
-- full GitHub Action commit pins and container image digests;
+- full GitHub Action commit pins and container image digests, extracted from
+  the same pinned actionlint syntax tree used by workflow policy;
 - first-class Trivy/OpenVEX container-artifact scans with normalized findings,
   CycloneDX SBOMs, immutable evidence hashes, and hardened offline execution.
 
@@ -127,6 +128,13 @@ That provider owns the honest installation/lock agreement for facts the lock
 does not encode; it cannot be replaced by a claim that the partial static
 reader proved the full build graph.
 
+Code Polishy's own `python-facts/v1` adapter follows the same rule. Its dedicated
+`pyproject.toml` and frozen `uv.lock` contain only the virtual first-party owner
+and `packaging`. A checked-in, script-disabled lock provider parses both with
+the carried CPython `tomllib`, reconciles the exact dependency and metadata,
+and binds the selected wheel to its checksum inventory. The ordinary uv
+release-age and OSV lanes then cover that complete resolved graph.
+
 Registry releases reach the ordinary release-age and OSV lanes. A Git source
 has no PyPI publication timestamp and cannot be represented honestly as a
 registry release; the online profile reports release-age and vulnerability
@@ -191,14 +199,20 @@ its own manifest and Go decides it. Reading is metadata only: no target code,
 install script, or executable configuration runs, and no registry is contacted.
 
 - `supplyChain.allowedLicenses` is the policy, as SPDX identifiers optionally
-  qualified as `<license> WITH <exception>`. A repository that lists none
-  declares no license policy, and none is enforced for it.
+  qualified as `<license> WITH <exception>`. Identifiers and exceptions come
+  only from the embedded, digest-verified SPDX license-list-data `v3.28.0`
+  snapshot. Live list changes cannot affect a run. `LicenseRef-` terms remain
+  accepted for contained custom licenses; external `DocumentRef-` terms are
+  outside the policy boundary. A repository that lists none declares no license
+  policy, and none is enforced for it.
 - `supplyChain.dependencyLicense` names a resolved release whose declared
   expression the policy does not admit, including one that declares no license
   and one written as something other than a readable SPDX expression. `OR`
   offers a choice, so allowing either side admits it; `AND` binds the target to
   both, so both must be allowed. A `WITH` exception changes what a license
-  permits, so the qualified pair is what the policy has to allow.
+  permits, so the qualified pair is what the policy has to allow. The bounded
+  fail-closed grammar supports parentheses, SPDX precedence, deprecated
+  snapshot identifiers, `+`, `WITH`, and case-insensitive standard identifiers.
 - `supplyChain.licenseCoverage` names a resolved release the installed tree
   declares no metadata for, and a tree the reader could not read at all. The
   lane therefore requires the target's dependencies to be installed with its
@@ -633,7 +647,10 @@ code-polishy supply-chain --offline
 
 Offline mode checks local declarations and executes target `supply-chain`
 providers: exact versions, frozen lock consistency, local-path containment,
-lifecycle policy, workflow commits, and image digests.
+lifecycle policy, workflow commits, and image digests. GitHub Actions files are
+parsed once through the bounded `workflow-facts/v1` adapter backed by exact
+actionlint `v1.7.12`; any syntax or semantic diagnostic fails before workflow
+facts can satisfy policy. Generic YAML parsing has no GitHub Actions role.
 
 ```sh
 code-polishy supply-chain

@@ -57,9 +57,11 @@ every operation that creates a tag, pushes, publishes, or changes a target lock.
    .\scripts\build-release.ps1 -Output C:\release\code-polishy.zip -PublicationDirectory C:\release\publication
    ```
 
-   Retain each archive, `.sha256`, internal manifest, CycloneDX SBOM, SLSA
-   provenance, and `.release.json` descriptor. The five required hosts are
-   `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, and `windows-x64`.
+   Retain each archive, `.sha256`, internal manifest, CycloneDX SBOM,
+   deterministic in-toto/SLSA provenance metadata, and `.release.json`
+   descriptor. This metadata is reproducible digest binding, not authenticated
+   builder or publisher evidence. The five required hosts are `darwin-arm64`,
+   `darwin-x64`, `linux-arm64`, `linux-x64`, and `windows-x64`.
 
 6. Combine the five descriptors with `release-manifest index`, using one
    repeated `--artifact-descriptor` per host. Publication succeeds only when

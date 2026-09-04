@@ -33,31 +33,31 @@ func TestScopePythonDynamicReferencesRejectsNonExactReferences(t *testing.T) {
 	}{
 		"duplicate": {
 			references: `[{"project":"pyproject.toml","module":"app.entry","symbol":"serve"},{"project":"pyproject.toml","module":"app.entry","symbol":"serve"}]`,
-			want:       "duplicates Python dynamic reference",
+			want:       schemaRejection,
 		},
 		"wildcard project": {
 			references: `[{"project":"apps/*/pyproject.toml","module":"app.entry","symbol":"serve"}]`,
-			want:       "concrete repository path",
+			want:       schemaRejection,
 		},
 		"non manifest": {
 			references: `[{"project":"apps/api/project.toml","module":"app.entry","symbol":"serve"}]`,
-			want:       "exact pyproject.toml",
+			want:       schemaRejection,
 		},
 		"noncanonical project": {
 			references: `[{"project":"./pyproject.toml","module":"app.entry","symbol":"serve"}]`,
-			want:       "canonical repository-relative path",
+			want:       schemaRejection,
 		},
 		"invalid module": {
 			references: `[{"project":"pyproject.toml","module":"app.*","symbol":"serve"}]`,
-			want:       "Python identifier chain",
+			want:       schemaRejection,
 		},
 		"invalid symbol": {
 			references: `[{"project":"pyproject.toml","module":"app.entry","symbol":"serve()"}]`,
-			want:       "Python identifier chain",
+			want:       schemaRejection,
 		},
 		"unknown field": {
 			references: `[{"project":"pyproject.toml","module":"app.entry","symbol":"serve","wildcard":true}]`,
-			want:       "unknown field",
+			want:       schemaRejection,
 		},
 	}
 	for name, testCase := range cases {

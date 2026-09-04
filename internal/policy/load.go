@@ -16,8 +16,8 @@ import (
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
-var environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-var siblingFallbackPattern = regexp.MustCompile(`^(?:\.\./)+[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$`)
+
+const maximumConfigurationBytes = 8 * 1024 * 1024
 
 func Load(repoRoot, configPath string) (Config, error) {
 	if configPath == "" {
@@ -36,6 +36,12 @@ func Parse(data []byte, source string) (Config, error) {
 	if source == "" {
 		source = ConfigFilename
 	}
+	if len(data) == 0 || len(data) > maximumConfigurationBytes {
+		return Config{}, fmt.Errorf("parse %s: configuration has an invalid byte size", source)
+	}
+	if err := validateRuntimeSchema(data); err != nil {
+		return Config{}, fmt.Errorf("parse %s: %w", source, err)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	config := Config{}
@@ -47,6 +53,13 @@ func Parse(data []byte, source string) (Config, error) {
 	}
 	config.ConfigPath = source
 	applyDefaults(&config)
+	normalized, err := json.Marshal(config)
+	if err != nil {
+		return Config{}, fmt.Errorf("normalize %s: %w", source, err)
+	}
+	if err := validateRuntimeSchema(normalized); err != nil {
+		return Config{}, fmt.Errorf("parse %s after defaults: %w", source, err)
+	}
 	if err := validate(&config); err != nil {
 		return Config{}, err
 	}
@@ -177,7 +190,7 @@ func normalizeExclusiveResources(resources *[]string) {
 }
 
 func validate(config *Config) error {
-	if err := validateBase(config); err != nil {
+	if err := validateScope(config); err != nil {
 		return err
 	}
 	if err := validateModules(config); err != nil {
@@ -232,41 +245,20 @@ func validateExternalInput(config *Config, input ExternalInput, label string, se
 }
 
 func validateExternalInputIdentity(config *Config, input ExternalInput, label string, seen map[string]bool) error {
-	if err := identifier(input.Name, label+".name"); err != nil {
-		return err
-	}
 	if seen[input.Name] {
 		return fmt.Errorf("duplicate external input name %q", input.Name)
 	}
 	seen[input.Name] = true
-	if err := allowedValues([]string{input.Kind}, []string{"directory", "file", "repository", "service"}, label+".kind"); err != nil {
-		return err
-	}
 	if _, exists := config.ModuleByName[input.Module]; !exists {
 		return fmt.Errorf("%s.module references unknown module %q", label, input.Module)
-	}
-	if len(input.SourcePaths) == 0 {
-		return fmt.Errorf("%s.sourcePaths must not be empty", label)
-	}
-	if err := validatePatterns(input.SourcePaths, label+".sourcePaths", false); err != nil {
-		return err
 	}
 	return nil
 }
 
 func validateExternalInputResolution(input ExternalInput, label string) error {
-	if err := allowedValues(input.Resolution, []string{"cli", "config", "default", "environment"}, label+".resolution"); err != nil {
-		return err
-	}
-	if err := validateEnvironment(input.Environment, label+".environment"); err != nil {
-		return err
-	}
 	usesEnvironment := slices.Contains(input.Resolution, "environment")
 	if usesEnvironment != (len(input.Environment) > 0) {
 		return fmt.Errorf("%s.environment must be non-empty exactly when resolution contains environment", label)
-	}
-	if err := allowedValues([]string{input.UnavailableBehavior}, []string{"fail", "warn"}, label+".unavailableBehavior"); err != nil {
-		return err
 	}
 	if input.SiblingFallback != "" {
 		if input.Kind == "service" {
@@ -274,9 +266,6 @@ func validateExternalInputResolution(input ExternalInput, label string) error {
 		}
 		if !slices.Contains(input.Resolution, "default") {
 			return fmt.Errorf("%s.siblingFallback requires default resolution", label)
-		}
-		if !siblingFallbackPattern.MatchString(input.SiblingFallback) {
-			return fmt.Errorf("%s.siblingFallback must be an exact portable parent-relative path", label)
 		}
 	}
 	if slices.Contains(input.Resolution, "default") && input.Resolution[len(input.Resolution)-1] != "default" {
@@ -290,12 +279,15 @@ func validateExternalInputEvidence(config *Config, input ExternalInput, label st
 	if err != nil {
 		return err
 	}
-	if contract.Scope != "module" || len(contract.Modules) != 1 || contract.Modules[0] != input.Module || contract.Cost != "quick" || !slices.Contains(contract.RunOn, "focused") {
-		return fmt.Errorf("%s.contractSuite must name a quick focused suite owned by module %q", label, input.Module)
+	if err := validateExternalContractSuite(contract, input.Module, label); err != nil {
+		return err
 	}
 	behavior, err := referencedSuite(config.Tests.Suites, input.BehaviorSuite, label+".behaviorSuite")
 	if err != nil {
 		return err
+	}
+	if behavior.Reusable {
+		return fmt.Errorf("%s.behaviorSuite cannot be reusable because it observes an external input", label)
 	}
 	if input.ContractSuite == input.BehaviorSuite {
 		return fmt.Errorf("%s must use distinct contractSuite and behaviorSuite evidence", label)
@@ -306,10 +298,18 @@ func validateExternalInputEvidence(config *Config, input ExternalInput, label st
 	return nil
 }
 
-func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) {
-	if err := identifier(name, label); err != nil {
-		return TestSuite{}, err
+func validateExternalContractSuite(contract TestSuite, module, label string) error {
+	if contract.Reusable {
+		return fmt.Errorf("%s.contractSuite cannot be reusable because it observes an external input", label)
 	}
+	owned := contract.Scope == "module" && len(contract.Modules) == 1 && contract.Modules[0] == module
+	if !owned || contract.Cost != "quick" || !slices.Contains(contract.RunOn, "focused") {
+		return fmt.Errorf("%s.contractSuite must name a quick focused suite owned by module %q", label, module)
+	}
+	return nil
+}
+
+func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) {
 	for _, suite := range suites {
 		if suite.Name == name {
 			return suite, nil
@@ -318,63 +318,20 @@ func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) 
 	return TestSuite{}, fmt.Errorf("%s references unknown test suite %q", label, name)
 }
 
-func validateBase(config *Config) error {
-
-	if config.Version != ConfigVersion {
-		return fmt.Errorf("unsupported policy version %d; expected %d", config.Version, ConfigVersion)
-	}
-	if err := nonempty(config.Project.Kind, "project.kind"); err != nil {
-		return err
-	}
-	if err := validateUniqueStrings(config.Project.Capabilities, "project.capabilities", true); err != nil {
-		return err
-	}
-	if err := validateQuality(config.Quality); err != nil {
-		return err
-	}
-	return validateScope(config)
-}
-
-func validateQuality(quality Quality) error {
-	limits := []struct {
-		label string
-		value int
-		max   int
-	}{
-		{"quality.maxFileLines", quality.MaxFileLines, MaxFileLines},
-		{"quality.maxTestFileLines", quality.MaxTestFileLines, MaxTestFileLines},
-		{"quality.complexity.go", quality.Complexity.Go, MaxGoComplexity},
-		{"quality.complexity.goTest", quality.Complexity.GoTest, MaxGoTestComplexity},
-		{"quality.complexity.python", quality.Complexity.Python, MaxPythonComplexity},
-		{"quality.complexity.typescript", quality.Complexity.TypeScript, MaxTypeScriptComplexity},
-		{"quality.complexity.typescriptTest", quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity},
-		{"quality.maxDepth", quality.MaxDepth, MaxTypeScriptDepth},
-		{"quality.maxTestDepth", quality.MaxTestDepth, MaxTypeScriptTestDepth},
-		{"quality.maxParams", quality.MaxParams, MaxTypeScriptParams},
-		{"quality.maxTestParams", quality.MaxTestParams, MaxTypeScriptTestParams},
-	}
-	for _, limit := range limits {
-		if limit.value < 1 || limit.value > limit.max {
-			return fmt.Errorf("%s must be between 1 and %d", limit.label, limit.max)
-		}
-	}
-	return nil
-}
-
 func validateScope(config *Config) error {
-	if err := validatePatterns(config.Scope.Exclude, "scope.exclude", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.Exclude, "scope.exclude"); err != nil {
 		return err
 	}
-	if err := validatePatterns(config.Scope.Generated, "scope.generated", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.Generated, "scope.generated"); err != nil {
 		return err
 	}
 	if err := validateDataPaths(config); err != nil {
 		return err
 	}
-	if err := validatePatterns(config.Scope.Tests, "scope.tests", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.Tests, "scope.tests"); err != nil {
 		return err
 	}
-	if err := validatePatterns(config.Scope.EntryPoints, "scope.entryPoints", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.EntryPoints, "scope.entryPoints"); err != nil {
 		return err
 	}
 	if err := validateGeneratedJavaScript(config.Scope.GeneratedJavaScript); err != nil {
@@ -383,10 +340,13 @@ func validateScope(config *Config) error {
 	if err := validatePythonDynamicReferences(config.Scope.PythonDynamicReferences); err != nil {
 		return err
 	}
+	if err := validatePythonComputedImports(config.Scope.PythonComputedImports); err != nil {
+		return err
+	}
 	if err := validatePythonExternalAttributes(config.Scope.PythonExternalAttributes); err != nil {
 		return err
 	}
-	if err := validatePatterns(config.Scope.Development, "scope.development", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.Development, "scope.development"); err != nil {
 		return err
 	}
 	return validateLanguageRules(config.Scope.Languages)
@@ -397,17 +357,11 @@ func validateLanguageRules(rules []LanguageRule) error {
 	seen := map[string]bool{}
 	for index, rule := range rules {
 		label := fmt.Sprintf("scope.languages[%d]", index)
-		if err := identifier(rule.Name, label+".name"); err != nil {
-			return err
-		}
 		if seen[rule.Name] || slices.Contains(reserved, rule.Name) {
 			return fmt.Errorf("%s.name must be a unique custom language identifier", label)
 		}
 		seen[rule.Name] = true
-		if len(rule.Paths) == 0 {
-			return fmt.Errorf("%s.paths must not be empty", label)
-		}
-		if err := validatePatterns(rule.Paths, label+".paths", true); err != nil {
+		if err := rejectUniversalPatterns(rule.Paths, label+".paths"); err != nil {
 			return err
 		}
 	}
@@ -420,29 +374,11 @@ func validateChecks(config *Config) error {
 		if err := validateCommand(config, &config.Checks[index], fmt.Sprintf("checks[%d]", index), commandNames); err != nil {
 			return err
 		}
-		if len(config.Checks[index].Provides) == 0 {
-			return fmt.Errorf("checks[%d].provides must not be empty", index)
-		}
-		if err := validateUniqueStrings(config.Checks[index].Provides, fmt.Sprintf("checks[%d].provides", index), true); err != nil {
-			return err
-		}
-		if err := allowedValues(config.Checks[index].RunOn, []string{"check", "gate", "format", "build", "security", "supply-chain", "supply-chain-online"}, fmt.Sprintf("checks[%d].runOn", index)); err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
 func validateTests(config *Config) error {
-	if len(config.Tests.Suites) == 0 {
-		return errors.New("tests.suites must contain at least one deterministic suite")
-	}
-	if err := validateUniqueStrings(config.Tests.RequiredKinds, "tests.requiredKinds", true); err != nil {
-		return err
-	}
-	if err := validateUniqueStrings(config.Tests.RequiredSupplementalKinds, "tests.requiredSupplementalKinds", true); err != nil {
-		return err
-	}
 	suiteNames := map[string]bool{}
 	for index := range config.Tests.Suites {
 		if err := validateTestSuite(config, &config.Tests.Suites[index], index, suiteNames); err != nil {
@@ -461,22 +397,19 @@ func validateTestSuite(config *Config, suite *TestSuite, index int, names map[st
 	if err := validateTestCommandArgv(suite.Argv, label); err != nil {
 		return err
 	}
-	if err := identifier(suite.Kind, label+".kind"); err != nil {
-		return err
-	}
 	if err := validateTestEvidence(suite, label); err != nil {
 		return err
 	}
-	if err := validatePatterns(suite.ExtraInputs, label+".extraInputs", false); err != nil {
-		return err
-	}
-	if err := validateUniqueStrings(suite.Covers, label+".covers", true); err != nil {
-		return err
+	if suite.Reusable && len(suite.ExclusiveResources) > 0 {
+		return fmt.Errorf("%s.reusable requires no external exclusive resources", label)
 	}
 	if err := validateTestArtifacts(suite.Artifacts, label); err != nil {
 		return err
 	}
-	return validateTestProfiles(suite, label)
+	if suite.Kind == "live" {
+		return fmt.Errorf("%s.kind live requires a typed external approval gate and cannot be an automatic test suite", label)
+	}
+	return nil
 }
 
 func validateTestCoverageRelations(suites []TestSuite) error {
@@ -517,6 +450,9 @@ func validateTestCoverageRelations(suites []TestSuite) error {
 
 func validateTestCoverageCompatibility(covering, target TestSuite) error {
 	label := fmt.Sprintf("test suite %q cannot cover %q", covering.Name, target.Name)
+	if covering.Reusable && !target.Reusable {
+		return fmt.Errorf("%s because a reusable result cannot satisfy an unbounded suite", label)
+	}
 	if slices.Contains(covering.RunOn, "supplemental") != slices.Contains(target.RunOn, "supplemental") {
 		return fmt.Errorf("%s across ordinary and supplemental profiles", label)
 	}
@@ -559,65 +495,9 @@ func artifactSetContains(container, required []TestArtifact) bool {
 	return true
 }
 
-func validateTestProfiles(suite *TestSuite, label string) error {
-	if suite.Kind == "live" {
-		return fmt.Errorf("%s.kind live requires a typed external approval gate and cannot be an automatic test suite", label)
-	}
-	if err := allowedValues([]string{suite.Cost}, []string{"quick", "standard", "expensive"}, label+".cost"); err != nil {
-		return err
-	}
-	if err := allowedValues(suite.RunOn, []string{"focused", "recommended", "full", "supplemental"}, label+".runOn"); err != nil {
-		return err
-	}
-	if err := validateSupplementalProfile(suite, label); err != nil {
-		return err
-	}
-	return validateNestedTestProfiles(suite, label)
-}
-
-func validateSupplementalProfile(suite *TestSuite, label string) error {
-	if slices.Contains(suite.RunOn, "supplemental") {
-		if len(suite.RunOn) != 1 {
-			return fmt.Errorf("%s.runOn must contain only supplemental when supplemental is selected", label)
-		}
-		if suite.Cost != "expensive" {
-			return fmt.Errorf("%s.cost must be expensive when runOn contains supplemental", label)
-		}
-	}
-	if supplementalOnlyKind(suite.Kind) && !slices.Contains(suite.RunOn, "supplemental") {
-		return fmt.Errorf("%s.runOn must be supplemental for %s evidence", label, suite.Kind)
-	}
-	return nil
-}
-
-func validateNestedTestProfiles(suite *TestSuite, label string) error {
-	if slices.Contains(suite.RunOn, "focused") && suite.Cost != "quick" {
-		return fmt.Errorf("%s.cost must be quick when runOn contains focused", label)
-	}
-	if slices.Contains(suite.RunOn, "focused") && !slices.Contains(suite.RunOn, "recommended") {
-		return fmt.Errorf("%s.runOn must include recommended when it includes focused", label)
-	}
-	if slices.Contains(suite.RunOn, "recommended") && !slices.Contains(suite.RunOn, "full") {
-		return fmt.Errorf("%s.runOn must include full when it includes recommended", label)
-	}
-	if slices.Contains(suite.RunOn, "recommended") && suite.Cost == "expensive" {
-		return fmt.Errorf("%s.cost cannot be expensive when runOn contains recommended", label)
-	}
-	return nil
-}
-
 func validateTestEvidence(suite *TestSuite, label string) error {
 	if slices.Contains([]string{"none", "noop", "skip", "skipped"}, suite.Kind) {
 		return fmt.Errorf("%s.kind must describe executed evidence, not a skip", label)
-	}
-	if suite.Scope != "module" && suite.Scope != "repository" {
-		return fmt.Errorf("%s.scope must be module or repository", label)
-	}
-	if suite.Scope == "module" && len(suite.Modules) != 1 {
-		return fmt.Errorf("%s.modules must name exactly one module; cross-module suites use repository scope", label)
-	}
-	if suite.Scope == "repository" && len(suite.Modules) > 0 {
-		return fmt.Errorf("%s.modules must be empty for a repository suite; use paths for focused triggers", label)
 	}
 	return nil
 }
@@ -656,18 +536,6 @@ func validateCommand(config *Config, command *Command, label string, names map[s
 	if err := validateCommandArgv(command.Argv, label); err != nil {
 		return err
 	}
-	if err := repositoryPath(command.Cwd, label+".cwd", false); err != nil {
-		return err
-	}
-	if command.TimeoutSeconds < 1 || command.TimeoutSeconds > 3600 {
-		return fmt.Errorf("%s.timeoutSeconds must be between 1 and 3600", label)
-	}
-	if err := validatePatterns(command.Paths, label+".paths", false); err != nil {
-		return err
-	}
-	if err := validateEnvironment(command.Environment, label+".environment"); err != nil {
-		return err
-	}
 	if err := ValidateExclusiveResources(command.ExclusiveResources); err != nil {
 		return fmt.Errorf("%s.exclusiveResources: %w", label, err)
 	}
@@ -689,22 +557,7 @@ func ValidateExclusiveResources(resources []string) error {
 	return nil
 }
 
-func validateEnvironment(values []string, label string) error {
-	if err := validateUniqueStrings(values, label, false); err != nil {
-		return err
-	}
-	for _, value := range values {
-		if !environmentNamePattern.MatchString(value) {
-			return fmt.Errorf("%s contains invalid environment variable name %q", label, value)
-		}
-	}
-	return nil
-}
-
 func validateCommandIdentity(command *Command, label string, names map[string]bool) error {
-	if err := identifier(command.Name, label+".name"); err != nil {
-		return err
-	}
 	if names[command.Name] {
 		return fmt.Errorf("duplicate command or suite name %q", command.Name)
 	}
@@ -713,27 +566,16 @@ func validateCommandIdentity(command *Command, label string, names map[string]bo
 }
 
 func validateCommandArgv(argv []string, label string) error {
-	if len(argv) == 0 {
-		return fmt.Errorf("%s.argv must not be empty", label)
-	}
-	for index, argument := range argv {
-		if err := nonempty(argument, fmt.Sprintf("%s.argv[%d]", label, index)); err != nil {
-			return err
-		}
-	}
 	if shellEvaluation(argv) {
 		return fmt.Errorf("%s.argv must call a checked-in script instead of shell -c", label)
 	}
 	if strings.ContainsAny(argv[0], "/\\") {
-		return repositoryPath(argv[0], label+".argv[0]", false)
+		return repositoryPath(argv[0], label+".argv[0]")
 	}
 	return nil
 }
 
 func validateCommandModules(config *Config, modules []string, label string) error {
-	if err := validateUniqueStrings(modules, label+".modules", true); err != nil {
-		return err
-	}
 	for _, module := range modules {
 		if _, exists := config.ModuleByName[module]; !exists {
 			return fmt.Errorf("%s references unknown module %q", label, module)
@@ -766,12 +608,6 @@ func validatePolicyModules(modules PolicyModules) error {
 }
 
 func validatePolicyModuleIdentity(override PolicyModuleOverride, label string, seen map[string]bool) error {
-	if !slices.Contains([]string{"electron", "osv", "react", "ruff", "ty", "vulture"}, override.Name) {
-		return fmt.Errorf("%s.name is not a supported conditional policy module", label)
-	}
-	if err := repositoryPath(override.Root, label+".root", false); err != nil {
-		return err
-	}
 	key := override.Name + "\x00" + override.Root
 	if seen[key] {
 		return fmt.Errorf("duplicate policy module override %q at %q", override.Name, override.Root)
@@ -781,28 +617,13 @@ func validatePolicyModuleIdentity(override PolicyModuleOverride, label string, s
 }
 
 func validatePolicyModuleMode(override PolicyModuleOverride, label string, now time.Time) error {
-	if override.Mode != "enabled" && override.Mode != "disabled" {
-		return fmt.Errorf("%s.mode must be enabled or disabled", label)
-	}
 	if override.Mode == "enabled" {
-		if override.Reason != "" || override.Owner != "" || !override.Expires.IsZero() {
-			return fmt.Errorf("%s enabled override must not contain exception metadata", label)
-		}
 		return nil
 	}
 	return validateDisabledPolicyModule(override, label, now)
 }
 
 func validateDisabledPolicyModule(override PolicyModuleOverride, label string, now time.Time) error {
-	if err := nonempty(override.Reason, label+".reason"); err != nil {
-		return err
-	}
-	if err := nonempty(override.Owner, label+".owner"); err != nil {
-		return err
-	}
-	if override.Expires.IsZero() {
-		return fmt.Errorf("%s.expires must use YYYY-MM-DD", label)
-	}
 	if override.Expires.Before(now) {
 		return fmt.Errorf("%s.expires has expired", label)
 	}
@@ -829,30 +650,11 @@ func validateExceptions(exceptions []Exception) error {
 }
 
 func validateException(exception Exception, label string, now time.Time) error {
-	if err := identifier(exception.ID, label+".id"); err != nil {
-		return err
-	}
-	for name, value := range map[string]string{"check": exception.Check, "path": exception.Path, "subject": exception.Subject, "reason": exception.Reason, "owner": exception.Owner} {
-		if err := nonempty(value, label+"."+name); err != nil {
-			return err
-		}
-	}
-	if strings.ContainsAny(exception.Check+exception.Path+exception.Subject, "*?[]") {
-		return fmt.Errorf("%s must be exact; wildcard exceptions are forbidden", label)
-	}
 	if strings.HasPrefix(exception.Check, "policy.") {
 		return fmt.Errorf("%s.check cannot suppress policy findings", label)
 	}
 	if !suppressibleCheck(exception.Check) {
 		return fmt.Errorf("%s.check must name an architecture, command, quality, supplyChain, or test finding", label)
-	}
-	if exception.Path != "repository" {
-		if err := repositoryPath(exception.Path, label+".path", false); err != nil {
-			return err
-		}
-	}
-	if exception.Expires.IsZero() {
-		return fmt.Errorf("%s.expires must use YYYY-MM-DD", label)
 	}
 	if exception.Expires.After(now.AddDate(0, 0, MaximumExceptionDays)) {
 		return fmt.Errorf("%s.expires must be within %d days", label, MaximumExceptionDays)
@@ -883,26 +685,17 @@ func suppressibleCheck(check string) bool {
 	return false
 }
 
-func validatePatterns(patterns []string, label string, rejectUniversal bool) error {
-	if err := validateUniqueStrings(patterns, label, false); err != nil {
-		return err
-	}
+func rejectUniversalPatterns(patterns []string, label string) error {
 	for _, pattern := range patterns {
-		if err := repositoryPath(pattern, label, true); err != nil {
-			return err
-		}
 		normalized := strings.Trim(strings.TrimPrefix(pattern, "./"), "/")
-		if rejectUniversal && slices.Contains([]string{"*", "**", "**/*", "*/**", "**/**"}, normalized) {
+		if slices.Contains([]string{"*", "**", "**/*", "*/**", "**/**"}, normalized) {
 			return fmt.Errorf("%s cannot hide the entire repository", label)
 		}
 	}
 	return nil
 }
 
-func repositoryPath(value, label string, allowGlob bool) error {
-	if err := nonempty(value, label); err != nil {
-		return err
-	}
+func repositoryPath(value, label string) error {
 	if strings.Contains(value, "\\") {
 		return fmt.Errorf("%s must use portable '/' separators", label)
 	}
@@ -914,52 +707,8 @@ func repositoryPath(value, label string, allowGlob bool) error {
 			return fmt.Errorf("%s must stay inside the repository", label)
 		}
 	}
-	if !allowGlob && strings.ContainsAny(value, "*?[]") {
+	if strings.ContainsAny(value, "*?[]") {
 		return fmt.Errorf("%s must be a concrete repository path", label)
-	}
-	return nil
-}
-
-func concreteRepositoryPath(value, label string) error {
-	if err := repositoryPath(value, label, false); err != nil {
-		return err
-	}
-	if strings.HasPrefix(value, "./") || pathpkg.Clean(value) != value {
-		return fmt.Errorf("%s must use one canonical repository-relative path", label)
-	}
-	return nil
-}
-
-func allowedValues(values, allowed []string, label string) error {
-	if len(values) == 0 {
-		return fmt.Errorf("%s must not be empty", label)
-	}
-	if err := validateUniqueStrings(values, label, false); err != nil {
-		return err
-	}
-	for _, value := range values {
-		if !slices.Contains(allowed, value) {
-			return fmt.Errorf("%s contains unsupported value %q", label, value)
-		}
-	}
-	return nil
-}
-
-func validateUniqueStrings(values []string, label string, validateIDs bool) error {
-	seen := map[string]bool{}
-	for index, value := range values {
-		if err := nonempty(value, fmt.Sprintf("%s[%d]", label, index)); err != nil {
-			return err
-		}
-		if validateIDs {
-			if err := identifier(value, fmt.Sprintf("%s[%d]", label, index)); err != nil {
-				return err
-			}
-		}
-		if seen[value] {
-			return fmt.Errorf("%s must not contain duplicate %q", label, value)
-		}
-		seen[value] = true
 	}
 	return nil
 }

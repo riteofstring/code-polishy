@@ -26,11 +26,11 @@ func TestScopeGeneratedJavaScriptRejectsBroadOrInexactOwnership(t *testing.T) {
 		declaration string
 		want        string
 	}{
-		"empty paths":      {`{"paths":[],"sourcePackage":"package.json"}`, "paths must not be empty"},
+		"empty paths":      {`{"paths":[],"sourcePackage":"package.json"}`, schemaRejection},
 		"universal paths":  {`{"paths":["**/*"],"sourcePackage":"package.json"}`, "cannot hide the entire repository"},
-		"globbed package":  {`{"paths":["generated/**"],"sourcePackage":"packages/*/package.json"}`, "concrete repository path"},
-		"wrong manifest":   {`{"paths":["generated/**"],"sourcePackage":"packages/app/project.json"}`, "exact package.json"},
-		"unknown property": {`{"paths":["generated/**"],"sourcePackage":"package.json","module":"app"}`, "unknown field"},
+		"globbed package":  {`{"paths":["generated/**"],"sourcePackage":"packages/*/package.json"}`, schemaRejection},
+		"wrong manifest":   {`{"paths":["generated/**"],"sourcePackage":"packages/app/project.json"}`, schemaRejection},
+		"unknown property": {`{"paths":["generated/**"],"sourcePackage":"package.json","module":"app"}`, schemaRejection},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {

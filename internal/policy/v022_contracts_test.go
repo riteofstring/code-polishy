@@ -23,8 +23,8 @@ func TestTestArtifactContractsRejectUnsafeDeclarations(t *testing.T) {
 	cases := []struct {
 		name, from, to, want string
 	}{
-		{name: "artifact traversal", from: `"argv":["go","test","./..."]`, to: `"argv":["go","test","./..."],"artifacts":[{"path":"../junit.xml","type":"junit"}]`, want: "stay inside"},
-		{name: "artifact type", from: `"argv":["go","test","./..."]`, to: `"argv":["go","test","./..."],"artifacts":[{"path":"result.xml","type":"coverage"}]`, want: "unsupported value"},
+		{name: "artifact traversal", from: `"argv":["go","test","./..."]`, to: `"argv":["go","test","./..."],"artifacts":[{"path":"../junit.xml","type":"junit"}]`, want: schemaRejection},
+		{name: "artifact type", from: `"argv":["go","test","./..."]`, to: `"argv":["go","test","./..."],"artifacts":[{"path":"result.xml","type":"coverage"}]`, want: schemaRejection},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

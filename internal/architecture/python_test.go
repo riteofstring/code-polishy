@@ -1,7 +1,10 @@
 package architecture
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,9 +18,10 @@ import (
 )
 
 type pythonGraphRunner struct {
-	outputs  map[string]string
-	commands []policy.Command
-	err      error
+	outputs     map[string]string
+	diagnostics map[string]string
+	commands    []policy.Command
+	err         error
 }
 
 func (graphRunner *pythonGraphRunner) Run(context.Context, string, policy.Command) error {
@@ -33,7 +37,50 @@ func (graphRunner *pythonGraphRunner) RunStructured(_ context.Context, _ string,
 	if !found {
 		return runner.Result{}, runner.Output{}, errors.New("no graph output was configured")
 	}
-	return runner.Result{}, runner.Output{Stdout: []byte(output)}, nil
+	return runner.Result{}, runner.Output{Stdout: []byte(output), Stderr: []byte(graphRunner.diagnostics[command.Cwd])}, nil
+}
+
+func TestRuffGraphFactsAreVersionedBoundedAndPathNormalized(t *testing.T) {
+	t.Parallel()
+	fixtures := map[string]string{
+		"linux":   `{"src/app.py":["src/domain/model.py"]}`,
+		"macos":   `{"src/app.py":["src/domain/model.py"]}`,
+		"windows": `{"src\\app.py":["src\\domain\\model.py"]}`,
+	}
+	for platform, fixture := range fixtures {
+		facts, err := adaptPythonGraph([]byte(fixture))
+		if err != nil {
+			t.Fatalf("%s: %v", platform, err)
+		}
+		if facts.Protocol != pythonGraphProtocol || facts.RuffVersion != pythonGraphRuffVersion ||
+			len(facts.Graph) != 1 || len(facts.Graph["src/app.py"]) != 1 || facts.Graph["src/app.py"][0] != "src/domain/model.py" {
+			t.Fatalf("%s facts = %+v", platform, facts)
+		}
+	}
+	invalid := [][]byte{
+		[]byte(`{"src\\app.py":[],"src/app.py":[]}`),
+		[]byte(`{"src/app.py":["src\\model.py","src/model.py"]}`),
+		[]byte(`{"src/app.py":{"target":true}}`),
+		[]byte(`{"src/app.py":[],"newShape":true}`),
+		bytes.Repeat([]byte(" "), pythonGraphMaximumBytes+1),
+	}
+	for _, candidate := range invalid {
+		if _, err := adaptPythonGraph(candidate); err == nil {
+			t.Fatalf("invalid graph was accepted: %.100q", candidate)
+		}
+	}
+}
+
+func TestPythonArchitectureRejectsRuffDiagnostics(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	writeArchitectureFile(t, repo.Root, "src/app.py", "value = 1\n")
+	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/app.py":[]}`}, diagnostics: map[string]string{".": "warning"}}
+	findings := CheckWithRunner(t.Context(), repo, []string{"src/app.py"}, graphRunner)
+	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" || !strings.Contains(findings[0].Message, "emitted diagnostics") {
+		t.Fatalf("findings = %+v", findings)
+	}
 }
 
 func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *testing.T) {
@@ -109,6 +156,7 @@ func assertPythonGraphCommand(t *testing.T, repo repository.Repository, commands
 		{"sealed environment", command.SealedEnvironment},
 		{"timeout", command.TimeoutSeconds == 900},
 		{"policy Ruff", command.Argv[0] == repo.PolicyTool("ruff")},
+		{"protocol identity", strings.HasPrefix(command.Name, "ruff-graph-facts-v1-ruff-"+pythonGraphRuffVersion+"-")},
 	}
 	for _, check := range checks {
 		if !check.valid {
@@ -268,7 +316,7 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 			name:    "nonliteral dynamic import",
 			source:  "import importlib\nimportlib.import_module(module_name)\n",
 			output:  `{"src/web/app.py":[]}`,
-			message: "dynamic Python import cannot be proven",
+			message: "computed Python import has no exact scope.pythonComputedImports declaration",
 		},
 	}
 	for _, testCase := range cases {
@@ -294,7 +342,7 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 
 func TestPythonGraphFindingsRejectsOmittedSource(t *testing.T) {
 	t.Parallel()
-	findings := pythonGraphFindings(repository.Repository{}, repository.PythonProject{}, []string{"source.py"}, nil, nil, pythonGraph{})
+	findings := pythonGraphFindings(repository.Repository{}, repository.PythonProject{}, []string{"source.py"}, nil, nil, pythonGraph{}, nil)
 	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" || findings[0].Path != "source.py" || !strings.Contains(findings[0].Message, "omitted this selected Python source") {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -314,21 +362,21 @@ func TestPythonArchitectureCoversAliasedDynamicImportsWithoutGuessing(t *testing
 			source:   "import importlib as il\nil.import_module(module_name)\n",
 			output:   `{"src/web/app.py":[]}`,
 			findings: 1,
-			message:  "dynamic Python import cannot be proven",
+			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
 		},
 		{
 			name:     "function alias with nonliteral argument",
 			source:   "from importlib import import_module as load\nload(module_name)\n",
 			output:   `{"src/web/app.py":[]}`,
 			findings: 1,
-			message:  "dynamic Python import cannot be proven",
+			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
 		},
 		{
 			name:     "nested module import binds importlib",
 			source:   "import importlib.util\nimportlib.import_module(module_name)\n",
 			output:   `{"src/web/app.py":[]}`,
 			findings: 1,
-			message:  "dynamic Python import cannot be proven",
+			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
 		},
 		{
 			name:   "module alias with literal argument",
@@ -371,6 +419,34 @@ func TestPythonArchitectureCoversAliasedDynamicImportsWithoutGuessing(t *testing
 				t.Fatalf("findings = %+v", findings)
 			}
 		})
+	}
+}
+
+func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{
+		{Name: "plugins", Paths: []string{"src/app/plugins/**"}},
+		{Name: "application", Paths: []string{"src/app/loader.py"}},
+	})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	writeArchitectureFile(t, repo.Root, "src/app/plugins/first.py", "value = 1\n")
+	source := []byte("import importlib\nimportlib.import_module((\"app.plugins.first\",)[choice])\n")
+	writeArchitectureFile(t, repo.Root, "src/app/loader.py", string(source))
+	fact := pythonComputedTestFact(t, "src/app/loader.py", source).ComputedImports[0]
+	digest := sha256.Sum256(source)
+	repo.Config.Scope.PythonComputedImports = []policy.PythonComputedImport{{
+		Project: "pyproject.toml", Importer: "src/app/loader.py", Module: "app.loader", ModuleScope: true,
+		Callee: fact.Callee, Line: fact.Line, Column: fact.Column, Shape: fact.Shape, Argument: fact.Argument,
+		SourceSHA256: hex.EncodeToString(digest[:]), Namespace: "app.plugins", Targets: []string{"app.plugins.first"},
+	}}
+	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/app/loader.py":[]}`}}
+	findings := CheckWithRunner(t.Context(), repo, []string{"src/app/loader.py"}, graphRunner)
+	if len(findings) != 1 || findings[0].Check != "architecture.moduleDependency" || findings[0].Subject != "plugins" {
+		t.Fatalf("findings = %+v", findings)
+	}
+	repo.Config.Modules[1].DependsOn = []string{"plugins"}
+	if findings := CheckWithRunner(t.Context(), repo, []string{"src/app/loader.py"}, graphRunner); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
 	}
 }
 
@@ -500,7 +576,9 @@ func pythonArchitectureRepository(t *testing.T, modules []policy.Module) reposit
 	for index, module := range modules {
 		config.ModuleByName[module.Name] = index
 	}
-	return repository.Repository{Root: t.TempDir(), PolicyRoot: t.TempDir(), Config: config}
+	policyRoot := t.TempDir()
+	writeArchitectureFile(t, policyRoot, "tools/ruff-version.txt", pythonGraphRuffVersion+"\n")
+	return repository.Repository{Root: t.TempDir(), PolicyRoot: policyRoot, Config: config}
 }
 
 func slicesIndex(values []string, target string) int {

@@ -49,7 +49,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 		SourceRevision: revision, Host: host, Features: []string{"javascript-bundle"},
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
 			Ty: "0.0.65", Vulture: "2.16",
 		},
 		Entries: []release.Entry{
@@ -97,6 +97,12 @@ func (installed store) installHistorical(t *testing.T, version int, revision, en
 	if version >= 3 {
 		tools.Ty = "0.0.65"
 		toolDocument["ty"] = tools.Ty
+	}
+	if version >= 4 {
+		tools.Python = "3.12.13+20260728"
+		tools.Vulture = "2.16"
+		toolDocument["python"] = tools.Python
+		toolDocument["vulture"] = tools.Vulture
 	}
 	manifest := release.Manifest{
 		ManifestVersion: version, CodePolishyVersion: "9.9.9", SourceRevision: revision,
@@ -237,7 +243,7 @@ func TestLauncherRunsTheReleaseTheLockNames(t *testing.T) {
 
 func TestLauncherRunsInstalledReleasesWithHistoricalManifests(t *testing.T) {
 	installed := newStore(t)
-	for _, version := range []int{2, 3} {
+	for _, version := range []int{2, 3, 4} {
 		lock := installed.installHistorical(t, version, exampleRevision(version), engineBytes)
 		status, stderr, argv := launcherIn(t, installed, repositoryWith(t, &lock), "version")
 		if status != 0 || len(argv) == 0 {

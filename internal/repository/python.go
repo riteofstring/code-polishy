@@ -63,19 +63,21 @@ func (source PythonGitSource) SameRepository(other PythonGitSource) bool {
 }
 
 type PythonRequirement struct {
-	Raw        string
-	Name       string
-	Extras     []string
-	Marker     string
-	Kind       PythonRequirementKind
-	Version    string
-	Specifiers []PythonVersionSpecifier
-	URL        string
-	FilePath   string
-	Git        PythonGitSource
-	Usage      string
-	Location   PythonRequirementLocation
-	markerKey  string
+	Raw            string
+	Name           string
+	Extras         []string
+	Marker         string
+	Kind           PythonRequirementKind
+	Version        string
+	Specifiers     []PythonVersionSpecifier
+	URL            string
+	FilePath       string
+	Git            PythonGitSource
+	Usage          string
+	Location       PythonRequirementLocation
+	markerKey      string
+	markerVariable string
+	markerValue    string
 }
 
 func (requirement PythonRequirement) ExactRegistryVersion() (string, bool) {
@@ -83,7 +85,7 @@ func (requirement PythonRequirement) ExactRegistryVersion() (string, bool) {
 		return "", false
 	}
 	specifier := requirement.Specifiers[0]
-	if specifier.Operator != "==" || strings.Contains(specifier.Version, "*") || !validPythonVersion(specifier.Version) {
+	if specifier.Operator != "==" || strings.Contains(specifier.Version, "*") {
 		return "", false
 	}
 	return specifier.Version, true

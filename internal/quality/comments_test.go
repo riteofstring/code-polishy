@@ -1,11 +1,22 @@
 package quality
 
 import (
+	"bytes"
 	"slices"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+func TestShellSourceParserIsByteBounded(t *testing.T) {
+	t.Parallel()
+	if _, err := scanShellSource(bytes.Repeat([]byte{' '}, maximumShellSourceBytes+1)); err == nil {
+		t.Fatal("oversized shell source was accepted")
+	}
+	if _, err := scanShellSource([]byte{0xff}); err == nil {
+		t.Fatal("invalid UTF-8 shell source was accepted")
+	}
+}
 
 func TestSourceCommentFindingsRejectRealAnnotations(t *testing.T) {
 	t.Parallel()
@@ -165,6 +176,7 @@ func TestSourceCommentAllowedMachineInputs(t *testing.T) {
 		{"shell-sbatch", "sample/job.sbatch", "#!/usr/bin/env bash\n\n#SBATCH --job-name=sample\n#SBATCH --time=00:05:00\nprintf '%s\\n' value\n", ""},
 		{"shell-source-dynamic", "sample/main.sh", "# shellcheck source=lib/source.sh\nsource \"${policy_root}/lib/source.sh\"\n", "lib/source.sh"},
 		{"shell-dot-dynamic", "sample/dot.sh", "# shellcheck source=lib/source.sh\n. \"$(pwd)/lib/source.sh\"\n", "lib/source.sh"},
+		{"shell-source-continuation", "sample/continued.sh", "# shellcheck source=lib/source.sh\nsource \\\n  \"${policy_root}/lib/source.sh\"\n", "lib/source.sh"},
 		{"powershell-shebang", "sample/main.ps1", "#!pwsh\n$value = 1\n", ""},
 	}
 	for _, testCase := range cases {

@@ -947,7 +947,7 @@ func TestMergeGateContinuesItsPlannedCommandsAfterAValidPreservedBehaviorReviewR
 }
 
 func TestMergeGateResumeReusesOnlyPassedOrdinaryTestsFromIdenticalFailedRun(t *testing.T) {
-	root := requiredBehaviorReviewCandidate(t)
+	root := requiredBehaviorReviewCandidateWithReuse(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -984,7 +984,7 @@ func TestMergeGateResumeReusesOnlyPassedOrdinaryTestsFromIdenticalFailedRun(t *t
 }
 
 func TestMergeGateResumeReplaysBehaviorProofInsteadOfReusingIt(t *testing.T) {
-	root := requiredBehaviorReviewCandidate(t)
+	root := requiredBehaviorReviewCandidateWithReuse(t)
 	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -1175,8 +1175,19 @@ func mergeGateCommandCount(commands []MergeGateExecutionCommand, name string) in
 }
 
 func requiredBehaviorReviewCandidate(t *testing.T) string {
+	return requiredBehaviorReviewCandidateConfigured(t, false)
+}
+
+func requiredBehaviorReviewCandidateWithReuse(t *testing.T) string {
+	return requiredBehaviorReviewCandidateConfigured(t, true)
+}
+
+func requiredBehaviorReviewCandidateConfigured(t *testing.T, reusable bool) string {
 	t.Helper()
 	root := contentRepository(t, nil)
+	if reusable {
+		enableReusableContentSuites(t, root)
+	}
 	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)

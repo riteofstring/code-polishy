@@ -16,8 +16,6 @@ func TestPythonRuffTargetVersionUsesMinimumSupportedMinor(t *testing.T) {
 		{requiresPython: ">=3.11", want: "py311"},
 		{requiresPython: ">3.11.4", want: "py311"},
 		{requiresPython: "~=3.10.2", want: "py310"},
-		{requiresPython: ">=3.12, !=3.12.*", want: "py313"},
-		{requiresPython: ">=3.15", want: "py315"},
 	}
 	for _, test := range tests {
 		test := test
@@ -33,7 +31,7 @@ func TestPythonRuffTargetVersionUsesMinimumSupportedMinor(t *testing.T) {
 
 func TestPythonRuffTargetVersionRejectsIndeterminateOrUnsupportedRanges(t *testing.T) {
 	t.Parallel()
-	for _, requiresPython := range []string{"", "<3.12", ">=3.6", ">=3.16", ">=3.12rc1", ">=3.12, <3.12"} {
+	for _, requiresPython := range []string{"", "<3.12", ">=3.6", ">=3.13", ">=3.15", ">=3.16", ">=3.12rc1", ">=3.12, <3.12", ">=3.12, !=3.12.*"} {
 		requiresPython := requiresPython
 		t.Run(requiresPython, func(t *testing.T) {
 			t.Parallel()

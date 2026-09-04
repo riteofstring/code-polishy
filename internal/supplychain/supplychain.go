@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	workflowfacts "github.com/riteofstring/code-polishy/internal/workflow"
 )
 
 var (
@@ -23,7 +24,6 @@ var (
 	fullCommit   = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 	fullDigest   = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 	goVersion    = regexp.MustCompile(`^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	workflowUses = regexp.MustCompile(`^(?:-\s*)?uses\s*:\s*(.+)$`)
 )
 
 type nodeManifest struct {
@@ -742,33 +742,43 @@ func checkWorkflowPins(repo repository.Repository, path string) []policy.Finding
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.workflow", Path: path, Subject: path, Message: err.Error()}}
 	}
+	facts, err := workflowfacts.Parse(path, data)
+	if err != nil {
+		return []policy.Finding{{Check: "supplyChain.workflow", Path: path, Subject: path, Message: err.Error()}}
+	}
 	findings := []policy.Finding{}
-	for lineNumber, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(strings.SplitN(raw, "#", 2)[0])
-		match := workflowUses.FindStringSubmatch(line)
-		if len(match) != 2 {
-			continue
+	for _, job := range facts.Jobs {
+		if job.Uses != "" {
+			findings = append(findings, workflowUseFindings(path, job.Uses, job.Line)...)
 		}
-		value := strings.Trim(strings.TrimSpace(match[1]), `"'`)
-		if strings.HasPrefix(value, "./") {
-			continue
-		}
-		if strings.HasPrefix(value, "docker://") {
-			digest := ""
-			if _, after, found := strings.Cut(value, "@"); found {
-				digest = after
+		for _, step := range job.Steps {
+			if step.Uses != "" {
+				findings = append(findings, workflowUseFindings(path, step.Uses, step.Line)...)
 			}
-			if !fullDigest.MatchString(digest) {
-				findings = append(findings, policy.Finding{Check: "supplyChain.workflowPin", Path: path, Subject: value, Message: fmt.Sprintf("line %d Docker action must use a full sha256 digest", lineNumber+1)})
-			}
-			continue
-		}
-		_, reference, found := strings.Cut(value, "@")
-		if !found || !fullCommit.MatchString(reference) {
-			findings = append(findings, policy.Finding{Check: "supplyChain.workflowPin", Path: path, Subject: value, Message: fmt.Sprintf("line %d GitHub Action must use a full 40-character commit", lineNumber+1)})
 		}
 	}
 	return findings
+}
+
+func workflowUseFindings(path, value string, line int) []policy.Finding {
+	if strings.HasPrefix(value, "./") {
+		return nil
+	}
+	if strings.HasPrefix(value, "docker://") {
+		digest := ""
+		if _, after, found := strings.Cut(value, "@"); found {
+			digest = after
+		}
+		if !fullDigest.MatchString(digest) {
+			return []policy.Finding{{Check: "supplyChain.workflowPin", Path: path, Subject: value, Message: fmt.Sprintf("line %d Docker action must use a full sha256 digest", line)}}
+		}
+		return nil
+	}
+	_, reference, found := strings.Cut(value, "@")
+	if !found || !fullCommit.MatchString(reference) {
+		return []policy.Finding{{Check: "supplyChain.workflowPin", Path: path, Subject: value, Message: fmt.Sprintf("line %d GitHub Action must use a full 40-character commit", line)}}
+	}
+	return nil
 }
 
 func checkContainerPins(repo repository.Repository, path string) []policy.Finding {
@@ -854,31 +864,6 @@ func parsePythonDependencies(text string) []string {
 		dependencies = append(dependencies, requirement.Raw)
 	}
 	return dependencies
-}
-
-func stripTOMLComment(line string) string {
-	quote := byte(0)
-	escaped := false
-	for index := 0; index < len(line); index++ {
-		character := line[index]
-		if quote != 0 {
-			if quote == '"' && character == '\\' && !escaped {
-				escaped = true
-				continue
-			}
-			if character == quote && !escaped {
-				quote = 0
-			}
-			escaped = false
-			continue
-		}
-		if character == '"' || character == '\'' {
-			quote = character
-		} else if character == '#' {
-			return line[:index]
-		}
-	}
-	return line
 }
 
 func localProtocol(version string, allowed []string) bool {

@@ -121,9 +121,11 @@ task slice and its base. This advisory data never changes merge selection.
 
 An identical passed merge-gate identity reports `already-passed` and executes no
 validation commands. A new gate automatically reuses successful suite receipts
-only when their complete release, platform, toolchain, command, configuration,
-environment, ownership, and file-input identities still match. All non-test
-phases, behavior-proof replays, failed commands, and unbounded suites execute.
+only when the suite explicitly declares `reusable: true`, its sealed read-only
+execution view was enforced, and its complete release, platform, toolchain,
+command, configuration, environment, ownership, and file-input identities still
+match. All non-test phases, behavior-proof replays, failed commands, and
+non-reusable suites execute.
 
 Use `code-polishy merge-gate --base <merge-target> --resume` only to retry an
 otherwise-identical failed merge gate. It can additionally resume successful

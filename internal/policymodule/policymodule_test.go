@@ -397,14 +397,26 @@ func installPinnedPythonVulture(t *testing.T, root string) {
 
 func installFakePythonRuntime(t *testing.T, root, pythonVersion, vultureVersion string) {
 	t.Helper()
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	carriedPython := (repository.Repository{PolicyRoot: filepath.Clean(filepath.Join(workingDirectory, "../.."))}).PythonTool()
+	if info, err := os.Stat(carriedPython); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("carried Python unavailable at %s: %v", carriedPython, err)
+	}
 	path := (repository.Repository{PolicyRoot: root}).PythonTool()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	contents := "#!/bin/sh\nif [ \"$1\" != \"-I\" ] || [ \"$2\" != \"-B\" ] || [ \"$3\" != \"-c\" ]; then\n  exit 1\nfi\ncase \"$4\" in\n  *sys.version_info*) printf '%s\\n' '" + pythonVersion + "' ;;\n  *importlib.metadata*) printf '%s\\n' '" + vultureVersion + "' ;;\n  *) exit 1 ;;\nesac\n"
+	contents := "#!/bin/sh\nif [ \"$1\" != \"-I\" ] || [ \"$2\" != \"-B\" ] || [ \"$3\" != \"-c\" ]; then\n  exit 1\nfi\nif [ \"$4\" = 'import sys; print(\".\".join(str(value) for value in sys.version_info[:3]))' ]; then\n  printf '%s\\n' '" + pythonVersion + "'\nelif [ \"$4\" = 'import importlib.metadata; print(importlib.metadata.version(\"vulture\"))' ]; then\n  printf '%s\\n' '" + vultureVersion + "'\nelse\n  exec " + shellSingleQuote(carriedPython) + " \"$@\"\nfi\n"
 	if err := os.WriteFile(path, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func writeModuleFile(t *testing.T, root, path, contents string) {

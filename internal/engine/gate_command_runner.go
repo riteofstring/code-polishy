@@ -164,6 +164,13 @@ func (commandRunner *gateArtifactRunner) ReceiptNotes() []string {
 	return commandRunner.receipts.Notes()
 }
 
+func (commandRunner *gateArtifactRunner) PrepareSuiteView(suite policy.TestSuite) (string, func() error, error) {
+	if commandRunner.receipts == nil {
+		return "", nil, errors.New("test receipt controller is unavailable")
+	}
+	return commandRunner.receipts.PrepareSuiteView(suite)
+}
+
 func (commandRunner *gateArtifactRunner) TestDiagnosticRunner() runner.Runner {
 	return &gateDiagnosticRunner{parent: commandRunner}
 }

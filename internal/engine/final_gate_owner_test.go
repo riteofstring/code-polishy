@@ -10,7 +10,7 @@ import (
 func TestCIFinalGateOwnerRequiresLiteralCheckedInWorkflowCommand(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeEngineFile(t, root, ".github/workflows/ci.yml", "jobs:\n  verify:\n    run: code-polishy test --all\n", 0o600)
+	writeEngineFile(t, root, ".github/workflows/ci.yml", "on: push\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - run: code-polishy test --all\n", 0o600)
 	repo := repository.Repository{
 		Root:   root,
 		Config: policy.Config{Version: 3, Verification: policy.Verification{FinalGateOwner: policy.FinalGateOwnerCI}},
@@ -18,7 +18,7 @@ func TestCIFinalGateOwnerRequiresLiteralCheckedInWorkflowCommand(t *testing.T) {
 	if findings := finalGateOwnerFindings(repo, []string{".github/workflows/ci.yml"}); len(findings) != 1 {
 		t.Fatalf("findings = %+v", findings)
 	}
-	writeEngineFile(t, root, ".github/workflows/ci.yml", "jobs:\n  verify:\n    run: ./bin/code-polishy merge-gate --base main\n", 0o600)
+	writeEngineFile(t, root, ".github/workflows/ci.yml", "on: push\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./bin/code-polishy merge-gate --base main\n", 0o600)
 	if findings := finalGateOwnerFindings(repo, []string{".github/workflows/ci.yml"}); len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}

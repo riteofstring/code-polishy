@@ -7,7 +7,7 @@ import (
 )
 
 func validateDataPaths(config *Config) error {
-	if err := validatePatterns(config.Scope.Data, "scope.data", true); err != nil {
+	if err := rejectUniversalPatterns(config.Scope.Data, "scope.data"); err != nil {
 		return err
 	}
 	for index, pattern := range config.Scope.Data {

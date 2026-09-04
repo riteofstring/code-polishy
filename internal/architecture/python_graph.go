@@ -5,15 +5,44 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	pathpkg "path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
 type pythonGraph map[string][]string
+
+const (
+	pythonGraphProtocol       = "ruff-graph-facts/v1"
+	pythonGraphRuffVersion    = "0.16.0"
+	pythonGraphMaximumBytes   = 8 << 20
+	pythonGraphMaximumSources = 4096
+	pythonGraphMaximumEdges   = 262144
+	pythonGraphMaximumPath    = 4096
+)
+
+type pythonGraphFacts struct {
+	Protocol    string
+	RuffVersion string
+	Graph       pythonGraph
+}
+
+func adaptPythonGraph(data []byte) (pythonGraphFacts, error) {
+	if len(data) == 0 || len(data) > pythonGraphMaximumBytes || !utf8.Valid(data) {
+		return pythonGraphFacts{}, fmt.Errorf("the Ruff graph has an invalid byte size or encoding")
+	}
+	graph, err := parsePythonGraph(data)
+	if err != nil {
+		return pythonGraphFacts{}, err
+	}
+	return pythonGraphFacts{Protocol: pythonGraphProtocol, RuffVersion: pythonGraphRuffVersion, Graph: graph}, nil
+}
 
 func parsePythonGraph(data []byte) (pythonGraph, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -47,32 +76,45 @@ func pythonGraphOpen(decoder *json.Decoder) error {
 
 func pythonGraphEntries(decoder *json.Decoder) (pythonGraph, error) {
 	graph := pythonGraph{}
+	edges := 0
 	for decoder.More() {
-		if err := pythonGraphEntry(decoder, graph); err != nil {
+		if len(graph) >= pythonGraphMaximumSources {
+			return nil, fmt.Errorf("the Ruff graph exceeds its source limit")
+		}
+		count, err := pythonGraphEntry(decoder, graph)
+		if err != nil {
 			return nil, err
+		}
+		edges += count
+		if edges > pythonGraphMaximumEdges {
+			return nil, fmt.Errorf("the Ruff graph exceeds its edge limit")
 		}
 	}
 	return graph, nil
 }
 
-func pythonGraphEntry(decoder *json.Decoder, graph pythonGraph) error {
+func pythonGraphEntry(decoder *json.Decoder, graph pythonGraph) (int, error) {
 	token, err := decoder.Token()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	source, ok := token.(string)
-	if !ok || source == "" {
-		return fmt.Errorf("the graph has an empty or non-string source path")
+	rawSource, ok := token.(string)
+	if !ok {
+		return 0, fmt.Errorf("the graph has a non-string source path")
+	}
+	source, err := pythonGraphNormalizePath(rawSource)
+	if err != nil {
+		return 0, fmt.Errorf("the graph has an invalid source path: %w", err)
 	}
 	if _, duplicate := graph[source]; duplicate {
-		return fmt.Errorf("the graph names source path %q more than once", source)
+		return 0, fmt.Errorf("the graph names source path %q more than once", source)
 	}
 	targets, err := pythonGraphEntryTargets(decoder, source)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	graph[source] = targets
-	return nil
+	return len(targets), nil
 }
 
 func pythonGraphEntryTargets(decoder *json.Decoder, source string) ([]string, error) {
@@ -80,12 +122,30 @@ func pythonGraphEntryTargets(decoder *json.Decoder, source string) ([]string, er
 	if err := decoder.Decode(&targets); err != nil || targets == nil {
 		return nil, fmt.Errorf("the graph targets for %q are not an array of paths", source)
 	}
-	for _, target := range targets {
-		if target == "" {
-			return nil, fmt.Errorf("the graph targets for %q include an empty path", source)
+	seen := map[string]bool{}
+	for index, rawTarget := range targets {
+		target, err := pythonGraphNormalizePath(rawTarget)
+		if err != nil {
+			return nil, fmt.Errorf("the graph targets for %q include an invalid path: %w", source, err)
 		}
+		if seen[target] {
+			return nil, fmt.Errorf("the graph targets for %q include path %q more than once", source, target)
+		}
+		seen[target] = true
+		targets[index] = target
 	}
 	return targets, nil
+}
+
+func pythonGraphNormalizePath(value string) (string, error) {
+	if value == "" || len(value) > pythonGraphMaximumPath || strings.ContainsAny(value, "\x00\r\n") {
+		return "", fmt.Errorf("path is empty or exceeds its lexical boundary")
+	}
+	normalized := pathpkg.Clean(strings.ReplaceAll(value, "\\", "/"))
+	if normalized == "." || normalized == "" {
+		return "", fmt.Errorf("path does not name a file")
+	}
+	return normalized, nil
 }
 
 func pythonGraphClose(decoder *json.Decoder) error {
@@ -118,6 +178,7 @@ func pythonGraphFindings(
 	owners map[string]string,
 	allFiles []string,
 	graph pythonGraph,
+	sourceFacts map[string]pythonSourceFact,
 ) []policy.Finding {
 	dependencies, coverage, err := pythonGraphDependencies(repo, project, sources, graph)
 	if err != nil {
@@ -125,7 +186,7 @@ func pythonGraphFindings(
 	}
 	pythonGraphMissingCoverage(sources, dependencies, coverage)
 	pythonGraphTargetCoverage(repo, project, owners, allFiles, dependencies, coverage)
-	pythonGraphImportCoverage(repo, project, sources, dependencies, coverage)
+	pythonGraphImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	findings := pythonCoverageFindings(coverage)
 	findings = append(findings, pythonModuleDependencyFindings(repo, sources, dependencies, coverage)...)
 	return pythonSortedFindings(findings)
@@ -242,24 +303,25 @@ func pythonGraphImportCoverage(
 	sources []string,
 	dependencies map[string]map[string]bool,
 	coverage map[string]string,
+	sourceFacts map[string]pythonSourceFact,
 ) {
+	pythonComputedImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	index := newPythonModuleIndex(project)
 	for _, source := range sources {
 		if coverage[source] != "" {
 			continue
 		}
-		if message := pythonSourceImportCoverage(repo, index, source, dependencies[source]); message != "" {
+		if message := pythonSourceImportCoverage(index, source, dependencies[source], sourceFacts[source]); message != "" {
 			coverage[source] = message
 		}
 	}
 }
 
-func pythonSourceImportCoverage(repo repository.Repository, index pythonModuleIndex, source string, dependencies map[string]bool) string {
-	data, err := repo.Read(source)
-	if err != nil {
-		return "the selected Python source could not be read for import coverage: " + err.Error()
+func pythonSourceImportCoverage(index pythonModuleIndex, source string, dependencies map[string]bool, facts pythonSourceFact) string {
+	if facts.SHA256 == "" {
+		return "the Python facts adapter omitted this selected source"
 	}
-	for _, reference := range pythonImportReferences(data) {
+	for _, reference := range facts.Imports {
 		if message := pythonUnprovenImport(index, source, reference, dependencies); message != "" {
 			return message
 		}

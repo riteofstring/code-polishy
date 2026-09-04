@@ -37,6 +37,23 @@ func TestRunRecordsFreshPassingSuite(t *testing.T) {
 	}
 }
 
+func TestRunAlwaysExecutesAndNeverRecordsUnboundedSuite(t *testing.T) {
+	t.Parallel()
+	commandRunner := &reuseFixtureRunner{reusable: true}
+	suite := reusableSuiteFixture()
+	suite.Reusable = false
+	root := t.TempDir()
+	for range 2 {
+		result := RunWithEvidence(t.Context(), repository.Repository{Root: root}, commandRunner, Plan{Suites: []policy.TestSuite{suite}}, nil)
+		if len(result.Findings) != 0 || result.Executions[0].Reused {
+			t.Fatalf("result = %+v", result)
+		}
+	}
+	if commandRunner.runs != 2 || commandRunner.recorded != 0 {
+		t.Fatalf("runner = %+v", commandRunner)
+	}
+}
+
 type reuseFixtureRunner struct {
 	reusable bool
 	runs     int
@@ -63,9 +80,13 @@ func (commandRunner *reuseFixtureRunner) RecordSuite(execution SuiteExecution) e
 	return nil
 }
 
+func (commandRunner *reuseFixtureRunner) PrepareSuiteView(policy.TestSuite) (string, func() error, error) {
+	return ".", func() error { return nil }, nil
+}
+
 func reusableSuiteFixture() policy.TestSuite {
 	return policy.TestSuite{
-		Name: "unit", Kind: "unit", Scope: "repository", Cost: "quick", Argv: []string{"true"}, Cwd: ".",
+		Name: "unit", Kind: "unit", Scope: "repository", Reusable: true, Cost: "quick", Argv: []string{"true"}, Cwd: ".",
 		RunOn: []string{"full"}, ExclusiveResources: []string{}, TimeoutSeconds: 30,
 	}
 }

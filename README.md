@@ -94,9 +94,10 @@ commit. The checkpoint gate validates one completed task, and the merge gate
 validates the whole branch. Each reports whether behavior review was optional,
 required, passed, or failed; selected reviews replay their proofs and force the
 configured feature suites. Gate reports stay under `.code-polishy-reports`.
-An identical passed gate executes no commands, and a new gate can reuse only
-suite receipts whose complete inputs still match. Checks, builds, security work,
-and behavior proofs remain fresh for new gate identities.
+An identical passed gate executes no commands. A new gate can reuse only a suite
+that explicitly declares `reusable: true`, ran in its sealed read-only input
+view, and still has an exact receipt identity. Checks, builds, security work,
+non-reusable suites, and behavior proofs remain fresh for new gate identities.
 Agents can use `code-polishy docs list`, `docs find`, and `docs read` to retrieve
 the exact documentation shipped with the repository's locked release.
 

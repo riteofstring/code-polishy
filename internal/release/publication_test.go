@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
 func TestReleaseArchiveIsDeterministic(t *testing.T) {
@@ -33,6 +35,96 @@ func TestReleaseArchiveIsDeterministic(t *testing.T) {
 	}
 	if firstDigest != secondDigest || !bytes.Equal(firstBytes, secondBytes) {
 		t.Fatal("identical release trees produced different archives")
+	}
+}
+
+func TestReleaseSBOMEnumeratesShippedEcosystemGraphsOnce(t *testing.T) {
+	t.Parallel()
+	root, manifest := installedRelease(t, map[string]string{BinaryPath: "placeholder", LauncherBinaryPath: "launcher"}, nil)
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	testBinary := filepath.Join(repositoryRoot, ".tools", "bin", "govulncheck")
+	if runtime.GOOS == "windows" {
+		testBinary += ".exe"
+	}
+	destination := filepath.Join(root, filepath.FromSlash(BinaryPath))
+	if err := os.Remove(destination); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyRegularFile(testBinary, destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := fileSHA256(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range manifest.Entries {
+		if manifest.Entries[index].Path == BinaryPath {
+			manifest.Entries[index].SHA256 = digest
+		}
+	}
+	manifest.ContentDigest = releaseEntriesDigest(manifest.Entries)
+	if err := os.WriteFile(filepath.Join(root, ManifestFilename), render(t, manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data, err := renderReleaseSBOM(manifest, root, "release.zip", exampleDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := &cdx.BOM{}
+	if err := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON).Decode(document); err != nil {
+		t.Fatal(err)
+	}
+	assertReleaseSBOMComponents(t, *document.Components)
+	assertReleaseSBOMDependencies(t, *document.Dependencies)
+}
+
+func assertReleaseSBOMComponents(t *testing.T, components []cdx.Component) {
+	t.Helper()
+	seen := map[string]bool{}
+	goModules := 0
+	for _, component := range components {
+		if seen[component.BOMRef] {
+			t.Fatalf("duplicate component %s", component.BOMRef)
+		}
+		seen[component.BOMRef] = true
+		if strings.HasPrefix(component.BOMRef, "pkg:golang/") {
+			goModules++
+		}
+	}
+	for _, required := range []string{"pkg:npm/fixture@1.0.0", "pkg:pypi/packaging@26.3", "pkg:pypi/vulture@2.16"} {
+		if !seen[required] {
+			t.Fatalf("SBOM omitted %s", required)
+		}
+	}
+	if seen["pkg:generic/packaging@26.3"] || seen["pkg:generic/vulture@2.16"] || goModules == 0 {
+		t.Fatalf("SBOM components = %+v", components)
+	}
+}
+
+func assertReleaseSBOMDependencies(t *testing.T, dependencies []cdx.Dependency) {
+	t.Helper()
+	pythonEdge := false
+	for _, dependency := range dependencies {
+		if dependency.Ref == "pkg:pypi/vulture@2.16" && slices.Contains(*dependency.Dependencies, "pkg:pypi/packaging@26.3") {
+			pythonEdge = true
+		}
+	}
+	if !pythonEdge {
+		t.Fatalf("SBOM dependencies = %+v", dependencies)
+	}
+}
+
+func TestReleaseSBOMRejectsMalformedPythonMetadata(t *testing.T) {
+	root, manifest := installedRelease(t, map[string]string{BinaryPath: "placeholder", LauncherBinaryPath: "launcher"}, nil)
+	metadata := filepath.Join(root, ".tools", "python", "fixture", "lib", "python3.12", "site-packages", "packaging-26.3.dist-info", "METADATA")
+	if err := os.WriteFile(metadata, []byte("Metadata-Version: 2.4\nName:\nVersion: invalid version\n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderReleaseSBOM(manifest, root, "release.zip", exampleDigest); err == nil {
+		t.Fatal("malformed Python distribution metadata was accepted")
 	}
 }
 

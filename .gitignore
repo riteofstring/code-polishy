@@ -1,5 +1,6 @@
 .DS_Store
 .tools/
+internal/pythonfacts/.venv/
 /.code-polishy-reports/
 /.code-polishy-artifacts/
 __pycache__/

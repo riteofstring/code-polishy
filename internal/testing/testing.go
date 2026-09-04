@@ -68,6 +68,10 @@ type SuiteReuseController interface {
 	RecordSuite(SuiteExecution) error
 }
 
+type SuiteExecutionViewController interface {
+	PrepareSuiteView(policy.TestSuite) (string, func() error, error)
+}
+
 func (execution SuiteExecution) Failed() bool {
 	return execution.FailureMessage != ""
 }
@@ -286,6 +290,7 @@ func duplicateSuiteKey(suite policy.TestSuite) (string, bool) {
 		Argv               []string
 		Cwd                string
 		Scope              string
+		Reusable           bool
 		Modules            []string
 		Paths              []string
 		ExtraInputs        []string
@@ -293,7 +298,7 @@ func duplicateSuiteKey(suite policy.TestSuite) (string, bool) {
 		ExclusiveResources []string
 		TimeoutSeconds     int
 	}{
-		suite.Argv, suite.Cwd, suite.Scope, suite.Modules, suite.Paths, suite.ExtraInputs,
+		suite.Argv, suite.Cwd, suite.Scope, suite.Reusable, suite.Modules, suite.Paths, suite.ExtraInputs,
 		suite.Environment, suite.ExclusiveResources, suite.TimeoutSeconds,
 	}
 	data, err := json.Marshal(payload)
@@ -475,20 +480,56 @@ func runOneSuite(ctx context.Context, root string, commandRunner runner.Runner, 
 	if reused {
 		return execution
 	}
-	if *artifacts == nil && !runnerManagesTestArtifacts(commandRunner) {
-		*artifacts, err = testartifact.Start(root, "")
+	if err := ensureRunArtifacts(root, commandRunner, artifacts); err != nil {
+		return failedSuiteExecution(suite, 1, err)
 	}
+	executionRoot, cleanup, err := suiteExecutionRoot(root, commandRunner, suite)
 	if err != nil {
 		return failedSuiteExecution(suite, 1, err)
 	}
-	execution = executeSuite(ctx, root, commandRunner, suite, 1, *artifacts)
-	if !execution.Failed() && reuse != nil {
-		if err := reuse.RecordSuite(execution); err != nil {
+	execution = executeSuite(ctx, executionRoot, commandRunner, suite, 1, *artifacts)
+	finishSuiteExecution(&execution, cleanup(), reuse)
+	return execution
+}
+
+func ensureRunArtifacts(root string, commandRunner runner.Runner, artifacts **testartifact.Execution) error {
+	if *artifacts != nil || runnerManagesTestArtifacts(commandRunner) {
+		return nil
+	}
+	execution, err := testartifact.Start(root, "")
+	*artifacts = execution
+	return err
+}
+
+func suiteExecutionRoot(root string, commandRunner runner.Runner, suite policy.TestSuite) (string, func() error, error) {
+	if !suite.Reusable {
+		return root, func() error { return nil }, nil
+	}
+	controller, available := commandRunner.(SuiteExecutionViewController)
+	if !available {
+		return "", nil, errors.New("reusable suite execution view is unavailable")
+	}
+	return controller.PrepareSuiteView(suite)
+}
+
+func finishSuiteExecution(execution *SuiteExecution, cleanupErr error, reuse SuiteReuseController) {
+	if cleanupErr != nil {
+		execution.FailureCategory = runner.FailureOperational
+		execution.FailureMessage = errors.Join(errorFromMessage(execution.FailureMessage), cleanupErr).Error()
+	}
+	if execution.Suite.Reusable && !execution.Failed() && reuse != nil {
+		if err := reuse.RecordSuite(*execution); err != nil {
 			execution.FailureCategory = runner.FailureOperational
 			execution.FailureMessage = err.Error()
 		}
 	}
-	return execution
+}
+
+func errorFromMessage(message string) error {
+	if message == "" {
+		return nil
+	}
+	return errors.New(message)
 }
 
 func reportSuiteExecution(reporter *ExecutionReporter, index int, execution SuiteExecution) {
@@ -506,7 +547,7 @@ func reportSuiteExecution(reporter *ExecutionReporter, index int, execution Suit
 }
 
 func reusableSuiteExecution(controller SuiteReuseController, suite policy.TestSuite, attempt int) (SuiteExecution, bool, error) {
-	if controller == nil {
+	if controller == nil || !suite.Reusable {
 		return SuiteExecution{}, false, nil
 	}
 	execution, reusable, err := controller.ReuseSuite(suite, attempt)
@@ -596,8 +637,9 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
 		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
 		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
-		TimeoutSeconds: suite.TimeoutSeconds,
-		TestArtifacts:  append([]policy.TestArtifact{}, suite.Artifacts...),
+		TimeoutSeconds:    suite.TimeoutSeconds,
+		SealedEnvironment: suite.Reusable,
+		TestArtifacts:     append([]policy.TestArtifact{}, suite.Artifacts...),
 	}
 }
 

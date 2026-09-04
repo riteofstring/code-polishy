@@ -207,6 +207,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native release identity contracts failed.' }
           & $go test -count=1 ./internal/javascript -run '^TestJavaScript(ExecutableUsesNativeHostContract|BundleContainsNativeTargetPaths)$'
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
+          & $go test -count=1 ./internal/architecture -run '^TestRuffGraphFactsAreVersionedBoundedAndPathNormalized$'
+          if ($LASTEXITCODE -ne 0) { throw 'Native Ruff graph adapter contract failed.' }
           & $go test -count=1 ./internal/repository -run '^TestDetachedWorktreeSupportsLongCheckoutPaths$'
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows Git worktree contract failed.' }
           & $go test -count=1 ./internal/gaterun

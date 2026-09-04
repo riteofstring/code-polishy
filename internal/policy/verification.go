@@ -8,9 +8,6 @@ import (
 )
 
 func validateVerification(config *Config) error {
-	if err := validateFinalGateOwner(config.Verification.FinalGateOwner); err != nil {
-		return err
-	}
 	if err := validateTrustedMergeTarget(config.Verification.TrustedMergeTarget); err != nil {
 		return err
 	}
@@ -18,13 +15,6 @@ func validateVerification(config *Config) error {
 		return err
 	}
 	return validateMergeGate(config)
-}
-
-func validateFinalGateOwner(owner string) error {
-	if owner == "" {
-		return nil
-	}
-	return allowedValues([]string{owner}, []string{FinalGateOwnerLocal, FinalGateOwnerCI}, "verification.finalGateOwner")
 }
 
 func validateTrustedMergeTarget(target string) error {
@@ -42,12 +32,6 @@ func validateMergeGate(config *Config) error {
 	if mergeGate == nil {
 		return nil
 	}
-	if len(mergeGate.RecommendedModules) == 0 {
-		return errors.New("verification.mergeGate.recommendedModules must not be empty")
-	}
-	if err := validateUniqueStrings(mergeGate.RecommendedModules, "verification.mergeGate.recommendedModules", true); err != nil {
-		return err
-	}
 	for _, module := range mergeGate.RecommendedModules {
 		if _, exists := config.ModuleByName[module]; !exists {
 			return fmt.Errorf("verification.mergeGate.recommendedModules references unknown module %q", module)
@@ -60,9 +44,6 @@ func validateBehaviorReview(config *Config) error {
 	behaviorReview := config.Verification.BehaviorReview
 	if behaviorReview == nil {
 		return nil
-	}
-	if err := allowedValues([]string{behaviorReview.DefaultRequiredAt}, []string{BehaviorReviewOnRequest, BehaviorReviewMerge, BehaviorReviewCheckpoint}, "verification.behaviorReview.defaultRequiredAt"); err != nil {
-		return err
 	}
 	featureNames := map[string]bool{}
 	for index, feature := range behaviorReview.Features {
@@ -85,29 +66,14 @@ func validateBehaviorReviewFeature(config *Config, behaviorReview BehaviorReview
 }
 
 func validateBehaviorReviewFeatureScope(config *Config, feature BehaviorReviewFeature, label string, names map[string]bool) error {
-	if err := identifier(feature.Name, label+".name"); err != nil {
-		return err
-	}
 	if names[feature.Name] {
 		return fmt.Errorf("duplicate behavior review feature name %q", feature.Name)
 	}
 	names[feature.Name] = true
-	if len(feature.Modules) == 0 && len(feature.Paths) == 0 {
-		return fmt.Errorf("%s must define at least one module or path", label)
-	}
-	if err := validateCommandModules(config, feature.Modules, label); err != nil {
-		return err
-	}
-	return validatePatterns(feature.Paths, label+".paths", false)
+	return validateCommandModules(config, feature.Modules, label)
 }
 
 func validateBehaviorReviewFeatureSuites(config *Config, feature BehaviorReviewFeature, label string) error {
-	if len(feature.Suites) == 0 {
-		return fmt.Errorf("%s.suites must not be empty", label)
-	}
-	if err := validateUniqueStrings(feature.Suites, label+".suites", true); err != nil {
-		return err
-	}
 	for _, suiteName := range feature.Suites {
 		suite, err := referencedSuite(config.Tests.Suites, suiteName, label+".suites")
 		if err != nil {
@@ -121,9 +87,6 @@ func validateBehaviorReviewFeatureSuites(config *Config, feature BehaviorReviewF
 }
 
 func validateBehaviorReviewFeatureRequirement(behaviorReview BehaviorReviewPolicy, feature BehaviorReviewFeature, label string) error {
-	if feature.RequiredAt != "" && !slices.Contains([]string{BehaviorReviewMerge, BehaviorReviewCheckpoint}, feature.RequiredAt) {
-		return fmt.Errorf("%s.requiredAt must be merge or checkpoint when set", label)
-	}
 	if behaviorReviewRequirementRank(behaviorReview.EffectiveRequiredAt(feature)) < behaviorReviewRequirementRank(behaviorReview.DefaultRequiredAt) {
 		return fmt.Errorf("%s.requiredAt cannot weaken verification.behaviorReview.defaultRequiredAt", label)
 	}

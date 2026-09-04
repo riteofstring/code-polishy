@@ -20,28 +20,17 @@ import (
 )
 
 func (engine *Engine) suiteReceiptIdentity(suite policy.TestSuite) (testreceipt.Identity, string, error) {
-	configuration, err := json.Marshal(engine.Repository.Config)
+	if !suite.Reusable {
+		return testreceipt.Identity{}, "suite is not explicitly reusable", nil
+	}
+	if err := validateReusableArguments(suite.Argv); err != nil {
+		return testreceipt.Identity{}, err.Error(), nil
+	}
+	configurationSHA256, releaseIdentity, err := suiteReceiptReleaseIdentity(engine.Repository)
 	if err != nil {
 		return testreceipt.Identity{}, "", err
 	}
-	configurationSHA256 := testreceiptContentDigest(configuration)
-	releaseIdentity := testreceipt.Release{Version: "development", Digest: configurationSHA256}
-	lock, found, err := release.ReadLock(engine.Repository.Root)
-	if err != nil {
-		return testreceipt.Identity{}, "", err
-	}
-	if found {
-		releaseIdentity = testreceipt.Release{Version: lock.CodePolishyVersion, Digest: lock.ReleaseDigest}
-	}
-	files, err := engine.Repository.AllFiles()
-	if err != nil {
-		return testreceipt.Identity{}, "", err
-	}
-	selected, reason := suiteReceiptInputPaths(engine.Repository, suite, files)
-	if reason != "" {
-		return testreceipt.Identity{}, reason, nil
-	}
-	inputs, reason, err := hashSuiteReceiptInputs(engine.Repository, selected)
+	inputs, selected, reason, err := suiteReceiptInputs(engine.Repository, suite)
 	if err != nil || reason != "" {
 		return testreceipt.Identity{}, reason, err
 	}
@@ -59,6 +48,36 @@ func (engine *Engine) suiteReceiptIdentity(suite policy.TestSuite) (testreceipt.
 		return testreceipt.Identity{}, "", err
 	}
 	return identity, "", nil
+}
+
+func suiteReceiptReleaseIdentity(repo repository.Repository) (string, testreceipt.Release, error) {
+	configuration, err := json.Marshal(repo.Config)
+	if err != nil {
+		return "", testreceipt.Release{}, err
+	}
+	digest := testreceiptContentDigest(configuration)
+	identity := testreceipt.Release{Version: "development", Digest: digest}
+	lock, found, err := release.ReadLock(repo.Root)
+	if err != nil {
+		return "", testreceipt.Release{}, err
+	}
+	if found {
+		identity = testreceipt.Release{Version: lock.CodePolishyVersion, Digest: lock.ReleaseDigest}
+	}
+	return digest, identity, nil
+}
+
+func suiteReceiptInputs(repo repository.Repository, suite policy.TestSuite) ([]testreceipt.Input, []string, string, error) {
+	files, err := repo.AllFiles()
+	if err != nil {
+		return nil, nil, "", err
+	}
+	selected, reason := suiteReceiptInputPaths(repo, suite, files)
+	if reason != "" {
+		return nil, selected, reason, nil
+	}
+	inputs, reason, err := hashSuiteReceiptInputs(repo, selected)
+	return inputs, selected, reason, err
 }
 
 func suiteReceiptInputPaths(repo repository.Repository, suite policy.TestSuite, files []string) ([]string, string) {

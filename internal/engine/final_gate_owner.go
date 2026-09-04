@@ -6,6 +6,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	workflowfacts "github.com/riteofstring/code-polishy/internal/workflow"
 )
 
 const finalGateCommandLiteral = "code-polishy merge-gate --base"
@@ -19,7 +20,7 @@ func finalGateOwnerFindings(repo repository.Repository, files []string) []policy
 			continue
 		}
 		data, err := repo.Read(path)
-		if err == nil && strings.Contains(string(data), finalGateCommandLiteral) {
+		if err == nil && finalGateWorkflowContains(path, data) {
 			return nil
 		}
 	}
@@ -27,6 +28,24 @@ func finalGateOwnerFindings(repo repository.Repository, files []string) []policy
 		Check: "policy.finalGateOwner", Path: receiptConfigurationPath(repo), Subject: "ci",
 		Message: "verification.finalGateOwner is ci, but no checked-in GitHub or GitLab workflow contains the literal command `code-polishy merge-gate --base`",
 	}}
+}
+
+func finalGateWorkflowContains(path string, data []byte) bool {
+	if strings.HasPrefix(filepath.ToSlash(path), ".github/workflows/") {
+		facts, err := workflowfacts.Parse(path, data)
+		if err != nil {
+			return false
+		}
+		for _, job := range facts.Jobs {
+			for _, step := range job.Steps {
+				if strings.Contains(step.Run, finalGateCommandLiteral) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return strings.Contains(string(data), finalGateCommandLiteral)
 }
 
 func finalGateWorkflowPath(repo repository.Repository, path string) bool {

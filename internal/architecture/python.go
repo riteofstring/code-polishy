@@ -112,7 +112,11 @@ func pythonPlanManifests(plan pythonSelectionPlan) []string {
 func pythonSources(repo repository.Repository, selected []string) []string {
 	seen := map[string]bool{}
 	sources := []string{}
-	for _, source := range selected {
+	candidates := append([]string{}, selected...)
+	for _, declaration := range repo.Config.Scope.PythonComputedImports {
+		candidates = append(candidates, declaration.Importer)
+	}
+	for _, source := range candidates {
 		if repo.Language(source) != "python" || seen[source] {
 			continue
 		}
@@ -182,14 +186,24 @@ func pythonProjectFindings(
 	if runErr != nil {
 		return []policy.Finding{{Check: "policy.tool", Path: project.Manifest, Subject: "ruff", Message: runErr.Error()}}
 	}
-	graph, err := parsePythonGraph(output.Stdout)
+	if len(output.Stderr) != 0 {
+		return pythonCoverageForSources(sources, "the policy-owned Ruff graph emitted diagnostics")
+	}
+	facts, err := adaptPythonGraph(output.Stdout)
 	if err != nil {
 		return pythonCoverageForSources(sources, "the policy-owned Ruff graph output is malformed: "+err.Error())
 	}
-	return pythonGraphFindings(repo, project, sources, owners, allFiles, graph)
+	sourceFacts, err := pythonSourceFacts(repo, sources)
+	if err != nil {
+		return pythonCoverageForSources(sources, "the policy-owned Python facts are unavailable: "+err.Error())
+	}
+	return pythonGraphFindings(repo, project, sources, owners, allFiles, facts.Graph, sourceFacts)
 }
 
 func pythonGraphCommand(repo repository.Repository, project repository.PythonProject, sources []string) (policy.Command, error) {
+	if version := repo.ToolPin("ruff"); version != pythonGraphRuffVersion {
+		return policy.Command{}, fmt.Errorf("ruff-graph-facts/v1 requires Ruff %s, found %q", pythonGraphRuffVersion, version)
+	}
 	paths := make([]string, 0, len(sources))
 	for _, source := range sources {
 		relative, err := pythonProjectPath(project, source)
@@ -210,7 +224,7 @@ func pythonGraphCommand(repo repository.Repository, project repository.PythonPro
 	arguments = append(arguments, "--detect-string-imports", "--min-dots", "0", "--type-checking-imports", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
-		Name:              "policy-ruff-import-graph-" + pythonGraphName(project.Root),
+		Name:              "ruff-graph-facts-v1-ruff-" + pythonGraphRuffVersion + "-" + pythonGraphName(project.Root),
 		Argv:              arguments,
 		Cwd:               project.Root,
 		Paths:             paths,
