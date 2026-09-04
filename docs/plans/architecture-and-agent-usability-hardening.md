@@ -64,6 +64,12 @@ oversized project and its direct and inherited `BaseModel`, annotated-field,
 Pydantic false positives as reported defects to fix, not as behavior already
 proved by v0.22 fixtures.
 
+The same adoption confirmed that v0.23's computed-import declaration is
+correctly limited to bounded local modules but cannot describe a user-selected
+external `package.module:object` plug-in. v0.24 adds that composition contract
+without turning it into local-symbol reachability or a general dynamic-import
+escape hatch.
+
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
 the observable outcome.
@@ -125,7 +131,11 @@ The graph is an engine fact contract, not a second parser:
   provider and cannot claim clean cycle evidence.
 - External dependencies are absent from this repository graph. Missing,
   ambiguous, escaping, truncated, or unparsed local edges remain import-
-  coverage failures rather than disappearing.
+  coverage failures rather than disappearing. Exact external plug-in
+  declarations contribute separately typed external-composition edges whose
+  target is a dependency contract rather than a repository node; those edges
+  appear in architecture summaries and reviews but do not enter local cycle
+  traversal.
 - Production, test, and generated classifications remain explicit. Test edges
   never authorize production dependency direction, but test-only cyclic
   components are still checked and identified separately.
@@ -337,6 +347,43 @@ architecture evidence for one computed import callsite and must continue to
 reject an undeclared, ambiguous, wildcard, escaping, or stale local import.
 Dead-code reachability cannot satisfy that architecture check, and a computed-
 import declaration alone cannot preserve a Vulture symbol.
+
+### Exact external plug-in imports
+
+Add a separate `scope.pythonExternalPluginImports` declaration for a user-
+selected external `package.module:object` value. It binds one contained Python
+project and importer, containing callable, exact loader callsite and source
+digest, recognized loader callee and argument, and the
+`python-module-object/v1` input grammar. The grammar accepts one normalized
+absolute Python module plus one identifier-chain object separated by one colon;
+it rejects relative, wildcard, empty, control-character, repeated-separator,
+and import-expression forms rather than passing them to an interpreter.
+
+Each declaration also binds one admitted direct external distribution and
+import namespace in the project's authoritative dependency and lock scope, plus
+one exact runtime protocol check applied to the loaded object. The check names
+the protocol's resolved qualified type or validation callable, its exact AST
+callsite, and whether it validates the loaded object with the supported
+`isinstance`, `issubclass`, or validator-call shape. The protocol itself must be
+runtime-checkable for the selected shape. Merely annotating a variable,
+performing a truthiness check, catching an import error, or naming a protocol in
+configuration is not evidence.
+
+Successful validation emits one external-composition dependency edge from the
+owning local module to the exact distribution, module namespace, object grammar,
+and protocol contract. It does not add a repository graph node, authorize a
+local module dependency, or preserve any local Vulture symbol. Vulnerability,
+license, release-age, exact-version, and dependency-review policy continue to
+govern the external distribution.
+
+The declaration is non-suppressible evidence, not a dynamic-import allowlist.
+A moved or duplicated loader or check, changed source, callable, callee,
+argument, grammar, distribution, namespace, protocol, or data flow between the
+loaded value and check makes it stale or ambiguous. A sibling dynamic import,
+an unchecked result, a check of another value, a local target, a transitive or
+undeclared distribution, or input outside the admitted namespace remains a
+specific `policy.pythonExternalPluginImport` failure. No setup or remediation
+path may generate these declarations from unresolved-import or Vulture output.
 
 ### TypedDict literal-key reads
 
@@ -793,7 +840,9 @@ be adopted as an exact declaration.
    `{project,module,symbol}` configuration path.
 6. Update adoption and remediation guidance so no agent or command turns dead-
    code findings into a generated reachability inventory.
-7. Revalidate computed plug-in imports end to end on the partitioned transport,
+7. Add the exact external plug-in import, input-grammar, runtime-protocol, and
+   external-composition edge contract without granting Vulture reachability.
+8. Revalidate local computed and external plug-in imports end to end on the partitioned transport,
    including a callsite and its target or governed registry in different
    partitions.
 
@@ -875,6 +924,16 @@ Python-reachability fixtures must prove:
   while lookalikes and unrelated members remain dead;
 - every v0.23 computed-import declaration remains exact, bounded, stale-
   checked, and separate from dead-code reachability;
+- an external `package.module:object` plug-in resolves only through its exact
+  loader callsite, admitted direct distribution and namespace, input grammar,
+  loaded-value data flow, and required runtime protocol check;
+- the external plug-in produces one external-composition edge but no local
+  dependency authorization, repository node, or Vulture reachability, while a
+  sibling import or local symbol with the same spelling remains unexempted;
+- moved, duplicated, unchecked, cross-value, transitive-dependency, local-
+  target, wildcard, relative, malformed-input, stale-digest, and unsupported-
+  protocol plug-in cases fail specifically and cannot suppress another dynamic
+  import;
 - a literal subscript read keeps only the matching field of one exactly
   resolved local TypedDict;
 - identical keys in another TypedDict, unrelated string literals, dynamic
@@ -1008,6 +1067,9 @@ complete release inventory and authenticated evidence.
 - Python computed-import architecture evidence remains exact and separate from
   dead-code reachability, including when callsites and targets cross Python-
   facts partitions.
+- User-selected external Python plug-ins require one exact loader grammar,
+  direct dependency, runtime protocol check, and external-composition edge and
+  never grant local Vulture reachability.
 - Python projects larger than one fact request are processed through
   deterministic bounded partitions with project-wide semantics and one
   project-level fail-closed coverage result.
