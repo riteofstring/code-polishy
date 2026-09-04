@@ -92,7 +92,7 @@ Resume never reuses checks, builds, security work, or behavior proofs.
 Agents can use `code-polishy docs list`, `docs find`, and `docs read` to retrieve
 the exact documentation shipped with the repository's locked release.
 
-Community language packs let independently owned toolchains participate in the
+Language packs let independently owned toolchains participate in the
 same checks and gates without loading third-party code into Code Polishy. Packs
 are reviewed and obtained separately, verified locally, installed by exact
 content digest, and selected explicitly in `.code-polishy.json`:
@@ -120,8 +120,8 @@ checks stay consistent.
 Code Polishy also rejects empty Go tests and obvious test commands that can
 pass without running tests. Optional mutation testing can provide deeper proof.
 
-Other languages can use exact community packs or repo-owned checks. Code Polishy runs and enforces
-them but does not supply their tools.
+Other languages can use exact language packs or repo-owned checks. Code Polishy
+runs and enforces them but does not supply their tools.
 
 ## What stays in your repo
 

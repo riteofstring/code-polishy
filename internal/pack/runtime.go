@@ -60,7 +60,7 @@ func Resolve(selected []policy.PackSelection, dataRoot string) Resolution {
 			continue
 		}
 		compileManifest(root, selection, manifest, &resolution)
-		resolution.Notes = append(resolution.Notes, fmt.Sprintf("community pack: %s %s %s", selection.Name, selection.Version, selection.Digest))
+		resolution.Notes = append(resolution.Notes, fmt.Sprintf("language pack: %s %s %s", selection.Name, selection.Version, selection.Digest))
 	}
 	return resolution
 }

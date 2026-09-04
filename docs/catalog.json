@@ -4,8 +4,8 @@
     {
       "id": "adding-a-language",
       "path": "docs/adding-a-language.md",
-      "title": "Adding a Community Language",
-      "summary": "Build, verify, install, and select an independently owned community language pack.",
+      "title": "Adding a Language Pack",
+      "summary": "Build, verify, install, and select an independently maintained language pack.",
       "aliases": ["language-packs", "packs"],
       "public": true
     },

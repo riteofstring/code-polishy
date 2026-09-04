@@ -81,7 +81,7 @@
 
 ## 0.20.0 - 2026-09-02
 
-- Add locally installed, content-addressed community language packs with exact
+- Add locally installed, content-addressed language packs with exact
   project selection, conformance fixtures, structured adapter evidence, and
   normal quality, architecture, build, supply-chain, doctor, and gate coverage.
 - Add `docs list`, `docs find`, and `docs read` so agents can retrieve bounded,
