@@ -359,6 +359,76 @@ and file digests, and inventory actionlint's YAML, cron, Markdown, and other
 transitive dependencies. A Sigstore trusted-root update is an explicit reviewed
 input change rather than ambient network state.
 
+### Required dependency coverage
+
+No executable third-party component may be adopted unless it has one named,
+automatic inventory, release-age, and vulnerability lane. A checksum or commit
+pin proves identity; it does not replace age or vulnerability coverage. An
+unsupported or incomplete graph blocks adoption rather than becoming a manual
+note.
+
+The 30-day minimum remains a blocking requirement for every resolved registry
+release and standalone executable. The 90-day preference remains advisory, but
+must be reported for every applicable new direct runtime or optional dependency.
+v0.23 extends the same preferred-age advisory to newly adopted executable
+GitHub Actions and standalone tools when their authoritative release timestamp
+is available. Neither age rule suppresses a vulnerability finding.
+
+Map each planned component to the following coverage before adding it:
+
+- Go libraries, including jsonschema, goldmark, `mvdan/sh`, cyclonedx-go,
+  in-toto, actionlint, and sigstore-go, belong to the exact root `go.mod` and
+  `go.sum`. Their complete graph receives the hard age check, `govulncheck`, and
+  OSV; a new direct module receives the preferred-age advisory.
+- JavaScript libraries belong to the sealed pnpm manifest and lock. Their
+  complete graph receives pnpm release-age enforcement, native audit, OSV, and
+  direct-dependency review. No second JavaScript dependency store is allowed.
+- Policy-owned Python adapter libraries, including PyPA `packaging`, belong to
+  a dedicated exact manifest and frozen `uv.lock` shipped with the adapter.
+  Installation uses exact wheel hashes without lifecycle execution. The
+  complete graph receives lock consistency, the hard age check, OSV, and the
+  direct preferred-age advisory. An unpacked wheel outside that graph is not an
+  acceptable shortcut.
+- GitHub Actions, including `actions/attest`, use a full 40-character commit
+  pin bound to an exact upstream release. An action-dependency inventory binds
+  its action metadata, distributed entry points, lock or upstream SBOM, and
+  resolved executable packages to that commit. The action receives hard and
+  preferred age checks and an automated vulnerability lane over that inventory.
+  Missing or irreconcilable upstream dependency evidence blocks adoption.
+- A downloaded or independently built executable remains a declared release
+  artifact with an exact version and checksum, but release age alone is not
+  sufficient. Its source module or package graph, or a verified upstream SBOM,
+  must feed a supported vulnerability lane before the tool is added.
+- Non-executable SPDX data and Sigstore trust roots use exact admitted tags,
+  file digests, provenance, schema validation, and semantic reconciliation.
+  They do not require a code-vulnerability scanner unless they introduce an
+  executable parser or updater.
+
+Every lane covers direct and transitive executable code, records its scanner
+and database identity in evidence, and participates in the checked-in weekly
+online supply-chain workflow. Low, moderate, high, critical, unknown, and known
+exploited findings retain the existing assessment limits and blocking behavior.
+
+### Self-hosting bootstrap
+
+The locked v0.22 release governs development and final verification of the
+v0.23 candidate until the verified v0.23 `lock` command performs the atomic
+authority transition. Candidate v0.23 code cannot be the sole evidence that its
+own new dependencies are safe.
+
+Implement each new inventory and checking lane before introducing the component
+that needs it. For graphs v0.22 already understands, run its normal
+`dependency-review` and online supply-chain profile. For a new class that v0.22
+does not understand, expose the deterministic inventory and exact checks
+through v0.22's checked-in `custom-dependencies` provider contract and review
+the provider without relying on the candidate dependency. Only then add the
+new component and run the provider against its exact graph.
+
+Bootstrap providers are development evidence, not a second public
+implementation. The v0.23 release contains one authoritative built-in lane for
+each newly supported class, and its post-release self-hosting lock activates
+those lanes for future updates.
+
 ## Components not recommended
 
 Do not adopt the following as part of this plan:
@@ -388,6 +458,10 @@ Do not adopt the following as part of this plan:
 5. Resolve each parser's future core or language-pack owner.
 6. Inventory every current computed Python import and classify its argument
    source, possible targets, and architecture owners.
+7. Assign every planned dependency, action, executable, data snapshot, and
+   trust root to the required coverage lane above.
+8. Implement and verify any v0.22-readable bootstrap provider needed before its
+   unsupported dependency class is introduced.
 
 ### Phase 1: Authenticate complete release evidence
 
@@ -397,15 +471,17 @@ Do not adopt the following as part of this plan:
    as metadata rather than authenticated evidence.
 3. Establish an authenticated builder for every required native host; do not
    substitute a later publisher identity for the builder.
-4. Add a protected, explicitly triggered release workflow with commit-pinned
+4. Establish age, dependency-inventory, and vulnerability coverage for the
+   pinned attestation action before adding it to the workflow.
+5. Add a protected, explicitly triggered release workflow with commit-pinned
    `actions/attest` and job-scoped OIDC and attestation permissions.
-5. Create and retain archive provenance, archive-to-SBOM attestations, release
+6. Create and retain archive provenance, archive-to-SBOM attestations, release
    index attestation, and OCI attestations for the same release identity.
-6. Integrate the narrow sigstore-go verifier with a trust root obtained outside
+7. Integrate the narrow sigstore-go verifier with a trust root obtained outside
    the unverified candidate.
-7. Verify cryptographic identity and transparency evidence before applying
+8. Verify cryptographic identity and transparency evidence before applying
    Code Polishy's predicate and artifact policy.
-8. Update the release checklist, publication descriptors, installation path,
+9. Update the release checklist, publication descriptors, installation path,
    and terminology to require the authenticated bundles.
 
 ### Phase 2: Remove configuration drift
@@ -419,20 +495,22 @@ Do not adopt the following as part of this plan:
 
 ### Phase 3: Replace high-risk Python and syntax implementations
 
-1. Introduce the batched Python facts adapter and resolve supported syntax
+1. Add the policy-owned Python manifest, frozen lock, wheel hashes, inventory,
+   age checks, and OSV lane before adding PyPA `packaging`.
+2. Introduce the batched Python facts adapter and resolve supported syntax
    versions.
-2. Freeze and enforce the `ruff-graph-facts/v1` adapter on every supported host.
-3. Add the strict `scope.pythonComputedImports` schema and AST-backed callsite
+3. Freeze and enforce the `ruff-graph-facts/v1` adapter on every supported host.
+4. Add the strict `scope.pythonComputedImports` schema and AST-backed callsite
    validation.
-4. Resolve bounded configured targets and derive every architecture edge from
+5. Resolve bounded configured targets and derive every architecture edge from
    the governed module graph.
-5. Keep dead-code dynamic references and architecture computed imports separate
+6. Keep dead-code dynamic references and architecture computed imports separate
    in configuration, validation, findings, documentation, and receipts.
-6. Replace Markdown structure parsing with goldmark.
-7. Replace shell lexical and syntax interpretation with `mvdan/sh`.
-8. Compare old and new facts over the frozen corpus and fuzzed inputs.
-9. Remove each old implementation and its fallback in the same coherent
-   cutover after equivalence or an intentional tightening is documented.
+7. Replace Markdown structure parsing with goldmark.
+8. Replace shell lexical and syntax interpretation with `mvdan/sh`.
+9. Compare old and new facts over the frozen corpus and fuzzed inputs.
+10. Remove each old implementation and its fallback in the same coherent
+    cutover after equivalence or an intentional tightening is documented.
 
 ### Phase 4: Establish workflow and SPDX authorities
 
@@ -528,6 +606,27 @@ Workflow and license work must additionally prove:
 - deprecated identifiers, `LicenseRef`, exceptions, `+`, `WITH`, precedence,
   and case behavior match the selected policy contract.
 
+Dependency-coverage work must additionally prove:
+
+- every executable third-party component resolves to exactly one complete
+  governed inventory and one named vulnerability lane;
+- every resolved registry release and standalone executable younger than the
+  hard minimum blocks unless an exact permitted release-age assessment applies;
+- every applicable new direct runtime, optional dependency, executable Action,
+  and standalone tool younger than the preference produces the advisory;
+- direct and transitive Go, pnpm, policy-owned Python, Action, and executable
+  fixtures reach their declared scanners and cannot disappear through another
+  packaging form;
+- a pin, checksum, release date, SBOM, or upstream scan cannot individually
+  substitute for a missing vulnerability lane;
+- the weekly online workflow executes every new lane and fails when its
+  advisory source or vulnerability database is unavailable;
+- v0.22 remains the policy authority for bootstrap admission, and candidate
+  v0.23 output alone cannot admit a dependency;
+- after the atomic lock cutover, the released v0.23 lanes reject the same
+  malformed, young, vulnerable, incomplete, and stale fixtures without a
+  bootstrap provider.
+
 Receipt work must prove that every modeled input change invalidates reuse,
 unrelated changes preserve only eligible receipts, undeclared access cannot
 produce reusable evidence, and unbounded suites always execute.
@@ -560,6 +659,15 @@ produce reusable evidence, and unbounded suites always execute.
   decide pass and fail.
 - Every added dependency is exactly pinned, admitted, reviewed, inventoried,
   and included in release evidence.
+- Every executable dependency has a complete named age and vulnerability lane;
+  no pin, checksum, or manual review substitutes for missing automated
+  coverage.
+- Policy-owned Python packages and executable GitHub Actions receive explicit
+  complete-graph coverage rather than relying on release-artifact or commit-pin
+  checks alone.
+- The v0.23 dependency set is admitted under the outgoing v0.22 authority, and
+  the atomic v0.23 lock cutover activates the same built-in checks for future
+  updates.
 - Every phase and completion criterion is delivered together in v0.23.0.
 
 ## Related plans
