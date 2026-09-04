@@ -193,11 +193,18 @@ func pythonProjectFindings(
 	if err != nil {
 		return pythonCoverageForSources(sources, "the policy-owned Ruff graph output is malformed: "+err.Error())
 	}
-	sourceFacts, err := pythonSourceFacts(repo, sources)
+	sourceFacts, err := pythonSourceFacts(bounded, repo, sources)
 	if err != nil {
-		return pythonCoverageForSources(sources, "the policy-owned Python facts are unavailable: "+err.Error())
+		return []policy.Finding{pythonFactsCoverageFinding(project, err)}
 	}
 	return pythonGraphFindings(repo, project, sources, owners, allFiles, facts.Graph, sourceFacts)
+}
+
+func pythonFactsCoverageFinding(project repository.PythonProject, err error) policy.Finding {
+	return policy.Finding{
+		Check: "architecture.pythonFactsCoverage", Path: project.Manifest, Subject: "python-facts",
+		Message: "the Python project fact set is unavailable; dependent per-source findings were withheld: " + err.Error(),
+	}
 }
 
 func pythonGraphCommand(repo repository.Repository, project repository.PythonProject, sources []string) (policy.Command, error) {

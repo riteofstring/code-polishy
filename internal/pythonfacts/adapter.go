@@ -215,6 +215,10 @@ func (buffer *boundedBuffer) Bytes() []byte {
 }
 
 func Analyze(python string, request Request) (Response, error) {
+	return analyze(context.Background(), python, request)
+}
+
+func analyze(ctx context.Context, python string, request Request) (Response, error) {
 	request = normalizedRequest(request)
 	if err := validateRequest(python, request); err != nil {
 		return Response{}, err
@@ -223,7 +227,7 @@ func Analyze(python string, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	responseData, err := runAdapter(python, data)
+	responseData, err := runAdapter(ctx, python, data)
 	if err != nil {
 		return Response{}, err
 	}
@@ -323,8 +327,8 @@ func encodeRequest(request Request) ([]byte, error) {
 	return data, nil
 }
 
-func runAdapter(python string, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func runAdapter(parent context.Context, python string, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, python, "-I", "-B", "-c", embeddedAdapterSource())
 	command.Dir = filepath.Dir(python)

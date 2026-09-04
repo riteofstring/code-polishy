@@ -1,6 +1,7 @@
 package architecture
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -90,7 +91,7 @@ func pythonConflictingModulePaths(paths []string) bool {
 	return len(locations) > 1
 }
 
-func pythonSourceFacts(repo repository.Repository, sources []string) (map[string]pythonSourceFact, error) {
+func pythonSourceFacts(ctx context.Context, repo repository.Repository, sources []string) (map[string]pythonSourceFact, error) {
 	inputs := make([]pythonfacts.Input, 0, len(sources))
 	data := make(map[string][]byte, len(sources))
 	for _, source := range sources {
@@ -114,7 +115,7 @@ func pythonSourceFacts(repo repository.Repository, sources []string) (map[string
 			return nil, err
 		}
 	}
-	response, err := pythonfacts.Analyze(python, pythonfacts.Request{Sources: inputs})
+	response, err := pythonfacts.AnalyzeProjectSources(ctx, python, inputs)
 	if err != nil {
 		return nil, err
 	}

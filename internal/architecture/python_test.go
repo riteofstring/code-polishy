@@ -83,6 +83,27 @@ func TestPythonArchitectureRejectsRuffDiagnostics(t *testing.T) {
 	}
 }
 
+func TestPythonFactsFailureProducesOneProjectFindingWithoutSourceCascades(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	sources := []string{"src/a.py", "src/b.py", "src/c.py"}
+	writeArchitectureFile(t, repo.Root, sources[0], strings.Repeat("x", 2*1024*1024+1))
+	writeArchitectureFile(t, repo.Root, sources[1], "value = 1\n")
+	writeArchitectureFile(t, repo.Root, sources[2], "value = 2\n")
+	project := repository.PythonProject{Root: ".", Manifest: "pyproject.toml", Files: sources}
+	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/a.py":[],"src/b.py":[],"src/c.py":[]}`}}
+	findings := pythonProjectFindings(
+		t.Context(), repo, project, sources,
+		map[string]string{"src/a.py": project.Manifest, "src/b.py": project.Manifest, "src/c.py": project.Manifest},
+		append([]string{"pyproject.toml"}, sources...), policy.Command{Cwd: "."}, graphRunner,
+	)
+	if len(findings) != 1 || findings[0].Check != "architecture.pythonFactsCoverage" || findings[0].Path != project.Manifest ||
+		!strings.Contains(findings[0].Message, "dependent per-source findings were withheld") {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
 func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{
