@@ -949,6 +949,58 @@ class Lookalike(BaseModel):
 	}
 }
 
+func TestPythonVultureAdapterKeepsReportedPydanticModelShapesWhenInstalled(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		live  string
+	}{
+		{name: "direct BaseModel", live: "direct_field", files: map[string]string{
+			"src/reported.py": "from pydantic import BaseModel\n\nclass DirectModel(BaseModel):\n    direct_field: str\n",
+		}},
+		{name: "inherited BaseModel reexport", live: "inherited_field", files: map[string]string{
+			"src/models/base.py":     "from pydantic import BaseModel\n\nclass ProjectModel(BaseModel):\n    pass\n",
+			"src/models/__init__.py": "from .base import ProjectModel as ModelBase\n",
+			"src/reported.py":        "from models import ModelBase\n\nclass InheritedModel(ModelBase):\n    inherited_field: int\n",
+		}},
+		{name: "multiline annotated field", live: "annotated_field", files: map[string]string{
+			"src/reported.py": "from typing import Annotated\nfrom pydantic import BaseModel, Field\n\nclass AnnotatedModel(BaseModel):\n    annotated_field: Annotated[\n        str,\n        Field(min_length=1),\n    ]\n",
+		}},
+		{name: "multiline model config", live: "model_config", files: map[string]string{
+			"src/reported.py": "from pydantic import BaseModel, ConfigDict\n\nclass ConfiguredModel(BaseModel):\n    model_config = ConfigDict(\n        extra=\"forbid\",\n    )\n",
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			repo := pythonQualityRepository(t)
+			repo.PolicyRoot = pythonVulturePolicyRoot(t)
+			if !pythonVultureRuntimeInstalled(t, repo) {
+				t.Skip("policy CPython with Vulture is not installed")
+			}
+			writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+			for path, source := range test.files {
+				writeQualityFile(t, repo.Root, path, source)
+			}
+			project := pythonVultureProject(t, repo)
+			command, err := pythonVultureCommand(repo, project)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := parsePythonVultureResponse(output.Stdout)
+			if err != nil || response.Error != "" {
+				t.Fatalf("response = %+v, error = %v", response, err)
+			}
+			if slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool { return diagnostic.Name == test.live }) {
+				t.Fatalf("reported Pydantic declaration %q was dead: %+v", test.live, response.Diagnostics)
+			}
+		})
+	}
+}
+
 func TestPythonVultureAdapterInfersInTreeBuildBackendHooksWhenInstalled(t *testing.T) {
 	repo := pythonQualityRepository(t)
 	repo.PolicyRoot = pythonVulturePolicyRoot(t)

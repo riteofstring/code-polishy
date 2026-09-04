@@ -16,7 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 3
+const pythonVultureProtocolVersion = 4
 
 const pythonVultureVersion = "2.16"
 
@@ -24,7 +24,7 @@ const pythonVultureInputMaximumBytes = 4 << 20
 
 const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys
 from collections import defaultdict
-P=3
+P=4
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -42,7 +42,9 @@ def p(x):
  return x
 def c(f,node,name):
  d=getattr(node,"decorator_list",())
- return (f["path"],d[0].lineno if d else node.lineno,node.end_lineno,name)
+ line=d[0].lineno if d else node.lineno
+ end=line if isinstance(node,(ast.Assign,ast.AnnAssign,ast.Name,ast.Attribute)) else node.end_lineno
+ return (f["path"],line,end,name)
 def ts(node):
  if isinstance(node,(ast.Tuple,ast.List)):
   for x in node.elts:yield from ts(x)
