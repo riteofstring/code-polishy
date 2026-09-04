@@ -754,6 +754,122 @@ patched.side_effect = RuntimeError
 	}
 }
 
+func TestPythonVultureAdapterInfersExactPydanticReachabilityWhenInstalled(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	if !pythonVultureRuntimeInstalled(t, repo) {
+		t.Skip("policy CPython with Vulture is not installed")
+	}
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "src/models/__init__.py", "from .base import CoreModel as ExportedModel\n")
+	writeQualityFile(t, repo.Root, "src/models/base.py", `import pydantic as pd
+from pydantic import computed_field as derived_field
+from pydantic import field_validator as validate_field
+from pydantic import model_serializer, model_validator
+from typing import ClassVar
+
+class CoreModel(pd.BaseModel):
+    model_name: str
+    model_count: int = pd.Field(default=0)
+    _private_value: str = pd.PrivateAttr(default="")
+    model_config = pd.ConfigDict(extra="forbid")
+    class_constant: ClassVar[int] = 1
+
+    @validate_field("model_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return value
+
+    @model_validator(mode="after")
+    def populate_count(self):
+        return self
+
+    @pd.field_serializer("model_name")
+    def serialize_name(self, value: str) -> str:
+        return value
+
+    @model_serializer
+    def serialize_model(self):
+        return {"model_name": self.model_name}
+
+    @derived_field
+    @property
+    def display_name(self) -> str:
+        return self.model_name
+
+    def unused_model_method(self) -> None:
+        return None
+`)
+	writeQualityFile(t, repo.Root, "src/models/child.py", `from models import ExportedModel
+from pydantic import field_validator as validate
+
+class ChildModel(ExportedModel):
+    inherited_value: int
+
+    @validate("inherited_value")
+    @classmethod
+    def validate_inherited(cls, value: int) -> int:
+        return value
+`)
+	writeQualityFile(t, repo.Root, "src/settings.py", `from pydantic_settings import BaseSettings as SettingsBase
+
+class Settings(SettingsBase):
+    api_key: str
+`)
+	writeQualityFile(t, repo.Root, "src/legacy.py", `from pydantic.v1 import BaseModel
+from pydantic.v1 import root_validator as validate_model_v1
+from pydantic.v1 import validator as validate_field_v1
+
+class LegacyModel(BaseModel):
+    legacy_value: int
+
+    @validate_field_v1("legacy_value")
+    def validate_legacy_value(cls, value: int) -> int:
+        return value
+
+    @validate_model_v1
+    def validate_legacy_model(cls, values):
+        return values
+`)
+	writeQualityFile(t, repo.Root, "src/lookalike.py", `class BaseModel:
+    pass
+
+class Lookalike(BaseModel):
+    fake_field: str
+
+    def unused_lookalike_method(self) -> None:
+        return None
+`)
+	project := pythonVultureProject(t, repo)
+	command, err := pythonVultureCommand(repo, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := parsePythonVultureResponse(output.Stdout)
+	if err != nil || response.Error != "" {
+		t.Fatalf("response = %+v, error = %v", response, err)
+	}
+	live := []string{
+		"model_name", "model_count", "_private_value", "model_config", "normalize_name", "populate_count",
+		"serialize_name", "serialize_model", "display_name", "inherited_value", "validate_inherited", "api_key",
+		"legacy_value", "validate_legacy_value", "validate_legacy_model",
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if slices.Contains(live, diagnostic.Name) {
+			t.Fatalf("Pydantic declaration reported dead: %+v", diagnostic)
+		}
+	}
+	for _, dead := range []string{"class_constant", "unused_model_method", "fake_field", "unused_lookalike_method"} {
+		if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool { return diagnostic.Name == dead }) {
+			t.Fatalf("unrelated declaration %q was hidden: %+v", dead, response.Diagnostics)
+		}
+	}
+}
+
 func TestPythonVultureAdapterInfersInTreeBuildBackendHooksWhenInstalled(t *testing.T) {
 	repo := pythonQualityRepository(t)
 	repo.PolicyRoot = pythonVulturePolicyRoot(t)

@@ -99,16 +99,110 @@ def ib(f):
  for x in f["tree"].body:
   if isinstance(x,ast.Import):
    for a in x.names:r[a.asname or a.name.partition(".")[0]]=a.name if a.asname else a.name.partition(".")[0]
-  elif isinstance(x,ast.ImportFrom) and not x.level and x.module:
-   for a in x.names:
-    if a.name!="*":r[a.asname or a.name]=x.module+"."+a.name
+  elif isinstance(x,ast.ImportFrom):
+   m=fm(f,x)
+   if m:
+    for a in x.names:
+     if a.name!="*":r[a.asname or a.name]=m+"."+a.name
  return r
+def fm(f,x):
+ if not isinstance(x,ast.ImportFrom):return ""
+ b=[]
+ if x.level:
+  if not f["package"]:return ""
+  b=f["package"].split(".")
+  if len(b)<x.level-1:return ""
+  b=b[:len(b)-x.level+1]
+ if x.module:b.append(x.module)
+ return ".".join(b)
 def en(x,b):
  if isinstance(x,ast.Name):return b.get(x.id,x.id)
  if isinstance(x,ast.Attribute):
   z=en(x.value,b)
   return z+"."+x.attr if z else ""
  return ""
+def un(x):
+ while isinstance(x,ast.Subscript):x=x.value
+ return x
+def rd(mod,parts,seen):
+ k=(mod,".".join(parts))
+ if k in seen:return None
+ seen=seen|{k};z=mods.get(mod,[])
+ if len(z)!=1:return None
+ f=z[0];d=ds(f,f["tree"].body,parts[0])
+ if len(d)!=1:return None
+ x=d[0]
+ if x[0]=="i":
+  node,a=x[1:];m=fm(f,node)
+  if not m:return None
+  return rd(m,a.name.split(".")+parts[1:],seen)
+ node=x[1]
+ if len(parts)==1:return (f,node) if isinstance(node,ast.ClassDef) else None
+ if not isinstance(node,ast.ClassDef):return None
+ d=ds(f,node.body,parts[1])
+ if len(d)!=1 or d[0][0]!="d":return None
+ node=d[0][1]
+ if len(parts)==2:return (f,node) if isinstance(node,ast.ClassDef) else None
+ return None
+def rc(f,node,b):
+ name=en(un(node),b)
+ if not name:return None
+ parts=name.split(".")
+ if len(parts)==1 and f["module"]:
+  z=rd(f["module"],parts,set())
+  if z:return z
+ for i in range(len(parts)-1,0,-1):
+  mod=".".join(parts[:i])
+  if mod in mods:
+   z=rd(mod,parts[i:],set())
+   if z:return z
+ return None
+def mi(f,node):
+ return (f["path"],node.lineno,node.name)
+def pa(f,node,b):
+ name=node.target.id
+ annotation=en(un(node.annotation),b)
+ if annotation in ("typing.ClassVar","typing_extensions.ClassVar"):return False
+ if not name.startswith("_"):return True
+ return isinstance(node.value,ast.Call) and en(node.value.func,b) in ("pydantic.PrivateAttr","pydantic.v1.PrivateAttr")
+def pk():
+ roots={"pydantic.BaseModel","pydantic.v1.BaseModel","pydantic_settings.BaseSettings"}
+ decorators={
+  "pydantic.field_validator","pydantic.model_validator","pydantic.field_serializer",
+  "pydantic.model_serializer","pydantic.computed_field","pydantic.validator",
+  "pydantic.root_validator","pydantic.v1.validator","pydantic.v1.root_validator",
+ }
+ fields={"pydantic.Field","pydantic.PrivateAttr","pydantic.v1.Field","pydantic.v1.PrivateAttr"}
+ classes=[]
+ for f in fs:
+  b=ib(f)
+  for node in f["tree"].body:
+   if isinstance(node,ast.ClassDef):classes.append((f,node,b))
+ known=set();changed=True
+ while changed:
+  changed=False
+  for f,node,b in classes:
+   identity=mi(f,node)
+   if identity in known:continue
+   for base in node.bases:
+    name=en(un(base),b);target=rc(f,base,b)
+    if name in roots or (target and mi(*target) in known):
+     known.add(identity);changed=True;break
+ keep=set()
+ for f,node,b in classes:
+  if mi(f,node) not in known:continue
+  for item in node.body:
+   if isinstance(item,ast.AnnAssign) and isinstance(item.target,ast.Name) and (item.target.id=="model_config" or pa(f,item,b)):keep.add(c(f,item,item.target.id))
+   elif isinstance(item,ast.Assign):
+    names=[z for target in item.targets for z in ts(target)]
+    call=en(item.value.func,b) if isinstance(item.value,ast.Call) else ""
+    for name in names:
+     if name.id=="model_config" or call in fields:keep.add(c(f,item,name.id))
+   if isinstance(item,(ast.FunctionDef,ast.AsyncFunctionDef)):
+    for decorator in item.decorator_list:
+     if en(decorator.func if isinstance(decorator,ast.Call) else decorator,b) in decorators:
+      keep.add(c(f,item,item.name));break
+ return keep
 def ka(f):
  k=set();b=ib(f);typed=set()
  protocols={
@@ -191,7 +285,7 @@ try:
   try:d=pkgutil.get_data("vulture",w)
   except OSError:continue
   if d is not None:v.scan(d.decode("utf-8"),filename=w)
- keep=set()
+ keep=pk()
  for f in fs:keep.update(ka(f))
  for r in rs:
   try:
