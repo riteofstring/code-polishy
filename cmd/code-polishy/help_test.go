@@ -102,6 +102,27 @@ func TestEvaluationCommandHelpDistinguishesDirectoriesAndModules(t *testing.T) {
 	}
 }
 
+func TestReportCommandHelpDistinguishesEvaluationAndDisplayOptions(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{
+		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-plan", "test-levels", "verify", "architecture",
+		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix",
+	} {
+		page, found := commandHelpFor(command)
+		if !found {
+			t.Fatalf("%s help page is missing", command)
+		}
+		output := &bytes.Buffer{}
+		page.writeTo(output)
+		text := output.String()
+		for _, fact := range []string{"separate from evaluation selectors", "--format human|json|sarif", "--output PATH", "display-only filters", "--display-limit"} {
+			if !strings.Contains(text, fact) {
+				t.Fatalf("%s help omitted %q: %q", command, fact, text)
+			}
+		}
+	}
+}
+
 func TestEveryCatalogCommandSupportsEarlyHelp(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	for _, page := range commandHelpPages {

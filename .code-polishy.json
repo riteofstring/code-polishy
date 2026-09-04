@@ -7,6 +7,7 @@
       "internal/spdx/data/exceptions.json",
       "internal/spdx/data/licenses.json"
     ],
+    "generated": ["internal/engine/testdata/**", "schema/sarif*.json"],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
       "tools/javascript/runner.mjs"
@@ -52,7 +53,7 @@
     { "name": "pythonfacts", "paths": ["internal/pythonfacts/**"] },
     {
       "name": "policy",
-      "paths": ["internal/policy/**", "schema/schema.go"],
+      "paths": ["internal/policy/**", "schema/**"],
       "dependsOn": ["spdx"]
     },
     {

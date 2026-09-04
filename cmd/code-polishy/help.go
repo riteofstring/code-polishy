@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/engine"
 )
 
 type commandHelpPage struct {
@@ -494,12 +496,27 @@ func printCommandHelp(output io.Writer, command string) bool {
 }
 
 func (page commandHelpPage) writeTo(output io.Writer) {
+	if reportOutputCommand(page.name) {
+		page.selectors = append(append([]string{}, page.selectors...), reportOutputHelp()...)
+		page.sideEffects = append(append([]string{}, page.sideEffects...), "Writes a complete versioned JSON report below .code-polishy-reports even when the displayed view is filtered or truncated.")
+	}
 	writeHelpSection(output, "Usage", page.syntax)
 	fmt.Fprintf(output, "\n%s\n", page.summary)
 	writeHelpSection(output, "Selectors and arguments", page.selectors)
 	writeHelpSection(output, "Side effects", page.sideEffects)
 	writeHelpSection(output, "Exit status", page.exits)
 	writeHelpSection(output, "Examples", page.examples)
+}
+
+func reportOutputHelp() []string {
+	return []string{
+		"Output options are separate from evaluation selectors and never reduce evaluated scope or exit status.",
+		"--format human|json|sarif selects bounded human output or one machine document; the default is human.",
+		"--output PATH atomically writes an explicit contained regular file instead of stdout.",
+		"--filter-rule, --filter-module, --filter-path, and --filter-relation are repeatable display-only filters.",
+		"--group-by rule|module|path|relation controls view ordering without changing the complete report.",
+		fmt.Sprintf("--display-limit N bounds human findings from 1 through %d; the default is %d.", engine.MaximumFindingDisplayLimit, engine.DefaultFindingDisplayLimit),
+	}
 }
 
 func writeHelpSection(output io.Writer, heading string, lines []string) {

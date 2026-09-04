@@ -133,7 +133,7 @@ func TestDoctorRejectsExcludedExecutableSource(t *testing.T) {
 func TestAdvisoriesDoNotFailReport(t *testing.T) {
 	t.Parallel()
 	report := (&Engine{}).finishWithAdvisories(nil, []policy.Advisory{{Check: "portability.machinePath", Path: "content/config.go", Subject: "2"}}, nil)
-	if len(report.Findings) != 0 || len(report.Advisories) != 1 {
+	if len(report.Findings) != 1 || report.Findings[0].Severity != policy.FindingWarning {
 		t.Fatalf("report = %+v", report)
 	}
 	if HasFindings(report) {
@@ -141,16 +141,18 @@ func TestAdvisoriesDoNotFailReport(t *testing.T) {
 	}
 }
 
-func TestCombinedReportsCanonicalizeAdvisories(t *testing.T) {
+func TestCombinedReportsCanonicalizeWarnings(t *testing.T) {
 	t.Parallel()
-	earlier := policy.Advisory{Check: "portability.machinePath", Path: "content/a.go", Subject: "1"}
-	later := policy.Advisory{Check: "portability.machinePath", Path: "content/z.go", Subject: "2"}
+	earlier := policy.NormalizeFinding(policy.Finding{Check: "portability.machinePath", Path: "content/a.go", Subject: "1", Severity: policy.FindingWarning})
+	later := policy.NormalizeFinding(policy.Finding{Check: "portability.machinePath", Path: "content/z.go", Subject: "2", Severity: policy.FindingWarning})
 	report := (&Engine{}).combine(
-		Report{Advisories: []policy.Advisory{later, earlier}},
-		Report{Advisories: []policy.Advisory{later}},
+		Report{Findings: []policy.Finding{later, earlier}},
+		Report{Findings: []policy.Finding{later}},
 	)
-	if !slices.Equal(report.Advisories, []policy.Advisory{earlier, later}) {
-		t.Fatalf("advisories = %+v", report.Advisories)
+	reversed := (&Engine{}).combine(Report{Findings: []policy.Finding{earlier, later}}, Report{})
+	if len(report.Findings) != 2 || len(reversed.Findings) != 2 || report.Findings[0].Fingerprint != reversed.Findings[0].Fingerprint ||
+		report.Findings[1].Fingerprint != reversed.Findings[1].Fingerprint {
+		t.Fatalf("findings = %+v", report.Findings)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,13 +23,52 @@ func TestPrintReportLabelsNonBlockingAdvisory(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	report := engine.Report{Advisories: []policy.Advisory{{Check: "portability.machinePath", Path: "app.js", Subject: "3", Message: "machine path"}}}
+	report := engine.Report{Findings: []policy.Finding{{Check: "portability.machinePath", Path: "app.js", Subject: "3", Message: "machine path", Severity: policy.FindingWarning}}}
 	printReportTo(stdout, stderr, report)
-	if !strings.Contains(stdout.String(), "WARN portability.machinePath") || !strings.Contains(stdout.String(), "PASS policy completed") {
+	if !strings.Contains(stdout.String(), "WARN portability.machinePath") || !strings.Contains(stdout.String(), "PASS with 1 warning") || strings.Contains(stdout.String(), "without findings") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestHumanReportBoundsAllFindingOutcomesTogether(t *testing.T) {
+	t.Parallel()
+	report := engine.Report{
+		Protocol: engine.ReportProtocol,
+		Summary:  engine.ReportSummary{Status: "failed", Errors: 15},
+		Display:  &engine.ReportDisplay{Limit: 20, Total: 30, Displayed: 30},
+	}
+	for index := 0; index < 15; index++ {
+		finding := policy.Finding{Check: "quality.lint", Path: fmt.Sprintf("src/%02d.go", index), Subject: "unused", Message: "unused"}
+		report.Findings = append(report.Findings, finding)
+		report.Suppressed = append(report.Suppressed, policy.Suppressed{
+			Finding: finding, Exception: policy.Exception{ID: fmt.Sprintf("exception-%02d", index)},
+		})
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	printReportTo(stdout, stderr, report)
+	if strings.Count(stderr.String(), "FAIL quality.lint") != 15 || strings.Count(stdout.String(), "WAIVED quality.lint") != 5 ||
+		!strings.Contains(stdout.String(), "OMITTED 10 finding(s)") {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestReportOutputOptionsAreSeparateFromEvaluationSelection(t *testing.T) {
+	options, remaining, err := parseReportOutputOptions("check", []string{
+		"--files", "src", "--format", "json", "--filter-relation=context", "--filter-rule", "quality.lint", "--group-by", "module", "--display-limit", "12",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.format != "json" || options.display.GroupBy != "module" || options.display.Limit != 12 || !slices.Equal(remaining, []string{"--files", "src"}) ||
+		!slices.Equal(options.display.Filters.Rules, []string{"quality.lint"}) || !slices.Equal(options.display.Filters.Relations, []policy.SelectionRelation{policy.SelectionContext}) {
+		t.Fatalf("options = %+v remaining = %v", options, remaining)
+	}
+	if _, _, err := parseReportOutputOptions("check", []string{"--format="}); err == nil {
+		t.Fatal("empty inline format was accepted")
 	}
 }
 
@@ -51,7 +91,7 @@ func TestPrintReportShowsTestQualityReminderBeforeOrdinaryDetails(t *testing.T) 
 	if strings.Index(lower, "test quality reminder") > strings.Index(lower, "merge gate") {
 		t.Fatalf("test reminder did not precede ordinary report details: %q", output)
 	}
-	if !strings.Contains(output, "PASS policy completed without findings") || engine.HasFindings(report) {
+	if !strings.Contains(output, "PASS errors=0 warnings=0 information=0") || engine.HasFindings(report) {
 		t.Fatalf("reminder changed successful report behavior: stdout=%q report=%+v", output, report)
 	}
 	if stderr.Len() != 0 {
@@ -440,7 +480,7 @@ func TestPrintReportSummarizesAcceptedCheckpointForHumans(t *testing.T) {
 		ReceiptPath: ".code-polishy-reports/checkpoint-gate/receipt.json",
 	}}
 	printReportTo(stdout, stderr, report)
-	want := "CHECKPOINT GATE: CHANGED against HEAD~1\nCHECKPOINT ACCEPTED: " + strings.Repeat("a", 40) + "\n"
+	want := "PASS errors=0 warnings=0 information=0\nCHECKPOINT GATE: CHANGED against HEAD~1\nCHECKPOINT ACCEPTED: " + strings.Repeat("a", 40) + "\n"
 	if !strings.HasPrefix(stdout.String(), want) || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
@@ -492,7 +532,7 @@ func TestPrintReportSummarizesMergePolicyForHumans(t *testing.T) {
 		Level: "recommended", Base: "origin/main", Reasons: []string{"content-only change"},
 	}}
 	printReportTo(stdout, stderr, report)
-	wantPrefix := "MERGE GATE: RECOMMENDED against origin/main\n"
+	wantPrefix := "PASS errors=0 warnings=0 information=0\nMERGE GATE: RECOMMENDED against origin/main\n"
 	if !strings.HasPrefix(stdout.String(), wantPrefix) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
@@ -507,7 +547,7 @@ func TestPrintReportSummarizesDocumentationMergePolicyForHumans(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	report := engine.Report{MergePolicy: &engine.MergePolicy{Level: "documentation", Base: "origin/main"}}
 	printReportTo(stdout, stderr, report)
-	wantPrefix := "MERGE GATE: DOCUMENTATION against origin/main\n"
+	wantPrefix := "PASS errors=0 warnings=0 information=0\nMERGE GATE: DOCUMENTATION against origin/main\n"
 	if !strings.HasPrefix(stdout.String(), wantPrefix) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
@@ -635,7 +675,7 @@ func TestVerboseReportPreservesDetailedMergePolicyReceipt(t *testing.T) {
 		Level: "recommended", Base: "origin/main", Reasons: []string{"content-only change"},
 	}}
 	printReportWithMode(stdout, stderr, report, true)
-	wantPrefix := "MERGE POLICY LEVEL: RECOMMENDED\nMERGE POLICY BASE: origin/main\nMERGE POLICY REASON: content-only change\n"
+	wantPrefix := "PASS errors=0 warnings=0 information=0\nMERGE POLICY LEVEL: RECOMMENDED\nMERGE POLICY BASE: origin/main\nMERGE POLICY REASON: content-only change\n"
 	if !strings.HasPrefix(stdout.String(), wantPrefix) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
@@ -646,7 +686,7 @@ func TestConciseReportHidesRoutineNotes(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	printReportTo(stdout, stderr, engine.Report{Notes: []string{"inventory: 257 governed files"}})
-	if strings.Contains(stdout.String(), "NOTE") || !strings.Contains(stdout.String(), "PASS policy completed") {
+	if strings.Contains(stdout.String(), "NOTE") || !strings.Contains(stdout.String(), "PASS errors=0 warnings=0 information=0") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
@@ -660,7 +700,8 @@ func TestPrintReportDisclosesTrustedChangeBoundary(t *testing.T) {
 		Paths: []string{"docs/plans/existing.md"}, NewPaths: []string{"docs/plans/new.md"},
 	}}
 	printReportTo(stdout, stderr, report)
-	wantPrefix := "CHANGE BOUNDARY BASE: 0123456789012345678901234567890123456789\n" +
+	wantPrefix := "PASS errors=0 warnings=0 information=0\n" +
+		"CHANGE BOUNDARY BASE: 0123456789012345678901234567890123456789\n" +
 		"CHANGE BOUNDARY MODULES: notes, theme\n" +
 		"CHANGE BOUNDARY EXACT PATHS: docs/plans/existing.md\n" +
 		"CHANGE BOUNDARY NEW PATHS: docs/plans/new.md\n"

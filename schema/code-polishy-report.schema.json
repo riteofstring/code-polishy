@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-polishy.dev/schema/code-polishy-report.schema.json",
+  "title": "Code Polishy report",
+  "type": "object",
+  "required": [
+    "$schema",
+    "protocol",
+    "command",
+    "reportPath",
+    "analysisContext",
+    "summary",
+    "testCommands",
+    "testDiagnostics",
+    "testAggregations",
+    "findings",
+    "suppressed",
+    "vulnerabilityAssessments",
+    "releaseAgeAssessments",
+    "tables",
+    "notes"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://code-polishy.dev/schema/code-polishy-report.schema.json"
+    },
+    "protocol": { "const": "code-polishy-report/v1" },
+    "command": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "reportPath": { "type": "string" },
+    "requestedSelection": { "$ref": "#/$defs/requestedSelection" },
+    "analysisContext": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/analysisContext" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "display": { "$ref": "#/$defs/display" },
+    "testCommands": { "type": "array", "items": { "type": "object" } },
+    "testDiagnostics": { "type": "array", "items": { "type": "object" } },
+    "testAggregations": { "type": "array", "items": { "type": "object" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "suppressed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding", "exception"],
+        "properties": {
+          "finding": { "$ref": "#/$defs/finding" },
+          "exception": { "type": "object" }
+        }
+      }
+    },
+    "vulnerabilityAssessments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding", "assessment"],
+        "properties": {
+          "finding": { "$ref": "#/$defs/finding" },
+          "assessment": { "type": "object" }
+        }
+      }
+    },
+    "releaseAgeAssessments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding", "assessment"],
+        "properties": {
+          "finding": { "$ref": "#/$defs/finding" },
+          "assessment": { "type": "object" }
+        }
+      }
+    },
+    "tables": { "type": "array", "items": { "type": "object" } },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "stringArray": { "type": "array", "items": { "type": "string" } },
+    "requestedSelection": {
+      "type": "object",
+      "required": ["mode", "operands", "expanded"],
+      "properties": {
+        "mode": { "type": "string" },
+        "operands": { "$ref": "#/$defs/stringArray" },
+        "modules": { "$ref": "#/$defs/stringArray" },
+        "expanded": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "analysisContext": {
+      "type": "object",
+      "required": ["analyzer", "root", "reason", "paths"],
+      "properties": {
+        "analyzer": { "type": "string", "minLength": 1 },
+        "root": { "type": "string" },
+        "reason": { "type": "string", "minLength": 1 },
+        "paths": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "status",
+        "errors",
+        "warnings",
+        "information",
+        "suppressed",
+        "reviewed",
+        "bySelectionRelation",
+        "byRule",
+        "byModule"
+      ],
+      "properties": {
+        "status": { "enum": ["passed", "failed", "review-required"] },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "information": { "type": "integer", "minimum": 0 },
+        "suppressed": { "type": "integer", "minimum": 0 },
+        "reviewed": { "type": "integer", "minimum": 0 },
+        "bySelectionRelation": { "$ref": "#/$defs/counts" },
+        "byRule": { "$ref": "#/$defs/counts" },
+        "byModule": { "$ref": "#/$defs/counts" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "display": {
+      "type": "object",
+      "required": ["filters", "total", "displayed", "omitted"],
+      "properties": {
+        "filters": {
+          "type": "object",
+          "properties": {
+            "rules": { "$ref": "#/$defs/stringArray" },
+            "modules": { "$ref": "#/$defs/stringArray" },
+            "paths": { "$ref": "#/$defs/stringArray" },
+            "relations": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/selectionRelation" }
+            }
+          }
+        },
+        "groupBy": { "enum": ["rule", "module", "path", "relation"] },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "total": { "type": "integer", "minimum": 0 },
+        "displayed": { "type": "integer", "minimum": 0 },
+        "omitted": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "selectionRelation": {
+      "enum": ["selected", "related", "context", "global"]
+    },
+    "location": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "endColumn": { "type": "integer", "minimum": 1 },
+        "message": { "type": "string" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "ruleId",
+        "fingerprint",
+        "severity",
+        "status",
+        "scope",
+        "selectionRelation",
+        "path",
+        "subject",
+        "message",
+        "remediation"
+      ],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9]*(\\.[A-Za-z][A-Za-z0-9]*)+$"
+        },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "severity": { "enum": ["error", "warning", "information"] },
+        "status": { "enum": ["open", "suppressed", "reviewed"] },
+        "scope": {
+          "type": "object",
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "repository",
+                "module",
+                "path",
+                "dependency",
+                "graph-component"
+              ]
+            },
+            "value": { "type": "string" }
+          }
+        },
+        "selectionRelation": { "$ref": "#/$defs/selectionRelation" },
+        "selectionEvidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["selected", "related", "kind"],
+            "properties": {
+              "selected": { "$ref": "#/$defs/location" },
+              "related": { "$ref": "#/$defs/location" },
+              "kind": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "path": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "endColumn": { "type": "integer", "minimum": 1 },
+        "module": { "type": "string" },
+        "subject": { "type": "string" },
+        "relatedLocations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/location" }
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "generatedProducer": { "type": "string" },
+        "message": { "type": "string", "minLength": 1 },
+        "remediation": {
+          "type": "object",
+          "required": ["summary"],
+          "properties": {
+            "summary": { "type": "string", "minLength": 1 },
+            "replacement": { "type": "string" },
+            "configuration": {},
+            "nextCommand": {
+              "type": "object",
+              "required": ["argv", "cwd"],
+              "properties": {
+                "argv": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 256,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "cwd": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

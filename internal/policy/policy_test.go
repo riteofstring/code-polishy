@@ -859,7 +859,7 @@ func TestReleaseAgeMetadataFailureDefersUnusedAssessmentFinding(t *testing.T) {
 		Message: "resolve standalone artifact release: release metadata request failed with HTTP 403",
 	}
 	kept, accepted := ApplyReleaseAgeAssessments([]Finding{failure}, []ReleaseAgeAssessment{assessment}, now, true)
-	if len(accepted) != 0 || len(kept) != 1 || kept[0] != failure {
+	if len(accepted) != 0 || len(kept) != 1 || kept[0].Error() != failure.Error() {
 		t.Fatalf("kept=%+v accepted=%+v", kept, accepted)
 	}
 }

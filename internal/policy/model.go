@@ -488,14 +488,85 @@ func (date *Date) UnmarshalJSON(data []byte) error {
 }
 
 type Finding struct {
-	Check         string
-	Path          string
-	Line          int
-	Column        int
-	Subject       string
-	Message       string
-	Vulnerability *VulnerabilityIdentity
-	ReleaseAge    *ReleaseAgeIdentity
+	Check             string                     `json:"ruleId"`
+	Fingerprint       string                     `json:"fingerprint"`
+	Severity          FindingSeverity            `json:"severity"`
+	Status            FindingStatus              `json:"status"`
+	Scope             FindingScope               `json:"scope"`
+	SelectionRelation SelectionRelation          `json:"selectionRelation"`
+	SelectionEvidence []FindingSelectionEvidence `json:"selectionEvidence,omitempty"`
+	Path              string                     `json:"path"`
+	Line              int                        `json:"line,omitempty"`
+	Column            int                        `json:"column,omitempty"`
+	EndLine           int                        `json:"endLine,omitempty"`
+	EndColumn         int                        `json:"endColumn,omitempty"`
+	Module            string                     `json:"module,omitempty"`
+	Subject           string                     `json:"subject"`
+	Related           []FindingLocation          `json:"relatedLocations,omitempty"`
+	Fields            map[string]string          `json:"fields,omitempty"`
+	GeneratedProducer string                     `json:"generatedProducer,omitempty"`
+	Message           string                     `json:"message"`
+	Remediation       FindingRemediation         `json:"remediation"`
+	Vulnerability     *VulnerabilityIdentity     `json:"vulnerability,omitempty"`
+	ReleaseAge        *ReleaseAgeIdentity        `json:"releaseAge,omitempty"`
+	SemanticIdentity  []string                   `json:"-"`
+}
+
+type FindingSeverity string
+
+const (
+	FindingError       FindingSeverity = "error"
+	FindingWarning     FindingSeverity = "warning"
+	FindingInformation FindingSeverity = "information"
+)
+
+type FindingStatus string
+
+const (
+	FindingOpen       FindingStatus = "open"
+	FindingSuppressed FindingStatus = "suppressed"
+	FindingReviewed   FindingStatus = "reviewed"
+)
+
+type SelectionRelation string
+
+const (
+	SelectionSelected SelectionRelation = "selected"
+	SelectionRelated  SelectionRelation = "related"
+	SelectionContext  SelectionRelation = "context"
+	SelectionGlobal   SelectionRelation = "global"
+)
+
+type FindingScope struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+type FindingLocation struct {
+	Path      string `json:"path"`
+	Line      int    `json:"line,omitempty"`
+	Column    int    `json:"column,omitempty"`
+	EndLine   int    `json:"endLine,omitempty"`
+	EndColumn int    `json:"endColumn,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
+type FindingSelectionEvidence struct {
+	Selected FindingLocation `json:"selected"`
+	Related  FindingLocation `json:"related"`
+	Kind     string          `json:"kind"`
+}
+
+type FindingRemediation struct {
+	Summary       string          `json:"summary"`
+	Replacement   string          `json:"replacement,omitempty"`
+	Configuration json.RawMessage `json:"configuration,omitempty"`
+	NextCommand   *FindingCommand `json:"nextCommand,omitempty"`
+}
+
+type FindingCommand struct {
+	Argv []string `json:"argv"`
+	Cwd  string   `json:"cwd"`
 }
 
 type Advisory struct {
@@ -506,38 +577,38 @@ type Advisory struct {
 }
 
 type VulnerabilityIdentity struct {
-	Ecosystem       string
-	Advisory        string
-	Aliases         []string
-	Package         string
-	AffectedVersion string
-	Scope           string
-	Severity        string
-	KnownExploited  bool
+	Ecosystem       string   `json:"ecosystem"`
+	Advisory        string   `json:"advisory"`
+	Aliases         []string `json:"aliases"`
+	Package         string   `json:"package"`
+	AffectedVersion string   `json:"affectedVersion"`
+	Scope           string   `json:"scope"`
+	Severity        string   `json:"severity"`
+	KnownExploited  bool     `json:"knownExploited"`
 }
 
 type ReleaseAgeIdentity struct {
-	Ecosystem string
-	Package   string
-	Version   string
-	Scope     string
-	Released  time.Time
-	Eligible  time.Time
+	Ecosystem string    `json:"ecosystem"`
+	Package   string    `json:"package"`
+	Version   string    `json:"version"`
+	Scope     string    `json:"scope"`
+	Released  time.Time `json:"released"`
+	Eligible  time.Time `json:"eligible"`
 }
 
 type Suppressed struct {
-	Finding   Finding
-	Exception Exception
+	Finding   Finding   `json:"finding"`
+	Exception Exception `json:"exception"`
 }
 
 type AssessedVulnerability struct {
-	Finding    Finding
-	Assessment VulnerabilityAssessment
+	Finding    Finding                 `json:"finding"`
+	Assessment VulnerabilityAssessment `json:"assessment"`
 }
 
 type AssessedReleaseAge struct {
-	Finding    Finding
-	Assessment ReleaseAgeAssessment
+	Finding    Finding              `json:"finding"`
+	Assessment ReleaseAgeAssessment `json:"assessment"`
 }
 
 func (finding Finding) Error() string {

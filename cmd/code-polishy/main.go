@@ -93,21 +93,32 @@ func validateInvocation(invocation invocation) int {
 }
 
 func runPolicyCommand(invocation invocation) int {
+	outputOptions, commandArguments, parseErr := parseReportOutputOptions(invocation.command, invocation.arguments)
+	if parseErr != nil {
+		return commandUsageErrorForInvocation(invocation, parseErr.Error())
+	}
 	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		return 2
 	}
 	policyEngine.Verbose = invocation.verbose
+	if outputOptions.format != "human" {
+		policyEngine.RouteProgress(os.Stderr)
+	}
 	handler, exists := commandHandlers()[invocation.command]
 	if !exists {
 		return commandUsageError("", "unknown command "+invocation.command)
 	}
-	result, err := handler(context.Background(), policyEngine, invocation.arguments)
-	return renderCommandResult(invocation, result, err)
+	result, err := handler(context.Background(), policyEngine, commandArguments)
+	if err == nil && !result.quiet {
+		result.report = engine.PrepareReportDisplay(result.report, outputOptions.display)
+		result.report, err = policyEngine.FinalizeReport(invocation.command, result.report)
+	}
+	return renderCommandResultWithOptions(invocation, policyEngine, result, err, outputOptions)
 }
 
-func renderCommandResult(invocation invocation, result commandResult, err error) int {
+func renderCommandResultWithOptions(invocation invocation, policyEngine *engine.Engine, result commandResult, err error, options reportOutputOptions) int {
 	if err != nil {
 		if isCommandInputError(err) {
 			return commandUsageErrorForInvocation(invocation, err.Error())
@@ -115,14 +126,22 @@ func renderCommandResult(invocation invocation, result commandResult, err error)
 		printOperationalReportHeaders(os.Stdout, result.report, invocation.verbose)
 		return operationalError(err)
 	}
+	messageOutput := io.Writer(os.Stdout)
+	if options.format != "human" {
+		messageOutput = os.Stderr
+	}
 	for _, message := range result.messages {
-		fmt.Fprintln(os.Stdout, message)
+		fmt.Fprintln(messageOutput, message)
 	}
 	if result.quiet {
 		return 0
 	}
-	printReport(result.report, invocation.verbose)
-	if engine.HasFindings(result.report) {
+	failed := engine.HasFindings(result.report)
+	view := engine.ReportView(result.report, options.display)
+	if renderErr := renderReportOutput(policyEngine, view, invocation.verbose, options); renderErr != nil {
+		return operationalError(renderErr)
+	}
+	if failed {
 		return 1
 	}
 	return 0
@@ -188,7 +207,11 @@ func handleWorkflowMetaCommand(invocation invocation) (int, bool) {
 }
 
 func handleChangeBoundaryMeta(invocation invocation) int {
-	options, err := parseChangeBoundaryOptions(invocation.arguments)
+	outputOptions, commandArguments, err := parseReportOutputOptions(invocation.command, invocation.arguments)
+	if err != nil {
+		return commandUsageErrorForInvocation(invocation, err.Error())
+	}
+	options, err := parseChangeBoundaryOptions(commandArguments)
 	if err != nil {
 		return commandUsageError("change-boundary", err.Error())
 	}
@@ -201,11 +224,13 @@ func handleChangeBoundaryMeta(invocation invocation) int {
 	if err != nil {
 		return operationalError(err)
 	}
-	printReport(report, invocation.verbose)
-	if engine.HasFindings(report) {
-		return 1
+	custodian, err := engine.OpenReportCustodian(invocation.repoRoot)
+	if err != nil {
+		return operationalError(err)
 	}
-	return 0
+	report = engine.PrepareReportDisplay(report, outputOptions.display)
+	report, err = custodian.FinalizeReport(invocation.command, report)
+	return renderCommandResultWithOptions(invocation, custodian, commandResult{report: report}, err, outputOptions)
 }
 
 type changeBoundaryOptions struct {
@@ -711,26 +736,42 @@ func onlyAllowed(arguments []string, allowed string) bool {
 	return len(arguments) == 0 || len(arguments) == 1 && arguments[0] == allowed
 }
 
-func printReport(report engine.Report, verbose bool) {
-	printReportWithMode(os.Stdout, os.Stderr, report, verbose)
-}
-
 func printReportTo(stdout, stderr io.Writer, report engine.Report) {
 	printReportWithMode(stdout, stderr, report, false)
 }
 
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
+	printReportCompletion(stdout, stderr, report)
+	printReportSummaryGroups(stdout, report.Summary)
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
-	printFindings(stderr, report.Findings)
+	limit := engine.DefaultFindingDisplayLimit
+	if report.Display != nil && report.Display.Limit > 0 {
+		limit = report.Display.Limit
+	}
+	remaining := limit
+	findings := boundedReportItems(report.Findings, &remaining)
+	suppressed := boundedReportItems(report.Suppressed, &remaining)
+	assessed := boundedReportItems(report.Assessed, &remaining)
+	releaseAges := boundedReportItems(report.ReleaseAges, &remaining)
+	printFindings(stdout, stderr, findings)
 	printTestFailureEvidence(stderr, report.TestCommands, report.TestDiagnostics)
-	printSuppressedFindings(stdout, report.Suppressed)
-	printVulnerabilityAssessments(stdout, report.Assessed)
-	printReleaseAgeAssessments(stdout, report.ReleaseAges)
-	printAdvisories(stdout, report.Advisories)
+	printSuppressedFindings(stdout, suppressed)
+	printVulnerabilityAssessments(stdout, assessed)
+	printReleaseAgeAssessments(stdout, releaseAges)
+	displayed := len(findings) + len(suppressed) + len(assessed) + len(releaseAges)
+	total := len(report.Findings) + len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
+	if omitted := total - displayed; omitted > 0 {
+		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
+	}
 	printReportTables(stdout, report.Tables)
 	printReportNotes(stdout, report.Notes, verbose)
-	printReportCompletion(stdout, stderr, report)
+	if report.ReportPath != "" {
+		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
+	}
+	if report.Display != nil && report.Display.Omitted > 0 {
+		fmt.Fprintf(stdout, "FILTERED %d occurrence(s); displayed %d of %d\n", report.Display.Omitted, report.Display.Displayed, report.Display.Total)
+	}
 }
 
 func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityReminder) {

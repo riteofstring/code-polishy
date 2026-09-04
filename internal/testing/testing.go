@@ -40,9 +40,9 @@ type Plan struct {
 }
 
 type SuiteAggregation struct {
-	Suite      string
-	ExecutedBy string
-	Reason     string
+	Suite      string `json:"suite"`
+	ExecutedBy string `json:"executedBy"`
+	Reason     string `json:"reason"`
 }
 
 type RunResult struct {

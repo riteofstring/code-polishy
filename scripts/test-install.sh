@@ -206,6 +206,12 @@ EOF
   write_file "${source_root}/schema/code-polishy.schema.json" <<'EOF'
 { "$schema": "https://json-schema.org/draft/2020-12/schema" }
 EOF
+  write_file "${source_root}/schema/code-polishy-report.schema.json" <<'EOF'
+{ "$schema": "https://json-schema.org/draft/2020-12/schema" }
+EOF
+  write_file "${source_root}/schema/sarif-schema-2.1.0.json" <<'EOF'
+{}
+EOF
   write_file "${source_root}/templates/AGENTS.md" <<'EOF'
 # Canonical guidance
 EOF
@@ -466,6 +472,7 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md docs/catalog.json schema/code-polishy.schema.json \
+  schema/code-polishy-report.schema.json schema/sarif-schema-2.1.0.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
   artifact-security/scanner-policy.json \
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \

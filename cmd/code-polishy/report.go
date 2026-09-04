@@ -3,16 +3,45 @@ package main
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func printFindings(output io.Writer, findings []policy.Finding) {
+func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
 	for _, finding := range findings {
-		fmt.Fprintf(output, "FAIL %-34s %s [%s]\n     %s\n", finding.Check, findingLocation(finding), finding.Subject, finding.Message)
+		relation := finding.SelectionRelation
+		if relation == "" {
+			relation = policy.SelectionGlobal
+		}
+		output := stderr
+		label := "FAIL"
+		if finding.Severity == policy.FindingWarning {
+			output = stdout
+			label = "WARN"
+		} else if finding.Severity == policy.FindingInformation {
+			output = stdout
+			label = "INFO"
+		}
+		fmt.Fprintf(output, "%s %-34s %s [%s] relation=%s\n     %s\n", label, finding.Check, findingLocation(finding), finding.Subject, relation, finding.Message)
+		if finding.Remediation.Summary != "" {
+			fmt.Fprintln(output, "     remedy:", finding.Remediation.Summary)
+		}
+		if finding.Remediation.NextCommand != nil {
+			fmt.Fprintln(output, "     next:", strings.Join(finding.Remediation.NextCommand.Argv, " "))
+		}
 	}
+}
+
+func boundedReportItems[T any](items []T, remaining *int) []T {
+	count := len(items)
+	if count > *remaining {
+		count = *remaining
+	}
+	*remaining -= count
+	return items[:count]
 }
 
 func findingLocation(finding policy.Finding) string {
@@ -54,12 +83,6 @@ func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedRele
 	}
 }
 
-func printAdvisories(output io.Writer, advisories []policy.Advisory) {
-	for _, advisory := range advisories {
-		fmt.Fprintf(output, "WARN %-34s %s [%s]\n     %s\n", advisory.Check, advisory.Path, advisory.Subject, advisory.Message)
-	}
-}
-
 func printReportTables(output io.Writer, tables []engine.Table) {
 	for _, table := range tables {
 		printTable(output, table)
@@ -76,13 +99,74 @@ func printReportNotes(output io.Writer, notes []string, verbose bool) {
 }
 
 func printReportCompletion(stdout, stderr io.Writer, report engine.Report) {
-	if len(report.Findings) == 0 && (report.GateRunPolicy == nil || report.GateRunPolicy.Status == "passed") {
-		fmt.Fprintln(stdout, "PASS policy completed without findings")
-		return
+	errors, warnings, information := report.Summary.Errors, report.Summary.Warnings, report.Summary.Information
+	if report.Protocol == "" {
+		errors, warnings, information = reportFindingTotals(report.Findings)
 	}
-	if len(report.Findings) > 0 {
-		fmt.Fprintf(stderr, "FAILED with %d finding(s)\n", len(report.Findings))
+	if report.Summary.Status == "review-required" {
+		fmt.Fprintf(stdout, "REVIEW REQUIRED errors=%d warnings=%d information=%d\n", errors, warnings, information)
+	} else if errors > 0 || report.GateRunPolicy != nil && report.GateRunPolicy.Status == "failed" {
+		fmt.Fprintf(stderr, "FAILED errors=%d warnings=%d information=%d\n", errors, warnings, information)
+	} else if warnings > 0 {
+		fmt.Fprintf(stdout, "PASS with %s; errors=0 warnings=%d information=%d\n", findingCount(warnings, "warning"), warnings, information)
+	} else if information > 0 {
+		fmt.Fprintf(stdout, "PASS with %s; errors=0 warnings=0 information=%d\n", findingCount(information, "informational finding"), information)
+	} else {
+		fmt.Fprintln(stdout, "PASS errors=0 warnings=0 information=0")
 	}
+}
+
+func findingCount(count int, singular string) string {
+	if count == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	return fmt.Sprintf("%d %ss", count, singular)
+}
+
+func printReportSummaryGroups(output io.Writer, summary engine.ReportSummary) {
+	printSummaryGroup(output, "RULE", summary.ByRule)
+	printSummaryGroup(output, "MODULE", summary.ByModule)
+	relations := make(map[string]int, len(summary.ByRelation))
+	for relation, count := range summary.ByRelation {
+		relations[string(relation)] = count
+	}
+	printSummaryGroup(output, "RELATION", relations)
+}
+
+func printSummaryGroup(output io.Writer, label string, counts map[string]int) {
+	keys := make([]string, 0, len(counts))
+	for key, count := range counts {
+		if key != "" && count > 0 {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	const limit = 20
+	displayed := len(keys)
+	if displayed > limit {
+		displayed = limit
+	}
+	for _, key := range keys[:displayed] {
+		fmt.Fprintf(output, "COUNT %s %s: %d\n", label, key, counts[key])
+	}
+	if omitted := len(keys) - displayed; omitted > 0 {
+		fmt.Fprintf(output, "COUNT %s OMITTED: %d group(s)\n", label, omitted)
+	}
+}
+
+func reportFindingTotals(findings []policy.Finding) (int, int, int) {
+	errors, warnings, information := 0, 0, 0
+	for _, finding := range findings {
+		switch finding.Severity {
+		case policy.FindingWarning:
+			warnings++
+		case policy.FindingInformation:
+			information++
+		default:
+			errors++
+		}
+	}
+	return errors, warnings, information
 }
 
 func printBehaviorReview(output io.Writer, review *engine.BehaviorReviewStatus, verbose bool) {

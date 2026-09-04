@@ -35,26 +35,26 @@ const (
 )
 
 type BehaviorReviewFeatureSelection struct {
-	Name    string
-	Reasons []string
+	Name    string   `json:"name"`
+	Reasons []string `json:"reasons"`
 }
 
 type BehaviorReviewStatus struct {
-	State              BehaviorReviewState
-	FinalStateState    BehaviorReviewState
-	RequiredBoundary   BehaviorReviewBoundary
-	SelectedFeatures   []BehaviorReviewFeatureSelection
-	SelectionDigest    string
-	FullCandidate      bool
-	ReviewID           string
-	ReceiptPath        string
-	Affected           []string
-	Configured         []string
-	TaskRequested      []string
-	Required           []string
-	Completed          []string
-	Missing            []string
-	FinalStateFindings []finalstate.Finding
+	State              BehaviorReviewState              `json:"state"`
+	FinalStateState    BehaviorReviewState              `json:"finalStateState"`
+	RequiredBoundary   BehaviorReviewBoundary           `json:"requiredBoundary"`
+	SelectedFeatures   []BehaviorReviewFeatureSelection `json:"selectedFeatures"`
+	SelectionDigest    string                           `json:"selectionDigest"`
+	FullCandidate      bool                             `json:"fullCandidate"`
+	ReviewID           string                           `json:"reviewId,omitempty"`
+	ReceiptPath        string                           `json:"receiptPath,omitempty"`
+	Affected           []string                         `json:"affected"`
+	Configured         []string                         `json:"configured"`
+	TaskRequested      []string                         `json:"taskRequested"`
+	Required           []string                         `json:"required"`
+	Completed          []string                         `json:"completed"`
+	Missing            []string                         `json:"missing"`
+	FinalStateFindings []finalstate.Finding             `json:"finalStateFindings"`
 }
 
 type behaviorReviewDecision struct {
