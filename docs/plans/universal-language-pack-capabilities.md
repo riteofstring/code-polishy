@@ -43,7 +43,7 @@ execution authority, capability outcomes, and verifiable evidence.
 | Module dependency direction                           | Running ecosystem-specific tools                       |
 | `scope.data` parse-only and no-rewrite rules          | Producing structured findings and evidence             |
 | Ordinary and supplemental execution boundaries        | Declaring supported capabilities and discovery mode    |
-| Timeouts, process isolation, logs, and reports        | Declaring any host toolchain requirements              |
+| Timeouts, isolation, artifacts, reports, and receipts | Declaring any host toolchain requirements              |
 | Checkpoint and merge gates                            | Shipping conformance fixtures                          |
 
 Language packs remain execution and evidence adapters. Repository services such
@@ -177,6 +177,11 @@ The following remain engine-owned for every mode and ecosystem:
 - supplemental mutation and risk suites require an explicit trigger or the
   stable-release-candidate workflow;
 - packs cannot declare test suites or a `supplemental` command profile;
+- packs write only to engine-owned per-execution temporary and artifact paths;
+- packs cannot decide suite scheduling or receipt reuse;
+- receipt identity includes the exact pack, capability, discovery scope, and
+  toolchain inputs, so relevant changes invalidate affected evidence while
+  unrelated prose-only changes do not;
 - installs remain content-addressed, atomic, read-only, and verified before and
   after adapter execution;
 - findings remain restricted to governed paths and the command's allowed scope;
@@ -185,6 +190,11 @@ The following remain engine-owned for every mode and ecosystem:
 Capability names define outcomes rather than tools. A pack may use Cargo,
 Clippy, Gradle, Ruff, Composer, or another ecosystem tool, and must omit any
 optional capability it cannot support faithfully.
+
+The [v0.21.6 and v0.22 roadmap](v0.21.6-and-v0.22.md) owns the corresponding
+artifact, receipt-reuse, final-gate, and suite-deduplication design. This pack
+protocol supplies exact inputs to that engine policy; it does not create a
+second scheduler.
 
 ## Scale requirements
 
@@ -305,6 +315,9 @@ Add observable boundary coverage for:
 - generated executable source remaining governed;
 - pack tampering before, during, and after discovery;
 - rejection of supplemental profiles and test-suite declarations in packs;
+- contained per-execution outputs and exact receipt invalidation after pack,
+  discovery, toolchain, source, and unrelated documentation changes;
+- repeated capabilities reusing evidence without duplicate adapter execution;
 - Unix and native Windows behavior for each supported execution type.
 
 Use temporary repositories and fake adapters for ordinary coverage. Credentialed,

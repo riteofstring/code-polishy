@@ -50,7 +50,7 @@ not silently reduce checks or substitute another version.
 | Pack verification, installation, and execution isolation     | Import and package graph interpretation        |
 | Capability names and structured evidence validation          | Build and language dependency checks           |
 | Supplemental-suite authority                                 | Language-specific conformance fixtures         |
-| Reports, exceptions, checkpoints, and gates                  | Supported platforms and toolchain declarations |
+| Reports, artifacts, suite receipts, checkpoints, and gates   | Supported platforms and toolchain declarations |
 | Markdown and repository-service policy                       | Pack release notes and support policy          |
 
 The core must not import language-specific parsers, invoke language tools, or
@@ -62,6 +62,16 @@ Repository-wide rules stay in core when their meaning is independent of a
 language. Examples include parse-only data safety, artifact integrity,
 supplemental execution rules, GitLab policy, workflow policy, test selection,
 and evidence validation.
+
+The engine also owns verification scheduling and reuse. A pack cannot trigger a
+supplemental suite, invalidate unrelated receipts, or write test output outside
+the engine-provided execution directory. Pack installation, selection,
+toolchain, or capability changes invalidate only receipts whose exact identity
+depends on the changed input; an incomplete identity runs again.
+
+The [v0.21.6 and v0.22 roadmap](v0.21.6-and-v0.22.md) defines managed artifacts,
+receipt reuse, final-gate ownership, and suite deduplication. Pack work must use
+those engine boundaries rather than reintroducing duplicate full runs.
 
 ## Official pack set
 
@@ -272,6 +282,10 @@ Add observable boundary coverage for:
 - no implicit network, toolchain, discovery, or execution authority;
 - language detection that recommends without executing or auto-selecting packs;
 - identical findings and capability coverage before and after each migration;
+- exact pack and toolchain changes invalidating affected receipts without
+  invalidating unrelated suites;
+- pack commands unable to schedule supplemental work or escape the managed
+  artifact directory;
 - missing, corrupt, or incomplete packs failing visibly;
 - multiple selected packs with disjoint ownership and rejected conflicts;
 - core-only operation for repositories containing no selected pack languages;
