@@ -83,6 +83,16 @@ governed contained project at fixed 60% confidence through carried CPython
 `3.12.13+20260728` from python-build-standalone; it does not use a target or
 ambient Python interpreter, and target Vulture configuration is ignored.
 
+A file selection activates Python analysis through selected Python source or
+an exact selected Python project input. Selecting the policy configuration
+validates its declared Python references and external attributes in their
+named projects. Those declarations alone do not activate Python analysis for
+unrelated files: `code-polishy check --files AGENTS.md` runs the selected
+guidance checks without starting Python facts or dead-code analysis. When
+Python analysis applies, Vulture retains the full governed context of each
+selected project; unrelated projects and their declarations stay outside that
+context. Repository-wide checks select their complete inputs explicitly.
+
 PEP 621 `project.scripts`, `project.gui-scripts`, and every
 `project.entry-points.*` table infer reachable module symbols. In-tree PEP 517
 backends infer their statically defined standard hooks. Vulture's own

@@ -220,6 +220,7 @@ var commandHelpPages = []commandHelpPage{
 			"--files accepts contained regular files and directories; directories expand to governed descendants without following symbolic links.",
 			"--module selects one or more declared modules and cannot be combined with file, change-aware, staged, or all-repository selectors.",
 			"--name NAME may repeat and cannot be combined with evaluation selectors.",
+			"Select --all or --name for configured repository-wide checks with no path or module triggers; focused checks retain global configuration validation and required context for applicable analyzers.",
 		},
 		sideEffects: []string{"Reads the configuration and selected files; runs configured checks."},
 		exits:       []string{"0 no findings", "1 policy findings", "2 invalid usage or operational failure"},

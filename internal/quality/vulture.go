@@ -577,18 +577,31 @@ func pythonQualitySelectedManifests(repo repository.Repository, selected []strin
 	manifests := map[string]bool{}
 	for _, candidate := range selected {
 		normalized, err := repo.NormalizePath(candidate)
-		if err != nil || filepath.Base(normalized) != "pyproject.toml" {
+		if err != nil {
 			continue
 		}
-		manifests[normalized] = true
+		if filepath.Base(normalized) == "pyproject.toml" {
+			manifests[normalized] = true
+		}
+		if normalized == pythonVultureConfigPath(repo) {
+			for _, reference := range repo.Config.Scope.PythonDynamicReferences {
+				manifests[reference.Project] = true
+			}
+			for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+				manifests[attribute.Project] = true
+			}
+		}
 	}
 	return manifests
 }
 
-func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, message string) []policy.Finding {
+func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, selectedManifests map[string]bool, message string) []policy.Finding {
 	findings := make([]policy.Finding, 0, len(repo.Config.Scope.PythonDynamicReferences))
 	configPath := pythonVultureConfigPath(repo)
 	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
+		if !selectedManifests[reference.Project] {
+			continue
+		}
 		findings = append(findings, policy.Finding{
 			Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
 			Message: "Python dynamic reference cannot determine its contained project: " + message,
@@ -597,10 +610,13 @@ func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, 
 	return findings
 }
 
-func pythonQualityExternalAttributeInventoryFindings(repo repository.Repository, message string) []policy.Finding {
+func pythonQualityExternalAttributeInventoryFindings(repo repository.Repository, selectedManifests map[string]bool, message string) []policy.Finding {
 	findings := make([]policy.Finding, 0, len(repo.Config.Scope.PythonExternalAttributes))
 	configPath := pythonVultureConfigPath(repo)
 	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		if !selectedManifests[attribute.Project] {
+			continue
+		}
 		findings = append(findings, policy.Finding{
 			Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
 			Message: "Python external attribute cannot determine its contained project: " + message,
@@ -610,66 +626,58 @@ func pythonQualityExternalAttributeInventoryFindings(repo repository.Repository,
 }
 
 func pythonQualityDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string) {
-	findings, referenceOnly, unrunnable := pythonQualityConfigDynamicReferenceProjects(repo, projects, selectedByProject, invalidProjects)
+	findings, referenceOnly, unrunnable := pythonQualityConfigDynamicReferenceProjects(repo, projects, selectedByProject, selectedManifests, invalidProjects)
 	return append(findings, pythonQualityInferredDynamicReferenceFindings(projects, selectedByProject, selectedManifests, referenceOnly, unrunnable, invalidProjects)...), referenceOnly
 }
 
-func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string, map[string]bool) {
+func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests, invalidProjects map[string]bool) ([]policy.Finding, map[string][]string, map[string]bool) {
 	findings := []policy.Finding{}
 	referenceOnly := map[string][]string{}
 	unrunnable := map[string]bool{}
-	configPath := pythonVultureConfigPath(repo)
-	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
-		project, found := projects[reference.Project]
-		if !found {
-			findings = append(findings, policy.Finding{
-				Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
-				Message: "Python dynamic reference names no current contained Python project",
-			})
+	for manifest, origins := range pythonQualityConfiguredReferenceOrigins(repo) {
+		if !selectedManifests[manifest] && len(selectedByProject[manifest]) == 0 {
 			continue
 		}
-		if invalidProjects[project.Manifest] {
+		project, found := projects[manifest]
+		problem := ""
+		switch {
+		case !found:
+			problem = "names no current contained Python project"
+		case invalidProjects[manifest], len(selectedByProject[manifest]) > 0:
 			continue
+		case !pythonQualityProjectHasRuntimeSource(project):
+			problem = "names a project with no runtime .py definitions"
+			unrunnable[manifest] = true
+		default:
+			referenceOnly[manifest] = nil
 		}
-		if _, selected := selectedByProject[project.Manifest]; selected {
-			continue
+		if problem != "" {
+			for _, origin := range origins {
+				findings = append(findings, policy.Finding{
+					Check: origin.Check, Path: origin.Path, Subject: origin.Subject, Message: origin.Message + problem,
+				})
+			}
 		}
-		if !pythonQualityProjectHasRuntimeSource(project) {
-			findings = append(findings, policy.Finding{
-				Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
-				Message: "Python dynamic reference names a project with no runtime .py definitions",
-			})
-			unrunnable[project.Manifest] = true
-			continue
-		}
-		referenceOnly[project.Manifest] = nil
-	}
-	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
-		project, found := projects[attribute.Project]
-		if !found {
-			findings = append(findings, policy.Finding{
-				Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
-				Message: "Python external attribute names no current contained Python project",
-			})
-			continue
-		}
-		if invalidProjects[project.Manifest] {
-			continue
-		}
-		if _, selected := selectedByProject[project.Manifest]; selected {
-			continue
-		}
-		if !pythonQualityProjectHasRuntimeSource(project) {
-			findings = append(findings, policy.Finding{
-				Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
-				Message: "Python external attribute names a project with no runtime .py definitions",
-			})
-			unrunnable[project.Manifest] = true
-			continue
-		}
-		referenceOnly[project.Manifest] = nil
 	}
 	return findings, referenceOnly, unrunnable
+}
+
+func pythonQualityConfiguredReferenceOrigins(repo repository.Repository) map[string][]pythonVultureReferenceOrigin {
+	origins := map[string][]pythonVultureReferenceOrigin{}
+	configPath := pythonVultureConfigPath(repo)
+	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
+		origins[reference.Project] = append(origins[reference.Project], pythonVultureReferenceOrigin{
+			Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
+			Message: "Python dynamic reference ",
+		})
+	}
+	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
+		origins[attribute.Project] = append(origins[attribute.Project], pythonVultureReferenceOrigin{
+			Check: "policy.pythonExternalAttribute", Path: configPath, Subject: pythonVultureAttributeID(attribute),
+			Message: "Python external attribute ",
+		})
+	}
+	return origins
 }
 
 func pythonQualityInferredDynamicReferenceFindings(projects map[string]repository.PythonProject, selectedByProject map[string][]string, selectedManifests map[string]bool, referenceOnly map[string][]string, unrunnable map[string]bool, invalidProjects map[string]bool) []policy.Finding {

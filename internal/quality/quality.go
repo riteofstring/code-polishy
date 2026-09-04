@@ -184,7 +184,7 @@ func prepareCommand(repo repository.Repository, command policy.Command, selectio
 		return command, true
 	}
 	selected := selectedCommandPaths(repo, command, selection.Files, profiles...)
-	if len(selected) == 0 && len(command.PassFilePaths) > 0 {
+	if len(selected) == 0 && len(command.PassFilePaths) > 0 && commandApplies(repo, command, selection) {
 		selected = commandFileArguments(command.Cwd, commandEligiblePaths(repo, command, command.PassFilePaths, profiles...))
 	}
 	if len(selected) == 0 {
@@ -207,7 +207,7 @@ func selectedCommandPaths(repo repository.Repository, command policy.Command, fi
 			}
 			continue
 		}
-		if policy.MatchesAny(path, command.Paths) && commandEligiblePath(repo, command, path, profiles...) {
+		if pathMatchesCommand(repo, path, command) && commandEligiblePath(repo, command, path, profiles...) {
 			selected = append(selected, commandFileArgument(command.Cwd, path))
 		}
 	}
@@ -762,7 +762,7 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 
 func commandApplies(repo repository.Repository, command policy.Command, selection repository.Selection) bool {
 	if len(command.Paths) == 0 && len(command.Modules) == 0 {
-		return true
+		return selection.All
 	}
 	paths := append(append([]string{}, selection.Files...), selection.Candidate.Deleted...)
 	for _, path := range paths {
@@ -774,8 +774,8 @@ func commandApplies(repo repository.Repository, command policy.Command, selectio
 }
 
 func pathMatchesCommand(repo repository.Repository, path string, command policy.Command) bool {
-	if len(command.Paths) > 0 && policy.MatchesAny(path, command.Paths) {
-		return true
+	if len(command.Paths) > 0 {
+		return policy.MatchesAny(path, command.Paths)
 	}
 	for _, module := range repo.ModuleNames(path) {
 		if slices.Contains(command.Modules, module) {

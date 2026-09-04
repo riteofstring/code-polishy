@@ -273,13 +273,17 @@ func TestCoverageRejectsUnusedCustomLanguageRule(t *testing.T) {
 	}
 }
 
-func TestRepositoryCommandWithoutTriggersAlwaysApplies(t *testing.T) {
+func TestRepositoryCommandWithoutTriggersRequiresRepositorySelection(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	command := policy.Command{Name: "repository-check"}
 	selection := repository.Selection{Files: []string{"internal/sample/file.go"}}
+	if commandApplies(repo, command, selection) {
+		t.Fatal("repository command ran without repository selection")
+	}
+	selection.All = true
 	if !commandApplies(repo, command, selection) {
-		t.Fatal("repository-wide command with no triggers should run in change mode")
+		t.Fatal("repository command was not selected by --all")
 	}
 }
 
@@ -298,6 +302,10 @@ func TestCommandsForProfilesMatchesDirectCommandSelection(t *testing.T) {
 	if len(commands) != 2 || commands[0].Name != "gate" || commands[1].Name != "build" {
 		t.Fatalf("commands = %+v", commands)
 	}
+	if commands := CommandsForProfiles(repo, selection, "supply-chain"); len(commands) != 0 {
+		t.Fatalf("unselected repository command = %+v", commands)
+	}
+	selection.All = true
 	if commands := CommandsForProfiles(repo, selection, "supply-chain"); len(commands) != 1 || commands[0].Name != "supply" {
 		t.Fatalf("repository command selection = %+v", commands)
 	}
@@ -320,6 +328,7 @@ func TestManagedCommandUsesExactOwnedFilesRelativeToItsWorkingDirectory(t *testi
 	repo := qualityRepository(t)
 	command := policy.Command{
 		Argv: []string{"ruff", "check", "--no-fix", "--"}, Cwd: "services/api", PassFiles: true,
+		Paths:         []string{"services/api/app/*.py", "services/api/pyproject.toml"},
 		PassFilePaths: []string{"services/api/app/main.py", "services/api/app/main_test.py"},
 	}
 	selection := repository.Selection{Files: []string{"services/api/app/main.py", "services/other/app/main.py"}}

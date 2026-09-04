@@ -56,6 +56,24 @@ ecosystem, file types the sealed formatter does not print, or the `.vue`,
 target's own, and a policy-owned managed command is Code Polishy running its own
 module rather than a target selecting an implementation.
 
+## Evaluation scope
+
+`check --files` and `check --module` select the requested inputs before an
+applicable analyzer expands its package or project context. Files elsewhere in
+the repository do not activate a language analyzer by their existence. A
+selected control document such as `AGENTS.md` receives its own source checks
+without selecting Python analysis. Shared configuration, lock, and coverage
+validation remains visible as global policy evidence.
+
+Configured command `paths` define its exact input triggers when present.
+`modules` select commands without explicit path triggers and continue to
+declare provider coverage. Sharing a module with a selected file does not
+override a command's narrower paths. A command with no path or module triggers
+is repository-wide: select it with `check --all`, `check --name NAME`, or a
+workflow that explicitly evaluates the repository. A matching project
+configuration may select the full contained analyzer input set; an unrelated
+file never does. Display filters do not change this evaluation or its status.
+
 ## Formatting
 
 Formatting is deterministic and has separate read and write operations.
