@@ -308,10 +308,22 @@ contracts such as `ast.NodeVisitor`, `unittest.TestCase`, `unittest.mock`, and
 `ctypes`. Code Polishy supplements them with syntax-bound handling for
 `NodeVisitor` methods, urllib redirect handlers, `HTMLParser` callbacks,
 context-manager exit parameters, exception chaining, and `ZipInfo` metadata.
-It also infers the hooks actually defined by an in-tree PEP 517 build backend
-and exact reachable symbols from PEP 621 `project.scripts`,
-`project.gui-scripts`, and every `project.entry-points.*` table. For a symbol
-reached dynamically through another protocol, use optional
+It also infers the hooks actually defined by an in-tree PEP 517 build backend,
+exact reachable symbols from PEP 621 `project.scripts`,
+`project.gui-scripts`, and every `project.entry-points.*` table, and statically
+provable Pydantic model contracts.
+
+Pydantic inference requires exact imports or aliases of `pydantic.BaseModel`,
+`pydantic.v1.BaseModel`, or `pydantic_settings.BaseSettings`. It follows exact
+local subclasses and re-exports. On proven model classes it keeps model fields,
+`Field` and `PrivateAttr` declarations, `model_config`, and methods selected by
+`field_validator`, `model_validator`, `field_serializer`, `model_serializer`,
+and `computed_field`, plus Pydantic v1 `validator` and `root_validator`.
+`ClassVar` members, ordinary methods, lookalike classes or decorators, wildcard
+imports, and unresolved aliases receive no exemption. The analyzer reads syntax
+only; it never imports or executes target Pydantic.
+
+For a symbol reached dynamically through another protocol, use optional
 `scope.pythonDynamicReferences`. Each item requires all three exact fields,
 with no wildcards; a class method such as an HTTP redirect hook uses an exact
 `ClassName.method_name` symbol:

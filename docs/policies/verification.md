@@ -381,6 +381,29 @@ stable-candidate release checklist selects it; release retry evidence follows
 the exact-suite invalidation rule above. Credentialed, destructive, and
 live-provider work remains an external gate.
 
+### First-time adoption
+
+`merge-gate` supports a candidate that introduces Code Polishy to a previously
+unmanaged base:
+
+| Base configuration | Candidate configuration | Result                            |
+| ------------------ | ----------------------- | --------------------------------- |
+| Exactly absent     | Valid and newly added   | Candidate-governed full gate      |
+| Valid              | Valid                   | Ordinary merge selection          |
+| Valid              | Absent                  | Fail: governed policy was removed |
+| Exactly absent     | Absent                  | Fail: candidate is not governed   |
+
+The engine resolves the exact merge base and reads the configured policy path
+there. Only an absent path means unmanaged. A malformed, unreadable,
+non-regular, or ambiguous base policy is an error, including when `--config`
+selects a custom contained path.
+
+For first adoption, the valid candidate configuration and lock govern ownership,
+checks, tests, providers, exceptions, and behavior review. The policy addition
+forces the full ordinary gate. No base suite, receipt, exception, or passing
+policy fact is invented. The run report records `first-adoption` and the exact
+configuration path proved absent at the base.
+
 ### Resume a failed merge gate
 
 `merge-gate --base REF --resume` is an explicit retry mode. It may reuse only a

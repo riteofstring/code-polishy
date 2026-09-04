@@ -199,6 +199,14 @@ installation, or copied from another host fails verification and is reinstalled
 rather than executed. The launcher makes the same native judgment before every
 run on Linux, macOS, and Windows.
 
+Every policy-owned carried-Python command uses isolated mode and disables
+bytecode generation at one shared command boundary. Version probes, Vulture,
+quality checks, architecture checks, doctor, and gates therefore cannot create
+`__pycache__` or `.pyc` entries inside the content-addressed release. Installed
+release acceptance runs these commands sequentially and verifies the complete
+manifest afterward, including rejection of any added entry. Writable caches,
+homes, temporary files, and target output remain outside the release tree.
+
 ## Installing is all-or-nothing
 
 Before it stages anything, the installer asks every tool the release will carry

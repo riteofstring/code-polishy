@@ -168,8 +168,10 @@ the carried Ruff baseline, C901, target additions, Vulture `2.16` full-project
 dead-code analysis, and structured `ty` diagnostics with those same roots.
 Vulture runs through carried CPython `3.12.13+20260728` from
 python-build-standalone, loads its version-matched standard whitelists, derives
-PEP 621 entry-point and in-tree backend-hook symbols, and accepts only validated
-exact `scope.pythonDynamicReferences` for remaining dynamic symbols.
+PEP 621 entry-point, in-tree backend-hook, and exact Pydantic model symbols, and
+accepts only validated exact `scope.pythonDynamicReferences` for remaining
+dynamic symbols. All policy-owned Python execution passes through one isolated,
+no-bytecode command boundary.
 `internal/architecture` asks the same carried Ruff for an
 isolated import graph and decides module direction in Go; `internal/supplychain`
 parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
@@ -280,6 +282,10 @@ because they are declared.
 The executable merge gate is distinct from that read-only planner. Its only
 caller input is a Git base. Repository selection preserves the exact candidate
 delta separately from any repository-wide analysis expansion.
+An exactly absent base configuration creates an explicit first-adoption state:
+the candidate configuration governs and forces the full ordinary gate. A
+malformed base, removed candidate policy, or missing candidate lock fails; the
+engine never treats those states as unmanaged or invents base evidence.
 `internal/testing.BuildMergeDecision` makes the deterministic ordinary level
 decision from that selection and compiled policy. `internal/engine` separately
 builds one behavior-review decision from ordered intents, additive task

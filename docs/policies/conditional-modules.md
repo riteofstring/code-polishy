@@ -88,8 +88,10 @@ PEP 621 `project.scripts`, `project.gui-scripts`, and every
 backends infer their statically defined standard hooks. Vulture's own
 version-matched import whitelists cover supported standard-library dynamic
 contracts, supplemented by Code Polishy's syntax-bound standard protocol
-inventory. A target may add only a dynamic reference that remains invisible,
-using
+inventory. Exact Pydantic imports and inheritance infer model fields,
+`model_config`, and supported validator, serializer, and computed-field
+methods; lookalike names do not. A target may add only a dynamic reference that
+remains invisible, using
 `scope.pythonDynamicReferences` exact `{project,module,symbol}` objects. Each
 field is required, `project` is the canonical contained-project
 `pyproject.toml` path, `module` and `symbol` are Python identifier chains,

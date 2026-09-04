@@ -328,10 +328,11 @@ ceiling. See
 JavaScript and TypeScript dead code comes from their sealed bundle across the
 whole package tree a file belongs to; a target pins and installs no analyzer.
 Python dead code comes only from Vulture. Its version-matched standard-library
-whitelists, in-tree PEP 517 hooks, and PEP 621 entry points are inferred; use
-exact `scope.pythonDynamicReferences` only for remaining dynamic symbols rather
-than substituting `scope.entryPoints` or a Vulture ignore. This is imported
-policy, not a target-authored adapter.
+whitelists, in-tree PEP 517 hooks, PEP 621 entry points, and statically proven
+Pydantic model fields, configuration, validators, serializers, and computed
+fields are inferred. Use exact `scope.pythonDynamicReferences` only for
+remaining dynamic symbols rather than substituting `scope.entryPoints` or a
+Vulture ignore. This is imported policy, not a target-authored adapter.
 
 An incorrect activation may be disabled only by an exact-root
 `policyModules.overrides` entry with `mode: "disabled"`, `reason`, `owner`, and
@@ -654,6 +655,14 @@ command accepts no file list or requested level and automatically escalates
 control, product-input, mixed, policy, dependency, workflow, container,
 unowned, non-allowlisted, and broad-impact changes to the complete gate.
 Require the resulting status for merge.
+
+The same command supports the first adoption commit. When the exact trusted
+base has no configuration at the candidate's configured path, Code Polishy uses
+the valid candidate configuration and lock and forces a full gate. It does not
+ask an unmanaged base for suites or receipts. A malformed base configuration,
+removal from an already governed base, or a candidate without a valid
+configuration or lock fails closed. See
+[First-time adoption](policies/verification.md#first-time-adoption).
 
 Each checkpoint or merge gate that executes work writes a managed versioned JSON
 report and bounded command logs below `.code-polishy-reports/<gate>/`. The

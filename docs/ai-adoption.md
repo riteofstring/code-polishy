@@ -465,11 +465,18 @@ The resulting guidance should make these execution boundaries clear:
 ## 8. Integrate CI without inventing credentials
 
 Inspect existing CI before adding a workflow. Reuse the repository's frozen
-dependency bootstrap, then run the same installed command used locally:
+dependency bootstrap, then pass the exact trusted pull-request base or
+push-before SHA to the same installed command used locally:
 
 ```sh
-code-polishy gate
+code-polishy merge-gate --base "$TRUSTED_BASE_SHA"
 ```
+
+This command also governs the first adoption change. If the configured policy
+path is exactly absent at the base, the valid candidate configuration and lock
+govern a forced full gate. A malformed base policy, removal from a governed
+base, or missing candidate policy or lock fails closed; none is treated as an
+unmanaged baseline.
 
 All actions and containers must satisfy Code Polishy pinning rules. Do not add a
 floating GitHub Action merely for convenience.
