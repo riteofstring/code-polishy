@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.21.6 - 2026-09-03
+
+- Keep sealed installations immutable across all policy-owned Python and
+  Vulture commands by using one isolated, no-bytecode execution boundary and
+  verifying the complete release after sequential installed commands.
+- Recognize statically proven Pydantic model fields, configuration, validators,
+  serializers, and computed fields as reachable while leaving lookalikes and
+  ordinary unused symbols visible to Vulture.
+- Let `merge-gate` govern a first-adoption candidate when the exact base policy
+  is absent. Candidate policy forces a full gate; malformed or removed policy
+  and missing candidate locks still fail closed.
+- Use base-aware CI selection, skip platform jobs for ordinary Markdown, split
+  the old nine-command tooling bundle by affected paths, and state that clean
+  Git operations and pre-gate `test --changed` reruns require no new evidence.
+
 ## 0.21.5 - 2026-09-03
 
 - Support root-owned Python packages below validated in-tree build-backend
