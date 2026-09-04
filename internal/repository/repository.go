@@ -718,33 +718,6 @@ func sortedSet(values map[string]bool) []string {
 	return result
 }
 
-func (repo Repository) GoModules(files []string) []GoModule {
-	modules := []GoModule{}
-	for _, path := range files {
-		if filepath.Base(path) != "go.mod" {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(repo.Root, filepath.FromSlash(path)))
-		if err != nil {
-			continue
-		}
-		name := ""
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "module ") {
-				name = strings.TrimSpace(strings.TrimPrefix(line, "module "))
-				break
-			}
-		}
-		root := filepath.ToSlash(filepath.Dir(path))
-		modules = append(modules, GoModule{Root: root, Manifest: path, Name: name})
-	}
-	sort.Slice(modules, func(left, right int) bool {
-		return len(modules[left].Root) > len(modules[right].Root)
-	})
-	return modules
-}
-
 func (repo Repository) OwningGoModule(path string, modules []GoModule) (GoModule, bool) {
 	for _, module := range modules {
 		if module.Root == "." || path == module.Root || strings.HasPrefix(path, module.Root+"/") {

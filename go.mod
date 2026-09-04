@@ -9,6 +9,7 @@ require (
 	github.com/rhysd/actionlint v1.7.12
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/yuin/goldmark v1.8.5
+	golang.org/x/mod v0.40.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/protobuf v1.36.11
 	mvdan.cc/sh/v3 v3.13.1
