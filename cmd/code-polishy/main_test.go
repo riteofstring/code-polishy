@@ -111,6 +111,18 @@ func TestParseSelectionConsumesExplicitFiles(t *testing.T) {
 	}
 }
 
+func TestParseSelectionConsumesDirectoriesAndModulesAsEvaluationOperands(t *testing.T) {
+	t.Parallel()
+	mode, paths, err := parseSelection([]string{"--files", "internal/engine", "cmd/code-polishy/main.go"})
+	if err != nil || mode != "files" || !slices.Equal(paths, []string{"internal/engine", "cmd/code-polishy/main.go"}) {
+		t.Fatalf("mode=%q paths=%v err=%v", mode, paths, err)
+	}
+	mode, modules, err := parseSelection([]string{"--module=engine", "--module", "cli"})
+	if err != nil || mode != "modules" || !slices.Equal(modules, []string{"engine", "cli"}) {
+		t.Fatalf("mode=%q modules=%v err=%v", mode, modules, err)
+	}
+}
+
 func TestParseSelectionRejectsUnknownOption(t *testing.T) {
 	t.Parallel()
 	if _, _, err := parseSelection([]string{"--quick"}); err == nil {
@@ -122,6 +134,12 @@ func TestParseSelectionRejectsMixedModes(t *testing.T) {
 	t.Parallel()
 	if _, _, err := parseSelection([]string{"--staged", "--all"}); err == nil {
 		t.Fatal("expected mixed-selection error")
+	}
+	if _, _, err := parseSelection([]string{"--files", "src", "--module", "domain"}); err == nil {
+		t.Fatal("expected file-and-module selection error")
+	}
+	if _, _, err := parseSelection([]string{"--module"}); err == nil {
+		t.Fatal("expected missing-module error")
 	}
 }
 

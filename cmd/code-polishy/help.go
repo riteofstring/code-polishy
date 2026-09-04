@@ -208,14 +208,16 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "check",
-		summary: "Run configured policy checks over one file selection or named checks.",
+		summary: "Run configured policy checks over one evaluation selection or named checks.",
 		syntax: []string{
-			"code-polishy check [--git-changes|--staged|--all|--files PATH...]",
+			"code-polishy check [--git-changes|--staged|--all|--files PATH...|--module NAME...]",
 			"code-polishy check --name NAME...",
 		},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
-			"--name NAME may repeat and cannot be combined with file selectors.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; directories expand to governed descendants without following symbolic links.",
+			"--module selects one or more declared modules and cannot be combined with file, change-aware, staged, or all-repository selectors.",
+			"--name NAME may repeat and cannot be combined with evaluation selectors.",
 		},
 		sideEffects: []string{"Reads the configuration and selected files; runs configured checks."},
 		exits:       []string{"0 no findings", "1 policy findings", "2 invalid usage or operational failure"},
@@ -362,10 +364,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "architecture",
-		summary: "Check architecture policy over one file selection.",
-		syntax:  []string{"code-polishy architecture [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Check architecture policy over one evaluation selection.",
+		syntax:  []string{"code-polishy architecture [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Reads the configuration and selected files; does not write project files."},
 		exits:       []string{"0 no findings", "1 architecture findings", "2 invalid usage or operational failure"},
@@ -433,10 +436,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "format",
-		summary: "Check or apply configured formatting over one file selection.",
-		syntax:  []string{"code-polishy format [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Check or apply configured formatting over one evaluation selection.",
+		syntax:  []string{"code-polishy format [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
 		exits:       []string{"0 formatting completed without findings", "1 formatting findings", "2 invalid usage or operational failure"},
@@ -444,10 +448,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "fix",
-		summary: "Apply configured formatting fixes over one file selection.",
-		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Apply configured formatting fixes over one evaluation selection.",
+		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
 		exits:       []string{"0 fixes completed without findings", "1 remaining findings", "2 invalid usage or operational failure"},
@@ -455,10 +460,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "list-files",
-		summary: "List the files in one resolved file selection.",
-		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "List the files in one resolved evaluation selection.",
+		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Reads repository state and prints selected paths; does not write project files."},
 		exits:       []string{"0 paths listed", "2 invalid usage or operational failure"},

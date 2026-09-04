@@ -30,6 +30,7 @@ type Selection struct {
 	Base            string
 	Candidate       CandidateDelta
 	Files           []string
+	Requested       RequestedSelection
 	All             bool
 	PolicySensitive bool
 }
@@ -73,54 +74,6 @@ func Open(root, policyRoot string, config policy.Config) (Repository, error) {
 		return Repository{}, fmt.Errorf("repository root is not a directory: %s", resolvedRoot)
 	}
 	return Repository{Root: resolvedRoot, PolicyRoot: resolvedPolicy, Config: config}, nil
-}
-
-func (repo Repository) Select(mode string, explicit []string) (Selection, error) {
-	var selection Selection
-	var err error
-	switch mode {
-	case "all":
-		var files []string
-		files, err = repo.AllFiles()
-		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}
-	case "files":
-		if len(explicit) == 0 {
-			return Selection{}, errors.New("--files needs at least one path")
-		}
-		files := []string{}
-		for _, path := range explicit {
-			normalized, err := repo.NormalizePath(path)
-			if err != nil {
-				return Selection{}, err
-			}
-			if !isRegularFile(filepath.Join(repo.Root, filepath.FromSlash(normalized))) {
-				return Selection{}, fmt.Errorf("explicit path is missing or not a regular file: %s", normalized)
-			}
-			if repo.IsExcluded(normalized) {
-				return Selection{}, fmt.Errorf("explicit path is outside governed scope: %s", normalized)
-			}
-			files = append(files, normalized)
-		}
-		files = uniqueSorted(files)
-		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files}
-	case "staged":
-		selection, err = repo.stagedSelection()
-	case "changes", "":
-		selection, err = repo.changedSelection()
-	default:
-		return Selection{}, fmt.Errorf("unknown selection mode %q", mode)
-	}
-	return repo.validatedSelection(selection, err)
-}
-
-func (repo Repository) validatedSelection(selection Selection, err error) (Selection, error) {
-	if err != nil {
-		return selection, err
-	}
-	if err := repo.validateDataFiles(selection.Files); err != nil {
-		return Selection{}, err
-	}
-	return selection, nil
 }
 
 func (repo Repository) RawFiles() ([]string, error) {
@@ -191,6 +144,7 @@ func (repo Repository) SelectBase(base string) (Selection, error) {
 		return Selection{}, err
 	}
 	selection, err := repo.selectionSince(mergeBase)
+	selection.Requested = RequestedSelection{Mode: "base", Operands: []string{base}, Expanded: selection.Candidate.Paths()}
 	return repo.validatedSelection(selection, err)
 }
 

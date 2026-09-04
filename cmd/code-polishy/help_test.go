@@ -86,6 +86,22 @@ func TestSupplementalHelpRequiresExplicitSelection(t *testing.T) {
 	}
 }
 
+func TestEvaluationCommandHelpDistinguishesDirectoriesAndModules(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"check", "architecture", "format", "fix", "list-files"} {
+		page, found := commandHelpFor(command)
+		if !found {
+			t.Fatalf("%s help page is missing", command)
+		}
+		output := &bytes.Buffer{}
+		page.writeTo(output)
+		text := output.String()
+		if !strings.Contains(text, "--files") || !strings.Contains(text, "directories") || !strings.Contains(text, "--module") {
+			t.Fatalf("%s help does not distinguish file, directory, and module evaluation: %q", command, text)
+		}
+	}
+}
+
 func TestEveryCatalogCommandSupportsEarlyHelp(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	for _, page := range commandHelpPages {

@@ -28,7 +28,7 @@ Commands:
   release-manifest <write|verify|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
-  check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
+  check [--git-changes|--staged|--all|--files PATH...|--module NAME...|--name NAME...]
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
@@ -44,13 +44,13 @@ Commands:
   test-receipts export --output PATH
   test-receipts import --source PATH --sha256 DIGEST
   verify [--tests-only]
-  architecture [--git-changes|--staged|--all|--files PATH...]
+  architecture [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   supply-chain [--offline]
   dependency-review --base REF
   artifact-security
   doctor [--strict]
   design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...])
-  format [--git-changes|--staged|--all|--files PATH...]
+  format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
   list-files [selection options]
 
@@ -535,50 +535,6 @@ func firstCommandIndex(arguments []string) int {
 		return index
 	}
 	return -1
-}
-
-func parseSelection(arguments []string) (string, []string, error) {
-	mode := "changes"
-	files := []string{}
-	modeSelected := false
-	for index := 0; index < len(arguments); index++ {
-		selected, known := selectionMode(arguments[index])
-		if !known {
-			return "", nil, fmt.Errorf("unknown selection option %q", arguments[index])
-		}
-		if modeSelected {
-			return "", nil, fmt.Errorf("choose only one file selection mode")
-		}
-		mode, modeSelected = selected, true
-		if mode != "files" {
-			continue
-		}
-		index++
-		for index < len(arguments) && !strings.HasPrefix(arguments[index], "--") {
-			files = append(files, arguments[index])
-			index++
-		}
-		index--
-	}
-	if mode == "files" && len(files) == 0 {
-		return "", nil, fmt.Errorf("--files needs at least one path")
-	}
-	return mode, files, nil
-}
-
-func selectionMode(option string) (string, bool) {
-	switch option {
-	case "--git-changes":
-		return "changes", true
-	case "--staged":
-		return "staged", true
-	case "--all":
-		return "all", true
-	case "--files":
-		return "files", true
-	default:
-		return "", false
-	}
 }
 
 func parseTestRequest(policyEngine *engine.Engine, arguments []string) (testpolicy.Request, error) {
