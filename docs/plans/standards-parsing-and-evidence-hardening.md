@@ -107,6 +107,14 @@ The adapter receives only the engine-selected inventory and emits strict,
 bounded JSON. One process should analyze a batch of files to avoid per-file
 startup cost.
 
+Treat Ruff's graph output as a version-specific tool protocol rather than a
+standards API. A `ruff-graph-facts/v1` adapter owns the exact Ruff invocation,
+raw response, path normalization, schema, count, depth, and byte limits. Raw
+Ruff types do not cross that boundary. Keep Ruff exactly pinned and fail closed
+when an upgrade changes output shape, path behavior, omitted-file behavior, or
+diagnostics. Golden fixtures on Windows, macOS, and Linux and differential
+import cases are required for every Ruff update.
+
 Before relying on `ast`, align the carried CPython parser with the highest
 accepted Python syntax target or narrow the declared target. The current
 carrier must not silently treat newer valid syntax as malformed or absent.
@@ -181,14 +189,24 @@ language ownership and moves with the shell pack if that plan is implemented.
 
 ### Workflow and schedule validation
 
-Use the already sealed `js-yaml` runtime to produce a typed, bounded GitHub
-Actions workflow representation. Add pinned
-[`actionlint`](https://github.com/rhysd/actionlint) execution for workflow
-syntax, expression, and schedule validation.
+Make [`actionlint`](https://github.com/rhysd/actionlint) the sole syntax and
+semantic parser for GitHub Actions workflows. Compile a narrow adapter against
+one exactly pinned actionlint release and emit a strict, bounded
+`workflow-facts/v1` response. The response contains only Code Polishy-owned
+facts needed for triggers, schedules, jobs, dependencies, conditions, steps,
+actions, and commands. Actionlint syntax-tree and expression types do not enter
+core policy packages.
 
-If policy must calculate schedule gaps rather than only validate cron syntax,
-evaluate [`github.com/robfig/cron/v3`](https://github.com/robfig/cron) for that
-one bounded responsibility.
+Actionlint's Go API does not follow semantic versioning and may break on a
+patch release. Every update therefore requires the same full adapter-contract
+and differential fixture review as a protocol-version change. Parser recovery
+or any actionlint diagnostic prevents clean workflow facts.
+
+Do not parse GitHub Actions again with `js-yaml`. Keep the already sealed
+`js-yaml` operation for generic YAML and GitLab responsibilities only. If
+policy needs schedule-gap calculation beyond actionlint's validation, perform
+it from the actionlint-derived schedule facts using the same pinned parser
+boundary. Do not create a second YAML interpretation.
 
 Static analysis may prove that an active workflow contains a reachable gate or
 schedule. It cannot prove branch protection, that a schedule is enabled, or
@@ -197,14 +215,27 @@ obtained through an explicitly configured provider API.
 
 ### SPDX expressions
 
+Pin an admitted tagged release of the official
+[`spdx/license-list-data`](https://github.com/spdx/license-list-data) JSON as
+the sole authority for standard license and exception identifiers. Verify and
+record its tag, license-list version, file digests, release inventory entry, and
+fact identity. Never fetch an unpinned current list during a policy run.
+
 Evaluate
 [`github.com/github/go-spdx/v2/spdxexp`](https://github.com/github/go-spdx)
-for SPDX identifier and expression semantics. Adoption requires differential
-tests for `AND`, `OR`, `WITH`, `+`, parentheses, exceptions, and `LicenseRef`
-handling because Code Polishy's allow-list decision must remain exact.
+only for expression grammar and satisfaction semantics. Its manually
+maintained valid-license list must not become Code Polishy's identifier
+authority. Adoption requires that its parser can operate cleanly with the
+official pinned data and that it passes differential tests for `AND`, `OR`,
+`WITH`, `+`, parentheses, deprecated identifiers, exceptions, `LicenseRef`,
+precedence, and case behavior.
 
-Keep the current bounded subset if the intended policy deliberately rejects
-valid SPDX constructs that the external package accepts.
+The current go-spdx public API couples validation to its own list and exposes
+limited parser output. Reject that dependency if the selected release cannot
+separate grammar from identifier data without a fork or parallel
+interpretation. In that case, retain the current bounded fail-closed grammar or
+select another parser while still using official SPDX data. Keep the narrower
+subset if the intended policy deliberately rejects valid SPDX constructs.
 
 ### SBOM and provenance
 
@@ -223,12 +254,42 @@ Use official
 [`github.com/in-toto/attestation`](https://github.com/in-toto/attestation)
 types rather than map-shaped in-toto and SLSA statements.
 
-Generate authenticated provenance at the CI publication boundary with OIDC and
-Sigstore-compatible signing or the hosting provider's artifact-attestation
-service. The verifier must bind the artifact digest to the expected repository,
-workflow, source revision, builder identity, and release event. A statement
-created and stored beside its artifact without authenticated issuer identity is
-deterministic metadata, not independent trust evidence.
+Until authenticated publication is complete, call the current local in-toto
+statement deterministic provenance metadata. Continue generating it because it
+binds release inputs reproducibly, but do not accept it as proof of builder or
+publisher identity.
+
+Authenticate the environment that builds each native archive, not merely a
+later uploader. Prefer an explicitly triggered, protected release workflow that
+builds the five native artifacts from the exact release commit. If a required
+host cannot run in that workflow, its external builder must emit independently
+authenticated compatible provenance. Uploading an externally built archive and
+then signing it in GitHub proves publication custody only and cannot satisfy
+the build-provenance requirement.
+
+At the authenticated build boundary, use
+[`actions/attest`](https://github.com/actions/attest) pinned by its complete
+commit digest. Give only the attestation job `id-token: write`,
+`attestations: write`, and `artifact-metadata: write`. Create a provenance
+attestation for every archive and an SBOM attestation binding that archive to
+its canonical SBOM. Attest the combined release index separately, preserve
+Buildx attestations for OCI images, and publish every resulting Sigstore bundle
+with the release.
+
+Use [`github.com/sigstore/sigstore-go`](https://github.com/sigstore/sigstore-go)
+behind a narrow verification boundary. Its types and substantial transitive
+dependency graph do not enter unrelated core packages. An admitted, versioned,
+and digested trusted root must come from an already trusted launcher,
+bootstrap, or explicit verifier input; it must never be learned from the
+unverified release being checked.
+
+Verification first establishes the signature, trusted root, certificate
+identity, issuer, transparency-log inclusion and time, and any required TSA
+evidence. Only after cryptographic verification succeeds does Code Polishy
+decode the predicate and enforce the expected repository, workflow, source
+revision and ref, event, builder, artifact name, and digest. The release
+workflow remains an explicit maintainer-authorized action even when builders
+move into CI.
 
 Syft or another independent SBOM generator may run as an explicitly selected
 supplemental completeness comparison. It does not replace the canonical
@@ -292,6 +353,12 @@ Several recommended projects may have a latest release younger than the
 minimum age at implementation time. Select the newest admitted release rather
 than weakening the age rule.
 
+Apply the same admission discipline to GitHub Actions, standards data, and
+trust roots. Pin actions by full commit digest, pin the official SPDX data tag
+and file digests, and inventory actionlint's YAML, cron, Markdown, and other
+transitive dependencies. A Sigstore trusted-root update is an explicit reviewed
+input change rather than ambient network state.
+
 ## Components not recommended
 
 Do not adopt the following as part of this plan:
@@ -322,7 +389,26 @@ Do not adopt the following as part of this plan:
 6. Inventory every current computed Python import and classify its argument
    source, possible targets, and architecture owners.
 
-### Phase 1: Remove configuration drift
+### Phase 1: Authenticate complete release evidence
+
+1. Move CycloneDX output to official models and produce the complete shipped
+   component and dependency graph.
+2. Move deterministic local provenance to official in-toto types and label it
+   as metadata rather than authenticated evidence.
+3. Establish an authenticated builder for every required native host; do not
+   substitute a later publisher identity for the builder.
+4. Add a protected, explicitly triggered release workflow with commit-pinned
+   `actions/attest` and job-scoped OIDC and attestation permissions.
+5. Create and retain archive provenance, archive-to-SBOM attestations, release
+   index attestation, and OCI attestations for the same release identity.
+6. Integrate the narrow sigstore-go verifier with a trust root obtained outside
+   the unverified candidate.
+7. Verify cryptographic identity and transparency evidence before applying
+   Code Polishy's predicate and artifact policy.
+8. Update the release checklist, publication descriptors, installation path,
+   and terminology to require the authenticated bundles.
+
+### Phase 2: Remove configuration drift
 
 1. Compile and validate the shipped JSON Schema at runtime.
 2. Retain typed decoding, defaults, and explicit semantic checks.
@@ -331,32 +417,35 @@ Do not adopt the following as part of this plan:
 4. Remove duplicate handwritten structural validation once equivalence is
    proven.
 
-### Phase 2: Replace high-risk Python and syntax implementations
+### Phase 3: Replace high-risk Python and syntax implementations
 
 1. Introduce the batched Python facts adapter and resolve supported syntax
    versions.
-2. Add the strict `scope.pythonComputedImports` schema and AST-backed callsite
+2. Freeze and enforce the `ruff-graph-facts/v1` adapter on every supported host.
+3. Add the strict `scope.pythonComputedImports` schema and AST-backed callsite
    validation.
-3. Resolve bounded configured targets and derive every architecture edge from
+4. Resolve bounded configured targets and derive every architecture edge from
    the governed module graph.
-4. Keep dead-code dynamic references and architecture computed imports separate
+5. Keep dead-code dynamic references and architecture computed imports separate
    in configuration, validation, findings, documentation, and receipts.
-5. Replace Markdown structure parsing with goldmark.
-6. Replace shell lexical and syntax interpretation with `mvdan/sh`.
-7. Compare old and new facts over the frozen corpus and fuzzed inputs.
-8. Remove each old implementation and its fallback in the same coherent
+6. Replace Markdown structure parsing with goldmark.
+7. Replace shell lexical and syntax interpretation with `mvdan/sh`.
+8. Compare old and new facts over the frozen corpus and fuzzed inputs.
+9. Remove each old implementation and its fallback in the same coherent
    cutover after equivalence or an intentional tightening is documented.
 
-### Phase 3: Strengthen standardized evidence
+### Phase 4: Establish workflow and SPDX authorities
 
-1. Parse workflows structurally and add actionlint validation.
-2. Decide whether complete SPDX semantics or the deliberate subset is the
-   product contract.
-3. Move CycloneDX and in-toto output to official models.
-4. Produce a complete dependency graph from release inputs.
-5. Add authenticated publication provenance and independent verification.
+1. Build the actionlint-backed `workflow-facts/v1` adapter as the only GitHub
+   Actions syntax interpretation.
+2. Remove `js-yaml` from the GitHub Actions path while retaining its generic
+   YAML and GitLab responsibilities.
+3. Pin and inventory an admitted official SPDX license-list-data release.
+4. Decide whether go-spdx can supply grammar without supplying identifier data.
+5. Implement the accepted expression parser or retain the explicit fail-closed
+   subset, then remove every superseded parallel interpretation.
 
-### Phase 4: Make reuse authority explicit
+### Phase 5: Make reuse authority explicit
 
 1. Add the reusable and hermetic suite contract.
 2. Bind every declared input and execution capability into receipt identity.
@@ -364,7 +453,7 @@ Do not adopt the following as part of this plan:
 4. Keep incomplete or unbounded suites non-reusable.
 5. Add diagnostics showing exactly why a receipt was reused or rejected.
 
-### Phase 5: Evaluate optional isolation
+### Phase 6: Evaluate optional isolation
 
 Prototype WASI only after third-party pack execution is an approved product
 goal. Measure analyzer compatibility, startup cost, filesystem mediation,
@@ -383,6 +472,17 @@ Every parser replacement must demonstrate:
 - no old parser, fallback, configuration switch, or dual implementation after
   cutover;
 - native Windows, macOS, and Linux behavior where the capability is supported.
+
+Ruff graph evidence must additionally prove:
+
+- the same `ruff-graph-facts/v1` schema and normalized paths on Windows,
+  macOS, and Linux;
+- malformed, oversized, incomplete, duplicated, or newly shaped Ruff output
+  fails at the adapter boundary;
+- representative absolute, relative, namespace-package, type-checking, literal
+  dynamic, and unresolved imports agree with the expected graph;
+- an exact Ruff update cannot retain receipts produced by another raw-output
+  contract.
 
 Computed-import coverage must additionally prove:
 
@@ -403,10 +503,30 @@ Release-evidence work must additionally prove:
 - the SBOM conforms to the selected CycloneDX version;
 - every shipped dependency and executable is represented once with stable
   identity and relationships;
+- each required archive is built by an authenticated expected builder, and a
+  publisher-only attestation is rejected as build provenance;
+- every archive-to-SBOM relationship and the combined release index are covered
+  by the expected Sigstore bundles;
+- signature, trust-root, certificate, issuer, transparency, and time validation
+  completes before predicate data can influence a policy result;
 - attestation verification rejects the wrong repository, workflow, revision,
-  builder, event, or artifact digest;
+  ref, builder, event, subject name, or artifact digest;
+- a trust root supplied only by the unverified candidate is rejected;
 - local deterministic metadata is not accepted as authenticated publication
   evidence.
+
+Workflow and license work must additionally prove:
+
+- one actionlint parse produces all GitHub Actions syntax and semantic facts;
+- `js-yaml` output cannot satisfy a GitHub Actions workflow check;
+- actionlint diagnostics, parser recovery, API drift, and fact-schema drift
+  fail closed;
+- the SPDX identifier and exception set exactly matches the pinned official
+  data files and records their version and digests;
+- grammar acceptance cannot introduce an identifier absent from that data, and
+  a newer live SPDX list cannot change a run;
+- deprecated identifiers, `LicenseRef`, exceptions, `+`, `WITH`, precedence,
+  and case behavior match the selected policy contract.
 
 Receipt work must prove that every modeled input change invalidates reuse,
 unrelated changes preserve only eligible receipts, undeclared access cannot
@@ -421,10 +541,19 @@ produce reusable evidence, and unbounded suites always execute.
   declarations whose possible targets produce ordinary enforced architecture
   edges.
 - Workflow checks parse active structure and do not overclaim external state.
+- Actionlint is the sole GitHub Actions syntax authority behind the stable
+  `workflow-facts/v1` boundary; `js-yaml` has no GitHub Actions policy role.
 - SPDX handling is either standards-complete or explicitly documented as a
-  narrower fail-closed policy.
+  narrower fail-closed policy, with an admitted official SPDX data snapshot as
+  the identifier and exception authority.
 - Release SBOMs contain the complete shipped dependency graph.
-- Published provenance is authenticated and independently verifiable.
+- Every native archive has authenticated build provenance, its canonical SBOM
+  is bound to it, and the combined release identity is independently
+  verifiable.
+- Publication-only identity is never reported as build provenance, and
+  deterministic local provenance remains clearly distinguished from both.
+- Ruff graph evidence crosses a pinned, bounded `ruff-graph-facts/v1` adapter
+  with native-platform contract coverage.
 - Cross-candidate receipt reuse is limited to explicitly reusable suites with a
   complete enforceable input contract.
 - External components cannot weaken thresholds, suppress required evidence, or
