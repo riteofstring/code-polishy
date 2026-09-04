@@ -42,6 +42,7 @@ the remaining delta instead of describing those capabilities as absent.
 | Evaluation scope        | File selectors retain whole-package context for JavaScript and TypeScript checks whose result cannot be computed file by file.                                                                                                                        | Accept contained directory and module selectors, expose requested selection separately from analyzer context, and stop forcing agents to construct unbounded file argument lists.                     |
 | Generated remediation   | Generated executable source receives format validation and semantic checks while format writers correctly preserve generator-owned bytes.                                                                                                             | Bind each project-generated executable output to its source and producer, and never recommend a formatter command that is forbidden from rewriting the failing output.                                |
 | Python reachability     | v0.22 infers exact Pydantic import aliases, re-exports, local subclass chains, fields, `model_config`, validators, serializers, and computed fields. It also supports exact dynamic symbols and external attribute writes through typed parameters.   | Infer TypedDict literal-key reads, support exact external writes through typed locals and `self`, and prevent free-standing or generated symbol inventories from suppressing dead-code findings.      |
+| Capability discovery    | The locked release exposes exact documentation topics and configuration names, and behavior-review features bind paths, modules, suites, and enforcement boundaries.                                                                                  | Add repository-aware capability discovery, descriptions and exact aliases, visible intent/status confirmations, upgrade deltas, and one bounded task-start packet.                                    |
 
 The later session supplies two exact regression cases. A 15-file `--files`
 selection produced 26 findings whose primary paths were all outside that
@@ -103,6 +104,10 @@ the observable outcome.
 - Dynamic reachability is evidence about one real consumer boundary, not a
   symbol allowlist. A declaration without independently resolvable consumer
   evidence is invalid even when every named symbol currently exists.
+- Natural-language task wording may discover candidate capabilities but never
+  activates one. Activation requires one exact canonical feature name or one
+  exact, uniquely declared alias supplied as a command operand and recorded as
+  its canonical identity.
 - Machine output is versioned, deterministic, path-normalized, size-bounded,
   and independent of terminal prose.
 
@@ -709,6 +714,58 @@ required SARIF subset with `encoding/json` and the pinned official schema. The
 evaluation and resulting single implementation must be complete before
 v0.24.0; do not retain two serializers.
 
+## Repository capability discovery and task start
+
+Add a repository-aware `capabilities` command backed by one versioned catalog,
+not help-text scraping. Its human and JSON forms list the exact locked release,
+built-in release capabilities, installed language-pack capabilities, project
+and module capabilities, configured checks, and configured behavior-review
+features. Each entry identifies its canonical name, kind, concise description,
+user-facing aliases, source, applicable paths or modules, enforcement boundary,
+and relevant workflow documentation. Unavailable or inapplicable capabilities
+remain explicit rather than disappearing.
+
+Require each configured behavior-review feature to declare a concise
+`description`; allow bounded `aliases` that are normalized for Unicode, case,
+and whitespace and are unique across canonical names and aliases. Commands may
+resolve an explicitly supplied feature operand by exact canonical name or exact
+alias and always record the canonical name. A natural-language query may return
+bounded deterministic candidates, but neither the CLI nor agent guidance may
+infer activation from keywords, descriptions, partial matches, or ranking.
+The agent presents candidates and uses a canonical name only after the user's
+request or confirmation identifies the intended capability.
+
+`behavior-review capture-intent` and `behavior-review status` always emit a
+concise human confirmation when successful, including the canonical features,
+state, and managed evidence path where applicable. Their machine forms emit one
+versioned document. Piped, captured, non-interactive, and launcher-mediated
+execution must not make these confirmations disappear.
+
+Put a short task-routing decision table at the beginning of
+`agent-workflows`. It routes read-only questions, ordinary interactive changes,
+isolated work, behavior-sensitive changes, dependency changes, releases, and
+final delivery to the exact first command without weakening later selection or
+verification rules.
+
+Add `task-start --intent-file PATH` with one exact file, directory, or module
+selector. It validates all inputs before mutation, atomically performs the same
+intent capture as `behavior-review capture-intent`, and returns one bounded
+`task-start/v1` packet containing the locked version, capture identity,
+canonical explicitly requested features, applicable workflows, configured
+guards, requested and expanded selection, current design context, and ordered
+required next actions. It runs no tests, reviews, package operations, or
+repository-controlled commands. The component commands remain authoritative;
+the task-start packet composes their facts and must agree with their separate
+outputs.
+
+After an atomic lock upgrade, print a bounded capability delta between the
+outgoing and incoming authenticated release catalogs: added, removed, and
+changed canonical capabilities with their release versions and documentation.
+If either authenticated catalog is unavailable, say that the delta is
+unavailable rather than guessing from changelog prose. The same delta is
+available in a deterministic machine document and from repository-aware
+capability inspection after the upgrade.
+
 ## Exact-version remediation
 
 Exact-version findings must prefer the version already selected by the current
@@ -862,7 +919,18 @@ be adopted as an exact declaration.
 7. Verify that suggestions never perform network resolution or bypass
    dependency review.
 
-### Phase 7: Release the atomic contract
+### Phase 7: Surface capabilities and task routing
+
+1. Add the versioned capability catalog and repository-aware human and JSON
+   inventory.
+2. Add required behavior-feature descriptions, exact aliases, uniqueness
+   validation, and explicit discovery without keyword activation.
+3. Add visible intent-capture and status confirmations across direct, piped,
+   captured, and launcher-mediated execution.
+4. Add the routing table and atomic bounded `task-start/v1` composition.
+5. Add authenticated upgrade capability deltas and unavailable evidence.
+
+### Phase 8: Release the atomic contract
 
 1. Update permanent policy, adoption, agent, schema, CLI, and release docs.
 2. Remove superseded types, renderers, schema fields, messages-as-identities,
@@ -1008,6 +1076,27 @@ Selection and command-surface fixtures must prove:
 - human, JSON, and SARIF status and warning totals agree with the process exit
   status.
 
+Capability and task-start fixtures must prove:
+
+- the same repository under two exact locked releases reports the correct
+  release, built-in, pack, project, module, check, and behavior-feature
+  capability inventory without reading an ambient installation;
+- configured feature descriptions and aliases are bounded, normalized, unique,
+  and resolve only an exact explicit operand to one canonical feature name;
+- natural-language discovery returns bounded deterministic candidates but
+  cannot capture, require, run, or satisfy a behavior feature;
+- intent capture and status each print one concise confirmation through direct,
+  piped, captured, and stable-launcher execution and emit equivalent machine
+  facts;
+- `task-start/v1` validates before mutation, captures the exact supplied intent
+  once, reports the same design and guard facts as their owning commands, and
+  runs no tests, reviews, dependency operations, or repository commands;
+- the routing table selects the correct first command for each named task class
+  without replacing later policy selection; and
+- an upgrade reports an authenticated added, removed, and changed capability
+  delta, while a missing outgoing catalog reports unavailable evidence without
+  inventing a delta.
+
 Generated-source remediation fixtures must prove:
 
 - every project-generated executable output has exactly one current producer
@@ -1078,6 +1167,10 @@ complete release inventory and authenticated evidence.
   analyzer context and finding relation.
 - Human output is bounded and summary-first; complete JSON reports always
   remain available.
+- Repository-aware capability discovery, exact feature aliases, visible intent
+  and status confirmations, authenticated upgrade deltas, and `task-start/v1`
+  expose the applicable locked workflows without activating a feature from
+  natural-language keywords.
 - JSON and SARIF expose stable rule IDs, semantic fingerprints, related
   locations, grouping fields, and structured remediation.
 - Global findings appear once, and display filters cannot turn a failed full
