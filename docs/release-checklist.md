@@ -90,6 +90,8 @@ pushes, or installs state.
    `<release>/bin/code-polishy lock`, as that repository's own reviewed atomic
    authority cutover. Outgoing guidance governs until this command replaces the
    lock; incoming guidance governs afterward.
+   After a bounded Python-fixture failure, use
+   `--fixture python-adoption` to retry only that installed-release fixture.
    Rerun the script with its default lock for this repository.
 8. Keep behavior review experimental until real workflows in more than one
    repository cover an optional `NOT RUN` refactor, a user-requested feature, a

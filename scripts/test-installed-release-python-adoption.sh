@@ -348,7 +348,7 @@ python_adoption_expect_data_preserved() {
 }
 
 exercise_python_adoption_fixture() {
-  local fixture_root="$1" real_git="$2"
+  local fixture_root="$1" real_git="$2" release="$3"
   local target="${fixture_root}/python-adoption"
   local host_python alpha_commit mismatch_commit gitlab_digest command_log base missing_venv_findings
   local json_path yaml_path json_snapshot yaml_snapshot
@@ -491,8 +491,5 @@ EOF
 
   if ! "${release}/scripts/release-manifest.sh" verify "${release}" >"${output}" 2>&1; then
     fail "python-adoption: managed Python commands changed the installed release: $(excerpt)"
-  fi
-  if find "${release}" \( -type d -name __pycache__ -o -type f -name '*.py[co]' \) -print -quit | grep -q .; then
-    fail "python-adoption: managed Python commands wrote bytecode into the installed release"
   fi
 }

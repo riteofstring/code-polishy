@@ -34,9 +34,10 @@ set -euo pipefail
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 prefix="${HOME}/.local/share/code-polishy"
 lock="${policy_root}/.code-polishy.lock.json"
+fixture=""
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture python-adoption]" >&2
   exit 2
 }
 
@@ -64,9 +65,23 @@ while (($#)); do
       lock="${1#*=}"
       shift
       ;;
+    --fixture)
+      if (($# < 2)); then
+        usage
+      fi
+      fixture="$2"
+      shift 2
+      ;;
+    --fixture=*)
+      fixture="${1#*=}"
+      shift
+      ;;
     *) usage ;;
   esac
 done
+if [[ -n "${fixture}" && "${fixture}" != "python-adoption" ]]; then
+  usage
+fi
 
 fail() {
   echo "installed release test failure: $1" >&2
@@ -270,6 +285,12 @@ expect_no_target_commands() {
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
+
+if [[ "${fixture}" == "python-adoption" ]]; then
+  exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
+  echo "The installed release passed the Python adoption fixture."
+  exit 0
+fi
 
 exercise_versioned_documentation() {
   local target="$1" description="$2" before
@@ -963,6 +984,6 @@ EOF
 expect_findings "${react}" "react" check --all
 expect_finding "react" "quality.lint" "src/conditional.tsx" "react-hooks/rules-of-hooks"
 
-exercise_python_adoption_fixture "${fixture_root}" "${real_git}"
+exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
 
 echo "The installed release governed every disposable target shape."
