@@ -1,0 +1,543 @@
+# Architecture and Agent Usability Hardening
+
+Status: proposed
+
+Target release: v0.24.0
+
+## Outcome
+
+Prevent a repository from appearing architecturally clean merely because its
+code was placed inside one permissive module, make test ownership independent
+of production path ownership, and make every policy result directly usable by
+an automated coding agent.
+
+This plan follows v0.23.0. It must preserve the stricter parser, dependency,
+evidence, and publication boundaries delivered there. Before implementation,
+reconcile every named internal boundary and schema below against the released
+v0.23 tree; do not restore a v0.22 implementation that v0.23 replaced.
+
+The release is one breaking, atomic cutover. It provides no compatibility
+alias, fallback reader, dual finding model, automatic waiver, or migration
+path for superseded configuration. Code Polishy itself adopts the new contract
+before v0.24.0 is complete.
+
+## Evidence baseline
+
+The adoption feedback behind this plan was collected from Code Polishy
+v0.21.x. v0.22 already closed part of it, so this plan implements the remaining
+delta instead of describing those capabilities as absent.
+
+| Feedback area           | Already present in v0.22                                                                                                                                                                                                                              | Remaining work                                                                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture visibility | `architecture` reports production files, test files, incoming and outgoing dependencies, and quick focused suites per module. Durable guidance already favors concept ownership and deep modules over catch-all ownership and forwarding-only splits. | Enforce cycles below the declared module level, identify suspiciously vacuous topology, and require a graph review before adoption or an architecture rewrite.                                        |
+| Test ownership          | Every governed test must resolve to one production module and be included by a quick focused suite.                                                                                                                                                   | Stop deriving ownership implicitly from production module paths. Declare the owner and primary focused suite directly and provide useful unmapped-test diagnostics.                                   |
+| Agent diagnostics       | Merge and checkpoint gates write JSON reports and bounded command logs.                                                                                                                                                                               | Make ordinary policy output summary-first and bounded, give every command a complete structured report, add SARIF and stable finding identities, and attach exact remediation and rerun instructions. |
+
+v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
+must delete or narrow any requirement that became redundant while retaining
+the observable outcome.
+
+## Product rules
+
+- Deterministic inventory, parsing, graph, ownership, and policy rules retain
+  final authority over pass and fail.
+- AI review handles qualitative architecture judgment. It cannot waive a
+  cycle, invent missing import evidence, suppress ownership failure, or replace
+  a separately required human approval.
+- This plan introduces no mandatory human architecture approval. A clean-
+  context AI reviewer may accept a coherent one-module design with evidence;
+  that result is a review decision, not a policy exception.
+- Module count, file count, percentage ownership, and dependency degree remain
+  evidence rather than arbitrary pass/fail thresholds.
+- Rendering filters never alter evaluation scope, the complete report, or the
+  process exit status.
+- Remediation uses repository and lockfile facts already available to the
+  evaluation. It never queries for the newest dependency or silently edits,
+  installs, upgrades, or executes lifecycle scripts.
+- Machine output is versioned, deterministic, path-normalized, size-bounded,
+  and independent of terminal prose.
+
+## Canonical source dependency graph
+
+Introduce one Code-Polishy-owned `source-dependency-graph/v1` fact model after
+ecosystem parsing and resolution but before declared-module filtering.
+
+Each node identifies one governed executable file by normalized repository
+path, language, generated status, test status, project or package root, and
+declared module owner. Each edge identifies its source and resolved target,
+source location, ecosystem, and semantic kind, including runtime, type-only,
+re-export, or statically proven dynamic import.
+
+The graph is an engine fact contract, not a second parser:
+
+- JavaScript and TypeScript consume resolved facts from the sealed language
+  adapter.
+- Python consumes the released v0.23 Python and Ruff fact boundaries.
+- Go retains package semantics. An import edge targets a package rather than an
+  invented file; a package cycle reports one real importing file as the witness
+  for each edge.
+- Other language packs may emit the same bounded graph capability. A language
+  without complete resolution continues to require its existing architecture
+  provider and cannot claim clean cycle evidence.
+- External dependencies are absent from this repository graph. Missing,
+  ambiguous, escaping, truncated, or unparsed local edges remain import-
+  coverage failures rather than disappearing.
+- Production, test, and generated classifications remain explicit. Test edges
+  never authorize production dependency direction, but test-only cyclic
+  components are still checked and identified separately.
+
+Raw parser or tool types must not enter the graph, policy, reporting, or review
+packages. The graph has exact node, edge, depth, and encoded-size limits. The
+complete normalized graph identity participates in architecture-review and
+reusable-evidence identities wherever those consumers rely on it.
+
+## File and package cycle enforcement
+
+Run cycle detection on the canonical graph before collapsing nodes into
+declared modules. A same-module edge is therefore invisible to the module-
+dependency check but never invisible to cycle analysis.
+
+Use a small internal strongly connected component implementation over sorted
+nodes and edges. Do not add a graph dependency for Tarjan or Kosaraju traversal.
+For every cyclic component of two or more nodes, and for every self-loop:
+
+- emit one blocking `architecture.fileCycle` finding for production or
+  generated source;
+- emit one blocking `testing.fileCycle` finding for a test-only component;
+- include every component member and internal edge in the complete report;
+- show one deterministic canonical witness cycle in human output;
+- identify runtime, type-only, re-export, and proven dynamic edges without
+  silently dropping any category;
+- retain source locations and module owners for every witness edge; and
+- derive the finding fingerprint from the sorted semantic component identity,
+  not from traversal order or message text.
+
+One strongly connected component can contain exponentially many simple cycles.
+Code Polishy reports every cyclic component and all of its internal edges; it
+does not attempt unbounded enumeration of every possible walk. Ordering and the
+chosen witness must be identical across supported operating systems.
+
+Cycle findings are not suppressible. A declaration that would turn a cyclic
+component back into a green architecture result recreates the original false-
+green condition. If an ecosystem cannot distinguish an edge category reliably,
+it fails coverage rather than assuming that category is harmless.
+
+## Non-vacuous architecture review
+
+Keep the v0.22 architecture summary and add deterministic review signals. A
+signal selects review; it is not itself proof that the architecture is wrong.
+Signals include:
+
+- a code-bearing repository with one production module;
+- one module spanning multiple independently discovered ecosystem projects,
+  workspaces, or packages;
+- one module containing multiple disconnected production graph components;
+- a repository-wide catch-all path owning otherwise distinguishable source
+  roots;
+- a declared graph with no inter-module edges while the source graph contains
+  material internal dependency structure; and
+- a candidate that changes module names, paths, dependencies, test ownership,
+  or the production graph topology covered by a prior review.
+
+These signals use exact structural facts and no minimum module or file count.
+A small one-module repository may therefore receive a short review and pass;
+the tool does not force it to manufacture meaningless modules.
+
+Add an `architecture-review` workflow modeled on the existing bounded behavior
+and final-state review infrastructure:
+
+1. `architecture-review prepare --base REF` writes a clean, bounded packet with
+   the trusted base, exact candidate, declared module graph, production and test
+   ownership, normalized source graph, cycle results, project and package
+   roots, per-module summary, topology diff, and only mapped current design
+   documents.
+2. A clean-context AI reviewer receives only that packet. It evaluates concept
+   ownership, boundary depth, graph direction, catch-all ownership,
+   disconnected responsibilities, and forwarding-only moves or file splits.
+3. The result is strict structured data. An acceptance cites concrete packet
+   evidence and explains why the graph represents real ownership. Findings cite
+   exact paths, edges, or configuration entries and propose a corrected graph.
+4. `architecture-review finalize` validates the result and writes a receipt
+   bound to the base, candidate graph, review signals, packet, and result.
+5. A required review with findings, missing evidence, malformed output, stale
+   inputs, or a mismatched candidate blocks the applicable checkpoint or merge
+   gate.
+
+An accepted one-module architecture is not a generated waiver and does not
+suppress the review signal from reports. Its receipt remains reusable only
+while the module contract, project and package roots, ownership map, and source-
+graph topology retain the same identity.
+
+Update version-matched agent guidance so an adopting or restructuring agent
+first drafts the proposed module graph, prepares this review, and resolves its
+findings before broad source moves or rewrites. Explicitly discourage a change
+whose main effect is replacing one deep file with forwarding-only files. A
+later candidate that diverges from the reviewed graph invalidates the receipt
+and requires a new review.
+
+The workflow does not embed an AI provider SDK or give Code Polishy network
+credentials. The calling harness supplies the clean-context reviewer and saves
+its result, as it does for other selected agent reviews. Local digests prove
+candidate consistency, not reviewer identity; documentation must preserve that
+trust limit.
+
+## Explicit test ownership
+
+Move test classification and ownership into one coherent `tests` contract:
+
+```json
+{
+  "tests": {
+    "paths": ["spec/**/*.py"],
+    "ownership": [
+      {
+        "paths": ["internal/policy/**/*_test.go"],
+        "module": "policy",
+        "focusedSuite": "policy-unit"
+      }
+    ],
+    "suites": []
+  }
+}
+```
+
+`tests.paths` adds unconventional test locations to built-in ecosystem test
+classification. `tests.ownership` answers which production boundary each test
+verifies and names its primary quick focused suite. Production `modules[].paths`
+no longer assigns test ownership, although path containment remains useful as
+non-authoritative diagnostic evidence.
+
+Enforce all of the following:
+
+- every governed executable test matches exactly one ownership entry;
+- every ownership entry names one existing production module and one existing
+  quick module-scoped suite for that same module;
+- the named suite runs in focused, recommended, and full profiles and its
+  execution paths include every test assigned to it;
+- ownership patterns are contained, non-overlapping, and non-stale;
+- an ownership pattern cannot convert production source into a test;
+- repository-scoped suites may additionally execute owned tests but cannot own
+  them; and
+- test imports remain excluded from production module edges.
+
+Remove `scope.tests` and the implicit module-path ownership behavior in the same
+schema cutover. The new schema version rejects those old forms. Do not retain a
+deprecated alias or silently synthesize `tests.ownership` entries.
+
+For each unmapped test, diagnostics use bounded evidence in this order:
+
+1. an exact paired production file under an existing module;
+2. one existing module containing the test path;
+3. resolved production imports that all converge on one module; and
+4. otherwise, the bounded set of candidate modules with the evidence for each.
+
+When one owner is provable, the finding names it as `expectedOwner` and includes
+a ready-to-copy ownership object using the exact test path and a compatible
+focused suite. When ownership is genuinely ambiguous, Code Polishy says so
+instead of inventing certainty, lists the candidates, and includes one concrete
+configuration alternative per candidate. The structured remediation always
+states that an agent must choose based on the behavior the test verifies, not
+merely its directory.
+
+## Canonical finding contract
+
+Replace message-shaped findings with a versioned Code-Polishy-owned finding
+model used by direct commands, gates, managed reports, JSON, and SARIF.
+
+Each finding contains:
+
+- a stable rule ID such as `architecture.fileCycle` or
+  `policy.testOwnership`;
+- a stable instance fingerprint derived from the rule's canonical semantic
+  identity;
+- severity and evaluation status;
+- scope (`repository`, `module`, `path`, dependency, or graph component);
+- primary and related normalized locations;
+- subject, owning module when known, and machine fields specific to the rule;
+- one concise message rendered from those fields; and
+- structured remediation with a summary, optional exact replacement or
+  configuration example, and a next command represented as an argument array
+  plus contained working directory.
+
+Message wording, ordering, terminal width, and operating-system separators do
+not participate in the fingerprint. A semantic change to the affected rule,
+path, dependency, owner, or cyclic component does.
+
+Producers must emit one semantic occurrence. The engine centrally coalesces
+duplicate occurrences by canonical identity and retains their related
+locations. Repository- or policy-global failures appear once rather than once
+per file or downstream consumer. Coalescing must never merge distinct affected
+paths, dependency versions, module edges, or graph components.
+
+All checks define their remediation at the policy owner. CLI code renders that
+data but does not infer fixes from English messages. A finding without a safe
+automatic replacement still provides a precise explanation and the narrowest
+valid rerun command.
+
+## Human, JSON, and SARIF output
+
+Every policy-producing command writes its complete versioned JSON report below
+`.code-polishy-reports/<command>/<execution-id>/`, even when the terminal view
+is filtered or truncated. Reports retain the existing gate identity and digest
+properties and add the canonical finding fields, evaluation totals, display
+filters, and suppressed or reviewed outcomes.
+
+Human output becomes summary-first:
+
+1. print pass, fail, or review-required status and the total finding count;
+2. print bounded counts grouped by rule and module;
+3. print at most 20 findings by default, with remediation and the next command;
+4. state exactly how many findings are omitted; and
+5. print the complete report path.
+
+Allow a caller to lower the display limit or raise it to a fixed safe maximum.
+No human-output option prints an unbounded finding list. Existing bounded gate
+logs remain separate from policy findings.
+
+Add a common output contract:
+
+- `--format human`, `--format json`, or `--format sarif`;
+- `--output PATH` for an explicit regular output file, with atomic replacement
+  and no repository escape;
+- repeatable `--check`, `--module`, and `--path` display filters; and
+- `--group-by check`, `--group-by module`, or `--group-by path` for human and
+  JSON views.
+
+Machine formats write one document to stdout when no output path is supplied;
+progress and operational diagnostics use stderr. A filtered document records
+both total and displayed counts. Exit status always reflects the complete
+unfiltered evaluation.
+
+JSON uses the canonical report directly. SARIF targets version 2.1.0 and maps
+stable rule IDs, fingerprints, primary and related locations, severity,
+remediation, and suppressed status without losing Code Polishy's complete JSON
+report. Validate generated SARIF against the pinned official schema and golden
+fixtures accepted by representative consumers.
+
+Evaluate an exact release of `github.com/owenrumney/go-sarif/v2` behind one
+narrow serializer adapter. Adopt it only if the v0.23 dependency-admission,
+release-age, vulnerability, license, provenance, platform, and transitive-
+inventory checks pass. If it does not pass, implement only Code Polishy's
+required SARIF subset with `encoding/json` and the pinned official schema. The
+evaluation and resulting single implementation must be complete before
+v0.24.0; do not retain two serializers.
+
+## Exact-version remediation
+
+Exact-version findings must prefer the version already selected by the current
+frozen lock rather than suggesting a newer release.
+
+Resolve the recommendation in the declaring manifest's exact package-manager,
+workspace, project, and importer scope. The structured finding records the
+declared specifier, lock source, locked version, and a ready-to-apply exact
+replacement when one unique current resolution exists. This applies to every
+supported direct-dependency ecosystem for which Code Polishy has authoritative
+lock facts, including the policy-owned Python inventory introduced for v0.23.
+
+Never choose the highest transitive occurrence or a similarly named package.
+If the lock is missing, stale, ambiguous, or contains multiple valid
+resolutions for that declaration, do not guess. Report why no replacement is
+safe, show the bounded candidate resolutions when useful, and direct the agent
+through the repository's dependency-review workflow before installation.
+
+The recommendation performs no registry request and says nothing about whether
+the locked version is desirable. Vulnerability, release-age, license, and
+dependency-review checks continue to decide whether that existing version may
+be adopted as an exact declaration.
+
+## Implementation boundaries
+
+- Extend the released parser and language-pack adapters to emit normalized
+  dependency facts; do not parse source again in the reporting or review layer.
+- Keep graph traversal, canonicalization, and cycle policy in a small internal
+  package using the Go standard library.
+- Put finding identity, aggregation, remediation, and rendering behind one
+  engine-owned reporting boundary. Gate reports adapt that same model rather
+  than defining a lossy second finding type.
+- Use the v0.23 runtime JSON Schema authority for the new test and report
+  contracts.
+- Reuse the bounded clean-context review and receipt primitives where their
+  trust and identity contracts match. Do not fork a general plugin or AI
+  framework.
+- Any new dependency or pinned standards data follows the full v0.23 supply-
+  chain lanes before it enters the candidate and appears in the release SBOM
+  and authenticated publication evidence.
+
+## Implementation sequence
+
+### Phase 0: Reconcile the released baseline
+
+1. Land or select the released v0.23 tree and inventory its parser, finding,
+   report, schema, review, dependency, and receipt boundaries.
+2. Convert the v0.21.x adoption examples into exact regression fixtures.
+3. Mark each v0.21 concern as closed by v0.22, closed by v0.23, or still open.
+4. Remove redundant work from this plan without weakening its outcomes.
+5. Freeze current exit codes, gate identities, report custody, and supported-
+   platform behavior that the cutover must deliberately preserve or replace.
+
+### Phase 1: Establish one finding and report model
+
+1. Define the canonical finding, semantic identity, remediation, occurrence,
+   summary, and report schemas.
+2. Convert every built-in producer and gate adapter to that model.
+3. Add semantic coalescing and global-finding ownership.
+4. Add managed reports for direct policy commands.
+5. Implement bounded summary-first human rendering and display-only filters.
+6. Implement and schema-test JSON and the selected single SARIF serializer.
+
+### Phase 2: Enforce source-level cycles
+
+1. Define and bound `source-dependency-graph/v1`.
+2. Adapt each supported language's existing resolved facts once.
+3. Add deterministic strongly connected component analysis before module
+   projection.
+4. Emit production, generated, and test-only cycle findings with complete
+   structured component evidence and canonical witnesses.
+5. Bind graph identity into downstream reports, reviews, and reusable evidence.
+
+### Phase 3: Cut over test ownership
+
+1. Add `tests.paths`, `tests.ownership`, and `focusedSuite` to the runtime and
+   shipped schema.
+2. Add exact coverage, overlap, staleness, module, suite, and profile
+   validation.
+3. Add evidence-based expected-owner diagnostics and concrete configuration
+   alternatives.
+4. Remove `scope.tests` and implicit production-path ownership.
+5. Convert Code Polishy's own tests and fixtures atomically.
+
+### Phase 4: Add architecture review
+
+1. Implement deterministic review signals from the normalized graph and
+   discovered project structure.
+2. Implement prepare, strict result validation, finalization, receipt identity,
+   invalidation, and gate selection.
+3. Add clean-context reviewer instructions for concept ownership, catch-all
+   modules, disconnected responsibilities, and forwarding-only rewrites.
+4. Update adoption and agent workflows to review the proposed graph before a
+   broad rewrite and verify the same graph at delivery.
+5. Complete one self-hosting architecture review for Code Polishy.
+
+### Phase 5: Complete remediation coverage
+
+1. Give every built-in finding an owned remediation and valid next command.
+2. Resolve exact direct versions from each authoritative lock scope.
+3. Add locked-version replacements and ambiguity evidence.
+4. Verify that suggestions never perform network resolution or bypass
+   dependency review.
+
+### Phase 6: Release the atomic contract
+
+1. Update permanent policy, adoption, agent, schema, CLI, and release docs.
+2. Remove superseded types, renderers, schema fields, messages-as-identities,
+   and compatibility fixtures.
+3. Run supported-platform conformance and self-hosting gates.
+4. Publish release notes that identify the breaking configuration and output
+   contracts without offering a legacy mode.
+5. Cut v0.24.0 only when every completion criterion is satisfied together.
+
+## Verification
+
+Graph and architecture fixtures must prove:
+
+- a JavaScript or Python cycle inside one declared module fails;
+- an allowed declared-module edge cannot hide a source-level cycle;
+- generated-source and test-only cycles are classified and fail separately;
+- Go package cycles retain real file witnesses without inventing file imports;
+- self-loops, type-only edges, re-exports, and proven dynamic imports remain
+  visible;
+- unresolved or incomplete edges fail coverage before cycle analysis can claim
+  a clean graph;
+- each cyclic component has one stable finding, complete internal edges, and a
+  canonical witness on Windows, macOS, and Linux; and
+- large cyclic components remain bounded without attempting exponential cycle
+  enumeration.
+
+Architecture-review fixtures must prove:
+
+- a one-module code repository selects review without an arbitrary size test;
+- coherent small and genuinely monolithic designs can receive a cited AI
+  acceptance;
+- multiple project roots collapsed into a catch-all module and forwarding-only
+  rewrites produce actionable findings;
+- AI acceptance cannot suppress cycle, coverage, ownership, or dependency-
+  direction failures;
+- a changed graph, owner map, project root, packet, or result invalidates the
+  receipt; and
+- missing or malformed AI output fails only when review is selected and never
+  masquerades as deterministic proof.
+
+Test-ownership fixtures must prove:
+
+- built-in and custom-path tests each require exactly one explicit owner and
+  primary focused suite;
+- production module paths no longer assign test ownership;
+- overlapping, stale, missing, cross-module, repository-suite, and uncovered
+  declarations fail specifically;
+- unmapped tests with convergent evidence receive the correct expected owner
+  and a valid configuration object;
+- ambiguous tests show bounded alternatives without a fabricated owner; and
+- test imports cannot authorize a production architecture edge.
+
+Reporting fixtures must prove:
+
+- human output starts with complete totals, remains within its selected bound,
+  states omitted counts, and points to a complete report;
+- JSON and SARIF validate against their pinned schemas and contain equivalent
+  rule, location, fingerprint, severity, and remediation facts;
+- fingerprints survive message-only changes, finding reordering, terminal
+  width, and platform path spelling but change with semantic identity;
+- a global failure is emitted once while distinct local occurrences remain
+  distinct or appear as related locations;
+- filters and grouping never change complete totals, report contents, or exit
+  status; and
+- every next command is a bounded argument array valid for the current command
+  and repository scope.
+
+Dependency-remediation fixtures must prove:
+
+- a broad direct declaration recommends its exact importer-scoped locked
+  version;
+- workspaces, aliases, optional and development groups, and Python project
+  scopes cannot borrow another declaration's resolution;
+- missing, stale, or ambiguous locks produce no guessed replacement;
+- no suggestion requests a latest version or performs network access; and
+- the suggested exact version still receives all ordinary vulnerability,
+  release-age, license, and dependency-review checks.
+
+The final candidate must also prove that old configuration fields and output
+types are absent, the Code Polishy repository passes under explicit test
+ownership, and every new dependency or standards snapshot is present in the
+complete release inventory and authenticated evidence.
+
+## Completion criteria
+
+- Every supported resolved repository dependency graph is represented once in
+  `source-dependency-graph/v1` with bounded, fail-closed coverage.
+- Every cyclic source component is reported before module projection, including
+  cycles wholly inside one declared module.
+- Suspicious topology selects a clean-context AI review without a minimum module
+  or file count and without generating a waiver.
+- Adopting and restructuring agents review a proposed module graph before broad
+  source rewrites, and delivery proves the candidate retained that graph.
+- Every governed test has one explicit production owner and primary quick
+  focused suite independent of production module path matching.
+- Human output is bounded and summary-first; complete JSON reports always
+  remain available.
+- JSON and SARIF expose stable rule IDs, semantic fingerprints, related
+  locations, grouping fields, and structured remediation.
+- Global findings appear once, and display filters cannot turn a failed full
+  evaluation into a green result.
+- Exact-version findings recommend the current unique locked version, never an
+  unsolicited upgrade.
+- Every finding provides a precise remediation and the narrowest safe next
+  command.
+- No v0.21 or v0.22 compatibility path, old test-ownership inference, or dual
+  report model remains.
+- Every phase and completion criterion is delivered together in v0.24.0.
+
+## Related plans
+
+- Standards Parsing and Evidence Hardening, targeted for v0.23.0
+- [Language-Pack Discovery and Universal Capabilities](universal-language-pack-capabilities.md)
+- [Installable First-Party Language Packs](installable-first-party-language-packs.md)
