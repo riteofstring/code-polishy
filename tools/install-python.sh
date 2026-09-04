@@ -38,7 +38,7 @@ for required_tool in awk curl tar; do
 done
 
 python_reported_version() {
-  "$1" -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))'
+  "$1" -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))'
 }
 
 runtime_release() {

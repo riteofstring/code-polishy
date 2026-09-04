@@ -401,7 +401,7 @@ func installFakePythonRuntime(t *testing.T, root, pythonVersion, vultureVersion 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	contents := "#!/usr/bin/env sh\nif [ \"$1\" != \"-I\" ] || [ \"$2\" != \"-c\" ]; then\n  exit 1\nfi\ncase \"$3\" in\n  *sys.version_info*) printf '%s\\n' '" + pythonVersion + "' ;;\n  *importlib.metadata*) printf '%s\\n' '" + vultureVersion + "' ;;\n  *) exit 1 ;;\nesac\n"
+	contents := "#!/bin/sh\nif [ \"$1\" != \"-I\" ] || [ \"$2\" != \"-B\" ] || [ \"$3\" != \"-c\" ]; then\n  exit 1\nfi\ncase \"$4\" in\n  *sys.version_info*) printf '%s\\n' '" + pythonVersion + "' ;;\n  *importlib.metadata*) printf '%s\\n' '" + vultureVersion + "' ;;\n  *) exit 1 ;;\nesac\n"
 	if err := os.WriteFile(path, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
 	}

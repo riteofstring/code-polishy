@@ -180,7 +180,7 @@ try {
   }
   $PythonReported = ''
   if (Test-Path -LiteralPath $Python -PathType Leaf) {
-    $PythonProbe = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    $PythonProbe = @(& $Python -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
     if ($LASTEXITCODE -eq 0 -and $PythonProbe.Count -eq 1) { $PythonReported = $PythonProbe[0].Trim() }
   }
   if ($PythonReported -ne $PythonVersion -or $PythonMarkerValue -ne $PythonRelease) {
@@ -196,7 +196,7 @@ try {
     }
     Replace-Directory $PythonStaging $PythonRoot
     $Python = Join-Path $PythonRoot 'python.exe'
-    $PythonProbe = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    $PythonProbe = @(& $Python -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
     if ($LASTEXITCODE -ne 0 -or $PythonProbe.Count -ne 1 -or $PythonProbe[0].Trim() -ne $PythonVersion) {
       throw 'Pinned CPython verification failed.'
     }
@@ -206,7 +206,7 @@ try {
   $VultureVersion = Read-Pin 'tools/vulture-version.txt'
   if ($VultureVersion -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') { throw 'tools/vulture-version.txt must pin a Vulture release.' }
   $VultureAsset = "vulture-$VultureVersion-py3-none-any.whl"
-  $SitePackagesProbe = @(& $Python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+  $SitePackagesProbe = @(& $Python -I -B -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
   if ($LASTEXITCODE -ne 0 -or $SitePackagesProbe.Count -ne 1) { throw 'Pinned CPython did not resolve one site-packages directory.' }
   $SitePackages = $SitePackagesProbe[0].Trim()
   $PythonPrefix = ((Resolve-Path -LiteralPath $PythonRoot).Path.TrimEnd('\') + '\')
@@ -218,7 +218,7 @@ try {
   if (Test-Path -LiteralPath $VultureMarker -PathType Leaf) {
     $VultureMarkerValue = (Get-Content -Raw -LiteralPath $VultureMarker).Trim()
   }
-  $VultureProbe = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+  $VultureProbe = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
   $VultureExitCode = $LASTEXITCODE
   $VultureMetadata = @()
   if (Test-Path -LiteralPath $SitePackages -PathType Container) {
@@ -257,7 +257,7 @@ with zipfile.ZipFile(wheel) as archive:
         with archive.open(entry) as source, target.open("wb") as output:
             shutil.copyfileobj(source, output)
 '@
-    & $Python -I -c $VultureExtractor $VultureArchive $VultureStaging $VultureVersion
+    & $Python -I -B -c $VultureExtractor $VultureArchive $VultureStaging $VultureVersion
     if ($LASTEXITCODE -ne 0) { throw 'Pinned Vulture extraction failed.' }
     $VulturePackage = Join-Path $VultureStaging 'vulture'
     $VultureMetadata = Join-Path $VultureStaging "vulture-$VultureVersion.dist-info"
@@ -289,7 +289,7 @@ with zipfile.ZipFile(wheel) as archive:
       $NewVulturePackageInstalled = $true
       Move-Item -LiteralPath $VultureMetadata -Destination (Join-Path $SitePackages "vulture-$VultureVersion.dist-info")
       $NewVultureMetadataInstalled = $true
-      $VultureProbe = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+      $VultureProbe = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
       $VultureExitCode = $LASTEXITCODE
       $VultureMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')
       if ($VultureExitCode -ne 0 -or $VultureProbe.Count -ne 1 -or $VultureProbe[0].Trim() -ne $VultureVersion -or
@@ -367,7 +367,7 @@ with zipfile.ZipFile(wheel) as archive:
   & (Join-Path $Bin 'ruff.exe') --version
   & (Join-Path $Bin 'ty.exe') --version
   & $Python --version
-  & $Python -I -c 'import importlib.metadata; print("vulture " + importlib.metadata.version("vulture"))'
+  & $Python -I -B -c 'import importlib.metadata; print("vulture " + importlib.metadata.version("vulture"))'
   & (Join-Path $ShellcheckRoot 'shellcheck.exe') --version
   Write-Host 'Installed the checksum-pinned Code Polishy Windows x64 toolchain.'
 } finally {

@@ -108,8 +108,8 @@ write_python_runtime_tool() {
   local path="$1" python_version="$2" vulture_version="$3"
   write_file "${path}" <<EOF
 #!/usr/bin/env bash
-if [[ "\${1:-}" == "-I" && "\${2:-}" == "-c" ]]; then
-  case "\${3:-}" in
+if [[ "\${1:-}" == "-I" && "\${2:-}" == "-B" && "\${3:-}" == "-c" ]]; then
+  case "\${4:-}" in
     *sys.version_info*) printf '%s\n' "${python_version}" ;;
     *sysconfig.get_paths*) printf '%s\n' "\$(cd "\$(dirname "\$0")" && pwd -P)/lib/python3.12/site-packages" ;;
     *importlib.metadata*) printf '%s\n' "${vulture_version}" ;;

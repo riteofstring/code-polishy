@@ -384,7 +384,7 @@ probed_version() {
         awk '/^osv-scanner version:/ { print $3 }'
       ;;
     python)
-      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c \
         'import sys; print(".".join(str(value) for value in sys.version_info[:3]))'
       ;;
     ruff)
@@ -394,7 +394,7 @@ probed_version() {
       javascript_sealed_run "${policy_root}/.tools/bin/ty" --version | awk '{ print $2 }'
       ;;
     vulture)
-      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c \
         'import importlib.metadata; print(importlib.metadata.version("vulture"))'
       ;;
     *)
@@ -406,7 +406,7 @@ probed_version() {
 
 vulture_metadata_is_exact() {
   local site_packages metadata expected count=0 malformed=0 exact=""
-  if ! site_packages="$(javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -c \
+  if ! site_packages="$(javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c \
     'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2>/dev/null)"; then
     return 1
   fi

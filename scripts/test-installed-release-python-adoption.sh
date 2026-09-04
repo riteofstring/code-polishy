@@ -488,4 +488,11 @@ EOF
   expect_finding \
     "python-adoption mutable GitLab include" "supplyChain.gitLabIncludePin" \
     "ci/includes/deep.yml" "fixture/secure-templates"
+
+  if ! "${release}/scripts/release-manifest.sh" verify "${release}" >"${output}" 2>&1; then
+    fail "python-adoption: managed Python commands changed the installed release: $(excerpt)"
+  fi
+  if find "${release}" \( -type d -name __pycache__ -o -type f -name '*.py[co]' \) -print -quit | grep -q .; then
+    fail "python-adoption: managed Python commands wrote bytecode into the installed release"
+  fi
 }

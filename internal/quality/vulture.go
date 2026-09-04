@@ -328,7 +328,7 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	return policy.Command{
 		Name:              "policy-vulture-dead-code-" + pythonQualityProjectName(project.Root),
 		Provides:          []string{"dead-code"},
-		Argv:              []string{interpreter, "-I", "-B", "-c", pythonVultureProgram},
+		Argv:              repo.PythonCommand(pythonVultureProgram),
 		Cwd:               ".",
 		Modules:           pythonQualityModules(repo, project.Files),
 		RunOn:             []string{"check", "gate"},

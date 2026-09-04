@@ -1,6 +1,7 @@
 package policymodule
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -86,11 +87,10 @@ func applyVulture(repo repository.Repository, active policy.ActivePolicyModule, 
 		resolution.Findings = append(resolution.Findings, finding("vulture", active.Root, "python", "enabled Vulture policy did not find governed Python source at this root"))
 		return
 	}
-	python := repo.PythonTool()
-	if !pythonRuntimeVersion(python, repo.ToolPin("python")) {
+	if !pythonRuntimeVersion(repo, repo.ToolPin("python")) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "python", Message: "conditional Python dead-code policy requires the CPython version tools/python-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
-	if !vultureRuntimeVersion(python, repo.ToolPin("vulture")) {
+	if !vultureRuntimeVersion(repo, repo.ToolPin("vulture")) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "vulture", Message: "conditional Python dead-code policy requires the Vulture version tools/vulture-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
 }
@@ -177,10 +177,10 @@ func tyExecutableVersion(path, pin string) bool {
 	return len(fields) >= 2 && fields[0] == "ty" && fields[1] == pin
 }
 
-func pythonRuntimeVersion(path, pin string) bool {
+func pythonRuntimeVersion(repo repository.Repository, pin string) bool {
 	version, build, found := strings.Cut(pin, "+")
 	return found && version != "" && pythonBuildTag(build) &&
-		pythonRuntimeOutput(path, "import sys; print(\".\".join(str(value) for value in sys.version_info[:3]))") == version
+		pythonRuntimeOutput(repo, "import sys; print(\".\".join(str(value) for value in sys.version_info[:3]))") == version
 }
 
 func pythonBuildTag(value string) bool {
@@ -195,20 +195,25 @@ func pythonBuildTag(value string) bool {
 	return true
 }
 
-func vultureRuntimeVersion(path, pin string) bool {
-	return pin != "" && pythonRuntimeOutput(path, "import importlib.metadata; print(importlib.metadata.version(\"vulture\"))") == pin
+func vultureRuntimeVersion(repo repository.Repository, pin string) bool {
+	return pin != "" && pythonRuntimeOutput(repo, "import importlib.metadata; print(importlib.metadata.version(\"vulture\"))") == pin
 }
 
-func pythonRuntimeOutput(path, source string) string {
+func pythonRuntimeOutput(repo repository.Repository, source string) string {
+	command := repo.PythonCommand(source)
+	path := command[0]
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 		return ""
 	}
-	output, err := runner.ToolOutput(path, "-I", "-c", source)
+	_, output, err := (runner.OSRunner{}).RunStructured(context.Background(), repo.Root, policy.Command{
+		Name: "policy-python-runtime-probe", Argv: command, Cwd: ".", TimeoutSeconds: 30,
+		Managed: true, SealedEnvironment: true,
+	})
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimSpace(string(output.Stdout))
 }
 
 func hasDependencyGraph(repo repository.Repository, files []string) bool {

@@ -204,8 +204,8 @@ func pythonQualityAssertRuffTargetCommand(t *testing.T, target policy.Command) {
 func pythonQualityAssertVultureCommand(t *testing.T, repo repository.Repository, vulture policy.Command) {
 	t.Helper()
 	if !vulture.SealedEnvironment || !slices.Equal(vulture.Provides, []string{"dead-code"}) ||
-		len(vulture.Argv) != 5 || vulture.Argv[0] != repo.PythonTool() || vulture.Argv[1] != "-I" || vulture.Argv[2] != "-B" ||
-		vulture.Argv[3] != "-c" || strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") ||
+		!slices.Equal(vulture.Argv, repo.PythonCommand(pythonVultureProgram)) ||
+		strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") ||
 		strings.ContainsAny(vulture.Argv[4], "\x00\r\n") {
 		t.Fatalf("Vulture command = %+v", vulture)
 	}
@@ -894,7 +894,7 @@ func pythonVultureRuntimeInstalled(t *testing.T, repo repository.Repository) boo
 		return false
 	}
 	command := policy.Command{
-		Name: "probe-vulture", Argv: []string{repo.PythonTool(), "-I", "-c", "import importlib.metadata;print(importlib.metadata.version('vulture'))"},
+		Name: "probe-vulture", Argv: repo.PythonCommand("import importlib.metadata;print(importlib.metadata.version('vulture'))"),
 		Cwd: ".", TimeoutSeconds: 30, SealedEnvironment: true,
 	}
 	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)

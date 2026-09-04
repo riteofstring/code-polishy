@@ -40,7 +40,7 @@ try {
     if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or -not (Test-Path -LiteralPath $PythonMarker -PathType Leaf)) {
       throw 'The release stage has no policy-owned CPython carrier.'
     }
-    $PythonReported = @(& $Python -I -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
+    $PythonReported = @(& $Python -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')
     if ($LASTEXITCODE -ne 0 -or $PythonReported.Count -ne 1 -or $PythonReported[0].Trim() -ne $PythonVersion -or
         (Get-Content -Raw -LiteralPath $PythonMarker).Trim() -ne $PythonRelease) {
       throw "The release stage does not carry CPython $PythonRelease."
@@ -54,7 +54,7 @@ try {
         (Get-Content -Raw -LiteralPath $VultureMarker).Trim() -ne $VultureRelease) {
       throw "The release stage does not carry Vulture $VultureRelease."
     }
-    $SitePackagesProbe = @(& $Python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+    $SitePackagesProbe = @(& $Python -I -B -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
     if ($LASTEXITCODE -ne 0 -or $SitePackagesProbe.Count -ne 1) {
       throw 'The release stage CPython carrier did not resolve one site-packages directory.'
     }
@@ -64,7 +64,7 @@ try {
         -not (Test-Path -LiteralPath $SitePackages -PathType Container)) {
       throw 'The release stage CPython carrier names an external site-packages directory.'
     }
-    $VultureReported = @(& $Python -I -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
+    $VultureReported = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("vulture"))')
     $VultureExitCode = $LASTEXITCODE
     $VultureMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'vulture-*.dist-info')
     if ($VultureExitCode -ne 0 -or $VultureReported.Count -ne 1 -or $VultureReported[0].Trim() -ne $VultureRelease -or
