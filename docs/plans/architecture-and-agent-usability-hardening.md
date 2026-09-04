@@ -130,7 +130,10 @@ The graph is an engine fact contract, not a second parser:
   the bounded project partitioning contract below.
 - Go retains package semantics. An import edge targets a package rather than an
   invented file; a package cycle reports one real importing file as the witness
-  for each edge.
+  for each edge. Parse `go.mod` and `go.work` only through the admitted exact
+  `golang.org/x/mod/modfile` dependency; remove the hand-written module-line
+  reader and fail coverage on malformed, escaping, duplicate, or ambiguous
+  workspace declarations.
 - Other language packs may emit the same bounded graph capability. A language
   without complete resolution continues to require its existing architecture
   provider and cannot claim clean cycle evidence.
@@ -735,6 +738,12 @@ infer activation from keywords, descriptions, partial matches, or ranking.
 The agent presents candidates and uses a canonical name only after the user's
 request or confirmation identifies the intended capability.
 
+Use the admitted exact `golang.org/x/text` dependency for alias identity:
+normalize with `unicode/norm` NFKC, apply `cases.Fold`, and collapse Unicode
+whitespace before collision checks and lookup while preserving the declared
+spelling for display. Do not maintain a second ASCII-only or platform-specific
+normalizer.
+
 `behavior-review capture-intent` and `behavior-review status` always emit a
 concise human confirmation when successful, including the canonical features,
 state, and managed evidence path where applicable. Their machine forms emit one
@@ -813,6 +822,10 @@ be adopted as an exact declaration.
 - Any new dependency or pinned standards data follows the full v0.23 supply-
   chain lanes before it enters the candidate and appears in the release SBOM
   and authenticated publication evidence.
+- Promote `golang.org/x/text` to a pinned direct dependency and admit one exact
+  `golang.org/x/mod` release through that lane before using `unicode/norm`,
+  `cases.Fold`, or `modfile`. Frozen locks, provenance, vulnerability, license,
+  release-age, platform, and transitive inventory evidence remain required.
 
 ## Implementation sequence
 
@@ -853,11 +866,13 @@ be adopted as an exact declaration.
 2. Adapt each supported language's existing resolved facts once, replacing the
    whole-project Python request with the deterministic bounded project
    partitioning contract.
-3. Add deterministic strongly connected component analysis before module
+3. Replace hand-parsed `go.mod` and `go.work` discovery with the admitted
+   `x/mod/modfile` parser and contained workspace resolution.
+4. Add deterministic strongly connected component analysis before module
    projection.
-4. Emit production, generated, and test-only cycle findings with complete
+5. Emit production, generated, and test-only cycle findings with complete
    structured component evidence and canonical witnesses.
-5. Bind graph identity into downstream reports, reviews, and reusable evidence.
+6. Bind graph identity into downstream reports, reviews, and reusable evidence.
 
 ### Phase 3: Cut over test ownership
 
@@ -924,7 +939,8 @@ be adopted as an exact declaration.
 1. Add the versioned capability catalog and repository-aware human and JSON
    inventory.
 2. Add required behavior-feature descriptions, exact aliases, uniqueness
-   validation, and explicit discovery without keyword activation.
+   validation through NFKC plus Unicode case folding, and explicit discovery
+   without keyword activation.
 3. Add visible intent-capture and status confirmations across direct, piped,
    captured, and launcher-mediated execution.
 4. Add the routing table and atomic bounded `task-start/v1` composition.
@@ -948,6 +964,9 @@ Graph and architecture fixtures must prove:
 - an allowed declared-module edge cannot hide a source-level cycle;
 - generated-source and test-only cycles are classified and fail separately;
 - Go package cycles retain real file witnesses without inventing file imports;
+- malformed modules and workspaces, duplicate module identities, escaping
+  `use` paths, and ambiguous workspace ownership fail through official
+  `x/mod/modfile` parsing rather than a partial hand-written interpretation;
 - self-loops, type-only edges, re-exports, and proven dynamic imports remain
   visible;
 - unresolved or incomplete edges fail coverage before cycle analysis can claim
@@ -1083,6 +1102,9 @@ Capability and task-start fixtures must prove:
   capability inventory without reading an ambient installation;
 - configured feature descriptions and aliases are bounded, normalized, unique,
   and resolve only an exact explicit operand to one canonical feature name;
+- composed/decomposed Unicode, compatibility forms, case variants, and Unicode
+  whitespace collide identically through NFKC plus `cases.Fold` on every
+  supported platform, while declared display spelling is preserved;
 - natural-language discovery returns bounded deterministic candidates but
   cannot capture, require, run, or satisfy a behavior feature;
 - intent capture and status each print one concise confirmation through direct,
