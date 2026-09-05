@@ -683,6 +683,10 @@ func pythonVultureFindings(repo repository.Repository, project repository.Python
 		findings = append(findings, policy.Finding{
 			Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line,
 			Subject: pythonVultureSubject(diagnostic), Message: pythonVultureMessage(diagnostic),
+			Remediation: policy.FindingRemediation{
+				Summary:     "Delete the unused definition. Do not generate reachability declarations or entry-point lists from dead-code findings.",
+				NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--files", diagnostic.Path}, Cwd: "."},
+			},
 		})
 	}
 	return findings

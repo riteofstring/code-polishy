@@ -536,6 +536,9 @@ bytes. It cannot be suppressed or replaced by a path-level entry-point list.
 PEP 621 entry points, build hooks, and proven Pydantic contracts remain inferred;
 a configured target cannot repeat an already inferred consumer.
 No setup or remediation step generates these declarations from dead-code output.
+An unused-definition finding recommends deletion and provides an exact
+`check --files PATH` recheck. That selection still analyzes the owning Python
+project so remaining uses and definitions are evaluated together.
 
 For an attribute written on a configuration object that an external runtime
 reads later, use `scope.pythonExternalAttributes` instead of preserving every
