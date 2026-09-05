@@ -96,6 +96,14 @@ Knip's working directory to the repository root, where no `package.json`
 exists. Analysis must retain the declared JavaScript owner even when its
 outputs live outside that package's physical directory.
 
+Implementation review also found that activating Go or JavaScript graph
+analysis still parsed unrelated projects, allowing their failures to block a
+focused selection. Scope graph construction before parsing, while retaining
+the selected projects and transitively connected local dependencies needed for
+sound cycle detection. Architecture packets must also include unchanged
+candidate source: graphs, documentation, and a configuration-only adoption
+patch cannot substantiate implementation depth by themselves.
+
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
 the observable outcome.
@@ -253,8 +261,10 @@ and final-state review infrastructure:
 1. `architecture-review prepare --base REF` writes a clean, bounded packet with
    the trusted base, exact candidate, declared module graph, production and test
    ownership, normalized source graph, cycle results, project and package
-   roots, per-module summary, topology diff, and only mapped current design
-   documents.
+   roots, per-module summary, topology diff, complete committed candidate source
+   for every graph node (including unchanged files), and only mapped current
+   design documents. Source entries carry exact paths, contents, and digests;
+   missing or oversized evidence prevents preparation without truncation.
 2. A clean-context AI reviewer receives only that packet. It evaluates concept
    ownership, boundary depth, graph direction, catch-all ownership,
    disconnected responsibilities, and forwarding-only moves or file splits.
@@ -1084,6 +1094,8 @@ lifecycle execution and uses the existing credential and workflow boundaries.
 9. Implement and schema-test JSON and the selected single SARIF serializer.
 10. Fix scoped analyzer applicability, preserve required project context, and
     separate explicit repository-wide checks from file-scoped execution.
+    Go and JavaScript graph construction must exclude unrelated projects before
+    parsing, while following local dependencies across project boundaries.
 11. Carry declared generated-JavaScript ownership into Knip package grouping,
     working-directory selection, configuration, entry points, and evidence;
     keep the repository read boundary separate from the execution directory.
@@ -1201,6 +1213,9 @@ Graph and architecture fixtures must prove:
 - an allowed declared-module edge cannot hide a source-level cycle;
 - generated-source and test-only cycles are classified and fail separately;
 - Go package cycles retain real file witnesses without inventing file imports;
+- focused Go and JavaScript selections do not parse unrelated projects or fail
+  on their malformed source or manifests; selected project controls retain
+  their applicable context and local cross-project cycles remain detectable;
 - malformed modules and workspaces, duplicate module identities, escaping
   `use` paths, and ambiguous workspace ownership fail through official
   `x/mod/modfile` parsing rather than a partial hand-written interpretation;
@@ -1220,6 +1235,9 @@ Architecture-review fixtures must prove:
   acceptance;
 - multiple project roots collapsed into a catch-all module and forwarding-only
   rewrites produce actionable findings;
+- configuration-only adoption packets contain unchanged committed source and
+  accept exact implementation excerpts as evidence; missing, non-regular,
+  non-UTF-8, or oversized source prevents preparation without partial evidence;
 - AI acceptance cannot suppress cycle, coverage, ownership, or dependency-
   direction failures;
 - a changed graph, owner map, project root, packet, or result invalidates the
