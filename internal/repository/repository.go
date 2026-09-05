@@ -199,31 +199,39 @@ func (repo Repository) ReadAt(revision, path string) ([]byte, error) {
 }
 
 func (repo Repository) ReadRegularFileAt(revision, path string) ([]byte, bool, error) {
-	if !exactRevision(revision) {
-		return nil, false, errors.New("revision must be an exact Git object ID")
-	}
-	normalized, err := repo.NormalizePath(path)
-	if err != nil {
-		return nil, false, err
-	}
-	entries, err := repo.gitLines("ls-tree", "-z", revision, "--", ":(literal)"+normalized)
-	if err != nil {
-		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
-	}
-	if len(entries) == 0 {
-		return nil, false, nil
-	}
-	if len(entries) != 1 {
-		return nil, false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
-	}
-	if err := validateRegularFileTreeEntry(entries[0], normalized); err != nil {
-		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	normalized, present, err := repo.regularFileAtPath(revision, path)
+	if err != nil || !present {
+		return nil, present, err
 	}
 	data, err := repo.ReadAt(revision, normalized)
 	if err != nil {
 		return nil, false, err
 	}
 	return data, true, nil
+}
+
+func (repo Repository) regularFileAtPath(revision, path string) (string, bool, error) {
+	if !exactRevision(revision) {
+		return "", false, errors.New("revision must be an exact Git object ID")
+	}
+	normalized, err := repo.NormalizePath(path)
+	if err != nil {
+		return "", false, err
+	}
+	entries, err := repo.gitLines("ls-tree", "-z", revision, "--", ":(literal)"+normalized)
+	if err != nil {
+		return "", false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	}
+	if len(entries) == 0 {
+		return "", false, nil
+	}
+	if len(entries) != 1 {
+		return "", false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
+	}
+	if err := validateRegularFileTreeEntry(entries[0], normalized); err != nil {
+		return "", false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	}
+	return normalized, true, nil
 }
 
 func validateRegularFileTreeEntry(entry, path string) error {
