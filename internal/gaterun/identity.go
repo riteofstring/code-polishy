@@ -72,6 +72,7 @@ func identityFromInput(input IdentityInput) (Identity, error) {
 		ArchitectureReviewSHA256: input.ArchitectureReviewSHA256,
 		GitEvidenceSHA256:        input.GitEvidenceSHA256,
 		PolicyValiditySHA256:     input.PolicyValiditySHA256,
+		PythonReachabilitySHA256: input.PythonReachabilitySHA256,
 	}, nil
 }
 
@@ -166,8 +167,8 @@ func validateIdentity(identity Identity) error {
 }
 
 func validateIdentityContext(identity Identity) error {
-	if !validOptionalSHA256(identity.GitEvidenceSHA256) || !validOptionalSHA256(identity.ArchitectureReviewSHA256) || !validOptionalSHA256(identity.PolicyValiditySHA256) {
-		return fmt.Errorf("%w: gate external evidence identity is invalid", ErrInvalidInput)
+	if err := validateIdentityEvidence(identity); err != nil {
+		return err
 	}
 	if !validReference(identity.RequestedBase) || !validRevision(identity.ExactBase) || !validRevision(identity.Candidate) {
 		return fmt.Errorf("%w: gate identity revisions are invalid", ErrInvalidInput)
@@ -411,4 +412,13 @@ func cloneCommand(command CommandSpec) CommandSpec {
 
 func cloneStrings(values []string) []string {
 	return append([]string{}, values...)
+}
+
+func validateIdentityEvidence(identity Identity) error {
+	for _, digest := range []string{identity.GitEvidenceSHA256, identity.ArchitectureReviewSHA256, identity.PolicyValiditySHA256, identity.PythonReachabilitySHA256} {
+		if !validOptionalSHA256(digest) {
+			return fmt.Errorf("%w: gate external evidence identity is invalid", ErrInvalidInput)
+		}
+	}
+	return nil
 }

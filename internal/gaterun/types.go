@@ -182,6 +182,7 @@ type IdentityInput struct {
 	ArchitectureReviewSHA256 string
 	GitEvidenceSHA256        string
 	PolicyValiditySHA256     string
+	PythonReachabilitySHA256 string
 	Platform                 Platform
 	Commands                 []CommandSpec
 	Environment              []EnvironmentInput
@@ -201,6 +202,7 @@ type Identity struct {
 	ArchitectureReviewSHA256 string                   `json:"architecture_review_sha256"`
 	GitEvidenceSHA256        string                   `json:"git_evidence_sha256"`
 	PolicyValiditySHA256     string                   `json:"policy_validity_sha256"`
+	PythonReachabilitySHA256 string                   `json:"python_reachability_sha256"`
 	Platform                 Platform                 `json:"platform"`
 	Commands                 []CommandSpec            `json:"commands"`
 	Environment              []EnvironmentFingerprint `json:"environment"`

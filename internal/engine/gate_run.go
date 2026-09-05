@@ -41,6 +41,7 @@ type gateRunController struct {
 	architectureArtifactsSHA256 string
 	gitEvidenceSHA256           string
 	policyValiditySHA256        string
+	pythonReachabilitySHA256    string
 }
 
 type gateArtifactRunner struct {
@@ -90,6 +91,7 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 				architectureArtifactsSHA256: identity.ArchitectureReviewSHA256,
 				gitEvidenceSHA256:           identity.GitEvidenceSHA256,
 				policyValiditySHA256:        identity.PolicyValiditySHA256,
+				pythonReachabilitySHA256:    identity.PythonReachabilitySHA256,
 			}, nil
 		}
 	}
@@ -112,6 +114,7 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 		architectureArtifactsSHA256: identity.ArchitectureReviewSHA256,
 		gitEvidenceSHA256:           identity.GitEvidenceSHA256,
 		policyValiditySHA256:        identity.PolicyValiditySHA256,
+		pythonReachabilitySHA256:    identity.PythonReachabilitySHA256,
 		artifactExecution:           artifactExecution,
 	}, nil
 }
@@ -241,7 +244,7 @@ func workingTreeCandidateDigest(root string, selection repository.Selection) (st
 }
 
 func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorReview gaterun.BehaviorReview, receipts *testReceiptController) (gaterun.Identity, error) {
-	architectureDigest, gitEvidenceDigest, err := engine.gateEvidenceIdentities()
+	architectureDigest, gitEvidenceDigest, pythonReachabilityDigest, err := engine.gateEvidenceIdentities()
 	if err != nil {
 		return gaterun.Identity{}, err
 	}
@@ -290,6 +293,7 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 		Environment: environment, AmbientEnvironment: ambient, BehaviorReview: behaviorReview,
 		ArchitectureReviewSHA256: architectureDigest,
 		GitEvidenceSHA256:        gitEvidenceDigest,
+		PythonReachabilitySHA256: pythonReachabilityDigest,
 		PolicyValiditySHA256:     gatePolicyValiditySHA256(engine.Repository.Config, time.Now()),
 	})
 }
@@ -416,6 +420,9 @@ func (controller *gateRunController) attachTestLogPaths(report *Report) {
 }
 
 func (controller *gateRunController) candidateIntegrityError(engine *Engine) error {
+	if err := engine.currentPythonReachabilityState(controller.pythonReachabilitySHA256); err != nil {
+		return err
+	}
 	if _, err := engine.currentGitEvidence(controller.gitEvidenceSHA256); err != nil {
 		return err
 	}

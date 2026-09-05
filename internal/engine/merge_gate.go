@@ -87,6 +87,9 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 }
 
 func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) (Report, error) {
+	if err := engine.currentPythonReachabilityState(controller.pythonReachabilitySHA256); err != nil {
+		return Report{}, err
+	}
 	if err := engine.currentGatePolicyValidity(controller.policyValiditySHA256); err != nil {
 		return Report{}, err
 	}

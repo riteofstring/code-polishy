@@ -102,10 +102,11 @@ inventory. Exact Pydantic imports and inheritance infer model fields,
 `model_config`, and supported validator, serializer, and computed-field
 methods; lookalike names do not. A target may add only a dynamic reference that
 remains invisible, using
-`scope.pythonDynamicReferences` exact `{project,module,symbol}` objects. Each
-field is required, `project` is the canonical contained-project
-`pyproject.toml` path, `module` and `symbol` are Python identifier chains,
-wildcards are unavailable, and stale or ambiguous references fail. See
+`scope.pythonDynamicReferences` consumer-bound `target` or `registry` objects.
+A target requires an exact governed callsite or an admitted external
+base, protocol, decorator, or registration contract. A registry derives its
+targets from governed input through an exact reader callsite. Free-standing
+symbol inventories, wildcards, stale references, and ambiguous consumers fail. See
 [Code Quality](code-quality.md#python-ruff-vulture-and-ty) for the complete
 reference and coverage contract.
 

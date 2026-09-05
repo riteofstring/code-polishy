@@ -481,8 +481,9 @@ in project fact validation and identity; each argument's canonical text is
 limited to 64 KiB.
 
 For a dynamically loaded local object, `scope.pythonDynamicReferences` requires
-one consumer-bound `target` or `registry` declaration. Both forms identify the
-project and an exact `pkgutil.resolve_name` call inside a governed callable:
+one consumer-bound `target` or `registry` declaration. A callsite consumer
+identifies the project and an exact `pkgutil.resolve_name` call inside a
+governed callable:
 
 ```json
 {
@@ -539,6 +540,56 @@ No setup or remediation step generates these declarations from dead-code output.
 An unused-definition finding recommends deletion and provides an exact
 `check --files PATH` recheck. That selection still analyzes the owning Python
 project so remaining uses and definitions are evaluated together.
+
+A target may instead bind an externally consumed class member. Its consumer
+names the admitted direct distribution and the exact local implementation:
+
+```json
+{
+  "kind": "base",
+  "importer": "src/service/plugins.py",
+  "module": "service.plugins",
+  "site": { "line": 2, "column": 1 },
+  "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "distribution": "framework",
+  "qualified": "framework.Contract",
+  "implementation": "Plugin",
+  "member": "on_event"
+}
+```
+
+This consumer belongs to a `target` declaration naming
+`service.plugins:Plugin.on_event`. The implementation must be one exact local
+class and method. For `base` and `protocol`, `site` identifies the class
+definition and an imported base must resolve to `qualified`. The dependency
+must define that member; `protocol` additionally requires proven
+`typing.Protocol` inheritance. A `decorator` consumer identifies the method
+definition and one bare imported decorator function. An `entry-point` consumer
+identifies a top-level registration call after the class, with that class as
+its sole argument and no keywords. The registration function must have one
+parameter annotated `type[Interface]` or `typing.Type[Interface]`, and that
+dependency-owned interface must define the member. Unsupported or ambiguous
+inheritance, expressions, bindings, or registrations fail rather than infer
+duck typing.
+
+The direct requirement and version 1 `uv.lock` must admit one exact registry
+version or Git repository, commit, and subdirectory. Contract definitions come
+from that distribution in the project's contained `.venv`. Code Polishy reads
+bounded UTF-8 Python sources and stubs through `METADATA` and SHA-256 `RECORD`
+entries without importing dependency code. Owned aliases, re-exports, and
+unambiguous inheritance resolve across source partitions. Runtime source takes
+precedence over a same-module stub; a stub cannot invent an absent runtime
+member. Git installations also require recorded `direct_url.json` matching
+the admitted source, including private SSH repositories. Registry installations
+must not carry a conflicting direct origin.
+
+These local installation records establish current input custody and origin
+consistency; artifact provenance remains the supply-chain policy's concern.
+Dependency inputs participate in reachability and gate identities. A changed
+or invalid installation prevents reuse of earlier gate acceptance, and changes
+during verification prevent success publication. Only distributions named by
+external consumers are read. These declarations cannot preserve unrelated
+members or substitute for dependency admission or architecture evidence.
 
 For an attribute written on a configuration object that an external runtime
 reads later, use `scope.pythonExternalAttributes` instead of preserving every
