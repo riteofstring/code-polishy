@@ -8,6 +8,7 @@ audit.mjs
 deadcode.mjs
 imports.mjs
 astro.mjs
+data-module.mjs
 gitlab.mjs
 licenses.mjs
 packages.mjs

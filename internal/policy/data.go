@@ -33,7 +33,7 @@ func validateDataPattern(config *Config, index int, pattern string) error {
 		return fmt.Errorf("%s must not match policy-sensitive control input pattern %q", label, control)
 	}
 	if !dataPatternHasSupportedExtension(pattern) {
-		return fmt.Errorf("%s must match only .json, .jsonc, .yaml, or .yml files", label)
+		return fmt.Errorf("%s must match only .json, .jsonc, .yaml, .yml, .js, or .mjs data files", label)
 	}
 	if overlapsScope(pattern, config.Scope.Exclude) || overlapsScope(pattern, DefaultExcludes) {
 		return fmt.Errorf("%s must not overlap scope.exclude", label)
@@ -89,7 +89,7 @@ func overlapsScope(pattern string, candidates []string) bool {
 
 func dataPatternIsExecutableSource(pattern string) bool {
 	for _, extension := range []string{
-		".bash", ".c", ".cc", ".cjs", ".cpp", ".cs", ".cts", ".cxx", ".dart", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt", ".kts", ".mjs", ".mts", ".php", ".proto", ".py", ".pyi", ".rb", ".rs", ".sh", ".sql", ".swift", ".ts", ".tsx", ".vue", ".svelte", ".astro",
+		".bash", ".c", ".cc", ".cjs", ".cpp", ".cs", ".cts", ".cxx", ".dart", ".go", ".h", ".hpp", ".java", ".jsx", ".kt", ".kts", ".mts", ".php", ".proto", ".py", ".pyi", ".rb", ".rs", ".sh", ".sql", ".swift", ".ts", ".tsx", ".vue", ".svelte", ".astro",
 	} {
 		if strings.HasSuffix(strings.ToLower(pattern), extension) {
 			return true
@@ -101,5 +101,6 @@ func dataPatternIsExecutableSource(pattern string) bool {
 func dataPatternHasSupportedExtension(pattern string) bool {
 	pattern = strings.ToLower(pattern)
 	return strings.HasSuffix(pattern, ".json") || strings.HasSuffix(pattern, ".jsonc") ||
-		strings.HasSuffix(pattern, ".yaml") || strings.HasSuffix(pattern, ".yml")
+		strings.HasSuffix(pattern, ".yaml") || strings.HasSuffix(pattern, ".yml") ||
+		strings.HasSuffix(pattern, ".js") || strings.HasSuffix(pattern, ".mjs")
 }

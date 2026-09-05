@@ -699,6 +699,10 @@ func TestScopeDataRejectsControlSourceAndOverlappingPaths(t *testing.T) {
 			scope: `{"data":[".gitlab-ci.yml"]}`,
 			want:  "policy-sensitive control input",
 		},
+		"workflow runner configuration": {
+			scope: `{"data":[".github/actionlint.yaml"]}`,
+			want:  "policy-sensitive control input",
+		},
 		"container input": {
 			scope: `{"data":["Dockerfile"]}`,
 			want:  "policy-sensitive control input",

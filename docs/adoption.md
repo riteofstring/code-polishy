@@ -215,9 +215,9 @@ an apparently valid empty result. See
   one non-generated source package. It inherits that package's workspace,
   lockfile, TypeScript, lint, dead-code, dependency, and module context.
 
-- `scope.data` is the non-rewrite category for hand-written product data. Use
-  narrow patterns that can match only `.json`, `.jsonc`, `.yaml`, or `.yml`, for
-  example:
+- `scope.data` is the non-rewrite category for product data and immutable
+  serialized snapshots. Use narrow patterns for `.json`, `.jsonc`, `.yaml`,
+  `.yml`, or JSON-only `.js` and `.mjs` modules, for example:
 
   ```json
   {
@@ -233,7 +233,9 @@ an apparently valid empty result. See
   ```
 
   Data stays contained, owned, selected by tests and gates, UTF-8 and
-  syntax-validated. Configuration rejects patterns that overlap executable
+  syntax-validated. JavaScript data modules must contain one default JSON
+  export, optionally bound to a single `const`; executable expressions and
+  other statements fail parse-only validation. Configuration rejects patterns that overlap other executable
   source, custom-language source, generated or excluded paths, dependency
   manifests, locks, tool configuration, CI, Dockerfiles, or other protected
   control inputs. `format` leaves its bytes unchanged, and a target command

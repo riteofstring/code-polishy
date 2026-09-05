@@ -13,6 +13,7 @@ import prettier from "./node_modules/prettier/index.mjs";
 import eslint from "./node_modules/eslint/lib/api.js";
 import typescript from "./node_modules/typescript/lib/typescript.js";
 import typescriptParser from "./node_modules/@typescript-eslint/parser/dist/index.js";
+import { parseDataModule } from "./data-module.mjs";
 import reactHooks from "./node_modules/eslint-plugin-react-hooks/index.js";
 import jsxAccessibility from "./node_modules/eslint-plugin-jsx-a11y/lib/index.js";
 import yaml from "./node_modules/js-yaml/dist/js-yaml.mjs";
@@ -187,31 +188,35 @@ function parse(request) {
       continue;
     }
     try {
-      switch (extname(path).toLowerCase()) {
-        case ".json":
-          JSON.parse(source);
-          break;
-        case ".jsonc":
-          parseJsonc(path, source);
-          break;
-        case ".yaml":
-        case ".yml":
-          yaml.loadAll(source, undefined, {
-            filename: path,
-            schema: yaml.JSON_SCHEMA,
-          });
-          break;
-        default:
-          throw new Error(
-            "the policy-owned data parser does not support this file extension",
-          );
-      }
+      parseSource(path, source);
       covered.push(path);
     } catch (error) {
       unsupportedPaths.push(unsupported(path, error.message));
     }
   }
   return { covered, unsupported: unsupportedPaths };
+}
+
+function parseSource(path, source) {
+  switch (extname(path).toLowerCase()) {
+    case ".js":
+    case ".mjs":
+      return parseDataModule(path, source);
+    case ".json":
+      return JSON.parse(source);
+    case ".jsonc":
+      return parseJsonc(path, source);
+    case ".yaml":
+    case ".yml":
+      return yaml.loadAll(source, undefined, {
+        filename: path,
+        schema: yaml.JSON_SCHEMA,
+      });
+    default:
+      throw new Error(
+        "the policy-owned data parser does not support this file extension",
+      );
+  }
 }
 
 function parseJsonc(path, source) {

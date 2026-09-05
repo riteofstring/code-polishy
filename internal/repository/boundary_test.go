@@ -149,6 +149,7 @@ func TestProtectedControlPathsIncludeIgnoreAndDeliveryFiles(t *testing.T) {
 		".code-polishy.json", ".code-polishy.lock.json", "CODEOWNERS",
 		".github/CODEOWNERS", ".github/workflows/policy.yml", ".gitignore", "nested/.gitignore",
 		".gitattributes", "nested/.gitattributes",
+		".github/actionlint.yaml", ".github/actionlint.yml",
 	} {
 		if !protectedControlPath(path, ".code-polishy.json") {
 			t.Errorf("%s was not protected", path)
@@ -172,6 +173,7 @@ func TestProtectedNewArtifactPathsIncludeControlNamespaces(t *testing.T) {
 		"CODEOWNERS", "CODEOWNERS/override", ".github", ".github/CODEOWNERS", ".github/CODEOWNERS/override",
 		".github/workflows", ".github/workflows/policy.yml", ".gitignore", "nested/.gitignore", "nested/.gitignore/override",
 		".gitattributes", "nested/.gitattributes", "nested/.gitattributes/override",
+		".github/actionlint.yaml", ".github/actionlint.yml", ".github/actionlint.yaml/override",
 	} {
 		if !protectedNewArtifactPath(path, ".code-polishy.json") {
 			t.Errorf("%s was not protected for a new artifact", path)

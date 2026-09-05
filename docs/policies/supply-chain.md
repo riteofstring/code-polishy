@@ -142,6 +142,16 @@ coverage unavailable for that exact source and commit. `dependency-review`
 still inventories accepted Git changes by normalized source and full commit,
 without inventing a PyPI age.
 
+## GitHub Actions runner configuration
+
+Declare exact custom self-hosted runner labels in `.github/actionlint.yaml` or
+`.github/actionlint.yml`. The policy-owned actionlint reader uses that contained
+configuration for workflow checks and CI gate discovery. Defining both files,
+malformed configuration, wildcard runner labels, or path ignores fails closed.
+Action pins and other workflow checks remain enforced. Runner configuration is
+a sensitive control input: changing it expands verification to the repository,
+and a disposable task session cannot change it.
+
 ## GitLab CI control inputs
 
 When `.gitlab-ci.yml` or `.gitlab-ci.yaml` exists, it is a policy-sensitive

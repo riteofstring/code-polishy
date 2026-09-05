@@ -62,3 +62,23 @@ func TestDynamicControlInputsMustBeDistinctContainedPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkflowRunnerConfigurationChangesExpandSelection(t *testing.T) {
+	for _, path := range []string{".github/actionlint.yaml", ".github/actionlint.yml"} {
+		t.Run(path, func(t *testing.T) {
+			repo := newGitRepository(t)
+			writeFile(t, repo.Root, path, "self-hosted-runner:\n  labels: [first]\n")
+			writeFile(t, repo.Root, "app/main.go", "package app\n")
+			git(t, repo.Root, "add", ".")
+			git(t, repo.Root, "commit", "-m", "base")
+			writeFile(t, repo.Root, path, "self-hosted-runner:\n  labels: [second]\n")
+			selection, err := repo.Select("changes", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !selection.All || !selection.PolicySensitive || !slices.Contains(selection.Files, "app/main.go") {
+				t.Fatalf("runner configuration did not expand selection: %+v", selection)
+			}
+		})
+	}
+}

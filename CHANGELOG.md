@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.23.1 - 2026-09-05
+
+- Local candidate for launch validation; not published.
+- Parse Astro imports and dead code with the pinned official compiler,
+  preserving source locations and browser-script dependencies.
+- Validate exact self-hosted runner labels through contained actionlint
+  configuration while retaining action pins and workflow checks.
+- Give shell checks bounded, distinct identifiers for filenames containing
+  spaces, accents, or punctuation.
+- Admit strictly parsed JSON-only data modules without rewriting immutable
+  snapshots or executing their contents.
+
 ## 0.23.0 - 2026-09-04
 
 - Validate runtime configuration against the shipped JSON Schema before typed

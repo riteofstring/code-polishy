@@ -24,7 +24,7 @@ module-direction checks, while format writers leave generator-owned bytes
 alone. Project-specific generated paths belong in `scope.generated`; do not
 hide production code in that category.
 
-Hand-written structured data is a separate governed category. `scope.data`
+Structured data is a separate governed category. `scope.data`
 keeps its identity-sensitive bytes out of style formatting and formatting
 writes while retaining syntax, schema, security, product-provider, ownership,
 test, and gate coverage.
@@ -52,9 +52,12 @@ Code Polishy already decides is a `policy.builtInCapability` finding naming the
 check and one file it covers. What the check reaches decides it: a command
 reaching source no built-in checker decides — another language, another
 ecosystem, file types the sealed formatter does not print, or the `.vue`,
-`.svelte`, and `.astro` components the sealed bundle never parses — remains the
-target's own, and a policy-owned managed command is Code Polishy running its own
-module rather than a target selecting an implementation.
+`.svelte` components the sealed bundle never parses — remains the target's own.
+The sealed Astro compiler owns import and dead-code analysis for `.astro`
+files, including frontmatter, markup references, and browser scripts. Astro
+formatting, lint, and type checking remain target-provided. A policy-owned
+managed command is Code Polishy running its own module rather than a target
+selecting an implementation.
 
 ## Formatting
 
@@ -86,9 +89,14 @@ is selected and formats its remaining file types with configured providers.
 
 ### Hand-written structured data
 
-`scope.data` names hand-written `.json`, `.jsonc`, `.yaml`, and `.yml` product
-inputs whose bytes may be identity-sensitive. The category is intentionally
-narrow: configuration rejects executable source, dependency and lock inputs,
+`scope.data` names `.json`, `.jsonc`, `.yaml`, and `.yml` product inputs whose
+bytes may be identity-sensitive. It also admits `.js` and `.mjs` modules that
+contain only one default export of strict JSON, optionally bound to a single
+unmodified `const`. The sealed parser rejects imports, calls, getters, computed
+keys, extra statements, and non-JSON expressions without executing the module.
+This covers both hand-written data and immutable serialized snapshots.
+The category is intentionally narrow: configuration rejects other executable
+source, dependency and lock inputs,
 tool configuration, CI, Dockerfiles, other policy-sensitive controls, and any
 overlap with `scope.exclude` or `scope.generated`.
 

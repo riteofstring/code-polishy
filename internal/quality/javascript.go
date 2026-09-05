@@ -152,7 +152,7 @@ type javascriptLintGroup struct {
 func javascriptLintGroups(repo repository.Repository, files []string) []javascriptLintGroup {
 	grouped := map[string]*javascriptLintGroup{}
 	for _, path := range files {
-		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
+		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) {
 			continue
 		}
 		limits := javascriptLintLimits(repo, repo.IsTest(path))
@@ -526,7 +526,7 @@ func javascriptDeadCodeSelected(files []string) bool {
 	for _, path := range files {
 		name := filepath.Base(path)
 		switch {
-		case javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))],
+		case javascriptDeadCodeExtension(path),
 			name == "package.json", name == "pnpm-workspace.yaml", name == policy.ConfigFilename,
 			strings.HasPrefix(name, "tsconfig") && strings.HasSuffix(name, ".json"):
 			return true
@@ -543,7 +543,7 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 		if repo.Language(path) != "typescript" {
 			continue
 		}
-		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
+		if !javascriptDeadCodeExtension(path) {
 			uncovered = append(uncovered, javascriptUncoveredFile{path,
 				"the policy-owned dead-code analyzer does not analyze this file"})
 			continue
@@ -568,6 +568,11 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 		}
 	}
 	return javascriptDeadCodeTrees(packages, grouped), uncovered
+}
+
+func javascriptDeadCodeExtension(path string) bool {
+	extension := strings.ToLower(filepath.Ext(path))
+	return javascriptSourceExtensions[extension] || extension == ".astro"
 }
 
 func javascriptPackageRoots(inventory []string) map[string]bool {

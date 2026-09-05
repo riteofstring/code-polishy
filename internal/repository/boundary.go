@@ -256,13 +256,13 @@ func boundaryFindings(repo Repository, configPath, path string, allowed, exactAl
 func protectedControlPath(path, configPath string) bool {
 	path = filepath.ToSlash(path)
 
-	return path == configPath || slices.Contains([]string{policy.LockFilename, "CODEOWNERS", ".github/CODEOWNERS"}, path) ||
+	return path == configPath || slices.Contains([]string{policy.LockFilename, "CODEOWNERS", ".github/CODEOWNERS", ".github/actionlint.yaml", ".github/actionlint.yml"}, path) ||
 		strings.HasPrefix(path, ".github/workflows/") || path == ".gitignore" || strings.HasSuffix(path, "/.gitignore") ||
 		path == ".gitattributes" || strings.HasSuffix(path, "/.gitattributes")
 }
 
 func protectedNewArtifactPath(path, configPath string) bool {
-	for _, protected := range []string{configPath, policy.LockFilename, "CODEOWNERS", ".github/CODEOWNERS", ".github/workflows"} {
+	for _, protected := range []string{configPath, policy.LockFilename, "CODEOWNERS", ".github/CODEOWNERS", ".github/workflows", ".github/actionlint.yaml", ".github/actionlint.yml"} {
 		if path == protected || strings.HasPrefix(path, protected+"/") || strings.HasPrefix(protected, path+"/") {
 			return true
 		}

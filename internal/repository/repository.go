@@ -562,6 +562,9 @@ func (repo Repository) Language(path string) string {
 }
 
 func (repo Repository) Languages(path string) []string {
+	if repo.isDataModule(path) {
+		return nil
+	}
 	if language := repo.builtInLanguage(path); language != "" {
 		return []string{language}
 	}
