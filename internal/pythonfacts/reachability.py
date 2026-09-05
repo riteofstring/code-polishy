@@ -384,6 +384,7 @@ class ReachabilityResolver:
         )
         return {
             "id": request["id"],
+            "dependencyIdentity": request["dependency"]["identity"] if external else "",
             "identity": identity,
             "registrySha256": hashlib.sha256(
                 request["registry"].encode("utf-8")

@@ -27,8 +27,9 @@ type ReachabilityInput struct {
 }
 
 type ReachabilityDependency struct {
-	Distribution string `json:"distribution"`
-	Identity     string `json:"identity"`
+	Distribution string                      `json:"distribution"`
+	Identity     string                      `json:"identity"`
+	Contract     *ContractDefinitionEvidence `json:"contract"`
 }
 
 type ReachabilityDefinition struct {
@@ -45,10 +46,11 @@ type ReachabilityTarget struct {
 }
 
 type ReachabilityEvidence struct {
-	RegistrySHA256 string               `json:"registrySha256"`
-	ID             string               `json:"id"`
-	Identity       string               `json:"identity"`
-	Targets        []ReachabilityTarget `json:"targets"`
+	DependencyIdentity string               `json:"dependencyIdentity"`
+	RegistrySHA256     string               `json:"registrySha256"`
+	ID                 string               `json:"id"`
+	Identity           string               `json:"identity"`
+	Targets            []ReachabilityTarget `json:"targets"`
 }
 
 func ReachabilitySupportSource() string {

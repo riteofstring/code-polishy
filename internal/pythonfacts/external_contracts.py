@@ -77,13 +77,28 @@ def resolve_external_contract(resolver, request):
     declaration = request["declaration"]
     expected = external_consumer(declaration["consumer"])
     dependency = request["dependency"]
-    _exact(dependency, ("distribution", "identity"), "admitted external dependency")
+    _exact(
+        dependency,
+        ("distribution", "identity", "contract"),
+        "admitted external dependency",
+    )
     if dependency["distribution"] != expected["distribution"] or (
         not isinstance(dependency["identity"], str)
         or len(dependency["identity"]) != 64
         or any(c not in "0123456789abcdef" for c in dependency["identity"])
     ):
         raise ValueError("external contract has no exact admitted dependency identity")
+    contract = dependency["contract"]
+    _exact(
+        contract,
+        ("id", "kind", "qualified", "member", "definitions", "identity"),
+        "owned dependency contract",
+    )
+    if (
+        any(contract[key] != expected[key] for key in ("kind", "qualified", "member"))
+        or not contract["definitions"]
+    ):
+        raise ValueError("dependency definition does not prove the declared contract")
     module = resolver.runtime_module(expected["module"])
     if (
         module["path"] != expected["importer"]

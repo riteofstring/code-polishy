@@ -31,7 +31,7 @@ func (repo Repository) PythonReachabilityInputs(project PythonProject) []pythonf
 		if err := repo.pythonReachabilityConsumer(project, declaration); err != nil {
 			input.Error = err.Error()
 		} else if declaration.Consumer.Kind != "callsite" {
-			input.Dependency, err = repo.pythonReachabilityDependency(project, declaration.Consumer.Distribution)
+			input.Dependency, err = repo.pythonReachabilityDependency(project, declaration.Consumer)
 			if err != nil {
 				input.Error = err.Error()
 			}
@@ -49,7 +49,8 @@ func (repo Repository) PythonReachabilityInputs(project PythonProject) []pythonf
 	return result
 }
 
-func (repo Repository) pythonReachabilityDependency(project PythonProject, distribution string) (*pythonfacts.ReachabilityDependency, error) {
+func (repo Repository) pythonReachabilityDependency(project PythonProject, consumer policy.PythonDynamicConsumer) (*pythonfacts.ReachabilityDependency, error) {
+	distribution := consumer.Distribution
 	facts, err := repo.PythonPluginDependencies(project, []string{distribution})
 	if err != nil {
 		return nil, err
@@ -57,12 +58,20 @@ func (repo Repository) pythonReachabilityDependency(project PythonProject, distr
 	if len(facts.Dependencies) != 1 || facts.Dependencies[0].Distribution != distribution || facts.Dependencies[0].Error != "" {
 		return nil, fmt.Errorf("external reachability contract has no admitted direct dependency: %+v", facts.Dependencies)
 	}
-	data, err := json.Marshal(facts)
+	sources, contract, err := repo.pythonReachabilityContract(project, facts.Dependencies[0], consumer)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(struct {
+		Admission PythonPluginDependencyFacts
+		Sources   string
+		Contract  pythonfacts.ContractDefinitionEvidence
+	}{facts, sources, contract})
 	if err != nil {
 		return nil, err
 	}
 	digest := sha256.Sum256(data)
-	return &pythonfacts.ReachabilityDependency{Distribution: distribution, Identity: hex.EncodeToString(digest[:])}, nil
+	return &pythonfacts.ReachabilityDependency{Distribution: distribution, Identity: hex.EncodeToString(digest[:]), Contract: &contract}, nil
 }
 
 func (repo Repository) pythonReachabilityConsumer(project PythonProject, declaration policy.PythonDynamicReference) error {

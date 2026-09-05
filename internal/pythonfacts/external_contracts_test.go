@@ -15,9 +15,25 @@ func TestExternalReachabilityContractsBindLocalMembers(t *testing.T) {
 				t.Fatalf("external contract = %+v, %v", result, err)
 			}
 			input.Dependency.Identity = strings.Repeat("b", 64)
+			if err := ValidateReachabilityEvidence([]string{modules[0].Path}, []ReachabilityInput{input}, []string{input.ID}, result.Evidence); err == nil {
+				t.Fatal("changed dependency retained previously accepted evidence")
+			}
 			changed, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
 			if err != nil || len(changed.Evidence) != 1 || changed.Evidence[0].Identity == result.Evidence[0].Identity {
 				t.Fatalf("dependency change did not invalidate identity: %+v, %v", changed, err)
+			}
+		})
+	}
+}
+
+func TestExternalReachabilityRequiresDependencyDefinitionProof(t *testing.T) {
+	for _, kind := range []string{"base", "protocol", "decorator", "entry-point"} {
+		t.Run(kind, func(t *testing.T) {
+			modules, input := externalContractInput(t, kind)
+			input.Dependency.Contract = nil
+			result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+			if err != nil || len(result.Evidence) != 0 || len(result.Problems) != 1 {
+				t.Fatalf("unproven dependency preserved a local member: %+v, %v", result, err)
 			}
 		})
 	}
@@ -74,5 +90,19 @@ func externalContractInput(t *testing.T, kind string) ([]TypeModule, Reachabilit
 	if err != nil {
 		t.Fatal(err)
 	}
-	return typeTestModules(project.Sources), ReachabilityInput{ID: "external-member", Declaration: declaration, Dependency: &ReachabilityDependency{Distribution: "framework", Identity: strings.Repeat("a", 64)}}
+	contractSource := "class Contract:\n    def on_event(self):\n        raise NotImplementedError\n"
+	switch kind {
+	case "protocol":
+		contractSource = "from typing import Protocol\nclass Contract(Protocol):\n    def on_event(self):\n        raise NotImplementedError\n"
+	case "decorator":
+		contractSource = "def Contract(function):\n    return function\n"
+	case "entry-point":
+		contractSource = "class Interface:\n    def on_event(self):\n        raise NotImplementedError\ndef Contract(plugin: type[Interface]):\n    return plugin\n"
+	}
+	modules := contractDefinitionModules(t, []Input{{Path: "src/framework.py", Source: contractSource}})
+	proof, err := ResolveContractDefinitions(t.Context(), typeTestInterpreter(t), modules, []ContractDefinitionRequest{{ID: "contract", Kind: kind, Qualified: "framework.Contract", Member: "on_event"}})
+	if err != nil || len(proof.Evidence) != 1 {
+		t.Fatalf("dependency contract = %+v, %v", proof, err)
+	}
+	return typeTestModules(project.Sources), ReachabilityInput{ID: "external-member", Declaration: declaration, Dependency: &ReachabilityDependency{Distribution: "framework", Identity: strings.Repeat("a", 64), Contract: &proof.Evidence[0]}}
 }

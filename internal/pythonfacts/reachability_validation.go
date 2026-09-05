@@ -20,6 +20,13 @@ func ValidateReachabilityEvidence(files []string, inputs []ReachabilityInput, re
 			return fmt.Errorf("reachability evidence repeats or names an unresolved consumer")
 		}
 		delete(expected, evidence.ID)
+		dependencyIdentity := ""
+		if input.Dependency != nil {
+			dependencyIdentity = input.Dependency.Identity
+		}
+		if evidence.DependencyIdentity != dependencyIdentity {
+			return fmt.Errorf("reachability evidence has stale dependency inputs")
+		}
 		digest := sha256.Sum256([]byte(input.Registry))
 		if evidence.RegistrySHA256 != hex.EncodeToString(digest[:]) || input.Error != "" {
 			return fmt.Errorf("reachability evidence has stale or invalid registry input")
