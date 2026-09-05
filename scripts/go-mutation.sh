@@ -64,6 +64,35 @@ if [[ -e "${worktree}/.tools" || -L "${worktree}/.tools" ]]; then
 fi
 ln -s "${repo_root}/.tools" "${worktree}/.tools"
 
+mkdir -p "${temporary_dir}/bin"
+cat >"${temporary_dir}/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+module_file="$("${CODE_POLISHY_MUTATION_GO}" env GOMOD)"
+module_root="${module_file%/go.mod}"
+if [[ -f "${module_file}" ]]; then
+  module_root="$(cd "${module_root}" && pwd -P)"
+fi
+if [[ "${module_root}" == "${CODE_POLISHY_MUTATION_ROOT}/"* ]]; then
+  if [[ ! -e "${module_root}/.tools" && ! -L "${module_root}/.tools" ]]; then
+    ln -s "${CODE_POLISHY_MUTATION_TOOLS}" "${module_root}/.tools" 2>/dev/null ||
+      [[ -L "${module_root}/.tools" ]]
+  fi
+  if [[ "$(readlink "${module_root}/.tools")" != "${CODE_POLISHY_MUTATION_TOOLS}" ]]; then
+    echo "Mutation copy has an unexpected tool directory." >&2
+    exit 1
+  fi
+fi
+exec "${CODE_POLISHY_MUTATION_GO}" "$@"
+EOF
+chmod +x "${temporary_dir}/bin/go"
+export CODE_POLISHY_MUTATION_GO="${mutation_go}"
+export CODE_POLISHY_MUTATION_TOOLS="${repo_root}/.tools"
+CODE_POLISHY_MUTATION_ROOT="$(cd "${temporary_dir}" && pwd -P)"
+export CODE_POLISHY_MUTATION_ROOT
+export TMPDIR="${CODE_POLISHY_MUTATION_ROOT}"
+export PATH="${temporary_dir}/bin:${PATH}"
+
 cd "${worktree}"
 inactive_patterns=()
 mutation_target="${1:-}"

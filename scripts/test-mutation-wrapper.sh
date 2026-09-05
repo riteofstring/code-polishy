@@ -41,7 +41,7 @@ if [[ "${1:-}" == "list" && "${2:-}" == "-m" ]]; then
 elif [[ "${1:-}" == "list" ]]; then
   root="$(pwd -P)"
   printf '%s\n' "${root}/internal/sample/inactive_other.go" "${root}/internal/sample/inactive_other_test.go"
-elif [[ "${1:-}" == "test" ]]; then
+elif [[ "${1:-}" == "test" || "${1:-}" == "env" ]]; then
   exec "${GREMLINS_TEST_GO}" "$@"
 fi
 exit 0
@@ -61,9 +61,13 @@ EOF
 cat >"${fixture_repo}/internal/sample/value_test.go" <<'EOF'
 package sample
 
-import "testing"
+import (
+ "testing"
+ "os"
+)
 
 func TestValue(t *testing.T) {
+ if _, err := os.Stat("../../.tools/bin/gremlins"); err != nil { t.Fatal(err) }
 	if Value() != 42 {
 		t.Fatal("unexpected value")
 	}
@@ -100,6 +104,13 @@ fi
 grep -qx '    efficacy: 80' "$2"
 grep -qx '    mutant-coverage: 0' "$2"
 grep -qx coverage "${GREMLINS_TEST_MARKER}"
+shadow="$(mktemp -d "${TMPDIR:-/tmp}/mutation-copy.XXXXXX")"
+cp go.mod "${shadow}/go.mod"
+cp -R internal "${shadow}/internal"
+if ! (cd "${shadow}/internal/sample" && go test -v .); then
+  echo "Unchanged tests failed in the mutation copy." >&2
+  exit 12
+fi
 printf '%s\n' invoked >"${GREMLINS_TEST_MARKER}"
 exit 10
 EOF
