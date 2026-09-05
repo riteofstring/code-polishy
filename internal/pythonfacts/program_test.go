@@ -25,11 +25,28 @@ func TestProgramInputRunsLargePolicySourceAndPreservesItsRequest(t *testing.T) {
 func TestProgramInputAcceptsTheExactRecordLimit(t *testing.T) {
 	source := "print(42)" + strings.Repeat(" ", maximumProgramRecordSize-3-len("print(42)"))
 	output, err := runFactProject(t.Context(), typeTestInterpreter(t), strings.NewReader(""), source)
-	if err != nil || string(output) != "42\n" {
+	if err != nil || (string(output) != "42\n" && string(output) != "42\r\n") {
 		t.Fatalf("exact bounded policy program = %q, error = %v", output, err)
 	}
 	if _, err := ProgramInput(source+" ", strings.NewReader("")); err == nil {
 		t.Fatal("oversized encoded policy record was accepted")
+	}
+}
+
+func TestProgramBootstrapPreservesUnicodeWithNonUTF8StandardStreams(t *testing.T) {
+	input, err := ProgramInput("import json,sys;json.dump(json.load(sys.stdin),sys.stdout,ensure_ascii=False)", strings.NewReader(`{"identifier":"third_party.plugins.λ:Δ"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), typeTestInterpreter(t), "-I", "-B", "-c", "import sys;sys.stdin.reconfigure(encoding='cp1252');sys.stdout.reconfigure(encoding='cp1252');"+ProgramBootstrap)
+	command.Stdin = input
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual map[string]string
+	if err := json.Unmarshal(output, &actual); err != nil || len(actual) != 1 || actual["identifier"] != "third_party.plugins.λ:Δ" {
+		t.Fatalf("policy transport changed Unicode: %q, error = %v", output, err)
 	}
 }
 

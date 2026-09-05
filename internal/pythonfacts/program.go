@@ -11,7 +11,7 @@ import (
 
 const maximumProgramRecordSize = 1 << 20
 
-const ProgramBootstrap = "import json,sys;_program=sys.stdin.buffer.readline(1048577);(0<len(_program)<=1048576 and _program.endswith(b'\\n')) or sys.exit('invalid policy program record');exec(compile(json.loads(_program),'<code-polishy>','exec'))"
+const ProgramBootstrap = "import json,sys;sys.stdin.reconfigure(encoding='utf-8');sys.stdout.reconfigure(encoding='utf-8');_program=sys.stdin.buffer.readline(1048577);(0<len(_program)<=1048576 and _program.endswith(b'\\n')) or sys.exit('invalid policy program record');exec(compile(json.loads(_program),'<code-polishy>','exec'))"
 
 func ProgramInput(source string, input io.Reader) (io.Reader, error) {
 	if source == "" || len(source) > maximumProgramRecordSize || !utf8.ValidString(source) || strings.ContainsRune(source, 0) {
