@@ -125,7 +125,7 @@ function collectCalledSpecifier(node, specifiers, computed) {
   }
 }
 
-function sourceSpecifiers(source) {
+function sourceSpecifiers(source, ranges) {
   const specifiers = [];
   const computed = [];
   const visit = (node) => {
@@ -133,7 +133,15 @@ function sourceSpecifiers(source) {
     typescript.forEachChild(node, visit);
   };
   typescript.forEachChild(source, visit);
-  return { specifiers, computed };
+  const authored = (node) =>
+    ranges === undefined ||
+    ranges.some(
+      (range) => node.getStart(source) >= range.start && node.end <= range.end,
+    );
+  return {
+    specifiers: specifiers.filter(authored),
+    computed: computed.filter(authored),
+  };
 }
 
 function nodeLine(source, node) {
@@ -205,7 +213,7 @@ async function fileFacts(request, path, resolve, facts, unsupportedPaths) {
       true,
       kind,
     );
-    written = sourceSpecifiers(source);
+    written = sourceSpecifiers(source, virtual.ranges);
   } catch (error) {
     unsupportedPaths.push(unsupported(path, error.message));
     return;

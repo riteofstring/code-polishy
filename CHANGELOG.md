@@ -8,6 +8,8 @@
 - Parse Astro imports and dead code with the pinned official compiler,
   preserving source locations, browser-script dependencies, and literal
   dynamic-route filenames such as `[slug].astro`.
+- Use compiler source ranges to retain authored type imports while excluding
+  injected framework declarations from the project import graph.
 - Validate exact self-hosted runner labels through contained actionlint
   configuration while retaining action pins and workflow checks.
 - Give shell checks bounded, distinct identifiers for filenames containing

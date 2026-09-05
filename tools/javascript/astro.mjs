@@ -28,7 +28,27 @@ export async function astroSource(text, path) {
       ),
     );
   }
-  return { code: result.code, map: new TraceMap(result.map) };
+  return {
+    code: result.code,
+    map: new TraceMap(result.map),
+    ranges: astroAuthoredRanges(result),
+  };
+}
+
+function astroAuthoredRanges(result) {
+  const ranges = [result.metaRanges.frontmatter, result.metaRanges.body];
+  for (const range of ranges) {
+    if (
+      !Number.isInteger(range.start) ||
+      !Number.isInteger(range.end) ||
+      range.start < 0 ||
+      range.start > range.end ||
+      range.end > result.code.length
+    ) {
+      throw new Error("The Astro compiler returned an invalid source range.");
+    }
+  }
+  return ranges;
 }
 
 export function astroPosition(map, line, column) {

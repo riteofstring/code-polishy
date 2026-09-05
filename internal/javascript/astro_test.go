@@ -68,6 +68,29 @@ func TestAstroComputedImportsRemainVisible(t *testing.T) {
 	}
 }
 
+func TestAstroPropsKeepAuthoredTypeImportsWithoutCompilerHelpers(t *testing.T) {
+	bundle, root := astroFixture(t)
+	source := "---\ntype Values = typeof import('./values.js');\ninterface Props { value: Values }\n---\n<p>{Astro.props.value.used}</p>\n"
+	writeAstroFixture(t, root, "page.astro", source)
+	reported, err := bundle.Imports(t.Context(), root, []string{"page.astro"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reported.Unsupported) != 0 || len(reported.Imports) != 1 ||
+		reported.Imports[0].Specifier != "./values.js" || reported.Imports[0].Line != 2 {
+		t.Fatalf("typed Astro import coverage: %+v", reported)
+	}
+	writeAstroFixture(t, root, "page.astro", "---\ntype Props = import('astro').HTMLAttributes<'div'>;\n---\n<div />\n")
+	reported, err = bundle.Imports(t.Context(), root, []string{"page.astro"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reported.Unsupported) != 0 || len(reported.Imports) != 1 ||
+		reported.Imports[0].Specifier != "astro" || reported.Imports[0].Line != 2 {
+		t.Fatalf("authored Astro package import was lost: %+v", reported)
+	}
+}
+
 func TestAstroClientScriptUsageReachesItsModule(t *testing.T) {
 	bundle, root := astroFixture(t)
 	writeAstroFixture(t, root, "page.astro", "<script>\nimport { play } from './client.js';\nplay();\n</script>\n")
