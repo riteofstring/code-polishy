@@ -58,6 +58,23 @@ selected modules. Read only the returned current design documents. The command
 does not select plans, historical evidence, or superseded decisions; open those
 only when the task specifically requires them.
 
+Retrieve context once for the planned scope. Context already supplied by
+`task-start` for that scope satisfies this requirement. Reuse what you have
+read until the scope, design mappings, or relevant document contents change.
+Another edit, test run, status request, or commit does not require another
+lookup. Refresh the affected context when changing those inputs.
+
+If no useful rationale is mapped, inspect the selected module boundaries and
+existing current documentation. During adoption or changes to ownership,
+invariants, dependency direction, or consequential tradeoffs, create or update
+the relevant repository-owned rationale and its `documentation.design`
+mapping as part of the work. Explain decisions that source cannot readily
+convey; do not invent decisions or manufacture a document for every module.
+Shared guidance is appropriate for shared constraints. An empty mapping alone
+does not block routine work or require boilerplate. Keep mapped rationale
+current when the design changes; the maintainer need not request this upkeep
+in each task.
+
 The same context command selects relevant repository operational handoffs from
 `documentation.handoffs`. Read each selected procedure before its associated
 operation. Add an exact `--situation authentication`, `--situation release`, or

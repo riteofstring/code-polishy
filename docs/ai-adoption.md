@@ -64,6 +64,16 @@ Adoption is complete only when:
 A config that merely parses is not an adoption. A green placeholder command is
 not evidence.
 
+As part of adoption, inspect consequential module boundaries and existing
+design rationale. Map current repository-owned explanations through
+`documentation.design`; create or update missing rationale for ownership,
+invariants, dependency direction, and material tradeoffs that code alone does
+not explain. Reuse shared guidance where constraints are shared. Do not invent
+design decisions, require one document per module, or fill coverage with
+boilerplate. Use the normal `design-context` workflow to check the selected
+guidance and identify what still needs explanation. Keep repository-specific
+content out of managed `AGENTS.md`.
+
 ## First-install setup wizard
 
 For a target with no `.code-polishy.json`, inspect the repository read-only long

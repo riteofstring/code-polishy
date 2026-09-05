@@ -932,6 +932,51 @@ retrieve credentials, grant authorization, or weaken locked policy and
 workflow approval requirements. Update the runtime and shipped schema, normal
 workflow help, permanent guidance, and repository examples together.
 
+## Useful design context across adopting repositories
+
+Ship design-context improvements through the canonical template, adoption
+guide, normal task workflow, and command output. They must work for every
+adopting repository without additional maintainer coaching. Improving Code
+Polishy's own mappings is necessary self-adoption evidence, not the complete
+feature.
+
+During adoption, the agent inspects actual module boundaries and existing
+rationale, maps relevant current documents, and writes missing explanations
+of consequential ownership, invariants, dependency constraints, and tradeoffs.
+Shared documents may cover genuinely shared constraints. Do not require a
+separate document per module, invent rationale, or accept boilerplate and a
+catch-all mapping as proof that the design is documented.
+
+The context command returns only relevant module and shared guidance, explains
+each selection, and exposes selected modules or source paths without mapped
+rationale. Distinguish an empty selection from missing mappings and invalid
+mapped documents. Missing mappings are actionable coverage information;
+invalid selected documents remain errors. Mapping coverage does not establish
+the quality or sufficiency of prose and is not an automatic per-module
+documentation gate.
+
+Task-start must compose the same matches, gaps, and document identities as
+standalone design-context. Adoption and architecture-changing workflows direct
+the implementing agent to create or update rationale when consequential design
+decisions are undocumented. Routine edits must not trigger boilerplate authoring
+merely because no document is mapped.
+
+Canonical guidance requires one lookup for a planned scope and reuse of its
+context until scope, mappings, or relevant document contents change. Normal
+task context already retrieved for that scope satisfies the lookup. Repeated
+edits, tests, status requests, and commits do not independently require another
+call. Keep history and superseded plans out unless the task explicitly needs
+them. Context discovery remains read-only and does not execute document
+commands or authorize external operations.
+
+Verify mixed covered and uncovered selections, exact match reasons, shared
+constraints, empty scopes, invalid selected documents, changed mappings and
+document identities, and standalone/task-start agreement. Installed adoption
+fixtures must demonstrate useful mapped rationale and actionable missing
+coverage without repository-specific text in managed AGENTS.md. Document the
+reuse and maintenance rules in shipped guidance and exercise the normal
+adoption path rather than relying on extra user instructions.
+
 ## Exact-version remediation
 
 Exact-version findings must prefer the version already selected by the current

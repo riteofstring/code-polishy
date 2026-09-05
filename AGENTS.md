@@ -20,9 +20,9 @@
   with the smallest maintainable change.
 - Add backward compatibility, migrations, legacy support, or transitional code
   only when the caller explicitly requests it.
-- Before changing governed source, run `code-polishy design-context` for the
-  exact files or modules and read only the current documents it returns. Load
-  plans, history, or superseded decisions only for an explicit task need.
+- Before changing governed source, retrieve `code-polishy design-context` for
+  the planned scope. Reuse it until scope, mappings, or documents change. Follow
+  `agent-workflows` for missing rationale and design updates.
 - Honor `quality.allowComments`. When it is false, keep governed handwritten
   source free of prose comments and docstrings. When it is true, add comments
   only for facts the code cannot convey. Put non-local rationale in mapped

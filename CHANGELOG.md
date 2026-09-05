@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Direct adopting agents to map useful design rationale and maintain it when
+  consequential boundaries change. Reuse retrieved design context until its
+  scope, mappings, or relevant documents change.
 - Clarify that agents commit progress at milestones, roughly every one to two
   hours of active editing on long tasks. Checkpoints may contain unfinished work
   or known failures; final verification and atomic public cutovers apply at
