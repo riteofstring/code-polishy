@@ -46,6 +46,7 @@ func (shippedLoader) Load(url string) (any, error) {
 	resources := map[string][]byte{
 		ConfigurationBase + "code-polishy-review-snapshot.schema.json":     CodePolishyReviewSnapshot,
 		ConfigurationBase + "code-polishy-architecture-review.schema.json": CodePolishyArchitectureReview,
+		ConfigurationBase + "code-polishy-behavior-review.schema.json":     CodePolishyBehaviorReview,
 		ConfigurationBase + "code-polishy.schema.json":                     CodePolishy,
 		ConfigurationBase + "code-polishy-supply-chain.schema.json":        CodePolishySupplyChain,
 		ConfigurationBase + "code-polishy-python.schema.json":              CodePolishyPython,

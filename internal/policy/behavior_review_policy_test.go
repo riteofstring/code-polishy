@@ -1,12 +1,10 @@
 package policy
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	policyschema "github.com/riteofstring/code-polishy/schema"
 )
 
 func TestBehaviorReviewPolicyOmissionKeepsReviewOptional(t *testing.T) {
@@ -187,54 +185,28 @@ func TestBehaviorReviewPolicyRejectsInvalidConfiguration(t *testing.T) {
 
 func TestBehaviorReviewSchemaMatchesPolicyContract(t *testing.T) {
 	t.Parallel()
-	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	schemaData, err := os.ReadFile(filepath.Join(repositoryRoot, "schema", "code-polishy.schema.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var schema struct {
-		Defs struct {
-			Verification struct {
-				Properties map[string]struct {
-					Ref string `json:"$ref"`
-				} `json:"properties"`
-			} `json:"verification"`
-			BehaviorReview struct {
-				AdditionalProperties *bool `json:"additionalProperties"`
-				Properties           map[string]struct {
-					Default string   `json:"default"`
-					Enum    []string `json:"enum"`
-				} `json:"properties"`
-			} `json:"behaviorReview"`
-			BehaviorReviewFeature struct {
-				AdditionalProperties *bool    `json:"additionalProperties"`
-				Required             []string `json:"required"`
-				Properties           map[string]struct {
-					Enum []string `json:"enum"`
-				} `json:"properties"`
-			} `json:"behaviorReviewFeature"`
-		} `json:"$defs"`
-	}
-	if err := json.Unmarshal(schemaData, &schema); err != nil {
-		t.Fatal(err)
-	}
-	if schema.Defs.Verification.Properties["behaviorReview"].Ref != "#/$defs/behaviorReview" {
-		t.Fatalf("behavior review schema reference = %q", schema.Defs.Verification.Properties["behaviorReview"].Ref)
-	}
-	behaviorReview := schema.Defs.BehaviorReview
-	if behaviorReview.AdditionalProperties == nil || *behaviorReview.AdditionalProperties ||
-		!slices.Equal(behaviorReview.Properties["defaultRequiredAt"].Enum, []string{BehaviorReviewOnRequest, BehaviorReviewMerge, BehaviorReviewCheckpoint}) ||
-		behaviorReview.Properties["defaultRequiredAt"].Default != BehaviorReviewOnRequest {
-		t.Fatalf("behavior review schema = %+v", behaviorReview)
-	}
-	feature := schema.Defs.BehaviorReviewFeature
-	if feature.AdditionalProperties == nil || *feature.AdditionalProperties ||
-		!slices.Equal(feature.Required, []string{"name", "description", "suites"}) ||
-		!slices.Equal(feature.Properties["requiredAt"].Enum, []string{BehaviorReviewMerge, BehaviorReviewCheckpoint}) {
-		t.Fatalf("behavior review feature schema = %+v", feature)
+	validator := policyschema.NewValidator(policyschema.ConfigurationBase + "code-polishy.schema.json")
+	for _, test := range []struct {
+		setting string
+		valid   bool
+	}{
+		{`{}`, true},
+		{`{"defaultRequiredAt":"on-request"}`, true},
+		{`{"defaultRequiredAt":"merge"}`, true},
+		{`{"defaultRequiredAt":"checkpoint"}`, true},
+		{`{"defaultRequiredAt":"always"}`, false},
+		{`{"unknown":true}`, false},
+		{`{"features":[{"name":"search","description":"Search behavior.","modules":["content"],"suites":["content-test"],"requiredAt":"checkpoint"}]}`, true},
+		{`{"features":[{"name":"search","description":"Search behavior.","suites":["content-test"]}]}`, false},
+		{`{"features":[{"name":"search","modules":["content"],"suites":["content-test"]}]}`, false},
+		{`{"features":[{"name":"search","description":"Search behavior.","modules":["content"],"suites":["content-test"],"unknown":true}]}`, false},
+	} {
+		configuration := []byte(behaviorReviewConfig(test.setting))
+		schemaErr := validator.Validate(configuration)
+		_, runtimeErr := Parse(configuration, ConfigFilename)
+		if (schemaErr == nil) != test.valid || (runtimeErr == nil) != test.valid {
+			t.Fatalf("setting %s: schema=%v runtime=%v want valid=%v", test.setting, schemaErr, runtimeErr, test.valid)
+		}
 	}
 }
 

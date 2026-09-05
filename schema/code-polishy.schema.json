@@ -574,54 +574,11 @@
           "pattern": "^[^\\s\\u0000]+$",
           "description": "Optional checked-in trusted merge target used when the caller supplies no explicit target."
         },
-        "behaviorReview": { "$ref": "#/$defs/behaviorReview" },
+        "behaviorReview": {
+          "$ref": "code-polishy-behavior-review.schema.json#/$defs/behaviorReview"
+        },
         "mergeGate": { "$ref": "#/$defs/mergeGate" }
       }
-    },
-    "behaviorReview": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "defaultRequiredAt": {
-          "enum": ["on-request", "merge", "checkpoint"],
-          "default": "on-request"
-        },
-        "features": {
-          "type": "array",
-          "maxItems": 128,
-          "items": { "$ref": "#/$defs/behaviorReviewFeature" }
-        }
-      }
-    },
-    "behaviorReviewFeature": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "description", "suites"],
-      "properties": {
-        "name": { "$ref": "#/$defs/identifier", "maxLength": 128 },
-        "description": {
-          "$ref": "#/$defs/nonemptyString",
-          "maxLength": 512,
-          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
-        },
-        "aliases": {
-          "type": "array",
-          "maxItems": 16,
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
-        },
-        "modules": { "$ref": "#/$defs/identifierArray" },
-        "paths": { "$ref": "#/$defs/paths" },
-        "suites": { "$ref": "#/$defs/nonemptyIdentifierArray" },
-        "requiredAt": { "enum": ["merge", "checkpoint"] }
-      },
-      "anyOf": [
-        {
-          "required": ["modules"],
-          "properties": { "modules": { "minItems": 1 } }
-        },
-        { "required": ["paths"], "properties": { "paths": { "minItems": 1 } } }
-      ]
     },
     "mergeGate": {
       "type": "object",

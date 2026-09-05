@@ -25,3 +25,6 @@ var CodePolishyArchitectureReview []byte
 
 //go:embed code-polishy-review-snapshot.schema.json
 var CodePolishyReviewSnapshot []byte
+
+//go:embed code-polishy-behavior-review.schema.json
+var CodePolishyBehaviorReview []byte
