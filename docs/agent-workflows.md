@@ -113,9 +113,10 @@ Choose verification from the event that actually changed risk:
 | Final candidate                                           | One base-aware merge gate, owned locally or by CI |
 | Stable release candidate                                  | Only explicitly selected supplemental suites      |
 
-Use the first applicable row. Repository operations and delivery requests are
-not checkpoints by themselves. A conflict resolution is a new change only for
-the files edited to resolve it; a prose-only conflict stays documentation-only.
+Use the first applicable row. Making a progress commit does not itself select
+tests, a review, or a checkpoint gate. A conflict resolution is a new change
+only for the files edited to resolve it; a prose-only conflict stays
+documentation-only.
 Do not run `test --changed` immediately before a final merge gate over the same
 candidate because the gate already selects changed-impact tests.
 
@@ -193,10 +194,27 @@ code-polishy test-receipts import \
 The bundle composes exact evidence; it does not aggregate partial shards or
 turn an incompatible receipt into a pass.
 
-Commit all completed task-owned changes after required verification unless the
-caller explicitly requests an uncommitted handoff. Keep each commit coherent
-and free of unrelated user work. Push, publish, and pull-request operations
-require the caller's explicit authorization.
+Commit task-owned progress at meaningful milestones, such as finishing a
+subtask or reaching a useful stopping point before switching focus. During
+long tasks, aim for a checkpoint roughly every one to two hours of active
+editing. Use judgment about the boundary; do not create a commit for every
+small edit or let hours of accumulated changes wait for the entire goal to
+finish.
+
+A progress commit may contain unfinished work or known failures. State what it
+captures, what remains, and which checks passed, failed, or have not run in its
+message. Commit related work together and exclude unrelated user changes.
+Verification follows the events above; a progress commit does not require a
+new test run, a clean full suite, a review, or a gate. Continue any verification
+already required by the work. The checkpoint gate applies when a code-changing
+task is complete, not to every progress commit within that task.
+
+Atomic public API cutovers must be coherent at merge or release. Intermediate
+branch commits may record incomplete implementation without adding temporary
+compatibility code merely to make each checkpoint complete. Before final
+delivery, finish required verification and commit remaining task-owned changes
+unless the caller explicitly requests an uncommitted handoff. Push, publish,
+and pull-request operations require the caller's explicit authorization.
 
 ## Agent reviews
 

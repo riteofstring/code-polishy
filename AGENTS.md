@@ -20,9 +20,6 @@
   with the smallest maintainable change.
 - Add backward compatibility, migrations, legacy support, or transitional code
   only when the caller explicitly requests it.
-- Treat an atomic public cutover as an externally visible contract. Private
-  implementation batches may be incremental; committed public APIs must remain
-  coherent and fully cut over.
 - Before changing governed source, run `code-polishy design-context` for the
   exact files or modules and read only the current documents it returns. Load
   plans, history, or superseded decisions only for an explicit task need.
@@ -79,7 +76,10 @@
   requests independent evidence.
   An exact passed identity executes nothing. Resume only an unchanged failed
   candidate. Summarize the result in plain language.
-- Commit all completed task-owned changes after required verification unless the
-  caller explicitly requests an uncommitted handoff. Keep commits coherent and
-  free of unrelated user work. Push, publish, and pull-request operations require
-  explicit caller authorization.
+- Commit task-owned progress at milestones, roughly every 1–2 hours of active
+  editing on long tasks. Checkpoints may be unfinished or failing; record what
+  remains and verification status. Do not wait for gates or API cutovers.
+- Before delivery, complete required verification and commit remaining task-owned
+  changes unless the caller requests an uncommitted handoff. Public cutovers
+  must be coherent at merge or release. Exclude unrelated user work. Push,
+  publish, and pull-request operations require explicit caller authorization.

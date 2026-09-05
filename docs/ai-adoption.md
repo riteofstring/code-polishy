@@ -557,9 +557,13 @@ Before finishing:
    digest and that `code-polishy version` agrees.
 3. Confirm no placeholder command, broad exclusion, credential, generated
    mutation, or policy tool output was committed accidentally.
-4. Commit all completed task-owned changes after required verification unless
-   the caller explicitly requests an uncommitted handoff. Do not push or
-   publish unless explicitly requested.
+4. Finish required verification and commit remaining task-owned changes unless
+   the caller explicitly requests an uncommitted handoff. During long adoption
+   tasks, make progress commits at meaningful milestones, roughly every one to
+   two hours of active editing, following the [agent workflow](agent-workflows.md).
+   Those checkpoints may contain unfinished work; record remaining work and
+   verification status in their messages. Do not push or publish unless
+   explicitly requested.
 
 The final response must include:
 

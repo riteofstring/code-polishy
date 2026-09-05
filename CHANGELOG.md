@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Clarify that agents commit progress at milestones, roughly every one to two
+  hours of active editing on long tasks. Checkpoints may contain unfinished work
+  or known failures; final verification and atomic public cutovers apply at
+  delivery, merge, or release.
 - Route the Ubuntu CI gate through change classification so documentation-only
   candidates install only their documentation toolchain, while source,
   ambiguous, and failed classifications retain the full fail-safe platform
