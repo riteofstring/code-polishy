@@ -117,27 +117,18 @@ jobs:
         shell: bash
         run: ./scripts/build.sh
 
-      - name: Restore accepted architecture review
-        if: github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
-            ./scripts/architecture-review-handoff.sh restore "${CODE_POLISHY_MERGE_BASE}"
-          fi
-
       - name: Run selected policy gate
         if: github.event_name != 'schedule'
         shell: bash
+        env:
+          DOCUMENTATION_ONLY: ${{ needs.classify.result == 'success' && needs.classify.outputs.documentation == 'true' }}
         run: |
           set -euo pipefail
-          if [[ -z "${CODE_POLISHY_MERGE_BASE}" ]]; then
+          if [[ "${DOCUMENTATION_ONLY}" == true && -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
+            ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}"
+          else
             ./.tools/bin/code-polishy gate
-            exit
           fi
-          ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}"
 
       - name: Run weekly online dependency security scan
         if: github.event_name == 'schedule'
@@ -181,26 +172,9 @@ jobs:
         shell: bash
         run: ./scripts/build.sh
 
-      - name: Restore accepted architecture review
-        if: github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
+      - name: Run automated policy gate
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
-            ./scripts/architecture-review-handoff.sh restore "${CODE_POLISHY_MERGE_BASE}"
-          fi
-
-      - name: Run selected policy gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
-            ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}"
-          else
-            ./.tools/bin/code-polishy gate
-          fi
+        run: ./.tools/bin/code-polishy gate
 
   windows:
     name: Native Windows contracts
