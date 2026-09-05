@@ -513,7 +513,7 @@ func TestRecommendedRepositorySuiteWithoutPathsDoesNotRunWithoutChanges(t *testi
 	}
 }
 
-func TestRepositoryPolicySelectsOnlyPathRelevantToolingContracts(t *testing.T) {
+func TestRepositoryPolicySelectsOwningModuleToolingContracts(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -524,13 +524,19 @@ func TestRepositoryPolicySelectsOnlyPathRelevantToolingContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := repository.Repository{Root: root, Config: config}
+	toolingSuites := []string{
+		"mutation-wrapper-contract", "install-contract", "release-preflight-contract",
+		"javascript-runtime-contract", "javascript-bundle-contract", "javascript-runner-contract",
+		"javascript-project-contract", "installed-release-contract",
+	}
+
 	tests := []struct {
 		path string
 		want []string
 	}{
-		{path: "scripts/install.sh", want: []string{"mutation-wrapper-contract", "install-contract"}},
-		{path: "scripts/release-preflight.sh", want: []string{"mutation-wrapper-contract", "release-preflight-contract"}},
-		{path: "scripts/test-mutation-wrapper.sh", want: []string{"mutation-wrapper-contract"}},
+		{path: "scripts/install.sh", want: toolingSuites},
+		{path: "scripts/release-preflight.sh", want: toolingSuites},
+		{path: "scripts/test-mutation-wrapper.sh", want: toolingSuites},
 		{path: "internal/quality/vulture.go", want: []string{"quality-unit", "engine-unit", "cli-contract"}},
 	}
 	for _, testCase := range tests {
