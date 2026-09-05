@@ -14,6 +14,9 @@ func (repo Repository) pythonReachabilityContract(project PythonProject, depende
 	if err != nil {
 		return "", pythonfacts.ContractDefinitionEvidence{}, err
 	}
+	if err := validatePythonDistributionOrigin(snapshot, dependency); err != nil {
+		return "", pythonfacts.ContractDefinitionEvidence{}, err
+	}
 	python, err := pythonfacts.DefaultInterpreter()
 	if err != nil {
 		return "", pythonfacts.ContractDefinitionEvidence{}, err

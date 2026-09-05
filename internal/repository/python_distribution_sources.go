@@ -249,6 +249,9 @@ func (capture *pythonDistributionCapture) retain(input pythonfacts.Input, origin
 }
 
 func (capture pythonDistributionCapture) finish() (PythonDistributionSources, error) {
+	if err := capture.validateOriginRecord(); err != nil {
+		return PythonDistributionSources{}, err
+	}
 	result := capture.result
 	if !capture.metadataSeen || len(result.Sources) == 0 {
 		return PythonDistributionSources{}, fmt.Errorf("distribution record omits metadata or Python source")
