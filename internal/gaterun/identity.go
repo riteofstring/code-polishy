@@ -69,7 +69,6 @@ func identityFromInput(input IdentityInput) (Identity, error) {
 		Release: input.Release, ConfigurationSHA256: input.ConfigurationSHA256,
 		Platform: input.Platform, Commands: cloneCommands(input.Commands), Environment: environment, AmbientEnvironment: ambient,
 		BehaviorReview:           cloneBehaviorReview(input.BehaviorReview),
-		ArchitectureReviewSHA256: input.ArchitectureReviewSHA256,
 		GitEvidenceSHA256:        input.GitEvidenceSHA256,
 		PolicyValiditySHA256:     input.PolicyValiditySHA256,
 		PythonReachabilitySHA256: input.PythonReachabilitySHA256,
@@ -415,7 +414,7 @@ func cloneStrings(values []string) []string {
 }
 
 func validateIdentityEvidence(identity Identity) error {
-	for _, digest := range []string{identity.GitEvidenceSHA256, identity.ArchitectureReviewSHA256, identity.PolicyValiditySHA256, identity.PythonReachabilitySHA256} {
+	for _, digest := range []string{identity.GitEvidenceSHA256, identity.PolicyValiditySHA256, identity.PythonReachabilitySHA256} {
 		if !validOptionalSHA256(digest) {
 			return fmt.Errorf("%w: gate external evidence identity is invalid", ErrInvalidInput)
 		}

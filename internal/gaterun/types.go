@@ -179,7 +179,6 @@ type IdentityInput struct {
 	PolicyLevel              string
 	Release                  ReleaseIdentity
 	ConfigurationSHA256      string
-	ArchitectureReviewSHA256 string
 	GitEvidenceSHA256        string
 	PolicyValiditySHA256     string
 	PythonReachabilitySHA256 string
@@ -199,7 +198,6 @@ type Identity struct {
 	PolicyLevel              string                   `json:"policy_level"`
 	Release                  ReleaseIdentity          `json:"release"`
 	ConfigurationSHA256      string                   `json:"configuration_sha256"`
-	ArchitectureReviewSHA256 string                   `json:"architecture_review_sha256"`
 	GitEvidenceSHA256        string                   `json:"git_evidence_sha256"`
 	PolicyValiditySHA256     string                   `json:"policy_validity_sha256"`
 	PythonReachabilitySHA256 string                   `json:"python_reachability_sha256"`

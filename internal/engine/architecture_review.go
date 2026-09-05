@@ -90,22 +90,6 @@ func combineArchitectureReview(left, right *behaviorreview.ArchitectureReviewSta
 	return left
 }
 
-func (controller *gateRunController) checkArchitectureReview(ctx context.Context, engine *Engine, base string, documentation bool) (Report, error) {
-	if documentation {
-		return Report{}, nil
-	}
-	report, err := engine.ArchitectureReview(ctx, base, "status")
-	controller.architectureReport = &report
-	return report, err
-}
-
-func (controller *gateRunController) withArchitectureReport(engine *Engine, report Report) Report {
-	if controller.architectureReport != nil {
-		return engine.combine(report, *controller.architectureReport)
-	}
-	return report
-}
-
 func (engine *Engine) Architecture(ctx context.Context, selection repository.Selection) Report {
 	analysis := architecture.AnalyzeWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)
 	files, err := engine.Repository.AllFiles()

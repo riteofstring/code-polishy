@@ -233,20 +233,6 @@ func TestArchitectureReviewRequiresNewEvidenceAfterInvalidAcceptance(t *testing.
 	}
 }
 
-func TestArchitectureReviewGateIdentityIgnoresUnrelatedReports(t *testing.T) {
-	t.Parallel()
-	repo, _ := newArchitectureReviewRepository(t)
-	before, err := ArchitectureReviewArtifactsSHA256(repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeBehaviorFile(t, repo.Root, architectureDirectory+"/status/report.json", `{"status":"required"}`)
-	after, err := ArchitectureReviewArtifactsSHA256(repo)
-	if err != nil || before != after {
-		t.Fatalf("unrelated report changed gate evidence: %s => %s, %v", before, after, err)
-	}
-}
-
 func newArchitectureReviewRepository(t *testing.T) (repository.Repository, ArchitectureReviewInput) {
 	t.Helper()
 	root := t.TempDir()

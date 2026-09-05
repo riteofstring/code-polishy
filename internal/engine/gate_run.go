@@ -27,21 +27,19 @@ type MergeGateOptions struct {
 }
 
 type gateRunController struct {
-	run                         *gaterun.Run
-	runner                      *gateArtifactRunner
-	candidate                   string
-	requestedBase               string
-	workingTreeCandidate        bool
-	behaviorReview              gaterun.BehaviorReview
-	behaviorStatus              BehaviorReviewStatus
-	artifactExecution           *testartifact.Execution
-	alreadyPassed               *gaterun.Report
-	alreadyPassedPath           string
-	architectureReport          *Report
-	architectureArtifactsSHA256 string
-	gitEvidenceSHA256           string
-	policyValiditySHA256        string
-	pythonReachabilitySHA256    string
+	run                      *gaterun.Run
+	runner                   *gateArtifactRunner
+	candidate                string
+	requestedBase            string
+	workingTreeCandidate     bool
+	behaviorReview           gaterun.BehaviorReview
+	behaviorStatus           BehaviorReviewStatus
+	artifactExecution        *testartifact.Execution
+	alreadyPassed            *gaterun.Report
+	alreadyPassedPath        string
+	gitEvidenceSHA256        string
+	policyValiditySHA256     string
+	pythonReachabilitySHA256 string
 }
 
 type gateArtifactRunner struct {
@@ -88,10 +86,9 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 			return &gateRunController{
 				candidate: candidate, requestedBase: requestedBase, behaviorReview: behaviorReview,
 				behaviorStatus: cloneBehaviorReviewStatus(behaviorStatus), alreadyPassed: &prior, alreadyPassedPath: path,
-				architectureArtifactsSHA256: identity.ArchitectureReviewSHA256,
-				gitEvidenceSHA256:           identity.GitEvidenceSHA256,
-				policyValiditySHA256:        identity.PolicyValiditySHA256,
-				pythonReachabilitySHA256:    identity.PythonReachabilitySHA256,
+				gitEvidenceSHA256:        identity.GitEvidenceSHA256,
+				policyValiditySHA256:     identity.PolicyValiditySHA256,
+				pythonReachabilitySHA256: identity.PythonReachabilitySHA256,
 			}, nil
 		}
 	}
@@ -111,11 +108,10 @@ func newGateRunController(engine *Engine, gate gaterun.GateKind, requestedBase, 
 	return &gateRunController{
 		run: run, runner: commandRunner, candidate: candidate, requestedBase: requestedBase,
 		behaviorReview: behaviorReview, behaviorStatus: cloneBehaviorReviewStatus(behaviorStatus),
-		architectureArtifactsSHA256: identity.ArchitectureReviewSHA256,
-		gitEvidenceSHA256:           identity.GitEvidenceSHA256,
-		policyValiditySHA256:        identity.PolicyValiditySHA256,
-		pythonReachabilitySHA256:    identity.PythonReachabilitySHA256,
-		artifactExecution:           artifactExecution,
+		gitEvidenceSHA256:        identity.GitEvidenceSHA256,
+		policyValiditySHA256:     identity.PolicyValiditySHA256,
+		pythonReachabilitySHA256: identity.PythonReachabilitySHA256,
+		artifactExecution:        artifactExecution,
 	}, nil
 }
 
@@ -244,7 +240,7 @@ func workingTreeCandidateDigest(root string, selection repository.Selection) (st
 }
 
 func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exactBase, candidate, level string, commands []MergeGateExecutionCommand, behaviorReview gaterun.BehaviorReview, receipts *testReceiptController) (gaterun.Identity, error) {
-	architectureDigest, gitEvidenceDigest, pythonReachabilityDigest, err := engine.gateEvidenceIdentities()
+	gitEvidenceDigest, pythonReachabilityDigest, err := engine.gateEvidenceIdentities()
 	if err != nil {
 		return gaterun.Identity{}, err
 	}
@@ -291,7 +287,6 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 		Release: releaseIdentity, ConfigurationSHA256: configurationDigest,
 		Platform: gaterun.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}, Commands: specifications,
 		Environment: environment, AmbientEnvironment: ambient, BehaviorReview: behaviorReview,
-		ArchitectureReviewSHA256: architectureDigest,
 		GitEvidenceSHA256:        gitEvidenceDigest,
 		PythonReachabilitySHA256: pythonReachabilityDigest,
 		PolicyValiditySHA256:     gatePolicyValiditySHA256(engine.Repository.Config, time.Now()),
@@ -363,7 +358,6 @@ func gateBehaviorProofCommands(plan behaviorreview.GateReplayPlan) ([]MergeGateE
 }
 
 func (controller *gateRunController) finalize(engine *Engine, report Report, gateErr error) (Report, error) {
-	report = controller.withArchitectureReport(engine, report)
 	controller.attachTestLogPaths(&report)
 	operationalErr := errors.Join(controller.runner.err, controller.completeArtifacts(), controller.candidateIntegrityError(engine))
 	status := gateRunStatus(report, gateErr, operationalErr)
@@ -380,7 +374,6 @@ func (controller *gateRunController) finalize(engine *Engine, report Report, gat
 }
 
 func (controller *gateRunController) preparePassed(engine *Engine, report *Report) (*gaterun.PreparedFinalization, error) {
-	*report = controller.withArchitectureReport(engine, *report)
 	controller.attachTestLogPaths(report)
 	if err := errors.Join(controller.runner.err, controller.completeArtifacts(), controller.candidateIntegrityError(engine)); err != nil {
 		return nil, err
@@ -428,13 +421,6 @@ func (controller *gateRunController) candidateIntegrityError(engine *Engine) err
 	}
 	if err := engine.currentGatePolicyValidity(controller.policyValiditySHA256); err != nil {
 		return err
-	}
-	digest, err := behaviorreview.ArchitectureReviewArtifactsSHA256(engine.Repository)
-	if err != nil {
-		return err
-	}
-	if digest != controller.architectureArtifactsSHA256 {
-		return fmt.Errorf("architecture review evidence changed during gate execution")
 	}
 	current, err := controller.currentCandidate(engine)
 	if err != nil {

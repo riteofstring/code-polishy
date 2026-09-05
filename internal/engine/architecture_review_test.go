@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
@@ -15,64 +13,42 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func TestArchitectureReviewGateRequiresUnreviewedGraph(t *testing.T) {
+func TestAutomatedGateIgnoresOptionalArchitectureReviewArtifacts(t *testing.T) {
 	t.Parallel()
-	engine := newArchitectureReviewEngine(t)
-	controller := architectureGateController(t, engine)
-	report, err := controller.checkArchitectureReview(t.Context(), engine, "main", false)
-	if err != nil || !HasFindings(report) || report.ArchitectureReview == nil || report.ArchitectureReview.State != "required" {
-		t.Fatalf("unreviewed gate = %+v, %v", report, err)
-	}
-	failed, err := controller.finalize(engine, report, nil)
-	if err != nil || failed.GateRunPolicy.Status != "failed" {
-		t.Fatalf("failed gate = %+v, %v", failed, err)
+	for _, gate := range []gaterun.GateKind{gaterun.MergeGate, gaterun.CheckpointGate} {
+		t.Run(string(gate), func(t *testing.T) {
+			engine := newArchitectureReviewEngine(t)
+			controller := architectureGateController(t, engine, gate)
+			passed, err := controller.finalize(engine, Report{}, nil)
+			if err != nil || passed.GateRunPolicy.Status != "passed" {
+				t.Fatalf("unreviewed gate = %+v, %v", passed, err)
+			}
+			writeEngineFile(t, engine.Repository.Root, ".code-polishy-reports/architecture-review/prepare.json", "malformed optional evidence", 0o600)
+			controller = architectureGateController(t, engine, gate)
+			if gate == gaterun.MergeGate && controller.alreadyPassed == nil {
+				t.Fatal("optional review artifacts invalidated the passed gate")
+			}
+			if err := controller.candidateIntegrityError(engine); err != nil {
+				t.Fatalf("optional evidence blocked gate publication: %v", err)
+			}
+			if gate == gaterun.CheckpointGate {
+				passed, err = controller.finalize(engine, Report{}, nil)
+				if err != nil || passed.GateRunPolicy.Status != "passed" {
+					t.Fatalf("optional evidence blocked checkpoint: %+v, %v", passed, err)
+				}
+			}
+		})
 	}
 }
 
-func TestArchitectureReviewGateBindsAcceptanceAndPreservesVisibleSignals(t *testing.T) {
+func TestExplicitArchitectureReviewRetainsAcceptanceValidation(t *testing.T) {
 	t.Parallel()
 	engine := newArchitectureReviewEngine(t)
 	prepared := acceptEngineArchitecture(t, engine)
-	controller := architectureGateController(t, engine)
-	if controller.alreadyPassed != nil {
-		t.Fatal("a gate with no previous pass was reused")
-	}
-	report, err := controller.checkArchitectureReview(t.Context(), engine, "main", false)
-	if err != nil || HasFindings(report) {
-		t.Fatalf("accepted gate = %+v, %v", report, err)
-	}
-	passed, err := controller.finalize(engine, Report{}, nil)
-	if err != nil || passed.GateRunPolicy.Status != "passed" {
-		t.Fatalf("passed gate = %+v, %v", passed, err)
-	}
-	assertArchitectureGateEvidence(t, engine, passed)
-	controller = architectureGateController(t, engine)
-	if controller.alreadyPassed == nil {
-		t.Fatal("exact accepted gate did not reuse its passed identity")
-	}
-	reused, err := engine.alreadyPassedMergeGate(t.Context(), "main", MergeGateExecutionPlan{Level: "recommended"}, controller)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertArchitectureGateEvidence(t, engine, reused)
-	resultPath := filepath.Join(engine.Repository.Root, filepath.FromSlash(prepared.ResultPath))
-	resultData, err := os.ReadFile(resultPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(resultPath, append(resultData, '\n'), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	controller = architectureGateController(t, engine)
-	if controller.alreadyPassed != nil {
-		t.Fatal("changed review evidence reused a passed gate")
-	}
-	report, err = controller.checkArchitectureReview(t.Context(), engine, "main", false)
-	if err != nil || !HasFindings(report) {
-		t.Fatalf("edited evidence gate = %+v, %v", report, err)
-	}
-	if _, err := controller.finalize(engine, report, nil); err != nil {
-		t.Fatal(err)
+	writeEngineFile(t, engine.Repository.Root, prepared.ResultPath, "malformed", 0o600)
+	report, err := engine.ArchitectureReview(t.Context(), "main", "status")
+	if err != nil || !HasFindings(report) || report.ArchitectureReview.State != "required" {
+		t.Fatalf("explicit review accepted invalid evidence: %+v, %v", report, err)
 	}
 }
 
@@ -90,48 +66,9 @@ func acceptEngineArchitecture(t *testing.T, engine *Engine) behaviorreview.Archi
 	return *prepared.ArchitecturePreparation
 }
 
-func assertArchitectureGateEvidence(t *testing.T, engine *Engine, passed Report) {
-	t.Helper()
-	if !slices.ContainsFunc(passed.Findings, func(finding policy.Finding) bool {
-		return finding.Check == "architecture.reviewSignal" && finding.Status == policy.FindingReviewed && finding.Severity == policy.FindingInformation
-	}) {
-		t.Fatalf("review signal was lost: %+v", passed.Findings)
-	}
-	data, err := os.ReadFile(filepath.Join(engine.Repository.Root, filepath.FromSlash(passed.GateRunPolicy.ReportPath)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var durable gaterun.Report
-	if err := json.Unmarshal(data, &durable); err != nil {
-		t.Fatal(err)
-	}
-	if len(durable.Findings) != len(passed.Findings) || durable.Findings[0].Fingerprint != passed.Findings[0].Fingerprint || durable.Findings[0].Remediation.NextCommand == nil {
-		t.Fatalf("gate lost canonical evidence: %+v", durable.Findings)
-	}
-}
-
-func TestArchitectureReviewRejectsSourceOwnershipAndEvidenceChangesDuringGate(t *testing.T) {
+func TestExplicitArchitectureReviewRejectsUnownedTests(t *testing.T) {
 	t.Parallel()
 	engine := newArchitectureReviewEngine(t)
-	prepared, err := engine.ArchitectureReview(t.Context(), "main", "prepare")
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeEngineArchitectureAcceptance(t, engine, *prepared.ArchitecturePreparation)
-	if _, err := engine.ArchitectureReview(t.Context(), "main", "finalize"); err != nil {
-		t.Fatal(err)
-	}
-	controller := architectureGateController(t, engine)
-	if _, err := controller.checkArchitectureReview(t.Context(), engine, "main", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(engine.Repository.Root, filepath.FromSlash(prepared.ArchitecturePreparation.ResultPath))); err != nil {
-		t.Fatal(err)
-	}
-	_, err = controller.finalize(engine, Report{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "evidence changed") {
-		t.Fatalf("gate publication error = %v", err)
-	}
 	writeEngineFile(t, engine.Repository.Root, "checks/value_test.go", "package checks_test\n\nimport _ \"example.test/app/app\"\n", 0o600)
 	gitBehaviorReview(t, engine.Repository.Root, "add", "--all")
 	gitBehaviorReview(t, engine.Repository.Root, "commit", "-m", "add an unowned test")
@@ -154,7 +91,7 @@ func newArchitectureReviewEngine(t *testing.T) *Engine {
 	return &Engine{Repository: repository.Repository{Root: root, PolicyRoot: enginePolicyRoot(t), Config: config}, Runner: &recordingEngineRunner{}, Output: io.Discard}
 }
 
-func architectureGateController(t *testing.T, engine *Engine) *gateRunController {
+func architectureGateController(t *testing.T, engine *Engine, gate gaterun.GateKind) *gateRunController {
 	t.Helper()
 	selection, err := engine.Repository.SelectBase("main")
 	if err != nil {
@@ -168,7 +105,7 @@ func architectureGateController(t *testing.T, engine *Engine) *gateRunController
 	if err != nil {
 		t.Fatal(err)
 	}
-	controller, err := newGateRunController(engine, gaterun.MergeGate, "main", selection.Base, candidate, "recommended", []MergeGateExecutionCommand{}, decision.status, false)
+	controller, err := newGateRunController(engine, gate, "main", selection.Base, candidate, "recommended", []MergeGateExecutionCommand{}, decision.status, false)
 	if err != nil {
 		t.Fatal(err)
 	}

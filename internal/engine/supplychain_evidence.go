@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
-	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/quality"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -42,17 +41,16 @@ func (engine *Engine) currentGitEvidence(expected string) ([]supplychain.GitEvid
 	return state.Receipts, nil
 }
 
-func (engine *Engine) gateEvidenceIdentities() (string, string, string, error) {
+func (engine *Engine) gateEvidenceIdentities() (string, string, error) {
 	evidence, err := supplychain.ReadGitEvidenceState(engine.Repository, time.Now().UTC())
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	pythonDigest, err := engine.Repository.PythonReachabilityStateSHA256()
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
-	architectureDigest, err := behaviorreview.ArchitectureReviewArtifactsSHA256(engine.Repository)
-	return architectureDigest, evidence.IdentitySHA256, pythonDigest, err
+	return evidence.IdentitySHA256, pythonDigest, nil
 }
 
 func gitEvidenceStateFinding(err error) policy.Finding {

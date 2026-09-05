@@ -185,6 +185,14 @@ code-polishy behavior-review status --base TASK_BASE --format json
 
 ## Complete a selected review
 
+Reviews selected by an explicit request or repository configuration report only
+major or severe, evidence-backed defects. Minor issues, style preferences,
+optional refactors, and speculative risks must not block acceptance. This
+threshold also applies to prose, correction residue, and consequential unknowns.
+After one review, report unresolved findings to the caller. Do not automatically
+launch another review after fixes; a follow-up needs explicit caller authorization.
+A required review with unresolved findings still fails; escalation is not a waiver.
+
 When status or a gate says review is required:
 
 1. Commit the candidate and keep tracked, staged, unstaged, and untracked

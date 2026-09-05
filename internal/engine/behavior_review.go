@@ -299,10 +299,6 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 	if execution.reviewReport != nil {
 		return execution.controller.finalize(engine, checkpointGateReport(*execution.reviewReport, execution.state), nil)
 	}
-	if report, err := execution.controller.checkArchitectureReview(ctx, engine, execution.selection.Base, execution.documentation); err != nil || HasFindings(report) {
-		report = withBehaviorReview(report, execution.controller.behaviorStatus)
-		return execution.controller.finalize(engine, checkpointGateReport(report, execution.state), err)
-	}
 	if len(execution.proofCommands) > 0 {
 		if replayErr := execution.controller.replayBehaviorReview(ctx, engine, execution.selection.Base, execution.plan.BehaviorReview.selection); replayErr != nil {
 			return engine.finalizeCheckpointReplayFailure(ctx, execution, replayErr)

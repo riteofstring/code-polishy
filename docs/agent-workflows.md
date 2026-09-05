@@ -42,14 +42,12 @@ allowed module and exact artifact path before the worker starts.
 ## Interactive work
 
 When adopting Code Polishy or restructuring architecture, capture the request
-and read its current design context before drafting the proposed module graph
-and current ownership in `.code-polishy.json`. Commit the
-candidate, then use `code-polishy architecture-review prepare --base REVIEW_BASE`
-before broad source moves or rewrites. Give only its packet to a clean-context
-reviewer, resolve findings, and finalize the accepted result. Avoid changes
-whose main effect is replacing one deep file with forwarding-only files. A
-later topology or ownership change requires another review; delivery validates
-that the candidate retains its reviewed graph. See the
+and read its current design context before drafting module ownership. Automated
+ownership, import, cycle, and dependency checks still apply. Architecture agent
+review is optional: run `code-polishy architecture-review prepare --base
+REVIEW_BASE` only when the caller explicitly requests that review. Supply the
+packet to a clean-context reviewer and finalize its result. Ordinary checkpoints
+and merge gates do not require or consume architecture-review receipts. See the
 [Architecture Policy](policies/architecture.md#architecture-review-workflow).
 
 Before changing governed source, run `code-polishy design-context --files` with
@@ -244,6 +242,19 @@ unless the caller explicitly requests an uncommitted handoff. Push, publish,
 and pull-request operations require the caller's explicit authorization.
 
 ## Agent reviews
+
+Agent reviews report only major or severe, evidence-backed defects. Do not turn
+nitpicks, preferences, optional refactors, minor prose issues, or speculative
+concerns into blocking findings. Behavior/final-state review retains its existing
+explicit-request and repository-configuration opt-ins. Architecture review
+requires an explicit caller request. Code Polishy does not launch review agents.
+
+Perform one review for the selected request or configured review event. Present
+unresolved findings and their consequences to the caller; do not automatically
+repeat review after fixes, choose a different reviewer to obtain acceptance, or
+start a new review cycle. Any follow-up requires explicit caller authorization
+and stays within the requested scope. A required behavior review remains failed
+until resolved; stopping iteration never fabricates acceptance or waives checks.
 
 A requested ordinary agent review binds to an explicit trusted base and exact
 candidate. A dirty-worktree review covers committed, staged, unstaged, and

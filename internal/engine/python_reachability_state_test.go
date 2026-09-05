@@ -27,7 +27,7 @@ func TestGateRunRejectsChangedInstalledReachabilityEvidence(t *testing.T) {
 	if _, err := gaterun.LoadReport(engine.Repository.Root, identity); err != nil {
 		t.Fatal(err)
 	}
-	controller := &gateRunController{candidate: head, gitEvidenceSHA256: identity.GitEvidenceSHA256, policyValiditySHA256: identity.PolicyValiditySHA256, architectureArtifactsSHA256: identity.ArchitectureReviewSHA256, pythonReachabilitySHA256: identity.PythonReachabilitySHA256}
+	controller := &gateRunController{candidate: head, gitEvidenceSHA256: identity.GitEvidenceSHA256, policyValiditySHA256: identity.PolicyValiditySHA256, pythonReachabilitySHA256: identity.PythonReachabilitySHA256}
 	if err := controller.candidateIntegrityError(engine); err != nil {
 		t.Fatal(err)
 	}

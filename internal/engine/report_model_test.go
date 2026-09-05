@@ -290,6 +290,10 @@ func TestPythonGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T)
 func TestJSONAndSARIFMatchConsumerGoldenFacts(t *testing.T) {
 	finding := policy.NormalizeFinding(policy.Finding{
 		Check: "quality.lint", Path: "src/app.go", Line: 3, Column: 2, Subject: "unused", Message: "unused", Severity: policy.FindingWarning,
+		Remediation: policy.FindingRemediation{
+			Summary:     "Resolve quality.lint for unused and rerun its owning policy command.",
+			NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--files", "src/app.go"}, Cwd: "."},
+		},
 	})
 	report := (&Engine{}).normalizeReport(Report{
 		Command: "check", ReportPath: ".code-polishy-reports/check/example/report.json", Findings: []policy.Finding{finding},

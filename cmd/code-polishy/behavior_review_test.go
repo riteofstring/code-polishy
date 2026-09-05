@@ -348,8 +348,6 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 	}
 
 	assertBehaviorReviewCLIReceiptConfirmation(t, common)
-	assertBehaviorReviewCLIArchitecturePrerequisite(t, common)
-	acceptBehaviorReviewCLIArchitecture(t, repositoryRoot, common)
 	assertBehaviorReviewCLIMerge(t, common)
 	assertBehaviorReviewCLICheckpoint(t, common)
 	assertBehaviorReviewCLIArtifacts(t, repositoryRoot, []string{

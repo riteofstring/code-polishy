@@ -36,7 +36,7 @@ var findingRemediationRules = []struct {
 	{"architecture.moduleDependency architecture.packageDependency", "Move the dependency or responsibility to its correct owner so imports follow the declared direction. Change the module contract only when the intended architecture changes and receives review."},
 	{"architecture.importCoverage architecture.pythonFactsCoverage architecture.sourceGraphCoverage", "Restore exact import resolution and complete bounded analyzer evidence for the selected projects before evaluating dependency direction or cycles."},
 	{"architecture.inventory", "Repair the reported contained source inventory failure so the dependency graph includes every applicable governed source."},
-	{"architecture.reviewSignal", "Inspect ownership and implementation depth in the architecture-review packet and resolve any substantive boundary findings before finalizing the review."},
+	{"architecture.reviewSignal", "Architecture review is optional. Only when requested by the caller, inspect its packet for major or severe boundary defects."},
 	{"portability.machinePath", "Replace the machine-specific path with an explicit configurable input or a contained repository-relative path and test unavailable-input behavior."},
 	{"portability.siblingReference", "Replace the implicit sibling-directory dependency with an exact declared external input and its contract tests, or remove the dependency."},
 	{"policy.agentGuidance", "Synchronize managed agent guidance from the exact locked release; keep repository-specific procedures in declared operational handoffs."},

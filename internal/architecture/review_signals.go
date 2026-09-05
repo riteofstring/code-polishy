@@ -157,7 +157,7 @@ func ReviewSignalFindings(signals []ReviewSignal, reviewed bool, base string) []
 	for _, signal := range signals {
 		finding := policy.Finding{Check: "architecture.reviewSignal", Path: policy.ConfigFilename, Module: signal.Module, Subject: signal.ID,
 			Message: signal.Summary, Severity: policy.FindingInformation, SemanticIdentity: []string{signal.ID, signal.Module},
-			Remediation: policy.FindingRemediation{Summary: "Review concept ownership, boundary depth, and dependency direction using the architecture-review packet.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "architecture-review", "prepare", "--base", base}, Cwd: "."}},
+			Remediation: policy.FindingRemediation{Summary: "Only when the caller requests architecture review, inspect ownership, boundary depth, and dependency direction using its packet.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "architecture-review", "prepare", "--base", base}, Cwd: "."}},
 			Fields:      map[string]string{"pathCount": fmt.Sprint(len(signal.Paths)), "unitCount": fmt.Sprint(len(signal.Units))},
 		}
 		if reviewed {

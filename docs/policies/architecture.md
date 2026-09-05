@@ -501,8 +501,8 @@ classes impossible.
 Architecture exceptions use the central exception list, matching the exact
 architecture check, source path, and target subject. There is no permanent
 per-module ignore list, and policy coverage itself cannot be exempted.
-Source cycles, source/import coverage, architecture-review signals, and required
-architecture review are not suppressible.
+Source cycles, source/import coverage, and architecture-review signals are not
+suppressible. Architecture agent review is optional and explicitly requested.
 
 ## Architecture summary
 
@@ -522,11 +522,11 @@ minimum file or module count.
 
 ## Architecture review workflow
 
-After required request capture and current design-context discovery, draft and
-commit the proposed module contract and current source/test ownership for
-adoption or an architecture rewrite. Review it before broad source
-moves; avoid replacing a deep file with forwarding-only files. Use one explicit
-trusted base throughout the review and its checkpoint or merge gate:
+Architecture agent review is optional and runs only when the caller explicitly
+requests it. Automated ownership, import coverage, cycle, and dependency checks
+remain mandatory independently of agent review. For a requested review, capture
+the request, retrieve current design context, and commit the candidate before
+preparing its packet. Use one explicit trusted base for these commands:
 
 ```sh
 code-polishy architecture-review status --base REVIEW_BASE
@@ -571,18 +571,19 @@ uses only shipped resources. Artifact byte limits, exact source and candidate
 bindings, topology identities, and citation validation remain independent of
 structural validation.
 
-Checkpoint and merge gates require acceptance for an unreviewed source graph
-or changed reviewed architecture. An unchanged accepted graph retains visible
-informational signals; acceptance is neither a generated waiver nor an
-exception. Reuse requires the same review base, module contract, project/package
-roots, ownership map, and semantic source topology, plus unchanged instructions
-and mapped design documents. The reviewed candidate must be an ancestor of the
-current candidate. Source locations may move without changing topology. A new
-pending review, changed packet/result, or missing evidence invalidates reuse.
-Ordinary prose-only delivery retains its documentation verification workflow.
+Checkpoint and merge gates do not require, read, or fingerprint architecture
+review artifacts. Explicit review commands continue to validate acceptance and
+report structural signals. Reuse requires the same review base, module contract,
+project/package roots, ownership map, semantic source topology, instructions,
+and mapped design documents; the reviewed candidate must be an ancestor of the
+current candidate. Changed or missing evidence cannot pass an explicit review.
 
-Gate identities bind the complete review artifact evidence and recheck it at
-publication. An identical passed identity executes no validation commands.
+Report only major or severe defects with concrete consequences and packet
+citations. Minor issues, preferences, optional refactors, and speculative risks
+are not findings. Return one review result. Present unresolved findings to the
+caller instead of automatically repeating reviews after fixes. Every follow-up
+requires an explicit caller request and stays within that scope.
+
 The calling harness supplies the reviewer; Code Polishy embeds no AI SDK and
 receives no provider credentials. Local hashes establish candidate consistency,
 not reviewer identity or proof of clean context. AI review cannot replace any

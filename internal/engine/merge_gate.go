@@ -79,10 +79,6 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 		report := engine.withMergeGateMetadata(ctx, *execution.reviewReport, base, plan)
 		return execution.controller.finalize(engine, report, nil)
 	}
-	if report, err := execution.controller.checkArchitectureReview(ctx, engine, base, plan.Level == testpolicy.MergeLevelDocumentation); err != nil || HasFindings(report) {
-		report = withBehaviorReview(report, execution.controller.behaviorStatus)
-		return execution.controller.finalize(engine, engine.withMergeGateMetadata(ctx, report, base, plan), err)
-	}
 	return engine.executeMergeGateCommands(ctx, base, plan, execution)
 }
 

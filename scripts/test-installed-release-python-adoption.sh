@@ -465,10 +465,6 @@ EOF
     fail "python-adoption: changed tests ran no selected target suite"
   fi
   : >"${command_log}"
-  expect_findings "${target}" "python-adoption missing architecture review" merge-gate --base "${base}"
-  expect_finding "python-adoption missing architecture review" "policy.architectureReview" ".code-polishy.json" "required"
-  fixture_accept_architecture "${target}" "${base}" "${host_python}"
-  : >"${command_log}"
   expect_pass "${target}" "python-adoption selected merge gate" merge-gate --base "${base}"
   grep -Fqx "MERGE GATE: RECOMMENDED against ${base}" "${output}" ||
     fail "python-adoption: merge gate did not select the ordinary recommended profile: $(excerpt)"

@@ -61,7 +61,7 @@ func TestPolicyExpiryDuringGatePreventsAcceptanceAndReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := &gateRunController{
-		candidate: head, gitEvidenceSHA256: identity.GitEvidenceSHA256, architectureArtifactsSHA256: identity.ArchitectureReviewSHA256,
+		candidate: head, gitEvidenceSHA256: identity.GitEvidenceSHA256,
 		policyValiditySHA256: gatePolicyValiditySHA256(policyEngine.Repository.Config, now.AddDate(0, 0, -1)),
 	}
 	if err := controller.candidateIntegrityError(policyEngine); err == nil || !strings.Contains(err.Error(), "validity changed") {

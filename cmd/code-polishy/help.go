@@ -284,9 +284,9 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:        "architecture-review",
-		summary:     "Review concept ownership and dependency topology against an exact clean candidate.",
+		summary:     "Optionally review concept ownership and dependency topology when explicitly requested.",
 		syntax:      []string{"code-polishy architecture-review <status|prepare|finalize> --base REF"},
-		selectors:   []string{"Exactly one --base REF and a clean committed candidate are required.", "status reports current signals and validates accepted evidence; prepare writes a bounded packet for a separate clean-context reviewer; finalize validates its strict result.", "An accepted review does not waive deterministic architecture or ownership failures."},
+		selectors:   []string{"Exactly one --base REF and a clean committed candidate are required.", "status reports current signals and validates accepted evidence; prepare writes a bounded packet for a separate clean-context reviewer; finalize validates its strict result.", "Ordinary gates do not require architecture review. An accepted review does not waive deterministic architecture or ownership failures."},
 		sideEffects: []string{"Reads the full source graph with the locked analyzers. prepare writes managed packet and binding files; finalize writes an acceptance receipt. The calling harness supplies the reviewer; no AI provider or tests are invoked."},
 		exits:       []string{"0 prepared, accepted, or no review required", "1 deterministic findings or required review", "2 invalid usage, invalid review result, changed candidate, or operational failure"},
 		examples:    []string{"code-polishy architecture-review status --base origin/main", "code-polishy architecture-review prepare --base origin/main", "code-polishy architecture-review finalize --base origin/main"},
