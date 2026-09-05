@@ -73,9 +73,13 @@ func printRepositoryContext(output io.Writer, context *engine.RepositoryContext)
 	if context == nil {
 		return
 	}
-	for _, document := range context.DesignDocuments {
-		fmt.Fprintln(output, "DESIGN DOCUMENT:", document.Path)
+	for _, match := range context.DesignResolution.Matches {
+		fmt.Fprintln(output, "DESIGN DOCUMENT:", match.Path)
+		for _, reason := range match.Reasons {
+			fmt.Fprintf(output, "  SELECTED BY: %s %s\n", reason.Kind, reason.Value)
+		}
 	}
+	printDesignCoverage(output, context)
 	for _, handoff := range context.Handoffs {
 		fmt.Fprintf(output, "HANDOFF %s: %s\n  DOCUMENT: %s\n  SHA256: %s\n", handoff.Name, handoff.Description, handoff.Document.Path, handoff.Document.SHA256)
 		for _, reason := range handoff.Reasons {
@@ -147,4 +151,24 @@ func designContextFiles(arguments []string) []string {
 		files = append(files, argument)
 	}
 	return files
+}
+
+func printDesignCoverage(output io.Writer, context *engine.RepositoryContext) {
+	resolution := context.DesignResolution
+	if resolution.SelectedPathCount == 0 && len(resolution.SelectedModules) == 0 {
+		fmt.Fprintln(output, "DESIGN COVERAGE: no files or modules selected")
+		return
+	}
+	if len(resolution.UnmappedModules) > 0 {
+		fmt.Fprintln(output, "DESIGN COVERAGE: selected work lacks mapped rationale in modules:", strings.Join(resolution.UnmappedModules, ", "))
+	}
+	for _, path := range resolution.UnmappedPaths[:min(10, len(resolution.UnmappedPaths))] {
+		fmt.Fprintln(output, "  NO DESIGN MAPPING:", path)
+	}
+	if len(resolution.UnmappedPaths) > 10 {
+		fmt.Fprintf(output, "  %d more unmapped paths; use --format json for complete coverage.\n", len(resolution.UnmappedPaths)-10)
+	}
+	if len(resolution.UnmappedModules)+len(resolution.UnmappedPaths) > 0 {
+		fmt.Fprintln(output, "  Review existing rationale; create or update mappings for consequential design decisions. Missing mappings alone do not block routine work.")
+	}
 }

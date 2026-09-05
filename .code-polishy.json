@@ -14,7 +14,20 @@
     ]
   },
   "documentation": {
-    "design": [{ "path": "docs/design/agent-guidance.md", "module": "agents" }]
+    "design": [
+      { "path": "docs/design/agent-guidance.md", "module": "agents" },
+      {
+        "path": "docs/design/design-context.md",
+        "sourcePaths": [
+          "internal/repository/design_context.go",
+          "internal/repository/selection.go",
+          "internal/engine/design_context.go",
+          "internal/engine/task_start.go",
+          "internal/engine/task_start_actions.go",
+          "cmd/code-polishy/design_context.go"
+        ]
+      }
+    ]
   },
   "verification": {
     "finalGateOwner": "ci",

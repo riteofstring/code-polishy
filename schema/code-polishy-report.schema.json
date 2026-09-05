@@ -129,12 +129,78 @@
     }
   },
   "$defs": {
+    "designResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedModules",
+        "selectedPathCount",
+        "matches",
+        "unmappedModules",
+        "unmappedPaths"
+      ],
+      "properties": {
+        "selectedModules": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "selectedPathCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "matches": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reasons"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reasons": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "value"],
+                  "properties": {
+                    "kind": {
+                      "enum": ["module", "source"]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "unmappedModules": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "unmappedPaths": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
     "repositoryContext": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol", "situations", "designDocuments", "handoffs"],
+      "required": [
+        "protocol",
+        "situations",
+        "designDocuments",
+        "handoffs",
+        "designResolution"
+      ],
       "properties": {
         "protocol": { "const": "repository-context/v1" },
+        "designResolution": { "$ref": "#/$defs/designResolution" },
         "situations": { "$ref": "#/$defs/stringArray", "maxItems": 33 },
         "designDocuments": {
           "type": "array",

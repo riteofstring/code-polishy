@@ -464,6 +464,7 @@ var commandHelpPages = []commandHelpPage{
 			"Choose either one or more --module NAME selectors or one file selector.",
 			"File selectors are mutually exclusive; --git-changes is the default.",
 			"Use --files PATH... for explicit paths; positional paths are not accepted.",
+			"Module and exact-source design mappings are additive. Output explains each match and reports uncovered selected modules and paths; missing mappings alone do not fail the command.",
 			"Repeat --situation NAME for exact operational situations such as authentication, release, or deployment. Situations alone select no files; a file or module selector may be added explicitly.",
 			"Handoffs match a selected situation, exact source, or module; the actual design-context workflow situation also applies. Only selected documents are loaded, with their SHA-256 identities and selection reasons.",
 		},

@@ -807,7 +807,7 @@ func TestNestedGoModuleOwnershipUsesDeepestRoot(t *testing.T) {
 	}
 }
 
-func TestDesignDocumentsPreferDirectSourceContextAndRemainStable(t *testing.T) {
+func TestDesignDocumentsCombineModuleAndSourceContextAndRemainStable(t *testing.T) {
 	t.Parallel()
 	repo := designDocumentRepository(t, []policy.Module{
 		{Name: "api", Paths: []string{"api/**"}},

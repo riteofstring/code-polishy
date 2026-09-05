@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -16,10 +17,11 @@ type ContextRequest struct {
 }
 
 type RepositoryContext struct {
-	Protocol        string                                 `json:"protocol"`
-	Situations      []string                               `json:"situations"`
-	DesignDocuments []repository.ContextDocument           `json:"designDocuments"`
-	Handoffs        []repository.OperationalHandoffContext `json:"handoffs"`
+	DesignResolution repository.DesignResolution            `json:"designResolution"`
+	Protocol         string                                 `json:"protocol"`
+	Situations       []string                               `json:"situations"`
+	DesignDocuments  []repository.ContextDocument           `json:"designDocuments"`
+	Handoffs         []repository.OperationalHandoffContext `json:"handoffs"`
 }
 
 func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
@@ -27,12 +29,12 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	if findings := engine.Repository.DesignDocumentFindings(); len(findings) > 0 {
-		return engine.finish(findings, nil), nil
-	}
-	selection, documents, err := engine.contextSelection(request)
+	selection, resolution, err := engine.contextSelection(request)
 	if err != nil {
 		return Report{}, err
+	}
+	if findings := engine.Repository.SelectedDesignDocumentFindings(resolution.DocumentPaths()); len(findings) > 0 {
+		return engine.finish(findings, nil), nil
 	}
 	handoffs, findings, err := engine.Repository.OperationalHandoffs(repository.HandoffSelection{
 		Files: selection.Files, Modules: request.Modules, Situations: request.Situations, Workflow: request.Workflow,
@@ -40,7 +42,7 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 	if err != nil || len(findings) > 0 {
 		return engine.finish(findings, nil), err
 	}
-	context, findings := engine.loadRepositoryContext(documents, handoffs, situations)
+	context, findings := engine.loadRepositoryContext(resolution, handoffs, situations)
 	report := engine.finish(findings, nil)
 	report.RepositoryContext = context
 	if selection.Requested.Mode != "" {
@@ -49,31 +51,37 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 	return engine.normalizeReport(report), nil
 }
 
-func (engine *Engine) contextSelection(request ContextRequest) (repository.Selection, []string, error) {
+func (engine *Engine) contextSelection(request ContextRequest) (repository.Selection, repository.DesignResolution, error) {
 	if request.Mode == "none" && len(request.Modules) == 0 && len(request.Files) == 0 {
-		return repository.Selection{}, nil, nil
+		resolution, err := engine.Repository.ResolveDesignContext(nil, nil)
+		return repository.Selection{}, resolution, err
 	}
 	mode, operands := request.Mode, request.Files
 	if len(request.Modules) > 0 {
 		if len(request.Files) > 0 {
-			return repository.Selection{}, nil, fmt.Errorf("choose only one of file selection or --module")
+			return repository.Selection{}, repository.DesignResolution{}, fmt.Errorf("choose only one of file selection or --module")
 		}
 		mode, operands = "modules", request.Modules
 	}
-	selection, err := engine.Select(mode, operands)
+	var selection repository.Selection
+	var err error
+	if mode == "modules" {
+		selection, err = engine.Repository.DesignModuleSelection(operands)
+	} else {
+		selection, err = engine.Select(mode, operands)
+	}
 	if err != nil {
-		return repository.Selection{}, nil, err
+		return repository.Selection{}, repository.DesignResolution{}, err
 	}
-	if len(request.Modules) > 0 {
-		documents, err := engine.Repository.DesignDocumentsForModules(request.Modules)
-		return selection, documents, err
-	}
-	return selection, engine.Repository.DesignDocumentsForFiles(selection.Files), nil
+	resolution, err := engine.Repository.ResolveDesignContext(selection.Files, request.Modules)
+	return selection, resolution, err
 }
 
-func (engine *Engine) loadRepositoryContext(paths []string, handoffs []repository.OperationalHandoffContext, situations []string) (*RepositoryContext, []policy.Finding) {
+func (engine *Engine) loadRepositoryContext(resolution repository.DesignResolution, handoffs []repository.OperationalHandoffContext, situations []string) (*RepositoryContext, []policy.Finding) {
+	paths := resolution.DocumentPaths()
 	context := &RepositoryContext{
-		Protocol: "repository-context/v1", Situations: reportArray(situations),
+		DesignResolution: resolution,
+		Protocol:         "repository-context/v1", Situations: reportArray(situations),
 		DesignDocuments: []repository.ContextDocument{}, Handoffs: reportArray(handoffs),
 	}
 	if len(paths)+len(handoffs) > 128 {
@@ -93,6 +101,10 @@ func (engine *Engine) loadRepositoryContext(paths []string, handoffs []repositor
 			return nil, []policy.Finding{contextDocumentFinding("context", fmt.Sprintf("selected context exceeds %d bytes", repository.MaximumContextDocumentSetBytes))}
 		}
 		context.DesignDocuments = append(context.DesignDocuments, document)
+	}
+	data, err := json.Marshal(resolution)
+	if err != nil || len(data)+bytes > repository.MaximumContextDocumentSetBytes {
+		return nil, []policy.Finding{contextDocumentFinding("context", "design context metadata exceeds the remaining byte boundary or cannot be serialized")}
 	}
 	return context, nil
 }

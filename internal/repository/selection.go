@@ -182,6 +182,15 @@ func directorySelectionFiles(repo Repository, directory string, files []string) 
 }
 
 func (repo Repository) moduleSelection(names []string) (Selection, error) {
+	return repo.moduleSelectionWithFiles(names, true)
+}
+
+func (repo Repository) DesignModuleSelection(names []string) (Selection, error) {
+	selection, err := repo.moduleSelectionWithFiles(names, false)
+	return repo.validatedSelection(selection, err)
+}
+
+func (repo Repository) moduleSelectionWithFiles(names []string, requireFiles bool) (Selection, error) {
 	if len(names) == 0 {
 		return Selection{}, errors.New("--module needs at least one declared module name")
 	}
@@ -208,7 +217,7 @@ func (repo Repository) moduleSelection(names []string) (Selection, error) {
 				matched = append(matched, path)
 			}
 		}
-		if len(matched) == 0 {
+		if requireFiles && len(matched) == 0 {
 			return Selection{}, fmt.Errorf("module selection has no governed files: %s", name)
 		}
 		expanded = append(expanded, matched...)

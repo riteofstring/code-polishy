@@ -574,8 +574,19 @@ func (repo Repository) ModuleNames(path string) []string {
 }
 
 func (repo Repository) DesignDocumentFindings() []policy.Finding {
+	return repo.designDocumentFindings(nil)
+}
+
+func (repo Repository) SelectedDesignDocumentFindings(paths []string) []policy.Finding {
+	return repo.designDocumentFindings(toSet(paths))
+}
+
+func (repo Repository) designDocumentFindings(selected map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, document := range repo.Config.Documentation.Design {
+		if selected != nil && !selected[document.Path] {
+			continue
+		}
 		if message := repo.designDocumentPathMessage(document.Path); message != "" {
 			findings = append(findings, designDocumentFinding(document.Path, message))
 		}
@@ -596,52 +607,13 @@ func (repo Repository) DesignDocumentFindings() []policy.Finding {
 }
 
 func (repo Repository) DesignDocumentsForFiles(paths []string) []string {
-	documents := map[string]bool{}
-	for _, path := range paths {
-		normalized, err := repo.NormalizePath(path)
-		if err != nil {
-			continue
-		}
-		if document, exists := repo.designDocumentForSource(normalized); exists {
-			documents[document.Path] = true
-			continue
-		}
-		for _, module := range repo.OwnerModuleNames(normalized) {
-			if document, exists := repo.designDocumentForModule(module); exists {
-				documents[document.Path] = true
-			}
-		}
-	}
-	return sortedSet(documents)
+	resolution, _ := repo.ResolveDesignContext(paths, nil)
+	return resolution.DocumentPaths()
 }
 
 func (repo Repository) DesignDocumentsForModules(modules []string) ([]string, error) {
-	selected := map[string]bool{}
-	for _, module := range modules {
-		if !repo.hasModule(module) {
-			return nil, fmt.Errorf("unknown module %q", module)
-		}
-		if selected[module] {
-			return nil, fmt.Errorf("module %q was specified more than once", module)
-		}
-		selected[module] = true
-	}
-	documents := map[string]bool{}
-	for _, document := range repo.Config.Documentation.Design {
-		if document.Module != "" && selected[document.Module] {
-			documents[document.Path] = true
-			continue
-		}
-		for _, sourcePath := range document.SourcePaths {
-			for _, module := range repo.OwnerModuleNames(sourcePath) {
-				if selected[module] {
-					documents[document.Path] = true
-					break
-				}
-			}
-		}
-	}
-	return sortedSet(documents), nil
+	resolution, err := repo.ResolveDesignContext(nil, modules)
+	return resolution.DocumentPaths(), err
 }
 
 func (repo Repository) designDocumentPathMessage(path string) string {
@@ -693,24 +665,6 @@ func (repo Repository) hasModule(name string) bool {
 		}
 	}
 	return false
-}
-
-func (repo Repository) designDocumentForSource(path string) (policy.DesignDocument, bool) {
-	for _, document := range repo.Config.Documentation.Design {
-		if slices.Contains(document.SourcePaths, path) {
-			return document, true
-		}
-	}
-	return policy.DesignDocument{}, false
-}
-
-func (repo Repository) designDocumentForModule(module string) (policy.DesignDocument, bool) {
-	for _, document := range repo.Config.Documentation.Design {
-		if document.Module == module {
-			return document, true
-		}
-	}
-	return policy.DesignDocument{}, false
 }
 
 func designDocumentFinding(subject, message string) policy.Finding {

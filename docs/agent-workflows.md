@@ -75,6 +75,16 @@ does not block routine work or require boilerplate. Keep mapped rationale
 current when the design changes; the maintainer need not request this upkeep
 in each task.
 
+Design-context explains each module or exact-source match and identifies
+unmapped selected paths and modules, including partial module coverage. Module
+guidance remains relevant when an additional source-specific document matches.
+The JSON report's `repositoryContext.designResolution` contains the complete
+matches, selection counts, and coverage gaps; the human output abbreviates long
+path lists. Task-start includes that same resolution and adds an action to
+consider missing rationale when gaps exist. Empty scope, unmapped work, and
+invalid selected documents are distinct outcomes. A lookup ignores unrelated
+stale documents; doctor validates the complete mapping inventory.
+
 The same context command selects relevant repository operational handoffs from
 `documentation.handoffs`. Read each selected procedure before its associated
 operation. Add an exact `--situation authentication`, `--situation release`, or

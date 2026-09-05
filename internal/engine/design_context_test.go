@@ -31,7 +31,7 @@ func TestDesignContextReturnsBoundedCurrentDocuments(t *testing.T) {
 		paths   []string
 	}{
 		{request: ContextRequest{Mode: "files", Files: []string{"src/model.go", "src/entry.go"}}, paths: []string{"docs/design/application.md", "docs/design/entry.md"}},
-		{request: ContextRequest{Mode: "files", Files: []string{"src/entry.go"}}, paths: []string{"docs/design/entry.md"}},
+		{request: ContextRequest{Mode: "files", Files: []string{"src/entry.go"}}, paths: []string{"docs/design/application.md", "docs/design/entry.md"}},
 		{request: ContextRequest{Modules: []string{"application"}}, paths: []string{"docs/design/application.md", "docs/design/entry.md"}},
 	} {
 		report, err := policyEngine.DesignContext(testCase.request)
