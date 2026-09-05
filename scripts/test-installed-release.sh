@@ -406,12 +406,15 @@ write_file "${go_only}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {"ownership": [], "suites": [
+  "tests": {"ownership": [
+      {"paths": ["internal/greeting/greeting_test.go"], "module": "greeting", "focusedSuite": "greeting-unit"}
+    ], "suites": [
       {
         "name": "greeting-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["greeting"],
+        "paths": ["internal/greeting/greeting_test.go"],
         "argv": ["./scripts/test.sh", "greeting"]
       },
       {

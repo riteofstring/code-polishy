@@ -98,6 +98,22 @@ EOF
   "state": "candidate"
 }
 
+EOF
+  "${real_git}" -C "${target}" add -A
+  "${real_git}" -C "${target}" commit --quiet -m "adopt Code Polishy"
+
+  command_log="${target}/.git/code-polishy-command-log"
+  : >"${command_log}"
+  expect_pass "${target}" "first-adoption merge gate" --verbose merge-gate --base main
+  grep -Fqx "MERGE POLICY LEVEL: FULL" "${output}" ||
+    fail "first-adoption: merge gate did not select full: $(excerpt)"
+  grep -Fq "first adoption: base configuration \".code-polishy.json\" is absent at ${base}" "${output}" ||
+    fail "first-adoption: merge gate omitted the unmanaged-base reason: $(excerpt)"
+  if ! grep -Fxq "build.sh" "${command_log}" || ! grep -Fxq "test.sh" "${command_log}"; then
+    fail "first-adoption: full gate omitted build or test evidence"
+  fi
+}
+
 exercise_adopted_design_context() {
   local target="$1" output="$2"
   local guidance_copy="${target}/.git/adopted-guidance"
@@ -122,20 +138,5 @@ exercise_adopted_design_context() {
     fail "first-adoption: context lookup changed canonical guidance"
   if [[ -s "${command_log}" ]]; then
     fail "first-adoption: context lookup executed repository commands"
-  fi
-}
-EOF
-  "${real_git}" -C "${target}" add -A
-  "${real_git}" -C "${target}" commit --quiet -m "adopt Code Polishy"
-
-  command_log="${target}/.git/code-polishy-command-log"
-  : >"${command_log}"
-  expect_pass "${target}" "first-adoption merge gate" --verbose merge-gate --base main
-  grep -Fqx "MERGE POLICY LEVEL: FULL" "${output}" ||
-    fail "first-adoption: merge gate did not select full: $(excerpt)"
-  grep -Fq "first adoption: base configuration \".code-polishy.json\" is absent at ${base}" "${output}" ||
-    fail "first-adoption: merge gate omitted the unmanaged-base reason: $(excerpt)"
-  if ! grep -Fxq "build.sh" "${command_log}" || ! grep -Fxq "test.sh" "${command_log}"; then
-    fail "first-adoption: full gate omitted build or test evidence"
   fi
 }

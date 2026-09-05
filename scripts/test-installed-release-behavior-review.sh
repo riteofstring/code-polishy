@@ -126,7 +126,9 @@ write_behavior_review_fixture_config() {
     }
   ],
   "tests": {
-    "ownership": [],
+    "ownership": [
+      {"paths": ["internal/greeting/greeting_test.go"], "module": "greeting", "focusedSuite": "greeting-contract"}
+    ],
     "suites": [
       {
         "name": "greeting-unit",
@@ -141,6 +143,7 @@ write_behavior_review_fixture_config() {
         "kind": "unit",
         "scope": "module",
         "modules": ["greeting"],
+        "paths": ["internal/greeting/greeting_test.go"],
         "argv": ["./scripts/test.sh", "greeting-contract"],
         "runOn": ["focused", "recommended", "full"]
       },
