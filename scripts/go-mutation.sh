@@ -28,6 +28,7 @@ if [[ -z "${mutation_go}" || ! -x "${mutation_go}" ]]; then
 fi
 mutation_go_directory="$(dirname "${mutation_go}")"
 export PATH="${mutation_go_directory}:${PATH}"
+export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-count=1"
 
 if ! git -C "${repo_root}" rev-parse --verify HEAD >/dev/null 2>&1; then
   echo "Go mutation requires a Git repository with at least one commit." >&2

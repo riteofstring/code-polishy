@@ -28,6 +28,7 @@ fixture_repo="${fixture_root}/repository"
 marker="${fixture_root}/gremlins-invoked"
 output="${fixture_root}/output"
 mkdir -p "${fixture_repo}/scripts" \
+  "${fixture_repo}/internal/sample" \
   "${fixture_repo}/.tools/bin" \
   "${fixture_repo}/.tools/go/${mutation_os}-${mutation_arch}/go/bin"
 cp "${policy_root}/scripts/go-mutation.sh" "${fixture_repo}/scripts/go-mutation.sh"
@@ -40,16 +41,45 @@ if [[ "${1:-}" == "list" && "${2:-}" == "-m" ]]; then
 elif [[ "${1:-}" == "list" ]]; then
   root="$(pwd -P)"
   printf '%s\n' "${root}/internal/sample/inactive_other.go" "${root}/internal/sample/inactive_other_test.go"
+elif [[ "${1:-}" == "test" ]]; then
+  exec "${GREMLINS_TEST_GO}" "$@"
 fi
 exit 0
 EOF
 chmod +x "${fixture_repo}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go"
+
+cat >"${fixture_repo}/go.mod" <<'EOF'
+module example.invalid/mutation-fixture
+
+go 1.26.0
+EOF
+cat >"${fixture_repo}/internal/sample/value.go" <<'EOF'
+package sample
+
+func Value() int { return 42 }
+EOF
+cat >"${fixture_repo}/internal/sample/value_test.go" <<'EOF'
+package sample
+
+import "testing"
+
+func TestValue(t *testing.T) {
+	if Value() != 42 {
+		t.Fatal("unexpected value")
+	}
+}
+EOF
 
 cat >"${fixture_repo}/.tools/bin/gremlins" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$1" == "--config" ]]
 [[ "$3" == "unleash" ]]
+test_output="$(go test -v ./internal/sample)"
+if [[ "${test_output}" == *"(cached)"* ]]; then
+  echo "Mutation baseline reused cached test results." >&2
+  exit 11
+fi
 [[ -L .tools ]]
 [[ "$(cd .tools && pwd -P)" == "$(cd "${GREMLINS_TEST_TOOLS}" && pwd -P)" ]]
 grep -qx 'unleash:' "$2"
@@ -82,7 +112,8 @@ git -C "${fixture_repo}" add scripts/go-mutation.sh
 git -C "${fixture_repo}" commit --quiet -m fixture
 
 status=0
-GREMLINS_TEST_MARKER="${marker}" \
+GREMLINS_TEST_GO="${policy_root}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go" \
+  GREMLINS_TEST_MARKER="${marker}" \
   GREMLINS_TEST_TOOLS="${fixture_repo}/.tools" \
   "${fixture_repo}/scripts/go-mutation.sh" ./internal/sample --timeout-coefficient 8 >"${output}" 2>&1 || status=$?
 [[ "${status}" == "10" ]] ||
