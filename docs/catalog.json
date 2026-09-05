@@ -18,6 +18,14 @@
       "public": true
     },
     {
+      "id": "adoption-command-history",
+      "path": "docs/history/adoption-command-evidence.md",
+      "title": "Recorded adoption command evidence",
+      "summary": "Historical command observations behind adoption regressions; not current workflow or setup instructions.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "agent-guidance-design",
       "path": "docs/design/agent-guidance.md",
       "title": "Canonical Agent Guidance Design",
@@ -95,6 +103,14 @@
       "public": true
     },
     {
+      "id": "design-context",
+      "path": "docs/design/design-context.md",
+      "title": "Design Context Resolution",
+      "summary": "Understand design-context ownership, mapping resolution, coverage, and reuse.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "exceptions",
       "path": "docs/policies/exceptions.md",
       "title": "Exception Policy",
@@ -111,11 +127,27 @@
       "public": true
     },
     {
+      "id": "historical-review-policy",
+      "path": "docs/design/historical-review-policy.md",
+      "title": "Historical Review Policy",
+      "summary": "Understand bounded historical configuration evidence and candidate policy authority.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "installation",
       "path": "docs/installation.md",
       "title": "Installation",
       "summary": "Install source, archive, or OCI releases and understand manifests, launchers, and repository locks.",
       "aliases": ["install"],
+      "public": true
+    },
+    {
+      "id": "installed-release-verification",
+      "path": "docs/design/installed-release-verification.md",
+      "title": "Installed Release Verification",
+      "summary": "Verify exact installed releases against disposable adopting repositories.",
+      "aliases": [],
       "public": true
     },
     {
@@ -147,6 +179,14 @@
       "path": "docs/policies/portability.md",
       "title": "Portability and External Inputs",
       "summary": "Declare separately owned inputs and keep repository behavior portable.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "python-contract-evidence",
+      "path": "docs/design/python-contract-evidence.md",
+      "title": "Python Contract Evidence",
+      "summary": "Understand Python dependency custody, semantic facts, and external contract evidence.",
       "aliases": [],
       "public": true
     },
