@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-git-evidence.schema.json",
+  "$defs": {
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyid", "sig"],
+      "properties": {
+        "keyid": {
+          "type": "string"
+        },
+        "sig": {
+          "type": "string"
+        }
+      }
+    },
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payloadType", "payload", "signatures"],
+      "properties": {
+        "payloadType": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "string"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signature"
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "record", "timestamp"],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "record": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ecosystem",
+        "name",
+        "version",
+        "repository",
+        "commit",
+        "subdirectory",
+        "treeSha256",
+        "observation"
+      ],
+      "properties": {
+        "ecosystem": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "subdirectory": {
+          "type": "string"
+        },
+        "treeSha256": {
+          "type": "string"
+        },
+        "observation": {
+          "$ref": "#/$defs/observation"
+        }
+      }
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sha256"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      }
+    },
+    "vulnerability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ecosystem",
+        "name",
+        "version",
+        "source",
+        "id",
+        "severity",
+        "knownExploited"
+      ],
+      "properties": {
+        "ecosystem": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "knownExploited": {
+          "type": "boolean"
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystem", "name", "version", "source", "expression"],
+      "properties": {
+        "ecosystem": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "expression": {
+          "type": "string"
+        }
+      }
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "target",
+        "completedAt",
+        "advisoryVersion",
+        "advisoryUpdated",
+        "scanner",
+        "vulnerabilities",
+        "licenses"
+      ],
+      "properties": {
+        "coverage": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "completedAt": {
+          "type": "string"
+        },
+        "advisoryVersion": {
+          "type": "string"
+        },
+        "advisoryUpdated": {
+          "type": "string"
+        },
+        "scanner": {
+          "$ref": "#/$defs/scanner"
+        },
+        "vulnerabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vulnerability"
+          }
+        },
+        "licenses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/license"
+          }
+        }
+      }
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "issuer",
+        "policySha256",
+        "scope",
+        "lockSha256",
+        "inventorySha256",
+        "issuedAt",
+        "expiresAt",
+        "subjects",
+        "scan"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "policySha256": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "lockSha256": {
+          "type": "string"
+        },
+        "inventorySha256": {
+          "type": "string"
+        },
+        "issuedAt": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string"
+        },
+        "subjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subject"
+          }
+        },
+        "scan": {
+          "$ref": "#/$defs/scan"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/envelope"
+    },
+    {
+      "$ref": "#/$defs/statement"
+    }
+  ]
+}

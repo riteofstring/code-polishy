@@ -1,82 +1,31 @@
 package behaviorreview
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"reflect"
-	"strings"
+
+	policyschema "github.com/riteofstring/code-polishy/schema"
 )
 
-type architectureJSONField struct {
-	typeOf   reflect.Type
-	optional bool
-}
+const architectureSchemaURL = policyschema.ConfigurationBase + "code-polishy-architecture-review.schema.json#/$defs/"
 
-func validateArchitectureJSONShape(data []byte, typeOf reflect.Type) error {
-	if typeOf.Kind() == reflect.Pointer {
-		typeOf = typeOf.Elem()
-	}
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return fmt.Errorf("null is not a structured architecture evidence value")
-	}
-	switch typeOf.Kind() {
-	case reflect.Struct:
-		return validateArchitectureJSONObject(data, typeOf)
-	case reflect.Slice:
-		var values []json.RawMessage
-		if err := json.Unmarshal(data, &values); err != nil {
-			return err
-		}
-		for _, value := range values {
-			if err := validateArchitectureJSONShape(value, typeOf.Elem()); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+var architecturePacketValidator = policyschema.NewValidator(architectureSchemaURL + "packet")
+var architectureBindingValidator = policyschema.NewValidator(architectureSchemaURL + "binding")
+var architectureReceiptValidator = policyschema.NewValidator(architectureSchemaURL + "receipt")
+var architectureResultValidator = policyschema.NewValidator(architectureSchemaURL + "result")
 
-func validateArchitectureJSONObject(data []byte, typeOf reflect.Type) error {
-	var values map[string]json.RawMessage
-	if err := json.Unmarshal(data, &values); err != nil {
-		return err
+func validateArchitectureJSON(data []byte, destination any) error {
+	var validator *policyschema.Validator
+	switch destination.(type) {
+	case *architecturePacket:
+		validator = architecturePacketValidator
+	case *architectureBinding:
+		validator = architectureBindingValidator
+	case *architectureReceipt:
+		validator = architectureReceiptValidator
+	case *ArchitectureReviewResult:
+		validator = architectureResultValidator
+	default:
+		return fmt.Errorf("unsupported architecture evidence document")
 	}
-	fields := architectureJSONFields(typeOf)
-	for name, value := range values {
-		field, exists := fields[name]
-		if !exists {
-			return fmt.Errorf("unknown JSON field %q", name)
-		}
-		if err := validateArchitectureJSONShape(value, field.typeOf); err != nil {
-			return fmt.Errorf("field %s: %w", name, err)
-		}
-	}
-	for name, field := range fields {
-		if _, exists := values[name]; !exists && !field.optional {
-			return fmt.Errorf("missing JSON field %q", name)
-		}
-	}
-	return nil
-}
-
-func architectureJSONFields(typeOf reflect.Type) map[string]architectureJSONField {
-	fields := map[string]architectureJSONField{}
-	for index := 0; index < typeOf.NumField(); index++ {
-		field := typeOf.Field(index)
-		if field.Anonymous {
-			for name, nested := range architectureJSONFields(field.Type) {
-				fields[name] = nested
-			}
-			continue
-		}
-		name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
-		if name == "" {
-			name = field.Name
-		}
-		if name != "-" {
-			fields[name] = architectureJSONField{typeOf: field.Type, optional: strings.Contains(options, "omitempty")}
-		}
-	}
-	return fields
+	return validator.Validate(data)
 }

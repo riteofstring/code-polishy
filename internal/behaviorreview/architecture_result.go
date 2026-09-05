@@ -1,15 +1,13 @@
 package behaviorreview
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	policyschema "github.com/riteofstring/code-polishy/schema"
 )
 
 func validateArchitectureResult(packet architecturePacket, data []byte) (ArchitectureReviewResult, error) {
@@ -182,51 +180,14 @@ func architectureArtifactData(value any, limit int) ([]byte, error) {
 }
 
 func decodeArchitectureArtifact(data []byte, value any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := architectureUniqueJSON(decoder, 0); err != nil {
+	if err := policyschema.ValidateUniqueJSON(data, 64); err != nil {
 		return fmt.Errorf("%w: %v", ErrArchitectureReview, err)
 	}
-	if _, err := decoder.Token(); err != io.EOF {
-		return fmt.Errorf("%w: trailing JSON content", ErrArchitectureReview)
-	}
-	if err := validateArchitectureJSONShape(data, reflect.TypeOf(value)); err != nil {
+	if err := validateArchitectureJSON(data, value); err != nil {
 		return fmt.Errorf("%w: %v", ErrArchitectureReview, err)
 	}
 	if err := decodeStrict(data, value); err != nil {
 		return fmt.Errorf("%w: %v", ErrArchitectureReview, err)
 	}
 	return nil
-}
-
-func architectureUniqueJSON(decoder *json.Decoder, depth int) error {
-	if depth > 64 {
-		return fmt.Errorf("JSON nesting exceeds 64 levels")
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, container := token.(json.Delim)
-	if !container {
-		return nil
-	}
-	seen := map[string]bool{}
-	for decoder.More() {
-		if delimiter == '{' {
-			key, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			name, ok := key.(string)
-			if !ok || seen[name] {
-				return fmt.Errorf("duplicate or invalid JSON object key")
-			}
-			seen[name] = true
-		}
-		if err := architectureUniqueJSON(decoder, depth+1); err != nil {
-			return err
-		}
-	}
-	_, err = decoder.Token()
-	return err
 }

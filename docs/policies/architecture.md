@@ -562,6 +562,13 @@ The harness saves the strict JSON result at the packet's result path and runs
 `finalize`. Empty evidence, invented citations, duplicate or unknown fields,
 findings, and changed candidate material cannot produce acceptance.
 
+The shipped `schema/code-polishy-architecture-review.schema.json` defines the
+packet, preparation binding, receipt, and result structures. Duplicate keys and
+nesting beyond 64 levels are rejected before object decoding. Schema resolution
+uses only shipped resources. Artifact byte limits, exact source and candidate
+bindings, topology identities, and citation validation remain independent of
+structural validation.
+
 Checkpoint and merge gates require acceptance for an unreviewed source graph
 or changed reviewed architecture. An unchanged accepted graph retains visible
 informational signals; acceptance is neither a generated waiver nor an

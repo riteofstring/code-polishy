@@ -82,7 +82,7 @@ func decodeGitEvidenceJSON(data []byte, destination any) error {
 	if len(data) == 0 || len(data) > maximumGitEvidenceBytes || !utf8.Valid(data) {
 		return gitEvidenceFailure("invalid", "Git evidence must be bounded UTF-8 JSON")
 	}
-	if err := validateGitEvidenceJSONKeys(data, destination); err != nil {
+	if err := validateGitEvidenceJSON(data, destination); err != nil {
 		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))

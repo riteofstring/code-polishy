@@ -16,3 +16,9 @@ var CodePolishyReport []byte
 
 //go:embed sarif-schema-2.1.0.json
 var SARIF210 []byte
+
+//go:embed code-polishy-git-evidence.schema.json
+var CodePolishyGitEvidence []byte
+
+//go:embed code-polishy-architecture-review.schema.json
+var CodePolishyArchitectureReview []byte

@@ -124,9 +124,13 @@ known exploitation is an explicit boolean. Every license result has
 duplicate coordinates fail coverage. A registry package sharing a Git
 dependency's claimed name and version does not prove the Git contents safe.
 
-Objects reject unknown, duplicate, missing, and case-variant keys. Arrays must
-be present and non-null. Each signed artifact and decoded payload is bounded
-to 4 MiB, with at most 1,024 Git subjects and 8,192 vulnerability or license
+The shipped `schema/code-polishy-git-evidence.schema.json` defines envelope and
+statement structure. Objects reject unknown, duplicate, missing, and
+case-variant keys. Duplicate-key and 16-level nesting checks run before object
+decoding; schema resolution reads only shipped resources. Signature, trust,
+identity, freshness, and complete inventory checks remain separate requirements.
+Arrays must be present and non-null. Each signed artifact and decoded payload
+is bounded to 4 MiB, with at most 1,024 Git subjects and 8,192 vulnerability or license
 results. The repository inventory is separately bounded to 512 lockfiles,
 16 MiB per lock, and 32 MiB in total.
 
