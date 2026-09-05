@@ -17,26 +17,16 @@ every operation that creates a tag, pushes, publishes, or changes a target lock.
    An exact already-passed gate executes no commands, and new gate identities
    may reuse only suite receipts whose complete inputs still match.
 
-3. Before a major version release (an increase in `MAJOR` in
-   `MAJOR.MINOR.PATCH`), run the full declared mutation suite inventory on the
-   stable candidate after the local full gate passes. First verify its harness:
+3. Mutation testing is optional for releases. Run it only when explicitly
+   requested by the caller or invoked by a checked-in event workflow; the
+   release version alone does not select it. When selected, verify the harness
+   first with `code-polishy test --suite mutation-wrapper-contract`.
 
-   ```sh
-   code-polishy test --suite mutation-wrapper-contract
-   ```
-
-   Run every declared mutation suite, without reusing a previous release's
-   mutation baseline. In this repository the mutation inventory is selected by:
-
-   ```sh
-   code-polishy test --supplemental
-   ```
-
-   For retries on that release candidate, use `test --supplemental --resume`
-   to run only missing, failed, expired, or invalidated suites. Fix findings
-   before release. Minor and patch releases do not select mutation hardening;
-   run it only if separately requested by the caller or a checked-in event
-   workflow. Other supplemental work requires its own explicit selection.
+   Use `code-polishy test --supplemental --resume` for the selected hardening
+   inventory. Run the complete set without a trusted baseline, after shared
+   mutation infrastructure, toolchain, or selection changes, or when impact
+   cannot be bounded. Otherwise rerun only missing, failed, expired, or
+   invalidated suites. Other supplemental work requires its own selection.
    Tagging, installation, lock updates, and push preparation do not invalidate
    unchanged evidence.
 
