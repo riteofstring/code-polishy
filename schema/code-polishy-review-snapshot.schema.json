@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-review-snapshot.schema.json",
+  "type": "object",
+  "required": ["version", "modules", "tests"],
+  "properties": {
+    "version": {
+      "const": 3
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "code-polishy.schema.json#/$defs/module"
+      }
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "tests": {
+          "$ref": "code-polishy.schema.json#/$defs/paths"
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": ["suites"],
+      "properties": {
+        "suites": {
+          "type": "array",
+          "items": {
+            "$ref": "code-polishy.schema.json#/$defs/testSuite"
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "behaviorReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultRequiredAt": {
+              "enum": ["on-request", "merge", "checkpoint"]
+            },
+            "features": {
+              "type": "array",
+              "maxItems": 128,
+              "items": {
+                "$ref": "#/$defs/feature"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "suites"],
+      "properties": {
+        "name": {
+          "$ref": "code-polishy.schema.json#/$defs/identifier"
+        },
+        "modules": {
+          "$ref": "code-polishy.schema.json#/$defs/identifierArray"
+        },
+        "paths": {
+          "$ref": "code-polishy.schema.json#/$defs/paths"
+        },
+        "suites": {
+          "$ref": "code-polishy.schema.json#/$defs/nonemptyIdentifierArray"
+        },
+        "requiredAt": {
+          "enum": ["merge", "checkpoint"]
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["modules"],
+          "properties": {
+            "modules": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "required": ["paths"],
+          "properties": {
+            "paths": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

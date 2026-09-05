@@ -220,7 +220,7 @@ func (engine *Engine) behaviorReviewConfigAt(base string) (behaviorReviewBaseCon
 	if !present {
 		return behaviorReviewBaseConfiguration{Config: policy.Config{}, Path: normalized, Present: false}, nil
 	}
-	config, err := policy.Parse(data, normalized)
+	config, err := policy.ParseReviewSnapshot(data, normalized)
 	if err != nil {
 		return behaviorReviewBaseConfiguration{}, fmt.Errorf("parse base configuration: %w", err)
 	}

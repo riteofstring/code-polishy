@@ -56,6 +56,14 @@
           "scripts/test-installed-release-contract.sh",
           "scripts/test-installed-release-architecture.sh"
         ]
+      },
+      {
+        "path": "docs/design/historical-review-policy.md",
+        "sourcePaths": [
+          "internal/policy/review_snapshot.go",
+          "internal/engine/behavior_review_decision.go",
+          "internal/engine/merge_gate.go"
+        ]
       }
     ]
   },
@@ -1333,7 +1341,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1342",
+      "subject": "1350",
       "reason": "The explicit suite and test-ownership inventory exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

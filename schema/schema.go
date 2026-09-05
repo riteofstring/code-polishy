@@ -22,3 +22,6 @@ var CodePolishyGitEvidence []byte
 
 //go:embed code-polishy-architecture-review.schema.json
 var CodePolishyArchitectureReview []byte
+
+//go:embed code-polishy-review-snapshot.schema.json
+var CodePolishyReviewSnapshot []byte
