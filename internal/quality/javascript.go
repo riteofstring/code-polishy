@@ -67,6 +67,10 @@ func JavaScriptFormatWrite(ctx context.Context, repo repository.Repository, file
 }
 
 func javascriptFormat(ctx context.Context, repo repository.Repository, files []string, write bool) []policy.Finding {
+	selected := javascriptFormatFiles(repo, files)
+	if len(selected) == 0 {
+		return javascriptFormatConfigFindings(repo, files)
+	}
 	governed, err := javascriptTarget(repo)
 	if err != nil {
 		return []policy.Finding{toolFinding("javascript-bundle", err.Error())}
@@ -75,10 +79,6 @@ func javascriptFormat(ctx context.Context, repo repository.Repository, files []s
 		return markdownFormat(ctx, repo, files, write)
 	}
 	findings := javascriptFormatConfigFindings(repo, files)
-	selected := javascriptFormatFiles(repo, files)
-	if write {
-		selected = editableJavaScriptFormatFiles(repo, selected)
-	}
 	return append(findings, runJavaScriptFormat(ctx, repo, selected, write)...)
 }
 
@@ -762,7 +762,7 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) {
 			continue
 		}
-		if repo.IsGenerated(path) && !repo.IsExecutableSource(path) {
+		if repo.IsGenerated(path) {
 			continue
 		}
 		if strings.HasSuffix(name, ".lock") || strings.Contains(name, "-lock.") {
@@ -771,16 +771,6 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 		selected = append(selected, path)
 	}
 	sort.Strings(selected)
-	return selected
-}
-
-func editableJavaScriptFormatFiles(repo repository.Repository, files []string) []string {
-	selected := []string{}
-	for _, path := range files {
-		if !repo.IsGenerated(path) && !repo.IsData(path) {
-			selected = append(selected, path)
-		}
-	}
 	return selected
 }
 
