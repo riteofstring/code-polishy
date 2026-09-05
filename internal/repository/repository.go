@@ -557,7 +557,8 @@ func (repo Repository) builtInLanguage(path string) string {
 }
 
 func (repo Repository) IsExecutableSource(path string) bool {
-	return len(repo.Languages(path)) > 0
+	extension := strings.ToLower(filepath.Ext(path))
+	return len(repo.Languages(path)) > 0 || extension == ".ps1" || extension == ".psm1"
 }
 
 func (repo Repository) ModuleNames(path string) []string {

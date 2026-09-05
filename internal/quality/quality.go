@@ -343,7 +343,9 @@ func inventoryModuleLanguages(repo repository.Repository, files []string) (map[s
 			findings = append(findings, policy.Finding{Check: "policy.moduleCoverage", Path: path, Subject: strings.Join(owners, ","), Message: "executable source belongs to more than one module"})
 			continue
 		}
-		languagesByModule[owners[0]][languages[0]] = true
+		for _, language := range languages {
+			languagesByModule[owners[0]][language] = true
+		}
 	}
 	return languagesByModule, findings
 }

@@ -79,6 +79,26 @@ func TestGoComplexityUsesProductionThreshold(t *testing.T) {
 	}
 }
 
+func TestPowerShellCoverageRequiresModuleOwnership(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"scripts/run.ps1", "scripts/module.psm1"} {
+		t.Run(path, func(t *testing.T) {
+			repo := qualityRepository(t)
+			repo.Config.Modules = []policy.Module{{Name: "tooling", Paths: []string{"scripts/**"}}}
+			repo.Config.ModuleByName = map[string]int{"tooling": 0}
+			writeQualityFile(t, repo.Root, path, "Write-Output 'ready'\n")
+			if findings := CoverageFindings(repo, []string{path}); len(findings) != 0 {
+				t.Fatalf("owned PowerShell script rejected: %+v", findings)
+			}
+			repo.Config.Modules = nil
+			repo.Config.ModuleByName = nil
+			if findings := CoverageFindings(repo, []string{path}); !findingChecks(findings)["policy.moduleCoverage"] {
+				t.Fatalf("unowned PowerShell script admitted: %+v", findings)
+			}
+		})
+	}
+}
+
 func TestCoverageRequiresAdaptersForUnknownLanguages(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)

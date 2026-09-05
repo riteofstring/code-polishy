@@ -51,6 +51,34 @@ func TestExplicitTestOwnerIsIndependentOfProductionPathOwnership(t *testing.T) {
 	}
 }
 
+func TestPowerShellTestOwnershipUsesDeclaredProductionOwner(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"scripts/test.ps1", "scripts/assertions.psm1", "scripts/TEST.PS1"} {
+		t.Run(path, func(t *testing.T) {
+			repo := ownershipRepository(t)
+			writeTestQualityFile(t, repo.Root, path, "param($value)\nif ($value -ne 'candidate') { throw 'Unexpected result' }\n")
+			repo.Config.Tests.Paths = []string{path}
+			repo.Config.Tests.Ownership = []policy.TestOwnership{{Paths: []string{path}, Module: "api", FocusedSuite: "api-unit"}}
+			for index := range repo.Config.Tests.Suites {
+				if repo.Config.Tests.Suites[index].Name == "api-unit" {
+					repo.Config.Tests.Suites[index].Paths = []string{path}
+				}
+			}
+			if findings := OwnershipFindings(repo, []string{path}); len(findings) != 0 {
+				t.Fatalf("PowerShell test ownership rejected: %+v", findings)
+			}
+			if owners := repo.OwnerModuleNames(path); len(owners) != 1 || owners[0] != "api" {
+				t.Fatalf("test owners = %v", owners)
+			}
+			repo.Config.Tests.Ownership = nil
+			findings := OwnershipFindings(repo, []string{path})
+			if len(findings) != 1 || findings[0].Subject != "unmapped" {
+				t.Fatalf("unowned PowerShell test admitted: %+v", findings)
+			}
+		})
+	}
+}
+
 func TestTestOwnershipCoverageRejectsInvalidExecutionAndSourceAssignments(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
