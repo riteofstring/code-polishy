@@ -13,7 +13,9 @@ creating symbol allowlists, distinguish requested evaluation scope from the
 broader context a sound analyzer must read, make generated-source failures
 safely repairable, and make every policy result directly usable by an automated
 coding agent. Surface relevant repository operational procedures through
-declarative handoffs while keeping managed agent guidance canonical.
+declarative handoffs while keeping managed agent guidance canonical. Let
+dependency review evaluate repairs to historical declarations and admit exact
+Git commits through verifiable evidence, including private dependencies.
 
 This plan follows v0.23.0. It must preserve the stricter parser, dependency,
 evidence, and publication boundaries delivered there. Before implementation,
@@ -41,7 +43,7 @@ the remaining delta instead of describing those capabilities as absent.
 | Test ownership          | Every governed test must resolve to one production module and be included by a quick focused suite.                                                                                                                                                   | Stop deriving ownership implicitly from production module paths. Declare the owner and primary focused suite directly and provide useful unmapped-test diagnostics.                                   |
 | Agent diagnostics       | Merge and checkpoint gates write JSON reports and bounded command logs.                                                                                                                                                                               | Make ordinary policy output summary-first and bounded, give every command a complete structured report, add SARIF and stable finding identities, and attach exact remediation and rerun instructions. |
 | Evaluation scope        | File selectors retain whole-package context for JavaScript and TypeScript checks whose result cannot be computed file by file.                                                                                                                        | Accept contained directory and module selectors, expose requested selection separately from analyzer context, and stop forcing agents to construct unbounded file argument lists.                     |
-| Generated remediation   | Generated executable source receives format validation and semantic checks while format writers correctly preserve generator-owned bytes.                                                                                                             | Bind each project-generated executable output to its source and producer, and never recommend a formatter command that is forbidden from rewriting the failing output.                                |
+| Generated remediation   | Generated executable source receives format validation and semantic checks while format writers correctly preserve generator-owned bytes.                                                                                                             | Exempt generated output from formatting and cosmetic style requirements, preserve security and reproducibility checks, and bind actionable findings to the exact source and producer.                 |
 | Python reachability     | v0.22 infers exact Pydantic import aliases, re-exports, local subclass chains, fields, `model_config`, validators, serializers, and computed fields. It also supports exact dynamic symbols and external attribute writes through typed parameters.   | Infer TypedDict literal-key reads, support exact external writes through typed locals and `self`, and prevent free-standing or generated symbol inventories from suppressing dead-code findings.      |
 | Capability discovery    | The locked release exposes exact documentation topics and configuration names, and behavior-review features bind paths, modules, suites, and enforcement boundaries.                                                                                  | Add repository-aware capability discovery, descriptions and exact aliases, visible intent/status confirmations, upgrade deltas, and one bounded task-start packet.                                    |
 
@@ -52,8 +54,8 @@ context. A generated TypeScript format finding instructed the agent to run
 `code-polishy format`; that command reported a clean pass while correctly
 leaving the generator-owned file untouched. The agent then searched unrelated
 installed releases for a formatter and created a temporary source/output
-synchronization script. v0.24 must make both paths unambiguous without weakening
-the underlying checks.
+synchronization script. v0.24 must make both paths unambiguous while preserving
+semantic, security, and reproducibility checks.
 
 A later v0.23 adoption exposed a third boundary: one Python project with more
 than 1,000 governed source files and more than 8 MiB of source could not cross
@@ -79,6 +81,21 @@ editing canonical managed `AGENTS.md`. A file-scoped invocation such as
 Python dead-code analysis. Preserve that invocation as a regression: explaining
 an expansion in a report does not make an unrelated analyzer applicable.
 
+Further dependency feedback reports that a historical Git tag prevents
+`dependency-review` from reaching a candidate that replaces it with a full
+commit pin. The current Python inventory applies the same strict source parser
+to both revisions, and the online lane emits unconditional Git vulnerability
+and release-age coverage failures. Generated JavaScript feedback also confirms
+that style validation and writer protection still disagree. Preserve these as
+regressions, with the generated-style exemption replacing the earlier proposal
+to keep generated formatting failures blocking.
+
+The same adoption reports JavaScript generated by a frontend into a Python
+package. Code Polishy accepts its declared source-package ownership but widens
+Knip's working directory to the repository root, where no `package.json`
+exists. Analysis must retain the declared JavaScript owner even when its
+outputs live outside that package's physical directory.
+
 v0.23 may improve any of these boundaries while this plan is waiting. Phase 0
 must delete or narrow any requirement that became redundant while retaining
 the observable outcome.
@@ -101,13 +118,24 @@ the observable outcome.
   path. Select applicable analyzers before expanding their context; the
   existence of a language elsewhere in the repository is not an applicability
   trigger.
+- An analyzer's filesystem read boundary is distinct from its execution
+  directory. Declared generated-source ownership determines the JavaScript
+  package context; out-of-package output does not invent a root package.
 - Rendering filters never alter evaluation scope, the complete report, or the
   process exit status.
 - Remediation uses repository and lockfile facts already available to the
   evaluation. It never queries for the newest dependency or silently edits,
   installs, upgrades, or executes lifecycle scripts.
-- Generated executable source remains governed and generator-owned. A format
-  writer never edits it, and a finding never names that writer as a remedy.
+- Historical dependency declarations are comparison facts. Strict pin and
+  admission policy applies to the complete candidate; a historical violation
+  cannot prevent review of its repair or removal.
+- An exact Git pin establishes identity, not security or age coverage. Public
+  and private commits can pass through verified, current evidence for that
+  exact source; unavailable evidence remains an actionable coverage failure.
+- Generated executable source remains governed and generator-owned, with
+  formatting and cosmetic style requirements exempted. Security, semantic,
+  provenance, and reproducibility checks remain applicable. A format writer
+  never edits generated output, and a finding never names it as a remedy.
 - CLI help, human summaries, machine reports, actions taken, and exit status
   describe the same command contract. A warning is counted, and a protected or
   otherwise skipped target is not described as successfully rewritten.
@@ -547,6 +575,41 @@ those checks from package context. An analyzer that was not selected cannot be
 reported as having passed. This classification introduces no baseline,
 exception, suppression, or weaker result for work that actually ran.
 
+### JavaScript package context for generated output
+
+Resolve JavaScript analysis from the same validated source-package ownership
+used by inventory and policy, including the existing
+`scope.generatedJavaScript` mapping. A frontend may own generated JavaScript
+inside a Python package without a repository-root `package.json`. Keep the
+source package, any authoritative workspace root, effective analyzer
+configuration, tool resolution, and declared or inferred entry points attached
+to that owner through selection, request construction, and execution.
+
+Run Knip from that package or its actual configured JavaScript workspace root.
+Never choose a common filesystem ancestor merely to enclose inherited outputs,
+and never fall back to the repository root when it has no owning package or
+workspace contract. The bounded repository read root may contain both source
+and output without becoming the execution directory. Preserve repository-
+relative finding paths across any analyzer-relative path translation.
+
+Carry generated outputs outside the package directory through the explicit
+ownership relation into the analyzer's governed project inputs. Do not change
+the working directory, silently drop those inputs, mark every generated file
+as an entry point, or suppress dead-code analysis to accommodate them. If an
+adapter cannot analyze the declared layout, report specific coverage and a
+supported remedy rather than accepting ownership and then reporting an
+unrelated missing-root-manifest failure.
+
+Partition independent package analyses by their actual owner/workspace, with
+each selected owner analyzed once. Missing, stale, ambiguous, escaping, or
+contradictory ownership fails before invoking Knip. Reports identify the
+source package, execution directory, selected inputs, inherited outputs, and
+context expansion reason; evidence identities include this resolved context.
+Style exemption for generated output does not alter required dead-code
+coverage or authorize a synthetic root manifest or package installation.
+
+### Evaluation selectors
+
 Make evaluation selectors usable without shell-generated path inventories:
 
 - every policy or format command that exposes `--files PATH...` accepts
@@ -617,14 +680,32 @@ output, a missing or multiply owned current output, a producer cycle, a broad
 escaping pattern, or a declaration with no possible output is a specific
 non-suppressible configuration finding.
 
-The ordinary `check`, `format`, and `doctor` commands never execute a declared
-producer. The mapping supplies ownership and safe remediation; it does not turn
-formatting into arbitrary repository-code execution. Any future command that
-runs a producer requires its own explicit execution contract and is outside
-this plan.
+Exempt generated output, including JavaScript and TypeScript, from formatting
+and other purely cosmetic style requirements in both validators and writers.
+Apply this at the shared source classification and rule-selection boundary so
+built-in checks, configured adapters, direct commands, and gates agree. Keep
+handwritten sources, generator implementations, and templates subject to their
+ordinary style requirements. A generated marker alone cannot exempt an
+unowned handwritten file; the validated producer contract remains required.
 
-When generated executable source fails format validation or another repairable
-source check, its finding identifies:
+Retain applicable parsing, semantic, architecture, security, dependency,
+provenance, and reproducibility checks on generated executable output. Split
+mixed style/security analyzers by rule or input where necessary; skipping an
+entire analyzer is invalid when it would lose required non-style coverage.
+Generated-output drift must still fail its declared verification workflow.
+Bind reproducibility evidence to the exact inputs, producer/toolchain and
+dependency identities, and output bytes; style exemption never makes stale or
+modified output reproducible.
+
+The ordinary `check`, `format`, and `doctor` commands never execute a declared
+producer merely because its mapping exists. Generation and reproducibility
+verification use explicitly selected commands or existing authorized test and
+event workflows. Discovery neither schedules those commands nor claims their
+verification passed. No new automatic producer-execution command is introduced
+by this plan.
+
+When generated executable source fails an applicable non-style check, its
+finding identifies:
 
 - the generator-owned output and exact failed rule;
 - the producer and authoritative input locations;
@@ -632,21 +713,21 @@ source check, its finding identifies:
 - the exact declared generation and verification commands; and
 - unavailable command or toolchain evidence when Code Polishy can establish it.
 
-A generated format failure uses a distinct remediation from a handwritten
-`quality.format` failure. It never says to run `code-polishy format`, because
+A generated-source finding never says to run `code-polishy format`, because
 that writer is forbidden from changing the output. If the producer cannot run,
-the remediation reports the blocked prerequisite and explicitly forbids a
-manual output edit or an unrelated formatter fallback.
+the remediation reports the blocked prerequisite and directs repair through
+the authoritative inputs and producer, without manual output edits or an
+unrelated formatter fallback.
 
 `format` continues to preserve generated bytes. Its summary counts explicitly
 selected generator-owned outputs as protected and untouched and names their
-producer. It applies the same read-only format validation used by `check` to
-those outputs: a nonconforming output returns the same generated-format finding
-and failing status, while a conforming output reports that it was validated but
-not rewritten. It never claims that an earlier generated-format finding was
-repaired merely because the writer skipped the file. A selection containing
-only protected outputs receives this specific validation result rather than
-`PASS ... without findings`.
+producer. It performs no style validation on those outputs and never claims
+they were rewritten or their security and reproducibility verified. A
+generated-only formatting selection succeeds with an explicit protected,
+style-exempt result and zero rewritten files, unless an independent applicable
+configuration or operational failure occurs. Human and machine summaries
+report the same result. `check` likewise emits no generated-format finding;
+its non-style findings and exit status remain authoritative.
 
 ## Canonical finding contract
 
@@ -864,6 +945,70 @@ the locked version is desirable. Vulnerability, release-age, license, and
 dependency-review checks continue to decide whether that existing version may
 be adopted as an exact declaration.
 
+## Dependency comparison and Git evidence
+
+### Historical inventory and candidate admission
+
+Separate syntactic dependency inventory from candidate admission policy.
+`dependency-review --base REF` must read historical manifests and locks that
+contain tags, branches, version ranges, or other previously accepted non-exact
+declarations without requiring them to satisfy current pin policy. Preserve
+their declared source and ref, plus any unambiguous recorded resolution, in the
+comparison; never resolve an old moving ref from today's network state or
+invent an exact historical commit.
+
+Keep bounded parsing, schema integrity, source containment, credential
+protection, and ambiguity checks on both inputs. Malformed or unreadable
+history produces a specific comparison-coverage failure. A syntactically valid
+historical non-exact pin alone cannot block comparison. This is a comparison
+input contract, not a compatibility mode for active repository configuration.
+
+Enforce strict exact pins, declaration/lock agreement, and all ordinary
+admission requirements on the complete candidate, including unchanged
+dependencies. Report a tag-to-commit repair as a source/ref change and a removal
+as a removal. A candidate that retains or introduces a tag, branch, abbreviated
+commit, or mismatched lock remains rejected. Inventory and comparison run no
+installation, lifecycle scripts, or repository-controlled code.
+
+### Verifiable Git commit evidence
+
+Replace unconditional Git coverage failures with an explicit evidence path for
+the exact resolved repository, full commit, and contained subdirectory where
+applicable. Define one bounded, versioned evidence contract with trusted
+issuer/provider identity, retrieval and expiry times, source/content identity,
+and the policy, scanner, and advisory-data versions used. Include the evidence
+identity in reports and reusable gate receipts. Changing the repository,
+commit, subdirectory, relevant policy, or evidence invalidates reuse.
+
+Provide verifiable vulnerability coverage for that commit and its resolved
+dependency inventory, with scan completeness and findings reported explicitly.
+A clean registry package with the same name or claimed version is insufficient
+unless evidence binds those exact contents to the Git source. An empty result
+from an unsupported scanner is unavailable coverage, not a clean scan.
+
+Define the Git age clock from an authenticated publication or trusted
+first-observed record for the exact commit. Apply the existing minimum-age
+policy to that record. Git author/committer timestamps, mutable tag dates, and
+self-declared timestamps alone cannot prove age. A young commit fails age
+policy; absent or unverifiable timing evidence fails age coverage. License,
+provenance, integrity, and transitive dependency checks remain required.
+
+Support public and private repositories through authenticated providers or
+verified evidence from an authorized private CI/scanner. Specify the supported
+providers and trust configuration in the shipped schema and documentation;
+include a working private-repository path in v0.24. Evidence is verified against
+configured trust, not accepted merely because it is a checked-in JSON file or
+has a content hash. Existing credential mechanisms supply access without
+embedding secrets in declarations, reports, receipts, or logs. Do not upload
+private source or identities to a public scanner implicitly.
+
+The online gate passes when required evidence is valid and policy passes. It
+must distinguish unavailable authentication, unsupported coverage, stale or
+invalid evidence, actual vulnerabilities, and insufficient age, with a concrete
+supported next action. It never silently waives coverage because a dependency
+is Git-based or private. Collection performs no dependency installation or
+lifecycle execution and uses the existing credential and workflow boundaries.
+
 ## Implementation boundaries
 
 - Extend the released parser and language-pack adapters to emit normalized
@@ -879,7 +1024,10 @@ be adopted as an exact declaration.
   Select analyzer applicability before context expansion, independently of
   unrelated ecosystem inventory.
 - Use the v0.23 runtime JSON Schema authority for the new test and report
-  contracts and for exact generated-source producer ownership.
+  contracts, Git evidence, and exact generated-source producer ownership.
+- Keep historical dependency reading separate from candidate admission in the
+  existing inventory boundary. Extend the supply-chain evidence lane for Git
+  commits; do not weaken candidate parsers or fork a second gate policy.
 - Extend the released batched Python AST facts and Vulture adapter for
   TypedDict, receiver-binding, and consumer evidence. Do not add another
   Python parser, dead-code analyzer, typechecker, or runtime dependency for
@@ -915,6 +1063,9 @@ be adopted as an exact declaration.
 5. Remove redundant work from this plan without weakening its outcomes.
 6. Freeze current exit codes, gate identities, report custody, and supported-
    platform behavior that the cutover must deliberately preserve or replace.
+7. Preserve the historical tag-to-commit repair, private Git evidence,
+   generated-style contradiction, and frontend-to-Python output layout as
+   observable regressions, recording the adopting release when known.
 
 ### Phase 1: Establish one finding and report model
 
@@ -933,6 +1084,9 @@ be adopted as an exact declaration.
 9. Implement and schema-test JSON and the selected single SARIF serializer.
 10. Fix scoped analyzer applicability, preserve required project context, and
     separate explicit repository-wide checks from file-scoped execution.
+11. Carry declared generated-JavaScript ownership into Knip package grouping,
+    working-directory selection, configuration, entry points, and evidence;
+    keep the repository read boundary separate from the execution directory.
 
 ### Phase 2: Enforce source-level cycles
 
@@ -998,15 +1152,21 @@ be adopted as an exact declaration.
    project-generated executable output in Code Polishy itself.
 2. Validate producer containment, ownership, staleness, command shape, and
    acyclic input/output relationships.
-3. Give generated format and semantic findings source-of-truth remediation,
-   exact generation and verification commands, and explicit blocked-toolchain
-   behavior without executing the producer.
+3. Exempt generated output from formatting and cosmetic style rules in checks
+   and writers, retain non-style and reproducibility coverage, and give
+   applicable findings source-of-truth remediation and exact producer commands.
 4. Give every remaining built-in finding an owned remediation and valid next
    command.
 5. Resolve exact direct versions from each authoritative lock scope.
 6. Add locked-version replacements and ambiguity evidence.
 7. Verify that suggestions never perform network resolution or bypass
    dependency review.
+8. Separate historical inventory from candidate pin enforcement and preserve
+   tag-to-commit, unchanged-invalid, and removal comparisons.
+9. Add authenticated Git security and age evidence, a working private-provider
+   path, bounded reports, and exact evidence identities for gate reuse.
+10. Verify Git dependency acceptance and actionable evidence failures end to
+    end without installing dependencies or executing lifecycle scripts.
 
 ### Phase 7: Surface capabilities and task routing
 
@@ -1163,6 +1323,18 @@ Selection and command-surface fixtures must prove:
 - selecting a Python source or applicable project input still runs its required
   project analysis, preserves strict contextual findings, and excludes
   unrelated projects;
+- a frontend package that generates JavaScript into a Python package passes
+  ownership validation and invokes the installed Knip adapter from its actual
+  JavaScript owner/workspace with no repository-root `package.json`;
+- that layout preserves the owner's tool/configuration resolution and entry
+  points, analyzes the declared out-of-package output, and reports real unused
+  code at the correct repository-relative path instead of a missing manifest;
+- changing the caller's working directory or adding an unrelated root manifest
+  cannot override the declared owner, and independent frontend owners retain
+  their separate analysis contexts without duplicate runs;
+- invalid ownership fails before Knip starts; an unsupported layout fails
+  explicit coverage without dropping generated input, fabricating entry points,
+  creating a root manifest, or installing a package;
 - explicit repository-wide selection and workflow-selected gates retain their
   full analyzer coverage, while focused Markdown checks retain the applicable
   managed-guidance and control/product-input rules;
@@ -1230,19 +1402,25 @@ Generated-source remediation fixtures must prove:
   with contained inputs and exact generation and verification commands;
 - missing, stale, overlapping, escaping, multiply owned, and cyclic producer
   declarations fail specifically and cannot be suppressed;
-- an unformatted generated TypeScript file remains a blocking format finding,
-  but its remediation names the producer and source-of-truth change and never
-  recommends `code-polishy format`;
-- explicit formatting of that generated file preserves its bytes, reports it as
-  protected and untouched, reruns read-only validation, and returns the same
-  failure rather than claiming the earlier finding was repaired;
+- generated JavaScript and TypeScript that differ from canonical formatting
+  produce no formatting or cosmetic style findings in direct checks or gates;
+- explicit formatting preserves generated bytes, reports them as protected and
+  style-exempt in human and machine output, and succeeds without claiming a
+  rewrite or non-style verification;
+- mixed generated/handwritten selections still enforce and fix handwritten
+  formatting, including generator and template sources;
+- generated security and semantic defects still fail their applicable checks,
+  including when style and security rules share an adapter;
+- stale or modified generated output fails the declared reproducibility
+  verification, and changing producer inputs or toolchain invalidates evidence;
 - ordinary checks, formatting, reporting, and doctor never execute the
   repository-controlled producer;
 - an unavailable producer or toolchain yields blocked-prerequisite remediation
   that forbids a manual generated-output edit and an unrelated installed
   formatter fallback; and
 - the exact v0.22 generated-contract adoption fixture no longer permits the
-  misleading check-fail, format-pass sequence.
+  misleading style-check-fail, protected-format-pass sequence, and a generated
+  marker cannot disguise an unowned handwritten file.
 
 Dependency-remediation fixtures must prove:
 
@@ -1254,6 +1432,32 @@ Dependency-remediation fixtures must prove:
 - no suggestion requests a latest version or performs network access; and
 - the suggested exact version still receives all ordinary vulnerability,
   release-age, license, and dependency-review checks.
+
+Dependency-comparison and Git-evidence fixtures must prove:
+
+- a historical tag in a Python manifest and `uv.lock` does not block review of
+  its exact-commit replacement; other supported historical branch/range inputs
+  retain their declared identities without resolving moving refs;
+- removal of a historical non-exact dependency is reviewable, while unchanged
+  or newly introduced non-exact candidate declarations and lock mismatches fail;
+- malformed, ambiguous, or unsafe history reports comparison coverage without
+  weakening candidate validation or inventing a historical commit;
+- public and private exact Git dependencies with trusted, complete security and
+  age evidence pass the online gate while retaining license and provenance
+  requirements;
+- vulnerable commits and verified commits below the minimum age fail for those
+  specific reasons, rather than unconditional Git coverage failures;
+- missing credentials, unsupported scanners, incomplete coverage, expired or
+  untrusted evidence, and absent age evidence produce distinct actionable
+  failures without a false clean result;
+- tampered evidence, a different repository/commit/subdirectory, self-reported
+  old Git timestamps, and unrelated registry results cannot satisfy the gate;
+- evidence or policy changes invalidate cached acceptance, secrets never enter
+  reports, and private source or identities are never implicitly sent publicly;
+  and
+- comparison and evidence collection execute no dependency installation,
+  lifecycle scripts, or repository-controlled code. Use deterministic provider
+  fixtures; live credentialed probes require their named external approval gate.
 
 The final candidate must also prove that old configuration fields, unbound
 Python reachability declarations, parameter-only external-write objects, and
@@ -1294,6 +1498,9 @@ complete release inventory and authenticated evidence.
   analyzer context and finding relation. Unrelated language analyzers never
   run merely because their ecosystem exists elsewhere in the repository;
   repository-wide checks have an explicit execution boundary.
+- JavaScript dead-code analysis honors the declared source-package owner for
+  generated output outside that package, including output in a Python package;
+  Knip's directory and package context remain valid without a root manifest.
 - Human output is bounded and summary-first; complete JSON reports always
   remain available.
 - Repository-aware capability discovery, exact feature aliases, visible intent
@@ -1309,9 +1516,15 @@ complete release inventory and authenticated evidence.
   evaluation into a green result.
 - Exact-version findings recommend the current unique locked version, never an
   unsolicited upgrade.
+- Dependency review accepts historical non-exact declarations as comparison
+  input while enforcing strict pins and admission on the complete candidate.
+- Exact public and private Git dependencies have a working authenticated path
+  through security and age checks, with specific failures for missing evidence
+  or violated policy and no automatic coverage waiver.
 - Every project-generated executable output has one exact producer, generated
-  bytes remain non-rewritable, and generated findings point only to the
-  authoritative source and producer workflow.
+  bytes remain non-rewritable and style-exempt, security and reproducibility
+  remain enforced, and generated findings point only to the authoritative
+  source and producer workflow.
 - CLI help, warning totals, protected-output summaries, reports, and exit
   statuses cannot contradict one another.
 - Every finding provides a precise remediation and the narrowest safe next
