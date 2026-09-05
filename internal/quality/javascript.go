@@ -492,6 +492,9 @@ func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository,
 	if !javascriptDeadCodeSelected(files) {
 		return findings
 	}
+	if ownership := repo.GeneratedJavaScriptOwnershipFindings(inventory); len(ownership) > 0 {
+		return append(findings, ownership...)
+	}
 	analyses, uncovered := javascriptDeadCodeAnalyses(repo, inventory)
 	for _, entry := range uncovered {
 		findings = append(findings, javascriptDeadCodeCoverageFinding(entry.path, entry.reason))
@@ -599,7 +602,10 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 		sort.Strings(workspace.Entry)
 		sort.Strings(workspace.Project)
 		sort.Strings(workspace.Inherited)
-		directory := javascriptDeadCodeDirectory(packages, root, workspace.Project)
+		directory := root
+		if len(workspace.Inherited) == 0 {
+			directory = javascriptOutermostPackage(packages, root)
+		}
 		trees[directory] = append(trees[directory], *workspace)
 	}
 	directories := make([]string, 0, len(trees))
@@ -616,19 +622,6 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 		analyses = append(analyses, javascriptDeadCodeAnalysis{directory: directory, workspaces: workspaces})
 	}
 	return analyses
-}
-
-func javascriptDeadCodeDirectory(packages map[string]bool, root string, paths []string) string {
-	directory := javascriptOutermostPackage(packages, root)
-	for _, path := range paths {
-		for !javascriptScopeOwns(directory, path) {
-			if directory == "." {
-				return directory
-			}
-			directory = filepath.ToSlash(filepath.Dir(directory))
-		}
-	}
-	return directory
 }
 
 func javascriptOutermostPackage(packages map[string]bool, root string) string {

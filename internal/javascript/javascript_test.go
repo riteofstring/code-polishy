@@ -636,6 +636,15 @@ func TestADeadCodeRequestRefusesAnIncompleteTree(t *testing.T) {
 		{"an uncontained entry point", ".",
 			[]DeadCodeWorkspace{{Root: ".", Entry: []string{"../a.ts"}, Project: []string{"a.ts"}}},
 			"outside"},
+		{"an escaping inherited output", "frontend",
+			[]DeadCodeWorkspace{{Root: "frontend", Project: []string{"../a.ts"}, Inherited: []string{"../a.ts"}}},
+			"invalid inherited"},
+		{"an inherited output outside the selection", "frontend",
+			[]DeadCodeWorkspace{{Root: "frontend", Project: []string{"frontend/a.ts"}, Inherited: []string{"python_pkg/generated.ts"}}},
+			"invalid inherited"},
+		{"a duplicated inherited output", "frontend",
+			[]DeadCodeWorkspace{{Root: "frontend", Project: []string{"python_pkg/generated.ts"}, Inherited: []string{"python_pkg/generated.ts", "python_pkg/generated.ts"}}},
+			"invalid inherited"},
 	}
 	for _, test := range tests {
 		_, err := bundle.DeadCode(context.Background(), "/target", test.directory, test.packages)

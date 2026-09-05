@@ -628,9 +628,17 @@ func TestGeneratedJavaScriptUsesItsSourcePackageDeadCodeWorkspace(t *testing.T) 
 		t.Fatalf("findings = %+v", findings)
 	}
 	requests := observedRequestLines(t, observed)
-	if len(requests) != 1 || !strings.Contains(requests[0], `"directory":"."`) ||
+	if len(requests) != 1 || !strings.Contains(requests[0], `"directory":"packages/app"`) ||
 		!strings.Contains(requests[0], `"root":"packages/app"`) || !strings.Contains(requests[0], `"generated/api.ts"`) {
 		t.Fatalf("requests = %v", requests)
+	}
+	writeQualityFile(t, repo.Root, "package.json", "{\"name\":\"unrelated-root\"}\n")
+	if findings := JavaScriptDeadCodeFindings(t.Context(), repo, []string{"generated/api.ts"}); len(findings) != 0 {
+		t.Fatalf("with unrelated root manifest: %+v", findings)
+	}
+	requests = observedRequestLines(t, observed)
+	if len(requests) != 2 || !strings.Contains(requests[1], `"directory":"packages/app"`) {
+		t.Fatalf("root manifest changed the declared source owner: %v", requests)
 	}
 }
 

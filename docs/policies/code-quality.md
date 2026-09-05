@@ -127,6 +127,13 @@ ownership. Missing, overlapping, non-generated, stale, or recursively generated
 owners are policy findings; a generated tree never needs a synthetic
 `package.json` or lockfile.
 
+Knip runs from the declared source package when it owns generated outputs,
+including outputs inside a Python package. Its repository read boundary can
+contain those outputs without becoming its execution directory. An unrelated
+root `package.json` cannot replace the declared owner. The same exact mapping
+assigns generated files and exports to their source workspace during analysis;
+it does not make them entry points or exempt them from dead-code checks.
+
 ## Source comments and docstrings
 
 `quality.allowComments` is a boolean and defaults to `true`. When it is omitted
@@ -471,7 +478,9 @@ surface, confuses tools and agents, and preserves superseded behavior.
   a link — reads as absent and the source only it reaches is reported as
   unreachable rather than kept alive by a tree the repository does not contain.
   Generated JavaScript declared through `scope.generatedJavaScript` participates
-  in its source package's same dead-code tree.
+  in its source package's same dead-code tree. That package remains the
+  execution context even when its generated output is outside the package
+  directory; filesystem ancestry alone cannot assign another owner.
 - Python dead-code analysis is Vulture `2.16` at the fixed 60% confidence
   threshold described above. Ruff `F` remains sealed lint only. Other languages
   need an explicit project command where a reliable tool is available.
