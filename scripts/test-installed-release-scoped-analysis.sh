@@ -102,4 +102,68 @@ assert not any("coverage" in item["ruleId"].lower() and "javascript" in item["ru
 PYTHON
   done
   expect_no_target_commands "${target}" "scoped installed checks"
+  exercise_context_selection_fixture "${fixture_root}" "${release}" "${output}"
+}
+
+exercise_context_selection_fixture() {
+  local fixture_root="$1" release="$2" output="$3" python target status index
+  local selected=()
+  target="${fixture_root}/context-selection"
+  python="$(installed_fixture_python "${release}")"
+  mkdir -p "${target}"
+  write_target_commands "${target}"
+  "${python}" -I -B - "${target}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+for directory, count in [("selected", 15), ("context", 26)]:
+    for index in range(count):
+        path = root / f"src/{directory}/value-{index}.js"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"export const value{index} = {index};\n")
+(root / "package.json").write_text(json.dumps({"name": "context-selection", "private": True, "type": "module", "packageManager": "pnpm@11.13.0"}))
+config = {
+    "version": 4, "project": {"kind": "application", "capabilities": []},
+    "scope": {"entryPoints": ["src/selected/**"]},
+    "modules": [{"name": "application", "paths": ["src/**"]}, {"name": "tooling", "paths": ["scripts/**"]}],
+    "checks": [
+        {"name": "build", "provides": ["build"], "modules": ["application", "tooling"], "argv": ["./scripts/build.sh"], "runOn": ["build"]},
+        {"name": "lock-sync", "provides": ["lock-sync"], "modules": ["application"], "argv": ["./scripts/test.sh", "lock"], "runOn": ["supply-chain"]},
+    ],
+    "tests": {"ownership": [], "suites": [
+        {"name": name + "-unit", "kind": "unit", "scope": "module", "modules": [name], "argv": ["./scripts/test.sh", name]}
+        for name in ["application", "tooling"]
+    ] + [{"name": "full", "kind": "integration", "scope": "repository", "argv": ["./scripts/test.sh", "all"], "runOn": ["full"]}]},
+    "exceptions": [],
+}
+(root / ".code-polishy.json").write_text(json.dumps(config, indent=2) + "\n")
+PY
+  seal_target "${target}"
+  for ((index = 0; index < 15; index++)); do
+    selected+=("src/selected/value-${index}.js")
+  done
+  status=0
+  run_policy "${target}" check --files "${selected[@]}" --filter-relation selected --format json || status=$?
+  [[ "${status}" == 1 ]] || fail "context selection lost its failure status: ${status}: $(excerpt)"
+  "${python}" -I -B - "${target}" "${output}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+view = json.loads(pathlib.Path(sys.argv[2]).read_text())
+complete = json.loads((root / view["reportPath"]).read_text())
+expected_selected = {f"src/selected/value-{index}.js" for index in range(15)}
+expected_context = {f"src/context/value-{index}.js" for index in range(26)}
+assert set(complete["requestedSelection"]["expanded"]) == expected_selected, complete["requestedSelection"]
+dead = [item for item in complete["findings"] if item["ruleId"] == "quality.deadCode"]
+assert len(dead) == 26 and {item["path"] for item in dead} == expected_context, complete["findings"]
+assert all(item["selectionRelation"] == "context" for item in dead), dead
+assert view["summary"] == complete["summary"] and view["summary"]["errors"] >= 26, view["summary"]
+assert not view["findings"], view["findings"]
+assert view["display"]["omitted"] >= 26, view["display"]
+PY
+  expect_no_target_commands "${target}" "context selection"
 }
