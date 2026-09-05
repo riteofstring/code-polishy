@@ -68,7 +68,7 @@
     ]
   },
   "verification": {
-    "finalGateOwner": "ci",
+    "finalGateOwner": "local",
     "mergeGate": {
       "recommendedModules": [
         "policy",

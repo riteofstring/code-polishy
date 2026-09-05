@@ -11,12 +11,11 @@ every operation that creates a tag, pushes, publishes, or changes a target lock.
    plans and obsolete docs. Use focused checks while editing; do not run a full
    gate against a changing worktree.
 
-2. Stop changing the candidate and run the full `code-polishy gate` locally.
-   This is required before every release, including minor and patch releases,
-   regardless of `verification.finalGateOwner`. A focused check, selected tests,
-   a reduced merge gate, or a CI result does not replace this local full gate.
-   Require a pass on the final candidate before tagging or publishing. Ubuntu,
-   macOS, and Windows CI must also pass for the same commit.
+2. Stop changing the candidate and complete its one ordinary final gate. Honor
+   `verification.finalGateOwner`: run locally for `local`, or retain the native
+   CI result for `ci`. Ubuntu, macOS, and Windows must pass for the same commit.
+   An exact already-passed gate executes no commands, and new gate identities
+   may reuse only suite receipts whose complete inputs still match.
 
 3. Before a major version release (an increase in `MAJOR` in
    `MAJOR.MINOR.PATCH`), run the full declared mutation suite inventory on the

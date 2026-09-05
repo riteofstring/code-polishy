@@ -9,14 +9,15 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Lead routine updates with the outcome in plain language; stay under 100 words
-  unless detail is requested or necessary. Omit file references, metrics,
-  implementation details, and raw output unless requested or decision-relevant.
+- Be succinct. For routine updates and summaries, lead with the outcome in plain
+  language and stay under 100 words unless the caller requests detail or
+  action/safety requires it. Omit file references, metrics, implementation
+  details, and raw output unless requested or decision-relevant.
 
 ## Implementation
 
-- Preserve unrelated work; avoid unrelated refactors. Fix root causes with the
-  smallest maintainable change.
+- Preserve unrelated user work and avoid unrelated refactors. Fix the root cause
+  with the smallest maintainable change.
 - Add backward compatibility, migrations, legacy support, or transitional code
   only when the caller explicitly requests it.
 - Before changing governed source, retrieve `code-polishy design-context` for
@@ -42,14 +43,15 @@
 - Give every module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
   pass-with-no-tests, and coverage-only tests; checked-in Gherkin must execute.
-- Run supplemental suites only when explicitly requested, invoked by a
-  checked-in event workflow, or selected by the version-matched release
-  checklist. Declarations, including
-  `tests.requiredSupplementalKinds`, never authorize execution.
-  Use `test --supplemental --resume` for retries; run all for major releases,
-  absent trusted evidence, shared infrastructure/toolchain/selection changes,
-  or unbounded impact. Credentialed, destructive, and live-provider probes
-  require a named external approval gate.
+- Run supplemental suites only when the caller explicitly requests them, a
+  checked-in event workflow invokes them, or the version-matched release
+  checklist selects them. Declarations, including
+  `tests.requiredSupplementalKinds`, never authorize execution. Exact reruns
+  record receipts. On a stable candidate, use `test --supplemental --resume` to
+  run only missing, failed, expired, or invalidated suites. Run all only without
+  a trusted baseline, after shared infrastructure, toolchain, or selection
+  changes, or when impact is unbounded. Credentialed, destructive, and
+  live-provider probes require a named external approval gate.
 
 ## Reviews and delivery
 
@@ -69,18 +71,15 @@
   gate will not immediately follow. Resolve the merge base from an explicit
   target, checked-in guidance, `origin/HEAD`, then `origin/main` or
   `origin/master`.
-- Ordinary delivery follows `verification.finalGateOwner`: run
-  `code-polishy merge-gate --base REF` locally or in CI. Duplicate only on
-  request. Exact passes execute nothing; resume only unchanged failures.
-- Every release requires a passing local full `code-polishy gate` on the final
-  candidate before tagging or publishing, regardless of `finalGateOwner`.
-  Required CI checks still apply.
-- Major version releases require all mutation suites on the stable candidate.
-  Minor and patch releases select them only on explicit caller or event-workflow
-  request.
+- Honor `verification.finalGateOwner`. Use `code-polishy merge-gate --base REF`
+  once, locally or in its checked-in CI workflow. Duplicate only when the caller
+  requests independent evidence.
+  An exact passed identity executes nothing. Resume only an unchanged failed
+  candidate. Summarize the result in plain language.
 - Commit task-owned progress at milestones, roughly every 1–2 hours of active
   editing on long tasks. Checkpoints may be unfinished or failing; record what
   remains and verification status. Do not wait for gates or API cutovers.
-- Before delivery, verify and commit task-owned changes unless an uncommitted
-  handoff is requested. Public cutovers must be coherent at merge or release.
-  Push, publish, and pull-request operations require explicit authorization.
+- Before delivery, complete required verification and commit remaining task-owned
+  changes unless the caller requests an uncommitted handoff. Public cutovers
+  must be coherent at merge or release. Exclude unrelated user work. Push,
+  publish, and pull-request operations require explicit caller authorization.
