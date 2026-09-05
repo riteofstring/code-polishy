@@ -1115,7 +1115,7 @@ func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, cand
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: review})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: review})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1178,8 +1178,8 @@ func featureBehaviorTestConfig() policy.Config {
 	config.Verification = policy.Verification{BehaviorReview: &policy.BehaviorReviewPolicy{
 		DefaultRequiredAt: policy.BehaviorReviewOnRequest,
 		Features: []policy.BehaviorReviewFeature{
-			{Name: "checkout", Modules: []string{"app"}, Suites: []string{"checkout-unit"}, RequiredAt: policy.BehaviorReviewMerge},
-			{Name: "search", Paths: []string{"app.txt"}, Suites: []string{"search-unit"}},
+			{Name: "checkout", Description: "Checkout completion and payment behavior.", Modules: []string{"app"}, Suites: []string{"checkout-unit"}, RequiredAt: policy.BehaviorReviewMerge},
+			{Name: "search", Description: "Search query and result behavior.", Paths: []string{"app.txt"}, Suites: []string{"search-unit"}},
 		},
 	}}
 	config.Tests.Suites = []policy.TestSuite{

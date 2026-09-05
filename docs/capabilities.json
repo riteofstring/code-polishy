@@ -1,0 +1,319 @@
+{
+  "protocol": "release-capabilities/v1",
+  "capabilities": [
+    {
+      "name": "agents",
+      "kind": "command",
+      "description": "Install or verify canonical managed agent guidance.",
+      "aliases": ["agent guidance"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "architecture",
+      "kind": "command",
+      "description": "Inspect dependency direction, source cycles, and test ownership.",
+      "aliases": ["dependency graph"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/policies/architecture.md"]
+    },
+    {
+      "name": "architecture-review",
+      "kind": "command",
+      "description": "Review concept ownership and dependency topology.",
+      "aliases": ["architecture acceptance"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/policies/architecture.md"]
+    },
+    {
+      "name": "artifact-security",
+      "kind": "command",
+      "description": "Verify security evidence for configured release artifacts.",
+      "aliases": ["artifact scanning"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "behavior-review",
+      "kind": "command",
+      "description": "Capture exact intent and verify requested behavior and final state.",
+      "aliases": ["behavior proof"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/policies/behavior-review.md"]
+    },
+    {
+      "name": "capabilities",
+      "kind": "command",
+      "description": "Discover release and repository capabilities without activating them.",
+      "aliases": ["capability discovery"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/capabilities.md", "docs/agent-workflows.md"]
+    },
+    {
+      "name": "change-boundary",
+      "kind": "command",
+      "description": "Inspect candidate changes against a trusted edit boundary.",
+      "aliases": ["edit boundary"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "check",
+      "kind": "command",
+      "description": "Evaluate selected source and applicable configured checks.",
+      "aliases": ["source checks"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "checkpoint-gate",
+      "kind": "command",
+      "description": "Verify a completed task and record exact checkpoint evidence.",
+      "aliases": ["checkpoint"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "dependency-review",
+      "kind": "command",
+      "description": "Review a candidate dependency graph before installation.",
+      "aliases": ["dependency admission"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "design-context",
+      "kind": "command",
+      "description": "Read current design documents and relevant operational handoffs.",
+      "aliases": ["operational handoffs"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/operational-handoffs.md"]
+    },
+    {
+      "name": "docs",
+      "kind": "command",
+      "description": "Find and read version-matched policy and workflow documents.",
+      "aliases": ["policy documentation"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "doctor",
+      "kind": "command",
+      "description": "Validate repository declarations, coverage, and tool availability.",
+      "aliases": ["configuration health"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "fix",
+      "kind": "command",
+      "description": "Apply governed formatting fixes to selected writable source.",
+      "aliases": ["apply formatting"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "format",
+      "kind": "command",
+      "description": "Format selected writable source with governed formatters.",
+      "aliases": ["format source"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "gate",
+      "kind": "command",
+      "description": "Run the ordinary repository validation workflow.",
+      "aliases": ["repository gate"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "list-files",
+      "kind": "command",
+      "description": "List the exact governed file selection.",
+      "aliases": ["file inventory"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "lock",
+      "kind": "command",
+      "description": "Atomically select an exact installed release.",
+      "aliases": ["upgrade lock"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md"]
+    },
+    {
+      "name": "merge-gate",
+      "kind": "command",
+      "description": "Verify the final candidate against its trusted merge target.",
+      "aliases": ["final verification"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "pack",
+      "kind": "command",
+      "description": "Install and verify exactly pinned language packs.",
+      "aliases": ["language packs"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "regression-proof",
+      "kind": "command",
+      "description": "Record an exact test failure before a change and pass afterward.",
+      "aliases": ["red green proof"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/policies/behavior-review.md"]
+    },
+    {
+      "name": "release-manifest",
+      "kind": "command",
+      "description": "Build and verify immutable release artifacts.",
+      "aliases": ["release artifacts"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md"]
+    },
+    {
+      "name": "supply-chain",
+      "kind": "command",
+      "description": "Inspect dependency versions, licenses, release age, and vulnerabilities.",
+      "aliases": ["dependency policy"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "task-start",
+      "kind": "command",
+      "description": "Validate task context and atomically capture the exact request in one packet.",
+      "aliases": ["task preparation"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": [
+        "docs/capabilities.md",
+        "docs/agent-workflows.md",
+        "docs/operational-handoffs.md"
+      ]
+    },
+    {
+      "name": "task-session",
+      "kind": "command",
+      "description": "Execute isolated work inside an explicit edit boundary.",
+      "aliases": ["isolated work"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "test",
+      "kind": "command",
+      "description": "Run explicitly selected or change-affected test suites.",
+      "aliases": ["test suites"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "test-levels",
+      "kind": "command",
+      "description": "Inspect available verification levels and their selected work.",
+      "aliases": ["verification levels"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "test-plan",
+      "kind": "command",
+      "description": "Inspect base-aware test selection without executing tests.",
+      "aliases": ["test selection"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "test-receipts",
+      "kind": "command",
+      "description": "Transfer authenticated reusable test evidence.",
+      "aliases": ["test evidence reuse"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "verify",
+      "kind": "command",
+      "description": "Run configured tests and source verification.",
+      "aliases": ["verify source"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "version",
+      "kind": "command",
+      "description": "Show the exact active release version.",
+      "aliases": ["release version"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md"]
+    }
+  ]
+}

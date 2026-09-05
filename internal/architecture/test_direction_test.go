@@ -20,14 +20,13 @@ func TestGoTestImportsDoNotCreateProductionDependencyEdges(t *testing.T) {
 	config := policy.Config{
 		Modules:      []policy.Module{{Name: "a", Paths: []string{"a/**"}}, {Name: "b", Paths: []string{"b/**"}}},
 		ModuleByName: map[string]int{"a": 0, "b": 1},
+		Tests:        policy.Testing{Ownership: []policy.TestOwnership{{Paths: []string{"a/a_test.go"}, Module: "b", FocusedSuite: "b-unit"}}},
 	}
 	repo := repository.Repository{Root: root, Config: config}
-	files := []string{"go.mod", "a/a.go", "a/a_test.go", "b/b.go"}
-	modules := repo.GoModules(files)
-	if findings := checkGoFile(repo, "a/a.go", files, modules); len(findings) != 1 {
+	if findings := Check(t.Context(), repo, []string{"a/a.go"}); len(findings) != 1 || findings[0].Check != "architecture.moduleDependency" {
 		t.Fatalf("production findings = %+v", findings)
 	}
-	if findings := checkGoFile(repo, "a/a_test.go", files, modules); len(findings) != 0 {
+	if findings := Check(t.Context(), repo, []string{"a/a_test.go"}); len(findings) != 0 {
 		t.Fatalf("test findings = %+v", findings)
 	}
 }

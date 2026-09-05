@@ -10,6 +10,27 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 
 ## Choose a workflow
 
+| Task                                   | First command                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| Read-only capability question          | `code-polishy capabilities --query "QUERY"`                                  |
+| Ordinary implementation                | `code-polishy task-start --intent-file PATH --module NAME`                   |
+| Explicit behavior-sensitive change     | `code-polishy task-start --intent-file PATH --module NAME --feature FEATURE` |
+| Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`                  |
+| Dependency change                      | `code-polishy docs read supply-chain`                                        |
+| Release or upgrade                     | `code-polishy docs read release-checklist`                                   |
+| Final delivery                         | `code-polishy behavior-review status --base REVIEW_BASE`                     |
+
+Use one file or directory operand with `--files PATH` instead of `--module NAME`
+when that identifies the task scope. A successful `task-start` already captures
+the request and returns its current design context and operational handoffs;
+read that packet before editing and do not recapture the same request through
+the component command. The first command does not replace selected reviews or
+event-required verification. Read-only
+questions require no capture or tests. For delivery, follow the status and
+the configured final-gate owner. Capability queries identify candidates only;
+explicit feature operands require the caller's intended canonical name or
+exact declared alias. See [Capability Discovery](capabilities.md).
+
 Ordinary interactive work may use the caller's current checkout. The primary
 agent owns task decomposition, subagent delegation, integration, and
 verification.
@@ -20,11 +41,60 @@ allowed module and exact artifact path before the worker starts.
 
 ## Interactive work
 
+When adopting Code Polishy or restructuring architecture, capture the request
+and read its current design context before drafting the proposed module graph
+and current ownership in `.code-polishy.json`. Commit the
+candidate, then use `code-polishy architecture-review prepare --base REVIEW_BASE`
+before broad source moves or rewrites. Give only its packet to a clean-context
+reviewer, resolve findings, and finalize the accepted result. Avoid changes
+whose main effect is replacing one deep file with forwarding-only files. A
+later topology or ownership change requires another review; delivery validates
+that the candidate retains its reviewed graph. See the
+[Architecture Policy](policies/architecture.md#architecture-review-workflow).
+
 Before changing governed source, run `code-polishy design-context --files` with
 the exact planned paths, or `code-polishy design-context --module` with the
 selected modules. Read only the returned current design documents. The command
 does not select plans, historical evidence, or superseded decisions; open those
 only when the task specifically requires them.
+
+Retrieve context once for the planned scope. Context already supplied by
+`task-start` for that scope satisfies this requirement. Reuse what you have
+read until the scope, design mappings, or relevant document contents change.
+Another edit, test run, status request, or commit does not require another
+lookup. Refresh the affected context when changing those inputs.
+
+If no useful rationale is mapped, inspect the selected module boundaries and
+existing current documentation. During adoption or changes to ownership,
+invariants, dependency direction, or consequential tradeoffs, create or update
+the relevant repository-owned rationale and its `documentation.design`
+mapping as part of the work. Explain decisions that source cannot readily
+convey; do not invent decisions or manufacture a document for every module.
+Shared guidance is appropriate for shared constraints. An empty mapping alone
+does not block routine work or require boilerplate. Keep mapped rationale
+current when the design changes; the maintainer need not request this upkeep
+in each task.
+
+Design-context explains each module or exact-source match and identifies
+unmapped selected paths and modules, including partial module coverage. Module
+guidance remains relevant when an additional source-specific document matches.
+The JSON report's `repositoryContext.designResolution` contains the complete
+matches, selection counts, and coverage gaps; the human output abbreviates long
+path lists. Task-start includes that same resolution and adds an action to
+consider missing rationale when gaps exist. Empty scope, unmapped work, and
+invalid selected documents are distinct outcomes. A lookup ignores unrelated
+stale documents; doctor validates the complete mapping inventory.
+
+The same context command selects relevant repository operational handoffs from
+`documentation.handoffs`. Read each selected procedure before its associated
+operation. Add an exact `--situation authentication`, `--situation release`, or
+`--situation deployment` when that operational situation applies; repositories
+may declare other exact identifiers. File and module triggers select matching
+handoffs automatically. Context lists their paths and selection reasons, while
+`--format json` includes their bounded contents and SHA-256 identities. An
+invalid selected handoff blocks context composition. Discovery does not execute
+procedure commands, obtain credentials, or grant approval. Keep managed
+`AGENTS.md` canonical; see [Operational Handoffs](operational-handoffs.md).
 
 Before implementing a non-documentation request, have the harness save the
 user's original request and supplied acceptance criteria to a bounded UTF-8
@@ -37,6 +107,11 @@ code-polishy behavior-review capture-intent --intent-file PATH
 Code Polishy copies that text into its managed journal. If implementation has
 already started without a capture at the task base, stop and report the missing
 boundary instead of writing a new summary of the request.
+
+`task-start --intent-file PATH` with one file, directory, or module selector
+performs this same capture after validating its complete bounded context
+packet. Use either capture entry point once for each exact request or later
+correction; see [Capability Discovery](capabilities.md#start-a-task).
 
 An upgrade has one explicit authority transition. The outgoing locked release
 and its installed guidance govern until the exact verified incoming release's
@@ -65,9 +140,10 @@ Choose verification from the event that actually changed risk:
 | Final candidate                                           | One base-aware merge gate, owned locally or by CI |
 | Stable release candidate                                  | Only explicitly selected supplemental suites      |
 
-Use the first applicable row. Repository operations and delivery requests are
-not checkpoints by themselves. A conflict resolution is a new change only for
-the files edited to resolve it; a prose-only conflict stays documentation-only.
+Use the first applicable row. Making a progress commit does not itself select
+tests, a review, or a checkpoint gate. A conflict resolution is a new change
+only for the files edited to resolve it; a prose-only conflict stays
+documentation-only.
 Do not run `test --changed` immediately before a final merge gate over the same
 candidate because the gate already selects changed-impact tests.
 
@@ -145,10 +221,27 @@ code-polishy test-receipts import \
 The bundle composes exact evidence; it does not aggregate partial shards or
 turn an incompatible receipt into a pass.
 
-Commit all completed task-owned changes after required verification unless the
-caller explicitly requests an uncommitted handoff. Keep each commit coherent
-and free of unrelated user work. Push, publish, and pull-request operations
-require the caller's explicit authorization.
+Commit task-owned progress at meaningful milestones, such as finishing a
+subtask or reaching a useful stopping point before switching focus. During
+long tasks, aim for a checkpoint roughly every one to two hours of active
+editing. Use judgment about the boundary; do not create a commit for every
+small edit or let hours of accumulated changes wait for the entire goal to
+finish.
+
+A progress commit may contain unfinished work or known failures. State what it
+captures, what remains, and which checks passed, failed, or have not run in its
+message. Commit related work together and exclude unrelated user changes.
+Verification follows the events above; a progress commit does not require a
+new test run, a clean full suite, a review, or a gate. Continue any verification
+already required by the work. The checkpoint gate applies when a code-changing
+task is complete, not to every progress commit within that task.
+
+Atomic public API cutovers must be coherent at merge or release. Intermediate
+branch commits may record incomplete implementation without adding temporary
+compatibility code merely to make each checkpoint complete. Before final
+delivery, finish required verification and commit remaining task-owned changes
+unless the caller explicitly requests an uncommitted handoff. Push, publish,
+and pull-request operations require the caller's explicit authorization.
 
 ## Agent reviews
 

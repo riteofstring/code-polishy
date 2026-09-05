@@ -16,6 +16,8 @@ const exampleDigest = "111111111111111111111111111111111111111111111111111111111
 const otherDigest = "2222222222222222222222222222222222222222222222222222222222222222"
 const exampleRevision = "0123456789abcdef0123456789abcdef01234567"
 
+const fixtureCapabilityCatalog = `{"protocol":"release-capabilities/v1","capabilities":[{"name":"check","kind":"command","description":"Check selected source.","aliases":["source validation"],"paths":[],"modules":[],"enforcement":["explicit"],"workflows":["docs/agent-workflows.md"]}]}`
+
 func installedRelease(t *testing.T, files, links map[string]string) (string, Manifest) {
 	t.Helper()
 	host, err := Host()
@@ -26,6 +28,12 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 	files = maps.Clone(files)
 	if files == nil {
 		files = map[string]string{}
+	}
+	if _, present := files[CapabilityCatalogPath]; !present && links[CapabilityCatalogPath] == "" {
+		files[CapabilityCatalogPath] = fixtureCapabilityCatalog
+	}
+	if _, present := files["docs/agent-workflows.md"]; !present {
+		files["docs/agent-workflows.md"] = "# Agent workflows\n\nRead the locked policy before changing source.\n"
 	}
 	files[".tools/javascript/bundle/node_modules/.package-map.json"] = `{"packages":{".":{"url":"..","dependencies":{"fixture":"fixture@1.0.0"}},"fixture@1.0.0":{"url":"./fixture","dependencies":{"fixture":"fixture@1.0.0"}}}}`
 	files["tools/javascript_bundle_inventory.txt"] = "fixture@1.0.0\tMIT\n"
@@ -61,6 +69,7 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 			Ty: "0.0.65", Vulture: "2.16",
 		},
 		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
+		CapabilityCatalogSHA256: capabilityContentSHA256([]byte(files[CapabilityCatalogPath])),
 	}
 	manifest.ReleaseDigest = manifest.Identity()
 	if err := os.WriteFile(filepath.Join(directory, ManifestFilename), render(t, manifest), 0o644); err != nil {

@@ -221,6 +221,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native sealed JavaScript platform contract failed.' }
           & $go test -count=1 ./internal/architecture -run '^TestRuffGraphFactsAreVersionedBoundedAndPathNormalized$'
           if ($LASTEXITCODE -ne 0) { throw 'Native Ruff graph adapter contract failed.' }
+          & $go test -count=1 ./internal/architecture/sourcegraph
+          if ($LASTEXITCODE -ne 0) { throw 'Native source graph and cycle contracts failed.' }
+          & $go test -count=1 ./internal/pythonfacts
+          if ($LASTEXITCODE -ne 0) { throw 'Native Python semantics and partition contracts failed.' }
           & $go test -count=1 ./internal/repository -run '^TestDetachedWorktreeSupportsLongCheckoutPaths$'
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows Git worktree contract failed.' }
           & $go test -count=1 ./internal/gaterun
@@ -273,7 +277,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $target 'scripts') | Out-Null
           @'
           {
-            "version": 3,
+            "version": 4,
             "project": {"kind": "application", "capabilities": []},
             "scope": {"development": ["scripts/test.ps1"]},
             "quality": {},
@@ -287,7 +291,7 @@ jobs:
               "behaviorReview": {
                 "defaultRequiredAt": "on-request",
                 "features": [
-                  {"name": "windows-state", "modules": ["application"], "suites": ["application-focused"]}
+                  {"name": "windows-state", "description": "The native application state remains directly observable through its boundary suite.", "modules": ["application"], "suites": ["application-focused"]}
                 ]
               }
             },
@@ -295,9 +299,9 @@ jobs:
               {"name": "application-build", "provides": ["build"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"], "modules": ["application"], "runOn": ["build"]},
               {"name": "tooling-build", "provides": ["build"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"], "modules": ["tooling"], "runOn": ["build"]}
             ],
-            "tests": {"suites": [
-              {"name": "application-focused", "kind": "unit", "scope": "module", "modules": ["application"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"]},
-              {"name": "tooling-focused", "kind": "unit", "scope": "module", "modules": ["tooling"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"]},
+            "tests": {"paths": ["scripts/test.ps1"], "ownership": [{"paths": ["scripts/test.ps1"], "module": "application", "focusedSuite": "application-focused"}], "suites": [
+              {"name": "application-focused", "kind": "unit", "scope": "module", "modules": ["application"], "paths": ["scripts/test.ps1"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"]},
+              {"name": "tooling-focused", "kind": "unit", "scope": "module", "modules": ["tooling"], "paths": ["scripts/test.ps1"], "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"]},
               {"name": "full", "kind": "integration", "scope": "repository", "cost": "standard", "argv": ["pwsh", "-NoProfile", "-NonInteractive", "-File", "./scripts/test.ps1"], "runOn": ["recommended", "full"]}
             ]},
             "supplyChain": {},

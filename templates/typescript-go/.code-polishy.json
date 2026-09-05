@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "project": {
     "kind": "application",
     "capabilities": ["backend", "frontend", "ui", "visual"]
@@ -45,6 +45,7 @@
     }
   ],
   "tests": {
+    "ownership": [],
     "requiredKinds": ["unit", "integration", "browser", "visual"],
     "suites": [
       {

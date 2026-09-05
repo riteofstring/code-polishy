@@ -36,6 +36,7 @@ func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inv
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ruff", Message: "conditional Python policy requires the Ruff version tools/ruff-version.txt pins; run ./tools/install-policy-tools.sh"})
 	}
 	modules := modulesForPythonFiles(repo, project.Files)
+	inputs := append(slices.Clone(project.Files), project.Manifest)
 	suffix := safeName(active.Root)
 	checkArguments := append([]string{ruff, "format"}, ruffOptions...)
 	checkArguments = append(checkArguments, "--check", "--")
@@ -44,12 +45,12 @@ func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inv
 	resolution.Commands = append(resolution.Commands,
 		policy.Command{
 			Name: "policy-ruff-format-" + suffix, Provides: []string{"format"},
-			Argv: checkArguments, Cwd: active.Root, Paths: project.Files, Modules: modules,
+			Argv: checkArguments, Cwd: active.Root, Paths: inputs, Modules: modules,
 			RunOn: []string{"check", "gate"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: project.Files,
 		},
 		policy.Command{
 			Name: "policy-ruff-write-" + suffix, Provides: []string{"format"},
-			Argv: writeArguments, Cwd: active.Root, Paths: project.Files, Modules: modules,
+			Argv: writeArguments, Cwd: active.Root, Paths: inputs, Modules: modules,
 			RunOn: []string{"format"}, TimeoutSeconds: 300, Managed: true, PassFiles: true, PassFilePaths: project.Files,
 		},
 	)
@@ -141,7 +142,7 @@ func pythonProjectAtRoot(inventory repository.PythonProjectInventory, root strin
 func modulesForPythonFiles(repo repository.Repository, files []string) []string {
 	modules := []string{}
 	for _, path := range files {
-		modules = append(modules, repo.ModuleNames(path)...)
+		modules = append(modules, repo.OwnerModuleNames(path)...)
 	}
 	sort.Strings(modules)
 	return slices.Compact(modules)

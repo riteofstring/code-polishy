@@ -181,7 +181,7 @@ func pythonQualityRuffLintFindings(repo repository.Repository, project pythonQua
 	if baseline && !pythonRuffBaselineDiagnostics(diagnostics) {
 		return pythonQualityCoverage(project.sources, "quality.lintCoverage", "ruff", "the isolated Ruff baseline emitted a diagnostic outside "+pythonRuffBaselineSelection)
 	}
-	return pythonRuffDiagnosticFindings(diagnostics, "quality.lint")
+	return pythonRuffDiagnosticFindings(pythonStyleFilteredDiagnostics(repo, diagnostics), "quality.lint")
 }
 
 func pythonQualityRuffComplexityFindings(repo repository.Repository, project pythonQualityProject, output []byte) []policy.Finding {
@@ -235,19 +235,19 @@ func pythonQualityCommands(repo repository.Repository, selected []string) []poli
 func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQualityPlan {
 	sources := pythonQualitySources(repo, selected)
 	selectedManifests := pythonQualitySelectedManifests(repo, selected)
-	if len(sources) == 0 && len(repo.Config.Scope.PythonDynamicReferences) == 0 && len(repo.Config.Scope.PythonExternalAttributes) == 0 && len(selectedManifests) == 0 {
+	if len(sources) == 0 && len(selectedManifests) == 0 {
 		return pythonQualityPlan{}
 	}
 	allFiles, err := repo.AllFiles()
 	if err != nil {
 		message := "the Python project inventory is unavailable: " + err.Error()
 		findings := pythonQualityAllCoverage(sources, message)
-		findings = append(findings, pythonQualityDynamicReferenceInventoryFindings(repo, message)...)
-		findings = append(findings, pythonQualityExternalAttributeInventoryFindings(repo, message)...)
+		findings = append(findings, pythonQualityDynamicReferenceInventoryFindings(repo, selectedManifests, message)...)
+		findings = append(findings, pythonQualityExternalAttributeInventoryFindings(repo, selectedManifests, message)...)
 		return pythonQualityPlan{findings: findings}
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
-	findings, invalid, invalidProjects := pythonQualityInventoryFindings(repo, sources, selectedManifests, inventory)
+	findings, invalid, invalidProjects := pythonQualityInventoryFindings(sources, selectedManifests, inventory)
 	projects, owners := pythonQualityProjectOwners(inventory)
 	selectedByProject, ownershipFindings := pythonQualitySelectedProjects(sources, invalid, owners)
 	findings = append(findings, ownershipFindings...)
@@ -396,7 +396,7 @@ func pythonQualityProjectPath(project repository.PythonProject, source string) (
 func pythonQualityModules(repo repository.Repository, sources []string) []string {
 	modules := []string{}
 	for _, source := range sources {
-		modules = append(modules, repo.ModuleNames(source)...)
+		modules = append(modules, repo.OwnerModuleNames(source)...)
 	}
 	sort.Strings(modules)
 	return slices.Compact(modules)

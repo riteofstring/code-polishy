@@ -17,7 +17,7 @@ func TestReusableSuiteRequiresBoundedExecutionCapabilities(t *testing.T) {
 
 func TestReusableAggregateCannotReplaceUnboundedSuite(t *testing.T) {
 	t.Parallel()
-	configured := strings.Replace(minimalConfig(), `"tests":{"suites":[`, `"tests":{"suites":[
+	configured := strings.Replace(minimalConfig(), `"suites":[`, `"suites":[
     {"name":"aggregate","kind":"unit","scope":"repository","reusable":true,"argv":["go","test","./..."],"covers":["content-test"]},`, 1)
 	if _, err := Load(writeConfig(t, configured), ""); err == nil || !strings.Contains(err.Error(), "cannot satisfy an unbounded suite") {
 		t.Fatalf("reusable aggregate error = %v", err)

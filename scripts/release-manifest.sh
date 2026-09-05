@@ -21,7 +21,7 @@ set -euo pipefail
 
 
 release_manifest_name="release-manifest.json"
-release_manifest_version=5
+release_manifest_version=6
 
 
 
@@ -211,6 +211,23 @@ content_digest="$(printf '%s\n' "${entries}" |
   LC_ALL=C "${release_digest_command[@]}" | awk '{print $1}')"
 entry_count="$(printf '%s\n' "${entries}" | wc -l | tr -d '[:space:]')"
 
+catalog_path="${release_dir}/docs/capabilities.json"
+if [[ -L "${release_dir}/docs" || -L "${catalog_path}" || ! -f "${catalog_path}" ]]; then
+  echo "The release requires a regular docs/capabilities.json with no symbolic-link parent." >&2
+  exit 1
+fi
+catalog_bytes="$(wc -c <"${catalog_path}" | tr -d '[:space:]')"
+if ((catalog_bytes == 0 || catalog_bytes > 1048576)); then
+  echo "The release capability catalog must contain between 1 and 1048576 bytes." >&2
+  exit 1
+fi
+capability_catalog_sha256="$(printf '%s\n' "${entries}" |
+  awk -F '\t' '$1 == "./docs/capabilities.json" { print $2 }')"
+if [[ ! "${capability_catalog_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "The release capability catalog requires one regular manifest entry." >&2
+  exit 1
+fi
+
 
 
 
@@ -245,6 +262,7 @@ release_identity() {
   printf 'manifestVersion=%s\n' "${release_manifest_version}"
   printf 'codePolishyVersion=%s\n' "${code_polishy_version}"
   printf 'sourceRevision=%s\n' "${source_revision}"
+  printf 'capabilityCatalogSha256=%s\n' "${capability_catalog_sha256}"
   for feature in "${release_features[@]}"; do
     printf 'feature=%s\n' "${feature}"
   done
@@ -282,6 +300,7 @@ render_manifest() {
   "manifestVersion": ${release_manifest_version},
   "codePolishyVersion": "${code_polishy_version}",
   "sourceRevision": "${source_revision}",
+  "capabilityCatalogSha256": "${capability_catalog_sha256}",
   "host": "${host_tuple}",
   "features": [
 $(render_features)

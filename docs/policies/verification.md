@@ -34,12 +34,15 @@ Explicit values may refine ordinary defaults, but:
   recommended, or full;
 - mutation and related test-strength kinds must remain supplemental.
 
-Every governed test source, including a path selected by `scope.tests`, belongs
-to exactly one production module. That ownership says what the test verifies;
-test imports never become production dependency edges. Every module must have
-at least one quick module-scoped focused suite whose paths include its owned
-tests. Every repository must have at least one repository-scoped full suite. A
-project may also list `tests.requiredKinds` to make specific layers mandatory.
+Every governed test source, including an unconventional path selected by
+`tests.paths`, must match exactly one `tests.ownership` entry. The entry names
+the production `module` it verifies and its primary quick `focusedSuite`;
+production module paths do not infer test ownership. The named suite must
+explicitly cover the owned test paths and run in focused, recommended, and full
+profiles. Test imports never become production dependency edges. Every module
+must have at least one quick module-scoped focused suite, and every repository
+must have at least one repository-scoped full suite. A project may also list
+`tests.requiredKinds` to make specific layers mandatory.
 
 Built-in project capabilities imply these repository-scoped full-profile
 requirements:
@@ -477,7 +480,8 @@ documentation-only change.
 Each merge gate writes a versioned JSON run report and bounded per-command logs
 below `.code-polishy-reports/merge-gate/`. The report is the machine-readable
 record of the selected command plan, attempts, durations, reuse decisions,
-structured findings, and final status. It records command failure categories
+structured findings, suppressed outcomes, vulnerability and release-age
+assessments, and final status. It records command failure categories
 from runner facts only: `command-exit`, `timeout`, `canceled`, `environment`,
 `resource`, or `operational`. Test evidence also identifies suite ownership,
 changed and impacted overlap, exit status, attempt count, and log path.
@@ -542,10 +546,33 @@ configuration path proved absent at the base.
 ### Gate reuse and failed-run resume
 
 Every merge gate first checks for an exact prior passed gate identity. If one
-exists, it reports `already-passed` and executes no validation command. For a
-new gate identity, exact matching receipts from suites that explicitly declare
+exists, it reports `already-passed` and executes no validation command. The
+saved report retains the canonical source graph and its validated fact inputs;
+the report digest binds this evidence. Reuse preserves it in JSON and SARIF
+without rerunning graph analyzers. For a new gate identity, exact matching
+receipts from suites that explicitly declare
 `reusable: true` may still be reused while all non-test phases execute. This is
 automatic and fails closed under the reusable evidence contract above.
+
+Saved gate reports have a 128 MiB encoding limit, checked before publication
+and again when reading. This accommodates the source graph's 64 MiB canonical
+encoding limit plus report formatting and other evidence. Exceeding either
+limit is an explicit failure and cannot publish a new accepted report.
+
+The identity includes the current expiry state of configured exceptions,
+vulnerability and release-age assessments, and disabled policy modules.
+Acceptance remains valid through its declared UTC expiry date; the following
+day cannot reuse a pass based on that acceptance. The gate checks this state
+again before publication and before returning a cached pass. Calendar time
+alone does not invalidate a repository with no timed acceptances.
+
+A reused pass retains its suppressed and reviewed findings, their exact
+exception or assessment evidence, and their summary counts. Repeated phases
+count the same accepted occurrence once while retaining its related locations.
+Human and JSON output preserve these outcomes; SARIF represents policy-accepted
+exceptions and assessments as accepted external suppressions, with their
+justification and the complete canonical report. Warnings and informational
+findings do not skip later required checks, tests, builds, or security phases.
 
 `merge-gate --base REF --resume` additionally resumes successful ordinary
 test-suite commands from a prior failed merge-gate report with the same gate

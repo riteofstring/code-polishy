@@ -30,6 +30,7 @@ type Selection struct {
 	Base            string
 	Candidate       CandidateDelta
 	Files           []string
+	Requested       RequestedSelection
 	All             bool
 	PolicySensitive bool
 }
@@ -73,54 +74,6 @@ func Open(root, policyRoot string, config policy.Config) (Repository, error) {
 		return Repository{}, fmt.Errorf("repository root is not a directory: %s", resolvedRoot)
 	}
 	return Repository{Root: resolvedRoot, PolicyRoot: resolvedPolicy, Config: config}, nil
-}
-
-func (repo Repository) Select(mode string, explicit []string) (Selection, error) {
-	var selection Selection
-	var err error
-	switch mode {
-	case "all":
-		var files []string
-		files, err = repo.AllFiles()
-		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files, All: true}
-	case "files":
-		if len(explicit) == 0 {
-			return Selection{}, errors.New("--files needs at least one path")
-		}
-		files := []string{}
-		for _, path := range explicit {
-			normalized, err := repo.NormalizePath(path)
-			if err != nil {
-				return Selection{}, err
-			}
-			if !isRegularFile(filepath.Join(repo.Root, filepath.FromSlash(normalized))) {
-				return Selection{}, fmt.Errorf("explicit path is missing or not a regular file: %s", normalized)
-			}
-			if repo.IsExcluded(normalized) {
-				return Selection{}, fmt.Errorf("explicit path is outside governed scope: %s", normalized)
-			}
-			files = append(files, normalized)
-		}
-		files = uniqueSorted(files)
-		selection = Selection{Candidate: CandidateDelta{AddedOrModified: append([]string{}, files...)}, Files: files}
-	case "staged":
-		selection, err = repo.stagedSelection()
-	case "changes", "":
-		selection, err = repo.changedSelection()
-	default:
-		return Selection{}, fmt.Errorf("unknown selection mode %q", mode)
-	}
-	return repo.validatedSelection(selection, err)
-}
-
-func (repo Repository) validatedSelection(selection Selection, err error) (Selection, error) {
-	if err != nil {
-		return selection, err
-	}
-	if err := repo.validateDataFiles(selection.Files); err != nil {
-		return Selection{}, err
-	}
-	return selection, nil
 }
 
 func (repo Repository) RawFiles() ([]string, error) {
@@ -191,6 +144,7 @@ func (repo Repository) SelectBase(base string) (Selection, error) {
 		return Selection{}, err
 	}
 	selection, err := repo.selectionSince(mergeBase)
+	selection.Requested = RequestedSelection{Mode: "base", Operands: []string{base}, Expanded: selection.Candidate.Paths()}
 	return repo.validatedSelection(selection, err)
 }
 
@@ -245,31 +199,39 @@ func (repo Repository) ReadAt(revision, path string) ([]byte, error) {
 }
 
 func (repo Repository) ReadRegularFileAt(revision, path string) ([]byte, bool, error) {
-	if !exactRevision(revision) {
-		return nil, false, errors.New("revision must be an exact Git object ID")
-	}
-	normalized, err := repo.NormalizePath(path)
-	if err != nil {
-		return nil, false, err
-	}
-	entries, err := repo.gitLines("ls-tree", "-z", revision, "--", ":(literal)"+normalized)
-	if err != nil {
-		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
-	}
-	if len(entries) == 0 {
-		return nil, false, nil
-	}
-	if len(entries) != 1 {
-		return nil, false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
-	}
-	if err := validateRegularFileTreeEntry(entries[0], normalized); err != nil {
-		return nil, false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	normalized, present, err := repo.regularFileAtPath(revision, path)
+	if err != nil || !present {
+		return nil, present, err
 	}
 	data, err := repo.ReadAt(revision, normalized)
 	if err != nil {
 		return nil, false, err
 	}
 	return data, true, nil
+}
+
+func (repo Repository) regularFileAtPath(revision, path string) (string, bool, error) {
+	if !exactRevision(revision) {
+		return "", false, errors.New("revision must be an exact Git object ID")
+	}
+	normalized, err := repo.NormalizePath(path)
+	if err != nil {
+		return "", false, err
+	}
+	entries, err := repo.gitLines("ls-tree", "-z", revision, "--", ":(literal)"+normalized)
+	if err != nil {
+		return "", false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	}
+	if len(entries) == 0 {
+		return "", false, nil
+	}
+	if len(entries) != 1 {
+		return "", false, fmt.Errorf("inspect %s at %s: expected one exact tree entry", normalized, revision)
+	}
+	if err := validateRegularFileTreeEntry(entries[0], normalized); err != nil {
+		return "", false, fmt.Errorf("inspect %s at %s: %w", normalized, revision, err)
+	}
+	return normalized, true, nil
 }
 
 func validateRegularFileTreeEntry(entry, path string) error {
@@ -451,7 +413,7 @@ func (repo Repository) IsData(path string) bool {
 }
 
 func (repo Repository) IsTest(path string) bool {
-	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Scope.Tests)
+	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Tests.Paths)
 }
 
 func (repo Repository) IsDevelopment(path string) bool {
@@ -612,8 +574,19 @@ func (repo Repository) ModuleNames(path string) []string {
 }
 
 func (repo Repository) DesignDocumentFindings() []policy.Finding {
+	return repo.designDocumentFindings(nil)
+}
+
+func (repo Repository) SelectedDesignDocumentFindings(paths []string) []policy.Finding {
+	return repo.designDocumentFindings(toSet(paths))
+}
+
+func (repo Repository) designDocumentFindings(selected map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, document := range repo.Config.Documentation.Design {
+		if selected != nil && !selected[document.Path] {
+			continue
+		}
 		if message := repo.designDocumentPathMessage(document.Path); message != "" {
 			findings = append(findings, designDocumentFinding(document.Path, message))
 		}
@@ -634,52 +607,13 @@ func (repo Repository) DesignDocumentFindings() []policy.Finding {
 }
 
 func (repo Repository) DesignDocumentsForFiles(paths []string) []string {
-	documents := map[string]bool{}
-	for _, path := range paths {
-		normalized, err := repo.NormalizePath(path)
-		if err != nil {
-			continue
-		}
-		if document, exists := repo.designDocumentForSource(normalized); exists {
-			documents[document.Path] = true
-			continue
-		}
-		for _, module := range repo.ModuleNames(normalized) {
-			if document, exists := repo.designDocumentForModule(module); exists {
-				documents[document.Path] = true
-			}
-		}
-	}
-	return sortedSet(documents)
+	resolution, _ := repo.ResolveDesignContext(paths, nil)
+	return resolution.DocumentPaths()
 }
 
 func (repo Repository) DesignDocumentsForModules(modules []string) ([]string, error) {
-	selected := map[string]bool{}
-	for _, module := range modules {
-		if !repo.hasModule(module) {
-			return nil, fmt.Errorf("unknown module %q", module)
-		}
-		if selected[module] {
-			return nil, fmt.Errorf("module %q was specified more than once", module)
-		}
-		selected[module] = true
-	}
-	documents := map[string]bool{}
-	for _, document := range repo.Config.Documentation.Design {
-		if document.Module != "" && selected[document.Module] {
-			documents[document.Path] = true
-			continue
-		}
-		for _, sourcePath := range document.SourcePaths {
-			for _, module := range repo.ModuleNames(sourcePath) {
-				if selected[module] {
-					documents[document.Path] = true
-					break
-				}
-			}
-		}
-	}
-	return sortedSet(documents), nil
+	resolution, err := repo.ResolveDesignContext(nil, modules)
+	return resolution.DocumentPaths(), err
 }
 
 func (repo Repository) designDocumentPathMessage(path string) string {
@@ -702,7 +636,7 @@ func (repo Repository) designSourcePathMessage(path string) string {
 	if !repo.IsSourceCommentSource(path) {
 		return "mapped source path is not governed source"
 	}
-	if owners := repo.ModuleNames(path); len(owners) != 1 {
+	if owners := repo.OwnerModuleNames(path); len(owners) != 1 {
 		return "mapped source path must belong to exactly one module"
 	}
 	return ""
@@ -733,24 +667,6 @@ func (repo Repository) hasModule(name string) bool {
 	return false
 }
 
-func (repo Repository) designDocumentForSource(path string) (policy.DesignDocument, bool) {
-	for _, document := range repo.Config.Documentation.Design {
-		if slices.Contains(document.SourcePaths, path) {
-			return document, true
-		}
-	}
-	return policy.DesignDocument{}, false
-}
-
-func (repo Repository) designDocumentForModule(module string) (policy.DesignDocument, bool) {
-	for _, document := range repo.Config.Documentation.Design {
-		if document.Module == module {
-			return document, true
-		}
-	}
-	return policy.DesignDocument{}, false
-}
-
 func designDocumentFinding(subject, message string) policy.Finding {
 	return policy.Finding{Check: DesignDocumentationCheck, Path: policy.ConfigFilename, Subject: subject, Message: message}
 }
@@ -762,33 +678,6 @@ func sortedSet(values map[string]bool) []string {
 	}
 	sort.Strings(result)
 	return result
-}
-
-func (repo Repository) GoModules(files []string) []GoModule {
-	modules := []GoModule{}
-	for _, path := range files {
-		if filepath.Base(path) != "go.mod" {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(repo.Root, filepath.FromSlash(path)))
-		if err != nil {
-			continue
-		}
-		name := ""
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "module ") {
-				name = strings.TrimSpace(strings.TrimPrefix(line, "module "))
-				break
-			}
-		}
-		root := filepath.ToSlash(filepath.Dir(path))
-		modules = append(modules, GoModule{Root: root, Manifest: path, Name: name})
-	}
-	sort.Slice(modules, func(left, right int) bool {
-		return len(modules[left].Root) > len(modules[right].Root)
-	})
-	return modules
 }
 
 func (repo Repository) OwningGoModule(path string, modules []GoModule) (GoModule, bool) {

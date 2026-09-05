@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type pythonGraphRunner struct {
 	diagnostics map[string]string
 	commands    []policy.Command
 	err         error
+	exact       bool
 }
 
 func (graphRunner *pythonGraphRunner) Run(context.Context, string, policy.Command) error {
@@ -37,7 +39,27 @@ func (graphRunner *pythonGraphRunner) RunStructured(_ context.Context, _ string,
 	if !found {
 		return runner.Result{}, runner.Output{}, errors.New("no graph output was configured")
 	}
+	if !graphRunner.exact {
+		output = completePythonGraphOutput(output, command.Paths)
+	}
 	return runner.Result{}, runner.Output{Stdout: []byte(output), Stderr: []byte(graphRunner.diagnostics[command.Cwd])}, nil
+}
+
+func completePythonGraphOutput(output string, paths []string) string {
+	graph := map[string][]string{}
+	if json.Unmarshal([]byte(output), &graph) != nil {
+		return output
+	}
+	for _, path := range paths {
+		if _, found := graph[path]; !found {
+			graph[path] = []string{}
+		}
+	}
+	encoded, err := json.Marshal(graph)
+	if err != nil {
+		return output
+	}
+	return string(encoded)
 }
 
 func TestRuffGraphFactsAreVersionedBoundedAndPathNormalized(t *testing.T) {
@@ -83,6 +105,27 @@ func TestPythonArchitectureRejectsRuffDiagnostics(t *testing.T) {
 	}
 }
 
+func TestPythonFactsFailureProducesOneProjectFindingWithoutSourceCascades(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	sources := []string{"src/a.py", "src/b.py", "src/c.py"}
+	writeArchitectureFile(t, repo.Root, sources[0], strings.Repeat("x", 2*1024*1024+1))
+	writeArchitectureFile(t, repo.Root, sources[1], "value = 1\n")
+	writeArchitectureFile(t, repo.Root, sources[2], "value = 2\n")
+	project := repository.PythonProject{Root: ".", Manifest: "pyproject.toml", Files: sources}
+	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/a.py":[],"src/b.py":[],"src/c.py":[]}`}}
+	findings := pythonProjectFindings(
+		t.Context(), repo, project, sources,
+		map[string]string{"src/a.py": project.Manifest, "src/b.py": project.Manifest, "src/c.py": project.Manifest},
+		append([]string{"pyproject.toml"}, sources...), policy.Command{Cwd: "."}, graphRunner,
+	)
+	if len(findings) != 1 || findings[0].Check != "architecture.pythonFactsCoverage" || findings[0].Path != project.Manifest ||
+		!strings.Contains(findings[0].Message, "dependent per-source findings were withheld") {
+		t.Fatalf("findings = %+v", findings)
+	}
+}
+
 func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{
@@ -107,6 +150,7 @@ func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *
 func TestPythonArchitectureUsesInTreeBackendAndNestedSrcRoots(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "runtime", Paths: []string{"packages/**"}}})
+	repo.Config.Tests.Ownership = []policy.TestOwnership{{Paths: []string{"packages/setta-runtime/tests/test_runtime.py"}, Module: "runtime", FocusedSuite: "runtime-unit"}}
 	writeArchitectureFile(t, repo.Root, "pyproject.toml", `[build-system]
 requires = []
 build-backend = "setta_build_backend"
@@ -330,7 +374,7 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
 			writeArchitectureFile(t, repo.Root, "src/web/app.py", testCase.source)
-			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": testCase.output}}
+			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": testCase.output}, exact: testCase.name == "omitted"}
 			findings := CheckWithRunner(t.Context(), repo, []string{"src/web/app.py"}, graphRunner)
 			if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" ||
 				findings[0].Path != "src/web/app.py" || !strings.Contains(findings[0].Message, testCase.message) {
@@ -440,9 +484,14 @@ func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
 		SourceSHA256: hex.EncodeToString(digest[:]), Namespace: "app.plugins", Targets: []string{"app.plugins.first"},
 	}}
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/app/loader.py":[]}`}}
-	findings := CheckWithRunner(t.Context(), repo, []string{"src/app/loader.py"}, graphRunner)
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/app/loader.py"}, graphRunner)
+	findings := analysis.Findings
 	if len(findings) != 1 || findings[0].Check != "architecture.moduleDependency" || findings[0].Subject != "plugins" {
 		t.Fatalf("findings = %+v", findings)
+	}
+	if analysis.Graph == nil || len(analysis.Graph.Edges) != 1 || analysis.Graph.Edges[0].Kind != "proven-dynamic" ||
+		analysis.Graph.Edges[0].Source != "src/app/loader.py" || analysis.Graph.Edges[0].Target != "src/app/plugins/first.py" {
+		t.Fatalf("computed import graph = %+v", analysis.Graph)
 	}
 	repo.Config.Modules[1].DependsOn = []string{"plugins"}
 	if findings := CheckWithRunner(t.Context(), repo, []string{"src/app/loader.py"}, graphRunner); len(findings) != 0 {
@@ -544,8 +593,8 @@ func TestPythonGraphAcceptsAbsoluteContainedPaths(t *testing.T) {
 	source := filepath.ToSlash(filepath.Join(repo.Root, "app", "main.py"))
 	target := filepath.ToSlash(filepath.Join(repo.Root, "app", "helper.py"))
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{
-		".": `{"` + source + `":["` + target + `"]}`,
-	}}
+		".": `{"` + source + `":["` + target + `"],"` + target + `":[]}`,
+	}, exact: true}
 	if findings := CheckWithRunner(t.Context(), repo, []string{"app/main.py"}, graphRunner); len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}

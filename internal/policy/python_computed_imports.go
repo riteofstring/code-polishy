@@ -27,6 +27,9 @@ func validatePythonComputedImports(imports []PythonComputedImport) error {
 }
 
 func validatePythonComputedImport(item *PythonComputedImport, label string) error {
+	if item.Callee == "pkgutil.resolve_name" && (item.EntryPointGroup != "" || len(item.Targets) != 0 || len(item.Configuration) != 1 || item.Shape != "module-object-call/v1") {
+		return fmt.Errorf("%s object loader requires one registry input and module-object-call/v1 without a duplicate target inventory", label)
+	}
 	projectRoot := pathpkg.Dir(item.Project)
 	if projectRoot != "." && item.Importer != projectRoot && !strings.HasPrefix(item.Importer, projectRoot+"/") {
 		return fmt.Errorf("%s.importer must be contained by its project", label)

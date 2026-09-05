@@ -20,6 +20,7 @@ func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
 		"test", "test-plan", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
+		"architecture-review", "capabilities", "task-start",
 	}
 	for _, command := range publicCommands {
 		t.Run(command, func(t *testing.T) {
@@ -82,6 +83,43 @@ func TestSupplementalHelpRequiresExplicitSelection(t *testing.T) {
 		page.writeTo(output)
 		if !strings.Contains(output.String(), "supplemental row is informational and never selects supplemental execution") {
 			t.Fatalf("%s help does not disclose informational supplemental output: %q", command, output.String())
+		}
+	}
+}
+
+func TestEvaluationCommandHelpDistinguishesDirectoriesAndModules(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"check", "architecture", "format", "fix", "list-files"} {
+		page, found := commandHelpFor(command)
+		if !found {
+			t.Fatalf("%s help page is missing", command)
+		}
+		output := &bytes.Buffer{}
+		page.writeTo(output)
+		text := output.String()
+		if !strings.Contains(text, "--files") || !strings.Contains(text, "directories") || !strings.Contains(text, "--module") {
+			t.Fatalf("%s help does not distinguish file, directory, and module evaluation: %q", command, text)
+		}
+	}
+}
+
+func TestReportCommandHelpDistinguishesEvaluationAndDisplayOptions(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{
+		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-plan", "test-levels", "verify", "architecture",
+		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix",
+	} {
+		page, found := commandHelpFor(command)
+		if !found {
+			t.Fatalf("%s help page is missing", command)
+		}
+		output := &bytes.Buffer{}
+		page.writeTo(output)
+		text := output.String()
+		for _, fact := range []string{"separate from evaluation selectors", "--format human|json|sarif", "--output PATH", "display-only filters", "--display-limit"} {
+			if !strings.Contains(text, fact) {
+				t.Fatalf("%s help omitted %q: %q", command, fact, text)
+			}
 		}
 	}
 }

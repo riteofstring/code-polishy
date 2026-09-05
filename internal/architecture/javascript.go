@@ -1,7 +1,6 @@
 package architecture
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -21,32 +20,6 @@ var javascriptSourceExtensions = map[string]bool{
 	".mjs": true, ".mts": true, ".ts": true, ".tsx": true,
 }
 
-func javascriptFindings(ctx context.Context, repo repository.Repository, selected, allFiles []string) []policy.Finding {
-	readable, findings := javascriptImportSources(repo, selected)
-	if len(readable) == 0 {
-		return findings
-	}
-	ctx, cancel := context.WithTimeout(ctx, javascriptImportBudget)
-	defer cancel()
-	result, err := javascript.Bundle{PolicyRoot: repo.PolicyRoot}.Imports(ctx, repo.Root, readable)
-	if err != nil {
-		return append(findings, policy.Finding{
-			Check: "policy.tool", Path: "repository", Subject: "javascript-bundle", Message: err.Error(),
-		})
-	}
-	for _, entry := range result.Unsupported {
-		findings = append(findings, importCoverageFinding(entry.Path,
-			"the policy-owned import reader could not read this import: "+entry.Reason))
-	}
-	governed := make(map[string]bool, len(allFiles))
-	for _, path := range allFiles {
-		governed[path] = true
-	}
-	packages := newNodePackages(repo, allFiles)
-	findings = append(findings, javascriptFactFindings(repo, packages, governed, result.Imports)...)
-	return append(findings, packages.coverage...)
-}
-
 func javascriptFactFindings(repo repository.Repository, packages *nodePackages,
 	governed map[string]bool, facts []javascript.ImportFact) []policy.Finding {
 	findings := []policy.Finding{}
@@ -61,23 +34,6 @@ func javascriptFactFindings(repo repository.Repository, packages *nodePackages,
 	return findings
 }
 
-func javascriptImportSources(repo repository.Repository, selected []string) ([]string, []policy.Finding) {
-	readable := []string{}
-	findings := []policy.Finding{}
-	for _, path := range selected {
-		if repo.Language(path) != "typescript" || len(repo.ModuleNames(path)) != 1 {
-			continue
-		}
-		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
-			findings = append(findings, importCoverageFinding(path,
-				"the policy-owned import reader does not read this file"))
-			continue
-		}
-		readable = append(readable, path)
-	}
-	return readable, findings
-}
-
 func javascriptImportFinding(repo repository.Repository, governed map[string]bool, fact javascript.ImportFact) (policy.Finding, bool) {
 	if repo.IsTest(fact.Path) {
 		return policy.Finding{}, false
@@ -85,8 +41,8 @@ func javascriptImportFinding(repo repository.Repository, governed map[string]boo
 	if fact.Resolved == "" || !governed[fact.Resolved] {
 		return policy.Finding{}, false
 	}
-	owners := repo.ModuleNames(fact.Path)
-	targets := repo.ModuleNames(fact.Resolved)
+	owners := repo.OwnerModuleNames(fact.Path)
+	targets := repo.OwnerModuleNames(fact.Resolved)
 	if len(owners) != 1 || len(targets) != 1 || owners[0] == targets[0] {
 		return policy.Finding{}, false
 	}

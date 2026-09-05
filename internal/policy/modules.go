@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+func ValidateModuleGraph(modules []Module) error {
+	return validateModules(&Config{Modules: modules})
+}
+
 func validateModules(config *Config) error {
 	config.ModuleByName = make(map[string]int, len(config.Modules))
 	for index, module := range config.Modules {

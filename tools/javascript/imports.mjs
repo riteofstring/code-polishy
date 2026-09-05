@@ -1,7 +1,7 @@
 import { builtinModules } from "node:module";
 import { extname, join } from "node:path";
 
-import typescript from "./node_modules/typescript/lib/typescript.js";
+import typescript from "typescript";
 
 import {
   containedRead,
@@ -64,12 +64,42 @@ function literalSpecifier(node) {
 function collectSpecifiers(node, specifiers, computed) {
   const declared = declaredSpecifier(node);
   if (declared !== null) {
-    specifiers.push(declared);
+    specifiers.push({ node: declared, kind: declaredImportKind(node) });
     return;
   }
   if (typescript.isCallExpression(node)) {
     collectCalledSpecifier(node, specifiers, computed);
   }
+}
+
+function declaredImportKind(node) {
+  if (typescript.isExportDeclaration(node)) {
+    return node.isTypeOnly ? "type-only" : "re-export";
+  }
+  if (typescript.isImportTypeNode(node)) {
+    return "type-only";
+  }
+  if (
+    typescript.isImportDeclaration(node) &&
+    typeOnlyClause(node.importClause)
+  ) {
+    return "type-only";
+  }
+  return "runtime";
+}
+
+function typeOnlyClause(clause) {
+  if (clause?.isTypeOnly) {
+    return true;
+  }
+  const bindings = clause?.namedBindings;
+  return (
+    clause?.name === undefined &&
+    bindings !== undefined &&
+    typescript.isNamedImports(bindings) &&
+    bindings.elements.length > 0 &&
+    bindings.elements.every((element) => element.isTypeOnly)
+  );
 }
 
 function declaredSpecifier(node) {
@@ -100,7 +130,7 @@ function collectCalledSpecifier(node, specifiers, computed) {
     if (written === null) {
       computed.push(node);
     } else {
-      specifiers.push(written);
+      specifiers.push({ node: written, kind: "proven-dynamic" });
     }
     return;
   }
@@ -109,7 +139,7 @@ function collectCalledSpecifier(node, specifiers, computed) {
     typescript.isIdentifier(node.expression) &&
     node.expression.text === "require"
   ) {
-    specifiers.push(written);
+    specifiers.push({ node: written, kind: "runtime" });
   }
 }
 
@@ -124,8 +154,9 @@ function sourceSpecifiers(source) {
   return { specifiers, computed };
 }
 
-function nodeLine(source, node) {
-  return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+function nodePosition(source, node) {
+  const position = source.getLineAndCharacterOfPosition(node.getStart(source));
+  return { line: position.line + 1, column: position.character + 1 };
 }
 
 function specifiedPackage(specifier) {
@@ -148,16 +179,20 @@ function specifiedPackage(specifier) {
   return name;
 }
 
-function importFact(root, path, source, node, resolved) {
+function importFact(root, path, source, declared, resolved) {
+  const { node, kind } = declared;
+  const position = nodePosition(source, node);
   return {
     path,
-    line: nodeLine(source, node),
+    line: position.line,
+    column: position.column,
     specifier: truncate(node.text),
     resolved:
       resolved === undefined
         ? ""
         : (insideRoot(root, resolved.resolvedFileName) ?? ""),
     package: specifiedPackage(node.text),
+    kind,
   };
 }
 
@@ -170,12 +205,12 @@ function fileFacts(request, path, resolve, facts, unsupportedPaths) {
         "the policy-owned import reader does not read this file",
       ),
     );
-    return;
+    return false;
   }
   const absolute = join(request.root, path);
   const text = readTargetFile(absolute, path, unsupportedPaths);
   if (text === null) {
-    return;
+    return false;
   }
   let source;
   let written;
@@ -187,30 +222,45 @@ function fileFacts(request, path, resolve, facts, unsupportedPaths) {
       true,
       kind,
     );
+    if (source.parseDiagnostics.length > 0) {
+      const diagnostic = source.parseDiagnostics[0];
+      const line =
+        diagnostic.start === undefined
+          ? 1
+          : source.getLineAndCharacterOfPosition(diagnostic.start).line + 1;
+      unsupportedPaths.push(
+        unsupported(
+          path,
+          `line ${line}: ${truncate(typescript.flattenDiagnosticMessageText(diagnostic.messageText, " "))}`,
+        ),
+      );
+      return false;
+    }
     written = sourceSpecifiers(source);
   } catch (error) {
     unsupportedPaths.push(unsupported(path, error.message));
-    return;
+    return false;
   }
   for (const node of written.computed) {
     unsupportedPaths.push(
       unsupported(
         path,
-        `line ${nodeLine(source, node)}: a dynamic import whose specifier is computed names no file to resolve`,
+        `line ${nodePosition(source, node).line}: a dynamic import whose specifier is computed names no file to resolve`,
       ),
     );
   }
-  for (const node of written.specifiers) {
+  for (const declared of written.specifiers) {
     facts.push(
       importFact(
         request.root,
         path,
         source,
-        node,
-        resolve(node.text, absolute),
+        declared,
+        resolve(declared.node.text, absolute),
       ),
     );
   }
+  return true;
 }
 
 export function imports(request) {
@@ -229,14 +279,17 @@ export function imports(request) {
       cache,
     ).resolvedModule;
   const facts = [];
+  const analyzed = [];
   const unsupportedPaths = [];
   for (const path of request.paths) {
-    fileFacts(request, path, resolve, facts, unsupportedPaths);
+    if (fileFacts(request, path, resolve, facts, unsupportedPaths)) {
+      analyzed.push(path);
+    }
     if (facts.length > MAXIMUM_IMPORT_FACTS) {
       fail(
         `the imports operation produced more than the ${MAXIMUM_IMPORT_FACTS} result limit`,
       );
     }
   }
-  return { imports: facts, unsupported: unsupportedPaths };
+  return { analyzed, imports: facts, unsupported: unsupportedPaths };
 }

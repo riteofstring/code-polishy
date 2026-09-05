@@ -1,6 +1,6 @@
 import { basename, join } from "node:path";
 
-import yaml from "./node_modules/js-yaml/dist/js-yaml.mjs";
+import yaml from "js-yaml";
 
 import { fail, readTargetFile, unsupported } from "./protocol.mjs";
 

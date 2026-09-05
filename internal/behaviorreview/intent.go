@@ -51,6 +51,7 @@ type intentCaptureMaterial struct {
 }
 
 func captureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
+	ctx = reviewContext(ctx)
 	features, err := configuredFeatureNames(repo.Config, options.Features)
 	if err != nil {
 		return CaptureIntentResult{}, err
@@ -64,7 +65,37 @@ func captureIntent(ctx context.Context, repo repository.Repository, options Capt
 		return CaptureIntentResult{}, err
 	}
 	defer root.Close()
-	return appendIntentCapture(repo, root, snapshot, intent, features)
+	return appendCurrentIntentCapture(ctx, repo, root, snapshot, intent, features)
+}
+
+func appendCurrentIntentCapture(ctx context.Context, repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (CaptureIntentResult, error) {
+	release, err := lockIntentJournal(root)
+	if err != nil {
+		return CaptureIntentResult{}, err
+	}
+	defer release()
+	journal, err := readIntentJournal(repo, root, true)
+	if err != nil {
+		return CaptureIntentResult{}, err
+	}
+	appendResult, err := prepareIntentJournalAppend(repo, journal, snapshot, intent, features)
+	if err != nil {
+		return CaptureIntentResult{}, err
+	}
+	return publishIntentCapture(ctx, repo, root, snapshot, appendResult, features)
+}
+
+func publishIntentCapture(ctx context.Context, repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, appendResult intentJournalAppend, features []string) (CaptureIntentResult, error) {
+	if err := ensureIntentCaptureCandidate(repo, snapshot); err != nil {
+		return CaptureIntentResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return CaptureIntentResult{}, operational("publish intent capture", err)
+	}
+	if err := root.writeArtifactAtomic(intentJournalFilename, appendResult.data); err != nil {
+		return CaptureIntentResult{}, err
+	}
+	return intentCaptureResult(appendResult, features), nil
 }
 
 func captureIntentInputs(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (repository.CandidateStateSnapshot, []byte, error) {
@@ -86,34 +117,15 @@ func captureIntentInputs(ctx context.Context, repo repository.Repository, option
 	return snapshot, intent, nil
 }
 
-func appendIntentCapture(repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (CaptureIntentResult, error) {
-	release, err := lockIntentJournal(root)
-	if err != nil {
-		return CaptureIntentResult{}, err
-	}
-	defer release()
-	appendResult, err := prepareIntentJournalAppend(repo, root, snapshot, intent, features)
-	if err != nil {
-		return CaptureIntentResult{}, err
-	}
-	if err := ensureIntentCaptureCandidate(repo, snapshot); err != nil {
-		return CaptureIntentResult{}, err
-	}
-	if err := root.writeArtifactAtomic(intentJournalFilename, appendResult.data); err != nil {
-		return CaptureIntentResult{}, err
-	}
+func intentCaptureResult(appendResult intentJournalAppend, features []string) CaptureIntentResult {
 	return CaptureIntentResult{
 		ID: appendResult.entry.ID, Commit: appendResult.entry.CapturedAtCommit, CandidateSHA256: appendResult.entry.CandidateStateSHA256, IntentSHA256: appendResult.entry.IntentSHA256,
 		JournalSHA256: appendResult.entry.EntrySHA256, JournalPath: artifactDisplayPath(intentJournalFilename),
 		RequirementID: appendResult.requirement.ID, RequirementSHA256: appendResult.requirement.EntrySHA256, Features: append([]string{}, features...),
-	}, nil
+	}
 }
 
-func prepareIntentJournalAppend(repo repository.Repository, root *artifactHandle, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (intentJournalAppend, error) {
-	journal, err := readIntentJournal(repo, root, true)
-	if err != nil {
-		return intentJournalAppend{}, err
-	}
+func prepareIntentJournalAppend(repo repository.Repository, journal intentJournal, snapshot repository.CandidateStateSnapshot, intent []byte, features []string) (intentJournalAppend, error) {
 	entry, err := newIntentCapture(snapshot, intent, journal)
 	if err != nil {
 		return intentJournalAppend{}, err

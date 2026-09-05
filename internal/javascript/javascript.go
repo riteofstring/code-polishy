@@ -493,6 +493,7 @@ func (bundle Bundle) DeadCode(ctx context.Context, root, directory string, works
 }
 
 type ImportResult struct {
+	Analyzed    []string      `json:"analyzed"`
 	Imports     []ImportFact  `json:"imports"`
 	Unsupported []Unsupported `json:"unsupported"`
 }
@@ -500,9 +501,11 @@ type ImportResult struct {
 type ImportFact struct {
 	Path      string `json:"path"`
 	Line      int    `json:"line"`
+	Column    int    `json:"column"`
 	Specifier string `json:"specifier"`
 	Resolved  string `json:"resolved"`
 	Package   string `json:"package"`
+	Kind      string `json:"kind"`
 }
 
 func (bundle Bundle) Imports(ctx context.Context, root string, paths []string) (ImportResult, error) {
@@ -514,8 +517,8 @@ func (bundle Bundle) Imports(ctx context.Context, root string, paths []string) (
 	if err != nil {
 		return ImportResult{}, err
 	}
-	var reported ImportResult
-	if err := decodeExactly(result, &reported); err != nil {
+	reported, err := decodeImportResult(result, paths)
+	if err != nil {
 		return ImportResult{}, fmt.Errorf("the sealed JavaScript bundle returned an unreadable %s result: %w", OperationImports, err)
 	}
 	return reported, nil
@@ -752,24 +755,26 @@ func containedWorkspace(directory string, workspace DeadCodeWorkspace) error {
 	if len(workspace.Project) == 0 {
 		return fmt.Errorf("the %s package %q selects no files", OperationDeadCode, workspace.Root)
 	}
-	if err := validateInheritedWorkspacePaths(directory, workspace); err != nil {
+	if err := validateInheritedWorkspacePaths(workspace); err != nil {
 		return err
 	}
 	return validateWorkspacePaths(directory, workspace)
 }
 
-func validateInheritedWorkspacePaths(directory string, workspace DeadCodeWorkspace) error {
+func validateInheritedWorkspacePaths(workspace DeadCodeWorkspace) error {
+	seen := map[string]bool{}
 	for _, path := range workspace.Inherited {
-		if !containedPath(path) || !containsPath(directory, path) || !slices.Contains(workspace.Project, path) {
+		if !containedPath(path) || seen[path] || !slices.Contains(workspace.Project, path) {
 			return fmt.Errorf("the %s package %q declares invalid inherited path %q", OperationDeadCode, workspace.Root, path)
 		}
+		seen[path] = true
 	}
 	return nil
 }
 
 func validateWorkspacePaths(directory string, workspace DeadCodeWorkspace) error {
 	for _, path := range slices.Concat(workspace.Project, workspace.Entry) {
-		if !containedPath(path) || !containsPath(directory, path) || !containsPath(workspace.Root, path) && !slices.Contains(workspace.Inherited, path) {
+		if !containedPath(path) || !containsPath(workspace.Root, path) && !slices.Contains(workspace.Inherited, path) {
 			return fmt.Errorf("the %s package %q selects %q outside %q", OperationDeadCode, workspace.Root, path, directory)
 		}
 	}

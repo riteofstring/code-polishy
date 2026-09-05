@@ -128,19 +128,19 @@ That provider owns the honest installation/lock agreement for facts the lock
 does not encode; it cannot be replaced by a claim that the partial static
 reader proved the full build graph.
 
-Code Polishy's own `python-facts/v1` adapter follows the same rule. Its dedicated
+Code Polishy's own `python-facts/v3` adapter follows the same rule. Its dedicated
 `pyproject.toml` and frozen `uv.lock` contain only the virtual first-party owner
 and `packaging`. A checked-in, script-disabled lock provider parses both with
 the carried CPython `tomllib`, reconciles the exact dependency and metadata,
 and binds the selected wheel to its checksum inventory. The ordinary uv
 release-age and OSV lanes then cover that complete resolved graph.
 
-Registry releases reach the ordinary release-age and OSV lanes. A Git source
-has no PyPI publication timestamp and cannot be represented honestly as a
-registry release; the online profile reports release-age and vulnerability
-coverage unavailable for that exact source and commit. `dependency-review`
-still inventories accepted Git changes by normalized source and full commit,
-without inventing a PyPI age.
+Public registry releases reach the ordinary release-age and OSV lanes. Exact
+Git sources use [signed CI evidence](../git-dependency-evidence.md) for the
+resolved repository, commit, optional subdirectory, source contents, complete
+lock inventory, and authenticated age record. Missing or unverifiable evidence
+fails coverage. Dependency comparison retains the declared Git source and ref
+and any recorded full-commit resolution without inventing a PyPI age.
 
 ## GitLab CI control inputs
 
@@ -669,6 +669,24 @@ Dependency review compares the candidate manifests and complete supported lock
 graphs with the merge base, prints a stable direct/transitive change table, and
 runs the full online supply-chain profile against the candidate tree. It does
 not install dependencies or execute dependency lifecycle scripts.
+
+Historical inputs are dependency inventory, not candidate admission evidence.
+The comparison accepts syntactically valid historical Git tags, branches,
+abbreviated revisions, and registry ranges. It retains their declared identity
+and any unambiguous full commit already recorded in the lock; it never resolves
+an old moving ref over the network. Git declaration and lock changes each keep
+their own manifest or lock scope, including the lock's revision kind and
+recorded resolution. A tag-to-commit repair appears as an update, and removing a
+non-exact dependency remains reviewable.
+
+Both inputs retain bounded parsing, source containment, credential protection,
+and ambiguity checks. Each inventory accepts at most 4,096 UTF-8 inputs, 8 MiB
+per input, and 128 MiB in total; parser-specific limits also apply. Malformed,
+unsafe, oversized, or unsupported historical inputs stop comparison with a
+coverage error naming the affected path when available. The complete
+candidate still receives the online profile's exact-pin, lock-consistency,
+security, age, and other admission checks, including unchanged dependencies.
+Successful inventory comparison alone grants no admission.
 
 Recurring external monitoring is optional and defaults off. Set
 `supplyChain.recurringSecurityMonitoring` to `true` to require the online

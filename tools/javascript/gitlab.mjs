@@ -5,7 +5,7 @@ import {
 } from "node:path/posix";
 import { isAbsolute as isWindowsAbsolute } from "node:path/win32";
 
-import yaml from "./node_modules/js-yaml/dist/js-yaml.mjs";
+import yaml from "js-yaml";
 
 import { fail, readTargetFile, unsupported } from "./protocol.mjs";
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 func handleDesignContext(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
@@ -14,23 +16,17 @@ func handleDesignContext(_ context.Context, policyEngine *engine.Engine, argumen
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	documents, findings, err := policyEngine.DesignContext(options.mode, options.files, options.modules)
-	if err != nil {
-		return commandResult{}, err
-	}
-	if len(findings) > 0 {
-		return commandResult{report: engine.Report{Findings: findings}}, nil
-	}
-	for _, document := range documents {
-		fmt.Println(document)
-	}
-	return commandResult{quiet: true}, nil
+	report, err := policyEngine.DesignContext(engine.ContextRequest{
+		Mode: options.mode, Files: options.files, Modules: options.modules, Situations: options.situations, Workflow: "design-context",
+	})
+	return commandResult{report: report}, err
 }
 
 type designContextOptions struct {
 	mode              string
 	files             []string
 	modules           []string
+	situations        []string
 	selectionSelected bool
 }
 
@@ -43,14 +39,56 @@ func parseDesignContextOptions(arguments []string) (designContextOptions, error)
 		}
 		index += consumed
 	}
-	return options, nil
+	if len(options.situations) > 0 && !options.selectionSelected && len(options.modules) == 0 {
+		options.mode = "none"
+	}
+	return options, policy.ValidateHandoffSituations(options.situations)
 }
 
 func parseDesignContextOption(options *designContextOptions, arguments []string) (int, error) {
+	if arguments[0] == "--situation" || strings.HasPrefix(arguments[0], "--situation=") {
+		value, consumed, err := designContextSituationValue(arguments)
+		if err == nil {
+			options.situations = append(options.situations, value)
+		}
+		return consumed, err
+	}
 	if isDesignContextModuleOption(arguments[0]) {
 		return parseDesignContextModule(options, arguments)
 	}
 	return parseDesignContextSelection(options, arguments)
+}
+
+func designContextSituationValue(arguments []string) (string, int, error) {
+	if strings.HasPrefix(arguments[0], "--situation=") {
+		return strings.TrimPrefix(arguments[0], "--situation="), 1, nil
+	}
+	if len(arguments) < 2 || strings.HasPrefix(arguments[1], "--") {
+		return "", 0, errors.New("--situation requires one exact situation identifier")
+	}
+	return arguments[1], 2, nil
+}
+
+func printRepositoryContext(output io.Writer, context *engine.RepositoryContext) {
+	if context == nil {
+		return
+	}
+	for _, match := range context.DesignResolution.Matches {
+		fmt.Fprintln(output, "DESIGN DOCUMENT:", match.Path)
+		for _, reason := range match.Reasons {
+			fmt.Fprintf(output, "  SELECTED BY: %s %s\n", reason.Kind, reason.Value)
+		}
+	}
+	printDesignCoverage(output, context)
+	for _, handoff := range context.Handoffs {
+		fmt.Fprintf(output, "HANDOFF %s: %s\n  DOCUMENT: %s\n  SHA256: %s\n", handoff.Name, handoff.Description, handoff.Document.Path, handoff.Document.SHA256)
+		for _, reason := range handoff.Reasons {
+			fmt.Fprintf(output, "  SELECTED BY: %s %s\n", reason.Kind, reason.Value)
+		}
+	}
+	if len(context.DesignDocuments)+len(context.Handoffs) == 0 {
+		fmt.Fprintln(output, "CONTEXT: no current documents or operational handoffs match this selection")
+	}
 }
 
 func isDesignContextModuleOption(argument string) bool {
@@ -113,4 +151,24 @@ func designContextFiles(arguments []string) []string {
 		files = append(files, argument)
 	}
 	return files
+}
+
+func printDesignCoverage(output io.Writer, context *engine.RepositoryContext) {
+	resolution := context.DesignResolution
+	if resolution.SelectedPathCount == 0 && len(resolution.SelectedModules) == 0 {
+		fmt.Fprintln(output, "DESIGN COVERAGE: no files or modules selected")
+		return
+	}
+	if len(resolution.UnmappedModules) > 0 {
+		fmt.Fprintln(output, "DESIGN COVERAGE: selected work lacks mapped rationale in modules:", strings.Join(resolution.UnmappedModules, ", "))
+	}
+	for _, path := range resolution.UnmappedPaths[:min(10, len(resolution.UnmappedPaths))] {
+		fmt.Fprintln(output, "  NO DESIGN MAPPING:", path)
+	}
+	if len(resolution.UnmappedPaths) > 10 {
+		fmt.Fprintf(output, "  %d more unmapped paths; use --format json for complete coverage.\n", len(resolution.UnmappedPaths)-10)
+	}
+	if len(resolution.UnmappedModules)+len(resolution.UnmappedPaths) > 0 {
+		fmt.Fprintln(output, "  Review existing rationale; create or update mappings for consequential design decisions. Missing mappings alone do not block routine work.")
+	}
 }

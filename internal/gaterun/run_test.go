@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 func TestRunWritesBoundedArtifactsAndStrictReport(t *testing.T) {
@@ -17,7 +19,7 @@ func TestRunWritesBoundedArtifactsAndStrictReport(t *testing.T) {
 	first := recordAttempt(t, run, 0, Passed, 0, "123456", "abcdef", 4)
 	assertBoundedOutcome(t, first, run.ReportPath())
 	recordAttempt(t, run, 1, Failed, 1, "failure", "details", 16)
-	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{"quality failed"}, BehaviorReview: identity.BehaviorReview})
+	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{"quality failed"}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +88,7 @@ func TestMergeRunKeepsFailedEvidenceImmutableUntilLaterTestReuse(t *testing.T) {
 	failed := startRun(t, root, identity)
 	recordAttempt(t, failed, 0, Failed, 1, "", "quality failed", 16)
 	recordAttempt(t, failed, 1, Passed, 0, "unit pass", "", 16)
-	prior, err := failed.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	prior, err := failed.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +111,7 @@ func TestMergeRunKeepsFailedEvidenceImmutableUntilLaterTestReuse(t *testing.T) {
 	if _, err := LoadReport(root, identity); err != nil {
 		t.Fatalf("prior failed report no longer validates: %v", err)
 	}
-	passed, err := resumed.Finalize(FinalizeOptions{Status: RunPassed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	passed, err := resumed.Finalize(FinalizeOptions{Status: RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +126,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 	initial := startRun(t, root, identity)
 	recordAttempt(t, initial, 0, Passed, 0, "unit pass", "", 16)
 	recordAttempt(t, initial, 1, Failed, 1, "", "initial late failure", 16)
-	initialReport, err := initial.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	initialReport, err := initial.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +144,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 		t.Fatalf("first resumed receipt path = %q, source = %q", firstOutcome.ReceiptPath, firstReusable.Path)
 	}
 	recordAttempt(t, firstResume, 1, Failed, 1, "", "resumed late failure", 16)
-	firstReport, err := firstResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	firstReport, err := firstResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +173,7 @@ func TestMergeRunReloadsAndResumesAfterAnotherLateFailure(t *testing.T) {
 		t.Fatalf("second resumed receipt path = %q, source = %q", secondOutcome.ReceiptPath, secondReusable.Path)
 	}
 	recordAttempt(t, secondResume, 1, Failed, 1, "", "second resumed late failure", 16)
-	if _, err := secondResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
+	if _, err := secondResume.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadReport(root, identity); err != nil {
@@ -186,7 +188,7 @@ func TestOnlyOrdinaryTestsCanProvideReusableReceipts(t *testing.T) {
 			root := t.TempDir()
 			run := startRun(t, root, identity)
 			recordAttempt(t, run, 0, Passed, 0, "pass", "", 16)
-			if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
+			if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := LoadReusableReceipt(root, identity, 0); !errors.Is(err, ErrIneligible) {
@@ -205,7 +207,7 @@ func TestDiagnosticAttemptDoesNotChangePlannedOutcomeOrReceipt(t *testing.T) {
 		!diagnostic.Attempts[1].Diagnostic || diagnostic.Attempts[1].Status != Passed {
 		t.Fatalf("diagnostic outcome = %+v", diagnostic)
 	}
-	if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
+	if _, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadReusableReceipt(run.repositoryRoot, identity, 0); !errors.Is(err, ErrMissingArtifact) {
@@ -258,7 +260,7 @@ func TestFinalizeBindsTypedTestEvidenceAndDiagnosticState(t *testing.T) {
 	diagnosticEvidence := testEvidenceForAttempt(diagnostic.Attempts[1], true)
 	diagnosticState := TestDiagnostic{Suite: "unit", State: "baseline-unavailable", CandidateRetry: &diagnosticEvidence}
 	report, err := run.Finalize(FinalizeOptions{
-		Status: RunFailed, Findings: []Finding{}, Notes: []string{}, TestEvidence: []TestEvidence{initialEvidence, diagnosticEvidence},
+		Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, TestEvidence: []TestEvidence{initialEvidence, diagnosticEvidence},
 		TestDiagnostics: []TestDiagnostic{diagnosticState}, BehaviorReview: identity.BehaviorReview,
 	})
 	if err != nil {
@@ -279,7 +281,7 @@ func TestFinalizeBindsSuiteSatisfactionToRepresentativeReceipt(t *testing.T) {
 	run := startRun(t, t.TempDir(), identity)
 	representative := recordAttempt(t, run, 0, Passed, 0, "passed", "", 16)
 	report, err := run.Finalize(FinalizeOptions{
-		Status: RunPassed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview,
+		Status: RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview,
 		SuiteSatisfactions: []SuiteSatisfactionInput{{Suite: "component", ExecutedBy: "aggregate", Reason: "covered"}},
 	})
 	if err != nil {
@@ -308,7 +310,7 @@ func TestFinalizeRecordsBehaviorReviewReplayFailure(t *testing.T) {
 				outcome.ReviewID, outcome.ReceiptPath = "", ""
 			}
 			report, err := run.Finalize(FinalizeOptions{
-				Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: outcome,
+				Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: outcome,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -365,7 +367,7 @@ func TestFinalizeRejectsBehaviorReviewOutcomeTransitions(t *testing.T) {
 			run := startRun(t, t.TempDir(), identity)
 			recordAttempt(t, run, 0, Failed, 1, "", "gate failed", 16)
 			if _, err := run.Finalize(FinalizeOptions{
-				Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: test.outcome,
+				Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: test.outcome,
 			}); !errors.Is(err, ErrStaleArtifact) {
 				t.Fatalf("Finalize() error = %v, want stale artifact", err)
 			}
@@ -464,7 +466,7 @@ func TestFinalizeRejectsLatestPointerSymlinkReplacement(t *testing.T) {
 	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit")})
 	prior := startRun(t, root, identity)
 	recordAttempt(t, prior, 0, Passed, 0, "pass", "", 16)
-	if _, err := prior.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
+	if _, err := prior.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
 		t.Fatal(err)
 	}
 	current := startRun(t, root, identity)
@@ -478,7 +480,7 @@ func TestFinalizeRejectsLatestPointerSymlinkReplacement(t *testing.T) {
 	if err := os.Symlink(outside, latestPath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := current.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); !errors.Is(err, ErrInvalidArtifact) {
+	if _, err := current.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); !errors.Is(err, ErrInvalidArtifact) {
 		t.Fatalf("Finalize() error = %v, want invalid artifact", err)
 	}
 	data, err := os.ReadFile(outside)
@@ -617,7 +619,7 @@ func failedRunWithReceipt(t *testing.T) (string, Identity, Report) {
 	run := startRun(t, root, identity)
 	recordAttempt(t, run, 0, Passed, 0, "pass", "", 16)
 	recordAttempt(t, run, 1, Failed, 1, "", "failed", 16)
-	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	report, err := run.Finalize(FinalizeOptions{Status: RunFailed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
 	if err != nil {
 		t.Fatal(err)
 	}

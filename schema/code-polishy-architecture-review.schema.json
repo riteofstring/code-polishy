@@ -1,0 +1,953 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-architecture-review.schema.json",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "language",
+        "root",
+        "module",
+        "resolutionUnit",
+        "generated",
+        "test"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "module": {
+          "type": "string"
+        },
+        "resolutionUnit": {
+          "type": "string"
+        },
+        "generated": {
+          "type": "boolean"
+        },
+        "test": {
+          "type": "boolean"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "sourceResolutionUnit",
+        "targetResolutionUnit",
+        "ecosystem",
+        "kind",
+        "line",
+        "column"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "sourceResolutionUnit": {
+          "type": "string"
+        },
+        "targetResolutionUnit": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analyzer",
+        "protocol",
+        "project",
+        "root",
+        "factsSha256",
+        "partitionsSha256",
+        "resolutionSha256",
+        "paths"
+      ],
+      "properties": {
+        "analyzer": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "factsSha256": {
+          "type": "string"
+        },
+        "partitionsSha256": {
+          "type": "string"
+        },
+        "resolutionSha256": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "lock",
+        "manifestSha256",
+        "lockSha256",
+        "distribution",
+        "version",
+        "kind",
+        "source",
+        "namespace"
+      ],
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "lock": {
+          "type": "string"
+        },
+        "manifestSha256": {
+          "type": "string"
+        },
+        "lockSha256": {
+          "type": "string"
+        },
+        "distribution": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputGrammar",
+        "checkKind",
+        "protocol",
+        "runtimeType",
+        "sourceSha256",
+        "runtimeSha256",
+        "inputSha256",
+        "checkLine",
+        "checkColumn"
+      ],
+      "properties": {
+        "inputGrammar": {
+          "type": "string"
+        },
+        "checkKind": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "runtimeType": {
+          "type": "string"
+        },
+        "sourceSha256": {
+          "type": "string"
+        },
+        "runtimeSha256": {
+          "type": "string"
+        },
+        "inputSha256": {
+          "type": "string"
+        },
+        "checkLine": {
+          "type": "integer"
+        },
+        "checkColumn": {
+          "type": "integer"
+        }
+      }
+    },
+    "external": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "sourceResolutionUnit",
+        "line",
+        "column",
+        "dependency",
+        "contract"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "sourceResolutionUnit": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "dependency": {
+          "$ref": "#/$defs/dependency"
+        },
+        "contract": {
+          "$ref": "#/$defs/contract"
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "identity",
+        "nodes",
+        "edges",
+        "inputs",
+        "externalCompositions"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/input"
+          }
+        },
+        "externalCompositions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/external"
+          }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "identity", "members", "edges", "witness"],
+      "properties": {
+        "classification": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        },
+        "witness": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "paths"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "focusedSuite", "paths"],
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "focusedSuite": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reviewEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "sourceResolutionUnit",
+        "targetResolutionUnit",
+        "ecosystem",
+        "kind"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "sourceResolutionUnit": {
+          "type": "string"
+        },
+        "targetResolutionUnit": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      }
+    },
+    "reviewExternal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceResolutionUnit",
+        "distribution",
+        "version",
+        "kind",
+        "dependencySource",
+        "namespace",
+        "inputGrammar",
+        "checkKind",
+        "protocol",
+        "runtimeType"
+      ],
+      "properties": {
+        "sourceResolutionUnit": {
+          "type": "string"
+        },
+        "distribution": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "dependencySource": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "inputGrammar": {
+          "type": "string"
+        },
+        "checkKind": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "runtimeType": {
+          "type": "string"
+        }
+      }
+    },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "identity",
+        "modules",
+        "testPaths",
+        "ownership",
+        "nodes",
+        "edges",
+        "externalCompositions"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/module"
+          }
+        },
+        "testPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ownership": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownership"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewEdge"
+          }
+        },
+        "externalCompositions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewExternal"
+          }
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "paths", "units"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "module": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "topologyDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous",
+        "current",
+        "addedNodes",
+        "removedNodes",
+        "changedNodes",
+        "changedModules",
+        "addedEdges",
+        "removedEdges",
+        "ownershipChanged",
+        "addedExternalCompositions",
+        "removedExternalCompositions"
+      ],
+      "properties": {
+        "previous": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "addedNodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "removedNodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changedNodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "changedModules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "addedEdges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewEdge"
+          }
+        },
+        "removedEdges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewEdge"
+          }
+        },
+        "ownershipChanged": {
+          "type": "boolean"
+        },
+        "addedExternalCompositions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewExternal"
+          }
+        },
+        "removedExternalCompositions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reviewExternal"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "production",
+        "tests",
+        "incoming",
+        "outgoing",
+        "focusedSuites",
+        "externalCompositions"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "production": {
+          "type": "integer"
+        },
+        "tests": {
+          "type": "integer"
+        },
+        "incoming": {
+          "type": "integer"
+        },
+        "outgoing": {
+          "type": "integer"
+        },
+        "focusedSuites": {
+          "type": "integer"
+        },
+        "externalCompositions": {
+          "type": "integer"
+        }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pointer", "quote", "rationale"],
+      "properties": {
+        "pointer": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rationale", "modules", "ownership"],
+      "properties": {
+        "rationale": {
+          "type": "string"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/module"
+          }
+        },
+        "ownership": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownership"
+          }
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "evidence", "correction"],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/citation"
+          }
+        },
+        "correction": {
+          "$ref": "#/$defs/correction"
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "reviewId",
+        "base",
+        "candidate",
+        "topology",
+        "decision",
+        "rationale",
+        "evidence",
+        "findings"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "candidate": {
+          "type": "string"
+        },
+        "topology": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/citation"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "reviewId",
+        "base",
+        "candidate",
+        "graph",
+        "topology",
+        "signalsSha256",
+        "packetSha256"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "candidate": {
+          "type": "string"
+        },
+        "graph": {
+          "type": "string"
+        },
+        "topology": {
+          "type": "string"
+        },
+        "signalsSha256": {
+          "type": "string"
+        },
+        "packetSha256": {
+          "type": "string"
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "reviewId",
+        "base",
+        "candidate",
+        "graph",
+        "topology",
+        "signalsSha256",
+        "packetSha256",
+        "resultSha256"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "candidate": {
+          "type": "string"
+        },
+        "graph": {
+          "type": "string"
+        },
+        "topology": {
+          "type": "string"
+        },
+        "signalsSha256": {
+          "type": "string"
+        },
+        "packetSha256": {
+          "type": "string"
+        },
+        "resultSha256": {
+          "type": "string"
+        }
+      }
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "reviewId",
+        "base",
+        "candidate",
+        "previousCandidate",
+        "patch",
+        "instructions",
+        "resultPath",
+        "graph",
+        "topology",
+        "signals",
+        "cycles",
+        "summary",
+        "topologyDiff",
+        "sources",
+        "designDocuments"
+      ],
+      "properties": {
+        "protocol": {
+          "type": "string"
+        },
+        "reviewId": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "candidate": {
+          "type": "string"
+        },
+        "previousCandidate": {
+          "type": "string"
+        },
+        "patch": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "resultPath": {
+          "type": "string"
+        },
+        "graph": {
+          "$ref": "#/$defs/graph"
+        },
+        "topology": {
+          "$ref": "#/$defs/topology"
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        },
+        "cycles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        },
+        "summary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summary"
+          }
+        },
+        "topologyDiff": {
+          "$ref": "#/$defs/topologyDiff"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/document"
+          }
+        },
+        "designDocuments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/document"
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/packet"
+    },
+    {
+      "$ref": "#/$defs/binding"
+    },
+    {
+      "$ref": "#/$defs/receipt"
+    },
+    {
+      "$ref": "#/$defs/result"
+    }
+  ]
+}

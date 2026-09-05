@@ -127,13 +127,17 @@ func walkPackageLockDependencies(entries map[string]packageLockEntry, ecosystem,
 }
 
 func parseUVLock(data []byte, scope string) ([]resolvedPackage, error) {
+	return parseUVLockWith(data, scope, parseUVSourceFields)
+}
+
+func parseUVLockWith(data []byte, scope string, parseSource func([]repository.PythonLockSourceField) (resolvedSource, error)) ([]resolvedPackage, error) {
 	lock, err := repository.ParsePythonUVLock(scope, data)
 	if err != nil {
 		return nil, err
 	}
 	packages := make([]resolvedPackage, 0, len(lock.Packages))
 	for _, item := range lock.Packages {
-		source, err := parseUVSourceFields(item.Source)
+		source, err := parseSource(item.Source)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", scope, err)
 		}
@@ -161,12 +165,21 @@ func parseUVLock(data []byte, scope string) ([]resolvedPackage, error) {
 }
 
 func parseUVSourceFields(source []repository.PythonLockSourceField) (resolvedSource, error) {
-	fields := make(map[string]string, len(source))
-	for _, field := range source {
-		if _, found := fields[field.Name]; found {
-			return resolvedSource{}, fmt.Errorf("uv lock package source repeats %q", field.Name)
-		}
-		fields[field.Name] = field.Value
+	parsed, err := parseUVSourceFieldsWith(source, repository.ParsePythonGitSource)
+	if err != nil {
+		return resolvedSource{Kind: "unsupported", Reason: err.Error()}, nil
+	}
+	return parsed, nil
+}
+
+func parseUVInventorySourceFields(source []repository.PythonLockSourceField) (resolvedSource, error) {
+	return parseUVSourceFieldsWith(source, repository.ParsePythonGitInventorySource)
+}
+
+func parseUVSourceFieldsWith(source []repository.PythonLockSourceField, readGit func(string, string, string) (repository.PythonGitSource, error)) (resolvedSource, error) {
+	fields, err := uvSourceFieldMap(source)
+	if err != nil {
+		return resolvedSource{}, err
 	}
 	if registry, found := fields["registry"]; found && registry != "" {
 		return resolvedSource{Kind: "registry", Registry: registry}, nil
@@ -176,9 +189,9 @@ func parseUVSourceFields(source []repository.PythonLockSourceField) (resolvedSou
 		if commit == "" {
 			commit = fields["rev"]
 		}
-		git, err := repository.ParsePythonGitSource(gitURL, commit, fields["subdirectory"])
+		git, err := readGit(gitURL, commit, fields["subdirectory"])
 		if err != nil {
-			return resolvedSource{Kind: "unsupported", Reason: err.Error()}, nil
+			return resolvedSource{}, err
 		}
 		return resolvedSource{Kind: "git", Git: git}, nil
 	}
@@ -187,10 +200,48 @@ func parseUVSourceFields(source []repository.PythonLockSourceField) (resolvedSou
 			return resolvedSource{Kind: "local", LocalPath: path}, nil
 		}
 	}
-	if len(fields) == 0 {
-		return resolvedSource{Kind: "unsupported", Reason: "uv lock package has no source"}, nil
-	}
 	return resolvedSource{Kind: "unsupported", Reason: "uv lock package source is unsupported"}, nil
+}
+
+func uvSourceFieldMap(source []repository.PythonLockSourceField) (map[string]string, error) {
+	fields := make(map[string]string, len(source))
+	for _, field := range source {
+		if _, found := fields[field.Name]; found {
+			return nil, fmt.Errorf("uv lock package source repeats a field")
+		}
+		fields[field.Name] = field.Value
+	}
+	if err := validateUVSourceFields(fields); err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+func validateUVSourceFields(fields map[string]string) error {
+	kinds := 0
+	for _, kind := range []string{"registry", "git", "editable", "directory", "virtual", "url", "path"} {
+		if _, found := fields[kind]; found {
+			kinds++
+		}
+	}
+	if kinds != 1 {
+		return fmt.Errorf("uv lock package must have exactly one source kind")
+	}
+	for name := range fields {
+		switch name {
+		case "registry", "git", "editable", "directory", "virtual", "url", "path":
+		case "commit", "rev", "subdirectory":
+			if fields["git"] == "" {
+				return fmt.Errorf("uv lock package has Git fields without a Git source")
+			}
+		default:
+			return fmt.Errorf("uv lock package has unsupported source fields")
+		}
+	}
+	if fields["commit"] != "" && fields["rev"] != "" && fields["commit"] != fields["rev"] {
+		return fmt.Errorf("uv lock package declares contradictory commit fields")
+	}
+	return nil
 }
 
 func uniqueResolvedPackages(packages []resolvedPackage) []resolvedPackage {
@@ -222,7 +273,7 @@ func resolvedPackageKey(item resolvedPackage) string {
 func resolvedSourceKey(source resolvedSource) string {
 	switch source.Kind {
 	case "git":
-		return source.Kind + "\x00" + source.Git.Identity()
+		return source.Kind + "\x00" + source.Git.InventoryIdentity()
 	case "registry":
 		return source.Kind + "\x00" + source.Registry
 	case "local":

@@ -1,0 +1,3 @@
+source https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json
+upstream-sha256 ad6db49878699b091f3eeb765b6e29e92a34bad4da88664d000c923b549c3a25
+lf-normalized-sha256 2b19d2358baef0251d7d24e208d05ffabf1b2a3ab5e1b3a816066fc57fd4a7e8

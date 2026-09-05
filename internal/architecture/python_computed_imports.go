@@ -40,7 +40,7 @@ func pythonComputedImportCoverage(
 func pythonComputedDeclarations(all []policy.PythonComputedImport, project, source string) []policy.PythonComputedImport {
 	result := []policy.PythonComputedImport{}
 	for _, declaration := range all {
-		if declaration.Project == project && declaration.Importer == source {
+		if declaration.Project == project && declaration.Importer == source && declaration.Callee != "pkgutil.resolve_name" {
 			result = append(result, declaration)
 		}
 	}

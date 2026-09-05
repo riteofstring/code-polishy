@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-python.schema.json",
+  "$defs": {
+    "installedGitOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "vcs_info"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "subdirectory": { "type": "string", "maxLength": 4096 },
+        "vcs_info": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vcs", "commit_id"],
+          "properties": {
+            "vcs": { "const": "git" },
+            "commit_id": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+            "requested_revision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          }
+        }
+      }
+    },
+    "externalPluginImport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "consumer",
+        "distribution",
+        "namespace",
+        "inputGrammar",
+        "check"
+      ],
+      "properties": {
+        "project": { "$ref": "code-polishy.schema.json#/$defs/pyprojectPath" },
+        "consumer": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonDynamicConsumer"
+        },
+        "distribution": {
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "namespace": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain",
+          "maxLength": 4096
+        },
+        "inputGrammar": { "const": "python-module-object/v1" },
+        "check": { "$ref": "#/$defs/runtimeCheck" },
+        "configuration": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonObjectImportInput"
+        }
+      }
+    },
+    "runtimeCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "protocol", "site"],
+      "properties": {
+        "kind": { "enum": ["isinstance", "issubclass", "validator-call"] },
+        "protocol": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain",
+          "maxLength": 4096
+        },
+        "site": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonSourceLocation"
+        }
+      }
+    }
+  }
+}

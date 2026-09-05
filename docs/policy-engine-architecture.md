@@ -187,10 +187,14 @@ dead-code analysis, and structured `ty` diagnostics with those same roots.
 Vulture runs through carried CPython `3.12.13+20260728` from
 python-build-standalone, loads its version-matched standard whitelists, derives
 PEP 621 entry-point, in-tree backend-hook, and exact Pydantic model symbols, and
-accepts only validated exact `scope.pythonDynamicReferences` for remaining
-dynamic symbols. Exact `scope.pythonExternalAttributes` declarations resolve
-one typed receiver write consumed by an external runtime without preserving
-same-named unread attributes. All policy-owned Python execution passes through
+accepts consumer-bound target and registry `scope.pythonDynamicReferences`
+for remaining dynamic symbols. The shared compact resolver verifies the exact
+loader call, argument, source digest, and governed registry data flow before
+retaining definitions. Exact `scope.pythonExternalAttributes` declarations bind a
+parameter, initialized annotated local, or externally consumed instance receiver
+to one assignment by line and column. The adapter resolves imported aliases and
+local re-exports without executing target code and rejects stale or ambiguous
+bindings without preserving same-named unread assignments. All policy-owned Python execution passes through
 one isolated, no-bytecode command boundary.
 `internal/architecture` asks the same carried Ruff for an
 isolated import graph and decides module direction in Go; `internal/supplychain`

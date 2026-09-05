@@ -721,6 +721,33 @@ func parsePythonProjectWith(python, manifest string, data []byte) (PythonProject
 }
 
 func pythonProjectFromParsed(manifest string, parsed pythonParsedManifest) (PythonProject, error) {
+	project, err := pythonProjectInventoryFromParsed(manifest, parsed)
+	if err != nil {
+		return PythonProject{}, err
+	}
+	for _, requirement := range project.Requirements {
+		if requirement.Kind == PythonGitRequirement {
+			if err := requirement.Git.ValidateExactPin(); err != nil {
+				return PythonProject{}, pythonManifestError(manifest, requirement.Location.Line, "dependency %q: %v", requirement.Name, err)
+			}
+		}
+	}
+	return project, nil
+}
+
+func ParsePythonProjectInventory(manifest string, data []byte) (PythonProject, error) {
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		return PythonProject{}, err
+	}
+	parsed, err := parsePythonManifestWith(python, manifest, data)
+	if err != nil {
+		return PythonProject{}, err
+	}
+	return pythonProjectInventoryFromParsed(manifest, parsed)
+}
+
+func pythonProjectInventoryFromParsed(manifest string, parsed pythonParsedManifest) (PythonProject, error) {
 	var err error
 	project := pythonProjectDefinition(manifest, parsed.document.tables, parsed.document.assignments)
 	project.BuildBackend, project.BackendPaths, err = pythonProjectBuildMetadata(manifest, parsed.document.assignments)
@@ -837,7 +864,7 @@ func pythonAssignmentRequirement(manifest string, assignment pythonTOMLAssignmen
 	if !found {
 		return PythonRequirement{}, pythonManifestError(manifest, value.line, "python-facts omitted requirement %q", value.text)
 	}
-	requirement, err := pythonRequirementFact(fact)
+	requirement, err := pythonRequirementInventoryFact(fact)
 	if err != nil {
 		return PythonRequirement{}, pythonManifestError(manifest, value.line, "invalid requirement %q: %v", value.text, err)
 	}

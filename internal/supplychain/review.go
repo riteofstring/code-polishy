@@ -13,6 +13,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"golang.org/x/mod/modfile"
 )
 
 type DependencyChange struct {
@@ -40,7 +41,7 @@ func DependencyChanges(ctx context.Context, repo repository.Repository, baseRevi
 		read:  func(path string) ([]byte, error) { return repo.ReadAt(baseRevision, path) },
 	})
 	if err != nil {
-		return nil, fmt.Errorf("inventory dependencies at merge base: %w", err)
+		return nil, fmt.Errorf("dependency comparison coverage at merge base: %w", err)
 	}
 	current, err := dependencyInventory(ctx, repo, inventorySource{files: currentFiles, read: repo.Read})
 	if err != nil {
@@ -66,12 +67,16 @@ type dependencyRecord struct {
 type dependencyInventoryMap map[string]map[string]dependencyRecord
 
 func dependencyInventory(ctx context.Context, repo repository.Repository, source inventorySource) (dependencyInventoryMap, error) {
+	source = boundedInventorySource(source)
 	inventory := dependencyInventoryMap{}
 	fileSet := map[string]bool{}
 	for _, path := range source.files {
 		fileSet[path] = true
 	}
 	for _, path := range source.files {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		var records []dependencyRecord
 		var err error
 		switch filepath.Base(path) {
@@ -93,12 +98,7 @@ func dependencyInventory(ctx context.Context, repo repository.Repository, source
 		if err != nil {
 			return nil, err
 		}
-		for _, record := range records {
-			if direct[record.Ecosystem+"\x00"+record.Name+"\x00"+record.Version] {
-				continue
-			}
-			addDependencyRecords(inventory, []dependencyRecord{record})
-		}
+		addResolvedInventoryRecords(inventory, direct, records)
 	}
 	return inventory, nil
 }
@@ -127,12 +127,13 @@ func directNodeRecords(source inventorySource, files map[string]bool, path strin
 	}
 	for _, group := range groups {
 		for name, version := range group.dependencies {
-			if exactVersion.MatchString(version) {
-				records = append(records, dependencyRecord{
-					Ecosystem: manager, Scope: path, Directness: "direct", Usage: group.usage,
-					Name: name, Version: version,
-				})
+			if err := validateNodeInventoryDeclaration(path, version); err != nil {
+				return nil, fmt.Errorf("parse %s: dependency %q: %w", path, name, err)
 			}
+			records = append(records, dependencyRecord{
+				Ecosystem: manager, Scope: path, Directness: "direct", Usage: group.usage,
+				Name: name, Version: version,
+			})
 		}
 	}
 	if name, version, found := strings.Cut(manifest.PackageManager, "@"); found && exactVersion.MatchString(version) {
@@ -176,30 +177,17 @@ func directPythonRecords(source inventorySource, path string) ([]dependencyRecor
 	if err != nil {
 		return nil, err
 	}
-	project, err := repository.ParsePythonProject(path, data)
+	project, err := repository.ParsePythonProjectInventory(path, data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse %s: Python dependency inventory is malformed, ambiguous, or unsafe", path)
 	}
 	records := []dependencyRecord{}
 	for _, dependency := range project.Requirements {
-		switch dependency.Kind {
-		case repository.PythonRegistryRequirement:
-			version, exact := dependency.ExactRegistryVersion()
-			if !exact {
-				continue
-			}
-			records = append(records, dependencyRecord{
-				Ecosystem: "pypi", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: version,
-			})
-		case repository.PythonGitRequirement:
-			records = append(records, dependencyRecord{
-				Ecosystem: "git", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: dependency.Git.Identity(),
-			})
-		case repository.PythonFileRequirement:
-			records = append(records, dependencyRecord{
-				Ecosystem: "file", Scope: path, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name, Version: "file:" + dependency.FilePath,
-			})
+		record, err := pythonInventoryRecord(path, dependency)
+		if err != nil {
+			return nil, err
 		}
+		records = append(records, record)
 	}
 	return records, nil
 }
@@ -209,41 +197,46 @@ func directGoRecords(source inventorySource, path string) ([]dependencyRecord, e
 	if err != nil {
 		return nil, err
 	}
+	document, err := modfile.Parse(path, data, func(_ string, version string) (string, error) {
+		return version, validateDependencyDeclaration(version)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: Go dependency inventory is malformed", path)
+	}
 	records := []dependencyRecord{}
-	block := false
-	for _, raw := range strings.Split(string(data), "\n") {
-		indirect := strings.Contains(raw, "// indirect")
-		line := strings.TrimSpace(strings.SplitN(raw, "//", 2)[0])
-		if line == "require (" {
-			block = true
-			continue
+	for _, requirement := range document.Require {
+		directness, usage := "direct", "runtime"
+		if requirement.Indirect {
+			directness, usage = "transitive", "resolved"
 		}
-		if block && line == ")" {
-			block = false
-			continue
-		}
-		if strings.HasPrefix(line, "require ") {
-			line = strings.TrimSpace(strings.TrimPrefix(line, "require "))
-		} else if !block {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && goVersion.MatchString(fields[1]) {
-			directness := "direct"
-			usage := "runtime"
-			if indirect {
-				directness = "transitive"
-				usage = "resolved"
-			}
-			records = append(records, dependencyRecord{
-				Ecosystem: "go", Scope: path, Directness: directness, Usage: usage, Name: fields[0], Version: fields[1],
-			})
-		}
+		records = append(records, dependencyRecord{
+			Ecosystem: "go", Scope: path, Directness: directness, Usage: usage,
+			Name: requirement.Mod.Path, Version: requirement.Mod.Version,
+		})
 	}
 	return records, nil
 }
 
 func resolvedLockRecords(ctx context.Context, repo repository.Repository, source inventorySource, path string) ([]dependencyRecord, error) {
+	packages, err := readResolvedLockInventory(ctx, repo, source, path)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]dependencyRecord, 0, len(packages))
+	for _, item := range packages {
+		if err := validateResolvedInventorySource(item); err != nil {
+			return nil, err
+		}
+		ecosystem, version := resolvedDependencyReviewIdentity(item)
+		records = append(records, dependencyRecord{
+			Ecosystem: ecosystem, Scope: path, Directness: "transitive", Usage: "resolved",
+			Name: item.Name, Version: version,
+		})
+	}
+	return records, nil
+}
+
+func readResolvedLockInventory(ctx context.Context, repo repository.Repository, source inventorySource, path string) ([]resolvedPackage, error) {
 	name := filepath.Base(path)
 	if name != "package-lock.json" && name != "npm-shrinkwrap.json" && name != pnpmLockName && name != "uv.lock" {
 		return nil, nil
@@ -259,26 +252,18 @@ func resolvedLockRecords(ctx context.Context, repo repository.Repository, source
 	case pnpmLockName:
 		packages, err = revisionPNPMPackages(ctx, repo, data, path)
 	case "uv.lock":
-		packages, err = parseUVLock(data, path)
+		packages, err = parseUVLockWith(data, path, parseUVInventorySourceFields)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse %s: resolved dependency inventory is malformed, ambiguous, or unsupported", path)
 	}
-	records := make([]dependencyRecord, 0, len(packages))
-	for _, item := range packages {
-		ecosystem, version := resolvedDependencyReviewIdentity(item)
-		records = append(records, dependencyRecord{
-			Ecosystem: ecosystem, Scope: path, Directness: "transitive", Usage: "resolved",
-			Name: item.Name, Version: version,
-		})
-	}
-	return records, nil
+	return packages, nil
 }
 
 func resolvedDependencyReviewIdentity(item resolvedPackage) (string, string) {
 	switch item.Source.Kind {
 	case "git":
-		return "git", item.Source.Git.Identity()
+		return "git", item.Source.Git.InventoryIdentity()
 	case "local":
 		return "file", "file:" + item.Source.LocalPath
 	default:
@@ -423,7 +408,18 @@ func newDependencyAgeCandidate(change DependencyChange) bool {
 		strings.Contains(" added updated ", " "+change.Change+" ") &&
 		strings.Contains(" runtime optional ", " "+change.Usage+" ") &&
 		change.To != "-" &&
+		dependencyAgeVersion(change) &&
 		strings.Contains(" go npm pnpm pypi ", " "+change.Ecosystem+" ")
+}
+
+func dependencyAgeVersion(change DependencyChange) bool {
+	if change.Ecosystem == "go" {
+		return goVersion.MatchString(change.To)
+	}
+	if change.Ecosystem == "pypi" {
+		return change.To != "" && !strings.ContainsAny(change.To, "<>=~*,")
+	}
+	return exactVersion.MatchString(change.To)
 }
 
 func observedDependencyAgeAdvisory(observation releaseObservation, cutoff time.Time, preferredDays int) *policy.Advisory {

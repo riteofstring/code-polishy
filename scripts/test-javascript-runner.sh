@@ -704,17 +704,26 @@ if [[ -e "${deadcode_target}/node_modules" ]] ||
   fail "the dead-code analysis wrote into the target tree"
 fi
 
-mkdir -p "${deadcode_target}/generated"
-printf 'export const inherited = () => 7;\n' >"${deadcode_target}/generated/client.ts"
-deadcode_request . \
-  '[{"root":"packages/web","entry":[],"project":["generated/client.ts"],"inherited":["generated/client.ts"]}]' |
-  run_runner >"${deadcode_response}" || fail "the runner rejected generated source owned by another package"
-if ! grep -qF '"covered":["generated/client.ts"]' "${deadcode_response}"; then
-  fail "deadcode did not apply the source package context to generated output: $(cat "${deadcode_response}")"
+generated_deadcode_target="${fixture_root}/generated-deadcode"
+mkdir -p "${generated_deadcode_target}/frontend/src" "${generated_deadcode_target}/python_pkg/generated"
+printf '{"name":"frontend","private":true,"type":"module"}\n' >"${generated_deadcode_target}/frontend/package.json"
+printf '[project]\nname = "python-package"\nversion = "1.0.0"\n' >"${generated_deadcode_target}/pyproject.toml"
+printf 'import { used } from "../../python_pkg/generated/client.js";\nexport const boot = () => used();\n' \
+  >"${generated_deadcode_target}/frontend/src/index.ts"
+printf 'export const used = () => 7;\nexport const unusedGenerated = () => 8;\n' \
+  >"${generated_deadcode_target}/python_pkg/generated/client.ts"
+printf 'export const orphan = () => 9;\n' >"${generated_deadcode_target}/python_pkg/generated/orphan.ts"
+printf '{"protocolVersion":3,"operation":"deadcode","root":"%s","directory":"frontend","workspaces":[{"root":"frontend","entry":["frontend/src/index.ts"],"project":["frontend/src/index.ts","python_pkg/generated/client.ts","python_pkg/generated/orphan.ts"],"inherited":["python_pkg/generated/client.ts","python_pkg/generated/orphan.ts"]}]}' \
+  "${generated_deadcode_target}" |
+  run_runner >"${deadcode_response}" || fail "the runner rejected generated JavaScript inside a Python package"
+if ! grep -qF '"unusedFiles":["python_pkg/generated/orphan.ts"]' "${deadcode_response}" ||
+  ! grep -qF '"symbol":"unusedGenerated"' "${deadcode_response}" ||
+  grep -qF '"symbol":"used"' "${deadcode_response}"; then
+  fail "deadcode lost source-package reachability for generated output: $(cat "${deadcode_response}")"
 fi
-
-
-
+if [[ -e "${generated_deadcode_target}/package.json" || -e "${generated_deadcode_target}/node_modules" ]]; then
+  fail "deadcode fabricated a root JavaScript package"
+fi
 
 mkdir -p "${deadcode_target}/tools/kit"
 printf '{"name":"kit","private":true,"version":"0.0.0","type":"module"}\n' \
@@ -899,7 +908,7 @@ expect_import "./lazy.ts" "web/lazy.ts" ""
 if [[ "$(grep -oF '"specifier":"./lazy.ts"' "${imports_response}" | wc -l | tr -d ' ')" != "2" ]]; then
   fail "imports did not report both the dynamic and the type import: $(cat "${imports_response}")"
 fi
-if ! grep -qF '"path":"web/legacy.cjs","line":1,"specifier":"../domain/model.js","resolved":"domain/model.ts","package":""' \
+if ! grep -qF '"path":"web/legacy.cjs","line":1,"column":27,"specifier":"../domain/model.js","resolved":"domain/model.ts","package":"","kind":"runtime"' \
   "${imports_response}"; then
   fail "imports did not resolve a literal require: $(cat "${imports_response}")"
 fi

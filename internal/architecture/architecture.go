@@ -2,14 +2,10 @@ package architecture
 
 import (
 	"context"
-	"fmt"
-	"go/parser"
-	"go/token"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -20,72 +16,28 @@ func Check(ctx context.Context, repo repository.Repository, selected []string) [
 }
 
 func CheckWithRunner(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
+	return AnalyzeWithRunner(ctx, repo, selected, commandRunner).Findings
+}
+
+type Analysis struct {
+	Findings    []policy.Finding
+	Graph       *sourcegraph.Graph
+	TestImports map[string][]string
+}
+
+func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) Analysis {
 	allFiles, err := repo.AllFiles()
 	if err != nil {
-		return []policy.Finding{{Check: "architecture.inventory", Path: "repository", Subject: "files", Message: err.Error()}}
+		return Analysis{Findings: []policy.Finding{{Check: "architecture.inventory", Path: "repository", Subject: "files", Message: err.Error()}}}
 	}
-	modules := repo.GoModules(allFiles)
-	findings := []policy.Finding{}
-	for _, source := range selected {
-		findings = append(findings, checkGoFile(repo, source, allFiles, modules)...)
-	}
-	findings = append(findings, javascriptFindings(ctx, repo, selected, allFiles)...)
-	return append(findings, pythonFindings(ctx, repo, selected, allFiles, commandRunner)...)
-}
-
-func checkGoFile(repo repository.Repository, source string, allFiles []string, modules []repository.GoModule) []policy.Finding {
-	if repo.Language(source) != "go" || repo.IsTest(source) {
-		return nil
-	}
-	owners := repo.ModuleNames(source)
-	if len(owners) != 1 {
-		return nil
-	}
-	if _, found := repo.OwningGoModule(source, modules); !found {
-		return nil
-	}
-	data, err := repo.Read(source)
-	if err != nil {
-		return nil
-	}
-	set := token.NewFileSet()
-	parsed, err := parser.ParseFile(set, source, data, parser.ImportsOnly)
-	if err != nil {
-		return nil
-	}
-	findings := []policy.Finding{}
-	for _, imported := range parsed.Imports {
-		if finding, exists := importFinding(repo, source, owners[0], modules, imported.Path.Value, set.Position(imported.Pos()).Line, allFiles); exists {
-			findings = append(findings, finding)
-		}
-	}
-	return findings
-}
-
-func importFinding(repo repository.Repository, source, sourceOwner string, modules []repository.GoModule, quotedImport string, line int, allFiles []string) (policy.Finding, bool) {
-	raw, err := strconv.Unquote(quotedImport)
-	if err != nil {
-		return policy.Finding{}, false
-	}
-	targetDirectory, internal := internalGoDirectory(modules, raw)
-	if !internal {
-		return policy.Finding{}, false
-	}
-	targetPath := representativeGoFile(targetDirectory, allFiles)
-	targetOwners := repo.ModuleNames(targetPath)
-	if targetPath == "" || len(targetOwners) != 1 || targetOwners[0] == sourceOwner {
-		return policy.Finding{}, false
-	}
-	sourceModule := repo.Config.Modules[repo.Config.ModuleByName[sourceOwner]]
-	if slices.Contains(sourceModule.DependsOn, targetOwners[0]) {
-		return policy.Finding{}, false
-	}
-	return policy.Finding{
-		Check:   "architecture.moduleDependency",
-		Path:    source,
-		Subject: targetOwners[0],
-		Message: fmt.Sprintf("line %d module %q imports module %q without declaring dependsOn", line, sourceOwner, targetOwners[0]),
-	}, true
+	goInventory := repo.InspectGoModules(allFiles)
+	part := mergeSourceGraphParts(
+		goSourceGraph(repo, selected, allFiles, goInventory),
+		javascriptSourceGraph(ctx, repo, selected, allFiles),
+		pythonSourceGraph(ctx, repo, selected, allFiles, commandRunner),
+	)
+	graph, findings := completeSourceGraph(part, selected)
+	return Analysis{Findings: findings, Graph: graph, TestImports: part.testImports}
 }
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
@@ -109,14 +61,14 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 func goPackageOwnerFindings(repo repository.Repository, files []string) []policy.Finding {
 	ownersByDirectory := map[string]map[string]bool{}
 	for _, path := range files {
-		if repo.Language(path) != "go" {
+		if repo.Language(path) != "go" || repo.IsTest(path) {
 			continue
 		}
 		directory := filepath.ToSlash(filepath.Dir(path))
 		if ownersByDirectory[directory] == nil {
 			ownersByDirectory[directory] = map[string]bool{}
 		}
-		for _, owner := range repo.ModuleNames(path) {
+		for _, owner := range repo.OwnerModuleNames(path) {
 			ownersByDirectory[directory][owner] = true
 		}
 	}
@@ -147,17 +99,4 @@ func internalGoDirectory(modules []repository.GoModule, imported string) (string
 		return filepath.ToSlash(suffix), true
 	}
 	return filepath.ToSlash(filepath.Join(matched.Root, suffix)), true
-}
-
-func representativeGoFile(directory string, files []string) string {
-	directory = strings.TrimSuffix(directory, "/")
-	for _, path := range files {
-		if filepath.Ext(path) != ".go" {
-			continue
-		}
-		if filepath.ToSlash(filepath.Dir(path)) == directory {
-			return path
-		}
-	}
-	return ""
 }

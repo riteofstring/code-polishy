@@ -270,7 +270,7 @@ swap the code a release runs without changing an installed file.
 
 Each manifest version has an exact schema and identity calculation. The engine
 accepts only its own version. The stable launcher keeps explicit readers for
-installed manifest versions 2 through 4 so installing a newer release does not
+installed manifest versions 2 through 5 so installing a newer release does not
 strand repositories still locked to an older one. It verifies each older
 release using that version's original fields and never invents evidence added
 by a later schema.
@@ -284,6 +284,13 @@ version is a separate contract.
 Manifest version 5 adds `tools.packaging` for PyPA `packaging` `26.3`. That
 field contributes only to version 5 identities; launchers continue validating
 older manifests against the exact smaller inventory of their own version.
+
+Manifest version 6 adds `capabilityCatalogSha256`, the SHA-256 of the shipped
+`docs/capabilities.json`. This digest contributes to the host-independent
+release identity and must match the catalog's regular-file entry. Discovery
+validates the selected catalog against the repository's exact lock; another
+installed release or a modified catalog cannot supply its capabilities. Older
+releases with no authenticated catalog report discovery evidence unavailable.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after

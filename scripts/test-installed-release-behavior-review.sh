@@ -2,7 +2,7 @@
 
 # Sourced by test-installed-release.sh after its fixture helpers are defined.
 
-declare output
+declare output release
 
 fixture_pass() {
   local target="$1" scenario="$2" phase="$3" review_attempt="$4"
@@ -61,6 +61,9 @@ fixture_status() {
 
 fixture_gate_pass() {
   local target="$1" scenario="$2" phase="$3" base="$4" expected="$5" review_attempt="$6" command="$7"
+  local fixture_python
+  fixture_python="$(installed_fixture_python "${release}")"
+  fixture_accept_architecture "${target}" "${base}" "${fixture_python}"
   fixture_pass "${target}" "${scenario}" "${phase}" "${review_attempt}" "${command}" --base "${base}"
   assert_behavior_review_status_line "${scenario}: ${phase}" "${expected}"
 }
@@ -108,7 +111,7 @@ write_behavior_review_fixture_config() {
   fi
   write_file "${target}/.code-polishy.json" <<EOF
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},
@@ -126,6 +129,9 @@ write_behavior_review_fixture_config() {
     }
   ],
   "tests": {
+    "ownership": [
+      {"paths": ["internal/greeting/greeting_test.go"], "module": "greeting", "focusedSuite": "greeting-contract"}
+    ],
     "suites": [
       {
         "name": "greeting-unit",
@@ -140,6 +146,7 @@ write_behavior_review_fixture_config() {
         "kind": "unit",
         "scope": "module",
         "modules": ["greeting"],
+        "paths": ["internal/greeting/greeting_test.go"],
         "argv": ["./scripts/test.sh", "greeting-contract"],
         "runOn": ["focused", "recommended", "full"]
       },
@@ -641,7 +648,7 @@ exercise_no_config_behavior_review() {
 exercise_capture_time_features_and_replay() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-capture-time" target="${scratch_root}/behavior-capture-time"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","modules":["greeting"],"suites":["greeting-unit"]}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","description":"Search query and result behavior.","modules":["greeting"],"suites":["greeting-unit"]}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base command_log
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
@@ -663,7 +670,7 @@ exercise_capture_time_features_and_replay() {
 exercise_later_additive_require() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-later-require" target="${scratch_root}/behavior-later-require"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","modules":["greeting"],"suites":["greeting-unit"]}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","description":"Search query and result behavior.","modules":["greeting"],"suites":["greeting-unit"]}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base journal before after
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
@@ -691,7 +698,7 @@ exercise_later_additive_require() {
 exercise_merge_required_feature() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-merge-required" target="${scratch_root}/behavior-merge-required"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"merge"}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"merge"}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
@@ -707,7 +714,7 @@ exercise_merge_required_feature() {
 exercise_checkpoint_required_feature() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-checkpoint-required" target="${scratch_root}/behavior-checkpoint-required"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"checkpoint"}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"checkpoint"}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
@@ -738,7 +745,7 @@ exercise_strict_full_candidate() {
 exercise_stale_fix_and_rereview() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-stale-fix-rereview" target="${scratch_root}/behavior-stale-fix-rereview"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"merge"}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"],"requiredAt":"merge"}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base repair_base started
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"
@@ -773,7 +780,7 @@ exercise_stale_fix_and_rereview() {
 exercise_multi_task_union() {
   local scratch_root="$1" git_executable="$2"
   local scenario="behavior-multi-task-union" target="${scratch_root}/behavior-multi-task-union"
-  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","modules":["greeting"],"suites":["greeting-unit"]}]}'
+  local policy='{"defaultRequiredAt":"on-request","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["greeting"],"suites":["greeting-unit"]},{"name":"search","description":"Search query and result behavior.","modules":["greeting"],"suites":["greeting-unit"]}]}'
   new_behavior_review_target "${target}" "${policy}" "${git_executable}"
   local base second_base journal
   base="$("${git_executable}" -C "${target}" rev-parse HEAD)"

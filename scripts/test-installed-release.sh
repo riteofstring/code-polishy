@@ -1,43 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 prefix="${HOME}/.local/share/code-polishy"
 lock="${policy_root}/.code-polishy.lock.json"
 fixture=""
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|python-adoption]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|scoped-analysis|python-adoption|python-reachability|python-pydantic]" >&2
   exit 2
 }
 
@@ -80,7 +50,7 @@ while (($#)); do
   esac
 done
 case "${fixture}" in
-  "" | first-adoption | python-adoption) ;;
+  "" | first-adoption | scoped-analysis | python-adoption | python-reachability | python-pydantic) ;;
   *) usage ;;
 esac
 
@@ -283,11 +253,20 @@ expect_no_target_commands() {
   fi
 }
 
+source "${policy_root}/scripts/test-installed-release-architecture.sh"
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
+source "${policy_root}/scripts/test-installed-release-scoped-analysis.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
+source "${policy_root}/scripts/test-installed-release-python-reachability.sh"
+source "${policy_root}/scripts/test-installed-release-python-pydantic.sh"
 
 case "${fixture}" in
+  scoped-analysis)
+    exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
+    echo "The installed release passed the scoped-analysis fixture."
+    exit 0
+    ;;
   first-adoption)
     exercise_first_adoption_fixture "${fixture_root}" "${real_git}" "${lock}" "${output}"
     echo "The installed release passed the first-adoption fixture."
@@ -296,6 +275,16 @@ case "${fixture}" in
   python-adoption)
     exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
     echo "The installed release passed the Python adoption fixture."
+    exit 0
+    ;;
+  python-pydantic)
+    exercise_python_pydantic_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}" "${policy_root}"
+    echo "The installed release passed the Pydantic fixture."
+    exit 0
+    ;;
+  python-reachability)
+    exercise_python_reachability_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}"
+    echo "The installed release passed the Python reachability fixture."
     exit 0
     ;;
 esac
@@ -407,7 +396,7 @@ chmod +x "${go_only}/scripts/test.sh"
 write_security_workflow "${go_only}"
 write_file "${go_only}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},
@@ -424,13 +413,15 @@ write_file "${go_only}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {
-    "suites": [
+  "tests": {"ownership": [
+      {"paths": ["internal/greeting/greeting_test.go"], "module": "greeting", "focusedSuite": "greeting-unit"}
+    ], "suites": [
       {
         "name": "greeting-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["greeting"],
+        "paths": ["internal/greeting/greeting_test.go"],
         "argv": ["./scripts/test.sh", "greeting"]
       },
       {
@@ -485,6 +476,8 @@ expect_absent "go-only reported a JavaScript-owned check" \
 
 
 
+exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
+
 pnpm_app="${fixture_root}/pnpm-app"
 mkdir -p "${pnpm_app}"
 write_file "${pnpm_app}/package.json" <<'EOF'
@@ -515,7 +508,7 @@ write_target_commands "${pnpm_app}"
 write_security_workflow "${pnpm_app}"
 write_file "${pnpm_app}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": { "entryPoints": ["src/**"] },
   "quality": {},
@@ -532,8 +525,7 @@ write_file "${pnpm_app}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {
-    "suites": [
+  "tests": {"ownership": [], "suites": [
       {
         "name": "app-unit",
         "kind": "unit",
@@ -652,7 +644,7 @@ write_target_commands "${monorepo}"
 write_security_workflow "${monorepo}"
 write_file "${monorepo}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": { "entryPoints": ["packages/*/src/index.js"] },
   "quality": {},
@@ -670,8 +662,7 @@ write_file "${monorepo}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {
-    "suites": [
+  "tests": {"ownership": [], "suites": [
       {
         "name": "lib-unit",
         "kind": "unit",
@@ -765,7 +756,7 @@ write_target_commands "${typescript}"
 write_security_workflow "${typescript}"
 write_file "${typescript}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "library", "capabilities": [] },
   "scope": { "entryPoints": ["src/index.ts"] },
   "quality": {},
@@ -782,8 +773,7 @@ write_file "${typescript}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {
-    "suites": [
+  "tests": {"ownership": [], "suites": [
       {
         "name": "library-unit",
         "kind": "unit",
@@ -926,7 +916,7 @@ write_target_commands "${react}"
 write_security_workflow "${react}"
 write_file "${react}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": ["frontend", "ui"] },
   "scope": { "entryPoints": ["src/**"] },
   "quality": {},
@@ -943,8 +933,7 @@ write_file "${react}/.code-polishy.json" <<'EOF'
       "runOn": ["build"]
     }
   ],
-  "tests": {
-    "suites": [
+  "tests": {"ownership": [], "suites": [
       {
         "name": "interface-unit",
         "kind": "unit",
@@ -993,5 +982,7 @@ expect_findings "${react}" "react" check --all
 expect_finding "react" "quality.lint" "src/conditional.tsx" "react-hooks/rules-of-hooks"
 
 exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
+exercise_python_reachability_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}"
+exercise_python_pydantic_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}" "${policy_root}"
 
 echo "The installed release governed every disposable target shape."

@@ -37,28 +37,26 @@ func checkResolvedNodeReleaseAge(ctx context.Context, repo repository.Repository
 	return releaseAgeFindings(ctx, repo, packages, time.Now().UTC())
 }
 
-func checkResolvedPythonReleaseAge(ctx context.Context, repo repository.Repository, projectPath string) []policy.Finding {
-	root := filepathDirectory(projectPath)
-	lockPath := "uv.lock"
-	if root != "." {
-		lockPath = root + "/uv.lock"
+func resolvedPythonFindings(ctx context.Context, repo repository.Repository, scope string, packages []resolvedPackage, now time.Time) []policy.Finding {
+	findings := []policy.Finding{}
+	if gitLockPackages(packages) {
+		verified, _ := verifyGitLockEvidence(repo, scope, packages, now)
+		findings = append(findings, verified...)
 	}
-	data, err := repo.Read(lockPath)
-	if err != nil {
-		return []policy.Finding{{
-			Check: "supplyChain.releaseAge", Path: projectPath, Subject: "uv:resolved-graph",
-			Message: err.Error(),
-		}}
+	registry := []resolvedPackage{}
+	for _, item := range packages {
+		switch item.Source.Kind {
+		case "unsupported":
+			findings = append(findings, gitEvidenceFinding(scope, gitEvidenceFailure("coverage", "Resolved Python lock contains an unsupported source; complete source coverage is required")))
+		case "registry":
+			if publicPythonRegistry(item.Source.Registry) {
+				registry = append(registry, item)
+			} else {
+				findings = append(findings, policy.Finding{Check: "supplyChain.releaseAgeCoverage", Path: scope, Subject: "private-registry", Message: "Non-public Python registry packages require authenticated publication evidence; their identities are not queried at PyPI"})
+			}
+		}
 	}
-	packages, err := parseUVLock(data, lockPath)
-	if err != nil {
-		return []policy.Finding{{
-			Check: "supplyChain.releaseAge", Path: lockPath, Subject: "uv:resolved-graph",
-			Message: err.Error(),
-		}}
-	}
-	findings := pythonGitSourceCoverageFindings(packages)
-	findings = append(findings, releaseAgeFindings(ctx, repo, packages, time.Now().UTC())...)
+	findings = append(findings, releaseAgeFindings(ctx, repo, registry, now)...)
 	return uniqueFindings(findings)
 }
 
@@ -121,31 +119,6 @@ func registryReleasePackages(packages []resolvedPackage) []resolvedPackage {
 		registry = append(registry, item)
 	}
 	return registry
-}
-
-func pythonGitSourceCoverageFindings(packages []resolvedPackage) []policy.Finding {
-	findings := []policy.Finding{}
-	for _, item := range packages {
-		if item.Source.Kind != "git" {
-			continue
-		}
-		subject := item.Name + "@" + item.Source.Git.Identity()
-		findings = append(findings,
-			policy.Finding{
-				Check: "supplyChain.releaseAgeCoverage", Path: item.Scope, Subject: subject,
-				Message: "Git source has no registry release timestamp, so release-age coverage is unavailable",
-			},
-			policy.Finding{
-				Check: "policy.securityScanner", Path: item.Scope, Subject: subject,
-				Message: "Git source vulnerability coverage is unavailable without a scanner that can assess the resolved repository commit",
-			},
-		)
-	}
-	sort.Slice(findings, func(left, right int) bool {
-		return findings[left].Check+"\x00"+findings[left].Path+"\x00"+findings[left].Subject <
-			findings[right].Check+"\x00"+findings[right].Path+"\x00"+findings[right].Subject
-	})
-	return uniqueFindings(findings)
 }
 
 type releaseGroup struct {

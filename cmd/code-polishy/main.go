@@ -21,6 +21,8 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 
 Commands:
   version
+  capabilities [--query TEXT] [--format human|json]
+  task-start --intent-file PATH (--files PATH | --module NAME) [--feature NAME] [--situation NAME]
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
@@ -28,15 +30,16 @@ Commands:
   release-manifest <write|verify|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
-  check [--git-changes|--staged|--all|--files PATH...|--name NAME...]
+  check [--git-changes|--staged|--all|--files PATH...|--module NAME...|--name NAME...]
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
-  behavior-review capture-intent --intent-file PATH [--feature NAME...]
+  behavior-review capture-intent --intent-file PATH [--feature NAME...] [--format human|json]
   behavior-review require --base REF --feature NAME...
-  behavior-review status --base REF
+  behavior-review status --base REF [--format human|json]
   behavior-review prepare --base REF
   behavior-review finalize --base REF
+  architecture-review <status|prepare|finalize> --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
   test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental [--resume]|--module NAME...|--suite NAME...]
   test-plan [--base REF]
@@ -44,13 +47,13 @@ Commands:
   test-receipts export --output PATH
   test-receipts import --source PATH --sha256 DIGEST
   verify [--tests-only]
-  architecture [--git-changes|--staged|--all|--files PATH...]
+  architecture [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   supply-chain [--offline]
   dependency-review --base REF
   artifact-security
   doctor [--strict]
-  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...])
-  format [--git-changes|--staged|--all|--files PATH...]
+  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...]) [--situation NAME...]
+  format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
   list-files [selection options]
 
@@ -93,21 +96,32 @@ func validateInvocation(invocation invocation) int {
 }
 
 func runPolicyCommand(invocation invocation) int {
+	outputOptions, commandArguments, parseErr := parseReportOutputOptions(invocation.command, invocation.arguments)
+	if parseErr != nil {
+		return commandUsageErrorForInvocation(invocation, parseErr.Error())
+	}
 	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
 		return 2
 	}
 	policyEngine.Verbose = invocation.verbose
+	if outputOptions.format != "human" {
+		policyEngine.RouteProgress(os.Stderr)
+	}
 	handler, exists := commandHandlers()[invocation.command]
 	if !exists {
 		return commandUsageError("", "unknown command "+invocation.command)
 	}
-	result, err := handler(context.Background(), policyEngine, invocation.arguments)
-	return renderCommandResult(invocation, result, err)
+	result, err := handler(context.Background(), policyEngine, commandArguments)
+	if err == nil && !result.quiet {
+		result.report = engine.PrepareReportDisplay(result.report, outputOptions.display)
+		result.report, err = policyEngine.FinalizeReport(invocation.command, result.report)
+	}
+	return renderCommandResultWithOptions(invocation, policyEngine, result, err, outputOptions)
 }
 
-func renderCommandResult(invocation invocation, result commandResult, err error) int {
+func renderCommandResultWithOptions(invocation invocation, policyEngine *engine.Engine, result commandResult, err error, options reportOutputOptions) int {
 	if err != nil {
 		if isCommandInputError(err) {
 			return commandUsageErrorForInvocation(invocation, err.Error())
@@ -115,14 +129,22 @@ func renderCommandResult(invocation invocation, result commandResult, err error)
 		printOperationalReportHeaders(os.Stdout, result.report, invocation.verbose)
 		return operationalError(err)
 	}
+	messageOutput := io.Writer(os.Stdout)
+	if options.format != "human" {
+		messageOutput = os.Stderr
+	}
 	for _, message := range result.messages {
-		fmt.Fprintln(os.Stdout, message)
+		fmt.Fprintln(messageOutput, message)
 	}
 	if result.quiet {
 		return 0
 	}
-	printReport(result.report, invocation.verbose)
-	if engine.HasFindings(result.report) {
+	failed := engine.HasFindings(result.report)
+	view := engine.ReportView(result.report, options.display)
+	if renderErr := renderReportOutput(policyEngine, view, invocation.verbose, options); renderErr != nil {
+		return operationalError(renderErr)
+	}
+	if failed {
 		return 1
 	}
 	return 0
@@ -188,7 +210,11 @@ func handleWorkflowMetaCommand(invocation invocation) (int, bool) {
 }
 
 func handleChangeBoundaryMeta(invocation invocation) int {
-	options, err := parseChangeBoundaryOptions(invocation.arguments)
+	outputOptions, commandArguments, err := parseReportOutputOptions(invocation.command, invocation.arguments)
+	if err != nil {
+		return commandUsageErrorForInvocation(invocation, err.Error())
+	}
+	options, err := parseChangeBoundaryOptions(commandArguments)
 	if err != nil {
 		return commandUsageError("change-boundary", err.Error())
 	}
@@ -201,11 +227,13 @@ func handleChangeBoundaryMeta(invocation invocation) int {
 	if err != nil {
 		return operationalError(err)
 	}
-	printReport(report, invocation.verbose)
-	if engine.HasFindings(report) {
-		return 1
+	custodian, err := engine.OpenReportCustodian(invocation.repoRoot)
+	if err != nil {
+		return operationalError(err)
 	}
-	return 0
+	report = engine.PrepareReportDisplay(report, outputOptions.display)
+	report, err = custodian.FinalizeReport(invocation.command, report)
+	return renderCommandResultWithOptions(invocation, custodian, commandResult{report: report}, err, outputOptions)
 }
 
 type changeBoundaryOptions struct {
@@ -275,29 +303,6 @@ func requireLockedRelease(invocation invocation) (int, bool) {
 	return 0, true
 }
 
-func handleLockMeta(invocation invocation) int {
-	if len(invocation.arguments) != 0 {
-		return commandUsageError("lock", "lock does not accept options")
-	}
-	manifest, installed, err := release.ReadManifest(invocation.policyRoot)
-	if err != nil {
-		return operationalError(err)
-	}
-	if !installed {
-		return operationalError(fmt.Errorf(
-			"%s is a Code Polishy source checkout rather than an installed release, and a source checkout cannot satisfy a target lock",
-			invocation.policyRoot,
-		))
-	}
-	lock := release.LockFor(manifest)
-	path := filepath.Join(invocation.repoRoot, release.LockFilename)
-	if err := release.WriteLock(invocation.repoRoot, lock); err != nil {
-		return operationalError(fmt.Errorf("write %s: %w", path, err))
-	}
-	fmt.Printf("PASS %s requires Code Polishy %s %s\n", release.LockFilename, lock.CodePolishyVersion, lock.ReleaseDigest)
-	return 0
-}
-
 func printVersion(invocation invocation) int {
 	if len(invocation.arguments) != 0 {
 		return commandUsageError("version", "version does not accept options")
@@ -350,26 +355,29 @@ func parseGlobalInvocation(arguments []string) (invocation, int) {
 
 func commandHandlers() map[string]commandHandler {
 	return map[string]commandHandler{
-		"doctor":            handleDoctor,
-		"gate":              handleGate,
-		"checkpoint-gate":   handleCheckpointGate,
-		"merge-gate":        handleMergeGate,
-		"behavior-review":   handleBehaviorReview,
-		"regression-proof":  handleRegressionProof,
-		"check":             handleCheck,
-		"architecture":      handleSelectionCommand("architecture"),
-		"format":            handleSelectionCommand("format"),
-		"fix":               handleSelectionCommand("format"),
-		"list-files":        handleSelectionCommand("list-files"),
-		"test":              handleTest,
-		"test-plan":         handleTestPlan,
-		"test-levels":       handleTestLevels,
-		"test-receipts":     handleTestReceipts,
-		"verify":            handleVerify,
-		"supply-chain":      handleSupplyChain,
-		"dependency-review": handleDependencyReview,
-		"artifact-security": handleArtifactSecurity,
-		"design-context":    handleDesignContext,
+		"capabilities":        handleCapabilities,
+		"task-start":          handleTaskStart,
+		"doctor":              handleDoctor,
+		"gate":                handleGate,
+		"checkpoint-gate":     handleCheckpointGate,
+		"merge-gate":          handleMergeGate,
+		"behavior-review":     handleBehaviorReview,
+		"architecture-review": handleArchitectureReview,
+		"regression-proof":    handleRegressionProof,
+		"check":               handleCheck,
+		"architecture":        handleSelectionCommand("architecture"),
+		"format":              handleSelectionCommand("format"),
+		"fix":                 handleSelectionCommand("format"),
+		"list-files":          handleSelectionCommand("list-files"),
+		"test":                handleTest,
+		"test-plan":           handleTestPlan,
+		"test-levels":         handleTestLevels,
+		"test-receipts":       handleTestReceipts,
+		"verify":              handleVerify,
+		"supply-chain":        handleSupplyChain,
+		"dependency-review":   handleDependencyReview,
+		"artifact-security":   handleArtifactSecurity,
+		"design-context":      handleDesignContext,
 	}
 }
 
@@ -535,50 +543,6 @@ func firstCommandIndex(arguments []string) int {
 		return index
 	}
 	return -1
-}
-
-func parseSelection(arguments []string) (string, []string, error) {
-	mode := "changes"
-	files := []string{}
-	modeSelected := false
-	for index := 0; index < len(arguments); index++ {
-		selected, known := selectionMode(arguments[index])
-		if !known {
-			return "", nil, fmt.Errorf("unknown selection option %q", arguments[index])
-		}
-		if modeSelected {
-			return "", nil, fmt.Errorf("choose only one file selection mode")
-		}
-		mode, modeSelected = selected, true
-		if mode != "files" {
-			continue
-		}
-		index++
-		for index < len(arguments) && !strings.HasPrefix(arguments[index], "--") {
-			files = append(files, arguments[index])
-			index++
-		}
-		index--
-	}
-	if mode == "files" && len(files) == 0 {
-		return "", nil, fmt.Errorf("--files needs at least one path")
-	}
-	return mode, files, nil
-}
-
-func selectionMode(option string) (string, bool) {
-	switch option {
-	case "--git-changes":
-		return "changes", true
-	case "--staged":
-		return "staged", true
-	case "--all":
-		return "all", true
-	case "--files":
-		return "files", true
-	default:
-		return "", false
-	}
 }
 
 func parseTestRequest(policyEngine *engine.Engine, arguments []string) (testpolicy.Request, error) {
@@ -755,26 +719,45 @@ func onlyAllowed(arguments []string, allowed string) bool {
 	return len(arguments) == 0 || len(arguments) == 1 && arguments[0] == allowed
 }
 
-func printReport(report engine.Report, verbose bool) {
-	printReportWithMode(os.Stdout, os.Stderr, report, verbose)
-}
-
 func printReportTo(stdout, stderr io.Writer, report engine.Report) {
 	printReportWithMode(stdout, stderr, report, false)
 }
 
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
+	printReportCompletion(stdout, stderr, report)
+	printReportSummaryGroups(stdout, report.Summary)
+	printFormattingOutcome(stdout, report.Formatting)
+	printGitEvidence(stdout, report)
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
-	printFindings(stderr, report.Findings)
+	printRepositoryContext(stdout, report.RepositoryContext)
+	limit := engine.DefaultFindingDisplayLimit
+	if report.Display != nil && report.Display.Limit > 0 {
+		limit = report.Display.Limit
+	}
+	remaining := limit
+	findings := boundedReportItems(report.Findings, &remaining)
+	suppressed := boundedReportItems(report.Suppressed, &remaining)
+	assessed := boundedReportItems(report.Assessed, &remaining)
+	releaseAges := boundedReportItems(report.ReleaseAges, &remaining)
+	printFindings(stdout, stderr, findings)
 	printTestFailureEvidence(stderr, report.TestCommands, report.TestDiagnostics)
-	printSuppressedFindings(stdout, report.Suppressed)
-	printVulnerabilityAssessments(stdout, report.Assessed)
-	printReleaseAgeAssessments(stdout, report.ReleaseAges)
-	printAdvisories(stdout, report.Advisories)
+	printSuppressedFindings(stdout, suppressed)
+	printVulnerabilityAssessments(stdout, assessed)
+	printReleaseAgeAssessments(stdout, releaseAges)
+	displayed := len(findings) + len(suppressed) + len(assessed) + len(releaseAges)
+	total := len(report.Findings) + len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
+	if omitted := total - displayed; omitted > 0 {
+		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
+	}
 	printReportTables(stdout, report.Tables)
 	printReportNotes(stdout, report.Notes, verbose)
-	printReportCompletion(stdout, stderr, report)
+	if report.ReportPath != "" {
+		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
+	}
+	if report.Display != nil && report.Display.Omitted > 0 {
+		fmt.Fprintf(stdout, "FILTERED %d occurrence(s); displayed %d of %d\n", report.Display.Omitted, report.Display.Displayed, report.Display.Total)
+	}
 }
 
 func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityReminder) {
@@ -795,6 +778,7 @@ func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityRemi
 }
 
 func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
+	printArchitectureReview(output, report)
 	if report.ChangedTestScope != nil {
 		printChangedTestScope(output, report.ChangedTestScope, verbose)
 	}
@@ -906,57 +890,6 @@ func printMergePolicyTo(output io.Writer, mergePolicy *engine.MergePolicy) {
 	for _, reason := range mergePolicy.Reasons {
 		fmt.Fprintln(output, "MERGE POLICY REASON:", reason)
 	}
-}
-
-func printTable(output io.Writer, table engine.Table) {
-	if len(table.Columns) == 0 {
-		return
-	}
-	widths := make([]int, len(table.Columns))
-	for index, column := range table.Columns {
-		widths[index] = len(column)
-	}
-	for _, row := range table.Rows {
-		for index := range table.Columns {
-			cell := tableCell(row, index)
-			if len(cell) > widths[index] {
-				widths[index] = len(cell)
-			}
-		}
-	}
-	if table.Title != "" {
-		fmt.Fprintln(output, table.Title)
-	}
-	printTableBorder(output, widths)
-	printTableRow(output, table.Columns, widths)
-	printTableBorder(output, widths)
-	for _, row := range table.Rows {
-		printTableRow(output, row, widths)
-	}
-	printTableBorder(output, widths)
-}
-
-func printTableBorder(output io.Writer, widths []int) {
-	fmt.Fprint(output, "+")
-	for _, width := range widths {
-		fmt.Fprint(output, strings.Repeat("-", width+2), "+")
-	}
-	fmt.Fprintln(output)
-}
-
-func printTableRow(output io.Writer, row []string, widths []int) {
-	fmt.Fprint(output, "|")
-	for index, width := range widths {
-		fmt.Fprintf(output, " %-*s |", width, tableCell(row, index))
-	}
-	fmt.Fprintln(output)
-}
-
-func tableCell(row []string, index int) string {
-	if index >= len(row) {
-		return ""
-	}
-	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(row[index])
 }
 
 func operationalError(err error) int {

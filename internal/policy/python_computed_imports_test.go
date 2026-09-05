@@ -41,3 +41,33 @@ func TestScopePythonComputedImportsRequiresExactBoundedCallsites(t *testing.T) {
 		}
 	}
 }
+
+func TestScopePythonObjectImportsRequireOneRegistryWithoutTargetInventory(t *testing.T) {
+	declaration := `{"project":"pyproject.toml","importer":"src/app/loader.py","module":"app.loader","callable":"load","callee":"pkgutil.resolve_name","line":5,"column":12,"shape":"module-object-call/v1","argument":"registry[name]","sourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","namespace":"app.plugins","configuration":[{"path":"registry.json","jsonPointer":"/plugins","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]}`
+	load := func(candidate string) error {
+		text := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"pythonComputedImports":[`+candidate+`]},"quality":{}`, 1)
+		_, err := Load(writeConfig(t, text), "")
+		return err
+	}
+	if err := load(declaration); err != nil {
+		t.Fatal(err)
+	}
+	rootSelector := strings.Replace(declaration, `"jsonPointer":"/plugins"`, `"jsonPointer":""`, 1)
+	if err := load(rootSelector); err != nil {
+		t.Fatalf("object registry root selector: %v", err)
+	}
+	if err := load(strings.Replace(rootSelector, "pkgutil.resolve_name", "importlib.import_module", 1)); err == nil {
+		t.Fatal("module-only imports lost their non-root selector boundary")
+	}
+	for name, invalid := range map[string]string{
+		"duplicate inventory": strings.Replace(declaration, `"configuration":`, `"targets":["app.plugins.first"],"configuration":`, 1),
+		"unsupported shape":   strings.Replace(declaration, "module-object-call/v1", "unknown", 1),
+		"entry-point variant": strings.Replace(declaration, `"namespace":"app.plugins"`, `"entryPointGroup":"plugins"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := load(invalid); err == nil {
+				t.Fatal("object import schema admitted an unsupported contract")
+			}
+		})
+	}
+}

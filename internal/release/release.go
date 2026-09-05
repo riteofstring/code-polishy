@@ -25,7 +25,7 @@ const (
 	ManifestFilename = "release-manifest.json"
 
 	LockVersion     = 1
-	ManifestVersion = 5
+	ManifestVersion = 6
 
 	releasesDirectory = "releases"
 )
@@ -68,16 +68,17 @@ type Lock struct {
 }
 
 type Manifest struct {
-	ManifestVersion    int      `json:"manifestVersion"`
-	CodePolishyVersion string   `json:"codePolishyVersion"`
-	SourceRevision     string   `json:"sourceRevision"`
-	Host               string   `json:"host"`
-	Features           []string `json:"features"`
-	Tools              Tools    `json:"tools"`
-	ReleaseDigest      string   `json:"releaseDigest"`
-	ContentDigest      string   `json:"contentDigest"`
-	EntryCount         int      `json:"entryCount"`
-	Entries            []Entry  `json:"entries"`
+	ManifestVersion         int      `json:"manifestVersion"`
+	CodePolishyVersion      string   `json:"codePolishyVersion"`
+	SourceRevision          string   `json:"sourceRevision"`
+	Host                    string   `json:"host"`
+	Features                []string `json:"features"`
+	Tools                   Tools    `json:"tools"`
+	ReleaseDigest           string   `json:"releaseDigest"`
+	ContentDigest           string   `json:"contentDigest"`
+	CapabilityCatalogSHA256 string   `json:"capabilityCatalogSha256,omitempty"`
+	EntryCount              int      `json:"entryCount"`
+	Entries                 []Entry  `json:"entries"`
 }
 
 type Tools struct {
@@ -205,6 +206,9 @@ func (manifest Manifest) Identity() string {
 	fmt.Fprintf(identity, "manifestVersion=%d\n", manifest.ManifestVersion)
 	fmt.Fprintf(identity, "codePolishyVersion=%s\n", manifest.CodePolishyVersion)
 	fmt.Fprintf(identity, "sourceRevision=%s\n", manifest.SourceRevision)
+	if manifest.ManifestVersion >= 6 {
+		fmt.Fprintf(identity, "capabilityCatalogSha256=%s\n", manifest.CapabilityCatalogSHA256)
+	}
 	for _, feature := range manifest.Features {
 		fmt.Fprintf(identity, "feature=%s\n", feature)
 	}
@@ -330,8 +334,24 @@ func validateManifestIdentity(manifest Manifest, source string) error {
 	if !digestPattern.MatchString(manifest.ReleaseDigest) || !digestPattern.MatchString(manifest.ContentDigest) {
 		return fmt.Errorf("%s records an unusable release or content digest", source)
 	}
+	if err := validateManifestCapabilityIdentity(manifest, source); err != nil {
+		return err
+	}
 	if err := validateFeatures(manifest.Features); err != nil {
 		return fmt.Errorf("%s %w", source, err)
+	}
+	return nil
+}
+
+func validateManifestCapabilityIdentity(manifest Manifest, source string) error {
+	if manifest.ManifestVersion >= 6 && !digestPattern.MatchString(manifest.CapabilityCatalogSHA256) {
+		return fmt.Errorf("%s records an unusable capability catalog digest", source)
+	}
+	if manifest.ManifestVersion < 6 && manifest.CapabilityCatalogSHA256 != "" {
+		return fmt.Errorf("%s records capability catalog metadata outside its manifest version", source)
+	}
+	if manifest.ManifestVersion >= 6 && !manifestRecordsCapabilityFile(manifest, CapabilityCatalogPath, manifest.CapabilityCatalogSHA256) {
+		return fmt.Errorf("%s capability catalog entry does not match the release identity", source)
 	}
 	return nil
 }

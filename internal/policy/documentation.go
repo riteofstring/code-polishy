@@ -23,7 +23,7 @@ func validateDocumentation(config *Config) error {
 			return err
 		}
 	}
-	return nil
+	return validateOperationalHandoffs(config)
 }
 
 func IsMarkdownPath(path string) bool {

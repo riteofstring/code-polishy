@@ -9,30 +9,24 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func pythonQualityInventoryFindings(repo repository.Repository, sources []string, selectedManifests map[string]bool, inventory repository.PythonProjectInventory) ([]policy.Finding, map[string]bool, map[string]bool) {
-	interested := pythonQualityInterestedProjects(repo, sources, selectedManifests, inventory.Assignments)
+func pythonQualityInventoryFindings(sources []string, selectedManifests map[string]bool, inventory repository.PythonProjectInventory) ([]policy.Finding, map[string]bool, map[string]bool) {
+	interested := pythonQualityInterestedProjects(sources, selectedManifests, inventory.Assignments)
 	invalidProjects := pythonQualityInvalidProjects(inventory)
 	invalidSources := map[string]bool{}
 	findings := []policy.Finding{}
 	for _, problem := range inventory.Problems {
 		relevant := pythonQualityMarkInvalidSources(problem, sources, invalidSources)
-		if relevant || pythonQualityProblemAffectsInterestedProject(problem, inventory.Projects, interested) {
+		if relevant || interested[problem.Path] || interested[problem.Subject] || pythonQualityProblemAffectsInterestedProject(problem, inventory.Projects, interested) {
 			findings = append(findings, repository.PythonInventoryFinding(problem))
 		}
 	}
 	return findings, invalidSources, invalidProjects
 }
 
-func pythonQualityInterestedProjects(repo repository.Repository, sources []string, selectedManifests map[string]bool, assignments []repository.PythonProjectAssignment) map[string]bool {
+func pythonQualityInterestedProjects(sources []string, selectedManifests map[string]bool, assignments []repository.PythonProjectAssignment) map[string]bool {
 	interested := map[string]bool{}
 	for manifest := range selectedManifests {
 		interested[manifest] = true
-	}
-	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
-		interested[reference.Project] = true
-	}
-	for _, attribute := range repo.Config.Scope.PythonExternalAttributes {
-		interested[attribute.Project] = true
 	}
 	selected := pythonQualitySelectedSources(sources)
 	for _, assignment := range assignments {

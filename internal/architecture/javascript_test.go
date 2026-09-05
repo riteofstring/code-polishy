@@ -1,9 +1,11 @@
 package architecture
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -66,6 +68,7 @@ func TestDeclaredJavaScriptPackageDependencyPasses(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","dependencies":{"react":"19.2.0"},`+
 		`"peerDependencies":{"zod":"4.1.12"},"optionalDependencies":{"fsevents":"2.3.3"}}`)
+	writeArchitectureFile(t, repo.Root, "web/helper.ts", "export const helper = 1;\n")
 	repo.PolicyRoot = fakeImportBundle(t,
 		importFact("web/app.ts", 1, "react", "node_modules/react/index.js", "react"),
 		importFact("web/app.ts", 2, "zod", "node_modules/zod/index.js", "zod"),
@@ -104,6 +107,9 @@ func TestJavaScriptDevelopmentDependencyImportedByDevelopmentSourcePasses(t *tes
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"app","devDependencies":{"vitest":"3.2.4"}}`)
 	repo.Config.Scope.Development = []string{"web/*.config.ts"}
+	repo.Config.Tests.Ownership = []policy.TestOwnership{{Paths: []string{"web/app.test.ts"}, Module: "web", FocusedSuite: "web-unit"}}
+	writeArchitectureFile(t, repo.Root, "web/app.test.ts", "export {};\n")
+	writeArchitectureFile(t, repo.Root, "web/vitest.config.ts", "export {};\n")
 	repo.PolicyRoot = fakeImportBundle(t,
 		importFact("web/app.test.ts", 1, "vitest", "node_modules/vitest/index.js", "vitest"),
 		importFact("web/vitest.config.ts", 1, "vitest", "node_modules/vitest/index.js", "vitest"))
@@ -117,8 +123,8 @@ func TestNearestJavaScriptManifestOwnsItsDependencies(t *testing.T) {
 	t.Parallel()
 	repo := nodePackageRepository(t, `{"name":"root","dependencies":{"left-pad":"1.3.0"}}`)
 	writeArchitectureFile(t, repo.Root, "web/package.json", `{"name":"@app/web"}`)
-	repo.PolicyRoot = fakeImportBundle(t,
-		importFact("web/app.ts", 1, "left-pad", "node_modules/left-pad/index.js", "left-pad"))
+	repo.PolicyRoot = installImportBundle(t, `{"analyzed":["web/app.ts"],"imports":[`+
+		importFact("web/app.ts", 1, "left-pad", "node_modules/left-pad/index.js", "left-pad")+`],"unsupported":[]}`)
 	findings := Check(t.Context(), repo, []string{"web/app.ts"})
 	if len(findings) != 1 || findings[0].Subject != "left-pad" ||
 		findings[0].Message != `line 1 package "web" imports "left-pad" without declaring it as a dependency` {
@@ -154,7 +160,7 @@ func TestJavaScriptSourceTheReaderCannotParseIsMissingCoverage(t *testing.T) {
 func TestUnreadJavaScriptImportIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, false)
-	result := `{"imports":[],"unsupported":[{"path":"web/app.ts","reason":"line 4: a dynamic import whose specifier is computed names no file to resolve"}]}`
+	result := `{"analyzed":["domain/model.ts","web/app.ts"],"imports":[],"unsupported":[{"path":"web/app.ts","reason":"line 4: a dynamic import whose specifier is computed names no file to resolve"}]}`
 	repo.PolicyRoot = installImportBundle(t, result)
 	findings := Check(t.Context(), repo, []string{"web/app.ts"})
 	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" ||
@@ -235,13 +241,33 @@ func nodePackageRepository(t *testing.T, manifest string) repository.Repository 
 }
 
 func importFact(path string, line int, specifier, resolved, imported string) string {
-	return `{"path":"` + path + `","line":` + strconv.Itoa(line) + `,"specifier":"` + specifier +
-		`","resolved":"` + resolved + `","package":"` + imported + `"}`
+	return `{"path":"` + path + `","line":` + strconv.Itoa(line) + `,"column":1,"specifier":"` + specifier +
+		`","resolved":"` + resolved + `","package":"` + imported + `","kind":"runtime"}`
 }
 
 func fakeImportBundle(t *testing.T, facts ...string) string {
 	t.Helper()
-	return installImportBundle(t, `{"imports":[`+strings.Join(facts, ",")+`],"unsupported":[]}`)
+	paths := map[string]bool{"domain/model.ts": true, "web/app.ts": true}
+	for _, encoded := range facts {
+		var fact javascript.ImportFact
+		if err := json.Unmarshal([]byte(encoded), &fact); err != nil {
+			t.Fatal(err)
+		}
+		paths[fact.Path] = true
+		if fact.Resolved != "" && !installedPackage(fact.Resolved) {
+			paths[fact.Resolved] = true
+		}
+	}
+	analyzed := make([]string, 0, len(paths))
+	for path := range paths {
+		analyzed = append(analyzed, path)
+	}
+	sort.Strings(analyzed)
+	encodedPaths, err := json.Marshal(analyzed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return installImportBundle(t, `{"analyzed":`+string(encodedPaths)+`,"imports":[`+strings.Join(facts, ",")+`],"unsupported":[]}`)
 }
 
 func installImportBundle(t *testing.T, result string) string {

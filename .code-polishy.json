@@ -1,19 +1,71 @@
 {
   "$schema": "schema/code-polishy.schema.json",
-  "version": 3,
-  "project": { "kind": "tooling", "capabilities": ["cli"] },
+  "version": 4,
+  "project": {
+    "kind": "tooling",
+    "capabilities": ["cli"]
+  },
   "scope": {
     "data": [
       "internal/spdx/data/exceptions.json",
       "internal/spdx/data/licenses.json"
     ],
+    "generated": ["internal/engine/testdata/**", "schema/sarif*.json"],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
       "tools/javascript/runner.mjs"
     ]
   },
   "documentation": {
-    "design": [{ "path": "docs/design/agent-guidance.md", "module": "agents" }]
+    "design": [
+      {
+        "path": "docs/design/agent-guidance.md",
+        "module": "agents"
+      },
+      {
+        "path": "docs/design/python-contract-evidence.md",
+        "sourcePaths": [
+          "internal/repository/python_plugins.go",
+          "internal/repository/python_distribution_sources.go",
+          "internal/repository/python_distribution_origin.go",
+          "internal/repository/python_reachability.go",
+          "internal/repository/python_reachability_contract.go",
+          "internal/repository/python_reachability_state.go",
+          "internal/pythonfacts/contract_definitions.go",
+          "internal/pythonfacts/contract_definitions.py",
+          "internal/pythonfacts/external_contracts.py",
+          "internal/pythonfacts/reachability_validation.go",
+          "internal/engine/python_reachability_state.go"
+        ]
+      },
+      {
+        "path": "docs/design/design-context.md",
+        "sourcePaths": [
+          "internal/repository/design_context.go",
+          "internal/repository/selection.go",
+          "internal/engine/design_context.go",
+          "internal/engine/task_start.go",
+          "internal/engine/task_start_actions.go",
+          "cmd/code-polishy/design_context.go"
+        ]
+      },
+      {
+        "path": "docs/design/installed-release-verification.md",
+        "sourcePaths": [
+          "scripts/test-installed-release.sh",
+          "scripts/test-installed-release-contract.sh",
+          "scripts/test-installed-release-architecture.sh"
+        ]
+      },
+      {
+        "path": "docs/design/historical-review-policy.md",
+        "sourcePaths": [
+          "internal/policy/review_snapshot.go",
+          "internal/engine/behavior_review_decision.go",
+          "internal/engine/merge_gate.go"
+        ]
+      }
+    ]
   },
   "verification": {
     "finalGateOwner": "ci",
@@ -48,11 +100,17 @@
     }
   },
   "modules": [
-    { "name": "spdx", "paths": ["internal/spdx/**"] },
-    { "name": "pythonfacts", "paths": ["internal/pythonfacts/**"] },
+    {
+      "name": "spdx",
+      "paths": ["internal/spdx/**"]
+    },
+    {
+      "name": "pythonfacts",
+      "paths": ["internal/pythonfacts/**"]
+    },
     {
       "name": "policy",
-      "paths": ["internal/policy/**", "schema/schema.go"],
+      "paths": ["internal/policy/**", "schema/**"],
       "dependsOn": ["spdx"]
     },
     {
@@ -68,7 +126,7 @@
     {
       "name": "gaterun",
       "paths": ["internal/gaterun/**"],
-      "dependsOn": ["testreceipt"]
+      "dependsOn": ["architecture", "policy", "testreceipt"]
     },
     {
       "name": "testartifact",
@@ -80,13 +138,26 @@
       "paths": ["internal/testreceipt/**"],
       "dependsOn": ["policy", "testartifact"]
     },
-    { "name": "finalstate", "paths": ["internal/finalstate/**"] },
+    {
+      "name": "finalstate",
+      "paths": ["internal/finalstate/**"]
+    },
     {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
-      "dependsOn": ["finalstate", "gaterun", "policy", "repository", "runner"]
+      "dependsOn": [
+        "architecture",
+        "finalstate",
+        "gaterun",
+        "policy",
+        "repository",
+        "runner"
+      ]
     },
-    { "name": "documentation", "paths": ["internal/documentation/**"] },
+    {
+      "name": "documentation",
+      "paths": ["internal/documentation/**"]
+    },
     {
       "name": "agents",
       "paths": ["AGENTS.md", "internal/agents/**", "templates/AGENTS.md"]
@@ -104,7 +175,14 @@
     {
       "name": "quality",
       "paths": ["internal/quality/**"],
-      "dependsOn": ["javascript", "pack", "policy", "repository", "runner"]
+      "dependsOn": [
+        "javascript",
+        "pack",
+        "policy",
+        "pythonfacts",
+        "repository",
+        "runner"
+      ]
     },
     {
       "name": "architecture",
@@ -134,7 +212,10 @@
         "workflow"
       ]
     },
-    { "name": "workflow", "paths": ["internal/workflow/**"] },
+    {
+      "name": "workflow",
+      "paths": ["internal/workflow/**"]
+    },
     {
       "name": "artifactsecurity",
       "paths": ["internal/artifactsecurity/**"],
@@ -277,194 +358,221 @@
         "kind": "unit",
         "scope": "module",
         "modules": ["spdx"],
-        "argv": ["go", "test", "-count=1", "./internal/spdx/..."]
+        "argv": ["go", "test", "-count=1", "./internal/spdx/..."],
+        "paths": ["internal/spdx/**/*_test.go"]
       },
       {
         "name": "pythonfacts-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["pythonfacts"],
-        "argv": ["go", "test", "-count=1", "./internal/pythonfacts/..."]
+        "argv": ["go", "test", "-count=1", "./internal/pythonfacts/..."],
+        "paths": ["internal/pythonfacts/**/*_test.go"]
       },
       {
         "name": "policy-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["policy"],
-        "argv": ["go", "test", "-count=1", "./internal/policy/..."]
+        "argv": ["go", "test", "-count=1", "./internal/policy/..."],
+        "paths": ["internal/policy/**/*_test.go"]
       },
       {
         "name": "repository-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["repository"],
-        "argv": ["go", "test", "-count=1", "./internal/repository/..."]
+        "argv": ["go", "test", "-count=1", "./internal/repository/..."],
+        "paths": ["internal/repository/**/*_test.go"]
       },
       {
         "name": "runner-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["runner"],
-        "argv": ["go", "test", "-count=1", "./internal/runner/..."]
+        "argv": ["go", "test", "-count=1", "./internal/runner/..."],
+        "paths": ["internal/runner/**/*_test.go"]
       },
       {
         "name": "gaterun-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["gaterun"],
-        "argv": ["go", "test", "-count=1", "./internal/gaterun/..."]
+        "argv": ["go", "test", "-count=1", "./internal/gaterun/..."],
+        "paths": ["internal/gaterun/**/*_test.go"]
       },
       {
         "name": "testartifact-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["testartifact"],
-        "argv": ["go", "test", "-count=1", "./internal/testartifact/..."]
+        "argv": ["go", "test", "-count=1", "./internal/testartifact/..."],
+        "paths": ["internal/testartifact/**/*_test.go"]
       },
       {
         "name": "testreceipt-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["testreceipt"],
-        "argv": ["go", "test", "-count=1", "./internal/testreceipt/..."]
+        "argv": ["go", "test", "-count=1", "./internal/testreceipt/..."],
+        "paths": ["internal/testreceipt/**/*_test.go"]
       },
       {
         "name": "finalstate-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["finalstate"],
-        "argv": ["go", "test", "-count=1", "./internal/finalstate/..."]
+        "argv": ["go", "test", "-count=1", "./internal/finalstate/..."],
+        "paths": ["internal/finalstate/**/*_test.go"]
       },
       {
         "name": "behaviorreview-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["behaviorreview"],
-        "argv": ["go", "test", "-count=1", "./internal/behaviorreview/..."]
+        "argv": ["go", "test", "-count=1", "./internal/behaviorreview/..."],
+        "paths": ["internal/behaviorreview/**/*_test.go"]
       },
       {
         "name": "documentation-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["documentation"],
-        "argv": ["go", "test", "-count=1", "./internal/documentation/..."]
+        "argv": ["go", "test", "-count=1", "./internal/documentation/..."],
+        "paths": ["internal/documentation/**/*_test.go"]
       },
       {
         "name": "agents-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["agents"],
-        "argv": ["go", "test", "-count=1", "./internal/agents/..."]
+        "argv": ["go", "test", "-count=1", "./internal/agents/..."],
+        "paths": ["internal/agents/**/*_test.go"]
       },
       {
         "name": "release-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["release"],
-        "argv": ["go", "test", "-count=1", "./internal/release/..."]
+        "argv": ["go", "test", "-count=1", "./internal/release/..."],
+        "paths": ["internal/release/**/*_test.go"]
       },
       {
         "name": "javascript-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["javascript"],
-        "argv": ["go", "test", "-count=1", "./internal/javascript/..."]
+        "argv": ["go", "test", "-count=1", "./internal/javascript/..."],
+        "paths": ["internal/javascript/**/*_test.go"]
       },
       {
         "name": "quality-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["quality"],
-        "argv": ["go", "test", "-count=1", "./internal/quality/..."]
+        "argv": ["go", "test", "-count=1", "./internal/quality/..."],
+        "paths": ["internal/quality/**/*_test.go"]
       },
       {
         "name": "architecture-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["architecture"],
-        "argv": ["go", "test", "-count=1", "./internal/architecture/..."]
+        "argv": ["go", "test", "-count=1", "./internal/architecture/..."],
+        "paths": ["internal/architecture/**/*_test.go"]
       },
       {
         "name": "testing-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["testing"],
-        "argv": ["go", "test", "-count=1", "./internal/testing/..."]
+        "argv": ["go", "test", "-count=1", "./internal/testing/..."],
+        "paths": ["internal/testing/**/*_test.go"]
       },
       {
         "name": "supplychain-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["supplychain"],
-        "argv": ["go", "test", "-count=1", "./internal/supplychain/..."]
+        "argv": ["go", "test", "-count=1", "./internal/supplychain/..."],
+        "paths": ["internal/supplychain/**/*_test.go"]
       },
       {
         "name": "workflow-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["workflow"],
-        "argv": ["go", "test", "-count=1", "./internal/workflow/..."]
+        "argv": ["go", "test", "-count=1", "./internal/workflow/..."],
+        "paths": ["internal/workflow/**/*_test.go"]
       },
       {
         "name": "artifactsecurity-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["artifactsecurity"],
-        "argv": ["go", "test", "-count=1", "./internal/artifactsecurity/..."]
+        "argv": ["go", "test", "-count=1", "./internal/artifactsecurity/..."],
+        "paths": ["internal/artifactsecurity/**/*_test.go"]
       },
       {
         "name": "pack-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["pack"],
-        "argv": ["go", "test", "-count=1", "./internal/pack/..."]
+        "argv": ["go", "test", "-count=1", "./internal/pack/..."],
+        "paths": ["internal/pack/**/*_test.go"]
       },
       {
         "name": "policymodule-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["policymodule"],
-        "argv": ["go", "test", "-count=1", "./internal/policymodule/..."]
+        "argv": ["go", "test", "-count=1", "./internal/policymodule/..."],
+        "paths": ["internal/policymodule/**/*_test.go"]
       },
       {
         "name": "portability-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["portability"],
-        "argv": ["go", "test", "-count=1", "./internal/portability/..."]
+        "argv": ["go", "test", "-count=1", "./internal/portability/..."],
+        "paths": ["internal/portability/**/*_test.go"]
       },
       {
         "name": "engine-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["engine"],
-        "argv": ["go", "test", "-count=1", "./internal/engine/..."]
+        "argv": ["go", "test", "-count=1", "./internal/engine/..."],
+        "paths": ["internal/engine/**/*_test.go"]
       },
       {
         "name": "cli-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["cli"],
-        "argv": ["go", "test", "-count=1", "./cmd/code-polishy/..."]
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy/..."],
+        "paths": ["cmd/code-polishy/**/*_test.go"]
       },
       {
         "name": "launcher-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["launcher"],
-        "argv": ["go", "test", "-count=1", "./cmd/code-polishy-launcher/..."]
+        "argv": ["go", "test", "-count=1", "./cmd/code-polishy-launcher/..."],
+        "paths": ["cmd/code-polishy-launcher/**/*_test.go"]
       },
       {
         "name": "mutation-wrapper-contract",
         "kind": "contract",
         "scope": "module",
         "modules": ["tooling"],
-        "argv": ["./scripts/test-mutation-wrapper.sh"]
+        "argv": ["./scripts/test-mutation-wrapper.sh"],
+        "paths": ["scripts/test-mutation-wrapper.sh"]
       },
       {
         "name": "install-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "scripts/*install.sh",
@@ -478,15 +586,17 @@
           "tools/*-version.txt",
           "tools/install-p*",
           "tools/javascript**",
-          "tools/packaging_wheel_checksums.txt"
+          "tools/packaging_wheel_checksums.txt",
+          "scripts/test-install.sh"
         ],
         "argv": ["./scripts/test-install.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "release-preflight-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "CHANGELOG.md",
@@ -496,12 +606,13 @@
           "scripts/test-release-preflight.sh"
         ],
         "argv": ["./scripts/test-release-preflight.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "javascript-runtime-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "scripts/test-javascript-runtime.sh",
@@ -511,42 +622,47 @@
           "tools/verify-sha256.sh"
         ],
         "argv": ["./scripts/test-javascript-runtime.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "javascript-bundle-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "scripts/*javascript-bundle.sh",
           "tools/*javascript*",
           "tools/javascript/**",
           "tools/node-version.txt",
-          "tools/pnpm-version.txt"
+          "tools/pnpm-version.txt",
+          "scripts/test-javascript-bundle.sh"
         ],
         "argv": ["./scripts/test-javascript-bundle.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "javascript-runner-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "internal/javascript/**",
           "scripts/*javascript-runner*.sh",
           "tools/javascript**",
           "tools/node-version.txt",
-          "tools/pnpm-version.txt"
+          "tools/pnpm-version.txt",
+          "scripts/test-javascript-runner.sh"
         ],
         "argv": ["./scripts/test-javascript-runner.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "javascript-project-contract",
         "kind": "contract",
-        "scope": "repository",
+        "scope": "module",
         "cost": "quick",
         "paths": [
           "internal/javascript/**",
@@ -558,7 +674,8 @@
           "tools/pnpm-version.txt"
         ],
         "argv": ["./scripts/test-javascript-project.sh"],
-        "runOn": ["focused", "recommended", "full"]
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
       },
       {
         "name": "language-pack-contract",
@@ -897,6 +1014,203 @@
         "modules": ["launcher"],
         "argv": ["./scripts/go-mutation.sh", "./cmd/code-polishy-launcher"],
         "timeoutSeconds": 3600
+      },
+      {
+        "name": "installed-release-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["tooling"],
+        "paths": [
+          "scripts/test-installed-release.sh",
+          "scripts/test-installed-release-contract.sh"
+        ],
+        "argv": ["./scripts/test-installed-release-contract.sh"]
+      }
+    ],
+    "paths": [
+      "scripts/test-mutation-wrapper.sh",
+      "scripts/test-install.sh",
+      "scripts/test-release-preflight.sh",
+      "scripts/test-javascript-runtime.sh",
+      "scripts/test-javascript-bundle.sh",
+      "scripts/test-javascript-runner.sh",
+      "scripts/test-javascript-project.sh",
+      "scripts/test-installed-release.sh",
+      "scripts/test-installed-release-contract.sh"
+    ],
+    "ownership": [
+      {
+        "paths": ["internal/spdx/**/*_test.go"],
+        "module": "spdx",
+        "focusedSuite": "spdx-unit"
+      },
+      {
+        "paths": ["internal/pythonfacts/**/*_test.go"],
+        "module": "pythonfacts",
+        "focusedSuite": "pythonfacts-unit"
+      },
+      {
+        "paths": ["internal/policy/**/*_test.go"],
+        "module": "policy",
+        "focusedSuite": "policy-unit"
+      },
+      {
+        "paths": ["internal/repository/**/*_test.go"],
+        "module": "repository",
+        "focusedSuite": "repository-unit"
+      },
+      {
+        "paths": ["internal/runner/**/*_test.go"],
+        "module": "runner",
+        "focusedSuite": "runner-unit"
+      },
+      {
+        "paths": ["internal/gaterun/**/*_test.go"],
+        "module": "gaterun",
+        "focusedSuite": "gaterun-unit"
+      },
+      {
+        "paths": ["internal/testartifact/**/*_test.go"],
+        "module": "testartifact",
+        "focusedSuite": "testartifact-unit"
+      },
+      {
+        "paths": ["internal/testreceipt/**/*_test.go"],
+        "module": "testreceipt",
+        "focusedSuite": "testreceipt-unit"
+      },
+      {
+        "paths": ["internal/finalstate/**/*_test.go"],
+        "module": "finalstate",
+        "focusedSuite": "finalstate-unit"
+      },
+      {
+        "paths": ["internal/behaviorreview/**/*_test.go"],
+        "module": "behaviorreview",
+        "focusedSuite": "behaviorreview-unit"
+      },
+      {
+        "paths": ["internal/documentation/**/*_test.go"],
+        "module": "documentation",
+        "focusedSuite": "documentation-unit"
+      },
+      {
+        "paths": ["internal/agents/**/*_test.go"],
+        "module": "agents",
+        "focusedSuite": "agents-unit"
+      },
+      {
+        "paths": ["internal/release/**/*_test.go"],
+        "module": "release",
+        "focusedSuite": "release-unit"
+      },
+      {
+        "paths": ["internal/javascript/**/*_test.go"],
+        "module": "javascript",
+        "focusedSuite": "javascript-unit"
+      },
+      {
+        "paths": ["internal/quality/**/*_test.go"],
+        "module": "quality",
+        "focusedSuite": "quality-unit"
+      },
+      {
+        "paths": ["internal/architecture/**/*_test.go"],
+        "module": "architecture",
+        "focusedSuite": "architecture-unit"
+      },
+      {
+        "paths": ["internal/testing/**/*_test.go"],
+        "module": "testing",
+        "focusedSuite": "testing-unit"
+      },
+      {
+        "paths": ["internal/supplychain/**/*_test.go"],
+        "module": "supplychain",
+        "focusedSuite": "supplychain-unit"
+      },
+      {
+        "paths": ["internal/workflow/**/*_test.go"],
+        "module": "workflow",
+        "focusedSuite": "workflow-unit"
+      },
+      {
+        "paths": ["internal/artifactsecurity/**/*_test.go"],
+        "module": "artifactsecurity",
+        "focusedSuite": "artifactsecurity-unit"
+      },
+      {
+        "paths": ["internal/pack/**/*_test.go"],
+        "module": "pack",
+        "focusedSuite": "pack-unit"
+      },
+      {
+        "paths": ["internal/policymodule/**/*_test.go"],
+        "module": "policymodule",
+        "focusedSuite": "policymodule-unit"
+      },
+      {
+        "paths": ["internal/portability/**/*_test.go"],
+        "module": "portability",
+        "focusedSuite": "portability-unit"
+      },
+      {
+        "paths": ["internal/engine/**/*_test.go"],
+        "module": "engine",
+        "focusedSuite": "engine-unit"
+      },
+      {
+        "paths": ["cmd/code-polishy/**/*_test.go"],
+        "module": "cli",
+        "focusedSuite": "cli-contract"
+      },
+      {
+        "paths": ["cmd/code-polishy-launcher/**/*_test.go"],
+        "module": "launcher",
+        "focusedSuite": "launcher-contract"
+      },
+      {
+        "paths": ["scripts/test-mutation-wrapper.sh"],
+        "module": "tooling",
+        "focusedSuite": "mutation-wrapper-contract"
+      },
+      {
+        "paths": ["scripts/test-install.sh"],
+        "module": "tooling",
+        "focusedSuite": "install-contract"
+      },
+      {
+        "paths": ["scripts/test-release-preflight.sh"],
+        "module": "tooling",
+        "focusedSuite": "release-preflight-contract"
+      },
+      {
+        "paths": ["scripts/test-javascript-runtime.sh"],
+        "module": "tooling",
+        "focusedSuite": "javascript-runtime-contract"
+      },
+      {
+        "paths": ["scripts/test-javascript-bundle.sh"],
+        "module": "tooling",
+        "focusedSuite": "javascript-bundle-contract"
+      },
+      {
+        "paths": ["scripts/test-javascript-runner.sh"],
+        "module": "tooling",
+        "focusedSuite": "javascript-runner-contract"
+      },
+      {
+        "paths": ["scripts/test-javascript-project.sh"],
+        "module": "tooling",
+        "focusedSuite": "javascript-project-contract"
+      },
+      {
+        "paths": [
+          "scripts/test-installed-release.sh",
+          "scripts/test-installed-release-contract.sh"
+        ],
+        "module": "tooling",
+        "focusedSuite": "installed-release-contract"
       }
     ]
   },
@@ -982,6 +1296,32 @@
     ],
     "releaseAgeAssessments": [
       {
+        "id": "x-mod-0-40-0-security-fix",
+        "ecosystem": "go",
+        "package": "golang.org/x/mod",
+        "version": "v0.40.0",
+        "scope": "go.mod",
+        "category": "security-fix",
+        "evidence": "https://pkg.go.dev/vuln/GO-2026-6179",
+        "reason": "v0.40.0 is the first x/mod release fixing CVE-2026-56865 and CVE-2026-56864. Every older version fails the complete dependency vulnerability policy; this exact release supplies the official go.mod and go.work parser.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-04",
+        "expires": "2026-09-12"
+      },
+      {
+        "id": "x-tools-0-49-0-x-mod-security-dependency",
+        "ecosystem": "go",
+        "package": "golang.org/x/tools",
+        "version": "v0.49.0",
+        "scope": "go.mod",
+        "category": "supported-release",
+        "evidence": "https://go.googlesource.com/mod/+/refs/tags/v0.40.0/go.mod",
+        "reason": "The security-fixed x/mod v0.40.0 module explicitly requires x/tools v0.49.0. Retain the upstream dependency graph without a downgrade or replacement; the complete graph remains subject to vulnerability and license policy.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-04",
+        "expires": "2026-09-12"
+      },
+      {
         "id": "go-1-26-6-security-fix",
         "ecosystem": "artifact",
         "package": "go",
@@ -995,5 +1335,16 @@
         "expires": "2026-09-12"
       }
     ]
-  }
+  },
+  "exceptions": [
+    {
+      "id": "declarative-suite-inventory-size",
+      "check": "quality.fileLength",
+      "path": ".code-polishy.json",
+      "subject": "1350",
+      "reason": "The explicit suite and test-ownership inventory exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
+      "owner": "code-polishy-maintainer",
+      "expires": "2026-10-05"
+    }
+  ]
 }

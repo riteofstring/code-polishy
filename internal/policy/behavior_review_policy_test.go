@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestBehaviorReviewPolicyKeepsOmittedV3Behavior(t *testing.T) {
+func TestBehaviorReviewPolicyOmissionKeepsReviewOptional(t *testing.T) {
 	t.Parallel()
 	config, err := Load(writeConfig(t, minimalConfig()), "")
 	if err != nil {
@@ -22,7 +22,7 @@ func TestBehaviorReviewPolicyKeepsOmittedV3Behavior(t *testing.T) {
 
 func TestBehaviorReviewPolicyDefaultsAndEffectiveFeatureRequirement(t *testing.T) {
 	t.Parallel()
-	config, err := Load(writeConfig(t, behaviorReviewConfig(`{"features":[{"name":"search","paths":["web/search/**"],"suites":["content-test"]}]}`)), "")
+	config, err := Load(writeConfig(t, behaviorReviewConfig(`{"features":[{"name":"search","description":"Search query and result behavior.","paths":["web/search/**"],"suites":["content-test"]}]}`)), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,15 +43,15 @@ func TestBehaviorReviewPolicyAcceptsConfiguredLevels(t *testing.T) {
 		required string
 	}{
 		"on request default": {
-			setting:  `{"defaultRequiredAt":"on-request","features":[{"name":"search","modules":["content"],"suites":["content-test"]}]}`,
+			setting:  `{"defaultRequiredAt":"on-request","features":[{"name":"search","description":"Search query and result behavior.","modules":["content"],"suites":["content-test"]}]}`,
 			required: BehaviorReviewOnRequest,
 		},
 		"merge default": {
-			setting:  `{"defaultRequiredAt":"merge","features":[{"name":"search","modules":["content"],"suites":["content-test"]}]}`,
+			setting:  `{"defaultRequiredAt":"merge","features":[{"name":"search","description":"Search query and result behavior.","modules":["content"],"suites":["content-test"]}]}`,
 			required: BehaviorReviewMerge,
 		},
 		"checkpoint feature": {
-			setting:  `{"defaultRequiredAt":"merge","features":[{"name":"search","modules":["content"],"suites":["content-test"],"requiredAt":"checkpoint"}]}`,
+			setting:  `{"defaultRequiredAt":"merge","features":[{"name":"search","description":"Search query and result behavior.","modules":["content"],"suites":["content-test"],"requiredAt":"checkpoint"}]}`,
 			required: BehaviorReviewCheckpoint,
 		},
 	}
@@ -86,90 +86,90 @@ func TestBehaviorReviewPolicyRejectsInvalidConfiguration(t *testing.T) {
 		},
 		"duplicate names": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]},{"name":"checkout","paths":["web/checkout/**"],"suites":["full"]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]},{"name":"checkout","description":"Checkout completion and payment behavior.","paths":["web/checkout/**"],"suites":["full"]}]}`)
 			},
 			want: "duplicate behavior review feature name",
 		},
 		"unknown module": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["missing"],"suites":["content-test"]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["missing"],"suites":["content-test"]}]}`)
 			},
 			want: "references unknown module",
 		},
 		"missing scope": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","suites":["content-test"]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","suites":["content-test"]}]}`)
 			},
 			want: schemaRejection,
 		},
 		"invalid path": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","paths":["../checkout/**"],"suites":["content-test"]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","paths":["../checkout/**"],"suites":["content-test"]}]}`)
 			},
 			want: schemaRejection,
 		},
 		"empty suites": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":[]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":[]}]}`)
 			},
 			want: schemaRejection,
 		},
 		"unknown suite": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["missing"]}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["missing"]}]}`)
 			},
 			want: "references unknown test suite",
 		},
 		"supplemental suite": {
 			config: func() string {
-				config := behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]}]}`)
+				config := behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]}]}`)
 				return strings.Replace(config, `"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]`, `"name":"content-test","kind":"content","scope":"module","cost":"expensive","modules":["content"],"argv":["go","test","./..."],"runOn":["supplemental"]`, 1)
 			},
 			want: "references ineligible suite",
 		},
 		"mutation suite": {
 			config: func() string {
-				config := behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]}]}`)
+				config := behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]}]}`)
 				return strings.Replace(config, `"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]`, `"name":"content-test","kind":"mutation","scope":"module","cost":"expensive","modules":["content"],"argv":["go","test","./..."],"runOn":["supplemental"]`, 1)
 			},
 			want: "references ineligible suite",
 		},
 		"credentialed suite": {
 			config: func() string {
-				config := behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]}]}`)
+				config := behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]}]}`)
 				return strings.Replace(config, `"name":"content-test","kind":"content"`, `"name":"content-test","kind":"credentialed"`, 1)
 			},
 			want: "references ineligible suite",
 		},
 		"destructive suite": {
 			config: func() string {
-				config := behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]}]}`)
+				config := behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]}]}`)
 				return strings.Replace(config, `"name":"content-test","kind":"content"`, `"name":"content-test","kind":"destructive"`, 1)
 			},
 			want: "references ineligible suite",
 		},
 		"declared environment": {
 			config: func() string {
-				config := behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"]}]}`)
+				config := behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"]}]}`)
 				return strings.Replace(config, `"name":"content-test","kind":"content","scope":"module"`, `"name":"content-test","kind":"content","scope":"module","environment":["TOKEN"]`, 1)
 			},
 			want: "references ineligible suite",
 		},
 		"unknown feature field": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"],"typo":true}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"],"typo":true}]}`)
 			},
 			want: schemaRejection,
 		},
 		"feature cannot explicitly use on request": {
 			config: func() string {
-				return behaviorReviewConfig(`{"features":[{"name":"checkout","modules":["content"],"suites":["content-test"],"requiredAt":"on-request"}]}`)
+				return behaviorReviewConfig(`{"features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"],"requiredAt":"on-request"}]}`)
 			},
 			want: schemaRejection,
 		},
 		"feature cannot weaken default": {
 			config: func() string {
-				return behaviorReviewConfig(`{"defaultRequiredAt":"checkpoint","features":[{"name":"checkout","modules":["content"],"suites":["content-test"],"requiredAt":"merge"}]}`)
+				return behaviorReviewConfig(`{"defaultRequiredAt":"checkpoint","features":[{"name":"checkout","description":"Checkout completion and payment behavior.","modules":["content"],"suites":["content-test"],"requiredAt":"merge"}]}`)
 			},
 			want: "cannot weaken verification.behaviorReview.defaultRequiredAt",
 		},
@@ -232,7 +232,7 @@ func TestBehaviorReviewSchemaMatchesPolicyContract(t *testing.T) {
 	}
 	feature := schema.Defs.BehaviorReviewFeature
 	if feature.AdditionalProperties == nil || *feature.AdditionalProperties ||
-		!slices.Equal(feature.Required, []string{"name", "suites"}) ||
+		!slices.Equal(feature.Required, []string{"name", "description", "suites"}) ||
 		!slices.Equal(feature.Properties["requiredAt"].Enum, []string{BehaviorReviewMerge, BehaviorReviewCheckpoint}) {
 		t.Fatalf("behavior review feature schema = %+v", feature)
 	}

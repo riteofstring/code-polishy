@@ -16,7 +16,7 @@ func Online(ctx context.Context, repo repository.Repository, files []string, com
 	commands, err := OnlineCommands(repo, files)
 	if err != nil {
 		return []policy.Finding{{
-			Check: "policy.securityScanner", Path: "repository", Subject: "pnpm audit", Message: err.Error(),
+			Check: "policy.securityScanner", Path: "repository", Subject: "online command plan", Message: err.Error(),
 		}}
 	}
 	return OnlineWithCommands(ctx, repo, files, commands, commandRunner)
@@ -32,7 +32,11 @@ func OnlineCommands(repo repository.Repository, files []string) ([]policy.Comman
 		return nil, err
 	}
 	commands = append(commands, auditCommands...)
-	commands = append(commands, osvCommands(repo)...)
+	securityCommands, err := osvCommands(repo)
+	if err != nil {
+		return nil, err
+	}
+	commands = append(commands, securityCommands...)
 	return commands, nil
 }
 
@@ -40,7 +44,7 @@ func OnlineWithCommands(ctx context.Context, repo repository.Repository, files [
 	expected, err := OnlineCommands(repo, files)
 	if err != nil {
 		return []policy.Finding{{
-			Check: "policy.securityScanner", Path: "repository", Subject: "pnpm audit", Message: err.Error(),
+			Check: "policy.securityScanner", Path: "repository", Subject: "online command plan", Message: err.Error(),
 		}}
 	}
 	if !sameOnlineCommandPlan(expected, commands) {
@@ -49,11 +53,10 @@ func OnlineWithCommands(ctx context.Context, repo repository.Repository, files [
 	findings := releaseArtifactAgeFindings(ctx, repo, registryClient(), time.Now().UTC())
 	findings, commandIndex := onlineGoModuleFindings(ctx, repo, files, commands, commandRunner, findings)
 	findings, commandIndex = onlineNodeFindings(ctx, repo, files, commands, commandRunner, findings, commandIndex)
-	findings = append(findings, onlinePythonFindings(ctx, repo, files)...)
+	findings = append(findings, onlinePythonFindings(ctx, repo)...)
 	if activePolicyModule(repo.Config, "osv") {
-		planned := osvCommands(repo)
-		findings = append(findings, scanOSVWithCommands(ctx, repo, planned, commandRunner)...)
-		commandIndex += len(planned)
+		findings = append(findings, scanOSVWithCommands(ctx, repo, commands[commandIndex:], commandRunner)...)
+		commandIndex = len(commands)
 	}
 	if commandIndex != len(commands) {
 		return append(findings, policy.Finding{Check: "policy.supplyChain", Path: "repository", Subject: "online command plan", Message: "online supply-chain command plan has unexpected commands"})
@@ -83,17 +86,14 @@ func onlineNodeFindings(ctx context.Context, repo repository.Repository, files [
 	return findings, commandIndex
 }
 
-func onlinePythonFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
+func onlinePythonFindings(ctx context.Context, repo repository.Repository) []policy.Finding {
+	inputs, err := onlineUVInputs(repo)
+	if err != nil {
+		return []policy.Finding{{Check: "supplyChain.releaseAgeCoverage", Path: "repository", Subject: "uv:resolved-graph", Message: err.Error()}}
+	}
 	findings := []policy.Finding{}
-	pythonLocks := map[string]bool{}
-	for _, path := range files {
-		if filepath.Base(path) == "pyproject.toml" && pythonProjectSupported(repo, path) {
-			root := filepath.ToSlash(filepath.Dir(path))
-			if !pythonLocks[root] {
-				pythonLocks[root] = true
-				findings = append(findings, checkResolvedPythonReleaseAge(ctx, repo, path)...)
-			}
-		}
+	for _, input := range inputs {
+		findings = append(findings, resolvedPythonFindings(ctx, repo, input.Scope, input.Packages, time.Now().UTC())...)
 	}
 	return findings
 }

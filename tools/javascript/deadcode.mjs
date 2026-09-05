@@ -2,7 +2,7 @@ import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 
-import typescript from "./node_modules/typescript/lib/typescript.js";
+import typescript from "typescript";
 
 import {
   MAXIMUM_OPERATION_PATHS,
@@ -64,8 +64,8 @@ function requireWorkspace(directory, workspace) {
     fail(`the dead-code workspace ${named} is outside the analyzed directory`);
   }
   requireWorkspaceCollections(workspace, named);
-  const inherited = requireInheritedPaths(directory, workspace, named);
-  const owned = requireOwnedPaths(directory, workspace, inherited, named);
+  const inherited = requireInheritedPaths(workspace, named);
+  const owned = requireOwnedPaths(workspace, inherited, named);
   requireInheritedOwnership(inherited, owned, named);
   requireWorkspaceEntries(workspace.entry, owned, named);
 }
@@ -84,11 +84,11 @@ function requireWorkspaceCollections(workspace, named) {
   }
 }
 
-function requireInheritedPaths(directory, workspace, named) {
+function requireInheritedPaths(workspace, named) {
   const inherited = new Set();
   for (const path of workspace.inherited) {
     requireContainedPath(path);
-    if (!insideDirectory(directory, path) || inherited.has(path)) {
+    if (inherited.has(path)) {
       fail(
         `the dead-code workspace ${named} declares an invalid inherited path`,
       );
@@ -98,14 +98,11 @@ function requireInheritedPaths(directory, workspace, named) {
   return inherited;
 }
 
-function requireOwnedPaths(directory, workspace, inherited, named) {
+function requireOwnedPaths(workspace, inherited, named) {
   const owned = new Set();
   for (const path of workspace.project) {
     requireContainedPath(path);
-    if (
-      !insideDirectory(directory, path) ||
-      (!insideDirectory(workspace.root, path) && !inherited.has(path))
-    ) {
+    if (!insideDirectory(workspace.root, path) && !inherited.has(path)) {
       fail(
         `the dead-code workspace ${named} selects ${JSON.stringify(path)} outside the analyzed directory`,
       );
@@ -215,8 +212,7 @@ function isRegularFile(absolute, path, unsupportedPaths) {
 }
 
 async function configurationFor(request, covered, unsupportedPaths) {
-  const { pluginNames } =
-    await import("./node_modules/knip/dist/types/PluginNames.js");
+  const { pluginNames } = await import("knip/dist/types/PluginNames.js");
   const workspaces = {};
   for (const workspace of request.workspaces) {
     const project = workspaceFiles(request, workspace, unsupportedPaths);
@@ -353,12 +349,15 @@ async function analyze(
     "--config",
     relative(directory, configurationPath),
   ];
-  const { main } = await import("./node_modules/knip/dist/index.js");
+  const { main } = await import("knip/dist/index.js");
+  const restoreOwnership = await bindInheritedWorkspaces(request);
   let analysis;
   try {
     analysis = await main(analyzerOptions(directory, scratch));
   } catch (error) {
     fail(`the dead-code analysis failed: ${truncate(error.message)}`);
+  } finally {
+    restoreOwnership();
   }
   const { unusedFiles, unusedExports } = reportedIssues(
     request.root,
@@ -370,6 +369,36 @@ async function analyze(
     );
   }
   return { unusedFiles, unusedExports, covered, unsupported: unsupportedPaths };
+}
+
+async function bindInheritedWorkspaces(request) {
+  const { ConfigurationChief } =
+    await import("knip/dist/ConfigurationChief.js");
+  const prototype = ConfigurationChief.prototype;
+  const findWorkspace = prototype.findWorkspaceByFilePath;
+  const owners = new Map();
+  for (const workspace of request.workspaces) {
+    for (const path of workspace.inherited) {
+      if (owners.has(path)) {
+        fail("a generated output has multiple dead-code workspace owners");
+      }
+      owners.set(path, containedName(request.directory, workspace.root));
+    }
+  }
+  prototype.findWorkspaceByFilePath = function (filePath) {
+    const owner = owners.get(insideRoot(request.root, filePath));
+    if (owner === undefined) {
+      return findWorkspace.call(this, filePath);
+    }
+    const workspace = this.workspacesByName.get(owner);
+    if (workspace === undefined) {
+      fail("a generated output's declared dead-code workspace is unavailable");
+    }
+    return workspace;
+  };
+  return () => {
+    prototype.findWorkspaceByFilePath = findWorkspace;
+  };
 }
 
 function analyzerOptions(directory, scratch) {

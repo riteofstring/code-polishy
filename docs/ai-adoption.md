@@ -64,6 +64,16 @@ Adoption is complete only when:
 A config that merely parses is not an adoption. A green placeholder command is
 not evidence.
 
+As part of adoption, inspect consequential module boundaries and existing
+design rationale. Map current repository-owned explanations through
+`documentation.design`; create or update missing rationale for ownership,
+invariants, dependency direction, and material tradeoffs that code alone does
+not explain. Reuse shared guidance where constraints are shared. Do not invent
+design decisions, require one document per module, or fill coverage with
+boilerplate. Use the normal `design-context` workflow to check the selected
+guidance and identify what still needs explanation. Keep repository-specific
+content out of managed `AGENTS.md`.
+
 ## First-install setup wizard
 
 For a target with no `.code-polishy.json`, inspect the repository read-only long
@@ -557,9 +567,13 @@ Before finishing:
    digest and that `code-polishy version` agrees.
 3. Confirm no placeholder command, broad exclusion, credential, generated
    mutation, or policy tool output was committed accidentally.
-4. Commit all completed task-owned changes after required verification unless
-   the caller explicitly requests an uncommitted handoff. Do not push or
-   publish unless explicitly requested.
+4. Finish required verification and commit remaining task-owned changes unless
+   the caller explicitly requests an uncommitted handoff. During long adoption
+   tasks, make progress commits at meaningful milestones, roughly every one to
+   two hours of active editing, following the [agent workflow](agent-workflows.md).
+   Those checkpoints may contain unfinished work; record remaining work and
+   verification status in their messages. Do not push or publish unless
+   explicitly requested.
 
 The final response must include:
 

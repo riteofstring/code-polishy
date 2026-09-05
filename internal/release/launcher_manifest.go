@@ -11,16 +11,17 @@ import (
 const oldestLauncherManifestVersion = 2
 
 type manifestDocument struct {
-	ManifestVersion    int             `json:"manifestVersion"`
-	CodePolishyVersion string          `json:"codePolishyVersion"`
-	SourceRevision     string          `json:"sourceRevision"`
-	Host               string          `json:"host"`
-	Features           []string        `json:"features"`
-	Tools              json.RawMessage `json:"tools"`
-	ReleaseDigest      string          `json:"releaseDigest"`
-	ContentDigest      string          `json:"contentDigest"`
-	EntryCount         int             `json:"entryCount"`
-	Entries            []Entry         `json:"entries"`
+	ManifestVersion         int             `json:"manifestVersion"`
+	CodePolishyVersion      string          `json:"codePolishyVersion"`
+	SourceRevision          string          `json:"sourceRevision"`
+	Host                    string          `json:"host"`
+	Features                []string        `json:"features"`
+	Tools                   json.RawMessage `json:"tools"`
+	ReleaseDigest           string          `json:"releaseDigest"`
+	ContentDigest           string          `json:"contentDigest"`
+	CapabilityCatalogSHA256 string          `json:"capabilityCatalogSha256,omitempty"`
+	EntryCount              int             `json:"entryCount"`
+	Entries                 []Entry         `json:"entries"`
 }
 
 type manifestToolsV2 struct {
@@ -106,6 +107,13 @@ func parseLauncherManifest(data []byte, source string) (Manifest, error) {
 }
 
 func parseHistoricalManifestTools(data []byte, source string, version int) (Tools, error) {
+	if version == 5 {
+		wire := Tools{}
+		if err := decodeExactly(data, source+" tools", &wire); err != nil {
+			return Tools{}, err
+		}
+		return wire, nil
+	}
 	if version == 2 {
 		wire := manifestToolsV2{}
 		if err := decodeExactly(data, source+" tools", &wire); err != nil {
@@ -132,7 +140,8 @@ func (document manifestDocument) manifest(tools Tools) Manifest {
 		ManifestVersion: document.ManifestVersion, CodePolishyVersion: document.CodePolishyVersion,
 		SourceRevision: document.SourceRevision, Host: document.Host, Features: document.Features, Tools: tools,
 		ReleaseDigest: document.ReleaseDigest, ContentDigest: document.ContentDigest,
-		EntryCount: document.EntryCount, Entries: document.Entries,
+		CapabilityCatalogSHA256: document.CapabilityCatalogSHA256,
+		EntryCount:              document.EntryCount, Entries: document.Entries,
 	}
 }
 

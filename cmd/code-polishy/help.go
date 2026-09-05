@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/engine"
 )
 
 type commandHelpPage struct {
@@ -33,6 +35,27 @@ func isCommandInputError(err error) bool {
 }
 
 var commandHelpPages = []commandHelpPage{
+	{
+		name:        "capabilities",
+		summary:     "Discover capabilities from the exact release, installed packs, and repository declarations.",
+		syntax:      []string{"code-polishy capabilities [--query TEXT] [--format human|json]"},
+		selectors:   []string{"Without a query, lists the bounded capability inventory. --query returns at most 20 deterministic candidates from at most 16 terms and 1024 UTF-8 bytes.", "Discovery never selects a behavior-review feature. Supply an exact configured name or alias only after the user's request identifies it.", "Missing or invalid authenticated release catalogs, unavailable packs, and inapplicable scopes remain explicit."},
+		sideEffects: []string{"Reads the locked release catalog, repository declarations, governed inventory, and selected pack receipts. Runs no checks, tests, package operations, or repository commands, and writes no reports or review artifacts."},
+		exits:       []string{"0 discovery completed, including explicit unavailable evidence", "2 invalid usage, configuration, bounded input, or operational failure"},
+		examples:    []string{"code-polishy capabilities", "code-polishy capabilities --query 'purchase behavior' --format json"},
+	},
+	{
+		name:    "task-start",
+		summary: "Validate task context and atomically capture the exact request in one bounded JSON packet.",
+		syntax:  []string{"code-polishy task-start --intent-file PATH (--files PATH | --module NAME) [--feature NAME...] [--situation NAME...] [--format json]"},
+		selectors: []string{
+			"Choose exactly one contained file, directory, or declared module; change-aware and repository-wide selectors are not accepted.",
+			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
+		},
+		sideEffects: []string{"Validates the intent, selection, features, context, catalog, and 16 MiB packet bound before atomically appending the intent journal. Emits one task-start/v1 JSON document. Runs no tests, reviews, package operations, or repository commands."},
+		exits:       []string{"0 intent captured and packet produced", "2 invalid usage, unavailable context, or operational failure"},
+		examples:    []string{"code-polishy task-start --intent-file /tmp/request.txt --module application --feature checkout", "code-polishy task-start --intent-file /tmp/request.txt --files frontend --situation deployment"},
+	},
 	{
 		name:    "version",
 		summary: "Print the running Code Polishy release version.",
@@ -208,14 +231,17 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "check",
-		summary: "Run configured policy checks over one file selection or named checks.",
+		summary: "Run configured policy checks over one evaluation selection or named checks.",
 		syntax: []string{
-			"code-polishy check [--git-changes|--staged|--all|--files PATH...]",
+			"code-polishy check [--git-changes|--staged|--all|--files PATH...|--module NAME...]",
 			"code-polishy check --name NAME...",
 		},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
-			"--name NAME may repeat and cannot be combined with file selectors.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; directories expand to governed descendants without following symbolic links.",
+			"--module selects one or more declared modules and cannot be combined with file, change-aware, staged, or all-repository selectors.",
+			"--name NAME may repeat and cannot be combined with evaluation selectors.",
+			"Select --all or --name for configured repository-wide checks with no path or module triggers; focused checks retain global configuration validation and required context for applicable analyzers.",
 		},
 		sideEffects: []string{"Reads the configuration and selected files; runs configured checks."},
 		exits:       []string{"0 no findings", "1 policy findings", "2 invalid usage or operational failure"},
@@ -257,17 +283,28 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy merge-gate --base origin/main", "code-polishy merge-gate --base origin/main --resume"},
 	},
 	{
+		name:        "architecture-review",
+		summary:     "Review concept ownership and dependency topology against an exact clean candidate.",
+		syntax:      []string{"code-polishy architecture-review <status|prepare|finalize> --base REF"},
+		selectors:   []string{"Exactly one --base REF and a clean committed candidate are required.", "status reports current signals and validates accepted evidence; prepare writes a bounded packet for a separate clean-context reviewer; finalize validates its strict result.", "An accepted review does not waive deterministic architecture or ownership failures."},
+		sideEffects: []string{"Reads the full source graph with the locked analyzers. prepare writes managed packet and binding files; finalize writes an acceptance receipt. The calling harness supplies the reviewer; no AI provider or tests are invoked."},
+		exits:       []string{"0 prepared, accepted, or no review required", "1 deterministic findings or required review", "2 invalid usage, invalid review result, changed candidate, or operational failure"},
+		examples:    []string{"code-polishy architecture-review status --base origin/main", "code-polishy architecture-review prepare --base origin/main", "code-polishy architecture-review finalize --base origin/main"},
+	},
+	{
 		name:    "behavior-review",
 		summary: "Capture intent and corrections, inspect review status, prepare evidence, or finalize a behavior and final-state review.",
 		syntax: []string{
-			"code-polishy behavior-review capture-intent --intent-file PATH [--feature NAME...]",
+			"code-polishy behavior-review capture-intent --intent-file PATH [--feature NAME...] [--format human|json]",
 			"code-polishy behavior-review require --base REF --feature NAME...",
-			"code-polishy behavior-review status --base REF",
+			"code-polishy behavior-review status --base REF [--format human|json]",
 			"code-polishy behavior-review prepare --base REF",
 			"code-polishy behavior-review finalize --base REF",
 		},
 		selectors: []string{
-			"capture-intent requires exactly one --intent-file PATH, a clean committed task base, and accepts repeated configured --feature NAME values.",
+			"capture-intent requires exactly one --intent-file PATH and a clean committed base for the original request; later corrections may bind a dirty candidate.",
+			"Repeat --feature only for explicitly requested configured names or exact normalized aliases. Stored requirements always use canonical names; intent keywords never activate features.",
+			"capture-intent and status always confirm canonical features and state on stdout, including in pipes; --format json emits one behavior-review/v1 document.",
 			"require requires exactly one --base REF, at least one configured --feature NAME, and a clean committed candidate with pre-code intent.",
 			"status requires exactly one --base REF and reads the behavior-review decision without running tests or writing artifacts.",
 			"prepare requires exactly one --base REF and uses intent captured before implementation.",
@@ -362,10 +399,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "architecture",
-		summary: "Check architecture policy over one file selection.",
-		syntax:  []string{"code-polishy architecture [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Check architecture policy over one evaluation selection.",
+		syntax:  []string{"code-polishy architecture [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Reads the configuration and selected files; does not write project files."},
 		exits:       []string{"0 no findings", "1 architecture findings", "2 invalid usage or operational failure"},
@@ -417,26 +455,30 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "design-context",
-		summary: "Print the current design documents that govern planned source changes.",
+		summary: "Discover current design documents and relevant repository operational handoffs.",
 		syntax: []string{
-			"code-polishy design-context --module NAME...",
-			"code-polishy design-context [--git-changes|--staged|--all|--files PATH...]",
+			"code-polishy design-context --module NAME... [--situation NAME...]",
+			"code-polishy design-context [--git-changes|--staged|--all|--files PATH...] [--situation NAME...]",
 		},
 		selectors: []string{
 			"Choose either one or more --module NAME selectors or one file selector.",
 			"File selectors are mutually exclusive; --git-changes is the default.",
 			"Use --files PATH... for explicit paths; positional paths are not accepted.",
+			"Module and exact-source design mappings are additive. Output explains each match and reports uncovered selected modules and paths; missing mappings alone do not fail the command.",
+			"Repeat --situation NAME for exact operational situations such as authentication, release, or deployment. Situations alone select no files; a file or module selector may be added explicitly.",
+			"Handoffs match a selected situation, exact source, or module; the actual design-context workflow situation also applies. Only selected documents are loaded, with their SHA-256 identities and selection reasons.",
 		},
-		sideEffects: []string{"Reads configuration and design-document mappings; prints matching current design-document paths."},
-		exits:       []string{"0 mappings printed", "1 mapping-policy findings", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy design-context --files cmd/code-polishy/main.go", "code-polishy design-context --module cli"},
+		sideEffects: []string{"Reads selected documents and writes a bounded managed context report. Human output identifies documents; JSON includes their exact contents. It executes no procedure commands, retrieves no credentials, and changes no managed guidance."},
+		exits:       []string{"0 context composed", "1 invalid current document or selected handoff", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy design-context --files cmd/code-polishy/main.go", "code-polishy design-context --module cli --situation release", "code-polishy design-context --situation authentication --format json"},
 	},
 	{
 		name:    "format",
-		summary: "Check or apply configured formatting over one file selection.",
-		syntax:  []string{"code-polishy format [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Check or apply configured formatting over one evaluation selection.",
+		syntax:  []string{"code-polishy format [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
 		exits:       []string{"0 formatting completed without findings", "1 formatting findings", "2 invalid usage or operational failure"},
@@ -444,10 +486,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "fix",
-		summary: "Apply configured formatting fixes over one file selection.",
-		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "Apply configured formatting fixes over one evaluation selection.",
+		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
 		exits:       []string{"0 fixes completed without findings", "1 remaining findings", "2 invalid usage or operational failure"},
@@ -455,10 +498,11 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "list-files",
-		summary: "List the files in one resolved file selection.",
-		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...]"},
+		summary: "List the files in one resolved evaluation selection.",
+		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
 		selectors: []string{
-			"File selectors are mutually exclusive; --git-changes is the default.",
+			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
+			"--files accepts contained regular files and directories; --module accepts declared module names.",
 		},
 		sideEffects: []string{"Reads repository state and prints selected paths; does not write project files."},
 		exits:       []string{"0 paths listed", "2 invalid usage or operational failure"},
@@ -488,12 +532,27 @@ func printCommandHelp(output io.Writer, command string) bool {
 }
 
 func (page commandHelpPage) writeTo(output io.Writer) {
+	if reportOutputCommand(page.name) {
+		page.selectors = append(append([]string{}, page.selectors...), reportOutputHelp()...)
+		page.sideEffects = append(append([]string{}, page.sideEffects...), "Writes a complete versioned JSON report below .code-polishy-reports even when the displayed view is filtered or truncated.")
+	}
 	writeHelpSection(output, "Usage", page.syntax)
 	fmt.Fprintf(output, "\n%s\n", page.summary)
 	writeHelpSection(output, "Selectors and arguments", page.selectors)
 	writeHelpSection(output, "Side effects", page.sideEffects)
 	writeHelpSection(output, "Exit status", page.exits)
 	writeHelpSection(output, "Examples", page.examples)
+}
+
+func reportOutputHelp() []string {
+	return []string{
+		"Output options are separate from evaluation selectors and never reduce evaluated scope or exit status.",
+		"--format human|json|sarif selects bounded human output or one machine document; the default is human.",
+		"--output PATH atomically writes an explicit contained regular file instead of stdout.",
+		"--filter-rule, --filter-module, --filter-path, and --filter-relation are repeatable display-only filters.",
+		"--group-by rule|module|path|relation controls view ordering without changing the complete report.",
+		fmt.Sprintf("--display-limit N bounds human findings from 1 through %d; the default is %d.", engine.MaximumFindingDisplayLimit, engine.DefaultFindingDisplayLimit),
+	}
 }
 
 func writeHelpSection(output io.Writer, heading string, lines []string) {

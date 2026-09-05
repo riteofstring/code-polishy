@@ -33,7 +33,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 			continue
 		}
 		for _, path := range matched {
-			if !slices.Contains(repo.ModuleNames(path), input.Module) {
+			if !slices.Contains(repo.OwnerModuleNames(path), input.Module) {
 				findings = append(findings, policy.Finding{
 					Check: "policy.portabilityCoverage", Path: path, Subject: input.Name,
 					Message: fmt.Sprintf("external input source must be owned by module %q", input.Module),

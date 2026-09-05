@@ -133,7 +133,7 @@ func TestDoctorRejectsExcludedExecutableSource(t *testing.T) {
 func TestAdvisoriesDoNotFailReport(t *testing.T) {
 	t.Parallel()
 	report := (&Engine{}).finishWithAdvisories(nil, []policy.Advisory{{Check: "portability.machinePath", Path: "content/config.go", Subject: "2"}}, nil)
-	if len(report.Findings) != 0 || len(report.Advisories) != 1 {
+	if len(report.Findings) != 1 || report.Findings[0].Severity != policy.FindingWarning {
 		t.Fatalf("report = %+v", report)
 	}
 	if HasFindings(report) {
@@ -141,16 +141,18 @@ func TestAdvisoriesDoNotFailReport(t *testing.T) {
 	}
 }
 
-func TestCombinedReportsCanonicalizeAdvisories(t *testing.T) {
+func TestCombinedReportsCanonicalizeWarnings(t *testing.T) {
 	t.Parallel()
-	earlier := policy.Advisory{Check: "portability.machinePath", Path: "content/a.go", Subject: "1"}
-	later := policy.Advisory{Check: "portability.machinePath", Path: "content/z.go", Subject: "2"}
+	earlier := policy.NormalizeFinding(policy.Finding{Check: "portability.machinePath", Path: "content/a.go", Subject: "1", Severity: policy.FindingWarning})
+	later := policy.NormalizeFinding(policy.Finding{Check: "portability.machinePath", Path: "content/z.go", Subject: "2", Severity: policy.FindingWarning})
 	report := (&Engine{}).combine(
-		Report{Advisories: []policy.Advisory{later, earlier}},
-		Report{Advisories: []policy.Advisory{later}},
+		Report{Findings: []policy.Finding{later, earlier}},
+		Report{Findings: []policy.Finding{later}},
 	)
-	if !slices.Equal(report.Advisories, []policy.Advisory{earlier, later}) {
-		t.Fatalf("advisories = %+v", report.Advisories)
+	reversed := (&Engine{}).combine(Report{Findings: []policy.Finding{earlier, later}}, Report{})
+	if len(report.Findings) != 2 || len(reversed.Findings) != 2 || report.Findings[0].Fingerprint != reversed.Findings[0].Fingerprint ||
+		report.Findings[1].Fingerprint != reversed.Findings[1].Fingerprint {
+		t.Fatalf("findings = %+v", report.Findings)
 	}
 }
 
@@ -277,7 +279,7 @@ func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, b
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,6 +585,7 @@ func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T)
 		t.Run(testCase.name, func(t *testing.T) {
 			root := testCase.root(t)
 			if testCase.level != testpolicy.MergeLevelDocumentation {
+				declareContentTestOwnership(t, root, "content/reminder_test.go")
 				installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 				installBehaviorReviewTestGuidance(t, root)
 			}
@@ -1279,7 +1282,7 @@ func contentRepository(t *testing.T, excludes []string) string {
 		excludeJSON += `"` + item + `"`
 	}
 	config := `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "content"},
   "scope": {"exclude": [` + excludeJSON + `]},
   "quality": {},
@@ -1292,7 +1295,7 @@ func contentRepository(t *testing.T, excludes []string) string {
     {"name":"content-build","provides":["content-build"],"argv":["true"],"modules":["content"],"runOn":["build"]},
     {"name":"offline-supply","provides":["content-integrity"],"argv":["true"],"runOn":["supply-chain"]}
   ],
-  "tests": {"suites":[
+  "tests": {"ownership":[],"suites":[
     {"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},
     {"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}
   ]},
@@ -1309,7 +1312,7 @@ func documentationRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	config := `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "tooling", "capabilities": ["cli"]},
   "scope": {},
   "quality": {},
@@ -1325,7 +1328,7 @@ func documentationRepository(t *testing.T) string {
     {"name": "offline-assurance", "provides": ["lock-sync"], "argv": ["true"], "runOn": ["supply-chain"]},
     {"name": "online-supply", "provides": ["release-age"], "argv": ["true"], "runOn": ["supply-chain-online"]}
   ],
-  "tests": {"suites": [
+  "tests": {"ownership": [], "suites": [
     {"name": "docs-product-contract", "kind": "contract", "scope": "module", "modules": ["docs"], "argv": ["go", "test", "./docs/..."]},
     {"name": "repository-full", "kind": "integration", "scope": "repository", "argv": ["./scripts/test-repository.sh"]}
   ]},

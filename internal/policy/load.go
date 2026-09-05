@@ -77,6 +77,7 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 func applyDefaults(config *Config) {
+	generationDefaults(&config.Generation)
 	if behaviorReview := config.Verification.BehaviorReview; behaviorReview != nil {
 		defaultString(&behaviorReview.DefaultRequiredAt, BehaviorReviewOnRequest)
 	}
@@ -328,9 +329,6 @@ func validateScope(config *Config) error {
 	if err := validateDataPaths(config); err != nil {
 		return err
 	}
-	if err := rejectUniversalPatterns(config.Scope.Tests, "scope.tests"); err != nil {
-		return err
-	}
 	if err := rejectUniversalPatterns(config.Scope.EntryPoints, "scope.entryPoints"); err != nil {
 		return err
 	}
@@ -341,6 +339,9 @@ func validateScope(config *Config) error {
 		return err
 	}
 	if err := validatePythonComputedImports(config.Scope.PythonComputedImports); err != nil {
+		return err
+	}
+	if err := validatePythonExternalPluginImports(&config.Scope); err != nil {
 		return err
 	}
 	if err := validatePythonExternalAttributes(config.Scope.PythonExternalAttributes); err != nil {
@@ -375,7 +376,7 @@ func validateChecks(config *Config) error {
 			return err
 		}
 	}
-	return nil
+	return ValidateGeneration(config.Generation)
 }
 
 func validateTests(config *Config) error {
@@ -385,7 +386,10 @@ func validateTests(config *Config) error {
 			return err
 		}
 	}
-	return validateTestCoverageRelations(config.Tests.Suites)
+	if err := validateTestCoverageRelations(config.Tests.Suites); err != nil {
+		return err
+	}
+	return validateTestOwnership(config)
 }
 
 func validateTestSuite(config *Config, suite *TestSuite, index int, names map[string]bool) error {
@@ -654,7 +658,7 @@ func validateException(exception Exception, label string, now time.Time) error {
 		return fmt.Errorf("%s.check cannot suppress policy findings", label)
 	}
 	if !suppressibleCheck(exception.Check) {
-		return fmt.Errorf("%s.check must name an architecture, command, quality, supplyChain, or test finding", label)
+		return fmt.Errorf("%s.check must name an architecture, quality, supplyChain, or test finding", label)
 	}
 	if exception.Expires.After(now.AddDate(0, 0, MaximumExceptionDays)) {
 		return fmt.Errorf("%s.expires must be within %d days", label, MaximumExceptionDays)
@@ -663,13 +667,19 @@ func validateException(exception Exception, label string, now time.Time) error {
 }
 
 func suppressibleCheck(check string) bool {
-	if check == "command" {
-		return true
+	if slices.Contains([]string{
+		"architecture.fileCycle", "testing.fileCycle", "architecture.sourceGraphCoverage",
+		"architecture.importCoverage", "architecture.pythonFactsCoverage",
+		"architecture.reviewSignal", "policy.architectureReview",
+	}, check) {
+		return false
 	}
 	if slices.Contains([]string{
 		"supplyChain.auditIgnore",
 		"supplyChain.dependencyOverride",
 		"supplyChain.goVulnerability",
+		"supplyChain.gitEvidence",
+		"supplyChain.gitVulnerability",
 		"supplyChain.nodeVulnerability",
 		"supplyChain.osvVulnerability",
 		"supplyChain.pnpmSecurity",

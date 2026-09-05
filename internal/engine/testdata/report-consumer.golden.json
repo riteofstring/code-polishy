@@ -1,0 +1,16 @@
+{
+  "ruleId": "quality.lint",
+  "fingerprint": "7bb8987acd8782c625d049d427c530334acd9ae7539297675c7ec98cecbd82ae",
+  "severity": "warning",
+  "message": "unused",
+  "path": "src/app.go",
+  "line": 3,
+  "column": 2,
+  "remediationSummary": "Resolve quality.lint for unused and rerun its owning policy command.",
+  "nextCommand": [
+    "code-polishy",
+    "check",
+    "--files",
+    "src/app.go"
+  ]
+}

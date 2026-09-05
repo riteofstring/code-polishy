@@ -203,16 +203,18 @@ The target config names modules and their allowed direct dependencies:
 }
 ```
 
-Every executable file belongs to exactly one module and the module graph must
+Every governed production executable belongs to exactly one module and the module graph must
 be acyclic. Omitting `dependsOn` means the module may use only itself and
 external packages. That makes foundational domain modules independent by
 construction.
 
-Tests use the same one-module ownership map to say which production boundary
-they verify, but their imports are omitted from the production graph. A test may
-exercise collaborators or span modules without authorizing the owning module's
-production code to depend on them. `scope.tests` adds unconventional test paths;
-every governed test must be included by a quick focused suite for its owner.
+Tests declare their production boundary independently through exactly one
+`tests.ownership` entry naming a `module` and its primary quick `focusedSuite`.
+Production module paths do not infer test ownership. `tests.paths` adds
+unconventional test paths, and the named suite must explicitly include its
+owned tests. Test imports are omitted from the production graph: a test may
+exercise collaborators or span modules without authorizing its production
+owner to depend on them.
 
 The Go adapter parses imports with Go's parser, resolves every nested `go.mod`,
 and rejects an internal import whose target module is not a declared direct
@@ -314,12 +316,29 @@ bounded graph output once. Target Ruff configuration cannot change this
 evidence. Code Polishy, rather than Ruff or a target command, then decides file
 and module ownership, allowed `dependsOn` edges, and coverage.
 
+The canonical source graph records one `python-facts/v3` input per analyzed
+Python project, covering its exact source paths. Its identity binds the
+normalized facts, deterministic partition records, and cross-file type
+resolution evidence. Missing, duplicated, or mismatched coverage withholds the
+graph. Cycle and architecture-review topology identities depend on semantic
+dependencies and ownership, so a source-body change can invalidate graph
+evidence without changing those semantic identities.
+
 The built-in resolver covers flat, direct `src`, and in-tree PEP 517 backend
 layouts, nested projects with overlapping import names, regular and namespace
 packages, package `__init__.py` re-exports, `.py` and `.pyi` modules, absolute
 and valid relative imports, and exact one-argument calls through statically
 proved aliases of `importlib.import_module` and `builtins.__import__`.
 Standard-library and third-party imports create no repository module edge.
+
+Module loaders and their supporting JSON, path, and entry-point calls resolve
+through the complete compact project, including imported aliases and re-exports
+across source partitions. Bounded collection and conditional-choice facts
+preserve every possible target. Exact start and end positions distinguish
+nested calls with the same starting location. Binding activation and branch
+facts preserve definition-time inputs and lexical shadowing; wildcard or
+ambiguous bindings cannot prove a loader. Resolved `typing.TYPE_CHECKING`
+guards and stub files retain type-only dynamic edges.
 
 A plain literal target is resolved directly. Any other recognized computed
 call must have one exact `scope.pythonComputedImports` declaration. The Python
@@ -344,6 +363,101 @@ one governed file and its source module must already allow the target owner in
 `dependsOn`; the declaration is evidence, not a second dependency allow-list.
 `scope.pythonDynamicReferences` remains a separate exact Vulture reachability
 contract and cannot satisfy computed-import coverage in either direction.
+
+`pkgutil.resolve_name` object loads resolve over the compact facts for the whole
+project, including loader aliases and re-exports across source partitions.
+A literal `module:object` argument contributes a `proven-dynamic` edge to its
+local runtime module. Its normalized absolute module and identifier-chain
+object must satisfy `python-module-object/v1`; relative names, wildcards, and
+import expressions are unproven. Ambiguous and wildcard loader bindings fail
+coverage. A local parameter that shadows the loader is not an import.
+
+For a registry object load, `scope.pythonComputedImports` must independently
+bind the source and one governed JSON input. Use `callee: "pkgutil.resolve_name"`
+and `shape: "module-object-call/v1"`, plus the exact source digest, module,
+callable or module scope, line, column, canonical argument, and namespace.
+Its single `configuration` entry names the registry path, JSON pointer, and
+current SHA-256. It has no `targets` inventory or `entryPointGroup`.
+The supported argument is a direct expression such as
+`json.loads(Path('src/app/registry.json').read_text(encoding='utf-8'))['plugins'][name]`,
+where the final dynamic index is one current callable parameter. A fixed
+selector may name one string, and an empty pointer may select the JSON root.
+The current bounded registry supplies the object targets; every module must
+remain beneath the declared non-top-level namespace and resolve inside the
+same project. Registry paths in source are relative to the project root;
+configuration paths are relative to the repository root.
+
+Registry files must be governed handwritten regular files of at most 2 MiB,
+without symbolic links or changes during the read. Duplicate keys, unsupported
+JSON constants, empty target sets, and malformed object names fail coverage.
+The graph's resolution identity binds the actual registry bytes and derived
+targets. Selecting a registry checks its consuming project; unrelated selected
+documents do not activate configured Python consumers.
+
+External object loads use `scope.pythonExternalPluginImports`. Each declaration
+binds one exact loader consumer to a canonical distribution name, an explicit
+owned import namespace, `inputGrammar: "python-module-object/v1"`, and a
+runtime check. The current contained manifest and adjacent `uv.lock` must
+identify the same direct runtime or optional dependency through an exact
+registry pin or exact Git commit. Transitive-only and moving dependencies do
+not satisfy the contract. Namespace ownership is an explicit repository
+declaration; distribution spelling does not establish an import namespace.
+
+The independent object-import resolver checks every literal or governed-registry
+target against that namespace. Registry input must match its declared path,
+JSON pointer, and current digest. Local modules and standard-library modules
+cannot become external composition targets. The loaded object must then pass a
+rejecting `isinstance` or `issubclass` check against the declared runtime type,
+or a proved synchronous validator containing that check. An annotation, an
+ignored boolean, a different checked value, or an unconstrained runtime input
+does not establish this evidence. Invalid or missing evidence emits
+`policy.pythonExternalPluginImport` and withholds a complete graph. Admission
+applies only to that loader callsite; other calls keep their own coverage rules.
+
+For a runtime parameter, a rejecting guard must call a governed predicate before
+the loader uses the same unchanged parameter. The supported predicate has one
+parameter and returns this conjunction, with the declared namespace substituted
+in both prefixes:
+
+```python
+import keyword
+import unicodedata
+
+
+def permitted(value):
+    return (
+        type(value) is str
+        and unicodedata.normalize("NFKC", value) == value
+        and value.count(":") == 1
+        and value.startswith(("third_party.plugins:", "third_party.plugins."))
+        and all(
+            part.isidentifier() and not keyword.iskeyword(part)
+            for part in value.replace(":", ".").split(".")
+        )
+    )
+```
+
+Use `if not permitted(name): raise ValueError(...)` before loading `name`,
+then perform the separately declared runtime protocol check on the loaded
+object. The name predicate admits normalized Unicode identifiers while
+rejecting keywords, empty components, expression syntax, extra colons, and
+neighboring namespace prefixes. Function and parameter names may differ;
+imports, aliases, and re-exports must resolve to the exact built-in and
+standard-library operations. The predicate must be synchronous, undecorated,
+and contain only that return expression. A swallowed or conditional rejection,
+rebound input, different checked argument, or check after loading is unproven.
+The graph binds the current predicate source digest as well as the loader's
+source. Predicate resolution uses the whole compact project and executes no
+application code.
+
+Successful declarations appear in the graph's separate `externalCompositions`
+collection and module summaries. Each entry retains dependency, manifest,
+lockfile, loader input, and runtime-check evidence. Reports, SARIF, saved gates,
+and architecture review packets preserve those entries. They neither create
+local dependency permissions nor enter local cycle traversal. Review topology
+tracks semantic external contracts, while proof digests remain part of the
+complete graph identity. Selecting the manifest, lockfile, registry, or
+configuration activates its declared consumer; unrelated documents do not.
 
 Computed shapes outside the bounded enumeration, governed-JSON, and PEP 621
 entry-point forms are unproven. Multi-argument calls and parenthesized
@@ -387,6 +501,8 @@ classes impossible.
 Architecture exceptions use the central exception list, matching the exact
 architecture check, source path, and target subject. There is no permanent
 per-module ignore list, and policy coverage itself cannot be exempted.
+Source cycles, source/import coverage, architecture-review signals, and required
+architecture review are not suppressible.
 
 ## Architecture summary
 
@@ -396,6 +512,81 @@ suite count. These facts make oversized or overly central modules visible for
 review. Names, file counts, percentages, and dependency degree are not arbitrary
 blocking thresholds; exact ownership, acyclic direction, import evidence, and
 focused test coverage remain the enforced invariants.
+
+`architecture --all` also reports deterministic review signals for one
+production module, modules spanning independently discovered projects or Go
+packages, disconnected production components, catch-all ownership across source
+roots, and an empty declared graph hiding internal source dependencies. A
+signal selects qualitative judgment without proving a defect or imposing a
+minimum file or module count.
+
+## Architecture review workflow
+
+After required request capture and current design-context discovery, draft and
+commit the proposed module contract and current source/test ownership for
+adoption or an architecture rewrite. Review it before broad source
+moves; avoid replacing a deep file with forwarding-only files. Use one explicit
+trusted base throughout the review and its checkpoint or merge gate:
+
+```sh
+code-polishy architecture-review status --base REVIEW_BASE
+code-polishy architecture-review prepare --base REVIEW_BASE
+code-polishy architecture-review finalize --base REVIEW_BASE
+```
+
+All three commands require a clean committed candidate. They obtain the complete
+normalized source graph through its owning analyzers and run no tests or AI
+provider. Resolve deterministic graph, import, ownership, and cycle failures
+before preparation. `status` reports whether review is required and validates
+existing evidence. It creates no review packet or receipt.
+
+`prepare` writes a bounded `architecture-review/v1` packet under
+`.code-polishy-reports/architecture-review/reviews/`. The packet contains exact
+revisions, the declared module contract, explicit test ownership, the canonical
+source graph and roots, cycle results, module summaries, structural signals,
+the Git patch, complete committed source for every graph node (including
+unchanged files), and only mapped current design documents. Source entries
+provide paths, UTF-8 contents, and exact content digests so configuration-only
+adoption can be reviewed using implementation evidence. Its topology diff
+compares against the last valid accepted review; an unreviewed graph has an
+explicit empty baseline. Packet size is limited to 128 MiB, the Git patch to
+16 MiB, each source file to 8 MiB, total source contents to 64 MiB, and reviewer
+output to 256 KiB. Missing, non-regular, non-UTF-8, or oversized source fails
+preparation. Oversized evidence fails without a
+truncated packet or an implied pass.
+
+The harness starts a reviewer with no inherited conversation and supplies only
+that packet. The locked instructions in `templates/architecture-review.md`
+require concrete packet citations and an explanation of real concept ownership,
+boundary depth, direction, disconnected responsibilities, and forwarding-only
+rewrites. Findings include exact evidence and a corrected module/ownership graph.
+The harness saves the strict JSON result at the packet's result path and runs
+`finalize`. Empty evidence, invented citations, duplicate or unknown fields,
+findings, and changed candidate material cannot produce acceptance.
+
+The shipped `schema/code-polishy-architecture-review.schema.json` defines the
+packet, preparation binding, receipt, and result structures. Duplicate keys and
+nesting beyond 64 levels are rejected before object decoding. Schema resolution
+uses only shipped resources. Artifact byte limits, exact source and candidate
+bindings, topology identities, and citation validation remain independent of
+structural validation.
+
+Checkpoint and merge gates require acceptance for an unreviewed source graph
+or changed reviewed architecture. An unchanged accepted graph retains visible
+informational signals; acceptance is neither a generated waiver nor an
+exception. Reuse requires the same review base, module contract, project/package
+roots, ownership map, and semantic source topology, plus unchanged instructions
+and mapped design documents. The reviewed candidate must be an ancestor of the
+current candidate. Source locations may move without changing topology. A new
+pending review, changed packet/result, or missing evidence invalidates reuse.
+Ordinary prose-only delivery retains its documentation verification workflow.
+
+Gate identities bind the complete review artifact evidence and recheck it at
+publication. An identical passed identity executes no validation commands.
+The calling harness supplies the reviewer; Code Polishy embeds no AI SDK and
+receives no provider credentials. Local hashes establish candidate consistency,
+not reviewer identity or proof of clean context. AI review cannot replace any
+separately required human approval.
 
 ## Architecture review template
 

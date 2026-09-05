@@ -9,12 +9,12 @@ from packaging.markers import Op, Value, Variable
 from packaging.metadata import Metadata
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
-from packaging.utils import canonicalize_name
+from packaging.utils import canonicalize_name, canonicalize_version
 from packaging.version import InvalidVersion, Version
 
 from source_adapter import _source
 
-PROTOCOL = "python-facts/v1"
+PROTOCOL = "python-facts/v3"
 PACKAGING_VERSION = "26.3"
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
@@ -478,7 +478,7 @@ def _analyze(request):
         request["sources"],
         "source",
         _source_fact,
-        {"sha256": "", "imports": [], "computedImports": []},
+        {"sha256": "", "imports": [], "typeFacts": None},
     )
     return {
         "protocol": PROTOCOL,
@@ -498,6 +498,9 @@ def _analyze(request):
             request["specifiers"], 65536, "request specifier is invalid", _ruff_target
         ),
         "names": [_name_fact(value) for value in request["names"]],
+        "versions": _bounded_facts(
+            request["versions"], 4096, "request version is invalid", _version_fact
+        ),
     }
 
 
@@ -514,6 +517,7 @@ def _validate_request(request):
             "requirements",
             "specifiers",
             "names",
+            "versions",
         },
         "request",
     )
@@ -527,6 +531,7 @@ def _validate_request(request):
         "requirements",
         "specifiers",
         "names",
+        "versions",
     ):
         if not isinstance(request[key], list) or len(request[key]) > MAX_ITEMS:
             raise ValueError(f"request {key} has an invalid count")
@@ -564,6 +569,14 @@ def _name_fact(value):
     try:
         return {"input": value, "normalized": _package_name(value), "error": ""}
     except (ValueError, TypeError) as error:
+        return {"input": value, "normalized": "", "error": str(error)}
+
+
+def _version_fact(value):
+    try:
+        normalized = canonicalize_version(Version(value))
+        return {"input": value, "normalized": normalized, "error": ""}
+    except InvalidVersion as error:
         return {"input": value, "normalized": "", "error": str(error)}
 
 

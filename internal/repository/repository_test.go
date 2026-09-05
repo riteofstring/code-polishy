@@ -291,6 +291,99 @@ func TestExplicitSelectionRejectsMissingAndExcludedPaths(t *testing.T) {
 	}
 }
 
+func TestExplicitSelectionExpandsContainedDirectoriesWithoutFollowingLinks(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "src/a.go", "package sample\n")
+	writeFile(t, root, "src/nested/b.go", "package nested\n")
+	writeFile(t, root, "src/ignored/c.go", "package ignored\n")
+	if err := os.Symlink(filepath.Join(root, "src", "nested"), filepath.Join(root, "src", "linked")); err != nil {
+		t.Skipf("create directory symbolic link: %v", err)
+	}
+	repo := Repository{Root: root, Config: policy.Config{Scope: policy.Scope{Exclude: []string{"src/ignored/**"}}}}
+	selection, err := repo.Select("files", []string{"src"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"src/a.go", "src/nested/b.go"}
+	if !slices.Equal(selection.Files, want) || !slices.Equal(selection.Requested.Expanded, want) ||
+		selection.Requested.Mode != "files" || !slices.Equal(selection.Requested.Operands, []string{"src"}) {
+		t.Fatalf("selection = %+v", selection)
+	}
+	rootSelection, err := repo.Select("files", []string{"."})
+	if err != nil || !slices.Equal(rootSelection.Files, want) {
+		t.Fatalf("root selection = %+v, error = %v", rootSelection, err)
+	}
+}
+
+func TestExplicitSelectionRejectsRepeatedOverlappingEmptyAndSymbolicLinkOperands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "src/a.go", "package sample\n")
+	if err := os.MkdirAll(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "src", "a.go"), filepath.Join(root, "linked.go")); err != nil {
+		t.Skipf("create symbolic link: %v", err)
+	}
+	repo := Repository{Root: root}
+	cases := []struct {
+		name     string
+		operands []string
+		message  string
+	}{
+		{name: "repeated", operands: []string{"src/a.go", "./src/a.go"}, message: "selection operand is repeated"},
+		{name: "overlapping", operands: []string{"src", "src/a.go"}, message: "selection operands overlap"},
+		{name: "empty", operands: []string{"empty"}, message: "no governed regular files"},
+		{name: "symbolic link", operands: []string{"linked.go"}, message: "symbolic link"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := repo.Select("files", testCase.operands)
+			if err == nil || !strings.Contains(err.Error(), testCase.message) {
+				t.Fatalf("Select(files, %v) error = %v", testCase.operands, err)
+			}
+		})
+	}
+}
+
+func TestModuleSelectionExpandsExactlyTheNamedDeclaredModules(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "alpha/a.go", "package alpha\n")
+	writeFile(t, root, "beta/b.go", "package beta\n")
+	writeFile(t, root, "other/c.go", "package other\n")
+	repo := Repository{Root: root, Config: policy.Config{Modules: []policy.Module{
+		{Name: "alpha", Paths: []string{"alpha/**"}},
+		{Name: "beta", Paths: []string{"beta/**"}},
+	}}}
+	selection, err := repo.Select("modules", []string{"beta", "alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(selection.Files, []string{"alpha/a.go", "beta/b.go"}) ||
+		!slices.Equal(selection.Requested.Operands, []string{"beta", "alpha"}) ||
+		!slices.Equal(selection.Requested.Modules, []string{"alpha", "beta"}) || selection.Requested.Mode != "module" {
+		t.Fatalf("selection = %+v", selection)
+	}
+	for _, testCase := range []struct {
+		names   []string
+		message string
+	}{
+		{names: nil, message: "at least one"},
+		{names: []string{"missing"}, message: "unknown module"},
+		{names: []string{"alpha", "alpha"}, message: "repeated"},
+	} {
+		if _, err := repo.Select("modules", testCase.names); err == nil || !strings.Contains(err.Error(), testCase.message) {
+			t.Fatalf("Select(modules, %v) error = %v", testCase.names, err)
+		}
+	}
+	emptyRepo := Repository{Root: t.TempDir(), Config: policy.Config{Modules: []policy.Module{{Name: "empty", Paths: []string{"src/**"}}}}}
+	if _, err := emptyRepo.Select("modules", []string{"empty"}); err == nil || !strings.Contains(err.Error(), "no governed files") {
+		t.Fatalf("empty module error = %v", err)
+	}
+}
+
 func TestChangedSelectionExpandsPolicyInputs(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)
@@ -714,7 +807,7 @@ func TestNestedGoModuleOwnershipUsesDeepestRoot(t *testing.T) {
 	}
 }
 
-func TestDesignDocumentsPreferDirectSourceContextAndRemainStable(t *testing.T) {
+func TestDesignDocumentsCombineModuleAndSourceContextAndRemainStable(t *testing.T) {
 	t.Parallel()
 	repo := designDocumentRepository(t, []policy.Module{
 		{Name: "api", Paths: []string{"api/**"}},

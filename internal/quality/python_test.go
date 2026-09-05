@@ -1,8 +1,10 @@
 package quality
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
@@ -47,8 +50,8 @@ func (qualityRunner *pythonQualityRunner) RunStructured(_ context.Context, _ str
 }
 
 func pythonVultureCleanOutput(command policy.Command) (string, error) {
-	request := pythonVultureRequest{}
-	if err := json.Unmarshal(command.Stdin, &request); err != nil {
+	request, err := pythonVultureInputRequest(command.Stdin)
+	if err != nil {
 		return "", err
 	}
 	covered := make([]string, 0, len(request.Files))
@@ -67,12 +70,23 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 	}
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
-		"diagnostics": []pythonVultureDiagnostic{}, "resolved": resolved, "problems": []pythonVultureProblem{}, "error": "",
+		"diagnostics": []pythonVultureDiagnostic{}, "resolved": resolved, "problems": []pythonVultureProblem{}, "error": "", "facts_error": "", "reachability": []pythonfacts.ReachabilityEvidence{},
 	})
 	if err != nil {
 		return "", err
 	}
 	return string(output), nil
+}
+
+func pythonVultureInputRequest(data []byte) (pythonVultureRequest, error) {
+	header, payload, found := bytes.Cut(data, []byte{'\n'})
+	var program string
+	if !found || json.Unmarshal(header, &program) != nil || program != pythonVultureProgram {
+		return pythonVultureRequest{}, fmt.Errorf("Vulture input omits its exact policy program")
+	}
+	var request pythonVultureRequest
+	err := json.Unmarshal(payload, &request)
+	return request, err
 }
 
 func TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive(t *testing.T) {
@@ -138,8 +152,8 @@ dependencies = []
 		t.Fatalf("Ruff command = %+v", ruff)
 	}
 	vulture := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-vulture-dead-code-root")
-	request := pythonVultureRequest{}
-	if err := json.Unmarshal(vulture.Stdin, &request); err != nil || len(request.Backends) != 1 ||
+	request, err := pythonVultureInputRequest(vulture.Stdin)
+	if err != nil || len(request.Backends) != 1 ||
 		request.Backends[0].Module != "setta_build_backend" {
 		t.Fatalf("Vulture request = %+v, error = %v", request, err)
 	}
@@ -207,7 +221,7 @@ func pythonQualityAssertRuffTargetCommand(t *testing.T, target policy.Command) {
 func pythonQualityAssertVultureCommand(t *testing.T, repo repository.Repository, vulture policy.Command) {
 	t.Helper()
 	if !vulture.SealedEnvironment || !slices.Equal(vulture.Provides, []string{"dead-code"}) ||
-		!slices.Equal(vulture.Argv, repo.PythonCommand(pythonVultureProgram)) ||
+		!slices.Equal(vulture.Argv, repo.PythonCommand(pythonfacts.ProgramBootstrap)) ||
 		strings.Contains(strings.Join(vulture.Argv, "\x00"), ".venv") ||
 		strings.ContainsAny(vulture.Argv[4], "\x00\r\n") {
 		t.Fatalf("Vulture command = %+v", vulture)
@@ -217,8 +231,8 @@ func pythonQualityAssertVultureCommand(t *testing.T, repo repository.Repository,
 
 func pythonQualityAssertVultureRequest(t *testing.T, data []byte) {
 	t.Helper()
-	request := pythonVultureRequest{}
-	if err := json.Unmarshal(data, &request); err != nil || request.Protocol != pythonVultureProtocolVersion ||
+	request, err := pythonVultureInputRequest(data)
+	if err != nil || request.Protocol != pythonVultureProtocolVersion ||
 		request.ToolVersion != pythonVultureVersion || !slices.EqualFunc(request.Files, []pythonVultureFile{{Path: "src/app.py", Module: "app"}}, func(left, right pythonVultureFile) bool {
 		return left == right
 	}) || len(request.Backends) != 0 || len(request.Attributes) != 0 {
@@ -489,8 +503,8 @@ func TestPythonVultureCoversTheWholeSelectedProjectAndFailsClosed(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := pythonVultureRequest{}
-	if err := json.Unmarshal(command.Stdin, &request); err != nil {
+	request, err := pythonVultureInputRequest(command.Stdin)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if got := []string{request.Files[0].Path, request.Files[1].Path}; !slices.Equal(got, []string{"src/first.py", "src/second.py"}) {
@@ -507,7 +521,7 @@ func TestPythonVultureDynamicReferenceProblemsArePolicyFindings(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
 	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
-		Project: "pyproject.toml", Module: "app", Symbol: "handler",
+		Kind: "target", Project: "pyproject.toml", Target: &policy.PythonDynamicTarget{Module: "app", Symbol: "handler"},
 	}}
 	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "app.py", "def handler():\n    return 1\n")
@@ -519,104 +533,10 @@ func TestPythonVultureDynamicReferenceProblemsArePolicyFindings(t *testing.T) {
 	findings := pythonVultureFindings(repo, project, pythonVultureOutput(t, project.Files, nil, nil, []pythonVultureProblem{{
 		ID: references[0].ID, Message: "symbol is stale or ambiguous",
 	}}, ""))
-	if len(findings) != 1 || findings[0].Check != "policy.pythonDynamicReference" || findings[0].Path != policy.ConfigFilename ||
+	if len(findings) != 1 || findings[0].Check != "policy.pythonReachability" || findings[0].Path != policy.ConfigFilename ||
 		findings[0].Subject != references[0].ID {
 		t.Fatalf("findings = %+v", findings)
 	}
-}
-
-func TestPythonVultureValidatesExternalAttributesWithoutSelectedSource(t *testing.T) {
-	t.Parallel()
-	repo := pythonQualityRepository(t)
-	repo.Config.Scope.PythonExternalAttributes = []policy.PythonExternalAttribute{{
-		Project: "apps/plugin/pyproject.toml", Module: "plugin", Callable: "configure", Receiver: "settings",
-		Attribute: "output_path", Line: 4, ConsumerType: "external.runtime.Settings",
-	}}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nrequires-python = \"==3.12.*\"\n")
-	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
-	plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
-	if !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
-		return finding.Check == "policy.pythonExternalAttribute" && strings.Contains(finding.Message, "no current contained Python project")
-	}) {
-		t.Fatalf("plan = %+v", plan)
-	}
-}
-
-func TestPythonVultureValidatesUnknownAndUnselectedReferenceProjects(t *testing.T) {
-	t.Parallel()
-	t.Run("unknown project", func(t *testing.T) {
-		repo := pythonQualityRepository(t)
-		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
-			Project: "apps/missing/pyproject.toml", Module: "missing", Symbol: "handler",
-		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-		writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
-		plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
-		if !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
-			return finding.Check == "policy.pythonDynamicReference" && finding.Subject == "config:apps/missing/pyproject.toml:missing:handler"
-		}) {
-			t.Fatalf("plan = %+v", plan)
-		}
-	})
-	t.Run("unselected project", func(t *testing.T) {
-		repo := pythonQualityRepository(t)
-		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
-			Project: "apps/other/pyproject.toml", Module: "other", Symbol: "missing",
-		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"root\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-		writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")
-		writeQualityFile(t, repo.Root, "apps/other/pyproject.toml", "[project]\nname = \"other\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-		writeQualityFile(t, repo.Root, "apps/other/other.py", "def handler():\n    return 1\n")
-		plan := pythonQualityPlanFor(repo, []string{"src/app.py"})
-		project := slices.IndexFunc(plan.projects, func(project pythonQualityProject) bool {
-			return project.project.Manifest == "apps/other/pyproject.toml"
-		})
-		if project < 0 || len(plan.projects[project].commands) != 1 || plan.projects[project].commands[0].kind != pythonVultureQualityKind {
-			t.Fatalf("plan = %+v", plan)
-		}
-		references, _ := pythonVultureReferences(repo, plan.projects[project].project)
-		findings := pythonQualityOutputFindings(repo, plan.projects[project], pythonVultureQualityKind, pythonVultureOutput(t,
-			plan.projects[project].project.Files, nil, nil, []pythonVultureProblem{{ID: references[0].ID, Message: "symbol is stale or ambiguous"}}, ""))
-		if len(findings) != 1 || findings[0].Check != "policy.pythonDynamicReference" || findings[0].Path != policy.ConfigFilename {
-			t.Fatalf("findings = %+v", findings)
-		}
-	})
-}
-
-func TestPythonVultureValidatesReferencesWithoutSelectedPythonSource(t *testing.T) {
-	t.Parallel()
-	t.Run("configured reference with no runtime source", func(t *testing.T) {
-		repo := pythonQualityRepository(t)
-		repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
-			Project: "pyproject.toml", Module: "app", Symbol: "handler",
-		}}
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-		plan := pythonQualityPlanFor(repo, nil)
-		if len(plan.projects) != 0 || !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
-			return finding.Check == "policy.pythonDynamicReference" && finding.Path == policy.ConfigFilename &&
-				finding.Subject == "config:pyproject.toml:app:handler"
-		}) {
-			t.Fatalf("plan = %+v", plan)
-		}
-	})
-	t.Run("inferred reference with only its manifest selected", func(t *testing.T) {
-		repo := pythonQualityRepository(t)
-		writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n\n[project.scripts]\nexample = \"app:handler\"\n")
-		plan := pythonQualityPlanFor(repo, []string{"pyproject.toml"})
-		if len(plan.projects) != 0 || !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
-			return finding.Check == "policy.pythonDynamicReference" && finding.Path == "pyproject.toml" &&
-				strings.HasPrefix(finding.Subject, "manifest:pyproject.toml:project.scripts:example:app:handler")
-		}) {
-			t.Fatalf("plan = %+v", plan)
-		}
-	})
-	t.Run("no Python and no reference work", func(t *testing.T) {
-		repo := pythonQualityRepository(t)
-		writeQualityFile(t, repo.Root, "README.md", "# example\n")
-		if plan := pythonQualityPlanFor(repo, []string{"README.md"}); len(plan.projects) != 0 || len(plan.findings) != 0 {
-			t.Fatalf("plan = %+v", plan)
-		}
-	})
 }
 
 func TestPythonVultureCommandFailureCoversFullProjectOnce(t *testing.T) {
@@ -774,65 +694,6 @@ patched.side_effect = RuntimeError
 	}
 }
 
-func TestPythonVultureAdapterKeepsOnlyExactExternalAttributeWritesWhenInstalled(t *testing.T) {
-	repo := pythonQualityRepository(t)
-	repo.PolicyRoot = pythonVulturePolicyRoot(t)
-	if !pythonVultureRuntimeInstalled(t, repo) {
-		t.Skip("policy CPython with Vulture is not installed")
-	}
-	repo.Config.Scope.PythonExternalAttributes = []policy.PythonExternalAttribute{{
-		Project: "pyproject.toml", Module: "plugin", Callable: "configure", Receiver: "settings",
-		Attribute: "output_path", Line: 4, ConsumerType: "external.runtime.Settings",
-	}}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
-	writeQualityFile(t, repo.Root, "src/plugin.py", `from external.runtime import Settings
-
-def configure(settings: Settings):
-    settings.output_path = "result"
-    settings.unused_path = "unused"
-`)
-	project := pythonVultureProject(t, repo)
-	command, err := pythonVultureCommand(repo, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := parsePythonVultureResponse(output.Stdout)
-	if err != nil || response.Error != "" || len(response.Problems) != 0 {
-		t.Fatalf("response = %+v, error = %v", response, err)
-	}
-	if !slices.Contains(response.Resolved, pythonVultureAttributeID(repo.Config.Scope.PythonExternalAttributes[0])) {
-		t.Fatalf("resolved = %v", response.Resolved)
-	}
-	for _, diagnostic := range response.Diagnostics {
-		if diagnostic.Name == "output_path" {
-			t.Fatalf("declared external attribute reported dead: %+v", diagnostic)
-		}
-	}
-	if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool { return diagnostic.Name == "unused_path" }) {
-		t.Fatalf("adjacent unused attribute was hidden: %+v", response.Diagnostics)
-	}
-
-	repo.Config.Scope.PythonExternalAttributes[0].Line = 5
-	stale, err := pythonVultureCommand(repo, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, staleOutput, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, stale)
-	if err != nil {
-		t.Fatal(err)
-	}
-	findings := pythonVultureFindings(repo, project, staleOutput.Stdout)
-	if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-		return finding.Check == "policy.pythonExternalAttribute" && strings.Contains(finding.Message, "stale or ambiguous")
-	}) {
-		t.Fatalf("findings = %+v", findings)
-	}
-}
-
 func TestPythonVultureAdapterInfersExactPydanticReachabilityWhenInstalled(t *testing.T) {
 	repo := pythonQualityRepository(t)
 	repo.PolicyRoot = pythonVulturePolicyRoot(t)
@@ -949,6 +810,58 @@ class Lookalike(BaseModel):
 	}
 }
 
+func TestPythonVultureAdapterKeepsReportedPydanticModelShapesWhenInstalled(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		live  string
+	}{
+		{name: "direct BaseModel", live: "direct_field", files: map[string]string{
+			"src/reported.py": "from pydantic import BaseModel\n\nclass DirectModel(BaseModel):\n    direct_field: str\n",
+		}},
+		{name: "inherited BaseModel reexport", live: "inherited_field", files: map[string]string{
+			"src/models/base.py":     "from pydantic import BaseModel\n\nclass ProjectModel(BaseModel):\n    pass\n",
+			"src/models/__init__.py": "from .base import ProjectModel as ModelBase\n",
+			"src/reported.py":        "from models import ModelBase\n\nclass InheritedModel(ModelBase):\n    inherited_field: int\n",
+		}},
+		{name: "multiline annotated field", live: "annotated_field", files: map[string]string{
+			"src/reported.py": "from typing import Annotated\nfrom pydantic import BaseModel, Field\n\nclass AnnotatedModel(BaseModel):\n    annotated_field: Annotated[\n        str,\n        Field(min_length=1),\n    ]\n",
+		}},
+		{name: "multiline model config", live: "model_config", files: map[string]string{
+			"src/reported.py": "from pydantic import BaseModel, ConfigDict\n\nclass ConfiguredModel(BaseModel):\n    model_config = ConfigDict(\n        extra=\"forbid\",\n    )\n",
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			repo := pythonQualityRepository(t)
+			repo.PolicyRoot = pythonVulturePolicyRoot(t)
+			if !pythonVultureRuntimeInstalled(t, repo) {
+				t.Skip("policy CPython with Vulture is not installed")
+			}
+			writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+			for path, source := range test.files {
+				writeQualityFile(t, repo.Root, path, source)
+			}
+			project := pythonVultureProject(t, repo)
+			command, err := pythonVultureCommand(repo, project)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := parsePythonVultureResponse(output.Stdout)
+			if err != nil || response.Error != "" {
+				t.Fatalf("response = %+v, error = %v", response, err)
+			}
+			if slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool { return diagnostic.Name == test.live }) {
+				t.Fatalf("reported Pydantic declaration %q was dead: %+v", test.live, response.Diagnostics)
+			}
+		})
+	}
+}
+
 func TestPythonVultureAdapterInfersInTreeBuildBackendHooksWhenInstalled(t *testing.T) {
 	repo := pythonQualityRepository(t)
 	repo.PolicyRoot = pythonVulturePolicyRoot(t)
@@ -996,37 +909,6 @@ def unused_helper():
 	}
 }
 
-func TestPythonVultureExactClassMemberReferenceCoversFrameworkHookWhenInstalled(t *testing.T) {
-	repo := pythonQualityRepository(t)
-	repo.PolicyRoot = pythonVulturePolicyRoot(t)
-	if !pythonVultureRuntimeInstalled(t, repo) {
-		t.Skip("policy CPython with Vulture is not installed")
-	}
-	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{
-		Project: "pyproject.toml", Module: "handler", Symbol: "Plugin.on_event",
-	}}
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
-	writeQualityFile(t, repo.Root, "src/handler.py", `class Plugin:
-    def on_event(self, event):
-        return None
-`)
-	project := pythonVultureProject(t, repo)
-	command, err := pythonVultureCommand(repo, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
-	if err != nil {
-		t.Fatal(err)
-	}
-	findings := pythonVultureFindings(repo, project, output.Stdout)
-	if slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-		return finding.Check == "policy.pythonDynamicReference" || strings.Contains(finding.Message, "on_event")
-	}) {
-		t.Fatalf("exact framework hook reference was not honored: %+v", findings)
-	}
-}
-
 func pythonVultureProject(t *testing.T, repo repository.Repository) repository.PythonProject {
 	t.Helper()
 	files, err := repo.AllFiles()
@@ -1056,7 +938,7 @@ func pythonVultureOutput(t *testing.T, covered []string, diagnostics []pythonVul
 	}
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
-		"diagnostics": diagnostics, "resolved": resolved, "problems": problems, "error": analysisError,
+		"diagnostics": diagnostics, "resolved": resolved, "problems": problems, "error": analysisError, "facts_error": "", "reachability": []pythonfacts.ReachabilityEvidence{},
 	})
 	if err != nil {
 		t.Fatal(err)

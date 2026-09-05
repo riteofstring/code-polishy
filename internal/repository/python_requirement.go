@@ -40,6 +40,19 @@ func ParsePythonRequirement(value string) (PythonRequirement, error) {
 }
 
 func pythonRequirementFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
+	requirement, err := pythonRequirementInventoryFact(fact)
+	if err != nil {
+		return PythonRequirement{}, err
+	}
+	if requirement.Kind == PythonGitRequirement {
+		if err := requirement.Git.ValidateExactPin(); err != nil {
+			return PythonRequirement{}, err
+		}
+	}
+	return requirement, nil
+}
+
+func pythonRequirementInventoryFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
 	if fact.Error != "" {
 		return PythonRequirement{}, fmt.Errorf("invalid Python requirement: %s", fact.Error)
 	}
@@ -89,7 +102,7 @@ func pythonGitRequirementURL(value string, requirement *PythonRequirement) error
 	}
 	requirement.Kind = PythonGitRequirement
 	requirement.Git = git
-	requirement.URL = git.Identity()
+	requirement.URL = git.InventoryIdentity()
 	return nil
 }
 

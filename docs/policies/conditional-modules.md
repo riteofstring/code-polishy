@@ -83,6 +83,16 @@ governed contained project at fixed 60% confidence through carried CPython
 `3.12.13+20260728` from python-build-standalone; it does not use a target or
 ambient Python interpreter, and target Vulture configuration is ignored.
 
+A file selection activates Python analysis through selected Python source or
+an exact selected Python project input. Selecting the policy configuration
+validates its declared Python references and external attributes in their
+named projects. Those declarations alone do not activate Python analysis for
+unrelated files: `code-polishy check --files AGENTS.md` runs the selected
+guidance checks without starting Python facts or dead-code analysis. When
+Python analysis applies, Vulture retains the full governed context of each
+selected project; unrelated projects and their declarations stay outside that
+context. Repository-wide checks select their complete inputs explicitly.
+
 PEP 621 `project.scripts`, `project.gui-scripts`, and every
 `project.entry-points.*` table infer reachable module symbols. In-tree PEP 517
 backends infer their statically defined standard hooks. Vulture's own
@@ -92,10 +102,11 @@ inventory. Exact Pydantic imports and inheritance infer model fields,
 `model_config`, and supported validator, serializer, and computed-field
 methods; lookalike names do not. A target may add only a dynamic reference that
 remains invisible, using
-`scope.pythonDynamicReferences` exact `{project,module,symbol}` objects. Each
-field is required, `project` is the canonical contained-project
-`pyproject.toml` path, `module` and `symbol` are Python identifier chains,
-wildcards are unavailable, and stale or ambiguous references fail. See
+`scope.pythonDynamicReferences` consumer-bound `target` or `registry` objects.
+A target requires an exact governed callsite or an admitted external
+base, protocol, decorator, or registration contract. A registry derives its
+targets from governed input through an exact reader callsite. Free-standing
+symbol inventories, wildcards, stale references, and ambiguous consumers fail. See
 [Code Quality](code-quality.md#python-ruff-vulture-and-ty) for the complete
 reference and coverage contract.
 

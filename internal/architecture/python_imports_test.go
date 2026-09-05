@@ -25,6 +25,9 @@ func TestPythonSourceFactsUseASTBindingsAndFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	facts := map[string]pythonSourceFact{"source.py": fact}
+	pythonResolveTestImports(t, response.Sources, facts)
+	fact = facts["source.py"]
 	if len(fact.Imports) != 2 || fact.Imports[0].Module != "importlib" || fact.Imports[1].Module != "package" ||
 		len(fact.ComputedImports) != 1 || fact.ComputedImports[0].Callee != "importlib.import_module" ||
 		fact.ComputedImports[0].Callable != "<module>" || fact.ComputedImports[0].Line != 3 || fact.ComputedImports[0].Argument != "module_name" {
@@ -34,6 +37,58 @@ func TestPythonSourceFactsUseASTBindingsAndFailClosed(t *testing.T) {
 	if _, err := pythonSourceFactFromAdapter(response.Sources[0], source); err == nil {
 		t.Fatal("mismatched source digest was accepted")
 	}
+}
+
+func TestPythonSourceFactsPreserveReexportTypeAndDynamicKinds(t *testing.T) {
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs := []pythonfacts.Input{
+		{Path: "pkg/__init__.py", Source: "from .model import Model\n"},
+		{Path: "pkg/contracts.pyi", Source: "from . import model\n"},
+		{Path: "pkg/service.py", Source: "from typing import TYPE_CHECKING as CHECKING\nif CHECKING:\n    from . import model\nimport importlib\nimportlib.import_module(\"pkg.model\")\n"},
+	}
+	response, err := pythonfacts.AnalyzeProjectSources(t.Context(), python, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string][]pythonfacts.Import{}
+	facts := map[string]pythonSourceFact{}
+	for _, source := range response.Sources {
+		byPath[source.Path] = source.Imports
+		facts[source.Path] = pythonSourceFact{SHA256: source.SHA256}
+	}
+	pythonResolveTestImports(t, response.Sources, facts)
+	for path, fact := range facts {
+		for _, imported := range fact.Imports {
+			byPath[path] = append(byPath[path], pythonfacts.Import{Module: imported.Module, Kind: imported.Kind})
+		}
+	}
+	checks := []struct {
+		path   string
+		module string
+		kind   string
+	}{
+		{path: "pkg/__init__.py", module: ".model", kind: "re-export"},
+		{path: "pkg/contracts.pyi", module: ".", kind: "type-only"},
+		{path: "pkg/service.py", module: ".", kind: "type-only"},
+		{path: "pkg/service.py", module: "pkg.model", kind: "proven-dynamic"},
+	}
+	for _, check := range checks {
+		if !containsPythonImport(byPath[check.path], check.module, check.kind) {
+			t.Fatalf("%s lacks %s %s import: %+v", check.path, check.kind, check.module, byPath[check.path])
+		}
+	}
+}
+
+func containsPythonImport(imports []pythonfacts.Import, module, kind string) bool {
+	for _, imported := range imports {
+		if imported.Module == module && imported.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPythonComputedImportCoverageRequiresCurrentExactEvidence(t *testing.T) {
@@ -114,7 +169,30 @@ func pythonComputedTestFact(t *testing.T, path string, source []byte) pythonSour
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fact
+	facts := map[string]pythonSourceFact{path: fact}
+	pythonResolveTestImports(t, response.Sources, facts)
+	return facts[path]
+}
+
+func pythonResolveTestImports(t *testing.T, sources []pythonfacts.Source, facts map[string]pythonSourceFact) {
+	t.Helper()
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := repository.PythonProject{Root: ".", SourceRoots: []string{".", "src"}}
+	modules := make([]pythonfacts.TypeModule, 0, len(sources))
+	for _, source := range sources {
+		module, packageName := repository.PythonModuleName(project, source.Path)
+		modules = append(modules, pythonfacts.TypeModule{Path: source.Path, Module: module, Package: packageName, SourceSHA256: source.SHA256, Facts: source.TypeFacts})
+	}
+	resolved, err := pythonfacts.ResolveTypeProject(t.Context(), python, modules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pythonModuleImportFacts(resolved.Imports, facts); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPythonRelativeImportResolutionStaysWithinTheProject(t *testing.T) {

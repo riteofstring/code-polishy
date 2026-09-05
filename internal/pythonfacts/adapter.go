@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +19,7 @@ import (
 )
 
 const (
-	Protocol            = "python-facts/v1"
+	Protocol            = "python-facts/v3"
 	PackagingVersion    = "26.3"
 	maximumRequestSize  = 8 * 1024 * 1024
 	maximumResponseSize = 16 * 1024 * 1024
@@ -48,6 +47,7 @@ type Request struct {
 	Requirements []string `json:"requirements"`
 	Specifiers   []string `json:"specifiers"`
 	Names        []string `json:"names"`
+	Versions     []string `json:"versions"`
 }
 
 type Value struct {
@@ -144,6 +144,8 @@ type Import struct {
 	Module  string   `json:"module"`
 	Names   []string `json:"names"`
 	Line    int      `json:"line"`
+	Column  int      `json:"column"`
+	Kind    string   `json:"kind"`
 	Literal bool     `json:"literal"`
 }
 
@@ -168,11 +170,11 @@ type ComputedConfiguration struct {
 }
 
 type Source struct {
-	Path            string           `json:"path"`
-	SHA256          string           `json:"sha256"`
-	Imports         []Import         `json:"imports"`
-	ComputedImports []ComputedImport `json:"computedImports"`
-	Error           string           `json:"error"`
+	Path      string          `json:"path"`
+	SHA256    string          `json:"sha256"`
+	Imports   []Import        `json:"imports"`
+	TypeFacts json.RawMessage `json:"typeFacts"`
+	Error     string          `json:"error"`
 }
 
 type Name struct {
@@ -182,16 +184,23 @@ type Name struct {
 }
 
 type Response struct {
-	Protocol         string         `json:"protocol"`
-	PythonVersion    string         `json:"pythonVersion"`
-	PackagingVersion string         `json:"packagingVersion"`
-	Manifests        []Manifest     `json:"manifests"`
-	Locks            []Lock         `json:"locks"`
-	Metadata         []Distribution `json:"metadata"`
-	Sources          []Source       `json:"sources"`
-	Requirements     []Requirement  `json:"requirements"`
-	Specifiers       []Specifier    `json:"specifiers"`
-	Names            []Name         `json:"names"`
+	Protocol         string              `json:"protocol"`
+	PythonVersion    string              `json:"pythonVersion"`
+	PackagingVersion string              `json:"packagingVersion"`
+	Manifests        []Manifest          `json:"manifests"`
+	Locks            []Lock              `json:"locks"`
+	Metadata         []Distribution      `json:"metadata"`
+	Sources          []Source            `json:"sources"`
+	Requirements     []Requirement       `json:"requirements"`
+	Specifiers       []Specifier         `json:"specifiers"`
+	Names            []Name              `json:"names"`
+	Versions         []NormalizedVersion `json:"versions"`
+}
+
+type NormalizedVersion struct {
+	Input      string `json:"input"`
+	Normalized string `json:"normalized"`
+	Error      string `json:"error"`
 }
 
 type boundedBuffer struct {
@@ -215,6 +224,10 @@ func (buffer *boundedBuffer) Bytes() []byte {
 }
 
 func Analyze(python string, request Request) (Response, error) {
+	return analyze(context.Background(), python, request)
+}
+
+func analyze(ctx context.Context, python string, request Request) (Response, error) {
 	request = normalizedRequest(request)
 	if err := validateRequest(python, request); err != nil {
 		return Response{}, err
@@ -223,7 +236,7 @@ func Analyze(python string, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	responseData, err := runAdapter(python, data)
+	responseData, err := runAdapter(ctx, python, data)
 	if err != nil {
 		return Response{}, err
 	}
@@ -261,6 +274,9 @@ func normalizedRequest(request Request) Request {
 	if request.Names == nil {
 		request.Names = []string{}
 	}
+	if request.Versions == nil {
+		request.Versions = []string{}
+	}
 	return request
 }
 
@@ -280,7 +296,7 @@ func validateRequest(python string, request Request) error {
 func requestExceedsItemLimit(request Request) bool {
 	counts := []int{
 		len(request.Manifests), len(request.Locks), len(request.Metadata), len(request.Sources),
-		len(request.Requirements), len(request.Specifiers), len(request.Names),
+		len(request.Requirements), len(request.Specifiers), len(request.Names), len(request.Versions),
 	}
 	for _, count := range counts {
 		if count > maximumItems {
@@ -302,7 +318,7 @@ func validRequestInputs(request Request) bool {
 }
 
 func validRequestValues(request Request) bool {
-	for _, values := range [][]string{request.Requirements, request.Specifiers, request.Names} {
+	for _, values := range [][]string{request.Requirements, request.Specifiers, request.Names, request.Versions} {
 		for _, value := range values {
 			if !utf8.ValidString(value) {
 				return false
@@ -323,13 +339,17 @@ func encodeRequest(request Request) ([]byte, error) {
 	return data, nil
 }
 
-func runAdapter(python string, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func runAdapter(parent context.Context, python string, data []byte) ([]byte, error) {
+	input, err := ProgramInput(embeddedAdapterSource(), bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, python, "-I", "-B", "-c", embeddedAdapterSource())
+	command := exec.CommandContext(ctx, python, "-I", "-B", "-c", ProgramBootstrap)
 	command.Dir = filepath.Dir(python)
 	command.Env = []string{}
-	command.Stdin = bytes.NewReader(data)
+	command.Stdin = input
 	stdout := &boundedBuffer{maximum: maximumResponseSize}
 	stderr := &boundedBuffer{maximum: 64 * 1024}
 	command.Stdout = stdout
@@ -348,9 +368,7 @@ func runAdapter(python string, data []byte) ([]byte, error) {
 }
 
 func embeddedAdapterSource() string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(sourceAdapterSource))
-	bootstrap := "import base64,sys,types\n_source_adapter=types.ModuleType('source_adapter')\nexec(compile(base64.b64decode('" + encoded + "'),'source_adapter.py','exec'),_source_adapter.__dict__)\nsys.modules['source_adapter']=_source_adapter\n"
-	return bootstrap + adapterSource
+	return SourceSupportSource() + adapterSource
 }
 
 func decodeResponse(data []byte) (Response, error) {
@@ -379,11 +397,11 @@ func validateResponse(response Response, request Request) error {
 func responseCountsMatch(response Response, request Request) bool {
 	responseCounts := []int{
 		len(response.Manifests), len(response.Locks), len(response.Metadata), len(response.Sources),
-		len(response.Requirements), len(response.Specifiers), len(response.Names),
+		len(response.Requirements), len(response.Specifiers), len(response.Names), len(response.Versions),
 	}
 	requestCounts := []int{
 		len(request.Manifests), len(request.Locks), len(request.Metadata), len(request.Sources),
-		len(request.Requirements), len(request.Specifiers), len(request.Names),
+		len(request.Requirements), len(request.Specifiers), len(request.Names), len(request.Versions),
 	}
 	return slices.Equal(responseCounts, requestCounts)
 }
@@ -401,10 +419,18 @@ func validateResponseOrder(response Response, request Request) error {
 		{selectedValues(response.Requirements, func(value Requirement) string { return value.Input }), request.Requirements, "python-facts response reordered requirement inputs"},
 		{selectedValues(response.Specifiers, func(value Specifier) string { return value.Input }), request.Specifiers, "python-facts response reordered specifier inputs"},
 		{selectedValues(response.Names, func(value Name) string { return value.Input }), request.Names, "python-facts response reordered package-name inputs"},
+		{selectedValues(response.Versions, func(value NormalizedVersion) string { return value.Input }), request.Versions, "python-facts response reordered version inputs"},
 	}
 	for _, check := range checks {
 		if !slices.Equal(check.actual, check.expected) {
 			return errors.New(check.message)
+		}
+	}
+	for _, source := range response.Sources {
+		if source.Error == "" {
+			if err := validateSourceTypeFacts(source.TypeFacts); err != nil {
+				return fmt.Errorf("python-facts source %s: %w", source.Path, err)
+			}
 		}
 	}
 	return nil

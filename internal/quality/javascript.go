@@ -67,6 +67,10 @@ func JavaScriptFormatWrite(ctx context.Context, repo repository.Repository, file
 }
 
 func javascriptFormat(ctx context.Context, repo repository.Repository, files []string, write bool) []policy.Finding {
+	selected := javascriptFormatFiles(repo, files)
+	if len(selected) == 0 {
+		return javascriptFormatConfigFindings(repo, files)
+	}
 	governed, err := javascriptTarget(repo)
 	if err != nil {
 		return []policy.Finding{toolFinding("javascript-bundle", err.Error())}
@@ -75,10 +79,6 @@ func javascriptFormat(ctx context.Context, repo repository.Repository, files []s
 		return markdownFormat(ctx, repo, files, write)
 	}
 	findings := javascriptFormatConfigFindings(repo, files)
-	selected := javascriptFormatFiles(repo, files)
-	if write {
-		selected = editableJavaScriptFormatFiles(repo, selected)
-	}
 	return append(findings, runJavaScriptFormat(ctx, repo, selected, write)...)
 }
 
@@ -492,6 +492,9 @@ func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository,
 	if !javascriptDeadCodeSelected(files) {
 		return findings
 	}
+	if ownership := repo.GeneratedJavaScriptOwnershipFindings(inventory); len(ownership) > 0 {
+		return append(findings, ownership...)
+	}
 	analyses, uncovered := javascriptDeadCodeAnalyses(repo, inventory)
 	for _, entry := range uncovered {
 		findings = append(findings, javascriptDeadCodeCoverageFinding(entry.path, entry.reason))
@@ -599,7 +602,10 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 		sort.Strings(workspace.Entry)
 		sort.Strings(workspace.Project)
 		sort.Strings(workspace.Inherited)
-		directory := javascriptDeadCodeDirectory(packages, root, workspace.Project)
+		directory := root
+		if len(workspace.Inherited) == 0 {
+			directory = javascriptOutermostPackage(packages, root)
+		}
 		trees[directory] = append(trees[directory], *workspace)
 	}
 	directories := make([]string, 0, len(trees))
@@ -616,19 +622,6 @@ func javascriptDeadCodeTrees(packages map[string]bool, grouped map[string]*javas
 		analyses = append(analyses, javascriptDeadCodeAnalysis{directory: directory, workspaces: workspaces})
 	}
 	return analyses
-}
-
-func javascriptDeadCodeDirectory(packages map[string]bool, root string, paths []string) string {
-	directory := javascriptOutermostPackage(packages, root)
-	for _, path := range paths {
-		for !javascriptScopeOwns(directory, path) {
-			if directory == "." {
-				return directory
-			}
-			directory = filepath.ToSlash(filepath.Dir(directory))
-		}
-	}
-	return directory
 }
 
 func javascriptOutermostPackage(packages map[string]bool, root string) string {
@@ -769,7 +762,7 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) {
 			continue
 		}
-		if repo.IsGenerated(path) && !repo.IsExecutableSource(path) {
+		if repo.IsGenerated(path) {
 			continue
 		}
 		if strings.HasSuffix(name, ".lock") || strings.Contains(name, "-lock.") {
@@ -778,16 +771,6 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 		selected = append(selected, path)
 	}
 	sort.Strings(selected)
-	return selected
-}
-
-func editableJavaScriptFormatFiles(repo repository.Repository, files []string) []string {
-	selected := []string{}
-	for _, path := range files {
-		if !repo.IsGenerated(path) && !repo.IsData(path) {
-			selected = append(selected, path)
-		}
-	}
 	return selected
 }
 

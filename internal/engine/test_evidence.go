@@ -26,42 +26,42 @@ const (
 )
 
 type ChangedTestScope struct {
-	Comparison        string
-	RequestedBase     string
-	ExactBase         string
-	Candidate         string
-	GovernedPathCount int
+	Comparison        string `json:"comparison"`
+	RequestedBase     string `json:"requestedBase,omitempty"`
+	ExactBase         string `json:"exactBase"`
+	Candidate         string `json:"candidate"`
+	GovernedPathCount int    `json:"governedPathCount"`
 }
 
 type TestCommandEvidence struct {
-	Name                  string
-	Kind                  string
-	Scope                 string
-	Cost                  string
-	Target                string
-	SuiteModules          []string
-	SuitePaths            []string
-	ChangedModules        []string
-	ImpactedModules       []string
-	ChangedModuleOverlap  []string
-	ImpactedModuleOverlap []string
-	ChangedPathOverlap    []string
-	Result                runner.Result
-	FailureCategory       runner.FailureCategory
-	FailureMessage        string
-	Attempt               int
-	LogPath               string
-	Artifacts             []testartifact.Record
-	Reused                bool
-	ReceiptPath           string
-	ReceiptSHA256         string
+	Name                  string                 `json:"name"`
+	Kind                  string                 `json:"kind"`
+	Scope                 string                 `json:"scope"`
+	Cost                  string                 `json:"cost"`
+	Target                string                 `json:"target"`
+	SuiteModules          []string               `json:"suiteModules"`
+	SuitePaths            []string               `json:"suitePaths"`
+	ChangedModules        []string               `json:"changedModules"`
+	ImpactedModules       []string               `json:"impactedModules"`
+	ChangedModuleOverlap  []string               `json:"changedModuleOverlap"`
+	ImpactedModuleOverlap []string               `json:"impactedModuleOverlap"`
+	ChangedPathOverlap    []string               `json:"changedPathOverlap"`
+	Result                runner.Result          `json:"result"`
+	FailureCategory       runner.FailureCategory `json:"failureCategory,omitempty"`
+	FailureMessage        string                 `json:"failureMessage,omitempty"`
+	Attempt               int                    `json:"attempt"`
+	LogPath               string                 `json:"logPath,omitempty"`
+	Artifacts             []testartifact.Record  `json:"artifacts"`
+	Reused                bool                   `json:"reused"`
+	ReceiptPath           string                 `json:"receiptPath,omitempty"`
+	ReceiptSHA256         string                 `json:"receiptSha256,omitempty"`
 }
 
 type TestFailureDiagnostic struct {
-	Suite          string
-	State          string
-	CandidateRetry *TestCommandEvidence
-	BaselineReplay *TestCommandEvidence
+	Suite          string               `json:"suite"`
+	State          string               `json:"state"`
+	CandidateRetry *TestCommandEvidence `json:"candidateRetry,omitempty"`
+	BaselineReplay *TestCommandEvidence `json:"baselineReplay,omitempty"`
 }
 
 type TestDiagnosticRunnerProvider interface {
@@ -110,7 +110,7 @@ func (engine *Engine) suiteChangedPathOverlap(suite policy.TestSuite, changedPat
 			}
 			continue
 		}
-		if len(stringIntersection(engine.Repository.ModuleNames(path), suite.Modules)) > 0 {
+		if len(stringIntersection(engine.Repository.OwnerModuleNames(path), suite.Modules)) > 0 {
 			paths = append(paths, path)
 		}
 	}

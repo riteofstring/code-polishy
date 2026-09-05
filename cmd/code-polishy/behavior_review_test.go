@@ -22,27 +22,27 @@ func TestParseBehaviorReviewOptionsAcceptsStrictFeatureAndReviewRequests(t *test
 		{
 			name:      "capture intent",
 			arguments: []string{"capture-intent", "--feature", "checkout", "--intent-file=intent.md", "--feature=search"},
-			want:      behaviorReviewOptions{action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
+			want:      behaviorReviewOptions{format: "human", action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
 		},
 		{
 			name:      "require",
 			arguments: []string{"require", "--feature=checkout", "--base", "origin/main", "--feature", "search"},
-			want:      behaviorReviewOptions{action: "require", base: "origin/main", features: []string{"checkout", "search"}},
+			want:      behaviorReviewOptions{format: "human", action: "require", base: "origin/main", features: []string{"checkout", "search"}},
 		},
 		{
 			name:      "status",
 			arguments: []string{"status", "--base=origin/main"},
-			want:      behaviorReviewOptions{action: "status", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "status", base: "origin/main"},
 		},
 		{
 			name:      "prepare",
 			arguments: []string{"prepare", "--base", "origin/main"},
-			want:      behaviorReviewOptions{action: "prepare", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "prepare", base: "origin/main"},
 		},
 		{
 			name:      "finalize",
 			arguments: []string{"finalize", "--base=origin/main"},
-			want:      behaviorReviewOptions{action: "finalize", base: "origin/main"},
+			want:      behaviorReviewOptions{format: "human", action: "finalize", base: "origin/main"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -126,7 +126,7 @@ func TestParseRegressionProofOptionsDefaultsRedExitAndRejectsInvalidRequests(t *
 func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *testing.T) {
 	t.Parallel()
 	for name, message := range map[string]string{
-		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123"),
+		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123", nil),
 		"require":  behaviorReviewRequirementAddedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "requirement-123", []string{"checkout", "search"}),
 		"prepare":  behaviorReviewPreparedMessage(".code-polishy-reports/behavior-review/packet.json", "review-123"),
 		"finalize": behaviorReviewFinalizedMessage(".code-polishy-reports/behavior-review/receipt.json", "review-123"),
@@ -347,6 +347,9 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 		t.Fatalf("finalize status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 
+	assertBehaviorReviewCLIReceiptConfirmation(t, common)
+	assertBehaviorReviewCLIArchitecturePrerequisite(t, common)
+	acceptBehaviorReviewCLIArchitecture(t, repositoryRoot, common)
 	assertBehaviorReviewCLIMerge(t, common)
 	assertBehaviorReviewCLICheckpoint(t, common)
 	assertBehaviorReviewCLIArtifacts(t, repositoryRoot, []string{
@@ -531,8 +534,8 @@ func newFeatureBehaviorReviewCLIBaseRepository(t *testing.T) (string, string) {
 	t.Helper()
 	return newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t, `{
   "features": [
-    {"name":"checkout","modules":["application"],"suites":["regression"]},
-    {"name":"search","paths":["value.go"],"suites":["regression"]}
+    {"name":"checkout","description":"Checkout completion and payment behavior.","modules":["application"],"suites":["regression"]},
+    {"name":"search","description":"Search query and result behavior.","paths":["value.go"],"suites":["regression"]}
   ]
 }`)
 }
@@ -541,7 +544,7 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
 	t.Helper()
 	root := t.TempDir()
 	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "application", "capabilities": []},
   "scope": {},
   "quality": {},
@@ -552,9 +555,9 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
     {"name": "build", "provides": ["build"], "modules": ["application"], "argv": ["true"], "runOn": ["build"]},
     {"name": "monitor", "provides": ["security-monitoring"], "argv": ["true"], "runOn": ["security"]}
   ],
-  "tests": {"suites": [{
+  "tests": {"ownership": [], "suites": [{
     "name": "regression", "kind": "unit", "scope": "module", "modules": ["application"],
-    "cost": "quick", "argv": ["go", "test", "./..."], "runOn": ["focused", "recommended", "full"]
+    "cost": "quick", "paths": ["evidence_test.go"], "argv": ["go", "test", "./..."], "runOn": ["focused", "recommended", "full"]
   }, {
     "name": "full", "kind": "integration", "scope": "repository",
     "argv": ["go", "test", "./..."], "runOn": ["full"]
@@ -592,8 +595,19 @@ func commitBehaviorReviewCLICandidate(t *testing.T, root string) {
 	t.Helper()
 	writeBehaviorReviewCLIFile(t, root, "value.go", "package behaviorreviewcli\n\nfunc Value() string { return \"new\" }\n")
 	writeBehaviorReviewCLIFile(t, root, "evidence_test.go", "package behaviorreviewcli\n\nimport \"testing\"\n\nfunc TestValue(t *testing.T) {\n\tif Value() != \"new\" {\n\t\tt.Fatalf(\"Value() = %q\", Value())\n\t}\n}\n")
-	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go")
+	declareBehaviorReviewCLITestOwnership(t, root)
+	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go", ".code-polishy.json")
 	gitBehaviorReviewCLI(t, root, "commit", "-m", "candidate")
+}
+
+func declareBehaviorReviewCLITestOwnership(t *testing.T, root string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".code-polishy.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured := strings.Replace(string(data), `"ownership": []`, `"ownership": [{"paths":["evidence_test.go"],"module":"application","focusedSuite":"regression"}]`, 1)
+	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", configured)
 }
 
 func behaviorReviewCLIPolicyRoot(t *testing.T) string {

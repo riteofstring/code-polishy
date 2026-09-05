@@ -47,6 +47,9 @@ dependencies = [
   "private-delta @ git+ssh://builder@git.example.test/fixture/private-delta.git@${delta_commit}#subdirectory=packages/delta",
 ]
 
+[project.scripts]
+adoption-api = "adoption_api.endpoint:endpoint"
+
 [build-system]
 requires = ["${build_requirement}"]
 build-backend = "hatchling.build"
@@ -93,6 +96,9 @@ name = "python-adoption-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+adoption-worker = "adoption_worker.worker:run"
 EOF
   write_file "${target}/apps/worker/uv.lock" <<'EOF'
 version = 1
@@ -222,22 +228,10 @@ python_adoption_write_config() {
   local target="$1"
   write_file "${target}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {
     "entryPoints": ["src/adoption_api/endpoint.py"],
-    "pythonDynamicReferences": [
-      {
-        "project": "pyproject.toml",
-        "module": "adoption_api.endpoint",
-        "symbol": "endpoint"
-      },
-      {
-        "project": "apps/worker/pyproject.toml",
-        "module": "adoption_worker.worker",
-        "symbol": "run"
-      }
-    ],
     "data": [
       "data/catalog-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json",
       "data/catalog-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210.yaml"
@@ -277,6 +271,7 @@ python_adoption_write_config() {
     }
   ],
   "tests": {
+    "ownership": [],
     "suites": [
       {
         "name": "foundation-unit",
@@ -346,6 +341,7 @@ python_adoption_expect_data_preserved() {
     fail "python-adoption: format changed hand-written ${yaml_path}"
   fi
 }
+
 
 exercise_python_adoption_fixture() {
   local fixture_root="$1" real_git="$2" release="$3"
@@ -468,6 +464,10 @@ EOF
   if ! grep -Fxq "test.sh" "${command_log}"; then
     fail "python-adoption: changed tests ran no selected target suite"
   fi
+  : >"${command_log}"
+  expect_findings "${target}" "python-adoption missing architecture review" merge-gate --base "${base}"
+  expect_finding "python-adoption missing architecture review" "policy.architectureReview" ".code-polishy.json" "required"
+  fixture_accept_architecture "${target}" "${base}" "${host_python}"
   : >"${command_log}"
   expect_pass "${target}" "python-adoption selected merge gate" merge-gate --base "${base}"
   grep -Fqx "MERGE GATE: RECOMMENDED against ${base}" "${output}" ||

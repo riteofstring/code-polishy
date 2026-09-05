@@ -47,10 +47,10 @@ type OSRunner struct {
 }
 
 type Result struct {
-	ExitStatus        int
-	ExecutionDuration time.Duration
-	ResourceWait      time.Duration
-	FailureCategory   FailureCategory
+	ExitStatus        int             `json:"exitStatus"`
+	ExecutionDuration time.Duration   `json:"executionDurationNanoseconds"`
+	ResourceWait      time.Duration   `json:"resourceWaitNanoseconds"`
+	FailureCategory   FailureCategory `json:"failureCategory,omitempty"`
 }
 
 type FailureCategory string
