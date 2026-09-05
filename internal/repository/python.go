@@ -38,6 +38,7 @@ type PythonGitSource struct {
 	Path         string
 	User         string
 	DeclaredRef  string
+	RefKind      string
 	Commit       string
 	Subdirectory string
 }
@@ -96,7 +97,7 @@ func (requirement PythonRequirement) SourceIdentity() string {
 	case PythonRegistryRequirement:
 		return requirement.Version
 	case PythonGitRequirement:
-		return requirement.Git.Identity()
+		return requirement.Git.InventoryIdentity()
 	case PythonFileRequirement:
 		return "file:" + requirement.FilePath
 	default:

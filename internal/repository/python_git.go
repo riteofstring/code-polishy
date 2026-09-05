@@ -22,46 +22,65 @@ func parsePythonFileURL(value string) (string, error) {
 }
 
 func parsePythonDirectGitURL(value string) (PythonGitSource, error) {
-	if hasPythonDynamicValue(value) {
-		return PythonGitSource{}, fmt.Errorf("git URL contains a dynamic substitution")
-	}
-	withoutFragment, fragment, fragmentFound := strings.Cut(value, "#")
-	if fragmentFound && strings.Contains(fragment, "#") {
-		return PythonGitSource{}, fmt.Errorf("git URL contains an unknown fragment")
-	}
-	withoutQuery, query, queryFound := strings.Cut(withoutFragment, "?")
-	if queryFound {
-		if pythonURLHasCredential(query) {
-			return PythonGitSource{}, fmt.Errorf("git URL query contains credentials")
-		}
-		return PythonGitSource{}, fmt.Errorf("git URL query is unsupported")
+	withoutQuery, fragment, fragmentFound, err := pythonDirectGitURLParts(value)
+	if err != nil {
+		return PythonGitSource{}, err
 	}
 	separator := strings.LastIndex(withoutQuery, "@")
 	if separator < 0 {
-		return PythonGitSource{}, fmt.Errorf("git URL must end in a full commit SHA")
+		return PythonGitSource{}, fmt.Errorf("git URL must end in one declared revision")
 	}
-	commit := withoutQuery[separator+1:]
-	if !pythonFullCommit(commit) {
-		return PythonGitSource{}, fmt.Errorf("git URL must end in one full 40-character commit SHA")
+	reference, err := pythonGitReference(withoutQuery[separator+1:])
+	if err != nil {
+		return PythonGitSource{}, err
 	}
 	source, err := parsePythonGitRepositoryURL(withoutQuery[:separator], true)
 	if err != nil {
 		return PythonGitSource{}, err
 	}
-	subdirectory := ""
 	if fragmentFound {
-		subdirectory, err = parsePythonGitFragment(fragment)
+		source.Subdirectory, err = parsePythonGitFragment(fragment)
 		if err != nil {
 			return PythonGitSource{}, err
 		}
 	}
-	source.Commit = strings.ToLower(commit)
-	source.DeclaredRef = strings.ToLower(commit)
-	source.Subdirectory = subdirectory
+	if pythonFullCommit(reference) {
+		source.Commit = reference
+	}
+	source.DeclaredRef = reference
 	return source, nil
 }
 
+func pythonDirectGitURLParts(value string) (string, string, bool, error) {
+	if hasPythonDynamicValue(value) {
+		return "", "", false, fmt.Errorf("git URL contains a dynamic substitution")
+	}
+	withoutFragment, fragment, fragmentFound := strings.Cut(value, "#")
+	if fragmentFound && strings.Contains(fragment, "#") {
+		return "", "", false, fmt.Errorf("git URL contains an unknown fragment")
+	}
+	withoutQuery, query, queryFound := strings.Cut(withoutFragment, "?")
+	if queryFound {
+		if pythonURLHasCredential(query) {
+			return "", "", false, fmt.Errorf("git URL query contains credentials")
+		}
+		return "", "", false, fmt.Errorf("git URL query is unsupported")
+	}
+	return withoutQuery, fragment, fragmentFound, nil
+}
+
 func ParsePythonGitSource(value, commit, subdirectory string) (PythonGitSource, error) {
+	source, err := ParsePythonGitInventorySource(value, commit, subdirectory)
+	if err != nil {
+		return PythonGitSource{}, err
+	}
+	if err := source.ValidateExactPin(); err != nil {
+		return PythonGitSource{}, err
+	}
+	return source, nil
+}
+
+func ParsePythonGitInventorySource(value, commit, subdirectory string) (PythonGitSource, error) {
 	if hasPythonDynamicValue(value) || hasPythonDynamicValue(subdirectory) {
 		return PythonGitSource{}, fmt.Errorf("git lock source contains a dynamic substitution")
 	}
@@ -107,6 +126,11 @@ func parsePythonUVGitSource(parsed *url.URL, suppliedCommit, suppliedSubdirector
 		return PythonGitSource{}, err
 	}
 	source.DeclaredRef = declaredRef
+	for _, kind := range []string{"rev", "tag", "branch"} {
+		if len(values[kind]) != 0 {
+			source.RefKind = kind
+		}
+	}
 	source.Commit = resolvedCommit
 	source.Subdirectory = normalizedSubdirectory
 	return source, nil
@@ -128,7 +152,7 @@ func pythonUVGitQuery(parsed *url.URL) (url.Values, error) {
 
 func pythonUVGitQueryKeys(values url.Values) bool {
 	for key := range values {
-		if key != "rev" && key != "subdirectory" {
+		if key != "rev" && key != "tag" && key != "branch" && key != "subdirectory" {
 			return false
 		}
 	}
@@ -136,16 +160,15 @@ func pythonUVGitQueryKeys(values url.Values) bool {
 }
 
 func pythonUVGitCommit(values url.Values, fragment, supplied string) (string, string, error) {
-	revisions := values["rev"]
-	if len(revisions) != 1 || !pythonFullCommit(revisions[0]) {
-		return "", "", fmt.Errorf("git lock source must declare one full 40-character commit SHA")
+	declaredRef, err := pythonUVGitReference(values)
+	if err != nil {
+		return "", "", err
 	}
 	if !pythonFullCommit(fragment) {
 		return "", "", fmt.Errorf("git lock source must resolve to one full 40-character commit SHA")
 	}
-	declaredRef := strings.ToLower(revisions[0])
 	resolvedCommit := strings.ToLower(fragment)
-	if declaredRef != resolvedCommit {
+	if pythonFullCommit(declaredRef) && declaredRef != resolvedCommit {
 		return "", "", fmt.Errorf("git lock source declared ref differs from its resolved commit")
 	}
 	if !pythonUVGitSuppliedCommit(supplied, resolvedCommit) {
