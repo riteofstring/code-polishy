@@ -30,6 +30,9 @@ var objectPredicatesSource string
 //go:embed type_resolver.py
 var typeResolverSource string
 
+//go:embed type_project.py
+var typeProjectSource string
+
 //go:embed pydantic_resolver.py
 var pydanticResolverSource string
 
@@ -182,7 +185,7 @@ func (reader *typeProjectReader) Read(target []byte) (int, error) {
 }
 
 func runTypeProject(ctx context.Context, python string, input io.Reader) ([]byte, error) {
-	return runFactProject(ctx, python, input, TypeSupportSource()+"from type_resolver import resolve_stream\nresolve_stream(sys.stdin.buffer,sys.stdout.buffer)\n")
+	return runFactProject(ctx, python, input, TypeSupportSource()+embeddedPythonModule("__main__", typeProjectSource))
 }
 
 func runFactProject(ctx context.Context, python string, input io.Reader, program string) ([]byte, error) {

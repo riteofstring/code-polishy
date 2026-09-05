@@ -9,13 +9,13 @@ import {
   sep,
 } from "node:path";
 
-import prettier from "./node_modules/prettier/index.mjs";
-import eslint from "./node_modules/eslint/lib/api.js";
-import typescript from "./node_modules/typescript/lib/typescript.js";
-import typescriptParser from "./node_modules/@typescript-eslint/parser/dist/index.js";
-import reactHooks from "./node_modules/eslint-plugin-react-hooks/index.js";
-import jsxAccessibility from "./node_modules/eslint-plugin-jsx-a11y/lib/index.js";
-import yaml from "./node_modules/js-yaml/dist/js-yaml.mjs";
+import prettier from "prettier";
+import eslint from "eslint";
+import typescript from "typescript";
+import typescriptParser from "@typescript-eslint/parser";
+import reactHooks from "eslint-plugin-react-hooks";
+import jsxAccessibility from "eslint-plugin-jsx-a11y";
+import yaml from "js-yaml";
 
 import { audit } from "./audit.mjs";
 import { deadcode, requireWorkspaces } from "./deadcode.mjs";

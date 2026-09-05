@@ -2,7 +2,7 @@ import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 
-import typescript from "./node_modules/typescript/lib/typescript.js";
+import typescript from "typescript";
 
 import {
   MAXIMUM_OPERATION_PATHS,
@@ -212,8 +212,7 @@ function isRegularFile(absolute, path, unsupportedPaths) {
 }
 
 async function configurationFor(request, covered, unsupportedPaths) {
-  const { pluginNames } =
-    await import("./node_modules/knip/dist/types/PluginNames.js");
+  const { pluginNames } = await import("knip/dist/types/PluginNames.js");
   const workspaces = {};
   for (const workspace of request.workspaces) {
     const project = workspaceFiles(request, workspace, unsupportedPaths);
@@ -350,7 +349,7 @@ async function analyze(
     "--config",
     relative(directory, configurationPath),
   ];
-  const { main } = await import("./node_modules/knip/dist/index.js");
+  const { main } = await import("knip/dist/index.js");
   const restoreOwnership = await bindInheritedWorkspaces(request);
   let analysis;
   try {
@@ -374,7 +373,7 @@ async function analyze(
 
 async function bindInheritedWorkspaces(request) {
   const { ConfigurationChief } =
-    await import("./node_modules/knip/dist/ConfigurationChief.js");
+    await import("knip/dist/ConfigurationChief.js");
   const prototype = ConfigurationChief.prototype;
   const findWorkspace = prototype.findWorkspaceByFilePath;
   const owners = new Map();

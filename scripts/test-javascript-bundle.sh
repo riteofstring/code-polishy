@@ -267,13 +267,43 @@ fi
 
 
 
-while read -r deferred_specifier; do
-  case "${deferred_specifier}" in
-    '"./node_modules/'*) ;;
-    *) fail "the runner imports ${deferred_specifier}" ;;
-  esac
-done < <(cat "${runner_sources[@]}" | tr -d '\n' | grep -o 'import([^)]*)' |
-  sed -e 's/^import( *//' -e 's/ *)$//')
+"${javascript_node}" --input-type=module - "${javascript_bundle_dir}" "${runner_sources[@]}" <<'JS'
+import fs from "node:fs";
+import path from "node:path";
+import { createRequire } from "node:module";
+
+const [bundle, ...sources] = process.argv.slice(2);
+const resolve = createRequire(path.join(bundle, "runner.mjs"));
+const ts = resolve("typescript");
+const dependencies = JSON.parse(fs.readFileSync(path.join(bundle, "package.json"), "utf8")).dependencies;
+const root = fs.realpathSync(path.join(bundle, "node_modules"));
+let checked = 0;
+for (const source of sources) {
+  const ast = ts.createSourceFile(source, fs.readFileSync(source, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      if (node.arguments.length !== 1 || !ts.isStringLiteral(node.arguments[0])) {
+        throw new Error(`${source}: deferred imports must name one literal dependency`);
+      }
+      const specifier = node.arguments[0].text;
+      const parts = specifier.split("/");
+      const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+      if (!Object.hasOwn(dependencies, name)) {
+        throw new Error(`${source}: undeclared deferred dependency ${specifier}`);
+      }
+      const target = fs.realpathSync(resolve.resolve(specifier));
+      const relative = path.relative(root, target);
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        throw new Error(`${source}: deferred dependency escapes the bundle: ${specifier}`);
+      }
+      checked++;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+}
+if (checked === 0) throw new Error("No deferred dependencies were verified");
+JS
 
 
 

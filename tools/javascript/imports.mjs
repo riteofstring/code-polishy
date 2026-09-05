@@ -1,7 +1,7 @@
 import { builtinModules } from "node:module";
 import { extname, join } from "node:path";
 
-import typescript from "./node_modules/typescript/lib/typescript.js";
+import typescript from "typescript";
 
 import {
   containedRead,
