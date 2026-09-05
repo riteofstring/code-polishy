@@ -6,7 +6,8 @@
 
 - Local candidate for launch validation; not published.
 - Parse Astro imports and dead code with the pinned official compiler,
-  preserving source locations and browser-script dependencies.
+  preserving source locations, browser-script dependencies, and literal
+  dynamic-route filenames such as `[slug].astro`.
 - Validate exact self-hosted runner labels through contained actionlint
   configuration while retaining action pins and workflow checks.
 - Give shell checks bounded, distinct identifiers for filenames containing

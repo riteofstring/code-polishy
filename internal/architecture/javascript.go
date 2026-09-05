@@ -17,7 +17,8 @@ import (
 const javascriptImportBudget = 20 * time.Minute
 
 var javascriptSourceExtensions = map[string]bool{
-	".cjs": true, ".cts": true, ".js": true, ".jsx": true,
+	".astro": true,
+	".cjs":   true, ".cts": true, ".js": true, ".jsx": true,
 	".mjs": true, ".mts": true, ".ts": true, ".tsx": true,
 }
 

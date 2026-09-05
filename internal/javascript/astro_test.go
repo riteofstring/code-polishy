@@ -114,7 +114,11 @@ func astroFixture(t *testing.T) (Bundle, string) {
 
 func writeAstroFixture(t *testing.T, root, name, source string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, name), []byte(source), 0o600); err != nil {
+	absolute := filepath.Join(root, name)
+	if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(absolute, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

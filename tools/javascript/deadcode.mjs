@@ -42,7 +42,7 @@ const DEADCODE_ISSUE_TYPES = [
   "duplicates",
 ];
 
-const DEADCODE_PATTERN_CHARACTERS = /[*?[\]{}()!]/;
+const DEADCODE_PATTERN_CHARACTERS = /[*?[\]{}()!]/g;
 
 function insideDirectory(directory, path) {
   return (
@@ -179,10 +179,6 @@ function workspaceFiles(request, workspace, unsupportedPaths) {
           "the policy-owned dead-code analyzer does not analyze this file",
         ),
       );
-    } else if (DEADCODE_PATTERN_CHARACTERS.test(path)) {
-      unsupportedPaths.push(
-        unsupported(path, "the file name contains a pattern character"),
-      );
     } else if (isRegularFile(absolute, path, unsupportedPaths)) {
       project.push(path);
     }
@@ -221,23 +217,26 @@ async function configurationFor(request, covered, unsupportedPaths) {
     await import("./node_modules/knip/dist/types/PluginNames.js");
   const workspaces = {};
   for (const workspace of request.workspaces) {
+    if (workspace.root.search(DEADCODE_PATTERN_CHARACTERS) !== -1) {
+      for (const path of workspace.project) {
+        unsupportedPaths.push(
+          unsupported(
+            path,
+            "Knip cannot resolve a workspace directory containing pattern characters literally",
+          ),
+        );
+      }
+      continue;
+    }
     const project = workspaceFiles(request, workspace, unsupportedPaths);
     covered.push(...project);
     const analyzed = new Set(project);
     workspaces[containedName(request.directory, workspace.root)] = {
       entry: workspace.entry
         .filter((path) => analyzed.has(path))
-        .map((path) =>
-          relative(
-            join(request.root, workspace.root),
-            join(request.root, path),
-          ).replaceAll("\\", "/"),
-        ),
+        .map((path) => workspacePattern(request, workspace, path)),
       project: project.map((path) =>
-        relative(
-          join(request.root, workspace.root),
-          join(request.root, path),
-        ).replaceAll("\\", "/"),
+        workspacePattern(request, workspace, path),
       ),
     };
   }
@@ -246,6 +245,19 @@ async function configurationFor(request, covered, unsupportedPaths) {
     configuration[name] = false;
   }
   return configuration;
+}
+
+function workspacePattern(request, workspace, path) {
+  return literalPattern(
+    relative(
+      join(request.root, workspace.root),
+      join(request.root, path),
+    ).replaceAll("\\", "/"),
+  );
+}
+
+function literalPattern(path) {
+  return path.replace(DEADCODE_PATTERN_CHARACTERS, "\\$&");
 }
 
 function unusedExport(root, kind, issue) {
