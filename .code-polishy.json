@@ -843,7 +843,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments_(python|shell|web)|javascript|markdown.*|quality)[.]go$"
+          "(^|/)(comments_(python|shell.*|web)|data|generated_commands|javascript|markdown.*|python.*|quality|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -857,7 +857,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments|comments_(shell|web)|javascript|markdown.*|quality)[.]go$"
+          "(^|/)(comments|comments_(shell.*|web)|data|generated_commands|javascript|markdown.*|python.*|quality|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -873,7 +873,7 @@
           "--timeout-coefficient",
           "10",
           "--exclude-files",
-          "(^|/)(comments|comments_(python|web)|javascript|markdown.*|quality)[.]go$"
+          "(^|/)(comments|comments_(python|web)|data|generated_commands|javascript|markdown.*|python.*|quality|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -887,7 +887,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments|comments_(python|shell)|javascript|markdown.*|quality)[.]go$"
+          "(^|/)(comments|comments_(python|shell.*)|data|generated_commands|javascript|markdown.*|python.*|quality|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -901,7 +901,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments.*|markdown.*|vulture)[.]go$"
+          "(^|/)(comments.*|markdown.*|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -915,7 +915,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments.*|data|javascript|markdown.*|python|python_inventory|quality)[.]go$"
+          "(^|/)(comments.*|data|generated_commands|javascript|markdown.*|python.*|quality)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
@@ -929,7 +929,7 @@
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
-          "(^|/)(comments.*|javascript|quality)[.]go$"
+          "(^|/)(comments.*|data|generated_commands|javascript|python.*|quality|vulture.*)[.]go$"
         ],
         "timeoutSeconds": 3600
       },
