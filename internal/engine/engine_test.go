@@ -279,7 +279,7 @@ func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, b
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,6 +585,7 @@ func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T)
 		t.Run(testCase.name, func(t *testing.T) {
 			root := testCase.root(t)
 			if testCase.level != testpolicy.MergeLevelDocumentation {
+				declareContentTestOwnership(t, root, "content/reminder_test.go")
 				installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 				installBehaviorReviewTestGuidance(t, root)
 			}
@@ -1281,7 +1282,7 @@ func contentRepository(t *testing.T, excludes []string) string {
 		excludeJSON += `"` + item + `"`
 	}
 	config := `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "content"},
   "scope": {"exclude": [` + excludeJSON + `]},
   "quality": {},
@@ -1294,7 +1295,7 @@ func contentRepository(t *testing.T, excludes []string) string {
     {"name":"content-build","provides":["content-build"],"argv":["true"],"modules":["content"],"runOn":["build"]},
     {"name":"offline-supply","provides":["content-integrity"],"argv":["true"],"runOn":["supply-chain"]}
   ],
-  "tests": {"suites":[
+  "tests": {"ownership":[],"suites":[
     {"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},
     {"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}
   ]},
@@ -1311,7 +1312,7 @@ func documentationRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	config := `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "tooling", "capabilities": ["cli"]},
   "scope": {},
   "quality": {},
@@ -1327,7 +1328,7 @@ func documentationRepository(t *testing.T) string {
     {"name": "offline-assurance", "provides": ["lock-sync"], "argv": ["true"], "runOn": ["supply-chain"]},
     {"name": "online-supply", "provides": ["release-age"], "argv": ["true"], "runOn": ["supply-chain-online"]}
   ],
-  "tests": {"suites": [
+  "tests": {"ownership": [], "suites": [
     {"name": "docs-product-contract", "kind": "contract", "scope": "module", "modules": ["docs"], "argv": ["go", "test", "./docs/..."]},
     {"name": "repository-full", "kind": "integration", "scope": "repository", "argv": ["./scripts/test-repository.sh"]}
   ]},

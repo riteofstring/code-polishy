@@ -20,6 +20,7 @@ func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
 		"test", "test-plan", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
+		"architecture-review", "capabilities", "task-start",
 	}
 	for _, command := range publicCommands {
 		t.Run(command, func(t *testing.T) {

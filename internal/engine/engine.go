@@ -122,6 +122,7 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	}
 	findings := []policy.Finding{}
 	findings = append(findings, engine.Repository.DesignDocumentFindings()...)
+	findings = append(findings, engine.Repository.OperationalHandoffFindings()...)
 	if filepath.Clean(engine.Repository.Root) != filepath.Clean(engine.Repository.PolicyRoot) {
 		agentStatus := agentpolicy.Check(engine.Repository.Root, engine.Repository.PolicyRoot)
 		if !agentStatus.Current {
@@ -159,6 +160,11 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	notes = append(notes, engine.PolicyModuleNotes...)
 	notes = append(notes, javascriptNotes...)
 	notes = append(notes, testpolicy.Notes(engine.Repository, files)...)
+	if selected := testpolicy.OwnershipImportSelection(engine.Repository, files); len(selected) > 0 {
+		analysis := architecture.AnalyzeWithRunner(ctx, engine.Repository, selected, engine.Runner)
+		findings = append(findings, analysis.Findings...)
+		findings = testpolicy.EnrichOwnershipFindings(engine.Repository, files, findings, analysis.TestImports)
+	}
 	return engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, files), notes), nil
 }
 
@@ -166,13 +172,17 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	findings := engine.coverageFindings()
 	findings = append(findings, quality.Check(ctx, engine.Repository, selection, engine.Runner, profile)...)
 	findings = append(findings, testpolicy.SourceFindings(engine.Repository, selection.Files)...)
-	findings = append(findings, architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)...)
+	architectureAnalysis := architecture.AnalyzeWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)
+	findings = append(findings, architectureAnalysis.Findings...)
+	findings = engine.enrichTestOwnership(findings, architectureAnalysis.TestImports)
 	findings = append(findings, supplychain.Static(ctx, engine.Repository, selection.Files)...)
 	notes := []string{fmt.Sprintf("checked %d files", len(selection.Files))}
 	if len(selection.Candidate.Deleted) > 0 {
 		notes = append(notes, fmt.Sprintf("%d deletions participated in command selection", len(selection.Candidate.Deleted)))
 	}
-	return engine.withSelection(engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, selection.Files), notes), selection)
+	report := engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, selection.Files), notes)
+	report.SourceDependencyGraph = architectureAnalysis.Graph
+	return engine.withSelection(report, selection)
 }
 
 func (engine *Engine) CheckChangeAware(ctx context.Context, selection repository.Selection, profile string) Report {
@@ -209,34 +219,12 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 	return findings
 }
 
-func (engine *Engine) Architecture(ctx context.Context, selection repository.Selection) Report {
-	report := engine.finish(architecture.CheckWithRunner(ctx, engine.Repository, selection.Files, engine.Runner), []string{fmt.Sprintf("checked architecture for %d files", len(selection.Files))})
+func (engine *Engine) enrichTestOwnership(findings []policy.Finding, imports map[string][]string) []policy.Finding {
 	files, err := engine.Repository.AllFiles()
-	if err == nil {
-		report.Tables = append(report.Tables, architectureSummaryTable(architecture.Summary(engine.Repository, files)))
+	if err != nil {
+		return findings
 	}
-	return engine.withSelection(report, selection)
-}
-
-func architectureSummaryTable(summaries []architecture.ModuleSummary) Table {
-	rows := make([][]string, 0, len(summaries))
-	for _, summary := range summaries {
-		rows = append(rows, []string{
-			summary.Name, fmt.Sprint(summary.Production), fmt.Sprint(summary.Tests), fmt.Sprint(summary.Incoming),
-			fmt.Sprint(summary.Outgoing), fmt.Sprint(summary.FocusedSuites),
-		})
-	}
-	return Table{
-		Title:   "ARCHITECTURE SUMMARY",
-		Columns: []string{"MODULE", "PRODUCTION", "TESTS", "IN", "OUT", "FOCUSED"},
-		Rows:    rows,
-	}
-}
-
-func (engine *Engine) Format(ctx context.Context, selection repository.Selection) Report {
-	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
-	findings = append(findings, quality.Format(ctx, engine.Repository, selection, engine.Runner)...)
-	return engine.withSelection(engine.finish(findings, nil), selection)
+	return testpolicy.EnrichOwnershipFindings(engine.Repository, files, findings, imports)
 }
 
 func (engine *Engine) Test(ctx context.Context, request testpolicy.Request) (Report, error) {
@@ -577,7 +565,7 @@ func (engine *Engine) Verify(ctx context.Context, testsOnly bool) (Report, error
 
 func (engine *Engine) verify(ctx context.Context, testsOnly, stopAfterFailure bool) (Report, error) {
 	report, err := engine.test(ctx, testpolicy.Request{Full: true}, stopAfterFailure)
-	if err != nil || len(report.Findings) > 0 || testsOnly {
+	if err != nil || HasFindings(report) || testsOnly {
 		return report, err
 	}
 	files, err := engine.Repository.AllFiles()
@@ -600,23 +588,24 @@ func (engine *Engine) SupplyChain(ctx context.Context, offline bool) (Report, er
 	selection := repository.Selection{Files: files, All: true}
 	mode := "online"
 	notes := []string{}
+	gitEvidence := []supplychain.GitEvidenceReceipt{}
 	if offline {
 		mode = "offline"
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
 	if !offline {
-		findings = append(findings, supplychain.Online(ctx, engine.Repository, files, engine.Runner)...)
-		findings = append(findings, quality.RunCommandsForProfiles(ctx, engine.Repository, selection, engine.Runner, "supply-chain", "supply-chain-online", "security")...)
-		artifactResult := artifactsecurity.Run(ctx, engine.Repository, engine.Runner)
-		findings = append(findings, artifactResult.Findings...)
-		notes = append(notes, artifactResult.Notes...)
-		findings = supplychain.ClassifyKnownExploited(ctx, engine.Repository, findings)
+		onlineFindings, evidence, onlineNotes := engine.onlineSupplyChain(ctx, files, findings)
+		findings = onlineFindings
+		gitEvidence = evidence
+		notes = append(notes, onlineNotes...)
 	}
 	notes = append([]string{"completed " + mode + " supply-chain profile"}, notes...)
 	if offline {
 		return engine.finish(findings, notes), nil
 	}
-	return engine.finishWithAssessments(findings, notes, true), nil
+	report := engine.finishWithAssessments(findings, notes, true)
+	report.GitEvidence = gitEvidence
+	return report, nil
 }
 
 func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report, error) {
@@ -807,21 +796,27 @@ func combineTestQualityReminders(left, right *TestQualityReminder) *TestQualityR
 
 func (engine *Engine) combine(left, right Report) Report {
 	report := Report{
-		BehaviorReview:      combineBehaviorReview(left.BehaviorReview, right.BehaviorReview),
-		MergePolicy:         combineMergePolicy(left.MergePolicy, right.MergePolicy),
-		CheckpointPolicy:    combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
-		GateRunPolicy:       combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
-		ChangedTestScope:    combineChangedTestScope(left.ChangedTestScope, right.ChangedTestScope),
-		TestQualityReminder: combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
-		TestCommands:        append(append([]TestCommandEvidence{}, left.TestCommands...), right.TestCommands...),
-		TestDiagnostics:     append(append([]TestFailureDiagnostic{}, left.TestDiagnostics...), right.TestDiagnostics...),
-		TestAggregations:    append(append([]testpolicy.SuiteAggregation{}, left.TestAggregations...), right.TestAggregations...),
-		Findings:            append(append([]policy.Finding{}, left.Findings...), right.Findings...),
-		Suppressed:          append(append([]policy.Suppressed{}, left.Suppressed...), right.Suppressed...),
-		Assessed:            append(append([]policy.AssessedVulnerability{}, left.Assessed...), right.Assessed...),
-		ReleaseAges:         append(append([]policy.AssessedReleaseAge{}, left.ReleaseAges...), right.ReleaseAges...),
-		Tables:              append(append([]Table{}, left.Tables...), right.Tables...),
-		Notes:               append(append([]string{}, left.Notes...), right.Notes...),
+		RequestedSelection:    combineRequestedSelection(left.RequestedSelection, right.RequestedSelection),
+		AnalysisContext:       append(append([]AnalysisContext{}, left.AnalysisContext...), right.AnalysisContext...),
+		BehaviorReview:        combineBehaviorReview(left.BehaviorReview, right.BehaviorReview),
+		MergePolicy:           combineMergePolicy(left.MergePolicy, right.MergePolicy),
+		CheckpointPolicy:      combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
+		GateRunPolicy:         combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
+		ChangedTestScope:      combineChangedTestScope(left.ChangedTestScope, right.ChangedTestScope),
+		TestQualityReminder:   combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
+		SourceDependencyGraph: combineSourceDependencyGraph(left.SourceDependencyGraph, right.SourceDependencyGraph),
+		ArchitectureReview:    combineArchitectureReview(left.ArchitectureReview, right.ArchitectureReview),
+		Formatting:            combineFormatting(left.Formatting, right.Formatting),
+		TestCommands:          append(append([]TestCommandEvidence{}, left.TestCommands...), right.TestCommands...),
+		TestDiagnostics:       append(append([]TestFailureDiagnostic{}, left.TestDiagnostics...), right.TestDiagnostics...),
+		TestAggregations:      append(append([]testpolicy.SuiteAggregation{}, left.TestAggregations...), right.TestAggregations...),
+		Findings:              append(append([]policy.Finding{}, left.Findings...), right.Findings...),
+		Suppressed:            append(append([]policy.Suppressed{}, left.Suppressed...), right.Suppressed...),
+		Assessed:              append(append([]policy.AssessedVulnerability{}, left.Assessed...), right.Assessed...),
+		ReleaseAges:           append(append([]policy.AssessedReleaseAge{}, left.ReleaseAges...), right.ReleaseAges...),
+		GitEvidence:           append(append([]supplychain.GitEvidenceReceipt{}, left.GitEvidence...), right.GitEvidence...),
+		Tables:                append(append([]Table{}, left.Tables...), right.Tables...),
+		Notes:                 append(append([]string{}, left.Notes...), right.Notes...),
 	}
 	return engine.normalizeReport(report)
 }
@@ -966,7 +961,7 @@ func inside(root, path string) bool {
 
 func HasFindings(report Report) bool {
 	return slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
-		return finding.Status == policy.FindingOpen && finding.Severity == policy.FindingError
+		return (finding.Status == "" || finding.Status == policy.FindingOpen) && (finding.Severity == "" || finding.Severity == policy.FindingError)
 	})
 }
 

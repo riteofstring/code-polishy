@@ -15,19 +15,46 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-func osvCommands(repo repository.Repository) []policy.Command {
+func osvCommands(repo repository.Repository) ([]policy.Command, error) {
+	scans, err := osvScanPlan(repo)
+	if err != nil {
+		return nil, err
+	}
+	commands := make([]policy.Command, len(scans))
+	for index, scan := range scans {
+		commands[index] = scan.Command
+	}
+	return commands, nil
+}
+
+func osvCommand(repo repository.Repository, name, root string) policy.Command {
+	return policy.Command{
+		Name: name, Argv: []string{repo.PolicyTool("osv-scanner"), "scan", "source", "--all-vulns", "--format", "json", "--verbosity", "error"}, Cwd: root,
+		Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800,
+	}
+}
+
+func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	tool := repo.PolicyTool("osv-scanner")
-	if !isExecutable(tool) {
-		return nil
+	if !isExecutable(tool) || len(activeOSVRoots(repo.Config)) == 0 {
+		return nil, nil
 	}
-	commands := []policy.Command{}
+	inputs, err := onlineUVInputs(repo)
+	if err != nil {
+		return nil, err
+	}
+	scans := []osvScan{}
 	for _, root := range activeOSVRoots(repo.Config) {
-		commands = append(commands, policy.Command{
-			Name: "osv-scan-" + safeName(root), Argv: []string{tool, "scan", "source", "--recursive", "--all-vulns", "--format", "json", "--verbosity", "error", "."}, Cwd: root,
-			Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800,
-		})
+		command := osvCommand(repo, "osv-scan-"+safeName(root), root)
+		command.Argv = append(command.Argv, "--recursive", "--experimental-disable-plugins", "python/uvlock", "--experimental-exclude", "g:**/.code-polishy-reports")
+		if rootHasUVInput(root, inputs) {
+			command.Argv = append(command.Argv, "--allow-no-lockfiles")
+		}
+		command.Argv = append(command.Argv, ".")
+		scans = append(scans, osvScan{Command: command, Root: root})
 	}
-	return commands
+	uv, err := osvUVScans(repo, inputs)
+	return append(scans, uv...), err
 }
 
 func scanOSVWithCommands(ctx context.Context, repo repository.Repository, commands []policy.Command, commandRunner runner.Runner) []policy.Finding {
@@ -38,16 +65,28 @@ func scanOSVWithCommands(ctx context.Context, repo repository.Repository, comman
 			Message: "pinned OSV-Scanner is unavailable; run ./tools/install-policy-tools.sh",
 		}}
 	}
-	roots := activeOSVRoots(repo.Config)
-	if len(commands) != len(roots) {
+	scans, err := osvScanPlan(repo)
+	if err != nil {
+		return []policy.Finding{{Check: "policy.securityScanner", Path: "repository", Subject: "osv-scanner", Message: err.Error()}}
+	}
+	if len(commands) != len(scans) {
 		return []policy.Finding{{
 			Check: "policy.supplyChain", Path: "repository", Subject: "online command plan",
 			Message: "OSV online supply-chain command plan is incomplete",
 		}}
 	}
 	findings := []policy.Finding{}
-	for index, root := range roots {
-		findings = append(findings, scanOSVRoot(ctx, repo, root, commands[index], commandRunner)...)
+	for index, scan := range scans {
+		if !sameOnlineCommand(scan.Command, commands[index]) {
+			return []policy.Finding{{Check: "policy.supplyChain", Path: "repository", Subject: "online command plan", Message: "OSV command differs from its public input plan"}}
+		}
+	}
+	for _, scan := range scans {
+		if err := prepareOSVInput(repo, scan); err != nil {
+			findings = append(findings, policy.Finding{Check: "policy.securityScanner", Path: scan.Scope, Subject: "osv-scanner", Message: err.Error()})
+			continue
+		}
+		findings = append(findings, scanOSVRoot(ctx, repo, scan, commandRunner)...)
 	}
 	return uniqueFindings(findings)
 }
@@ -73,9 +112,10 @@ func compactStrings(values []string) []string {
 	return result
 }
 
-func scanOSVRoot(ctx context.Context, repo repository.Repository, root string, command policy.Command, commandRunner runner.Runner) []policy.Finding {
-	output, runErr := runCommandWithOutput(ctx, repo, command, commandRunner)
-	findings, parseErr := parseOSVReport(repo, root, output.Stdout)
+func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) []policy.Finding {
+	root := scan.Root
+	output, runErr := runCommandWithOutput(ctx, repo, scan.Command, commandRunner)
+	findings, parseErr := parseOSVScanReport(repo, scan, output.Stdout)
 	if parseErr != nil {
 		message := fmt.Sprintf("parse OSV-Scanner JSON: %v", parseErr)
 		if detail := strings.TrimSpace(string(output.Stderr)); detail != "" {
@@ -132,6 +172,10 @@ type osvVulnerability struct {
 }
 
 func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]policy.Finding, error) {
+	return parseOSVScanReport(repo, osvScan{Root: root}, payload)
+}
+
+func parseOSVScanReport(repo repository.Repository, scan osvScan, payload []byte) ([]policy.Finding, error) {
 	if len(bytes.TrimSpace(payload)) == 0 {
 		return nil, errors.New("scanner returned no JSON report")
 	}
@@ -152,9 +196,15 @@ func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]
 	}
 	findings := []policy.Finding{}
 	for _, result := range report.Results {
-		scope, err := osvScope(repo, root, result.Source.Path)
+		scope, err := osvScope(repo, scan.Root, result.Source.Path)
 		if err != nil {
 			return nil, err
+		}
+		if scan.InputPath != "" {
+			if scope != scan.InputPath {
+				return nil, errors.New("scanner report refers to an input outside its public package projection")
+			}
+			scope = scan.Scope
 		}
 		for _, observed := range result.Packages {
 			findings = append(findings, osvPackageFindings(scope, observed)...)

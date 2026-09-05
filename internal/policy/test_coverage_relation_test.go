@@ -7,7 +7,7 @@ import (
 
 func TestTestSuiteCoversRequiresOneAcyclicCompatibleOwner(t *testing.T) {
 	t.Parallel()
-	valid := strings.Replace(minimalConfig(), `"tests":{"suites":[`, `"tests":{"suites":[
+	valid := strings.Replace(minimalConfig(), `"suites":[`, `"suites":[
     {"name":"aggregate","kind":"unit","scope":"repository","cost":"quick","argv":["go","test","./..."],"covers":["content-test"]},`, 1)
 	config, err := Load(writeConfig(t, valid), "")
 	if err != nil || len(config.Tests.Suites[0].Covers) != 1 {

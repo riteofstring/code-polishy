@@ -908,7 +908,7 @@ expect_import "./lazy.ts" "web/lazy.ts" ""
 if [[ "$(grep -oF '"specifier":"./lazy.ts"' "${imports_response}" | wc -l | tr -d ' ')" != "2" ]]; then
   fail "imports did not report both the dynamic and the type import: $(cat "${imports_response}")"
 fi
-if ! grep -qF '"path":"web/legacy.cjs","line":1,"specifier":"../domain/model.js","resolved":"domain/model.ts","package":""' \
+if ! grep -qF '"path":"web/legacy.cjs","line":1,"column":27,"specifier":"../domain/model.js","resolved":"domain/model.ts","package":"","kind":"runtime"' \
   "${imports_response}"; then
   fail "imports did not resolve a literal require: $(cat "${imports_response}")"
 fi

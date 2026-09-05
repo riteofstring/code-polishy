@@ -10,6 +10,27 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 
 ## Choose a workflow
 
+| Task                                   | First command                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| Read-only capability question          | `code-polishy capabilities --query "QUERY"`                                  |
+| Ordinary implementation                | `code-polishy task-start --intent-file PATH --module NAME`                   |
+| Explicit behavior-sensitive change     | `code-polishy task-start --intent-file PATH --module NAME --feature FEATURE` |
+| Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`                  |
+| Dependency change                      | `code-polishy docs read supply-chain`                                        |
+| Release or upgrade                     | `code-polishy docs read release-checklist`                                   |
+| Final delivery                         | `code-polishy behavior-review status --base REVIEW_BASE`                     |
+
+Use one file or directory operand with `--files PATH` instead of `--module NAME`
+when that identifies the task scope. A successful `task-start` already captures
+the request and returns its current design context and operational handoffs;
+read that packet before editing and do not recapture the same request through
+the component command. The first command does not replace selected reviews or
+event-required verification. Read-only
+questions require no capture or tests. For delivery, follow the status and
+the configured final-gate owner. Capability queries identify candidates only;
+explicit feature operands require the caller's intended canonical name or
+exact declared alias. See [Capability Discovery](capabilities.md).
+
 Ordinary interactive work may use the caller's current checkout. The primary
 agent owns task decomposition, subagent delegation, integration, and
 verification.
@@ -20,11 +41,33 @@ allowed module and exact artifact path before the worker starts.
 
 ## Interactive work
 
+When adopting Code Polishy or restructuring architecture, capture the request
+and read its current design context before drafting the proposed module graph
+and current ownership in `.code-polishy.json`. Commit the
+candidate, then use `code-polishy architecture-review prepare --base REVIEW_BASE`
+before broad source moves or rewrites. Give only its packet to a clean-context
+reviewer, resolve findings, and finalize the accepted result. Avoid changes
+whose main effect is replacing one deep file with forwarding-only files. A
+later topology or ownership change requires another review; delivery validates
+that the candidate retains its reviewed graph. See the
+[Architecture Policy](policies/architecture.md#architecture-review-workflow).
+
 Before changing governed source, run `code-polishy design-context --files` with
 the exact planned paths, or `code-polishy design-context --module` with the
 selected modules. Read only the returned current design documents. The command
 does not select plans, historical evidence, or superseded decisions; open those
 only when the task specifically requires them.
+
+The same context command selects relevant repository operational handoffs from
+`documentation.handoffs`. Read each selected procedure before its associated
+operation. Add an exact `--situation authentication`, `--situation release`, or
+`--situation deployment` when that operational situation applies; repositories
+may declare other exact identifiers. File and module triggers select matching
+handoffs automatically. Context lists their paths and selection reasons, while
+`--format json` includes their bounded contents and SHA-256 identities. An
+invalid selected handoff blocks context composition. Discovery does not execute
+procedure commands, obtain credentials, or grant approval. Keep managed
+`AGENTS.md` canonical; see [Operational Handoffs](operational-handoffs.md).
 
 Before implementing a non-documentation request, have the harness save the
 user's original request and supplied acceptance criteria to a bounded UTF-8
@@ -37,6 +80,11 @@ code-polishy behavior-review capture-intent --intent-file PATH
 Code Polishy copies that text into its managed journal. If implementation has
 already started without a capture at the task base, stop and report the missing
 boundary instead of writing a new summary of the request.
+
+`task-start --intent-file PATH` with one file, directory, or module selector
+performs this same capture after validating its complete bounded context
+packet. Use either capture entry point once for each exact request or later
+correction; see [Capability Discovery](capabilities.md#start-a-task).
 
 An upgrade has one explicit authority transition. The outgoing locked release
 and its installed guidance govern until the exact verified incoming release's

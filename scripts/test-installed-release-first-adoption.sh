@@ -22,7 +22,7 @@ EOF
 
   write_file "${target}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},
@@ -43,6 +43,7 @@ EOF
     }
   ],
   "tests": {
+    "ownership": [],
     "suites": [
       {
         "name": "application-unit",

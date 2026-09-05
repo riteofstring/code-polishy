@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/architecture"
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -69,7 +70,7 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 		return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), err
 	}
 	if execution.controller.alreadyPassed != nil {
-		return engine.alreadyPassedMergeGate(ctx, base, plan, execution.controller), nil
+		return engine.alreadyPassedMergeGate(ctx, base, plan, execution.controller)
 	}
 	if execution.reviewErr != nil {
 		return engine.finalizeMergeGateReviewError(ctx, base, plan, execution)
@@ -78,10 +79,21 @@ func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, pla
 		report := engine.withMergeGateMetadata(ctx, *execution.reviewReport, base, plan)
 		return execution.controller.finalize(engine, report, nil)
 	}
+	if report, err := execution.controller.checkArchitectureReview(ctx, engine, base, plan.Level == testpolicy.MergeLevelDocumentation); err != nil || HasFindings(report) {
+		report = withBehaviorReview(report, execution.controller.behaviorStatus)
+		return execution.controller.finalize(engine, engine.withMergeGateMetadata(ctx, report, base, plan), err)
+	}
 	return engine.executeMergeGateCommands(ctx, base, plan, execution)
 }
 
-func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) Report {
+func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) (Report, error) {
+	if err := engine.currentGatePolicyValidity(controller.policyValiditySHA256); err != nil {
+		return Report{}, err
+	}
+	evidence, err := engine.currentGitEvidence(controller.gitEvidenceSHA256)
+	if err != nil {
+		return Report{}, err
+	}
 	reused := []string{}
 	for _, command := range controller.alreadyPassed.Commands {
 		if command.Category == gaterun.OrdinaryTest {
@@ -89,11 +101,17 @@ func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, p
 		}
 	}
 	report := Report{
-		BehaviorReview: &controller.behaviorStatus,
-		GateRunPolicy:  &GateRunPolicy{Status: "already-passed", ReportPath: controller.alreadyPassedPath, ReusedPhases: reused},
-		Notes:          []string{"the exact gate identity already passed; no validation commands executed"},
+		SourceDependencyGraph: sourcegraph.Clone(controller.alreadyPassed.SourceDependencyGraph),
+		Findings:              append([]policy.Finding{}, controller.alreadyPassed.Findings...),
+		Suppressed:            append([]policy.Suppressed{}, controller.alreadyPassed.Suppressed...),
+		Assessed:              append([]policy.AssessedVulnerability{}, controller.alreadyPassed.Assessed...),
+		ReleaseAges:           append([]policy.AssessedReleaseAge{}, controller.alreadyPassed.ReleaseAges...),
+		BehaviorReview:        &controller.behaviorStatus,
+		GitEvidence:           evidence,
+		GateRunPolicy:         &GateRunPolicy{Status: "already-passed", ReportPath: controller.alreadyPassedPath, ReusedPhases: reused},
+		Notes:                 []string{"the exact gate identity already passed; no validation commands executed"},
 	}
-	return engine.withMergeGateMetadata(ctx, report, base, plan)
+	return engine.withMergeGateMetadata(ctx, report, base, plan), nil
 }
 
 func (engine *Engine) prepareMergeGateExecution(ctx context.Context, base string, plan MergeGateExecutionPlan, options MergeGateOptions) (mergeGateExecution, error) {
@@ -176,7 +194,7 @@ func (engine *Engine) runMergeGateLevel(ctx context.Context, plan MergeGateExecu
 		return engine.fullMergeGate(ctx, plan.Tests)
 	case testpolicy.MergeLevelDocumentation:
 		report, err := engine.documentationMergeGate(ctx, plan.Selection)
-		if err != nil || len(report.Findings) != 0 || len(plan.Tests.Suites) == 0 {
+		if err != nil || HasFindings(report) || len(plan.Tests.Suites) == 0 {
 			return report, err
 		}
 		tested, testErr := engine.testExactPlan(ctx, plan.Tests, plan.Selection, true)
@@ -190,7 +208,7 @@ func mergeGateExecutionError(gateErr error, report Report, plannedRunner *mergeG
 	if plannedRunner.err != nil {
 		gateErr = errors.Join(gateErr, plannedRunner.err)
 	}
-	if gateErr == nil && len(report.Findings) == 0 && plannedRunner.next != len(commands) {
+	if gateErr == nil && !HasFindings(report) && plannedRunner.next != len(commands) {
 		return fmt.Errorf("merge gate completed before planned command %d of %d", plannedRunner.next+1, len(commands))
 	}
 	return gateErr
@@ -610,7 +628,7 @@ func samePolicyCommandCollections(expected, actual policy.Command) bool {
 
 func (engine *Engine) fullGate(ctx context.Context) (Report, error) {
 	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
+	if err != nil || HasFindings(doctor) {
 		return doctor, err
 	}
 	selection, err := engine.Repository.Select("all", nil)
@@ -618,11 +636,11 @@ func (engine *Engine) fullGate(ctx context.Context) (Report, error) {
 		return Report{}, err
 	}
 	checked := engine.Check(ctx, selection, "gate")
-	if len(checked.Findings) > 0 {
+	if HasFindings(checked) {
 		return engine.combine(doctor, checked), nil
 	}
 	verified, err := engine.verify(ctx, false, true)
-	if err != nil || len(verified.Findings) > 0 {
+	if err != nil || HasFindings(verified) {
 		return engine.combine(engine.combine(doctor, checked), verified), err
 	}
 	supply, err := engine.SupplyChain(ctx, false)
@@ -631,7 +649,7 @@ func (engine *Engine) fullGate(ctx context.Context) (Report, error) {
 
 func (engine *Engine) fullMergeGate(ctx context.Context, tests testpolicy.Plan) (Report, error) {
 	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
+	if err != nil || HasFindings(doctor) {
 		return doctor, err
 	}
 	selection, err := engine.Repository.Select("all", nil)
@@ -639,16 +657,16 @@ func (engine *Engine) fullMergeGate(ctx context.Context, tests testpolicy.Plan) 
 		return Report{}, err
 	}
 	checked := engine.Check(ctx, selection, "gate")
-	if len(checked.Findings) > 0 {
+	if HasFindings(checked) {
 		return engine.combine(doctor, checked), nil
 	}
 	verified, err := engine.testExactPlan(ctx, tests, selection, true)
-	if err != nil || len(verified.Findings) > 0 {
+	if err != nil || HasFindings(verified) {
 		return engine.combine(engine.combine(doctor, checked), verified), err
 	}
 	buildFindings := quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "build")
 	built := engine.finish(buildFindings, []string{"completed full build profile"})
-	if len(built.Findings) > 0 {
+	if HasFindings(built) {
 		return engine.combine(engine.combine(engine.combine(doctor, checked), verified), built), nil
 	}
 	supply, err := engine.SupplyChain(ctx, false)
@@ -657,23 +675,23 @@ func (engine *Engine) fullMergeGate(ctx context.Context, tests testpolicy.Plan) 
 
 func (engine *Engine) recommendedMergeGateWithTests(ctx context.Context, selection repository.Selection, tests testpolicy.Plan) (Report, error) {
 	doctor, err := engine.Doctor(ctx)
-	if err != nil || len(doctor.Findings) > 0 {
+	if err != nil || HasFindings(doctor) {
 		return doctor, err
 	}
 	checked := engine.Check(ctx, selection, "gate")
 	report := engine.combine(doctor, checked)
-	if len(checked.Findings) > 0 {
+	if HasFindings(checked) {
 		return report, nil
 	}
 	verified, err := engine.testExactPlan(ctx, tests, selection, true)
 	report = engine.combine(report, verified)
-	if err != nil || len(verified.Findings) > 0 {
+	if err != nil || HasFindings(verified) {
 		return report, err
 	}
 	buildFindings := quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "build")
 	built := engine.finish(buildFindings, []string{"completed applicable build profile"})
 	report = engine.combine(report, built)
-	if len(built.Findings) > 0 {
+	if HasFindings(built) {
 		return report, nil
 	}
 	supply, err := engine.SupplyChain(ctx, true)

@@ -348,6 +348,8 @@ func TestBehaviorReviewCLIExecutesPrepareProofFinalizeAndCheckpointWorkflow(t *t
 	}
 
 	assertBehaviorReviewCLIReceiptConfirmation(t, common)
+	assertBehaviorReviewCLIArchitecturePrerequisite(t, common)
+	acceptBehaviorReviewCLIArchitecture(t, repositoryRoot, common)
 	assertBehaviorReviewCLIMerge(t, common)
 	assertBehaviorReviewCLICheckpoint(t, common)
 	assertBehaviorReviewCLIArtifacts(t, repositoryRoot, []string{
@@ -542,7 +544,7 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
 	t.Helper()
 	root := t.TempDir()
 	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", `{
-  "version": 3,
+  "version": 4,
   "project": {"kind": "application", "capabilities": []},
   "scope": {},
   "quality": {},
@@ -553,9 +555,9 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
     {"name": "build", "provides": ["build"], "modules": ["application"], "argv": ["true"], "runOn": ["build"]},
     {"name": "monitor", "provides": ["security-monitoring"], "argv": ["true"], "runOn": ["security"]}
   ],
-  "tests": {"suites": [{
+  "tests": {"ownership": [], "suites": [{
     "name": "regression", "kind": "unit", "scope": "module", "modules": ["application"],
-    "cost": "quick", "argv": ["go", "test", "./..."], "runOn": ["focused", "recommended", "full"]
+    "cost": "quick", "paths": ["evidence_test.go"], "argv": ["go", "test", "./..."], "runOn": ["focused", "recommended", "full"]
   }, {
     "name": "full", "kind": "integration", "scope": "repository",
     "argv": ["go", "test", "./..."], "runOn": ["full"]
@@ -593,8 +595,19 @@ func commitBehaviorReviewCLICandidate(t *testing.T, root string) {
 	t.Helper()
 	writeBehaviorReviewCLIFile(t, root, "value.go", "package behaviorreviewcli\n\nfunc Value() string { return \"new\" }\n")
 	writeBehaviorReviewCLIFile(t, root, "evidence_test.go", "package behaviorreviewcli\n\nimport \"testing\"\n\nfunc TestValue(t *testing.T) {\n\tif Value() != \"new\" {\n\t\tt.Fatalf(\"Value() = %q\", Value())\n\t}\n}\n")
-	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go")
+	declareBehaviorReviewCLITestOwnership(t, root)
+	gitBehaviorReviewCLI(t, root, "add", "value.go", "evidence_test.go", ".code-polishy.json")
 	gitBehaviorReviewCLI(t, root, "commit", "-m", "candidate")
+}
+
+func declareBehaviorReviewCLITestOwnership(t *testing.T, root string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, ".code-polishy.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured := strings.Replace(string(data), `"ownership": []`, `"ownership": [{"paths":["evidence_test.go"],"module":"application","focusedSuite":"regression"}]`, 1)
+	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", configured)
 }
 
 func behaviorReviewCLIPolicyRoot(t *testing.T) string {

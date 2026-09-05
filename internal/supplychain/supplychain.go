@@ -197,7 +197,7 @@ func manifestModules(repo repository.Repository, files []string, manifest string
 		if !repo.IsExecutableSource(path) || outsideDirectory || !slices.Contains(languages, repo.Language(path)) {
 			continue
 		}
-		modules = append(modules, repo.ModuleNames(path)...)
+		modules = append(modules, repo.OwnerModuleNames(path)...)
 	}
 	sort.Strings(modules)
 	return slices.Compact(modules)
@@ -281,7 +281,7 @@ func firstClassContainerFileCoverageFindings(repo repository.Repository, path st
 	if artifactTargetBuildsDockerfile(repo.Config, path) {
 		return nil
 	}
-	owners := repo.ModuleNames(path)
+	owners := repo.OwnerModuleNames(path)
 	if len(owners) == 1 && hasArtifactSecurityTarget(repo.Config, owners[0]) {
 		return nil
 	}
@@ -314,7 +314,7 @@ func providerContainerFileCoverageFindings(repo repository.Repository, path stri
 }
 
 func containerFileOwner(repo repository.Repository, path string) (string, string, bool) {
-	owners := repo.ModuleNames(path)
+	owners := repo.OwnerModuleNames(path)
 	if len(owners) != 1 {
 		return "", "repository", false
 	}

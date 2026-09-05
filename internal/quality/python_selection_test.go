@@ -1,7 +1,6 @@
 package quality
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,13 +38,13 @@ func TestPythonQualityExpandsOnlyTheSelectedProject(t *testing.T) {
 		t.Fatalf("plan = %+v", plan)
 	}
 	if slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
-		return finding.Check == "policy.pythonDynamicReference" || finding.Check == "policy.pythonExternalAttribute"
+		return finding.Check == "policy.pythonReachability" || finding.Check == "policy.pythonExternalAttribute"
 	}) {
 		t.Fatalf("unselected declarations were validated: %+v", plan.findings)
 	}
 	command := pythonQualityRequiredCommand(t, pythonQualityCommandValues(plan.projects[0].commands), "policy-vulture-dead-code-root")
-	request := pythonVultureRequest{}
-	if err := json.Unmarshal(command.Stdin, &request); err != nil {
+	request, err := pythonVultureInputRequest(command.Stdin)
+	if err != nil {
 		t.Fatal(err)
 	}
 	paths := make([]string, 0, len(request.Files))
@@ -73,7 +72,7 @@ func TestPythonQualityValidatesDeclarationsWhenTheirConfigurationIsSelected(t *t
 			if len(plan.projects) != 0 || len(plan.findings) != 2 {
 				t.Fatalf("plan = %+v", plan)
 			}
-			for _, check := range []string{"policy.pythonDynamicReference", "policy.pythonExternalAttribute"} {
+			for _, check := range []string{"policy.pythonReachability", "policy.pythonExternalAttribute"} {
 				if !slices.ContainsFunc(plan.findings, func(finding policy.Finding) bool {
 					return finding.Check == check && finding.Path == configPath && strings.Contains(finding.Message, "no current contained Python project")
 				}) {
@@ -97,7 +96,7 @@ func TestPythonQualitySelectsConfiguredProjectWithoutSelectedSource(t *testing.T
 	references, _ := pythonVultureReferences(repo, project.project)
 	findings := pythonQualityOutputFindings(repo, project, pythonVultureQualityKind, pythonVultureOutput(t,
 		project.project.Files, nil, nil, []pythonVultureProblem{{ID: references[0].ID, Message: "symbol is stale or ambiguous"}}, ""))
-	if len(findings) != 1 || findings[0].Check != "policy.pythonDynamicReference" || findings[0].Path != policy.ConfigFilename {
+	if len(findings) != 1 || findings[0].Check != "policy.pythonReachability" || findings[0].Path != policy.ConfigFilename {
 		t.Fatalf("findings = %+v", findings)
 	}
 }
@@ -133,11 +132,11 @@ func TestPythonQualitySelectedManifestValidatesInferredReferencesWithoutRuntimeS
 func TestPythonQualitySelectedConfigurationValidatesReferencesWithoutRuntimeSource(t *testing.T) {
 	t.Parallel()
 	repo := pythonQualityRepository(t)
-	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{Project: "pyproject.toml", Module: "app", Symbol: "handler"}}
+	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{Kind: "target", Project: "pyproject.toml", Target: &policy.PythonDynamicTarget{Module: "app", Symbol: "handler"}}}
 	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
 	plan := pythonQualityPlanFor(repo, []string{policy.ConfigFilename})
-	if len(plan.projects) != 0 || len(plan.findings) != 1 || plan.findings[0].Check != "policy.pythonDynamicReference" ||
-		plan.findings[0].Subject != "config:pyproject.toml:app:handler" || !strings.Contains(plan.findings[0].Message, "no runtime .py definitions") {
+	if len(plan.projects) != 0 || len(plan.findings) != 1 || plan.findings[0].Check != "policy.pythonReachability" ||
+		plan.findings[0].Subject != pythonVultureConfigReferenceID(repo.Config.Scope.PythonDynamicReferences[0]) || !strings.Contains(plan.findings[0].Message, "no runtime .py definitions") {
 		t.Fatalf("plan = %+v", plan)
 	}
 }
@@ -145,10 +144,11 @@ func TestPythonQualitySelectedConfigurationValidatesReferencesWithoutRuntimeSour
 func pythonSelectionRepository(t *testing.T) repository.Repository {
 	t.Helper()
 	repo := pythonQualityRepository(t)
-	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{Project: "apps/other/pyproject.toml", Module: "other", Symbol: "missing"}}
+	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{Kind: "target", Project: "apps/other/pyproject.toml", Target: &policy.PythonDynamicTarget{Module: "other", Symbol: "missing"}}}
 	repo.Config.Scope.PythonExternalAttributes = []policy.PythonExternalAttribute{{
-		Project: "apps/plugin/pyproject.toml", Module: "plugin", Callable: "configure", Receiver: "settings",
-		Attribute: "output_path", Line: 4, ConsumerType: "external.runtime.Settings",
+		Project: "apps/plugin/pyproject.toml", Module: "plugin", Callable: "configure",
+		Receiver:  policy.PythonExternalReceiver{Kind: "parameter", Name: "settings", Binding: policy.PythonSourceLocation{Line: 3, Column: 15}, Type: "external.runtime.Settings"},
+		Attribute: "output_path", Write: policy.PythonSourceLocation{Line: 4, Column: 5},
 	}}
 	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
 	writeQualityFile(t, repo.Root, "src/app.py", "value = 1\n")

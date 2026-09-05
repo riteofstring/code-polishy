@@ -5,6 +5,12 @@ import _ "embed"
 //go:embed code-polishy.schema.json
 var CodePolishy []byte
 
+//go:embed code-polishy-supply-chain.schema.json
+var CodePolishySupplyChain []byte
+
+//go:embed code-polishy-python.schema.json
+var CodePolishyPython []byte
+
 //go:embed code-polishy-report.schema.json
 var CodePolishyReport []byte
 

@@ -82,7 +82,7 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 		}
 		command := policy.Command{Name: "gofmt-write", Argv: append([]string{repo.GoTool("gofmt")}, arguments...), Cwd: ".", TimeoutSeconds: 300}
 		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
-			findings = append(findings, commandFinding("format", command.Name, err))
+			findings = append(findings, commandFinding("quality.format", command.Name, err))
 		}
 	}
 	findings = append(findings, JavaScriptFormatWrite(ctx, repo, selection.Files)...)
@@ -95,8 +95,8 @@ func RunCommands(ctx context.Context, repo repository.Repository, selection repo
 }
 
 func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profiles ...string) []policy.Finding {
-	findings := []policy.Finding{}
-	for _, command := range CommandsForProfiles(repo, selection, profiles...) {
+	commands, findings := configuredCommandsForProfiles(repo, selection, profiles...)
+	for _, command := range commands {
 		if command.Adapter != nil {
 			profile := profiles[0]
 			for _, candidate := range profiles {
@@ -116,9 +116,19 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 }
 
 func CommandsForProfiles(repo repository.Repository, selection repository.Selection, profiles ...string) []policy.Command {
+	commands, _ := configuredCommandsForProfiles(repo, selection, profiles...)
+	return commands
+}
+
+func configuredCommandsForProfiles(repo repository.Repository, selection repository.Selection, profiles ...string) ([]policy.Command, []policy.Finding) {
 	commands := []policy.Command{}
+	findings := []policy.Finding{}
 	for _, command := range repo.Config.Checks {
 		if !sliceIntersects(command.RunOn, profiles) || !commandApplies(repo, command, selection) {
+			continue
+		}
+		if finding := generatedStyleExecutionFinding(repo, command); finding != nil {
+			findings = append(findings, *finding)
 			continue
 		}
 		command, runnable := prepareCommand(repo, command, selection, profiles...)
@@ -126,7 +136,7 @@ func CommandsForProfiles(repo repository.Repository, selection repository.Select
 			commands = append(commands, command)
 		}
 	}
-	return commands
+	return commands, findings
 }
 
 func NamedCommands(repo repository.Repository, names []string) ([]policy.Command, error) {
@@ -148,6 +158,9 @@ func NamedCommands(repo repository.Repository, names []string) ([]policy.Command
 		if index < 0 {
 			return nil, fmt.Errorf("unknown configured check %q", name)
 		}
+		if problem := generatedStyleCommandProblem(repo, repo.Config.Checks[index], files); problem != "" {
+			return nil, fmt.Errorf("%s", problem)
+		}
 		command, runnable := prepareCommand(repo, repo.Config.Checks[index], selection, repo.Config.Checks[index].RunOn...)
 		if !runnable {
 			return nil, fmt.Errorf("configured check %q has no selected files to execute", name)
@@ -165,6 +178,9 @@ func RunNamedCommands(ctx context.Context, repo repository.Repository, commandRu
 	files, err := repo.AllFiles()
 	if err != nil {
 		return nil, err
+	}
+	if inventory := repo.InspectGeneration(files); len(inventory.Findings) > 0 {
+		return inventory.Findings, nil
 	}
 	findings := []policy.Finding{}
 	for _, command := range commands {
@@ -231,10 +247,7 @@ func commandEligiblePath(repo repository.Repository, command policy.Command, pat
 	if !repo.IsGenerated(path) {
 		return true
 	}
-	if slices.Contains(command.Provides, "complexity") {
-		return false
-	}
-	return !(slices.Contains(profiles, "format") && slices.Contains(command.Provides, "format"))
+	return !styleOnlyCommand(command)
 }
 
 func formatSelection(repo repository.Repository, selection repository.Selection) repository.Selection {
@@ -275,10 +288,13 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
+	styleLanguages, _ := inventoryModuleLanguages(repo, editableFiles(repo, files))
 	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
+	findings = append(findings, repo.InspectGeneration(files).Findings...)
+	findings = append(findings, generatedStyleCoverageFindings(repo, files)...)
 	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)
 	findings = append(findings, customLanguageRuleFindings(repo, files)...)
-	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule)...)
+	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule, styleLanguages)...)
 	findings = append(findings, builtInProviderFindings(repo, files)...)
 	findings = append(findings, buildCoverageFindings(repo.Config, languagesByModule)...)
 	findings = append(findings, pack.CoverageFindings(repo, files)...)
@@ -318,7 +334,7 @@ func inventoryModuleLanguages(repo repository.Repository, files []string) (map[s
 			findings = append(findings, policy.Finding{Check: "policy.languageCoverage", Path: path, Subject: strings.Join(languages, ","), Message: "executable source matches more than one custom language rule"})
 			continue
 		}
-		owners := repo.ModuleNames(path)
+		owners := repo.OwnerModuleNames(path)
 		if len(owners) == 0 {
 			findings = append(findings, policy.Finding{Check: "policy.moduleCoverage", Path: path, Subject: "unowned", Message: "executable source does not belong to a module"})
 			continue
@@ -332,11 +348,14 @@ func inventoryModuleLanguages(repo repository.Repository, files []string) (map[s
 	return languagesByModule, findings
 }
 
-func adapterCoverageFindings(config policy.Config, languagesByModule map[string]map[string]bool) []policy.Finding {
+func adapterCoverageFindings(config policy.Config, languagesByModule, styleLanguages map[string]map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for module, languages := range languagesByModule {
 		for language := range languages {
 			for _, capability := range requiredCapabilities(language) {
+				if (capability == "format" || capability == "complexity") && !styleLanguages[module][language] {
+					continue
+				}
 				if builtInCapability(language, capability) {
 					continue
 				}
@@ -386,6 +405,9 @@ func builtInCoveredSource(repo repository.Repository, files []string, formatted 
 	example := ""
 	for _, path := range files {
 		if !commandCovers(repo, command, path) {
+			continue
+		}
+		if (capability == "format" || capability == "complexity") && repo.IsGenerated(path) {
 			continue
 		}
 		language := repo.Language(path)
@@ -563,7 +585,7 @@ func goToolChecks(ctx context.Context, repo repository.Repository, files []strin
 	if len(goFiles) == 0 {
 		return nil
 	}
-	findings := goFormatFindings(ctx, repo, goFiles)
+	findings := goFormatFindings(ctx, repo, editableFiles(repo, goFiles))
 	for _, path := range goFiles {
 		if !repo.IsGenerated(path) && !repo.IsData(path) {
 			findings = append(findings, goComplexityFindings(repo, path)...)
@@ -647,6 +669,9 @@ func goPackageToolCommands(repo repository.Repository, packages map[string]map[s
 }
 
 func goFormatFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
+	if len(files) == 0 {
+		return nil
+	}
 	arguments := []string{"-l"}
 	for _, path := range files {
 		arguments = append(arguments, filepath.Join(repo.Root, filepath.FromSlash(path)))
@@ -777,7 +802,7 @@ func pathMatchesCommand(repo repository.Repository, path string, command policy.
 	if len(command.Paths) > 0 {
 		return policy.MatchesAny(path, command.Paths)
 	}
-	for _, module := range repo.ModuleNames(path) {
+	for _, module := range repo.OwnerModuleNames(path) {
 		if slices.Contains(command.Modules, module) {
 			return true
 		}
@@ -885,7 +910,7 @@ func configuredCommandFailure(command policy.Command, err error) policy.Finding 
 	if slices.Contains(command.Provides, "security") || slices.Contains(command.Provides, "security-monitoring") {
 		return policy.Finding{Check: "policy.securityProvider", Path: "repository", Subject: command.Name, Message: err.Error()}
 	}
-	return commandFinding("command", command.Name, err)
+	return commandFinding("quality.command", command.Name, err)
 }
 
 func toolFinding(tool, message string) policy.Finding {

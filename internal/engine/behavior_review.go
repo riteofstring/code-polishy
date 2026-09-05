@@ -299,6 +299,10 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 	if execution.reviewReport != nil {
 		return execution.controller.finalize(engine, checkpointGateReport(*execution.reviewReport, execution.state), nil)
 	}
+	if report, err := execution.controller.checkArchitectureReview(ctx, engine, execution.selection.Base, execution.documentation); err != nil || HasFindings(report) {
+		report = withBehaviorReview(report, execution.controller.behaviorStatus)
+		return execution.controller.finalize(engine, checkpointGateReport(report, execution.state), err)
+	}
 	if len(execution.proofCommands) > 0 {
 		if replayErr := execution.controller.replayBehaviorReview(ctx, engine, execution.selection.Base, execution.plan.BehaviorReview.selection); replayErr != nil {
 			return engine.finalizeCheckpointReplayFailure(ctx, execution, replayErr)
@@ -312,7 +316,7 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 
 func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
 	report, gateErr := engine.documentationMergeGate(ctx, execution.selection)
-	if gateErr == nil && len(report.Findings) == 0 && len(execution.plan.Tests.Suites) > 0 {
+	if gateErr == nil && !HasFindings(report) && len(execution.plan.Tests.Suites) > 0 {
 		plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
 		plannedEngine := *engine
 		plannedEngine.Runner = plannedRunner
@@ -355,7 +359,7 @@ func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, executio
 
 func (engine *Engine) checkpointChecksAndTests(ctx context.Context, plannedEngine Engine, selection repository.Selection, tests testpolicy.Plan) (Report, error) {
 	report := plannedEngine.Check(ctx, selection, "check")
-	if len(report.Findings) != 0 {
+	if HasFindings(report) {
 		return report, nil
 	}
 	tested, err := plannedEngine.testExactPlan(ctx, tests, selection, true)
@@ -363,7 +367,7 @@ func (engine *Engine) checkpointChecksAndTests(ctx context.Context, plannedEngin
 }
 
 func checkpointPlannedRunnerError(commandRunner *mergeGatePlannedRunner, report Report, commands []MergeGateExecutionCommand) error {
-	if commandRunner.err != nil || len(report.Findings) != 0 || commandRunner.next == len(commands) {
+	if commandRunner.err != nil || HasFindings(report) || commandRunner.next == len(commands) {
 		return commandRunner.err
 	}
 	return fmt.Errorf("checkpoint gate completed before planned command %d of %d", commandRunner.next+1, len(commands))
@@ -389,7 +393,7 @@ func (engine *Engine) finalizeAcceptedCheckpointGate(ctx context.Context, contro
 	if report.BehaviorReview == nil {
 		report = withBehaviorReview(report, controller.behaviorStatus)
 	}
-	if gateErr != nil || len(report.Findings) != 0 {
+	if gateErr != nil || HasFindings(report) {
 		return controller.finalize(engine, report, gateErr)
 	}
 	prepared, err := controller.preparePassed(engine, &report)

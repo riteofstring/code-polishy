@@ -12,7 +12,8 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const runtimeSchemaURL = "https://code-polishy.dev/schema/code-polishy.schema.json"
+const configurationSchemaBase = "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/"
+const runtimeSchemaURL = configurationSchemaBase + "code-polishy.schema.json"
 
 var runtimeSchemaOnce sync.Once
 var runtimeSchema *jsonschema.Schema
@@ -51,12 +52,7 @@ func validateRuntimeSchema(data []byte) error {
 	runtimeSchemaOnce.Do(func() {
 		compiler := jsonschema.NewCompiler()
 		compiler.UseRegexpEngine(compileECMARegexp)
-		document, err := jsonschema.UnmarshalJSON(bytes.NewReader(policyschema.CodePolishy))
-		if err != nil {
-			runtimeSchemaError = err
-			return
-		}
-		if err := compiler.AddResource(runtimeSchemaURL, document); err != nil {
+		if err := addRuntimeSchemaResources(compiler); err != nil {
 			runtimeSchemaError = err
 			return
 		}
@@ -67,6 +63,26 @@ func validateRuntimeSchema(data []byte) error {
 	}
 	if err := runtimeSchema.Validate(document); err != nil {
 		return fmt.Errorf("configuration does not match shipped schema: %w", err)
+	}
+	return nil
+}
+
+func addRuntimeSchemaResources(compiler *jsonschema.Compiler) error {
+	for _, resource := range []struct {
+		url  string
+		data []byte
+	}{
+		{runtimeSchemaURL, policyschema.CodePolishy},
+		{configurationSchemaBase + "code-polishy-supply-chain.schema.json", policyschema.CodePolishySupplyChain},
+		{configurationSchemaBase + "code-polishy-python.schema.json", policyschema.CodePolishyPython},
+	} {
+		document, err := jsonschema.UnmarshalJSON(bytes.NewReader(resource.data))
+		if err != nil {
+			return err
+		}
+		if err := compiler.AddResource(resource.url, document); err != nil {
+			return err
+		}
 	}
 	return nil
 }

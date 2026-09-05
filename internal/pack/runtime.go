@@ -168,7 +168,7 @@ func providerConflictFindings(repo repository.Repository, files []string) []poli
 				continue
 			}
 			for _, capability := range commands[left].Provides {
-				if !slices.Contains(commands[right].Provides, capability) || !commandsOverlap(repo, files, commands[left], commands[right]) {
+				if !slices.Contains(commands[right].Provides, capability) || !commandsOverlap(repo, files, commands[left], commands[right], capability) {
 					continue
 				}
 				findings = append(findings, policy.Finding{Check: "policy.packProvider", Path: policy.ConfigFilename, Subject: capability, Message: fmt.Sprintf("%s and %s both claim authoritative ownership of matching source", commands[left].Name, commands[right].Name)})
@@ -178,8 +178,11 @@ func providerConflictFindings(repo repository.Repository, files []string) []poli
 	return findings
 }
 
-func commandsOverlap(repo repository.Repository, files []string, left, right policy.Command) bool {
+func commandsOverlap(repo repository.Repository, files []string, left, right policy.Command, capability string) bool {
 	for _, file := range files {
+		if !packCapabilitySelects(repo, capability, file) {
+			continue
+		}
 		leftPath := len(left.Paths) == 0 || policy.MatchesAny(file, left.Paths)
 		rightPath := len(right.Paths) == 0 || policy.MatchesAny(file, right.Paths)
 		if leftPath && rightPath && moduleCommandMatches(repo, left.Modules, file) && moduleCommandMatches(repo, right.Modules, file) {
@@ -193,7 +196,7 @@ func moduleCommandMatches(repo repository.Repository, modules []string, file str
 	if len(modules) == 0 {
 		return true
 	}
-	for _, owner := range repo.ModuleNames(file) {
+	for _, owner := range repo.OwnerModuleNames(file) {
 		if slices.Contains(modules, owner) {
 			return true
 		}
@@ -208,7 +211,7 @@ func manifestOwners(repo repository.Repository, files []string, manifest, langua
 		if repo.Language(file) != language || directory != "" && !strings.HasPrefix(file, directory+"/") {
 			continue
 		}
-		owners = append(owners, repo.ModuleNames(file)...)
+		owners = append(owners, repo.OwnerModuleNames(file)...)
 	}
 	return sortedUnique(owners)
 }

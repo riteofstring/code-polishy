@@ -47,6 +47,9 @@ dependencies = [
   "private-delta @ git+ssh://builder@git.example.test/fixture/private-delta.git@${delta_commit}#subdirectory=packages/delta",
 ]
 
+[project.scripts]
+adoption-api = "adoption_api.endpoint:endpoint"
+
 [build-system]
 requires = ["${build_requirement}"]
 build-backend = "hatchling.build"
@@ -93,6 +96,9 @@ name = "python-adoption-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+adoption-worker = "adoption_worker.worker:run"
 EOF
   write_file "${target}/apps/worker/uv.lock" <<'EOF'
 version = 1
@@ -222,22 +228,10 @@ python_adoption_write_config() {
   local target="$1"
   write_file "${target}/.code-polishy.json" <<'EOF'
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {
     "entryPoints": ["src/adoption_api/endpoint.py"],
-    "pythonDynamicReferences": [
-      {
-        "project": "pyproject.toml",
-        "module": "adoption_api.endpoint",
-        "symbol": "endpoint"
-      },
-      {
-        "project": "apps/worker/pyproject.toml",
-        "module": "adoption_worker.worker",
-        "symbol": "run"
-      }
-    ],
     "data": [
       "data/catalog-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json",
       "data/catalog-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210.yaml"
@@ -277,6 +271,7 @@ python_adoption_write_config() {
     }
   ],
   "tests": {
+    "ownership": [],
     "suites": [
       {
         "name": "foundation-unit",
@@ -345,6 +340,32 @@ python_adoption_expect_data_preserved() {
   if ! cmp -s "${target}/${yaml_path}" "${yaml_snapshot}"; then
     fail "python-adoption: format changed hand-written ${yaml_path}"
   fi
+}
+
+python_adoption_accept_architecture() {
+  local target="$1" base="$2" python="$3"
+  expect_pass "${target}" "python-adoption architecture packet" architecture-review prepare --base "${base}" --format json
+  "${python}" - "${target}" "${output}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+prepared = json.loads(pathlib.Path(sys.argv[2]).read_text())["architecturePreparation"]
+packet = json.loads((root / prepared["packetPath"]).read_text())
+index, source = next((index, source) for index, source in enumerate(packet["sources"]) if source["content"].strip())
+result = {
+    "protocol": packet["protocol"], "reviewId": packet["reviewId"],
+    "base": packet["base"], "candidate": packet["candidate"],
+    "topology": packet["topology"]["identity"], "decision": "accept",
+    "rationale": "The fixture assigns its application and worker operations to explicit project owners.",
+    "evidence": [{"pointer": f"/sources/{index}/content", "quote": source["content"],
+                  "rationale": "The unchanged candidate source supplies the fixture's worker implementation."}],
+    "findings": [],
+}
+(root / prepared["resultPath"]).write_text(json.dumps(result) + "\n")
+PY
+  expect_pass "${target}" "python-adoption architecture receipt" architecture-review finalize --base "${base}"
 }
 
 exercise_python_adoption_fixture() {
@@ -468,6 +489,10 @@ EOF
   if ! grep -Fxq "test.sh" "${command_log}"; then
     fail "python-adoption: changed tests ran no selected target suite"
   fi
+  : >"${command_log}"
+  expect_findings "${target}" "python-adoption missing architecture review" merge-gate --base "${base}"
+  expect_finding "python-adoption missing architecture review" "policy.architectureReview" ".code-polishy.json" "required"
+  python_adoption_accept_architecture "${target}" "${base}" "${host_python}"
   : >"${command_log}"
   expect_pass "${target}" "python-adoption selected merge gate" merge-gate --base "${base}"
   grep -Fqx "MERGE GATE: RECOMMENDED against ${base}" "${output}" ||

@@ -14,17 +14,25 @@ import (
 const MaximumBehaviorReviewFeatures = 128
 
 func NormalizeFeatureAlias(value string) (string, error) {
-	if !utf8.ValidString(value) || len(value) > 256 {
-		return "", fmt.Errorf("feature name or alias must be UTF-8 text of at most 256 bytes")
+	return normalizedTextIdentity(value, 256)
+}
+
+func NormalizeCapabilityQuery(value string) (string, error) {
+	return normalizedTextIdentity(value, 1024)
+}
+
+func normalizedTextIdentity(value string, maximum int) (string, error) {
+	if !utf8.ValidString(value) || len(value) > maximum {
+		return "", fmt.Errorf("text identity must be UTF-8 text of at most %d bytes", maximum)
 	}
 	for _, character := range value {
 		if (unicode.IsControl(character) || unicode.In(character, unicode.Cf)) && !unicode.IsSpace(character) {
-			return "", fmt.Errorf("feature name or alias contains an unsupported control character")
+			return "", fmt.Errorf("text identity contains an unsupported control character")
 		}
 	}
 	identity := strings.Join(strings.Fields(cases.Fold().String(norm.NFKC.String(value))), " ")
-	if identity == "" || len(identity) > 256 {
-		return "", fmt.Errorf("normalized feature name or alias must contain at most 256 UTF-8 bytes")
+	if identity == "" || len(identity) > maximum {
+		return "", fmt.Errorf("normalized text identity must contain at most %d UTF-8 bytes", maximum)
 	}
 	return identity, nil
 }

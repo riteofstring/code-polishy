@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
@@ -287,6 +288,9 @@ func (prepared *PreparedFinalization) Commit() (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	if len(data) > maximumReportBytes {
+		return Report{}, fmt.Errorf("%w: gate run report exceeds the %d byte limit", ErrInvalidArtifact, maximumReportBytes)
+	}
 	if err := writeArtifactAtomic(prepared.run.report, data); err != nil {
 		return Report{}, err
 	}
@@ -373,9 +377,12 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 		return Report{}, err
 	}
 	report := Report{
-		Version: Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256, ExecutionID: run.executionID,
+		SourceDependencyGraph: sourcegraph.Clone(options.SourceDependencyGraph),
+		Version:               Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256, ExecutionID: run.executionID,
 		Status: options.Status, StartedAt: run.startedAt, CompletedAt: completedAt,
 		Commands: commands, Findings: cloneFindings(options.Findings), Notes: cloneStrings(options.Notes),
+		Suppressed: cloneSuppressedOutcomes(options.Suppressed), Assessed: cloneVulnerabilityOutcomes(options.Assessed),
+		ReleaseAges:  cloneReleaseAgeOutcomes(options.ReleaseAges),
 		TestEvidence: cloneTestEvidence(options.TestEvidence), TestDiagnostics: cloneTestDiagnostics(options.TestDiagnostics),
 		SuiteSatisfactions: satisfactions,
 		BehaviorReview:     cloneBehaviorReview(options.BehaviorReview),

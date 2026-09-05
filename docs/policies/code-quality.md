@@ -18,11 +18,13 @@ The default policy is:
 | File length (maximum lines)                            |      1,000 | 1,500 |
 
 Generated, vendored, lock, and build-output files are excluded from
-edit-oriented text and complexity budgets. Generated executable source still
-receives format validation, syntax/compiler, lint, dead-code, coverage, and
-module-direction checks, while format writers leave generator-owned bytes
-alone. Project-specific generated paths belong in `scope.generated`; do not
-hide production code in that category.
+edit-oriented text and complexity budgets. Generated output is exempt from
+format validation and cosmetic style rules, and format writers preserve its
+bytes. Generated executable source retains syntax/compiler, semantic lint,
+security, dead-code, coverage, and module-direction checks. Project-specific
+generated paths belong in `scope.generated`, and every generated executable
+requires an exact producer declaration. Classification alone cannot exempt
+handwritten production code from policy.
 
 Hand-written structured data is a separate governed category. `scope.data`
 keeps its identity-sensitive bytes out of style formatting and formatting
@@ -86,6 +88,9 @@ Formatting is deterministic and has separate read and write operations.
 - A writer must not be guessed for an unknown language.
 - Text source ends in a newline and contains no trailing spaces or tabs.
 
+These style requirements apply to handwritten source. Generated outputs and
+declared data are protected in both check and write operations.
+
 Run Go through the repository's pinned wrapper when one exists. Python uses the
 policy-owned Ruff module.
 
@@ -101,6 +106,86 @@ outside the repository, a file that is not UTF-8 text, or one past the size
 bound — is a specific coverage finding, never a silent pass. A
 target without JavaScript or TypeScript launches the bundle only when Markdown
 is selected and formats its remaining file types with configured providers.
+
+### Generated producers
+
+Declare each generated executable's authoritative inputs and exact commands
+in `generation.producers`:
+
+```json
+{
+  "generation": {
+    "producers": [
+      {
+        "name": "contracts",
+        "inputs": ["source/contracts/**", "scripts/contracts/**"],
+        "outputs": ["app/client.generated.ts"],
+        "generate": {
+          "argv": ["node", "scripts/contracts/generate.mjs"],
+          "cwd": "."
+        },
+        "verify": {
+          "argv": ["node", "scripts/contracts/verify.mjs"],
+          "cwd": "."
+        }
+      }
+    ]
+  }
+}
+```
+
+Producer names are unique. Each current output has exactly one producer and
+must belong to generated scope. Inputs and outputs are contained governed
+regular files; patterns must match current files and may not overlap within a
+producer. Duplicate owners, self-consumption, producer cycles, missing files,
+symlinks, escaping paths, and handwritten outputs fail configuration coverage.
+The inventory permits 64 producers, 64 patterns per input/output list, and
+8,192 matched files per list, with a bounded aggregate matching budget.
+
+Commands use literal argument arrays, a contained working directory, optional
+environment variable names, and a timeout. The default directory is `.` and
+the default timeout is 900 seconds; the maximum is 3,600 seconds. Each argument
+is bounded to 4,096 bytes and a command has at most 128 arguments. A declaration
+does not schedule either command: `check`, `format`, and `doctor` never run a
+producer or its verification merely because the mapping exists.
+
+`format` reports actual rewritten, unchanged, and protected files. A selection
+containing only valid generated outputs succeeds with zero rewrites, names
+their producers, and identifies those outputs as untouched and style-exempt.
+Content evidence is bounded to 64 MiB per selected file. A protected file that
+changes during formatting fails write-protection coverage. Formatting does not
+establish security or reproducibility evidence.
+
+Generated-file defects name the producer, authoritative inputs, and exact
+generation and verification commands. Repair the inputs and regenerate; use
+the declared verification workflow to detect drift. Missing command executables
+or working directories appear as prerequisites when they can be established.
+The repair path never calls an unrelated formatter or recommends editing the
+generated output directly.
+
+Go, JavaScript, managed file-list formatters, and capability-specific pack
+adapters exclude generated output from style operations. Non-style adapters
+retain it. An opaque configured command that combines style with semantic or
+security checks, or cannot bound its formatting inputs, fails
+`policy.generatedStyleCoverage` when it covers generated output. Declare
+separate providers with bounded inputs; that failure cannot serve as a clean
+security result or a waiver.
+
+Ruff still parses and analyzes generated Python. Its cosmetic whitespace,
+blank-line, quote, docstring, naming, import-order, and formatting-comma rules
+are exempt. Syntax, undefined-name, security, timezone, NumPy, namespace-package,
+and suspicious bare-tuple diagnostics remain applicable. Complexity is a
+separate exempt operation, and Vulture and type checking retain generated
+inputs.
+
+An explicitly reusable test that verifies or consumes a generated output binds
+its receipt to the producer's current input/output files, transitive producer
+inputs, contained command files, command declarations, environment identities,
+dependency/control files, and policy toolchain identities. Changes invalidate
+reuse. A producer whose tool inputs cannot be bounded prevents reuse; its
+declaration never authorizes an additional test run. Declare generator
+implementations, templates, and other authoritative inputs completely so a
+verification workflow has the same source of truth as generation.
 
 ### Hand-written structured data
 
@@ -357,32 +442,100 @@ and `computed_field`, plus Pydantic v1 `validator` and `root_validator`.
 imports, and unresolved aliases receive no exemption. The analyzer reads syntax
 only; it never imports or executes target Pydantic.
 
-For a symbol reached dynamically through another protocol, use optional
-`scope.pythonDynamicReferences`. Each item requires all three exact fields,
-with no wildcards; a class method such as an HTTP redirect hook uses an exact
-`ClassName.method_name` symbol:
+TypedDict inference uses the shared `python-facts/v3` AST contract. Exact
+`typing.TypedDict` and `typing_extensions.TypedDict` imports, aliases, local
+re-exports, class inheritance, and functional definitions with a literal field
+mapping establish field identities. An annotated receiver, exact constructor,
+or local receiver alias followed by `value["literal_key"]` preserves only that
+declared field, including the original declaration of an inherited field.
+Another type's same-named key stays subject to dead-code analysis.
+
+Dynamic keys, `Any`, union receivers, wildcard imports, unresolved or rebound
+receivers, and type objects provide no exemption. Dictionary methods such as
+`get`, `pop`, and `setdefault`, iteration, unpacking, and serialization do not
+establish literal-key evidence. Duplicate definitions or keys, escaping
+re-exports, unsupported TypedDict definitions, or missing compact facts produce
+one non-suppressible `architecture.pythonFactsCoverage` failure for the project.
+Dependent dead-code results are withheld when the required fact set fails.
+
+The source coordinator partitions complete files into bounded requests and
+resolves compact type facts over their validated union. TypedDict declarations
+and reads, Pydantic model bases and subclasses, and decorator re-exports may
+live in different partitions. Pydantic resolution bounds inheritance and alias
+depth to 128 and reference visits to two million. It returns exact source member
+spans; substituted or duplicate output members fail fact validation.
+Type resolution streams one compact
+source record at a time, checks exact source coverage, and binds the resolved
+evidence identity to the current source digests and fact records. Vulture uses
+the same extractor and resolver on its existing ASTs without executing target
+Python. Its project boundary allows at most 65,536 sources, 512 MiB of source,
+two million AST nodes, and 256 MiB of compact type facts; one source is limited
+to 2 MiB and one compact record or response to 16 MiB. Exceeding a limit fails
+coverage.
+
+The compact fact set also retains source calls, their lexical scopes, exact
+argument and keyword forms, and UTF-8 byte locations. Assignment bindings name
+the location of their value expression, allowing consumer analysis to follow
+a particular loaded value. Calls and their argument collections participate
+in project fact validation and identity; each argument's canonical text is
+limited to 64 KiB.
+
+For a dynamically loaded local object, `scope.pythonDynamicReferences` requires
+one consumer-bound `target` or `registry` declaration. Both forms identify the
+project and an exact `pkgutil.resolve_name` call inside a governed callable:
 
 ```json
 {
-  "scope": {
-    "pythonDynamicReferences": [
-      {
-        "project": "services/api/pyproject.toml",
-        "module": "service.plugins",
-        "symbol": "load"
-      }
-    ]
+  "kind": "target",
+  "project": "pyproject.toml",
+  "target": { "module": "service.plugins", "symbol": "Plugin.on_event" },
+  "consumer": {
+    "kind": "callsite",
+    "importer": "src/service/loader.py",
+    "module": "service.loader",
+    "callable": "load",
+    "site": { "line": 3, "column": 12 },
+    "callee": "pkgutil.resolve_name",
+    "shape": "module-object-call/v1",
+    "argument": "'service.plugins:Plugin.on_event'",
+    "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   }
 }
 ```
 
-`project` is a canonical repository-relative contained-project manifest path;
-`module` and `symbol` are exact Python identifier chains. Duplicates, globs, and
-other patterns are invalid. Every declared or inferred reference must resolve to
-one current project, module, and symbol; a stale or ambiguous reference fails
-rather than becoming a broad ignore.
-`scope.entryPoints` remains a path-level reachability declaration and cannot
-substitute for this exact Python symbol contract.
+Use the current SHA-256 of the consumer source and the argument's canonical
+Python spelling. A target call has one literal `module:object` argument and
+no keywords. Imports and aliases must resolve exactly to the named loader;
+shadowing, wildcard imports, changed source, moved calls, changed arguments,
+and missing or ambiguous targets fail with `policy.pythonReachability`.
+Targets and class members resolve within the same project through exact aliases
+and re-exports. Only the resolved definitions are retained.
+
+A registry declaration replaces `target` with `"kind": "registry"` and
+`"registry": {"path": "src/registry.json", "jsonPointer": "/plugins"}`.
+It retains the same exact consumer fields. The supported reader is
+`json.loads(Path('src/registry.json').read_text(encoding='utf-8'))['plugins'][name]`
+passed directly to `resolve_name`, where `name` is one current parameter of the
+containing callable. Literal path components are relative to the project root;
+configuration paths remain repository-relative. Fixed structural selectors may
+select one string; a final parameter index selects the values of a nonempty
+JSON object or array. The engine derives current targets from that input.
+Changing the registry changes its target evidence without copying symbols into
+configuration. Selecting the registry itself checks the consumer project.
+The loader also needs independent
+[architecture evidence](architecture.md) for its local module dependencies;
+reachability cannot authorize those imports.
+
+Registry inputs must be governed, handwritten regular files, contained in the
+same project, and no larger than 2 MiB. Symbolic links in the path are rejected,
+and inputs must remain stable while being read. Duplicate JSON keys, unsupported JSON constants,
+missing selectors, empty collections, or invalid module-object strings fail.
+JSON has a depth limit of 64 and an item limit of 131,072. Derived evidence
+records every target and its exact definitions, source-fact identity, and input
+bytes. It cannot be suppressed or replaced by a path-level entry-point list.
+PEP 621 entry points, build hooks, and proven Pydantic contracts remain inferred;
+a configured target cannot repeat an already inferred consumer.
+No setup or remediation step generates these declarations from dead-code output.
 
 For an attribute written on a configuration object that an external runtime
 reads later, use `scope.pythonExternalAttributes` instead of preserving every
@@ -396,21 +549,47 @@ same-named attribute:
         "project": "pyproject.toml",
         "module": "service.runtime",
         "callable": "configure",
-        "receiver": "settings",
+        "receiver": {
+          "kind": "parameter",
+          "name": "settings",
+          "binding": { "line": 16, "column": 15 },
+          "type": "vendor.runtime.Settings"
+        },
         "attribute": "timeout",
-        "line": 18,
-        "consumerType": "vendor.runtime.Settings"
+        "write": { "line": 18, "column": 5 }
       }
     ]
   }
 }
 ```
 
-The declaration resolves one current module and callable, an exactly annotated
-receiver parameter whose qualified type is external to the project, and one
-`receiver.attribute` write at the exact line. Only that assignment is treated
-as externally consumed. Wildcards, local or unresolved consumer types, stale
-lines, ambiguous callables, and adjacent unread attributes remain findings.
+Each declaration binds one current module and callable and one attribute
+assignment. Source locations use one-based lines and UTF-8 byte columns, matching
+the carried Python AST. `receiver.kind` selects one exact contract:
+
+- `parameter` names an annotated parameter and its signature location.
+- `local` names an initialized, annotated local binding and its assignment
+  location. The binding must be a direct statement in the callable.
+- `self` names the first positional parameter of an undecorated instance method.
+  It replaces `type` with `consumer`, whose `kind` is `base`, `protocol`,
+  `decorator`, or `registration`, whose `qualified` value names an exact imported
+  external contract, and whose `site` gives that contract's line and column.
+
+Parameter and local annotations resolve through exact imports, aliases, and
+local re-exports to `type`. A self consumer identifies one direct external base
+or protocol on the enclosing class, one bare external class decorator, or one
+module-level external registration call with that class as its sole argument.
+For example, `register(Runtime)` binds the call's location and the imported
+qualified identity of `register`. No target imports or decorators execute during
+analysis.
+
+Only the identified write is treated as externally consumed. A receiver rebound
+before the write, a conditional binding, an unresolved or local-only type,
+`Any`, a union annotation, a wildcard import, or a stale binding or consumer
+fails the declaration. Rebinding after a direct write does not preserve later
+assignments. Two same-named writes on one line fail because Vulture cannot
+distinguish those occurrences. Nested receiver chains and dictionary operations
+do not satisfy this contract. The schema rejects the old flat receiver object.
 
 `ty` runs with the release-owned configuration and structured output. Each
 diagnostic becomes one `quality.typecheck` finding with the contained path,

@@ -204,7 +204,7 @@ func (repo Repository) moduleSelection(names []string) (Selection, error) {
 	for _, name := range modules {
 		matched := []string{}
 		for _, path := range allFiles {
-			if slices.Contains(repo.ModuleNames(path), name) {
+			if slices.Contains(repo.OwnerModuleNames(path), name) {
 				matched = append(matched, path)
 			}
 		}

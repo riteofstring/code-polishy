@@ -33,7 +33,7 @@ func TestOpenResolvesExactCommunityPackAndDoctorUsesItsCoverage(t *testing.T) {
 	}
 	root := t.TempDir()
 	writeEngineFile(t, root, "src/main.fixture", "good\n", 0o600)
-	config := fmt.Sprintf(`{"version":3,"project":{"kind":"content"},"packs":[{"name":%q,"version":%q,"digest":%q}],"modules":[{"name":"app","paths":["src/**"]}],"tests":{"suites":[{"name":"app-test","kind":"unit","scope":"module","modules":["app"],"argv":["go","test","./..."]},{"name":"full","kind":"contract","scope":"repository","argv":["go","test","./..."]}]}}`, identity.Name, identity.Version, identity.Digest)
+	config := fmt.Sprintf(`{"version":4,"project":{"kind":"content"},"packs":[{"name":%q,"version":%q,"digest":%q}],"modules":[{"name":"app","paths":["src/**"]}],"tests":{"ownership":[],"suites":[{"name":"app-test","kind":"unit","scope":"module","modules":["app"],"argv":["go","test","./..."]},{"name":"full","kind":"contract","scope":"repository","argv":["go","test","./..."]}]}}`, identity.Name, identity.Version, identity.Digest)
 	writeEngineFile(t, root, policy.ConfigFilename, config, 0o600)
 	policyEngine, err := Open(root, root, "")
 	if err != nil {

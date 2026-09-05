@@ -185,14 +185,19 @@ an apparently valid empty result. See
 
 ## 5. Define scope narrowly
 
-- `scope.generated` remains discoverable. Generated executable source receives
-  format validation, syntax/compiler, lint, dead-code, tool-coverage, and
-  dependency-direction checks, while `format` never rewrites generator-owned
-  bytes. It skips only edit-oriented text and complexity budgets.
-- `scope.tests` adds repository-specific test locations to the built-in naming
-  conventions. Every governed executable test must still belong to exactly one
-  module and be included by that module's quick focused suite. Its imports do
-  not create production dependency edges.
+- `scope.generated` remains discoverable. Every generated executable output
+  requires exactly one `generation.producers` owner with its source inputs and
+  generation and verification commands. Generated output is exempt from
+  formatting and cosmetic style rules; `format` preserves its bytes and reports
+  it as protected. Syntax/compiler, semantic lint, security, dead-code,
+  tool-coverage, dependency-direction, and reproducibility checks remain
+  applicable. See [Generated producers](policies/code-quality.md#generated-producers).
+- `tests.paths` adds repository-specific test locations to the built-in naming
+  conventions. `tests.ownership` assigns every governed executable test to one
+  production module and its primary quick focused suite. That suite explicitly
+  includes the test in its execution paths. Production module paths do not
+  assign test ownership, and test imports do not create production dependency
+  edges.
 - `scope.generatedJavaScript` gives generated JavaScript or TypeScript the
   package context of one real source package without a fake manifest or lock in
   the output tree:
@@ -249,20 +254,18 @@ an apparently valid empty result. See
   directory, and `*.config.*` modules beside a package manifest are already
   entry points; declare only what those conventions cannot cover, and declare it
   exactly rather than as a broad pattern.
-- `scope.pythonDynamicReferences` is separate from path-level
-  `scope.entryPoints`. It declares only a Python symbol Vulture cannot reach
-  through imports or inferred PEP 621 `project.scripts`,
-  `project.gui-scripts`, or `project.entry-points.*`. Each item is an exact
-  `{project,module,symbol}` object: all fields are required, `project` is the
-  canonical repository-relative contained-project `pyproject.toml` path, and
-  `module` and `symbol` are identifier chains; wildcards are not allowed. A
-  stale or ambiguous reference fails instead of preserving a symbol broadly.
+- `scope.pythonDynamicReferences` requires a consumer-bound `target` or
+  `registry`. Each declaration identifies its project, exact loader callsite,
+  containing callable, argument, and source digest. A target names one object;
+  a registry derives its current objects from one governed JSON input and
+  structural selector connected to the consumer. Missing, stale, ambiguous,
+  or disconnected evidence fails. Inferred entry points and Pydantic contracts
+  remain inferred. Never generate a reachability inventory from Vulture output.
   [Code Quality](policies/code-quality.md#python-ruff-vulture-and-ty) owns the
-  full Python reachability contract.
+  supported consumer shapes and complete contract.
 - `scope.pythonExternalAttributes` models an exact assignment to a typed object
   that an external runtime reads later. Each item names the project, module,
-  containing callable, receiver parameter, attribute, source line, and qualified
-  external consumer type:
+  containing callable, exact receiver binding, attribute, and write location:
 
   ```json
   {
@@ -272,19 +275,26 @@ an apparently valid empty result. See
           "project": "pyproject.toml",
           "module": "service.runtime",
           "callable": "configure",
-          "receiver": "settings",
+          "receiver": {
+            "kind": "parameter",
+            "name": "settings",
+            "binding": { "line": 16, "column": 15 },
+            "type": "vendor.runtime.Settings"
+          },
           "attribute": "timeout",
-          "line": 18,
-          "consumerType": "vendor.runtime.Settings"
+          "write": { "line": 18, "column": 5 }
         }
       ]
     }
   }
   ```
 
-  The receiver must have that exact external type annotation and the named line
-  must contain the exact attribute write. Wildcards, stale sites, local consumer
-  types, and broad name-based suppression are rejected; adjacent attributes
+  Use `kind: "local"` for an initialized annotated local and bind its declaration
+  location. A `self` receiver instead requires an exact external base, protocol,
+  class decorator, or registration consumer; merely naming a class is
+  insufficient. The [receiver contract](policies/code-quality.md#python-ruff-vulture-and-ty)
+  defines the supported source shapes. Stale locations, ambiguous rebinding,
+  local-only types, and broad suppression are rejected; adjacent assignments
   remain visible to Vulture.
 
 - `scope.development` names governed source that never ships: build and tool
@@ -384,9 +394,8 @@ whole package tree a file belongs to; a target pins and installs no analyzer.
 Python dead code comes only from Vulture. Its version-matched standard-library
 whitelists, in-tree PEP 517 hooks, PEP 621 entry points, and statically proven
 Pydantic model fields, configuration, validators, serializers, and computed
-fields are inferred. Use exact `scope.pythonDynamicReferences` only for
-remaining dynamic symbols rather than substituting `scope.entryPoints` or a
-Vulture ignore. This is imported policy, not a target-authored adapter.
+fields are inferred. Use consumer-bound `scope.pythonDynamicReferences` for
+remaining dynamic symbols with a proven loader or registry. This is imported policy, not a target-authored adapter.
 
 An incorrect activation may be disabled only by an exact-root
 `policyModules.overrides` entry with `mode: "disabled"`, `reason`, `owner`, and

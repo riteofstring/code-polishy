@@ -150,6 +150,23 @@ EOF
 
 Run the installed task-session supervisor.
 EOF
+  write_file "${source_root}/docs/capabilities.json" <<'EOF'
+{
+  "protocol": "release-capabilities/v1",
+  "capabilities": [
+    {
+      "name": "check",
+      "kind": "command",
+      "description": "Check repository policy.",
+      "aliases": [],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/agent-workflows.md"]
+    }
+  ]
+}
+EOF
   write_file "${source_root}/docs/catalog.json" <<'EOF'
 {
   "version": 1,
@@ -471,7 +488,7 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
   fail "the host-independent digest is the installed-bytes digest"
 
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
-  docs/installation.md docs/agent-workflows.md docs/catalog.json schema/code-polishy.schema.json \
+  docs/installation.md docs/agent-workflows.md docs/catalog.json docs/capabilities.json schema/code-polishy.schema.json \
   schema/code-polishy-report.schema.json schema/sarif-schema-2.1.0.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
   artifact-security/scanner-policy.json \
@@ -499,7 +516,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
   fail "the installed release carried retired shell workflow supervisors"
-for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-workflows.md docs/catalog.json; do
+for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-workflows.md docs/catalog.json docs/capabilities.json; do
   cmp -s "${source_root}/${documentation}" "${release}/${documentation}" ||
     fail "the release did not carry the exact ${documentation} documentation"
 done

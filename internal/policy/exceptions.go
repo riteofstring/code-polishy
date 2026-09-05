@@ -11,6 +11,10 @@ func ApplyExceptions(findings []Finding, exceptions []Exception, now time.Time) 
 	suppressed := []Suppressed{}
 	for _, finding := range findings {
 		matched := false
+		if !suppressibleCheck(finding.Check) {
+			kept = append(kept, finding)
+			continue
+		}
 		for _, exception := range exceptions {
 			if exception.Expires.Before(currentDate) {
 				continue

@@ -142,7 +142,7 @@ func pythonProjectAtRoot(inventory repository.PythonProjectInventory, root strin
 func modulesForPythonFiles(repo repository.Repository, files []string) []string {
 	modules := []string{}
 	for _, path := range files {
-		modules = append(modules, repo.ModuleNames(path)...)
+		modules = append(modules, repo.OwnerModuleNames(path)...)
 	}
 	sort.Strings(modules)
 	return slices.Compact(modules)

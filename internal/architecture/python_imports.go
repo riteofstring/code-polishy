@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
@@ -18,10 +20,13 @@ type pythonImportReference struct {
 	Module  string
 	Names   []string
 	Line    int
+	Column  int
+	Kind    string
 	Literal bool
 }
 
 type pythonComputedImportFact struct {
+	Kind            string
 	Callee          string
 	Callable        string
 	Line            int
@@ -45,6 +50,21 @@ type pythonSourceFact struct {
 	SHA256          string
 	Imports         []pythonImportReference
 	ComputedImports []pythonComputedImportFact
+	ObjectImports   []pythonfacts.ObjectImport
+	ExternalImports map[pythonfacts.SourceLocation]bool
+}
+
+type pythonProjectFacts struct {
+	sources        map[string]pythonSourceFact
+	input          sourcegraph.FactInput
+	external       []sourcegraph.ExternalComposition
+	pluginFindings []policy.Finding
+}
+
+type pythonResolution struct {
+	identity string
+	external []sourcegraph.ExternalComposition
+	findings []policy.Finding
 }
 
 type pythonModuleIndex struct {
@@ -91,47 +111,84 @@ func pythonConflictingModulePaths(paths []string) bool {
 	return len(locations) > 1
 }
 
-func pythonSourceFacts(ctx context.Context, repo repository.Repository, sources []string) (map[string]pythonSourceFact, error) {
+func pythonSourceFacts(ctx context.Context, repo repository.Repository, project repository.PythonProject, sources []string) (pythonProjectFacts, error) {
 	inputs := make([]pythonfacts.Input, 0, len(sources))
 	data := make(map[string][]byte, len(sources))
 	for _, source := range sources {
 		contents, err := repo.Read(source)
 		if err != nil {
-			return nil, fmt.Errorf("read %s for python-facts: %w", source, err)
+			return pythonProjectFacts{}, fmt.Errorf("read %s for python-facts: %w", source, err)
 		}
 		data[source] = contents
 		inputs = append(inputs, pythonfacts.Input{Path: source, Source: string(contents)})
 	}
-	python := repo.PythonTool()
-	if !filepath.IsAbs(python) {
-		var err error
-		python, err = pythonfacts.DefaultInterpreter()
-		if err != nil {
-			return nil, err
-		}
-	} else if _, err := os.Stat(python); err != nil {
-		python, err = pythonfacts.DefaultInterpreter()
-		if err != nil {
-			return nil, err
-		}
+	python, err := pythonFactInterpreter(repo)
+	if err != nil {
+		return pythonProjectFacts{}, err
 	}
 	response, err := pythonfacts.AnalyzeProjectSources(ctx, python, inputs)
 	if err != nil {
-		return nil, err
+		return pythonProjectFacts{}, err
 	}
 	result := make(map[string]pythonSourceFact, len(sources))
-	for index, source := range sources {
-		fact := response.Sources[index]
+	types := make([]pythonfacts.TypeModule, 0, len(response.Sources))
+	for _, fact := range response.Sources {
+		source := fact.Path
 		if fact.Error != "" {
-			return nil, fmt.Errorf("parse %s: %s", source, fact.Error)
+			return pythonProjectFacts{}, fmt.Errorf("parse %s: %s", source, fact.Error)
 		}
 		converted, err := pythonSourceFactFromAdapter(fact, data[source])
 		if err != nil {
-			return nil, fmt.Errorf("parse %s facts: %w", source, err)
+			return pythonProjectFacts{}, fmt.Errorf("parse %s facts: %w", source, err)
 		}
 		result[source] = converted
+		module, packageName := repository.PythonModuleName(project, source)
+		types = append(types, pythonfacts.TypeModule{Path: source, Module: module, Package: packageName, SourceSHA256: fact.SHA256, Facts: fact.TypeFacts})
 	}
-	return result, nil
+	resolution, err := pythonProjectResolution(ctx, repo, python, project, types, result)
+	if err != nil {
+		return pythonProjectFacts{}, err
+	}
+	return pythonProjectFacts{sources: result, external: resolution.external, pluginFindings: resolution.findings, input: sourcegraph.FactInput{
+		Analyzer: "python-facts", Protocol: pythonfacts.Protocol, Project: project.Manifest, Root: project.Root,
+		Paths: append([]string{}, sources...), FactsSHA256: response.Identity, PartitionsSHA256: response.PartitionIdentity, ResolutionSHA256: resolution.identity,
+	}}, nil
+}
+
+func pythonProjectResolution(ctx context.Context, repo repository.Repository, python string, project repository.PythonProject, modules []pythonfacts.TypeModule, facts map[string]pythonSourceFact) (pythonResolution, error) {
+	types, err := pythonfacts.ResolveTypeProject(ctx, python, modules)
+	if err != nil {
+		return pythonResolution{}, err
+	}
+	if err := pythonModuleImportFacts(types.Imports, facts); err != nil {
+		return pythonResolution{}, err
+	}
+	objects, err := pythonfacts.ResolveObjectImports(ctx, python, project.Root, modules, repo.PythonObjectImportInputs(project))
+	if err != nil {
+		return pythonResolution{}, err
+	}
+	for _, imported := range objects.Imports {
+		fact := facts[imported.Path]
+		fact.ObjectImports = append(fact.ObjectImports, imported)
+		facts[imported.Path] = fact
+	}
+	resolved, err := pythonExternalProject(ctx, repo, python, project, modules, facts)
+	if err != nil {
+		return pythonResolution{}, err
+	}
+	digest := sha256.Sum256([]byte(types.Identity + "\x00" + objects.Identity + "\x00" + resolved.identity))
+	resolved.identity = hex.EncodeToString(digest[:])
+	return resolved, nil
+}
+
+func pythonFactInterpreter(repo repository.Repository) (string, error) {
+	python := repo.PythonTool()
+	if filepath.IsAbs(python) {
+		if _, err := os.Stat(python); err == nil {
+			return python, nil
+		}
+	}
+	return pythonfacts.DefaultInterpreter()
 }
 
 func pythonSourceFactFromAdapter(fact pythonfacts.Source, data []byte) (pythonSourceFact, error) {
@@ -147,25 +204,45 @@ func pythonSourceFactFromAdapter(fact pythonfacts.Source, data []byte) (pythonSo
 		}
 		result.Imports = append(result.Imports, converted)
 	}
-	for _, computed := range fact.ComputedImports {
-		converted, err := pythonComputedFactFromAdapter(computed)
-		if err != nil {
-			return pythonSourceFact{}, err
-		}
-		result.ComputedImports = append(result.ComputedImports, converted)
-	}
 	return result, nil
 }
 
+func pythonModuleImportFacts(imports []pythonfacts.ModuleImport, facts map[string]pythonSourceFact) error {
+	for _, imported := range imports {
+		fact, found := facts[imported.Path]
+		if !found {
+			return fmt.Errorf("module import fact has no current source")
+		}
+		if imported.Literal {
+			fact.Imports = append(fact.Imports, pythonImportReference{Module: imported.Targets[0], Line: imported.Line, Column: imported.Column, Kind: imported.Kind, Literal: true})
+		} else {
+			computed, err := pythonComputedFactFromAdapter(imported.ComputedImport)
+			if err != nil {
+				return err
+			}
+			computed.Kind = imported.Kind
+			fact.ComputedImports = append(fact.ComputedImports, computed)
+		}
+		facts[imported.Path] = fact
+	}
+	return nil
+}
+
 func pythonImportFactFromAdapter(reference pythonfacts.Import) (pythonImportReference, error) {
-	if reference.Module == "" || reference.Line <= 0 || !reference.Literal {
+	if reference.Module == "" || reference.Line <= 0 || reference.Column <= 0 || !reference.Literal || !validPythonImportKind(reference.Kind) {
 		return pythonImportReference{}, fmt.Errorf("import fact is invalid")
 	}
 	names := []string(nil)
 	if len(reference.Names) > 0 {
 		names = append(names, reference.Names...)
 	}
-	return pythonImportReference{Module: reference.Module, Names: names, Line: reference.Line, Literal: true}, nil
+	return pythonImportReference{
+		Module: reference.Module, Names: names, Line: reference.Line, Column: reference.Column, Kind: reference.Kind, Literal: true,
+	}, nil
+}
+
+func validPythonImportKind(kind string) bool {
+	return kind == "runtime" || kind == "type-only" || kind == "re-export" || kind == "proven-dynamic"
 }
 
 func pythonComputedFactFromAdapter(computed pythonfacts.ComputedImport) (pythonComputedImportFact, error) {

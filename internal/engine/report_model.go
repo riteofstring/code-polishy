@@ -5,9 +5,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/supplychain"
 )
 
 const ReportProtocol = "code-polishy-report/v1"
@@ -38,6 +40,7 @@ func (engine *Engine) withSelection(report Report, selection repository.Selectio
 func (engine *Engine) normalizeReport(report Report) Report {
 	report.Schema = ReportSchemaURL
 	report.Protocol = ReportProtocol
+	engine.enrichGeneratedReport(&report)
 	if report.RequestedSelection != nil {
 		report.RequestedSelection.Operands = reportArray(report.RequestedSelection.Operands)
 		report.RequestedSelection.Expanded = reportArray(report.RequestedSelection.Expanded)
@@ -54,6 +57,7 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	for index := range report.ReleaseAges {
 		report.ReleaseAges[index].Finding = engine.normalizeFinding(report.ReleaseAges[index].Finding, report.RequestedSelection)
 	}
+	coalesceReportOutcomes(&report)
 	report.AnalysisContext = reportArray(report.AnalysisContext)
 	report.TestCommands = reportArray(report.TestCommands)
 	report.TestDiagnostics = reportArray(report.TestDiagnostics)
@@ -62,10 +66,25 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	report.Suppressed = reportArray(report.Suppressed)
 	report.Assessed = reportArray(report.Assessed)
 	report.ReleaseAges = reportArray(report.ReleaseAges)
+	report.GitEvidence = normalizeGitEvidence(report.GitEvidence)
 	report.Tables = reportArray(report.Tables)
 	report.Notes = reportArray(report.Notes)
 	report.Summary = summarizeReport(report)
 	return report
+}
+
+func normalizeGitEvidence(receipts []supplychain.GitEvidenceReceipt) []supplychain.GitEvidenceReceipt {
+	ordered := slices.Clone(receipts)
+	slices.SortFunc(ordered, func(left, right supplychain.GitEvidenceReceipt) int {
+		if order := strings.Compare(left.Scope+"\x00"+left.Path+"\x00"+left.SHA256, right.Scope+"\x00"+right.Path+"\x00"+right.SHA256); order != 0 {
+			return order
+		}
+		return right.RetrievedAt.Compare(left.RetrievedAt)
+	})
+	return slices.CompactFunc(ordered, func(left, right supplychain.GitEvidenceReceipt) bool {
+		left.RetrievedAt, right.RetrievedAt = time.Time{}, time.Time{}
+		return left == right
+	})
 }
 
 func reportArray[T any](values []T) []T {
@@ -84,7 +103,7 @@ func (engine *Engine) normalizeFindings(findings []policy.Finding, requested *re
 
 func (engine *Engine) normalizeFinding(finding policy.Finding, requested *repository.RequestedSelection) policy.Finding {
 	if finding.Module == "" && finding.Path != "" && finding.Path != "repository" && finding.Path != policy.ConfigFilename {
-		owners := engine.Repository.ModuleNames(finding.Path)
+		owners := engine.Repository.OwnerModuleNames(finding.Path)
 		if len(owners) == 1 {
 			finding.Module = owners[0]
 		}
@@ -136,6 +155,9 @@ func summarizeReport(report Report) ReportSummary {
 }
 
 func summaryFinding(summary *ReportSummary, finding policy.Finding) {
+	if finding.Status == policy.FindingReviewed {
+		summary.Reviewed++
+	}
 	switch finding.Severity {
 	case policy.FindingWarning:
 		summary.Warnings++

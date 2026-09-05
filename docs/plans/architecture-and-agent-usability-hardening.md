@@ -1035,6 +1035,15 @@ lifecycle execution and uses the existing credential and workflow boundaries.
   unrelated ecosystem inventory.
 - Use the v0.23 runtime JSON Schema authority for the new test and report
   contracts, Git evidence, and exact generated-source producer ownership.
+  Consolidate repeated JSON structural validation through the existing pinned
+  JSON Schema library and release-owned schemas. Keep duplicate-key rejection
+  before object decoding, bounded input and output bytes, nesting and item
+  limits, exact protocol versions, and trailing-input rejection. Schema
+  validation must not replace source-digest, signature, ownership, identity,
+  or other semantic evidence checks. Remove superseded hand-written shape
+  validators at each converted boundary and test malformed, duplicated,
+  oversized, and semantically invalid inputs independently. Schema resolution
+  uses only shipped resources and must not fetch target-selected references.
 - Keep historical dependency reading separate from candidate admission in the
   existing inventory boundary. Extend the supply-chain evidence lane for Git
   commits; do not weaken candidate parsers or fork a second gate policy.

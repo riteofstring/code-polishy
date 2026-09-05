@@ -26,17 +26,28 @@ func TestDesignContextReturnsBoundedCurrentDocuments(t *testing.T) {
 			{Path: "docs/design/entry.md", SourcePaths: []string{"src/entry.go"}},
 		}},
 	}}}
-	files, findings, err := policyEngine.DesignContext("files", []string{"src/model.go", "src/entry.go"}, nil)
-	if err != nil || len(findings) != 0 || !slices.Equal(files, []string{"docs/design/application.md", "docs/design/entry.md"}) {
-		t.Fatalf("file context = %v, findings = %+v, err = %v", files, findings, err)
-	}
-	direct, findings, err := policyEngine.DesignContext("files", []string{"src/entry.go"}, nil)
-	if err != nil || len(findings) != 0 || !slices.Equal(direct, []string{"docs/design/entry.md"}) {
-		t.Fatalf("direct context = %v, findings = %+v, err = %v", direct, findings, err)
-	}
-	modules, findings, err := policyEngine.DesignContext("changes", nil, []string{"application"})
-	if err != nil || len(findings) != 0 || !slices.Equal(modules, []string{"docs/design/application.md", "docs/design/entry.md"}) {
-		t.Fatalf("module context = %v, findings = %+v, err = %v", modules, findings, err)
+	for _, testCase := range []struct {
+		request ContextRequest
+		paths   []string
+	}{
+		{request: ContextRequest{Mode: "files", Files: []string{"src/model.go", "src/entry.go"}}, paths: []string{"docs/design/application.md", "docs/design/entry.md"}},
+		{request: ContextRequest{Mode: "files", Files: []string{"src/entry.go"}}, paths: []string{"docs/design/entry.md"}},
+		{request: ContextRequest{Modules: []string{"application"}}, paths: []string{"docs/design/application.md", "docs/design/entry.md"}},
+	} {
+		report, err := policyEngine.DesignContext(testCase.request)
+		if err != nil || len(report.Findings) != 0 || report.RepositoryContext == nil {
+			t.Fatalf("context = %+v, err = %v", report, err)
+		}
+		paths := []string{}
+		for _, document := range report.RepositoryContext.DesignDocuments {
+			paths = append(paths, document.Path)
+			if document.Content == "" || len(document.SHA256) != 64 {
+				t.Fatalf("context lacks bound document contents: %+v", document)
+			}
+		}
+		if !slices.Equal(paths, testCase.paths) {
+			t.Fatalf("context paths = %v, want %v", paths, testCase.paths)
+		}
 	}
 }
 
@@ -49,7 +60,8 @@ func TestDesignContextReportsStaleMappings(t *testing.T) {
 			Path: "docs/design/missing.md", Module: "application",
 		}}},
 	}}}
-	_, findings, err := policyEngine.DesignContext("changes", nil, []string{"application"})
+	report, err := policyEngine.DesignContext(ContextRequest{Modules: []string{"application"}})
+	findings := report.Findings
 	if err != nil || len(findings) != 1 || findings[0].Check != repository.DesignDocumentationCheck || findings[0].Subject != "docs/design/missing.md" {
 		t.Fatalf("findings = %+v, err = %v", findings, err)
 	}

@@ -13,10 +13,11 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 4
+const pythonVultureProtocolVersion = 7
 
 const pythonVultureVersion = "2.16"
 
@@ -24,11 +25,15 @@ const pythonVultureInputMaximumBytes = 4 << 20
 
 const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys
 from collections import defaultdict
-P=4
+from source_parser import parse_source
+from type_facts import type_facts
+from type_resolver import typed_dict_reads
+from pydantic_resolver import pydantic_members
+P=7
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
-o={"protocol":P,"tool_version":"","covered":[],"diagnostics":[],"resolved":[],"problems":[],"error":""}
+o={"protocol":P,"tool_version":"","covered":[],"diagnostics":[],"resolved":[],"problems":[],"facts_error":"","error":"","reachability":[]}
 def e(x):
  o["error"]=str(x)[:S]
 def q(x):
@@ -123,88 +128,6 @@ def en(x,b):
   z=en(x.value,b)
   return z+"."+x.attr if z else ""
  return ""
-def un(x):
- while isinstance(x,ast.Subscript):x=x.value
- return x
-def rd(mod,parts,seen):
- k=(mod,".".join(parts))
- if k in seen:return None
- seen=seen|{k};z=mods.get(mod,[])
- if len(z)!=1:return None
- f=z[0];d=ds(f,f["tree"].body,parts[0])
- if len(d)!=1:return None
- x=d[0]
- if x[0]=="i":
-  node,a=x[1:];m=fm(f,node)
-  if not m:return None
-  return rd(m,a.name.split(".")+parts[1:],seen)
- node=x[1]
- if len(parts)==1:return (f,node) if isinstance(node,ast.ClassDef) else None
- if not isinstance(node,ast.ClassDef):return None
- d=ds(f,node.body,parts[1])
- if len(d)!=1 or d[0][0]!="d":return None
- node=d[0][1]
- if len(parts)==2:return (f,node) if isinstance(node,ast.ClassDef) else None
- return None
-def rc(f,node,b):
- name=en(un(node),b)
- if not name:return None
- parts=name.split(".")
- if len(parts)==1 and f["module"]:
-  z=rd(f["module"],parts,set())
-  if z:return z
- for i in range(len(parts)-1,0,-1):
-  mod=".".join(parts[:i])
-  if mod in mods:
-   z=rd(mod,parts[i:],set())
-   if z:return z
- return None
-def mi(f,node):
- return (f["path"],node.lineno,node.name)
-def pa(f,node,b):
- name=node.target.id
- annotation=en(un(node.annotation),b)
- if annotation in ("typing.ClassVar","typing_extensions.ClassVar"):return False
- if not name.startswith("_"):return True
- return isinstance(node.value,ast.Call) and en(node.value.func,b) in ("pydantic.PrivateAttr","pydantic.v1.PrivateAttr")
-def pk():
- roots={"pydantic.BaseModel","pydantic.v1.BaseModel","pydantic_settings.BaseSettings"}
- decorators={
-  "pydantic.field_validator","pydantic.model_validator","pydantic.field_serializer",
-  "pydantic.model_serializer","pydantic.computed_field","pydantic.validator",
-  "pydantic.root_validator","pydantic.v1.validator","pydantic.v1.root_validator",
- }
- fields={"pydantic.Field","pydantic.PrivateAttr","pydantic.v1.Field","pydantic.v1.PrivateAttr"}
- classes=[]
- for f in fs:
-  b=ib(f)
-  for node in f["tree"].body:
-   if isinstance(node,ast.ClassDef):classes.append((f,node,b))
- known=set();changed=True
- while changed:
-  changed=False
-  for f,node,b in classes:
-   identity=mi(f,node)
-   if identity in known:continue
-   for base in node.bases:
-    name=en(un(base),b);target=rc(f,base,b)
-    if name in roots or (target and mi(*target) in known):
-     known.add(identity);changed=True;break
- keep=set()
- for f,node,b in classes:
-  if mi(f,node) not in known:continue
-  for item in node.body:
-   if isinstance(item,ast.AnnAssign) and isinstance(item.target,ast.Name) and (item.target.id=="model_config" or pa(f,item,b)):keep.add(c(f,item,item.target.id))
-   elif isinstance(item,ast.Assign):
-    names=[z for target in item.targets for z in ts(target)]
-    call=en(item.value.func,b) if isinstance(item.value,ast.Call) else ""
-    for name in names:
-     if name.id=="model_config" or call in fields:keep.add(c(f,item,name.id))
-   if isinstance(item,(ast.FunctionDef,ast.AsyncFunctionDef)):
-    for decorator in item.decorator_list:
-     if en(decorator.func if isinstance(decorator,ast.Call) else decorator,b) in decorators:
-      keep.add(c(f,item,item.name));break
- return keep
 def ka(f):
  k=set();b=ib(f);typed=set()
  protocols={
@@ -252,16 +175,6 @@ def wn(node):
  for x in ast.iter_child_nodes(node):
   if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef,ast.Lambda)):continue
   yield x;yield from wn(x)
-def xa(a):
- f,node=fc(a["module"],a["callable"].split("."));b=ib(f);args=node.args
- parameters=args.posonlyargs+args.args+args.kwonlyargs+([args.vararg] if args.vararg else [])+([args.kwarg] if args.kwarg else [])
- parameters=[x for x in parameters if x.arg==a["receiver"]]
- if len(parameters)!=1 or parameters[0].annotation is None:raise ValueError("write receiver has no exact annotated parameter")
- if en(un(parameters[0].annotation),b)!=a["consumer_type"]:raise ValueError("write receiver annotation does not match consumer type")
- if any(a["consumer_type"]==m or a["consumer_type"].startswith(m+".") for m in mods):raise ValueError("consumer type is not external")
- writes=[x for x in wn(node) if isinstance(x,ast.Attribute) and isinstance(x.ctx,ast.Store) and x.lineno==a["line"] and x.attr==a["attribute"] and isinstance(x.value,ast.Name) and x.value.id==a["receiver"]]
- if len(writes)!=1:raise ValueError("external attribute write is stale or ambiguous")
- return c(f,writes[0],a["attribute"])
 try:
  b=sys.stdin.buffer.read(M+1)
  if len(b)>M:raise ValueError("input exceeds limit")
@@ -276,7 +189,7 @@ try:
  o["tool_version"]=importlib.metadata.version("vulture")
  if o["tool_version"]!=x["tool_version"]:raise ValueError("Vulture version mismatch")
  if not isinstance(x["files"],list) or not x["files"]:raise ValueError("invalid files")
- fs=[]; seen=set()
+ fs=[]; seen=set();source_bytes=0;ast_nodes=0
  for f in x["files"]:
   if not isinstance(f,dict) or set(f)!={"path","module","package"}:raise ValueError("invalid file")
   path=p(f["path"])
@@ -286,15 +199,26 @@ try:
    if not isinstance(f[k],str) or (f[k] and not n(f[k])):raise ValueError("invalid module")
   h=os.path.realpath(os.path.join(root,*path.split("/")))
   if os.path.commonpath((root,h))!=root or not os.path.isfile(h):raise ValueError("file escapes root")
-  with open(h,encoding="utf-8") as g:s=g.read()
-  fs.append({"path":path,"module":f["module"],"package":f["package"],"tree":ast.parse(s,filename=path,type_comments=True),"source":s})
+  try:
+   s,tree=_vulture_read_source(path,h)
+   source_bytes+=len(s.encode("utf-8"));ast_nodes+=sum(1 for _ in ast.walk(tree))
+   if source_bytes>512*1024*1024 or ast_nodes>2000000 or len(fs)>=65536:raise ValueError("Python project exceeds its source or AST resource boundary")
+  except Exception as z:
+   o["facts_error"]=str(z)[:S];raise
+  fs.append({"path":path,"module":f["module"],"package":f["package"],"tree":tree,"source":s})
  if not isinstance(x["references"],list):raise ValueError("invalid references")
- rs=[]; ids=set()
+ rs=[]; configured=[]; ids=set()
  for r in x["references"]:
-  if not isinstance(r,dict) or set(r)!={"id","module","symbol"}:raise ValueError("invalid reference")
+  if not isinstance(r,dict) or set(r)!={"id","module","symbol","contract"}:raise ValueError("invalid reference")
   i=q(r["id"])
-  if i in ids or not n(r["module"]) or not n(r["symbol"]):raise ValueError("invalid reference")
-  ids.add(i);rs.append(r)
+  if i in ids:raise ValueError("duplicate reference")
+  ids.add(i)
+  if r["contract"] is None:
+   if not i.startswith("manifest:") or not n(r["module"]) or not n(r["symbol"]):raise ValueError("invalid inferred reference")
+   rs.append(r)
+  else:
+   if not isinstance(r["contract"],dict) or r["contract"].get("id")!=i or r["module"] or r["symbol"]:raise ValueError("invalid configured reference")
+   configured.append(r["contract"])
  if not isinstance(x["backends"],list):raise ValueError("invalid backends")
  bs=[]
  for b in x["backends"]:
@@ -305,9 +229,10 @@ try:
  if not isinstance(x["attributes"],list):raise ValueError("invalid attributes")
  ats=[]
  for a in x["attributes"]:
-  if not isinstance(a,dict) or set(a)!={"id","module","callable","receiver","attribute","line","consumer_type"}:raise ValueError("invalid attribute")
+  if not isinstance(a,dict) or set(a)!={"id","module","callable","receiver","attribute","write"}:raise ValueError("invalid attribute")
   i=q(a["id"])
-  if i in ids or not n(a["module"]) or not n(a["callable"]) or not n(a["receiver"]) or "." in a["receiver"] or not n(a["attribute"]) or "." in a["attribute"] or type(a["line"]) is not int or a["line"]<1 or not n(a["consumer_type"]) or "." not in a["consumer_type"]:raise ValueError("invalid attribute")
+  if i in ids or not n(a["module"]) or not n(a["callable"]) or not n(a["attribute"]) or "." in a["attribute"]:raise ValueError("invalid attribute")
+  _validate_external_receiver(a["receiver"]);_external_location(a["write"])
   ids.add(i);ats.append(a)
  mods={}
  for f in fs:
@@ -322,7 +247,13 @@ try:
   try:d=pkgutil.get_data("vulture",w)
   except OSError:continue
   if d is not None:v.scan(d.decode("utf-8"),filename=w)
- keep=pk()
+ try:
+  type_modules=_vulture_type_modules(fs)
+  typed=typed_dict_reads(type_modules)
+  models=pydantic_members(type_modules)
+ except Exception as z:
+  o["facts_error"]=str(z)[:S];raise
+ keep={(r["path"],r["line"],r["end"],r["name"]) for r in models}|{(r["field"]["path"],r["field"]["line"],r["field"]["line"],r["field"]["key"]) for r in typed}
  for f in fs:keep.update(ka(f))
  for r in rs:
   try:
@@ -356,8 +287,15 @@ try:
   except Exception as z:o["problems"].append({"id":b["id"],"message":str(z)[:S]})
  for a in ats:
   try:
-   keep.add(xa(a));o["resolved"].append(a["id"])
+   keep.add(_external_write(a));o["resolved"].append(a["id"])
   except Exception as z:o["problems"].append({"id":a["id"],"message":str(z)[:S]})
+ from reachability import resolve_reachability
+ evidence,problems=resolve_reachability(type_modules,configured,keep)
+ o["reachability"]=evidence;o["problems"].extend(problems)
+ for item in evidence:
+  o["resolved"].append(item["id"])
+  for target in item["targets"]:
+   for definition in target["definitions"]:keep.add((definition["path"],definition["line"],definition["end"],definition["name"]))
  for z in v.get_unused_code(min_confidence=60):
   a=(str(z.filename),z.first_lineno,z.last_lineno,z.name)
   if a in keep:continue
@@ -366,7 +304,7 @@ try:
 except Exception as z:e(z)
 sys.stdout.write(json.dumps(o,sort_keys=True,separators=(",",":")))`
 
-var pythonVultureProgram = "exec(" + strconv.Quote(pythonVultureAdapter) + ")"
+var pythonVultureProgram = pythonfacts.ParserSupportSource() + pythonfacts.TypeSupportSource() + pythonfacts.ReachabilitySupportSource() + pythonVultureTypeFacts + pythonVultureExternalAttributes + "\n" + pythonVultureAdapter
 
 type pythonVultureFile struct {
 	Path    string `json:"path"`
@@ -375,9 +313,10 @@ type pythonVultureFile struct {
 }
 
 type pythonVultureReference struct {
-	ID     string `json:"id"`
-	Module string `json:"module"`
-	Symbol string `json:"symbol"`
+	Contract *pythonfacts.ReachabilityInput `json:"contract"`
+	ID       string                         `json:"id"`
+	Module   string                         `json:"module"`
+	Symbol   string                         `json:"symbol"`
 }
 
 type pythonVultureBackend struct {
@@ -387,13 +326,12 @@ type pythonVultureBackend struct {
 }
 
 type pythonVultureAttribute struct {
-	ID           string `json:"id"`
-	Module       string `json:"module"`
-	Callable     string `json:"callable"`
-	Receiver     string `json:"receiver"`
-	Attribute    string `json:"attribute"`
-	Line         int    `json:"line"`
-	ConsumerType string `json:"consumer_type"`
+	ID        string                        `json:"id"`
+	Module    string                        `json:"module"`
+	Callable  string                        `json:"callable"`
+	Receiver  policy.PythonExternalReceiver `json:"receiver"`
+	Attribute string                        `json:"attribute"`
+	Write     policy.PythonSourceLocation   `json:"write"`
 }
 
 type pythonVultureRequest struct {
@@ -430,21 +368,25 @@ type pythonVultureProblem struct {
 }
 
 type pythonVultureResponseWire struct {
-	Protocol    *int                       `json:"protocol"`
-	ToolVersion *string                    `json:"tool_version"`
-	Covered     *[]string                  `json:"covered"`
-	Diagnostics *[]pythonVultureDiagnostic `json:"diagnostics"`
-	Resolved    *[]string                  `json:"resolved"`
-	Problems    *[]pythonVultureProblem    `json:"problems"`
-	Error       *string                    `json:"error"`
+	Reachability *[]pythonfacts.ReachabilityEvidence `json:"reachability"`
+	Protocol     *int                                `json:"protocol"`
+	ToolVersion  *string                             `json:"tool_version"`
+	Covered      *[]string                           `json:"covered"`
+	Diagnostics  *[]pythonVultureDiagnostic          `json:"diagnostics"`
+	Resolved     *[]string                           `json:"resolved"`
+	Problems     *[]pythonVultureProblem             `json:"problems"`
+	FactsError   *string                             `json:"facts_error"`
+	Error        *string                             `json:"error"`
 }
 
 type pythonVultureResponse struct {
-	Covered     []string
-	Diagnostics []pythonVultureDiagnostic
-	Resolved    []string
-	Problems    []pythonVultureProblem
-	Error       string
+	Reachability []pythonfacts.ReachabilityEvidence
+	Covered      []string
+	Diagnostics  []pythonVultureDiagnostic
+	Resolved     []string
+	Problems     []pythonVultureProblem
+	FactsError   string
+	Error        string
 }
 
 func pythonVultureCommand(repo repository.Repository, project repository.PythonProject) (policy.Command, error) {
@@ -472,45 +414,26 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	if len(encoded) > pythonVultureInputMaximumBytes {
 		return policy.Command{}, fmt.Errorf("vulture request exceeds %d bytes", pythonVultureInputMaximumBytes)
 	}
+	input, err := pythonfacts.ProgramInput(pythonVultureProgram, bytes.NewReader(append(encoded, '\n')))
+	if err != nil {
+		return policy.Command{}, err
+	}
+	stdin, err := io.ReadAll(input)
+	if err != nil {
+		return policy.Command{}, err
+	}
 	return policy.Command{
 		Name:              "policy-vulture-dead-code-" + pythonQualityProjectName(project.Root),
 		Provides:          []string{"dead-code"},
-		Argv:              repo.PythonCommand(pythonVultureProgram),
+		Argv:              repo.PythonCommand(pythonfacts.ProgramBootstrap),
 		Cwd:               ".",
 		Modules:           pythonQualityModules(repo, project.Files),
 		RunOn:             []string{"check", "gate"},
 		TimeoutSeconds:    int(pythonQualityBudget.Seconds()),
 		Managed:           true,
 		SealedEnvironment: true,
-		Stdin:             append(encoded, '\n'),
+		Stdin:             stdin,
 	}, nil
-}
-
-func pythonVultureReferences(repo repository.Repository, project repository.PythonProject) ([]pythonVultureReference, map[string]pythonVultureReferenceOrigin) {
-	references := []pythonVultureReference{}
-	origins := map[string]pythonVultureReferenceOrigin{}
-	configPath := pythonVultureConfigPath(repo)
-	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
-		if reference.Project != project.Manifest {
-			continue
-		}
-		id := pythonVultureConfigReferenceID(reference)
-		references = append(references, pythonVultureReference{ID: id, Module: reference.Module, Symbol: reference.Symbol})
-		origins[id] = pythonVultureReferenceOrigin{
-			Path: configPath, Subject: id, Check: "policy.pythonDynamicReference",
-			Message: "Python dynamic reference cannot resolve exactly: ",
-		}
-	}
-	for _, reference := range project.DynamicReferences {
-		id := pythonVultureManifestReferenceID(project, reference)
-		references = append(references, pythonVultureReference{ID: id, Module: reference.Module, Symbol: reference.Symbol})
-		origins[id] = pythonVultureReferenceOrigin{
-			Path: project.Manifest, Line: reference.Line, Subject: id, Check: "policy.pythonDynamicReference",
-			Message: "Python dynamic reference cannot resolve exactly: ",
-		}
-	}
-	sort.Slice(references, func(left, right int) bool { return references[left].ID < references[right].ID })
-	return references, origins
 }
 
 func pythonVultureAttributes(repo repository.Repository, project repository.PythonProject) ([]pythonVultureAttribute, map[string]pythonVultureReferenceOrigin) {
@@ -524,7 +447,7 @@ func pythonVultureAttributes(repo repository.Repository, project repository.Pyth
 		id := pythonVultureAttributeID(attribute)
 		attributes = append(attributes, pythonVultureAttribute{
 			ID: id, Module: attribute.Module, Callable: attribute.Callable, Receiver: attribute.Receiver,
-			Attribute: attribute.Attribute, Line: attribute.Line, ConsumerType: attribute.ConsumerType,
+			Attribute: attribute.Attribute, Write: attribute.Write,
 		})
 		origins[id] = pythonVultureReferenceOrigin{
 			Path: configPath, Subject: id, Check: "policy.pythonExternalAttribute",
@@ -552,7 +475,7 @@ func pythonVultureBackends(project repository.PythonProject) ([]pythonVultureBac
 }
 
 func pythonVultureConfigReferenceID(reference policy.PythonDynamicReference) string {
-	return "config:" + reference.Project + ":" + reference.Module + ":" + reference.Symbol
+	return repository.PythonReachabilityID(reference)
 }
 
 func pythonVultureManifestReferenceID(project repository.PythonProject, reference repository.PythonDynamicReference) string {
@@ -560,8 +483,9 @@ func pythonVultureManifestReferenceID(project repository.PythonProject, referenc
 }
 
 func pythonVultureAttributeID(attribute policy.PythonExternalAttribute) string {
-	return fmt.Sprintf("config:%s:%s:%s:%s.%s:%d:%s", attribute.Project, attribute.Module, attribute.Callable,
-		attribute.Receiver, attribute.Attribute, attribute.Line, attribute.ConsumerType)
+	data, _ := json.Marshal(attribute)
+	digest := sha256.Sum256(data)
+	return "config:external-attribute:" + hex.EncodeToString(digest[:])
 }
 
 func pythonVultureConfigPath(repo repository.Repository) string {
@@ -583,6 +507,11 @@ func pythonQualitySelectedManifests(repo repository.Repository, selected []strin
 		if filepath.Base(normalized) == "pyproject.toml" {
 			manifests[normalized] = true
 		}
+		for _, reference := range repo.Config.Scope.PythonDynamicReferences {
+			if reference.Registry != nil && normalized == reference.Registry.Path {
+				manifests[reference.Project] = true
+			}
+		}
 		if normalized == pythonVultureConfigPath(repo) {
 			for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 				manifests[reference.Project] = true
@@ -603,7 +532,7 @@ func pythonQualityDynamicReferenceInventoryFindings(repo repository.Repository, 
 			continue
 		}
 		findings = append(findings, policy.Finding{
-			Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
+			Check: "policy.pythonReachability", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
 			Message: "Python dynamic reference cannot determine its contained project: " + message,
 		})
 	}
@@ -667,7 +596,7 @@ func pythonQualityConfiguredReferenceOrigins(repo repository.Repository) map[str
 	configPath := pythonVultureConfigPath(repo)
 	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 		origins[reference.Project] = append(origins[reference.Project], pythonVultureReferenceOrigin{
-			Check: "policy.pythonDynamicReference", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
+			Check: "policy.pythonReachability", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
 			Message: "Python dynamic reference ",
 		})
 	}
@@ -732,6 +661,9 @@ func pythonVultureFindings(repo repository.Repository, project repository.Python
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
 	}
 	if response.Error != "" {
+		if response.FactsError != "" {
+			return []policy.Finding{{Check: "architecture.pythonFactsCoverage", Path: project.Manifest, Subject: "python-facts", Message: "the Python project type fact set is unavailable: " + response.FactsError}}
+		}
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture analysis failed: "+response.Error)
 	}
 	references, origins := pythonVultureReferences(repo, project)
@@ -806,13 +738,13 @@ func pythonVultureResponseFromWire(wire pythonVultureResponseWire) (pythonVultur
 		return pythonVultureResponse{}, fmt.Errorf("error exceeds %d bytes", pythonStructuredMessageMaximumBytes)
 	}
 	return pythonVultureResponse{
-		Covered: *wire.Covered, Diagnostics: *wire.Diagnostics, Resolved: *wire.Resolved, Problems: *wire.Problems, Error: *wire.Error,
+		Reachability: *wire.Reachability, Covered: *wire.Covered, Diagnostics: *wire.Diagnostics, Resolved: *wire.Resolved, Problems: *wire.Problems, Error: *wire.Error, FactsError: *wire.FactsError,
 	}, nil
 }
 
 func pythonVultureResponseWireComplete(wire pythonVultureResponseWire) bool {
 	return wire.Protocol != nil && wire.ToolVersion != nil && wire.Covered != nil && wire.Diagnostics != nil &&
-		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil
+		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil && wire.FactsError != nil && wire.Reachability != nil
 }
 
 func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, response pythonVultureResponse) error {
@@ -820,6 +752,9 @@ func validatePythonVultureResponse(files []string, references []pythonVultureRef
 		return err
 	}
 	if err := validatePythonVultureReferences(references, backends, attributes, response.Resolved, response.Problems); err != nil {
+		return err
+	}
+	if err := validatePythonReachabilityEvidence(files, references, response); err != nil {
 		return err
 	}
 	return validatePythonVultureDiagnostics(files, response.Diagnostics)

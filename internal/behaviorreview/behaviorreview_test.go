@@ -1115,7 +1115,7 @@ func checkpointGateEvidence(t *testing.T, repo repository.Repository, base, cand
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []gaterun.Finding{}, Notes: []string{}, BehaviorReview: review})
+	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: review})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -16,10 +18,11 @@ import (
 const pythonImportBudget = 15 * time.Minute
 
 type pythonSelectionPlan struct {
-	findings         []policy.Finding
-	owners           map[string]string
-	projects         map[string]repository.PythonProject
-	sourcesByProject map[string][]string
+	findings          []policy.Finding
+	owners            map[string]string
+	projects          map[string]repository.PythonProject
+	sourcesByProject  map[string][]string
+	selectedByProject map[string][]string
 }
 
 func PythonGraphCommands(repo repository.Repository, selected []string) []policy.Command {
@@ -38,20 +41,25 @@ func PythonGraphCommands(repo repository.Repository, selected []string) []policy
 	return commands
 }
 
-func pythonFindings(ctx context.Context, repo repository.Repository, selected, allFiles []string, commandRunner runner.Runner) []policy.Finding {
+func pythonSourceGraph(ctx context.Context, repo repository.Repository, selected, allFiles []string, commandRunner runner.Runner) sourceGraphPart {
 	plan := pythonSelection(repo, selected, allFiles)
-	findings := append([]policy.Finding{}, plan.findings...)
+	part := sourceGraphPart{findings: append([]policy.Finding{}, plan.findings...), incomplete: len(plan.findings) > 0}
+	externalCoverage := pythonExternalDeclarationCoverage(repo, selected, plan)
+	part.findings = append(part.findings, externalCoverage...)
+	part.incomplete = part.incomplete || len(externalCoverage) != 0
 	for _, manifest := range pythonPlanManifests(plan) {
 		project := plan.projects[manifest]
 		sources := plan.sourcesByProject[manifest]
+		selectedSources := plan.selectedByProject[manifest]
 		command, err := pythonGraphCommand(repo, project, sources)
 		if err != nil {
-			findings = append(findings, pythonCoverageForSources(sources, "the Python project cannot produce a contained Ruff graph command: "+err.Error())...)
+			part.findings = append(part.findings, pythonCoverageForSources(selectedSources, "the Python project cannot produce a contained Ruff graph command: "+err.Error())...)
+			part.incomplete = true
 			continue
 		}
-		findings = append(findings, pythonProjectFindings(ctx, repo, project, sources, plan.owners, allFiles, command, commandRunner)...)
+		part = mergeSourceGraphParts(part, pythonProjectSourceGraph(ctx, repo, project, sources, selectedSources, plan.owners, allFiles, command, commandRunner))
 	}
-	return findings
+	return part
 }
 
 func pythonSelection(repo repository.Repository, selected, allFiles []string) pythonSelectionPlan {
@@ -74,7 +82,7 @@ func pythonSelection(repo repository.Repository, selected, allFiles []string) py
 		if problemSources[source] {
 			continue
 		}
-		if len(repo.ModuleNames(source)) != 1 {
+		if _, err := sourceModuleOwner(repo, source); err != nil {
 			findings = append(findings, pythonImportCoverage(source, "Python source must belong to exactly one repository module"))
 			continue
 		}
@@ -85,16 +93,10 @@ func pythonSelection(repo repository.Repository, selected, allFiles []string) py
 		}
 		selectedByProject[manifest] = append(selectedByProject[manifest], source)
 	}
-	for _, manifest := range pythonPlanManifests(pythonSelectionPlan{projects: projects, sourcesByProject: selectedByProject}) {
-		_, found := projects[manifest]
-		if !found {
-			for _, source := range selectedByProject[manifest] {
-				findings = append(findings, pythonImportCoverage(source, "the Python project inventory returned an unknown project"))
-			}
-		}
-	}
+	sourcesByProject, contextFindings := pythonProjectSelection(repo, projects, selectedByProject)
+	findings = append(findings, contextFindings...)
 	return pythonSelectionPlan{
-		findings: findings, owners: owners, projects: projects, sourcesByProject: selectedByProject,
+		findings: findings, owners: owners, projects: projects, sourcesByProject: sourcesByProject, selectedByProject: selectedByProject,
 	}
 }
 
@@ -114,7 +116,14 @@ func pythonSources(repo repository.Repository, selected []string) []string {
 	sources := []string{}
 	candidates := append([]string{}, selected...)
 	for _, declaration := range repo.Config.Scope.PythonComputedImports {
-		candidates = append(candidates, declaration.Importer)
+		if pythonComputedInputSelected(repo, selected, declaration) {
+			candidates = append(candidates, declaration.Importer)
+		}
+	}
+	for _, declaration := range repo.Config.Scope.PythonExternalPluginImports {
+		if pythonExternalInputSelected(repo, selected, declaration) {
+			candidates = append(candidates, declaration.Consumer.Importer)
+		}
 	}
 	for _, source := range candidates {
 		if repo.Language(source) != "python" || seen[source] {
@@ -125,6 +134,24 @@ func pythonSources(repo repository.Repository, selected []string) []string {
 	}
 	sort.Strings(sources)
 	return sources
+}
+
+func pythonComputedInputSelected(repo repository.Repository, selected []string, declaration policy.PythonComputedImport) bool {
+	configPath := policy.ConfigFilename
+	if repo.Config.ConfigPath != "" {
+		if normalized, err := repo.NormalizePath(repo.Config.ConfigPath); err == nil {
+			configPath = normalized
+		}
+	}
+	if slices.Contains(selected, configPath) || slices.Contains(selected, declaration.Project) {
+		return true
+	}
+	for _, input := range declaration.Configuration {
+		if slices.Contains(selected, input.Path) {
+			return true
+		}
+	}
+	return false
 }
 
 func pythonInventoryFindings(inventory repository.PythonProjectInventory, sources []string) (map[string]bool, []policy.Finding) {
@@ -173,31 +200,50 @@ func pythonProjectFindings(
 	command policy.Command,
 	commandRunner runner.Runner,
 ) []policy.Finding {
+	return pythonProjectSourceGraph(ctx, repo, project, sources, sources, owners, allFiles, command, commandRunner).findings
+}
+
+func pythonProjectSourceGraph(
+	ctx context.Context,
+	repo repository.Repository,
+	project repository.PythonProject,
+	sources []string,
+	selectedSources []string,
+	owners map[string]string,
+	allFiles []string,
+	command policy.Command,
+	commandRunner runner.Runner,
+) sourceGraphPart {
 	structured, ok := commandRunner.(runner.StructuredRunner)
 	if !ok {
-		return []policy.Finding{{
+		return sourceGraphPart{findings: []policy.Finding{{
 			Check: "policy.tool", Path: project.Manifest, Subject: "ruff",
 			Message: "the architecture runner cannot capture the bounded Ruff graph output",
-		}}
+		}}, incomplete: true}
 	}
 	bounded, cancel := context.WithTimeout(ctx, pythonImportBudget)
 	defer cancel()
 	_, output, runErr := structured.RunStructured(bounded, repo.Root, command)
 	if runErr != nil {
-		return []policy.Finding{{Check: "policy.tool", Path: project.Manifest, Subject: "ruff", Message: runErr.Error()}}
+		return sourceGraphPart{findings: []policy.Finding{{Check: "policy.tool", Path: project.Manifest, Subject: "ruff", Message: runErr.Error()}}, incomplete: true}
 	}
 	if len(output.Stderr) != 0 {
-		return pythonCoverageForSources(sources, "the policy-owned Ruff graph emitted diagnostics")
+		return sourceGraphPart{findings: pythonCoverageForSources(selectedSources, "the policy-owned Ruff graph emitted diagnostics"), incomplete: true}
 	}
 	facts, err := adaptPythonGraph(output.Stdout)
 	if err != nil {
-		return pythonCoverageForSources(sources, "the policy-owned Ruff graph output is malformed: "+err.Error())
+		return sourceGraphPart{findings: pythonCoverageForSources(selectedSources, "the policy-owned Ruff graph output is malformed: "+err.Error()), incomplete: true}
 	}
-	sourceFacts, err := pythonSourceFacts(bounded, repo, sources)
+	sourceFacts, err := pythonSourceFacts(bounded, repo, project, sources)
 	if err != nil {
-		return []policy.Finding{pythonFactsCoverageFinding(project, err)}
+		return sourceGraphPart{findings: []policy.Finding{pythonFactsCoverageFinding(project, err)}, incomplete: true}
 	}
-	return pythonGraphFindings(repo, project, sources, owners, allFiles, facts.Graph, sourceFacts)
+	part := pythonGraphSourcePart(repo, project, sources, selectedSources, owners, allFiles, facts.Graph, sourceFacts.sources)
+	part.inputs = []sourcegraph.FactInput{sourceFacts.input}
+	part.external = sourceFacts.external
+	part.findings = append(part.findings, sourceFacts.pluginFindings...)
+	part.incomplete = part.incomplete || len(sourceFacts.pluginFindings) != 0
+	return part
 }
 
 func pythonFactsCoverageFinding(project repository.PythonProject, err error) policy.Finding {
@@ -258,4 +304,30 @@ func pythonProjectPath(project repository.PythonProject, source string) (string,
 		return "", fmt.Errorf("source %q is outside project root %q", source, project.Root)
 	}
 	return relative, nil
+}
+
+func pythonProjectSelection(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string) (map[string][]string, []policy.Finding) {
+	findings := []policy.Finding{}
+	sourcesByProject := map[string][]string{}
+	for _, manifest := range pythonPlanManifests(pythonSelectionPlan{projects: projects, sourcesByProject: selectedByProject}) {
+		_, found := projects[manifest]
+		if !found {
+			for _, source := range selectedByProject[manifest] {
+				findings = append(findings, pythonImportCoverage(source, "the Python project inventory returned an unknown project"))
+			}
+			continue
+		}
+		for _, source := range projects[manifest].Files {
+			if repo.Language(source) != "python" {
+				continue
+			}
+			if _, err := sourceModuleOwner(repo, source); err != nil {
+				findings = append(findings, pythonImportCoverage(source, "Python source must belong to exactly one repository module"))
+				continue
+			}
+			sourcesByProject[manifest] = append(sourcesByProject[manifest], source)
+		}
+		sort.Strings(sourcesByProject[manifest])
+	}
+	return sourcesByProject, findings
 }

@@ -728,6 +728,12 @@ func installedRelease(t *testing.T, revision string) string {
 		t.Fatalf("write %s: %v", binary, err)
 	}
 	content := sha256.Sum256([]byte("engine"))
+	catalog := `{"protocol":"release-capabilities/v1","capabilities":[{"name":"check","kind":"command","description":"Check selected source.","aliases":[],"paths":[],"modules":[],"enforcement":["explicit"],"workflows":["docs/agent-workflows.md"]}]}`
+	catalogDigest := sha256.Sum256([]byte(catalog))
+	workflow := "# Agent workflows\n"
+	workflowDigest := sha256.Sum256([]byte(workflow))
+	writeBehaviorReviewCLIFile(t, directory, release.CapabilityCatalogPath, catalog)
+	writeBehaviorReviewCLIFile(t, directory, "docs/agent-workflows.md", workflow)
 	manifest := release.Manifest{
 		ManifestVersion: release.ManifestVersion, CodePolishyVersion: "9.9.9",
 		SourceRevision: revision, Host: host,
@@ -737,7 +743,12 @@ func installedRelease(t *testing.T, revision string) string {
 			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
 			Ty: "0.0.65", Vulture: "2.16",
 		},
-		Entries: []release.Entry{{Path: release.BinaryPath, SHA256: hex.EncodeToString(content[:])}},
+		CapabilityCatalogSHA256: hex.EncodeToString(catalogDigest[:]),
+		Entries: []release.Entry{
+			{Path: release.BinaryPath, SHA256: hex.EncodeToString(content[:])},
+			{Path: "docs/agent-workflows.md", SHA256: hex.EncodeToString(workflowDigest[:])},
+			{Path: release.CapabilityCatalogPath, SHA256: hex.EncodeToString(catalogDigest[:])},
+		},
 	}
 	manifest.EntryCount = len(manifest.Entries)
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)

@@ -68,7 +68,10 @@ func identityFromInput(input IdentityInput) (Identity, error) {
 		ExactBase: input.ExactBase, Candidate: input.Candidate, PolicyLevel: input.PolicyLevel,
 		Release: input.Release, ConfigurationSHA256: input.ConfigurationSHA256,
 		Platform: input.Platform, Commands: cloneCommands(input.Commands), Environment: environment, AmbientEnvironment: ambient,
-		BehaviorReview: cloneBehaviorReview(input.BehaviorReview),
+		BehaviorReview:           cloneBehaviorReview(input.BehaviorReview),
+		ArchitectureReviewSHA256: input.ArchitectureReviewSHA256,
+		GitEvidenceSHA256:        input.GitEvidenceSHA256,
+		PolicyValiditySHA256:     input.PolicyValiditySHA256,
 	}, nil
 }
 
@@ -163,6 +166,9 @@ func validateIdentity(identity Identity) error {
 }
 
 func validateIdentityContext(identity Identity) error {
+	if !validOptionalSHA256(identity.GitEvidenceSHA256) || !validOptionalSHA256(identity.ArchitectureReviewSHA256) || !validOptionalSHA256(identity.PolicyValiditySHA256) {
+		return fmt.Errorf("%w: gate external evidence identity is invalid", ErrInvalidInput)
+	}
 	if !validReference(identity.RequestedBase) || !validRevision(identity.ExactBase) || !validRevision(identity.Candidate) {
 		return fmt.Errorf("%w: gate identity revisions are invalid", ErrInvalidInput)
 	}
@@ -170,6 +176,10 @@ func validateIdentityContext(identity Identity) error {
 		return fmt.Errorf("%w: gate identity policy, release, configuration, or platform is invalid", ErrInvalidInput)
 	}
 	return validateBehaviorReview(identity.BehaviorReview)
+}
+
+func validOptionalSHA256(value string) bool {
+	return value == "" || validSHA256(value)
 }
 
 func validateIdentityPlan(identity Identity) error {

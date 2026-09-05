@@ -697,7 +697,7 @@ func TestADeadCodeResultReportsUnusedFilesExportsAndCoverage(t *testing.T) {
 
 func TestAnImportsRequestCarriesTheRootAndTheSelection(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":3,"operation":"imports","result":{"imports":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"imports","result":{"analyzed":["web/app.ts"],"imports":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	if _, err := bundle.Imports(context.Background(), "/target", []string{"web/app.ts"}); err != nil {
 		t.Fatalf("exchange imports: %v", err)
@@ -713,8 +713,8 @@ func TestAnImportsRequestCarriesTheRootAndTheSelection(t *testing.T) {
 }
 
 func TestAnImportsResultReportsResolvedSpecifiersAndUnreadFiles(t *testing.T) {
-	result := `{"imports":[{"path":"web/app.ts","line":3,"specifier":"../domain/model.js","resolved":"domain/model.ts"},` +
-		`{"path":"web/app.ts","line":4,"specifier":"@scope/absent","resolved":""}],` +
+	result := `{"analyzed":["web/app.ts"],"imports":[{"path":"web/app.ts","line":3,"column":8,"specifier":"../domain/model.js","resolved":"domain/model.ts","package":"","kind":"type-only"},` +
+		`{"path":"web/app.ts","line":4,"column":8,"specifier":"@scope/absent","resolved":"","package":"@scope/absent","kind":"runtime"}],` +
 		`"unsupported":[{"path":"web/widget.tsx","reason":"the file is unreadable"}]}`
 	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"imports","result":`+result+`}`))
 	reported, err := bundle.Imports(context.Background(), "/target", []string{"web/app.ts", "web/widget.tsx"})
@@ -733,6 +733,46 @@ func TestAnImportsResultReportsResolvedSpecifiersAndUnreadFiles(t *testing.T) {
 	}
 	if len(reported.Unsupported) != 1 || reported.Unsupported[0].Path != "web/widget.tsx" {
 		t.Fatalf("unexpected unread files: %+v", reported.Unsupported)
+	}
+}
+
+func TestInstalledImportReaderPreservesSemanticKinds(t *testing.T) {
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeScript(t, filepath.Join(root, "src", "a.ts"), "import type { B } from \"./b\";\nexport { value } from \"./b\";\nconst load = () => import(\"./b\");\nconst legacy = require(\"./b\");\n")
+	writeScript(t, filepath.Join(root, "src", "b.ts"), "export type B = string;\nexport const value = 1;\n")
+	result, err := (Bundle{PolicyRoot: policyRoot}).Imports(t.Context(), root, []string{"src/a.ts", "src/b.ts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := []string{}
+	for _, fact := range result.Imports {
+		if fact.Path == "src/a.ts" && fact.Resolved == "src/b.ts" {
+			kinds = append(kinds, fact.Kind)
+		}
+	}
+	slices.Sort(kinds)
+	if !slices.Equal(kinds, []string{"proven-dynamic", "re-export", "runtime", "type-only"}) {
+		t.Fatalf("kinds = %+v, result = %+v", kinds, result)
+	}
+}
+
+func TestInstalledImportReaderFailsCoverageOnSyntaxErrors(t *testing.T) {
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeScript(t, filepath.Join(root, "src", "bad.ts"), "import { from \"./missing\";\n")
+	result, err := (Bundle{PolicyRoot: policyRoot}).Imports(t.Context(), root, []string{"src/bad.ts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Analyzed) != 0 || len(result.Imports) != 0 || len(result.Unsupported) != 1 || result.Unsupported[0].Path != "src/bad.ts" {
+		t.Fatalf("result = %+v", result)
 	}
 }
 

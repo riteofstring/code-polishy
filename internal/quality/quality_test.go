@@ -99,8 +99,13 @@ func TestGeneratedSourceStillRequiresModuleAndToolCoverage(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"generated": 0}
 	writeQualityFile(t, repo.Root, "generated/client.rs", "fn generated() {}\n")
 	findings := CoverageFindings(repo, []string{"generated/client.rs"})
-	if len(findings) != 6 {
+	if len(findings) != 5 || !findingChecks(findings)["policy.generationOwnership"] {
 		t.Fatalf("generated executable source cannot bypass adapter coverage: %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.Subject == "generated:format" || finding.Subject == "generated:complexity" {
+			t.Fatalf("generated source required a style provider: %+v", finding)
+		}
 	}
 }
 

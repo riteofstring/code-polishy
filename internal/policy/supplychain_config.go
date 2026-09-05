@@ -47,6 +47,9 @@ func validateSupplyChain(supply SupplyChain) error {
 }
 
 func validateSupplyChainInputs(supply SupplyChain) error {
+	if err := ValidateGitEvidence(supply.GitEvidence); err != nil {
+		return err
+	}
 	if err := validateAllowedLicenses(supply.AllowedLicenses); err != nil {
 		return err
 	}

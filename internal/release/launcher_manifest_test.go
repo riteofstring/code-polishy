@@ -8,7 +8,7 @@ import (
 
 func TestLauncherManifestReadsHistoricalSchemasWithoutReinterpretingThem(t *testing.T) {
 	t.Parallel()
-	for _, version := range []int{2, 3, 4} {
+	for _, version := range []int{2, 3, 4, 5} {
 		data, expected := historicalManifest(t, version)
 		manifest, err := parseLauncherManifest(data, ManifestFilename)
 		if err != nil {
@@ -49,14 +49,18 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 	t.Helper()
 	_, manifest := exampleRelease(t)
 	manifest.ManifestVersion = version
+	manifest.CapabilityCatalogSHA256 = ""
 	manifest.Tools.Packaging = ""
 	manifest.Tools.Python = ""
 	manifest.Tools.Vulture = ""
 	if version == 2 {
 		manifest.Tools.Ty = ""
-	} else if version == 4 {
+	} else if version >= 4 {
 		manifest.Tools.Python = "3.12.13+20260728"
 		manifest.Tools.Vulture = "2.16"
+	}
+	if version == 5 {
+		manifest.Tools.Packaging = "26.3"
 	}
 	manifest.ReleaseDigest = manifest.Identity()
 	tools := historicalManifestTools(t, manifest)
@@ -71,6 +75,9 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 
 func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 	t.Helper()
+	if manifest.ManifestVersion == 5 {
+		return render(t, manifest.Tools)
+	}
 	base := manifestToolsV2{
 		Go: manifest.Tools.Go, Govulncheck: manifest.Tools.Govulncheck, Node: manifest.Tools.Node,
 		OSVScanner: manifest.Tools.OSVScanner, PNPM: manifest.Tools.PNPM, Ruff: manifest.Tools.Ruff,

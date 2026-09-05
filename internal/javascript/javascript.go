@@ -493,6 +493,7 @@ func (bundle Bundle) DeadCode(ctx context.Context, root, directory string, works
 }
 
 type ImportResult struct {
+	Analyzed    []string      `json:"analyzed"`
 	Imports     []ImportFact  `json:"imports"`
 	Unsupported []Unsupported `json:"unsupported"`
 }
@@ -500,9 +501,11 @@ type ImportResult struct {
 type ImportFact struct {
 	Path      string `json:"path"`
 	Line      int    `json:"line"`
+	Column    int    `json:"column"`
 	Specifier string `json:"specifier"`
 	Resolved  string `json:"resolved"`
 	Package   string `json:"package"`
+	Kind      string `json:"kind"`
 }
 
 func (bundle Bundle) Imports(ctx context.Context, root string, paths []string) (ImportResult, error) {
@@ -514,8 +517,8 @@ func (bundle Bundle) Imports(ctx context.Context, root string, paths []string) (
 	if err != nil {
 		return ImportResult{}, err
 	}
-	var reported ImportResult
-	if err := decodeExactly(result, &reported); err != nil {
+	reported, err := decodeImportResult(result, paths)
+	if err != nil {
 		return ImportResult{}, fmt.Errorf("the sealed JavaScript bundle returned an unreadable %s result: %w", OperationImports, err)
 	}
 	return reported, nil

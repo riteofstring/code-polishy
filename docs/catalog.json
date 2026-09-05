@@ -71,6 +71,14 @@
       "public": true
     },
     {
+      "id": "capabilities",
+      "path": "docs/capabilities.md",
+      "title": "Repository Capability Discovery",
+      "summary": "Discover exact release, pack, and repository capabilities without activating behavior features.",
+      "aliases": ["capability-discovery"],
+      "public": true
+    },
+    {
       "id": "code-quality",
       "path": "docs/policies/code-quality.md",
       "title": "Code Quality Policy",
@@ -95,11 +103,27 @@
       "public": true
     },
     {
+      "id": "git-dependency-evidence",
+      "path": "docs/git-dependency-evidence.md",
+      "title": "Git Dependency Evidence",
+      "summary": "Verify signed CI evidence for exact public and private Git dependencies.",
+      "aliases": ["git-evidence"],
+      "public": true
+    },
+    {
       "id": "installation",
       "path": "docs/installation.md",
       "title": "Installation",
       "summary": "Install source, archive, or OCI releases and understand manifests, launchers, and repository locks.",
       "aliases": ["install"],
+      "public": true
+    },
+    {
+      "id": "operational-handoffs",
+      "path": "docs/operational-handoffs.md",
+      "title": "Repository Operational Handoffs",
+      "summary": "Select repository procedures for authentication, releases, deployment, and exact source or module contexts.",
+      "aliases": ["handoffs", "procedures"],
       "public": true
     },
     {

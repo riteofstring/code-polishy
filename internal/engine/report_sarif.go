@@ -80,6 +80,7 @@ type sarifRegion struct {
 
 type sarifSuppression struct {
 	Kind          string `json:"kind"`
+	Status        string `json:"status"`
 	Justification string `json:"justification"`
 }
 
@@ -91,15 +92,15 @@ func SARIF(report Report) ([]byte, error) {
 		rules[finding.Check] = true
 	}
 	for _, suppressed := range report.Suppressed {
-		results = append(results, findingSARIF(suppressed.Finding, suppressed.Exception.ID))
+		results = append(results, findingSARIF(suppressed.Finding, suppressed.Exception.ID+": "+suppressed.Exception.Reason))
 		rules[suppressed.Finding.Check] = true
 	}
 	for _, assessed := range report.Assessed {
-		results = append(results, findingSARIF(assessed.Finding, ""))
+		results = append(results, findingSARIF(assessed.Finding, assessed.Assessment.ID+": "+assessed.Assessment.Reason))
 		rules[assessed.Finding.Check] = true
 	}
 	for _, assessed := range report.ReleaseAges {
-		results = append(results, findingSARIF(assessed.Finding, ""))
+		results = append(results, findingSARIF(assessed.Finding, assessed.Assessment.ID+": "+assessed.Assessment.Reason))
 		rules[assessed.Finding.Check] = true
 	}
 	ruleIDs := make([]string, 0, len(rules))
@@ -150,7 +151,7 @@ func findingSARIF(finding policy.Finding, suppression string) sarifResult {
 		result.RelatedLocations = append(result.RelatedLocations, location)
 	}
 	if suppression != "" {
-		result.Suppressions = []sarifSuppression{{Kind: "external", Justification: suppression}}
+		result.Suppressions = []sarifSuppression{{Kind: "external", Status: "accepted", Justification: suppression}}
 	}
 	return result
 }

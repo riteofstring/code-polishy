@@ -11,11 +11,11 @@ import (
 	"unicode/utf8"
 )
 
-func New(nodes []Node, edges []Edge) (Graph, error) {
+func New(nodes []Node, edges []Edge, inputs []FactInput, external []ExternalComposition) (Graph, error) {
 	if len(nodes) > MaximumNodes {
 		return Graph{}, fmt.Errorf("source dependency graph exceeds the %d node limit", MaximumNodes)
 	}
-	if len(edges) > MaximumEdges {
+	if len(edges) > MaximumEdges-len(external) {
 		return Graph{}, fmt.Errorf("source dependency graph exceeds the %d edge limit", MaximumEdges)
 	}
 	normalizedNodes, nodeByPath, resolutions, err := normalizeNodes(nodes)
@@ -26,11 +26,21 @@ func New(nodes []Node, edges []Edge) (Graph, error) {
 	if err != nil {
 		return Graph{}, err
 	}
+	normalizedInputs, err := normalizeFactInputs(inputs, nodeByPath)
+	if err != nil {
+		return Graph{}, err
+	}
+	normalizedExternal, err := normalizeExternalCompositions(external, nodeByPath)
+	if err != nil {
+		return Graph{}, err
+	}
 	canonical := struct {
-		Protocol string `json:"protocol"`
-		Nodes    []Node `json:"nodes"`
-		Edges    []Edge `json:"edges"`
-	}{Protocol: Protocol, Nodes: normalizedNodes, Edges: normalizedEdges}
+		Protocol string                `json:"protocol"`
+		Nodes    []Node                `json:"nodes"`
+		Edges    []Edge                `json:"edges"`
+		Inputs   []FactInput           `json:"inputs"`
+		External []ExternalComposition `json:"externalCompositions"`
+	}{Protocol: Protocol, Nodes: normalizedNodes, Edges: normalizedEdges, Inputs: normalizedInputs, External: normalizedExternal}
 	encoded, err := json.Marshal(canonical)
 	if err != nil {
 		return Graph{}, fmt.Errorf("encode source dependency graph: %w", err)
@@ -42,6 +52,8 @@ func New(nodes []Node, edges []Edge) (Graph, error) {
 	return Graph{
 		Protocol: Protocol, Identity: hex.EncodeToString(digest[:]),
 		Nodes: normalizedNodes, Edges: normalizedEdges,
+		Inputs:   normalizedInputs,
+		External: normalizedExternal,
 	}, nil
 }
 

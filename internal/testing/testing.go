@@ -336,7 +336,7 @@ func BuildMergeDecision(repo repository.Repository, selection repository.Selecti
 	}
 	changedPaths := selection.Candidate.Paths()
 	for _, path := range changedPaths {
-		modules := repo.ModuleNames(path)
+		modules := repo.OwnerModuleNames(path)
 		if len(modules) != 1 {
 			return MergeDecision{
 				Level:   MergeLevelFull,
@@ -702,53 +702,8 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, requiredKindFindings(config)...)
 	findings = append(findings, requiredSupplementalKindFindings(config)...)
 	findings = append(findings, gherkinCoverageFindings(config.Tests.Suites, files)...)
-	findings = append(findings, testOwnershipFindings(repo, files)...)
+	findings = append(findings, OwnershipFindings(repo, files)...)
 	return findings
-}
-
-func testOwnershipFindings(repo repository.Repository, files []string) []policy.Finding {
-	findings := []policy.Finding{}
-	for _, path := range files {
-		if !repo.IsExecutableSource(path) || !repo.IsTest(path) {
-			continue
-		}
-		owners := repo.ModuleNames(path)
-		if len(owners) != 1 {
-			findings = append(findings, policy.Finding{
-				Check: "policy.testOwnership", Path: path, Subject: "module",
-				Message: fmt.Sprintf("governed test source belongs to %d modules; exactly one is required", len(owners)),
-			})
-			continue
-		}
-		if !focusedSuiteOwnsTest(repo.Config, owners[0], path) {
-			findings = append(findings, policy.Finding{
-				Check: "policy.testOwnership", Path: path, Subject: owners[0],
-				Message: "no quick focused suite for the owning module includes this test path",
-			})
-		}
-	}
-	return findings
-}
-
-func focusedSuiteOwnsTest(config policy.Config, module, path string) bool {
-	moduleIndex, found := config.ModuleByName[module]
-	if !found {
-		return false
-	}
-	for _, suite := range config.Tests.Suites {
-		if suite.Scope != "module" || suite.Cost != "quick" || !slices.Contains(suite.RunOn, "focused") ||
-			!slices.Contains(suite.Modules, module) {
-			continue
-		}
-		patterns := suite.Paths
-		if len(patterns) == 0 {
-			patterns = config.Modules[moduleIndex].Paths
-		}
-		if policy.MatchesAny(path, patterns) {
-			return true
-		}
-	}
-	return false
 }
 
 func Notes(_ repository.Repository, files []string) []string {

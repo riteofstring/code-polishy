@@ -203,7 +203,8 @@ func TestPackRequestsKeepGeneratedExecutableSourceAndProtectDeclaredData(t *test
 		paths      []string
 		want       []string
 	}{
-		{name: "format check", capability: "format", profile: "check", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
+		{name: "format check", capability: "format", profile: "check", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts"}},
+		{name: "format gate", capability: "format", profile: "gate", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts"}},
 		{name: "format write", capability: "format", profile: "format", paths: []string{"src/**", "data/**"}, want: []string{"src/main.ts"}},
 		{name: "lint", capability: "lint", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},
 		{name: "typecheck", capability: "typecheck", profile: "check", paths: []string{"src/**"}, want: []string{"src/main.ts", "src/client.generated.ts"}},

@@ -34,7 +34,7 @@ func (engine *Engine) suiteReceiptIdentity(suite policy.TestSuite) (testreceipt.
 	if err != nil || reason != "" {
 		return testreceipt.Identity{}, reason, err
 	}
-	environment := suiteReceiptEnvironment(suite.Environment)
+	environment := suiteReceiptEnvironment(generationReceiptEnvironment(engine.Repository, suite, selected))
 	tools := suiteReceiptTools(engine.Repository)
 	if reason := unboundedSuiteTool(suite.Argv, tools, selected); reason != "" {
 		return testreceipt.Identity{}, reason, nil
@@ -84,11 +84,14 @@ func suiteReceiptInputPaths(repo repository.Repository, suite policy.TestSuite, 
 	modules := suiteReceiptModules(repo.Config, suite)
 	selected := map[string]bool{}
 	for _, path := range files {
-		owned := intersectsStrings(repo.ModuleNames(path), modules)
+		owned := intersectsStrings(repo.OwnerModuleNames(path), modules)
 		declared := policy.MatchesAny(path, suite.Paths) || policy.MatchesAny(path, suite.ExtraInputs)
 		if owned || declared || repo.IsControlInput(path) || path == receiptConfigurationPath(repo) {
 			selected[path] = true
 		}
+	}
+	if reason := generationReceiptInputs(repo, suite, files, selected); reason != "" {
+		return nil, reason
 	}
 	if local, localReason := localSuiteExecutable(repo, suite.Argv); localReason != "" {
 		return nil, localReason

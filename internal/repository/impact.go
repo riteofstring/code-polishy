@@ -14,7 +14,7 @@ func (repo Repository) ImpactForPaths(paths []string) CandidateImpact {
 	paths = uniqueSorted(paths)
 	direct := []string{}
 	for _, path := range paths {
-		direct = append(direct, repo.ModuleNames(path)...)
+		direct = append(direct, repo.OwnerModuleNames(path)...)
 	}
 	direct = uniqueSorted(direct)
 	return CandidateImpact{

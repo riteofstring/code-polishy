@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	policyschema "github.com/riteofstring/code-polishy/schema"
@@ -197,12 +199,67 @@ func TestManagedJSONAndSARIFValidateAgainstPinnedSchemas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sarifSchemaSHA256 = "6352a05f9d03f181b8d9c71a46bdacc4fcff9d8ade5364858b425ba0c0994ed7"
+	const sarifSchemaSHA256 = "2b19d2358baef0251d7d24e208d05ffabf1b2a3ab5e1b3a816066fc57fd4a7e8"
 	digest := sha256.Sum256(policyschema.SARIF210)
 	if hex.EncodeToString(digest[:]) != sarifSchemaSHA256 {
 		t.Fatalf("SARIF schema digest = %s", hex.EncodeToString(digest[:]))
 	}
 	validateSchemaDocument(t, sarifSchema, policyschema.SARIF210, sarifData)
+}
+
+func TestSourceGraphAndCycleEvidenceValidateAgainstPinnedReportSchema(t *testing.T) {
+	node := sourcegraph.Node{Path: "src/app.ts", Language: "typescript", Root: ".", Module: "app", Resolution: "file:src/app.ts"}
+	edge := sourcegraph.Edge{
+		Source: "src/app.ts", Target: "src/app.ts", SourceResolution: node.Resolution, TargetResolution: node.Resolution,
+		Line: 1, Column: 1, Ecosystem: "javascript", Kind: sourcegraph.EdgeProvenDynamic,
+	}
+	graph, err := sourcegraph.New([]sourcegraph.Node{node}, []sourcegraph.Edge{edge}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	components, err := sourcegraph.CyclicComponents(graph)
+	if err != nil || len(components) != 1 {
+		t.Fatalf("components = %+v, error = %v", components, err)
+	}
+	component := components[0]
+	report := (&Engine{}).normalizeReport(Report{
+		Command: "architecture", ReportPath: ".code-polishy-reports/architecture/example/report.json", SourceDependencyGraph: &graph,
+		Findings: []policy.Finding{{
+			Check: "architecture.fileCycle", Path: node.Path, Line: 1, Column: 1, Subject: component.Classification,
+			Message: "cycle", SemanticIdentity: []string{component.Identity}, Scope: policy.FindingScope{Kind: "graph-component", Value: component.Identity},
+			DependencyComponent: &policy.DependencyComponent{
+				Protocol: "source-dependency-component/v1", Classification: component.Classification, Identity: component.Identity,
+				Members: []policy.DependencyNode{{Path: node.Path, Language: node.Language, Root: node.Root, Module: node.Module, Resolution: node.Resolution}},
+				Edges: []policy.DependencyEdge{{
+					Source: edge.Source, Target: edge.Target, SourceResolution: edge.SourceResolution, TargetResolution: edge.TargetResolution,
+					Line: edge.Line, Column: edge.Column, Ecosystem: edge.Ecosystem, Kind: string(edge.Kind),
+				}},
+				Witness: []policy.DependencyEdge{{
+					Source: edge.Source, Target: edge.Target, SourceResolution: edge.SourceResolution, TargetResolution: edge.TargetResolution,
+					Line: edge.Line, Column: edge.Column, Ecosystem: edge.Ecosystem, Kind: string(edge.Kind),
+				}},
+			},
+		}},
+	})
+	data, err := JSONReport(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
+}
+
+func TestPythonGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T) {
+	graph, err := sourcegraph.New([]sourcegraph.Node{{Path: "app.py", Language: "python", Root: ".", Module: "app", Resolution: "file:app.py"}}, nil,
+		[]sourcegraph.FactInput{{Analyzer: "python-facts", Protocol: "python-facts/v3", Project: "pyproject.toml", Root: ".", Paths: []string{"app.py"}, FactsSHA256: strings.Repeat("a", 64), PartitionsSHA256: strings.Repeat("b", 64), ResolutionSHA256: strings.Repeat("c", 64)}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := (&Engine{}).normalizeReport(Report{Command: "architecture", ReportPath: ".code-polishy-reports/architecture/example/report.json", SourceDependencyGraph: &graph})
+	data, err := JSONReport(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
 }
 
 func TestJSONAndSARIFMatchConsumerGoldenFacts(t *testing.T) {

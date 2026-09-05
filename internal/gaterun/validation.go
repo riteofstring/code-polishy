@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
@@ -271,10 +273,15 @@ func validateReportHeader(report Report) error {
 	if report.Commands == nil || report.Findings == nil || report.Notes == nil || report.TestEvidence == nil || report.TestDiagnostics == nil || report.SuiteSatisfactions == nil {
 		return fmt.Errorf("%w: gate run report collections are missing", ErrInvalidArtifact)
 	}
-	return validateFindingLocations(report.Findings)
+	if report.SourceDependencyGraph != nil {
+		if err := sourcegraph.Validate(*report.SourceDependencyGraph); err != nil {
+			return fmt.Errorf("%w: gate run source graph: %v", ErrInvalidArtifact, err)
+		}
+	}
+	return validatePolicyOutcomes(report)
 }
 
-func validateFindingLocations(findings []Finding) error {
+func validateFindingLocations(findings []policy.Finding) error {
 	for _, finding := range findings {
 		if finding.Line < 0 || finding.Column < 0 || finding.Column > 0 && finding.Line == 0 {
 			return fmt.Errorf("%w: gate run finding location is invalid", ErrInvalidArtifact)
@@ -862,8 +869,12 @@ func cloneCommandOutcome(outcome CommandOutcome) CommandOutcome {
 	return outcome
 }
 
-func cloneFindings(findings []Finding) []Finding {
-	return append([]Finding{}, findings...)
+func cloneFindings(findings []policy.Finding) []policy.Finding {
+	result := make([]policy.Finding, 0, len(findings))
+	for _, finding := range findings {
+		result = append(result, finding.Clone())
+	}
+	return result
 }
 
 func cloneTestEvidence(evidence []TestEvidence) []TestEvidence {
@@ -906,12 +917,16 @@ func cloneTestEvidencePointer(evidence *TestEvidence) *TestEvidence {
 
 func cloneReport(report Report) Report {
 	report.Identity = cloneIdentity(report.Identity)
+	report.SourceDependencyGraph = sourcegraph.Clone(report.SourceDependencyGraph)
 	commands := report.Commands
 	report.Commands = make([]CommandOutcome, len(commands))
 	for index, outcome := range commands {
 		report.Commands[index] = cloneCommandOutcome(outcome)
 	}
 	report.Findings = cloneFindings(report.Findings)
+	report.Suppressed = cloneSuppressedOutcomes(report.Suppressed)
+	report.Assessed = cloneVulnerabilityOutcomes(report.Assessed)
+	report.ReleaseAges = cloneReleaseAgeOutcomes(report.ReleaseAges)
 	report.Notes = cloneStrings(report.Notes)
 	report.TestEvidence = cloneTestEvidence(report.TestEvidence)
 	report.TestDiagnostics = cloneTestDiagnostics(report.TestDiagnostics)

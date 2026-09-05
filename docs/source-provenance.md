@@ -79,17 +79,86 @@ keep the sealed bundle portable and minimal.
   policy-owned `pyproject.toml` and frozen `uv.lock`; the carried runtime has no
   pip or ensurepip. Code Polishy never executes target Python to discover
   imports, select a project, or perform dead-code analysis.
+- Python fact analysis and Vulture pass their embedded policy program as the
+  first standard-input record. The isolated interpreter receives a fixed small
+  bootstrap argument; its program record is a JSON string bounded to 1 MiB,
+  including the required terminating newline. Remaining input contains the
+  separately bounded analysis request. Truncated and oversized program records
+  fail before execution. Target source remains analysis data.
 - The repository boundary builds one validated Python project inventory from
   contained `pyproject.toml` files and reuses it for dependency, quality, and
-  architecture work. One batched `python-facts/v1` process uses CPython 3.12
-  `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release. Its
+  architecture work. Bounded `python-facts/v3` requests use CPython 3.12
+  `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release.
+  Complete source files are partitioned deterministically. Compact type facts
+  resolve TypedDict reads, Pydantic members, and module imports across the validated union through
+  `python-type-project/v2`, and
+  Vulture uses the same parser, AST extractor, and semantic resolvers. Consumer
+  target resolution also accepts bounded compact records through
+  `python-reachability-project/v1`. Independent object-import resolution uses
+  `python-object-import-project/v1` over the same compact facts and only declared
+  registry inputs. It bounds the registry header and each source record to
+  16 MiB, the compact project to 256 MiB, resolution depth to 128, and loader
+  binding visits to two million. The graph binds separate identities for the
+  normalized facts, partition records, and combined type and object-import
+  resolution, including current registry bytes and exact source coverage. Compact call facts
+  retain lexical scopes, argument and keyword shapes, UTF-8 byte spans,
+  assignment-to-call locations, direct statement positions, and rejecting
+  guards. Loader evidence also records bounded collections and conditional
+  choices, lexical branch identities, binding activation sites, type-only
+  guards, and the canonical call AST shape. Loader aliases and supporting
+  calls resolve across the entire compact project. Each argument's canonical text is bounded to
+  64 KiB; malformed call evidence fails project validation. Its
   project, direct `src`, and in-tree PEP 517 backend roots are passed explicitly
   to consumers. A project-local `.venv` is passed only to `ty` when dependencies
   require it; Vulture always uses carried CPython and its pinned built-in
   whitelists. Ambient Python paths and environments are not tool provenance.
+- `python-runtime-check-project/v1` resolves exact runtime checks over the same
+  compact project union. It binds the loader and check to current source spans,
+  traces consecutive local assignments and aliases, and resolves governed
+  runtime classes and protocols through project imports and re-exports.
+  Supported checks are rejecting `isinstance` or `issubclass` guards and direct
+  synchronous validators whose body performs one such guard. Annotations,
+  ignored booleans, another checked value, uses or exits before the check,
+  exception suppression, and asynchronous or generator validators provide no
+  evidence. Data protocols cannot satisfy a class check; unknown metaclasses,
+  decorators, and external bases remain unsupported. Header, source-record,
+  response, and aggregate limits match the object-import transport, and value
+  and inheritance resolution are bounded to 128 steps. Exact source coverage,
+  request identity, call spans, and loaded-value traces are checked at the Go
+  boundary. This query executes no target code and establishes no input grammar,
+  namespace ownership, or dependency admission by itself.
 - Python manifests and `uv.lock` are target-owned inputs. Exact Git repository
   and commit facts remain source facts, not a fabricated PyPI age or
   vulnerability result when registry evidence is unavailable.
+  External plug-in dependency facts snapshot the current contained manifest
+  and its adjacent `uv.lock`, each bounded to 4 MiB and read as a regular file
+  without following symlinks. They retain both byte digests, require a direct
+  runtime or optional dependency, and match one authoritative lock package.
+  Registry pins compare through the carried `packaging` release's PEP 440
+  version normalization; Git pins bind the repository, exact commit, and
+  subdirectory. Transitive-only, build-only, development-only, local, moving,
+  or mismatched sources cannot acquire external dependency evidence. The
+  repository's namespace declaration remains an explicit ownership contract;
+  lockfile package names do not establish import namespaces. These facts do
+  not replace vulnerability, license, release-age, or dependency-review policy.
+- External composition joins independent object-import targets, runtime-check
+  evidence, and current direct dependency facts at one exact loader callsite.
+  Runtime input can instead supply a proved rejecting grammar and namespace
+  guard. Compact function facts recognize its exact predicate expression;
+  project resolution verifies its built-in and standard-library references,
+  unchanged loader parameter, rejection order, and current predicate source
+  digest. The predicate supports normalized Unicode module and object names
+  without evaluating application code. Guard lookup and output validation
+  index source calls and bindings, and resolution shares the two-million-visit
+  object-import work boundary.
+  The project resolution identity binds all three inputs; the canonical graph
+  retains each successful contract and its proof digests in the separate
+  `externalCompositions` collection. JSON, SARIF, saved gate results, and
+  architecture packets retain the same evidence. Local graph traversal and
+  module permissions do not consume these entries. Review topology retains
+  the semantic dependency and runtime contract without proof-only digest or
+  source-position changes. No composition declaration creates Vulture
+  reachability evidence or authorizes another loader callsite.
 - GitHub Actions structure comes only from the bounded `workflow-facts/v1`
   adapter over actionlint `v1.7.12`. Static workflow facts establish checked-in
   triggers, schedules, reachability, commands, and full action pins; provider

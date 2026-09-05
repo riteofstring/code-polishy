@@ -180,16 +180,7 @@ func pythonGraphFindings(
 	graph pythonGraph,
 	sourceFacts map[string]pythonSourceFact,
 ) []policy.Finding {
-	dependencies, coverage, err := pythonGraphDependencies(repo, project, sources, graph)
-	if err != nil {
-		return pythonCoverageForSources(sources, err.Error())
-	}
-	pythonGraphMissingCoverage(sources, dependencies, coverage)
-	pythonGraphTargetCoverage(repo, project, owners, allFiles, dependencies, coverage)
-	pythonGraphImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
-	findings := pythonCoverageFindings(coverage)
-	findings = append(findings, pythonModuleDependencyFindings(repo, sources, dependencies, coverage)...)
-	return pythonSortedFindings(findings)
+	return pythonGraphSourcePart(repo, project, sources, sources, owners, allFiles, graph, sourceFacts).findings
 }
 
 func pythonGraphDependencies(
@@ -240,10 +231,25 @@ func pythonGraphTargets(repo repository.Repository, project repository.PythonPro
 	return targets, message
 }
 
-func pythonGraphMissingCoverage(sources []string, dependencies map[string]map[string]bool, coverage map[string]string) {
+func pythonGraphMissingCoverage(sources, selected []string, dependencies map[string]map[string]bool, coverage map[string]string) {
+	selectedSet := pythonExpectedSources(selected)
+	contextMissing := []string{}
 	for _, source := range sources {
 		if _, found := dependencies[source]; !found {
-			coverage[source] = "the Ruff graph omitted this selected Python source"
+			if selectedSet[source] {
+				coverage[source] = "the Ruff graph omitted this selected Python source"
+			} else {
+				contextMissing = append(contextMissing, source)
+			}
+		}
+	}
+	if len(contextMissing) > 0 {
+		path := sources[0]
+		if len(selected) > 0 {
+			path = selected[0]
+		}
+		if coverage[path] == "" {
+			coverage[path] = fmt.Sprintf("the Ruff graph omitted %d contextual Python source(s), beginning with %s", len(contextMissing), contextMissing[0])
 		}
 	}
 }
@@ -291,7 +297,7 @@ func pythonGraphTargetCoverageMessage(
 	if owner != project.Manifest {
 		return "the Ruff graph resolves a local import outside the selected Python project"
 	}
-	if len(repo.ModuleNames(target)) != 1 {
+	if _, err := sourceModuleOwner(repo, target); err != nil {
 		return "the Ruff graph resolves a local import to an ambiguously owned module"
 	}
 	return ""
@@ -305,6 +311,7 @@ func pythonGraphImportCoverage(
 	coverage map[string]string,
 	sourceFacts map[string]pythonSourceFact,
 ) {
+	pythonObjectImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	pythonComputedImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	index := newPythonModuleIndex(project)
 	for _, source := range sources {
@@ -350,9 +357,9 @@ func pythonSourceModuleDependencyFindings(repo repository.Repository, source str
 		return nil
 	}
 	findings := []policy.Finding{}
-	sourceOwners := repo.ModuleNames(source)
+	sourceOwners := repo.OwnerModuleNames(source)
 	for target := range dependencies {
-		targetOwners := repo.ModuleNames(target)
+		targetOwners := repo.OwnerModuleNames(target)
 		if sourceOwners[0] == targetOwners[0] {
 			continue
 		}

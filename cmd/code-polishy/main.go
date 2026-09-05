@@ -21,6 +21,8 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 
 Commands:
   version
+  capabilities [--query TEXT] [--format human|json]
+  task-start --intent-file PATH (--files PATH | --module NAME) [--feature NAME] [--situation NAME]
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
@@ -37,6 +39,7 @@ Commands:
   behavior-review status --base REF [--format human|json]
   behavior-review prepare --base REF
   behavior-review finalize --base REF
+  architecture-review <status|prepare|finalize> --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
   test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental [--resume]|--module NAME...|--suite NAME...]
   test-plan [--base REF]
@@ -49,7 +52,7 @@ Commands:
   dependency-review --base REF
   artifact-security
   doctor [--strict]
-  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...])
+  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...]) [--situation NAME...]
   format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
   list-files [selection options]
@@ -300,29 +303,6 @@ func requireLockedRelease(invocation invocation) (int, bool) {
 	return 0, true
 }
 
-func handleLockMeta(invocation invocation) int {
-	if len(invocation.arguments) != 0 {
-		return commandUsageError("lock", "lock does not accept options")
-	}
-	manifest, installed, err := release.ReadManifest(invocation.policyRoot)
-	if err != nil {
-		return operationalError(err)
-	}
-	if !installed {
-		return operationalError(fmt.Errorf(
-			"%s is a Code Polishy source checkout rather than an installed release, and a source checkout cannot satisfy a target lock",
-			invocation.policyRoot,
-		))
-	}
-	lock := release.LockFor(manifest)
-	path := filepath.Join(invocation.repoRoot, release.LockFilename)
-	if err := release.WriteLock(invocation.repoRoot, lock); err != nil {
-		return operationalError(fmt.Errorf("write %s: %w", path, err))
-	}
-	fmt.Printf("PASS %s requires Code Polishy %s %s\n", release.LockFilename, lock.CodePolishyVersion, lock.ReleaseDigest)
-	return 0
-}
-
 func printVersion(invocation invocation) int {
 	if len(invocation.arguments) != 0 {
 		return commandUsageError("version", "version does not accept options")
@@ -375,26 +355,29 @@ func parseGlobalInvocation(arguments []string) (invocation, int) {
 
 func commandHandlers() map[string]commandHandler {
 	return map[string]commandHandler{
-		"doctor":            handleDoctor,
-		"gate":              handleGate,
-		"checkpoint-gate":   handleCheckpointGate,
-		"merge-gate":        handleMergeGate,
-		"behavior-review":   handleBehaviorReview,
-		"regression-proof":  handleRegressionProof,
-		"check":             handleCheck,
-		"architecture":      handleSelectionCommand("architecture"),
-		"format":            handleSelectionCommand("format"),
-		"fix":               handleSelectionCommand("format"),
-		"list-files":        handleSelectionCommand("list-files"),
-		"test":              handleTest,
-		"test-plan":         handleTestPlan,
-		"test-levels":       handleTestLevels,
-		"test-receipts":     handleTestReceipts,
-		"verify":            handleVerify,
-		"supply-chain":      handleSupplyChain,
-		"dependency-review": handleDependencyReview,
-		"artifact-security": handleArtifactSecurity,
-		"design-context":    handleDesignContext,
+		"capabilities":        handleCapabilities,
+		"task-start":          handleTaskStart,
+		"doctor":              handleDoctor,
+		"gate":                handleGate,
+		"checkpoint-gate":     handleCheckpointGate,
+		"merge-gate":          handleMergeGate,
+		"behavior-review":     handleBehaviorReview,
+		"architecture-review": handleArchitectureReview,
+		"regression-proof":    handleRegressionProof,
+		"check":               handleCheck,
+		"architecture":        handleSelectionCommand("architecture"),
+		"format":              handleSelectionCommand("format"),
+		"fix":                 handleSelectionCommand("format"),
+		"list-files":          handleSelectionCommand("list-files"),
+		"test":                handleTest,
+		"test-plan":           handleTestPlan,
+		"test-levels":         handleTestLevels,
+		"test-receipts":       handleTestReceipts,
+		"verify":              handleVerify,
+		"supply-chain":        handleSupplyChain,
+		"dependency-review":   handleDependencyReview,
+		"artifact-security":   handleArtifactSecurity,
+		"design-context":      handleDesignContext,
 	}
 }
 
@@ -743,8 +726,11 @@ func printReportTo(stdout, stderr io.Writer, report engine.Report) {
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
 	printReportCompletion(stdout, stderr, report)
 	printReportSummaryGroups(stdout, report.Summary)
+	printFormattingOutcome(stdout, report.Formatting)
+	printGitEvidence(stdout, report)
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
+	printRepositoryContext(stdout, report.RepositoryContext)
 	limit := engine.DefaultFindingDisplayLimit
 	if report.Display != nil && report.Display.Limit > 0 {
 		limit = report.Display.Limit
@@ -792,6 +778,7 @@ func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityRemi
 }
 
 func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {
+	printArchitectureReview(output, report)
 	if report.ChangedTestScope != nil {
 		printChangedTestScope(output, report.ChangedTestScope, verbose)
 	}
@@ -903,57 +890,6 @@ func printMergePolicyTo(output io.Writer, mergePolicy *engine.MergePolicy) {
 	for _, reason := range mergePolicy.Reasons {
 		fmt.Fprintln(output, "MERGE POLICY REASON:", reason)
 	}
-}
-
-func printTable(output io.Writer, table engine.Table) {
-	if len(table.Columns) == 0 {
-		return
-	}
-	widths := make([]int, len(table.Columns))
-	for index, column := range table.Columns {
-		widths[index] = len(column)
-	}
-	for _, row := range table.Rows {
-		for index := range table.Columns {
-			cell := tableCell(row, index)
-			if len(cell) > widths[index] {
-				widths[index] = len(cell)
-			}
-		}
-	}
-	if table.Title != "" {
-		fmt.Fprintln(output, table.Title)
-	}
-	printTableBorder(output, widths)
-	printTableRow(output, table.Columns, widths)
-	printTableBorder(output, widths)
-	for _, row := range table.Rows {
-		printTableRow(output, row, widths)
-	}
-	printTableBorder(output, widths)
-}
-
-func printTableBorder(output io.Writer, widths []int) {
-	fmt.Fprint(output, "+")
-	for _, width := range widths {
-		fmt.Fprint(output, strings.Repeat("-", width+2), "+")
-	}
-	fmt.Fprintln(output)
-}
-
-func printTableRow(output io.Writer, row []string, widths []int) {
-	fmt.Fprint(output, "|")
-	for index, width := range widths {
-		fmt.Fprintf(output, " %-*s |", width, tableCell(row, index))
-	}
-	fmt.Fprintln(output)
-}
-
-func tableCell(row []string, index int) string {
-	if index >= len(row) {
-		return ""
-	}
-	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(row[index])
 }
 
 func operationalError(err error) int {

@@ -231,7 +231,7 @@ func boundaryFindings(repo Repository, configPath, path string, allowed, exactAl
 			Message: "allowed new path must be a regular file addition",
 		}}
 	}
-	owners := repo.ModuleNames(path)
+	owners := repo.OwnerModuleNames(path)
 	if len(owners) == 0 {
 		return []policy.Finding{{
 			Check: ChangeBoundaryCheck, Path: path, Subject: "unowned",

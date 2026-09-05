@@ -442,10 +442,10 @@ func TestRegistryURLCannotContainCredentials(t *testing.T) {
 
 func TestLoadReadsOnlyTheCurrentConfigVersion(t *testing.T) {
 	t.Parallel()
-	for name, version := range map[string]string{"submodule-era": "2", "unreleased": "4"} {
+	for name, version := range map[string]string{"implicit-test-ownership": "3", "unreleased": "5"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			root := writeConfig(t, strings.Replace(minimalConfig(), `"version":3`, `"version":`+version, 1))
+			root := writeConfig(t, strings.Replace(minimalConfig(), `"version":4`, `"version":`+version, 1))
 			_, err := Load(root, "")
 			if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 				t.Fatalf("expected version %s to be refused, got %v", version, err)
@@ -797,6 +797,8 @@ func TestGeneralExceptionsCannotReplaceTypedSupplyChainGovernance(t *testing.T) 
 		"supplyChain.auditIgnore",
 		"supplyChain.dependencyOverride",
 		"supplyChain.goVulnerability",
+		"supplyChain.gitEvidence",
+		"supplyChain.gitVulnerability",
 		"supplyChain.nodeVulnerability",
 		"supplyChain.osvVulnerability",
 		"supplyChain.pnpmSecurity",
@@ -894,6 +896,18 @@ func TestApplyExceptionsRequiresExactTriple(t *testing.T) {
 	kept, suppressed := ApplyExceptions(findings, []Exception{exception}, now)
 	if len(kept) != 1 || kept[0].Path != "b.go" || len(suppressed) != 1 {
 		t.Fatalf("kept=%+v suppressed=%+v", kept, suppressed)
+	}
+}
+
+func TestArchitectureEvidenceFailuresCannotBeSuppressed(t *testing.T) {
+	now := time.Now().UTC()
+	for _, check := range []string{"architecture.fileCycle", "testing.fileCycle", "architecture.sourceGraphCoverage", "architecture.importCoverage", "architecture.pythonFactsCoverage"} {
+		finding := Finding{Check: check, Path: "a.go", Subject: "production", Message: "cycle"}
+		exception := Exception{Check: check, Path: finding.Path, Subject: finding.Subject, Expires: Date{Time: now.AddDate(0, 0, 1)}}
+		kept, suppressed := ApplyExceptions([]Finding{finding}, []Exception{exception}, now)
+		if len(kept) != 1 || len(suppressed) != 0 || suppressibleCheck(check) {
+			t.Fatalf("%s: kept=%+v suppressed=%+v", check, kept, suppressed)
+		}
 	}
 }
 
@@ -1444,5 +1458,5 @@ func writeConfig(t *testing.T, contents string) string {
 	return root
 }
 func minimalConfig() string {
-	return `{"version":3,"project":{"kind":"content"},"quality":{},"modules":[{"name":"content","paths":["content/**"]}],"checks":[],"tests":{"suites":[{"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},{"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}]},"supplyChain":{},"exceptions":[]}`
+	return `{"version":4,"project":{"kind":"content"},"quality":{},"modules":[{"name":"content","paths":["content/**"]}],"checks":[],"tests":{"ownership":[],"suites":[{"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},{"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}]},"supplyChain":{},"exceptions":[]}`
 }

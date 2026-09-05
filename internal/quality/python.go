@@ -181,7 +181,7 @@ func pythonQualityRuffLintFindings(repo repository.Repository, project pythonQua
 	if baseline && !pythonRuffBaselineDiagnostics(diagnostics) {
 		return pythonQualityCoverage(project.sources, "quality.lintCoverage", "ruff", "the isolated Ruff baseline emitted a diagnostic outside "+pythonRuffBaselineSelection)
 	}
-	return pythonRuffDiagnosticFindings(diagnostics, "quality.lint")
+	return pythonRuffDiagnosticFindings(pythonStyleFilteredDiagnostics(repo, diagnostics), "quality.lint")
 }
 
 func pythonQualityRuffComplexityFindings(repo repository.Repository, project pythonQualityProject, output []byte) []policy.Finding {
@@ -396,7 +396,7 @@ func pythonQualityProjectPath(project repository.PythonProject, source string) (
 func pythonQualityModules(repo repository.Repository, sources []string) []string {
 	modules := []string{}
 	for _, source := range sources {
-		modules = append(modules, repo.ModuleNames(source)...)
+		modules = append(modules, repo.OwnerModuleNames(source)...)
 	}
 	sort.Strings(modules)
 	return slices.Compact(modules)

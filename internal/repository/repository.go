@@ -413,7 +413,7 @@ func (repo Repository) IsData(path string) bool {
 }
 
 func (repo Repository) IsTest(path string) bool {
-	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Scope.Tests)
+	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Tests.Paths)
 }
 
 func (repo Repository) IsDevelopment(path string) bool {
@@ -606,7 +606,7 @@ func (repo Repository) DesignDocumentsForFiles(paths []string) []string {
 			documents[document.Path] = true
 			continue
 		}
-		for _, module := range repo.ModuleNames(normalized) {
+		for _, module := range repo.OwnerModuleNames(normalized) {
 			if document, exists := repo.designDocumentForModule(module); exists {
 				documents[document.Path] = true
 			}
@@ -633,7 +633,7 @@ func (repo Repository) DesignDocumentsForModules(modules []string) ([]string, er
 			continue
 		}
 		for _, sourcePath := range document.SourcePaths {
-			for _, module := range repo.ModuleNames(sourcePath) {
+			for _, module := range repo.OwnerModuleNames(sourcePath) {
 				if selected[module] {
 					documents[document.Path] = true
 					break
@@ -664,7 +664,7 @@ func (repo Repository) designSourcePathMessage(path string) string {
 	if !repo.IsSourceCommentSource(path) {
 		return "mapped source path is not governed source"
 	}
-	if owners := repo.ModuleNames(path); len(owners) != 1 {
+	if owners := repo.OwnerModuleNames(path); len(owners) != 1 {
 		return "mapped source path must belong to exactly one module"
 	}
 	return ""

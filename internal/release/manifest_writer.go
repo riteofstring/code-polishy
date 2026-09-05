@@ -73,7 +73,31 @@ func composeReleaseManifest(root, sourceRevision string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	return newReleaseManifest(version, sourceRevision, host, pins, entries), nil
+	manifest := newReleaseManifest(version, sourceRevision, host, pins, entries)
+	if err := validateReleaseCapabilityCatalog(root, manifest); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
+}
+
+func validateReleaseCapabilityCatalog(root string, manifest Manifest) error {
+	handle, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	data, err := readCapabilityFile(handle, CapabilityCatalogPath, MaximumCapabilityCatalogBytes)
+	if err != nil {
+		return fmt.Errorf("read required release capability catalog: %w", err)
+	}
+	catalog, err := ParseCapabilityCatalog(data)
+	if err != nil {
+		return err
+	}
+	if capabilityContentSHA256(data) != manifest.CapabilityCatalogSHA256 {
+		return fmt.Errorf("capability catalog changed while composing the release")
+	}
+	return validateCapabilityWorkflowFiles(handle, manifest, catalog)
 }
 
 func readReleasePin(root, relative string, trimV bool) (string, error) {
@@ -94,6 +118,11 @@ func readReleasePin(root, relative string, trimV bool) (string, error) {
 func newReleaseManifest(version, sourceRevision, host string, pins []string, entries []Entry) Manifest {
 	manifest := Manifest{ManifestVersion: ManifestVersion, CodePolishyVersion: version, SourceRevision: sourceRevision,
 		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Packaging: pins[5], Python: pins[6], Ruff: pins[7], Shellcheck: pins[8], Staticcheck: pins[9], Ty: pins[10], Vulture: pins[11]}, Entries: entries, EntryCount: len(entries)}
+	for _, entry := range entries {
+		if entry.Path == CapabilityCatalogPath && entry.Symlink == "" {
+			manifest.CapabilityCatalogSHA256 = entry.SHA256
+		}
+	}
 	manifest.ReleaseDigest = manifest.Identity()
 	manifest.ContentDigest = releaseEntriesDigest(entries)
 	return manifest

@@ -57,10 +57,13 @@ func RunAdapter(ctx context.Context, repo repository.Repository, selection repos
 	if adapter == nil {
 		return nil
 	}
+	request := requestFor(repo, selection, command, profile)
+	if len(request.Files) == 0 && (adapter.Capability == "format" || adapter.Capability == "complexity") {
+		return nil
+	}
 	if err := verifyAdapter(command); err != nil {
 		return []policy.Finding{packFailure(adapter, err)}
 	}
-	request := requestFor(repo, selection, command, profile)
 	if len(request.Files) > 10000 || len(request.Modules) > 1000 {
 		return []policy.Finding{packFailure(adapter, errors.New("adapter request exceeds its file or module count limit"))}
 	}
@@ -217,7 +220,7 @@ func malformedResponseFinding(finding ResponseFinding, capability string) bool {
 func requestFor(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) Request {
 	files := []string{}
 	for _, selected := range selection.Files {
-		if packCommandSelects(repo, command, profile, selected) {
+		if packCommandSelects(repo, command, selected) {
 			files = append(files, selected)
 		}
 	}
@@ -236,27 +239,31 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile}
 }
 
-func packCommandSelects(repo repository.Repository, command policy.Command, profile, selected string) bool {
+func packCommandSelects(repo repository.Repository, command policy.Command, selected string) bool {
 	if (len(command.Paths) > 0 && !policy.MatchesAny(selected, command.Paths)) || !moduleMatches(repo, command.Modules, selected) {
 		return false
 	}
-	if repo.IsData(selected) && command.Adapter.Capability == "format" {
+	return packCapabilitySelects(repo, command.Adapter.Capability, selected)
+}
+
+func packCapabilitySelects(repo repository.Repository, capability, selected string) bool {
+	if repo.IsData(selected) && capability == "format" {
 		return false
 	}
 	if !repo.IsGenerated(selected) {
 		return true
 	}
-	if command.Adapter.Capability == "complexity" {
+	if capability == "complexity" {
 		return false
 	}
-	return !(command.Adapter.Capability == "format" && profile == "format")
+	return capability != "format"
 }
 
 func moduleMatches(repo repository.Repository, modules []string, selected string) bool {
 	if len(modules) == 0 {
 		return true
 	}
-	for _, owner := range repo.ModuleNames(selected) {
+	for _, owner := range repo.OwnerModuleNames(selected) {
 		if slices.Contains(modules, owner) {
 			return true
 		}

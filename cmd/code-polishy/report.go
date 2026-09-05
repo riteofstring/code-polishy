@@ -32,6 +32,72 @@ func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
 		if finding.Remediation.NextCommand != nil {
 			fmt.Fprintln(output, "     next:", strings.Join(finding.Remediation.NextCommand.Argv, " "))
 		}
+		printGenerationRemediation(output, finding.Remediation.Generation)
+	}
+}
+
+func printGenerationRemediation(output io.Writer, generation *policy.GenerationRemediation) {
+	if generation == nil {
+		return
+	}
+	fmt.Fprintln(output, "     producer:", generation.Producer)
+	inputs := generation.Inputs
+	if len(inputs) > 8 {
+		inputs = inputs[:8]
+	}
+	inputText := strings.Join(inputs, ", ")
+	if len(inputText) > 1024 {
+		inputText = "paths exceed the terminal bound; see the complete report"
+	}
+	fmt.Fprintln(output, "     inputs:", inputText)
+	if len(inputs) < len(generation.Inputs) {
+		fmt.Fprintf(output, "     %d more producer input(s) in the complete report\n", len(generation.Inputs)-len(inputs))
+	}
+	fmt.Fprintf(output, "     generate (cwd %s): %s\n", generation.Generate.Cwd, displayGenerationCommand(generation.Generate.Argv))
+	fmt.Fprintf(output, "     verify (cwd %s): %s\n", generation.Verify.Cwd, displayGenerationCommand(generation.Verify.Argv))
+	for _, prerequisite := range generation.Prerequisites {
+		fmt.Fprintf(output, "     %s prerequisite: %s\n", prerequisite.Operation, prerequisite.Message)
+	}
+}
+
+func displayGenerationCommand(argv []string) string {
+	quoted := make([]string, 0, len(argv))
+	for _, argument := range argv {
+		quoted = append(quoted, "'"+strings.ReplaceAll(argument, "'", "'\\''")+"'")
+	}
+	command := strings.Join(quoted, " ")
+	if len(command) > 4096 {
+		return "command exceeds the terminal bound; see the complete report for its exact arguments"
+	}
+	return command
+}
+
+func printFormattingOutcome(output io.Writer, outcome *engine.FormatOutcome) {
+	if outcome == nil {
+		return
+	}
+	fmt.Fprintf(output, "FORMAT: %d rewritten, %d unchanged, %d protected and untouched\n", outcome.Rewritten, outcome.Unchanged, outcome.Protected)
+	producers := map[string]int{}
+	for _, file := range outcome.Files {
+		if file.State == "protected" {
+			producer := file.Producer
+			if producer == "" {
+				producer = "declared data or non-executable generated output"
+			}
+			producers[producer]++
+		}
+	}
+	names := make([]string, 0, len(producers))
+	for name := range producers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for index, name := range names {
+		if index == 8 {
+			fmt.Fprintf(output, "PROTECTED: %d more producer group(s) in the complete report\n", len(names)-index)
+			break
+		}
+		fmt.Fprintf(output, "PROTECTED: %s — %d style-exempt output(s)\n", name, producers[name])
 	}
 }
 
@@ -80,6 +146,16 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedReleaseAge) {
 	for _, assessment := range assessed {
 		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s)\n", assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category)
+	}
+}
+
+func printGitEvidence(output io.Writer, report engine.Report) {
+	for index, receipt := range report.GitEvidence {
+		if index == 8 {
+			fmt.Fprintf(output, "GIT EVIDENCE: %d more verified artifact(s) in the complete report\n", len(report.GitEvidence)-index)
+			break
+		}
+		fmt.Fprintf(output, "GIT EVIDENCE: %s verified from %s; expires %s\n", receipt.Scope, receipt.Provider, receipt.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"))
 	}
 }
 
@@ -234,4 +310,55 @@ func behaviorReviewScope(review *engine.BehaviorReviewStatus) string {
 		scope = append(scope, feature.Name)
 	}
 	return strings.Join(scope, ", ")
+}
+
+func printTable(output io.Writer, table engine.Table) {
+	if len(table.Columns) == 0 {
+		return
+	}
+	widths := make([]int, len(table.Columns))
+	for index, column := range table.Columns {
+		widths[index] = len(column)
+	}
+	for _, row := range table.Rows {
+		for index := range table.Columns {
+			cell := tableCell(row, index)
+			if len(cell) > widths[index] {
+				widths[index] = len(cell)
+			}
+		}
+	}
+	if table.Title != "" {
+		fmt.Fprintln(output, table.Title)
+	}
+	printTableBorder(output, widths)
+	printTableRow(output, table.Columns, widths)
+	printTableBorder(output, widths)
+	for _, row := range table.Rows {
+		printTableRow(output, row, widths)
+	}
+	printTableBorder(output, widths)
+}
+
+func printTableBorder(output io.Writer, widths []int) {
+	fmt.Fprint(output, "+")
+	for _, width := range widths {
+		fmt.Fprint(output, strings.Repeat("-", width+2), "+")
+	}
+	fmt.Fprintln(output)
+}
+
+func printTableRow(output io.Writer, row []string, widths []int) {
+	fmt.Fprint(output, "|")
+	for index, width := range widths {
+		fmt.Fprintf(output, " %-*s |", width, tableCell(row, index))
+	}
+	fmt.Fprintln(output)
+}
+
+func tableCell(row []string, index int) string {
+	if index >= len(row) {
+		return ""
+	}
+	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(row[index])
 }

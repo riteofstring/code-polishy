@@ -31,6 +31,8 @@ func TestIdentityDigestBindsCommandAndEnvironmentInputs(t *testing.T) {
 	}{
 		{name: "candidate", mutate: func(value *IdentityInput) { value.Candidate = strings.Repeat("c", 40) }},
 		{name: "configuration", mutate: func(value *IdentityInput) { value.ConfigurationSHA256 = strings.Repeat("d", 64) }},
+		{name: "Git evidence", mutate: func(value *IdentityInput) { value.GitEvidenceSHA256 = strings.Repeat("e", 64) }},
+		{name: "policy validity", mutate: func(value *IdentityInput) { value.PolicyValiditySHA256 = strings.Repeat("f", 64) }},
 		{name: "environment", mutate: func(value *IdentityInput) { value.Environment[0].Value = "other" }},
 		{name: "command", mutate: func(value *IdentityInput) { value.Commands[0].Argv = []string{"tool", "changed"} }},
 		{name: "category", mutate: func(value *IdentityInput) { value.Commands[0].Category = Check }},

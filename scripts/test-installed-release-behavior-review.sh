@@ -108,7 +108,7 @@ write_behavior_review_fixture_config() {
   fi
   write_file "${target}/.code-polishy.json" <<EOF
 {
-  "version": 3,
+  "version": 4,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},
@@ -126,6 +126,7 @@ write_behavior_review_fixture_config() {
     }
   ],
   "tests": {
+    "ownership": [],
     "suites": [
       {
         "name": "greeting-unit",

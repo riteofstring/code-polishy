@@ -51,7 +51,7 @@ func parseReportOutputOptions(command string, arguments []string) (reportOutputO
 
 func reportOutputCommand(command string) bool {
 	switch command {
-	case "change-boundary", "doctor", "gate", "checkpoint-gate", "merge-gate", "check", "architecture", "format", "fix", "test", "test-plan", "test-levels", "verify", "supply-chain", "dependency-review", "artifact-security":
+	case "change-boundary", "doctor", "gate", "checkpoint-gate", "merge-gate", "check", "architecture", "architecture-review", "design-context", "format", "fix", "test", "test-plan", "test-levels", "verify", "supply-chain", "dependency-review", "artifact-security":
 		return true
 	default:
 		return false

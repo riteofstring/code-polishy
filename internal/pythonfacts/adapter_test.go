@@ -72,11 +72,12 @@ func assertAdapterMetadata(t *testing.T, metadata Distribution) {
 
 func assertAdapterSource(t *testing.T, source Source) {
 	t.Helper()
-	if source.Error != "" || len(source.Imports) != 1 || len(source.ComputedImports) != 1 || source.ComputedImports[0].Callee != "importlib.import_module" {
+	imports := sourceModuleTestImports(t, source)
+	if source.Error != "" || len(source.Imports) != 1 || len(imports) != 1 || imports[0].Callee != "importlib.import_module" {
 		t.Fatalf("source = %+v", source)
 	}
-	if source.ComputedImports[0].EvidenceError == "" {
-		t.Fatalf("unbounded computed import evidence = %+v", source.ComputedImports[0])
+	if imports[0].EvidenceError == "" {
+		t.Fatalf("unbounded computed import evidence = %+v", imports[0])
 	}
 }
 
@@ -97,18 +98,19 @@ importlib.import_module(importlib.metadata.entry_points(group="app.plugins")[cho
 		t.Fatal(err)
 	}
 	source := response.Sources[0]
-	if source.Error != "" || len(source.ComputedImports) != 3 {
+	imports := sourceModuleTestImports(t, source)
+	if source.Error != "" || len(imports) != 3 {
 		t.Fatalf("source = %+v", source)
 	}
-	if strings.Join(source.ComputedImports[0].Targets, ",") != "app.plugins.first,app.plugins.second" || source.ComputedImports[0].EvidenceError != "" {
-		t.Fatalf("enumeration = %+v", source.ComputedImports[0])
+	if strings.Join(imports[0].Targets, ",") != "app.plugins.first,app.plugins.second" || imports[0].EvidenceError != "" {
+		t.Fatalf("enumeration = %+v", imports[0])
 	}
-	configuration := source.ComputedImports[1]
+	configuration := imports[1]
 	if len(configuration.Configuration) != 1 || configuration.Configuration[0].Path != "plugins.json" || configuration.Configuration[0].JSONPointer != "/enabled" || configuration.EvidenceError != "" {
 		t.Fatalf("configuration = %+v", configuration)
 	}
-	if source.ComputedImports[2].EntryPointGroup != "app.plugins" || source.ComputedImports[2].EvidenceError != "" {
-		t.Fatalf("entry point = %+v", source.ComputedImports[2])
+	if imports[2].EntryPointGroup != "app.plugins" || imports[2].EvidenceError != "" {
+		t.Fatalf("entry point = %+v", imports[2])
 	}
 }
 
@@ -129,19 +131,20 @@ class Plugin(importlib.import_module(base_name), metaclass=importlib.import_modu
 		t.Fatal(err)
 	}
 	facts := response.Sources[0]
-	if facts.Error != "" || len(facts.ComputedImports) != 8 {
+	imports := sourceModuleTestImports(t, facts)
+	if facts.Error != "" || len(imports) != 8 {
 		t.Fatalf("source = %+v", facts)
 	}
-	arguments := make([]string, 0, len(facts.ComputedImports))
-	for _, fact := range facts.ComputedImports {
+	arguments := make([]string, 0, len(imports))
+	for _, fact := range imports {
 		arguments = append(arguments, fact.Argument)
 	}
 	slices.Sort(arguments)
 	if strings.Join(arguments, ",") != "annotation_name,base_name,class_name,decorator_name,default_name,lambda_name,metaclass_name,return_name" {
-		t.Fatalf("computed imports = %+v", facts.ComputedImports)
+		t.Fatalf("computed imports = %+v", imports)
 	}
-	if facts.ComputedImports[3].Callable != "<lambda>" {
-		t.Fatalf("lambda computed import = %+v", facts.ComputedImports[3])
+	if imports[3].Callable != "<lambda>" {
+		t.Fatalf("lambda computed import = %+v", imports[3])
 	}
 }
 
@@ -166,7 +169,8 @@ value = lambda importlib: importlib.import_module(lambda_name)
 		t.Fatal(err)
 	}
 	facts := response.Sources[0]
-	if facts.Error != "" || len(facts.ComputedImports) != 0 {
+	imports := sourceModuleTestImports(t, facts)
+	if facts.Error != "" || len(imports) != 0 {
 		t.Fatalf("source = %+v", facts)
 	}
 }
@@ -193,4 +197,16 @@ func TestAdapterFailsClosedForSyntaxIdentityAndResourceBoundaries(t *testing.T) 
 	if _, err := Analyze(python, Request{Metadata: []Input{{Path: "broken.dist-info/METADATA", Source: string([]byte{0xff})}}}); err == nil {
 		t.Fatal("invalid UTF-8 was accepted")
 	}
+}
+
+func sourceModuleTestImports(t *testing.T, source Source) []ModuleImport {
+	t.Helper()
+	if source.Error != "" {
+		t.Fatal(source.Error)
+	}
+	result, err := ResolveTypeProject(t.Context(), typeTestInterpreter(t), typeTestModules([]Source{source}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result.Imports
 }

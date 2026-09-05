@@ -19,8 +19,9 @@ func TestCheckSelectedAgentGuidanceDoesNotStartPythonAnalysis(t *testing.T) {
 		t.Fatal(err)
 	}
 	configured := strings.Replace(string(config), `"scope": {}`, `"scope": {
-  "pythonDynamicReferences": [{"project":"pyproject.toml","module":"app","symbol":"handler"}],
-  "pythonExternalAttributes": [{"project":"pyproject.toml","module":"app","callable":"configure","receiver":"settings","attribute":"output_path","line":4,"consumerType":"external.runtime.Settings"}]
+  "pythonDynamicReferences": [{"kind":"target","project":"pyproject.toml","target":{"module":"app","symbol":"handler"},"consumer":{"kind":"callsite","importer":"app.py","module":"app","callable":"load","site":{"line":3,"column":12},"callee":"pkgutil.resolve_name","shape":"module-object-call/v1","argument":"'app:handler'","sourceSha256":"`+strings.Repeat("a", 64)+`"}}],
+  "pythonExternalAttributes": [{"project":"pyproject.toml","module":"app","callable":"configure","receiver":{"kind":"parameter","name":"settings","binding":{"line":3,"column":15},"type":"external.runtime.Settings"},"attribute":"output_path","write":{"line":4,"column":5}}],
+  "pythonExternalPluginImports": [{"project":"pyproject.toml","distribution":"plug-dist","namespace":"third_party.plugins","inputGrammar":"python-module-object/v1","consumer":{"kind":"callsite","importer":"app.py","module":"app","callable":"load","site":{"line":5,"column":14},"callee":"pkgutil.resolve_name","shape":"module-object-call/v1","argument":"name","sourceSha256":"`+strings.Repeat("a", 64)+`"},"check":{"kind":"isinstance","protocol":"app.Contract","site":{"line":6,"column":12}}}]
 }`, 1)
 	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, configured)
 	writeBehaviorReviewCLIFile(t, root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
@@ -40,7 +41,7 @@ func TestCheckSelectedAgentGuidanceDoesNotStartPythonAnalysis(t *testing.T) {
 	}
 	for _, finding := range report.Findings {
 		if strings.HasPrefix(finding.Check, "quality.deadCode") || strings.HasPrefix(finding.Check, "architecture.python") ||
-			finding.Check == "policy.pythonDynamicReference" || finding.Check == "policy.pythonExternalAttribute" {
+			finding.Check == "policy.pythonDynamicReference" || finding.Check == "policy.pythonExternalAttribute" || finding.Check == "policy.pythonExternalPluginImport" {
 			t.Errorf("Python analysis ran for selected agent guidance: %+v", finding)
 		}
 	}

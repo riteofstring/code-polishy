@@ -7,12 +7,13 @@
   "required": ["version", "project", "modules", "tests"],
   "properties": {
     "$schema": { "type": "string", "minLength": 1 },
-    "version": { "const": 3 },
+    "version": { "const": 4 },
     "project": { "$ref": "#/$defs/project" },
     "scope": { "$ref": "#/$defs/scope" },
     "quality": { "$ref": "#/$defs/quality" },
     "portability": { "$ref": "#/$defs/portability" },
     "documentation": { "$ref": "#/$defs/documentation" },
+    "generation": { "$ref": "#/$defs/generation" },
     "verification": { "$ref": "#/$defs/verification" },
     "packs": {
       "type": "array",
@@ -24,19 +25,65 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/module" }
     },
-    "checks": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/check" }
-    },
+    "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
     "tests": { "$ref": "#/$defs/tests" },
-    "supplyChain": { "$ref": "#/$defs/supplyChain" },
+    "supplyChain": {
+      "$ref": "code-polishy-supply-chain.schema.json#/$defs/supplyChain"
+    },
     "policyModules": { "$ref": "#/$defs/policyModules" },
-    "exceptions": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/exception" }
-    }
+    "exceptions": { "type": "array", "items": { "$ref": "#/$defs/exception" } }
   },
   "$defs": {
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "producers": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/generationProducer" }
+        }
+      }
+    },
+    "generationProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "outputs", "inputs", "generate", "verify"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier", "maxLength": 128 },
+        "outputs": { "$ref": "#/$defs/generationPatterns" },
+        "inputs": { "$ref": "#/$defs/generationPatterns" },
+        "generate": { "$ref": "#/$defs/generationCommand" },
+        "verify": { "$ref": "#/$defs/generationCommand" }
+      }
+    },
+    "generationPatterns": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path", "maxLength": 4096 }
+    },
+    "generationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/nonemptyString", "maxLength": 4096 }
+        },
+        "cwd": { "$ref": "#/$defs/concretePath", "maxLength": 4096 },
+        "environment": {
+          "$ref": "#/$defs/environment",
+          "maxItems": 64,
+          "items": { "maxLength": 4096 }
+        },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
     "identifier": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
@@ -126,7 +173,6 @@
         "exclude": { "$ref": "#/$defs/paths" },
         "generated": { "$ref": "#/$defs/paths" },
         "data": { "$ref": "#/$defs/paths" },
-        "tests": { "$ref": "#/$defs/paths" },
         "entryPoints": { "$ref": "#/$defs/paths" },
         "generatedJavaScript": {
           "type": "array",
@@ -143,6 +189,14 @@
           "maxItems": 1024,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/pythonComputedImport" }
+        },
+        "pythonExternalPluginImports": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "code-polishy-python.schema.json#/$defs/externalPluginImport"
+          }
         },
         "pythonExternalAttributes": {
           "type": "array",
@@ -180,12 +234,26 @@
     "pythonDynamicReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["project", "module", "symbol"],
+      "required": ["kind", "project", "consumer"],
       "properties": {
+        "kind": { "enum": ["target", "registry"] },
         "project": { "$ref": "#/$defs/pyprojectPath" },
-        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
-        "symbol": { "$ref": "#/$defs/pythonIdentifierChain" }
-      }
+        "target": { "$ref": "#/$defs/pythonDynamicTarget" },
+        "registry": { "$ref": "#/$defs/pythonDynamicRegistry" },
+        "consumer": { "$ref": "#/$defs/pythonDynamicConsumer" }
+      },
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "target" } },
+          "required": ["target"],
+          "not": { "required": ["registry"] }
+        },
+        {
+          "properties": { "kind": { "const": "registry" } },
+          "required": ["registry"],
+          "not": { "required": ["target"] }
+        }
+      ]
     },
     "pythonComputedImport": {
       "type": "object",
@@ -201,7 +269,11 @@
         "callable": { "$ref": "#/$defs/pythonIdentifierChain" },
         "moduleScope": { "const": true },
         "callee": {
-          "enum": ["importlib.import_module", "builtins.__import__"]
+          "enum": [
+            "importlib.import_module",
+            "builtins.__import__",
+            "pkgutil.resolve_name"
+          ]
         },
         "line": { "type": "integer", "minimum": 1 },
         "column": { "type": "integer", "minimum": 1 },
@@ -228,12 +300,33 @@
         "configuration": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/pythonComputedImportInput" }
+          "items": { "$ref": "#/$defs/pythonObjectImportInput" }
         }
       },
       "allOf": [
         { "required": ["line", "column", "shape", "argument"] },
         { "required": ["sourceSha256"] },
+        {
+          "if": {
+            "properties": { "callee": { "const": "pkgutil.resolve_name" } }
+          },
+          "then": {
+            "required": ["namespace", "configuration"],
+            "properties": {
+              "shape": { "const": "module-object-call/v1" },
+              "targets": { "maxItems": 0 },
+              "entryPointGroup": false,
+              "configuration": { "minItems": 1, "maxItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "configuration": {
+                "items": { "$ref": "#/$defs/pythonComputedImportInput" }
+              }
+            }
+          }
+        },
         {
           "oneOf": [
             {
@@ -256,9 +349,7 @@
           ]
         },
         {
-          "if": {
-            "required": ["entryPointGroup"]
-          },
+          "if": { "required": ["entryPointGroup"] },
           "then": {
             "properties": {
               "targets": { "maxItems": 0 },
@@ -269,19 +360,21 @@
       ]
     },
     "pythonComputedImportInput": {
+      "allOf": [
+        { "$ref": "#/$defs/pythonObjectImportInput" },
+        { "properties": { "jsonPointer": { "minLength": 1 } } }
+      ]
+    },
+    "pythonObjectImportInput": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "jsonPointer", "sha256"],
       "properties": {
-        "path": {
-          "$ref": "#/$defs/literalExactPath",
-          "pattern": "[.]json$"
-        },
+        "path": { "$ref": "#/$defs/literalExactPath", "pattern": "[.]json$" },
         "jsonPointer": {
           "type": "string",
-          "minLength": 1,
           "maxLength": 4096,
-          "pattern": "^/[^*\\r\\n\\u0000]*$"
+          "pattern": "^(?:/[^*\\r\\n\\u0000]*)?$"
         },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
@@ -290,23 +383,25 @@
     "pythonExternalAttribute": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["project", "module", "callable", "receiver"],
+      "required": [
+        "project",
+        "module",
+        "callable",
+        "receiver",
+        "attribute",
+        "write"
+      ],
       "properties": {
         "project": { "$ref": "#/$defs/pyprojectPath" },
         "module": { "$ref": "#/$defs/pythonIdentifierChain" },
         "callable": { "$ref": "#/$defs/pythonIdentifierChain" },
-        "receiver": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "receiver": { "$ref": "#/$defs/pythonExternalReceiver" },
         "attribute": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
         },
-        "line": { "type": "integer", "minimum": 1 },
-        "consumerType": {
-          "$ref": "#/$defs/pythonIdentifierChain",
-          "pattern": "\\."
-        }
-      },
-      "allOf": [{ "required": ["attribute", "line", "consumerType"] }]
+        "write": { "$ref": "#/$defs/pythonSourceLocation" }
+      }
     },
     "pythonIdentifierChain": {
       "type": "string",
@@ -359,8 +454,53 @@
           "type": "array",
           "items": { "$ref": "#/$defs/designDocument" }
         },
+        "handoffs": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/operationalHandoff" }
+        },
         "productInputs": { "$ref": "#/$defs/markdownPaths" }
       }
+    },
+    "handoffIdentifiers": {
+      "$ref": "#/$defs/nonemptyIdentifierArray",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/identifier", "maxLength": 128 }
+    },
+    "operationalHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "path"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier", "maxLength": 128 },
+        "description": {
+          "$ref": "#/$defs/nonemptyString",
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "path": {
+          "$ref": "#/$defs/markdownPath",
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001f\\u007f:]+$"
+        },
+        "situations": { "$ref": "#/$defs/handoffIdentifiers" },
+        "modules": { "$ref": "#/$defs/handoffIdentifiers" },
+        "sourcePaths": {
+          "$ref": "#/$defs/exactPaths",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/literalExactPath",
+            "maxLength": 4096,
+            "pattern": "^[^\\u0000-\\u001f\\u007f:]+$"
+          }
+        }
+      },
+      "anyOf": [
+        { "required": ["situations"] },
+        { "required": ["modules"] },
+        { "required": ["sourcePaths"] }
+      ]
     },
     "designDocument": {
       "type": "object",
@@ -387,23 +527,17 @@
       "required": ["name", "kind", "module", "sourcePaths"],
       "properties": {
         "name": { "$ref": "#/$defs/identifier" },
-        "kind": {
-          "enum": ["directory", "file", "repository", "service"]
-        },
+        "kind": { "enum": ["directory", "file", "repository", "service"] },
         "module": { "$ref": "#/$defs/identifier" },
         "sourcePaths": { "$ref": "#/$defs/nonemptyPaths" },
         "resolution": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {
-            "enum": ["cli", "config", "environment", "default"]
-          }
+          "items": { "enum": ["cli", "config", "environment", "default"] }
         },
         "environment": { "$ref": "#/$defs/environment" },
-        "unavailableBehavior": {
-          "enum": ["fail", "warn"]
-        },
+        "unavailableBehavior": { "enum": ["fail", "warn"] },
         "contractSuite": { "$ref": "#/$defs/identifier" },
         "behaviorSuite": { "$ref": "#/$defs/identifier" },
         "siblingFallback": {
@@ -471,9 +605,7 @@
         "modules": { "$ref": "#/$defs/identifierArray" },
         "paths": { "$ref": "#/$defs/paths" },
         "suites": { "$ref": "#/$defs/nonemptyIdentifierArray" },
-        "requiredAt": {
-          "enum": ["merge", "checkpoint"]
-        }
+        "requiredAt": { "enum": ["merge", "checkpoint"] }
       },
       "anyOf": [
         {
@@ -551,13 +683,9 @@
       "required": ["name", "kind", "scope", "argv"],
       "properties": {
         "kind": { "$ref": "#/$defs/identifier" },
-        "scope": {
-          "enum": ["module", "repository"]
-        },
+        "scope": { "enum": ["module", "repository"] },
         "reusable": { "type": "boolean" },
-        "cost": {
-          "enum": ["quick", "standard", "expensive"]
-        },
+        "cost": { "enum": ["quick", "standard", "expensive"] },
         "extraInputs": { "$ref": "#/$defs/paths" },
         "covers": { "$ref": "#/$defs/identifierArray" },
         "artifacts": {
@@ -576,31 +704,17 @@
       "allOf": [
         { "$ref": "#/$defs/commandBase" },
         {
-          "if": {
-            "properties": {
-              "scope": { "const": "module" }
-            }
-          },
+          "if": { "properties": { "scope": { "const": "module" } } },
           "then": {
             "required": ["modules"],
-            "properties": {
-              "modules": { "minItems": 1, "maxItems": 1 }
-            }
+            "properties": { "modules": { "minItems": 1, "maxItems": 1 } }
           },
-          "else": {
-            "properties": {
-              "modules": { "maxItems": 0 }
-            }
-          }
+          "else": { "properties": { "modules": { "maxItems": 0 } } }
         },
         {
           "if": {
             "required": ["runOn"],
-            "properties": {
-              "runOn": {
-                "contains": { "const": "focused" }
-              }
-            }
+            "properties": { "runOn": { "contains": { "const": "focused" } } }
           },
           "then": {
             "properties": {
@@ -618,19 +732,13 @@
           "if": {
             "required": ["runOn"],
             "properties": {
-              "runOn": {
-                "contains": { "const": "recommended" }
-              }
+              "runOn": { "contains": { "const": "recommended" } }
             }
           },
           "then": {
             "properties": {
-              "cost": {
-                "enum": ["quick", "standard"]
-              },
-              "runOn": {
-                "contains": { "const": "full" }
-              }
+              "cost": { "enum": ["quick", "standard"] },
+              "runOn": { "contains": { "const": "full" } }
             }
           }
         },
@@ -638,9 +746,7 @@
           "if": {
             "required": ["runOn"],
             "properties": {
-              "runOn": {
-                "contains": { "const": "supplemental" }
-              }
+              "runOn": { "contains": { "const": "supplemental" } }
             }
           },
           "then": {
@@ -667,9 +773,7 @@
           "then": {
             "properties": {
               "cost": { "const": "expensive" },
-              "runOn": {
-                "contains": { "const": "supplemental" }
-              }
+              "runOn": { "contains": { "const": "supplemental" } }
             }
           }
         }
@@ -678,8 +782,14 @@
     "tests": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["suites"],
+      "required": ["ownership", "suites"],
       "properties": {
+        "paths": { "$ref": "#/$defs/paths", "maxItems": 1024 },
+        "ownership": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/testOwnership" }
+        },
         "requiredKinds": { "$ref": "#/$defs/identifierArray" },
         "requiredSupplementalKinds": { "$ref": "#/$defs/identifierArray" },
         "suites": {
@@ -689,268 +799,25 @@
         }
       }
     },
+    "testOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "module", "focusedSuite"],
+      "properties": {
+        "paths": { "$ref": "#/$defs/nonemptyPaths", "maxItems": 128 },
+        "module": { "$ref": "#/$defs/identifier" },
+        "focusedSuite": { "$ref": "#/$defs/identifier" }
+      }
+    },
     "testArtifact": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "type"],
       "properties": {
-        "path": {
-          "$ref": "#/$defs/exactPath",
-          "pattern": "\\.[xX][mM][lL]$"
-        },
-        "type": {
-          "enum": ["junit", "cobertura"]
-        },
+        "path": { "$ref": "#/$defs/exactPath", "pattern": "\\.[xX][mM][lL]$" },
+        "type": { "enum": ["junit", "cobertura"] },
         "required": { "type": "boolean", "default": false }
       }
-    },
-    "supplyChain": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "minimumReleaseAgeDays": { "type": "integer", "minimum": 30 },
-        "preferredNewDependencyAgeDays": { "type": "integer", "minimum": 30 },
-        "auditLevel": { "const": "low" },
-        "recurringSecurityMonitoring": { "type": "boolean", "default": false },
-        "allowedDependencyProtocols": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "enum": ["workspace:", "file:", "link:"]
-          }
-        },
-        "allowedLicenses": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9.-]+\\+?( WITH [A-Za-z0-9.-]+\\+?)?$"
-          }
-        },
-        "npmRegistryUrl": { "type": "string", "pattern": "^https://" },
-        "environment": { "$ref": "#/$defs/environment" },
-        "releaseArtifacts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/releaseArtifact" }
-        },
-        "vulnerabilityAssessments": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/vulnerabilityAssessment" }
-        },
-        "releaseAgeAssessments": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/releaseAgeAssessment" }
-        },
-        "dependencyOverridePolicies": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/dependencyOverridePolicy" }
-        },
-        "artifactSecurity": { "$ref": "#/$defs/artifactSecurity" }
-      }
-    },
-    "artifactSecurity": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "outputDirectory": { "$ref": "#/$defs/concretePath" },
-        "targets": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/artifactTarget" }
-        }
-      }
-    },
-    "artifactTarget": {
-      "type": "object",
-      "unevaluatedProperties": false,
-      "required": ["name", "mode"],
-      "properties": {
-        "name": { "$ref": "#/$defs/identifier" },
-        "module": { "$ref": "#/$defs/identifier" },
-        "platform": {
-          "enum": ["linux/amd64", "linux/arm64"]
-        },
-        "dockerfile": { "$ref": "#/$defs/concretePath" },
-        "context": { "$ref": "#/$defs/concretePath" },
-        "archive": { "$ref": "#/$defs/concretePath" },
-        "producer": { "$ref": "#/$defs/artifactProducer" },
-        "openVex": { "$ref": "#/$defs/concretePath" }
-      },
-      "oneOf": [
-        {
-          "properties": {
-            "mode": { "const": "dockerfile" },
-            "archive": false,
-            "producer": false
-          },
-          "required": ["dockerfile", "context"]
-        },
-        {
-          "properties": {
-            "mode": { "const": "archive" },
-            "dockerfile": false,
-            "context": false,
-            "producer": false
-          },
-          "required": ["archive"]
-        },
-        {
-          "properties": {
-            "mode": { "const": "command" },
-            "dockerfile": false,
-            "context": false,
-            "archive": false
-          },
-          "required": ["producer"]
-        }
-      ]
-    },
-    "artifactProducer": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["argv"],
-      "properties": {
-        "argv": { "$ref": "#/$defs/argv" },
-        "cwd": { "$ref": "#/$defs/concretePath" },
-        "environment": { "$ref": "#/$defs/environment" },
-        "manifest": { "$ref": "#/$defs/concretePath" },
-        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
-      }
-    },
-    "releaseArtifact": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "versionFile", "source"],
-      "properties": {
-        "name": { "$ref": "#/$defs/identifier" },
-        "versionFile": { "$ref": "#/$defs/concretePath" },
-        "source": {
-          "enum": [
-            "github-release",
-            "go-module",
-            "go-toolchain",
-            "node-runtime",
-            "npm",
-            "pypi",
-            "python-build-standalone"
-          ]
-        },
-        "locator": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9@][A-Za-z0-9._@/+~-]*$"
-        },
-        "tagPrefix": {
-          "type": "string",
-          "maxLength": 32,
-          "pattern": "^[A-Za-z0-9._-]*$"
-        }
-      }
-    },
-    "vulnerabilityAssessment": {
-      "type": "object",
-      "unevaluatedProperties": false,
-      "required": ["id", "ecosystem", "advisory", "package"],
-      "properties": {
-        "id": { "$ref": "#/$defs/identifier" },
-        "ecosystem": {
-          "enum": ["go", "npm", "pnpm", "pypi"]
-        },
-        "advisory": { "$ref": "#/$defs/nonemptyString" },
-        "package": { "$ref": "#/$defs/nonemptyString" },
-        "affectedVersion": {
-          "type": "string",
-          "pattern": "^[^*?\\[\\]<>=~^|,\\s]+$"
-        },
-        "scope": { "$ref": "#/$defs/concretePath" },
-        "severity": {
-          "enum": ["low", "moderate", "high"]
-        },
-        "reason": { "$ref": "#/$defs/nonemptyString" },
-        "impact": { "$ref": "#/$defs/nonemptyString" },
-        "evidence": { "type": "string", "pattern": "^https://" },
-        "tracking": { "type": "string", "pattern": "^https://" },
-        "owner": { "$ref": "#/$defs/nonemptyString" },
-        "approvedBy": { "$ref": "#/$defs/nonemptyString" },
-        "approval": { "type": "string", "pattern": "^https://" },
-        "reviewed": { "type": "string", "format": "date" },
-        "expires": { "type": "string", "format": "date" }
-      },
-      "allOf": [
-        { "required": ["affectedVersion", "scope", "severity", "status"] },
-        { "required": ["basis", "reason", "impact", "evidence"] },
-        { "required": ["tracking", "owner", "approvedBy", "approval"] },
-        { "required": ["reviewed", "expires"] }
-      ],
-      "oneOf": [
-        {
-          "properties": {
-            "status": { "const": "not-affected" },
-            "basis": {
-              "enum": ["false-positive", "unreachable"]
-            }
-          }
-        },
-        {
-          "properties": {
-            "severity": {
-              "enum": ["low", "moderate"]
-            },
-            "status": { "const": "risk-accepted" },
-            "basis": {
-              "enum": ["mitigated", "temporary-no-fix"]
-            }
-          }
-        }
-      ]
-    },
-    "releaseAgeAssessment": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "ecosystem", "package", "version"],
-      "properties": {
-        "id": { "$ref": "#/$defs/identifier" },
-        "ecosystem": {
-          "enum": ["artifact", "go", "npm", "pnpm", "pypi"]
-        },
-        "package": { "$ref": "#/$defs/nonemptyString" },
-        "version": { "$ref": "#/$defs/nonemptyString" },
-        "scope": { "$ref": "#/$defs/concretePath" },
-        "category": {
-          "enum": ["security-fix", "supported-release"]
-        },
-        "evidence": { "type": "string", "pattern": "^https://" },
-        "reason": { "$ref": "#/$defs/nonemptyString" },
-        "owner": { "$ref": "#/$defs/nonemptyString" },
-        "reviewed": { "type": "string", "format": "date" },
-        "expires": { "type": "string", "format": "date" }
-      },
-      "allOf": [
-        { "required": ["scope", "category", "evidence", "reason"] },
-        { "required": ["owner", "reviewed", "expires"] }
-      ]
-    },
-    "dependencyOverridePolicy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "ecosystem", "path", "field"],
-      "properties": {
-        "id": { "$ref": "#/$defs/identifier" },
-        "ecosystem": {
-          "enum": ["npm", "pnpm"]
-        },
-        "path": { "$ref": "#/$defs/concretePath" },
-        "field": {
-          "enum": ["overrides", "pnpm.overrides"]
-        },
-        "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "reason": { "$ref": "#/$defs/nonemptyString" },
-        "owner": { "$ref": "#/$defs/nonemptyString" },
-        "reviewed": { "type": "string", "format": "date" },
-        "expires": { "type": "string", "format": "date" }
-      },
-      "allOf": [
-        { "required": ["contentSha256", "reason", "owner"] },
-        { "required": ["reviewed", "expires"] }
-      ]
     },
     "policyModules": {
       "type": "object",
@@ -1004,6 +871,101 @@
         "expires": { "type": "string", "format": "date" }
       },
       "allOf": [{ "required": ["reason", "owner", "expires"] }]
+    },
+    "pythonSourceLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pythonExternalReceiver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "binding"],
+      "properties": {
+        "kind": { "enum": ["parameter", "local", "self"] },
+        "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "binding": { "$ref": "#/$defs/pythonSourceLocation" },
+        "type": { "$ref": "#/$defs/pythonIdentifierChain", "pattern": "\\." },
+        "consumer": { "$ref": "#/$defs/pythonExternalConsumer" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "enum": ["parameter", "local"] },
+            "consumer": false
+          },
+          "required": ["type"]
+        },
+        {
+          "properties": { "kind": { "const": "self" }, "type": false },
+          "required": ["consumer"]
+        }
+      ]
+    },
+    "pythonExternalConsumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "qualified", "site"],
+      "properties": {
+        "kind": { "enum": ["base", "protocol", "decorator", "registration"] },
+        "qualified": {
+          "$ref": "#/$defs/pythonIdentifierChain",
+          "pattern": "\\."
+        },
+        "site": { "$ref": "#/$defs/pythonSourceLocation" }
+      }
+    },
+    "pythonDynamicTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "symbol"],
+      "properties": {
+        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "symbol": { "$ref": "#/$defs/pythonIdentifierChain" }
+      }
+    },
+    "pythonDynamicRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "jsonPointer"],
+      "properties": {
+        "path": { "$ref": "#/$defs/literalExactPath" },
+        "jsonPointer": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^(?:/(?:[^~]|~[01])*)*$"
+        }
+      }
+    },
+    "pythonDynamicConsumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "importer",
+        "module",
+        "callable",
+        "site",
+        "callee",
+        "shape",
+        "argument",
+        "sourceSha256"
+      ],
+      "properties": {
+        "kind": { "const": "callsite" },
+        "importer": { "$ref": "#/$defs/literalExactPath", "pattern": "\\.py$" },
+        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "callable": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "site": { "$ref": "#/$defs/pythonSourceLocation" },
+        "callee": { "const": "pkgutil.resolve_name" },
+        "shape": { "const": "module-object-call/v1" },
+        "argument": { "type": "string", "minLength": 1, "maxLength": 65536 },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
     }
   }
 }

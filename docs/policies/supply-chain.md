@@ -128,19 +128,19 @@ That provider owns the honest installation/lock agreement for facts the lock
 does not encode; it cannot be replaced by a claim that the partial static
 reader proved the full build graph.
 
-Code Polishy's own `python-facts/v1` adapter follows the same rule. Its dedicated
+Code Polishy's own `python-facts/v3` adapter follows the same rule. Its dedicated
 `pyproject.toml` and frozen `uv.lock` contain only the virtual first-party owner
 and `packaging`. A checked-in, script-disabled lock provider parses both with
 the carried CPython `tomllib`, reconciles the exact dependency and metadata,
 and binds the selected wheel to its checksum inventory. The ordinary uv
 release-age and OSV lanes then cover that complete resolved graph.
 
-Registry releases reach the ordinary release-age and OSV lanes. A Git source
-has no PyPI publication timestamp and cannot be represented honestly as a
-registry release; the online profile reports release-age and vulnerability
-coverage unavailable for that exact source and commit. Dependency comparison
-retains the declared Git source and ref and any recorded full-commit resolution,
-without inventing a PyPI age.
+Public registry releases reach the ordinary release-age and OSV lanes. Exact
+Git sources use [signed CI evidence](../git-dependency-evidence.md) for the
+resolved repository, commit, optional subdirectory, source contents, complete
+lock inventory, and authenticated age record. Missing or unverifiable evidence
+fails coverage. Dependency comparison retains the declared Git source and ref
+and any recorded full-commit resolution without inventing a PyPI age.
 
 ## GitLab CI control inputs
 

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const ConfigVersion = 3
+const ConfigVersion = 4
 
 const (
 	BehaviorReviewOnRequest  = "on-request"
@@ -61,6 +61,7 @@ type Config struct {
 	Quality             Quality              `json:"quality,omitempty"`
 	Portability         Portability          `json:"portability,omitempty"`
 	Documentation       Documentation        `json:"documentation,omitempty"`
+	Generation          Generation           `json:"generation,omitempty"`
 	Packs               []PackSelection      `json:"packs,omitempty"`
 	Modules             []Module             `json:"modules"`
 	Verification        Verification         `json:"verification,omitempty"`
@@ -138,13 +139,13 @@ type Scope struct {
 	Exclude   []string `json:"exclude,omitempty"`
 	Generated []string `json:"generated,omitempty"`
 	Data      []string `json:"data,omitempty"`
-	Tests     []string `json:"tests,omitempty"`
 
-	EntryPoints              []string                  `json:"entryPoints,omitempty"`
-	GeneratedJavaScript      []GeneratedJavaScript     `json:"generatedJavaScript,omitempty"`
-	PythonDynamicReferences  []PythonDynamicReference  `json:"pythonDynamicReferences,omitempty"`
-	PythonComputedImports    []PythonComputedImport    `json:"pythonComputedImports,omitempty"`
-	PythonExternalAttributes []PythonExternalAttribute `json:"pythonExternalAttributes,omitempty"`
+	EntryPoints                 []string                     `json:"entryPoints,omitempty"`
+	GeneratedJavaScript         []GeneratedJavaScript        `json:"generatedJavaScript,omitempty"`
+	PythonDynamicReferences     []PythonDynamicReference     `json:"pythonDynamicReferences,omitempty"`
+	PythonComputedImports       []PythonComputedImport       `json:"pythonComputedImports,omitempty"`
+	PythonExternalPluginImports []PythonExternalPluginImport `json:"pythonExternalPluginImports,omitempty"`
+	PythonExternalAttributes    []PythonExternalAttribute    `json:"pythonExternalAttributes,omitempty"`
 
 	Development []string       `json:"development,omitempty"`
 	Languages   []LanguageRule `json:"languages,omitempty"`
@@ -156,9 +157,33 @@ type GeneratedJavaScript struct {
 }
 
 type PythonDynamicReference struct {
-	Project string `json:"project"`
-	Module  string `json:"module"`
-	Symbol  string `json:"symbol"`
+	Kind     string                 `json:"kind"`
+	Project  string                 `json:"project"`
+	Target   *PythonDynamicTarget   `json:"target,omitempty"`
+	Registry *PythonDynamicRegistry `json:"registry,omitempty"`
+	Consumer PythonDynamicConsumer  `json:"consumer"`
+}
+
+type PythonDynamicTarget struct {
+	Module string `json:"module"`
+	Symbol string `json:"symbol"`
+}
+
+type PythonDynamicRegistry struct {
+	Path        string `json:"path"`
+	JSONPointer string `json:"jsonPointer"`
+}
+
+type PythonDynamicConsumer struct {
+	Kind         string               `json:"kind"`
+	Importer     string               `json:"importer"`
+	Module       string               `json:"module"`
+	Callable     string               `json:"callable"`
+	Site         PythonSourceLocation `json:"site"`
+	Callee       string               `json:"callee"`
+	Shape        string               `json:"shape"`
+	Argument     string               `json:"argument"`
+	SourceSHA256 string               `json:"sourceSha256"`
 }
 
 type PythonComputedImport struct {
@@ -186,13 +211,12 @@ type PythonComputedImportInput struct {
 }
 
 type PythonExternalAttribute struct {
-	Project      string `json:"project"`
-	Module       string `json:"module"`
-	Callable     string `json:"callable"`
-	Receiver     string `json:"receiver"`
-	Attribute    string `json:"attribute"`
-	Line         int    `json:"line"`
-	ConsumerType string `json:"consumerType"`
+	Project   string                 `json:"project"`
+	Module    string                 `json:"module"`
+	Callable  string                 `json:"callable"`
+	Receiver  PythonExternalReceiver `json:"receiver"`
+	Attribute string                 `json:"attribute"`
+	Write     PythonSourceLocation   `json:"write"`
 }
 
 type LanguageRule struct {
@@ -228,8 +252,18 @@ type Portability struct {
 }
 
 type Documentation struct {
-	Design        []DesignDocument `json:"design,omitempty"`
-	ProductInputs []string         `json:"productInputs,omitempty"`
+	Design        []DesignDocument     `json:"design,omitempty"`
+	Handoffs      []OperationalHandoff `json:"handoffs,omitempty"`
+	ProductInputs []string             `json:"productInputs,omitempty"`
+}
+
+type OperationalHandoff struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Path        string   `json:"path"`
+	Situations  []string `json:"situations,omitempty"`
+	Modules     []string `json:"modules,omitempty"`
+	SourcePaths []string `json:"sourcePaths,omitempty"`
 }
 
 type DesignDocument struct {
@@ -291,9 +325,17 @@ type PackAdapter struct {
 }
 
 type Testing struct {
-	RequiredKinds             []string    `json:"requiredKinds,omitempty"`
-	RequiredSupplementalKinds []string    `json:"requiredSupplementalKinds,omitempty"`
-	Suites                    []TestSuite `json:"suites"`
+	Paths                     []string        `json:"paths,omitempty"`
+	Ownership                 []TestOwnership `json:"ownership"`
+	RequiredKinds             []string        `json:"requiredKinds,omitempty"`
+	RequiredSupplementalKinds []string        `json:"requiredSupplementalKinds,omitempty"`
+	Suites                    []TestSuite     `json:"suites"`
+}
+
+type TestOwnership struct {
+	Paths        []string `json:"paths"`
+	Module       string   `json:"module"`
+	FocusedSuite string   `json:"focusedSuite"`
 }
 
 type TestSuite struct {
@@ -336,6 +378,7 @@ type SupplyChain struct {
 	ReleaseAgeAssessments      []ReleaseAgeAssessment     `json:"releaseAgeAssessments,omitempty"`
 	DependencyOverridePolicies []DependencyOverridePolicy `json:"dependencyOverridePolicies,omitempty"`
 	ArtifactSecurity           ArtifactSecurity           `json:"artifactSecurity,omitempty"`
+	GitEvidence                GitEvidence                `json:"gitEvidence,omitempty"`
 }
 
 type ReleaseArtifact struct {
@@ -490,28 +533,59 @@ func (date *Date) UnmarshalJSON(data []byte) error {
 }
 
 type Finding struct {
-	Check             string                     `json:"ruleId"`
-	Fingerprint       string                     `json:"fingerprint"`
-	Severity          FindingSeverity            `json:"severity"`
-	Status            FindingStatus              `json:"status"`
-	Scope             FindingScope               `json:"scope"`
-	SelectionRelation SelectionRelation          `json:"selectionRelation"`
-	SelectionEvidence []FindingSelectionEvidence `json:"selectionEvidence,omitempty"`
-	Path              string                     `json:"path"`
-	Line              int                        `json:"line,omitempty"`
-	Column            int                        `json:"column,omitempty"`
-	EndLine           int                        `json:"endLine,omitempty"`
-	EndColumn         int                        `json:"endColumn,omitempty"`
-	Module            string                     `json:"module,omitempty"`
-	Subject           string                     `json:"subject"`
-	Related           []FindingLocation          `json:"relatedLocations,omitempty"`
-	Fields            map[string]string          `json:"fields,omitempty"`
-	GeneratedProducer string                     `json:"generatedProducer,omitempty"`
-	Message           string                     `json:"message"`
-	Remediation       FindingRemediation         `json:"remediation"`
-	Vulnerability     *VulnerabilityIdentity     `json:"vulnerability,omitempty"`
-	ReleaseAge        *ReleaseAgeIdentity        `json:"releaseAge,omitempty"`
-	SemanticIdentity  []string                   `json:"-"`
+	Check               string                     `json:"ruleId"`
+	Fingerprint         string                     `json:"fingerprint"`
+	Severity            FindingSeverity            `json:"severity"`
+	Status              FindingStatus              `json:"status"`
+	Scope               FindingScope               `json:"scope"`
+	SelectionRelation   SelectionRelation          `json:"selectionRelation"`
+	SelectionEvidence   []FindingSelectionEvidence `json:"selectionEvidence,omitempty"`
+	Path                string                     `json:"path"`
+	Line                int                        `json:"line,omitempty"`
+	Column              int                        `json:"column,omitempty"`
+	EndLine             int                        `json:"endLine,omitempty"`
+	EndColumn           int                        `json:"endColumn,omitempty"`
+	Module              string                     `json:"module,omitempty"`
+	Subject             string                     `json:"subject"`
+	Related             []FindingLocation          `json:"relatedLocations,omitempty"`
+	Fields              map[string]string          `json:"fields,omitempty"`
+	GeneratedProducer   string                     `json:"generatedProducer,omitempty"`
+	DependencyComponent *DependencyComponent       `json:"dependencyComponent,omitempty"`
+	Message             string                     `json:"message"`
+	Remediation         FindingRemediation         `json:"remediation"`
+	Vulnerability       *VulnerabilityIdentity     `json:"vulnerability,omitempty"`
+	ReleaseAge          *ReleaseAgeIdentity        `json:"releaseAge,omitempty"`
+	SemanticIdentity    []string                   `json:"semanticIdentity,omitempty"`
+}
+
+type DependencyComponent struct {
+	Protocol       string           `json:"protocol"`
+	Classification string           `json:"classification"`
+	Identity       string           `json:"identity"`
+	Members        []DependencyNode `json:"members"`
+	Edges          []DependencyEdge `json:"edges"`
+	Witness        []DependencyEdge `json:"witness"`
+}
+
+type DependencyNode struct {
+	Path       string `json:"path"`
+	Language   string `json:"language"`
+	Generated  bool   `json:"generated"`
+	Test       bool   `json:"test"`
+	Root       string `json:"root"`
+	Module     string `json:"module"`
+	Resolution string `json:"resolutionUnit"`
+}
+
+type DependencyEdge struct {
+	Source           string `json:"source"`
+	Target           string `json:"target"`
+	SourceResolution string `json:"sourceResolutionUnit"`
+	TargetResolution string `json:"targetResolutionUnit"`
+	Line             int    `json:"line"`
+	Column           int    `json:"column"`
+	Ecosystem        string `json:"ecosystem"`
+	Kind             string `json:"kind"`
 }
 
 type FindingSeverity string
@@ -560,10 +634,24 @@ type FindingSelectionEvidence struct {
 }
 
 type FindingRemediation struct {
-	Summary       string          `json:"summary"`
-	Replacement   string          `json:"replacement,omitempty"`
-	Configuration json.RawMessage `json:"configuration,omitempty"`
-	NextCommand   *FindingCommand `json:"nextCommand,omitempty"`
+	Summary       string                 `json:"summary"`
+	Replacement   string                 `json:"replacement,omitempty"`
+	Configuration json.RawMessage        `json:"configuration,omitempty"`
+	NextCommand   *FindingCommand        `json:"nextCommand,omitempty"`
+	Generation    *GenerationRemediation `json:"generation,omitempty"`
+}
+
+type GenerationRemediation struct {
+	Producer      string                   `json:"producer"`
+	Inputs        []string                 `json:"inputs"`
+	Generate      GenerationCommand        `json:"generate"`
+	Verify        GenerationCommand        `json:"verify"`
+	Prerequisites []GenerationPrerequisite `json:"prerequisites"`
+}
+
+type GenerationPrerequisite struct {
+	Operation string `json:"operation"`
+	Message   string `json:"message"`
 }
 
 type FindingCommand struct {

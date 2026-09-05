@@ -69,7 +69,7 @@
     {
       "name": "gaterun",
       "paths": ["internal/gaterun/**"],
-      "dependsOn": ["testreceipt"]
+      "dependsOn": ["architecture", "policy", "testreceipt"]
     },
     {
       "name": "testartifact",
@@ -85,7 +85,14 @@
     {
       "name": "behaviorreview",
       "paths": ["internal/behaviorreview/**"],
-      "dependsOn": ["finalstate", "gaterun", "policy", "repository", "runner"]
+      "dependsOn": [
+        "architecture",
+        "finalstate",
+        "gaterun",
+        "policy",
+        "repository",
+        "runner"
+      ]
     },
     { "name": "documentation", "paths": ["internal/documentation/**"] },
     {
@@ -105,7 +112,14 @@
     {
       "name": "quality",
       "paths": ["internal/quality/**"],
-      "dependsOn": ["javascript", "pack", "policy", "repository", "runner"]
+      "dependsOn": [
+        "javascript",
+        "pack",
+        "policy",
+        "pythonfacts",
+        "repository",
+        "runner"
+      ]
     },
     {
       "name": "architecture",

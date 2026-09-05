@@ -21,7 +21,7 @@ func TestCyclicComponentsAreCompleteClassifiedAndDeterministic(t *testing.T) {
 		{Source: "app/a.ts", Target: "app/b.ts", SourceResolution: "file:app/a.ts", TargetResolution: "file:app/b.ts", Line: 3, Column: 2, Ecosystem: "javascript", Kind: EdgeRuntime},
 		{Source: "tests/c.ts", Target: "tests/c.ts", SourceResolution: "file:tests/c.ts", TargetResolution: "file:tests/c.ts", Line: 1, Column: 1, Ecosystem: "javascript", Kind: EdgeProvenDynamic},
 	}
-	graph, err := New(nodes, edges)
+	graph, err := New(nodes, edges, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestCyclicComponentsAreCompleteClassifiedAndDeterministic(t *testing.T) {
 	reversedEdges := slices.Clone(edges)
 	slices.Reverse(reversedNodes)
 	slices.Reverse(reversedEdges)
-	reversedGraph, err := New(reversedNodes, reversedEdges)
+	reversedGraph, err := New(reversedNodes, reversedEdges, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestLargeStronglyConnectedComponentHasOneBoundedWitness(t *testing.T) {
 			Line: 1, Column: 1, Ecosystem: "javascript", Kind: EdgeRuntime,
 		})
 	}
-	graph, err := New(nodes, edges)
+	graph, err := New(nodes, edges, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestGoPackageUnitsKeepRealImportingFiles(t *testing.T) {
 		{Source: "a/other.go", Target: "example.test/app/b", SourceResolution: "go:example.test/app/a", TargetResolution: "go:example.test/app/b", Line: 4, Column: 1, Ecosystem: "go", Kind: EdgeRuntime},
 		{Source: "b/b.go", Target: "example.test/app/a", SourceResolution: "go:example.test/app/b", TargetResolution: "go:example.test/app/a", Line: 5, Column: 1, Ecosystem: "go", Kind: EdgeRuntime},
 	}
-	graph, err := New(nodes, edges)
+	graph, err := New(nodes, edges, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestCycleClassificationUsesTheEdgesRequiredForTheCycle(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			graph, err := New(testCase.nodes, testCase.edges)
+			graph, err := New(testCase.nodes, testCase.edges, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,12 +169,12 @@ func TestGraphRejectsMissingTargetsAndDuplicateEdges(t *testing.T) {
 	t.Parallel()
 	node := Node{Path: "a.py", Language: "python", Root: ".", Module: "app", Resolution: "file:a.py"}
 	edge := Edge{Source: "a.py", Target: "b.py", SourceResolution: "file:a.py", TargetResolution: "file:b.py", Line: 1, Column: 1, Ecosystem: "python", Kind: EdgeRuntime}
-	if _, err := New([]Node{node}, []Edge{edge}); err == nil {
+	if _, err := New([]Node{node}, []Edge{edge}, nil, nil); err == nil {
 		t.Fatal("missing target unit was accepted")
 	}
 	edge.Target = "a.py"
 	edge.TargetResolution = "file:a.py"
-	if _, err := New([]Node{node}, []Edge{edge, edge}); err == nil {
+	if _, err := New([]Node{node}, []Edge{edge, edge}, nil, nil); err == nil {
 		t.Fatal("duplicate edge was accepted")
 	}
 }
@@ -194,7 +194,7 @@ func TestGraphRejectsInvalidNodeOwnershipAndResolutionCollisions(t *testing.T) {
 		},
 	}
 	for _, nodes := range cases {
-		if _, err := New(nodes, nil); err == nil {
+		if _, err := New(nodes, nil, nil, nil); err == nil {
 			t.Fatalf("invalid nodes were accepted: %+v", nodes)
 		}
 	}
@@ -202,7 +202,7 @@ func TestGraphRejectsInvalidNodeOwnershipAndResolutionCollisions(t *testing.T) {
 
 func TestEmptyGraphReportsAnExplicitEmptyInventory(t *testing.T) {
 	t.Parallel()
-	graph, err := New(nil, nil)
+	graph, err := New(nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestEmptyGraphReportsAnExplicitEmptyInventory(t *testing.T) {
 func TestGraphRejectsItsExactNodeResourceOverrun(t *testing.T) {
 	t.Parallel()
 	nodes := make([]Node, MaximumNodes+1)
-	if _, err := New(nodes, nil); err == nil {
+	if _, err := New(nodes, nil, nil, nil); err == nil {
 		t.Fatal("node overrun was accepted")
 	}
 }
@@ -242,7 +242,7 @@ func TestMixedComponentWitnessUsesItsProductionSubcycle(t *testing.T) {
 	for _, pair := range [][2]string{{"a.test.ts", "b.ts"}, {"b.ts", "a.test.ts"}, {"b.ts", "c.ts"}, {"c.ts", "b.ts"}} {
 		edges = append(edges, Edge{Source: pair[0], Target: pair[1], SourceResolution: "file:" + pair[0], TargetResolution: "file:" + pair[1], Line: 1, Column: 1, Ecosystem: "javascript", Kind: EdgeRuntime})
 	}
-	graph, err := New(nodes, edges)
+	graph, err := New(nodes, edges, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestCycleFingerprintIgnoresLocationsButBindsOwnership(t *testing.T) {
 	node := Node{Path: "app.py", Language: "python", Root: ".", Module: "app", Resolution: "file:app.py"}
 	edge := Edge{Source: "app.py", Target: "app.py", SourceResolution: "file:app.py", TargetResolution: "file:app.py", Line: 1, Column: 1, Ecosystem: "python", Kind: EdgeRuntime}
 	identity := func(nodes []Node, edges []Edge) string {
-		graph, err := New(nodes, edges)
+		graph, err := New(nodes, edges, []FactInput{graphTestFactInput(".", "app.py")}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -287,7 +287,7 @@ func TestGraphNormalizesPlatformPathsAndRejectsFalseEdgeEvidence(t *testing.T) {
 	t.Parallel()
 	node := Node{Path: "src/a.py", Language: "python", Root: "src", Module: "app", Resolution: "file:src/a.py"}
 	edge := Edge{Source: "src/a.py", Target: "src/a.py", SourceResolution: node.Resolution, TargetResolution: node.Resolution, Line: 1, Column: 1, Ecosystem: "python", Kind: EdgeRuntime}
-	graph, err := New([]Node{node}, []Edge{edge})
+	graph, err := New([]Node{node}, []Edge{edge}, []FactInput{graphTestFactInput("src", "src/a.py")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,23 +296,23 @@ func TestGraphNormalizesPlatformPathsAndRejectsFalseEdgeEvidence(t *testing.T) {
 	windowsNode.Resolution = `file:src\a.py`
 	windowsEdge.Source, windowsEdge.Target = windowsNode.Path, windowsNode.Path
 	windowsEdge.SourceResolution, windowsEdge.TargetResolution = windowsNode.Resolution, windowsNode.Resolution
-	windowsGraph, err := New([]Node{windowsNode}, []Edge{windowsEdge})
+	windowsGraph, err := New([]Node{windowsNode}, []Edge{windowsEdge}, []FactInput{graphTestFactInput("src", `src\a.py`)}, nil)
 	if err != nil || !reflect.DeepEqual(graph, windowsGraph) {
 		t.Fatalf("normalized graph = %+v, error = %v", windowsGraph, err)
 	}
 	for _, invalid := range []string{"../a.py", `C:\src\a.py`, "missing.py"} {
 		changed := edge
 		changed.Target = invalid
-		if _, err := New([]Node{node}, []Edge{changed}); err == nil {
+		if _, err := New([]Node{node}, []Edge{changed}, nil, nil); err == nil {
 			t.Fatalf("target %q accepted", invalid)
 		}
 	}
 	edge.Ecosystem = "go"
-	if _, err := New([]Node{node}, []Edge{edge}); err == nil {
+	if _, err := New([]Node{node}, []Edge{edge}, []FactInput{graphTestFactInput("src", "src/a.py")}, nil); err == nil {
 		t.Fatal("foreign ecosystem accepted")
 	}
 	node.Path = strings.ReplaceAll(`C:\src\a.py`, "\\", "/")
-	if _, err := New([]Node{node}, nil); err == nil {
+	if _, err := New([]Node{node}, nil, nil, nil); err == nil {
 		t.Fatal("foreign absolute path accepted")
 	}
 }

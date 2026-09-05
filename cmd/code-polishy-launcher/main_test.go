@@ -44,9 +44,11 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	if err != nil {
 		t.Fatalf("resolve the host: %v", err)
 	}
+	catalog := `{"protocol":"release-capabilities/v1","capabilities":[{"name":"check","kind":"command","description":"Check selected source.","aliases":[],"paths":[],"modules":[],"enforcement":["explicit"],"workflows":["docs/agent-workflows.md"]}]}`
 	manifest := release.Manifest{
 		ManifestVersion: release.ManifestVersion, CodePolishyVersion: "9.9.9",
 		SourceRevision: revision, Host: host, Features: []string{"javascript-bundle"},
+		CapabilityCatalogSHA256: digestOf(catalog),
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
 			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
@@ -56,6 +58,8 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 			{Path: bundleLink, Symlink: "../.pnpm/tool"},
 			{Path: bundleFile, SHA256: digestOf(engine + " runner")},
 			{Path: release.BinaryPath, SHA256: digestOf(engine)},
+			{Path: "docs/agent-workflows.md", SHA256: digestOf("# Agent workflows\n")},
+			{Path: release.CapabilityCatalogPath, SHA256: digestOf(catalog)},
 		},
 	}
 	manifest.EntryCount = len(manifest.Entries)
@@ -68,6 +72,8 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	directory := installed.releaseRoot(lock)
 	writeFile(t, directory, release.BinaryPath, engine)
 	writeFile(t, directory, bundleFile, engine+" runner")
+	writeFile(t, directory, release.CapabilityCatalogPath, catalog)
+	writeFile(t, directory, "docs/agent-workflows.md", "# Agent workflows\n")
 	writeLink(t, directory, bundleLink, "../.pnpm/tool")
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
@@ -103,6 +109,10 @@ func (installed store) installHistorical(t *testing.T, version int, revision, en
 		tools.Vulture = "2.16"
 		toolDocument["python"] = tools.Python
 		toolDocument["vulture"] = tools.Vulture
+	}
+	if version >= 5 {
+		tools.Packaging = "26.3"
+		toolDocument["packaging"] = tools.Packaging
 	}
 	manifest := release.Manifest{
 		ManifestVersion: version, CodePolishyVersion: "9.9.9", SourceRevision: revision,
@@ -243,7 +253,7 @@ func TestLauncherRunsTheReleaseTheLockNames(t *testing.T) {
 
 func TestLauncherRunsInstalledReleasesWithHistoricalManifests(t *testing.T) {
 	installed := newStore(t)
-	for _, version := range []int{2, 3, 4} {
+	for _, version := range []int{2, 3, 4, 5} {
 		lock := installed.installHistorical(t, version, exampleRevision(version), engineBytes)
 		status, stderr, argv := launcherIn(t, installed, repositoryWith(t, &lock), "version")
 		if status != 0 || len(argv) == 0 {

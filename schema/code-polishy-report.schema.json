@@ -32,6 +32,29 @@
       "type": "array",
       "items": { "$ref": "#/$defs/analysisContext" }
     },
+    "sourceDependencyGraph": { "$ref": "#/$defs/sourceDependencyGraph" },
+    "repositoryContext": { "$ref": "#/$defs/repositoryContext" },
+    "architectureReview": { "$ref": "#/$defs/architectureReview" },
+    "architecturePreparation": {
+      "type": "object",
+      "required": [
+        "reviewId",
+        "base",
+        "candidate",
+        "topology",
+        "packetPath",
+        "resultPath"
+      ],
+      "properties": {
+        "reviewId": { "type": "string", "minLength": 1 },
+        "base": { "type": "string", "minLength": 40 },
+        "candidate": { "type": "string", "minLength": 40 },
+        "topology": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "packetPath": { "type": "string", "minLength": 1 },
+        "resultPath": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
     "summary": { "$ref": "#/$defs/summary" },
     "display": { "$ref": "#/$defs/display" },
     "testCommands": { "type": "array", "items": { "type": "object" } },
@@ -72,9 +95,122 @@
       }
     },
     "tables": { "type": "array", "items": { "type": "object" } },
-    "notes": { "type": "array", "items": { "type": "string" } }
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "formatting": { "$ref": "#/$defs/formatting" },
+    "gitEvidence": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "required": [
+          "scope",
+          "provider",
+          "path",
+          "sha256",
+          "policySha256",
+          "lockSha256",
+          "inventorySha256",
+          "expiresAt",
+          "retrievedAt"
+        ],
+        "properties": {
+          "scope": { "type": "string", "minLength": 1 },
+          "provider": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "policySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "lockSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "inventorySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "retrievedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
   },
   "$defs": {
+    "repositoryContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "situations", "designDocuments", "handoffs"],
+      "properties": {
+        "protocol": { "const": "repository-context/v1" },
+        "situations": { "$ref": "#/$defs/stringArray", "maxItems": 33 },
+        "designDocuments": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/contextDocument" }
+        },
+        "handoffs": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/operationalHandoff" }
+        }
+      }
+    },
+    "contextDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "content"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "content": { "type": "string", "minLength": 1, "maxLength": 1048576 }
+      }
+    },
+    "operationalHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "document", "reasons"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "document": { "$ref": "#/$defs/contextDocument" },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 192,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "value"],
+            "properties": {
+              "kind": { "enum": ["source", "module", "situation"] },
+              "value": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "architectureReview": {
+      "type": "object",
+      "required": ["state", "base", "candidate", "topology", "signals"],
+      "properties": {
+        "state": { "enum": ["required", "passed", "not-required"] },
+        "base": { "type": "string", "minLength": 40 },
+        "candidate": { "type": "string", "minLength": 40 },
+        "topology": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "reviewId": { "type": "string", "minLength": 1 },
+        "receiptSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "reason": { "type": "string" },
+        "signals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "summary", "paths", "units"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "module": { "type": "string" },
+              "summary": { "type": "string", "minLength": 1 },
+              "paths": { "$ref": "#/$defs/stringArray" },
+              "units": { "$ref": "#/$defs/stringArray" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "stringArray": { "type": "array", "items": { "type": "string" } },
     "requestedSelection": {
       "type": "object",
@@ -94,6 +230,133 @@
         "root": { "type": "string" },
         "reason": { "type": "string", "minLength": 1 },
         "paths": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "sourceDependencyGraph": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "identity",
+        "nodes",
+        "edges",
+        "inputs",
+        "externalCompositions"
+      ],
+      "properties": {
+        "protocol": { "const": "source-dependency-graph/v1" },
+        "identity": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "nodes": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/dependencyNode" }
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 500000,
+          "items": { "$ref": "#/$defs/dependencyEdge" }
+        },
+        "inputs": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/dependencyFactInput" }
+        },
+        "externalCompositions": {
+          "type": "array",
+          "maxItems": 500000,
+          "items": { "$ref": "#/$defs/externalComposition" }
+        }
+      }
+    },
+    "dependencyNode": {
+      "type": "object",
+      "required": [
+        "path",
+        "language",
+        "generated",
+        "test",
+        "root",
+        "module",
+        "resolutionUnit"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "language": { "enum": ["go", "python", "typescript"] },
+        "generated": { "type": "boolean" },
+        "test": { "type": "boolean" },
+        "root": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "module": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "resolutionUnit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    },
+    "dependencyEdge": {
+      "type": "object",
+      "required": [
+        "source",
+        "target",
+        "sourceResolutionUnit",
+        "targetResolutionUnit",
+        "line",
+        "column",
+        "ecosystem",
+        "kind"
+      ],
+      "properties": {
+        "source": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "target": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "sourceResolutionUnit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "targetResolutionUnit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "ecosystem": { "enum": ["go", "javascript", "python"] },
+        "kind": {
+          "enum": ["runtime", "type-only", "re-export", "proven-dynamic"]
+        }
+      }
+    },
+    "dependencyComponent": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "classification",
+        "identity",
+        "members",
+        "edges",
+        "witness"
+      ],
+      "properties": {
+        "protocol": { "const": "source-dependency-component/v1" },
+        "classification": { "enum": ["production", "generated", "test-only"] },
+        "identity": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/dependencyNode" }
+        },
+        "edges": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500000,
+          "items": { "$ref": "#/$defs/dependencyEdge" }
+        },
+        "witness": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/dependencyEdge" }
+        }
       }
     },
     "summary": {
@@ -183,6 +446,7 @@
           "pattern": "^[A-Za-z][A-Za-z0-9]*(\\.[A-Za-z][A-Za-z0-9]*)+$"
         },
         "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "semanticIdentity": { "$ref": "#/$defs/stringArray" },
         "severity": { "enum": ["error", "warning", "information"] },
         "status": { "enum": ["open", "suppressed", "reviewed"] },
         "scope": {
@@ -230,6 +494,7 @@
           "additionalProperties": { "type": "string" }
         },
         "generatedProducer": { "type": "string" },
+        "dependencyComponent": { "$ref": "#/$defs/dependencyComponent" },
         "message": { "type": "string", "minLength": 1 },
         "remediation": {
           "type": "object",
@@ -254,9 +519,212 @@
                 },
                 "cwd": { "type": "string" }
               }
+            },
+            "generation": { "$ref": "#/$defs/generationRemediation" }
+          }
+        }
+      }
+    },
+    "formatting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rewritten", "unchanged", "protected", "files"],
+      "properties": {
+        "rewritten": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 },
+        "protected": { "type": "integer", "minimum": 0 },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "state", "styleExempt"],
+            "properties": {
+              "path": { "type": "string" },
+              "state": {
+                "enum": [
+                  "rewritten",
+                  "unchanged",
+                  "protected",
+                  "modified-protected",
+                  "unavailable"
+                ]
+              },
+              "producer": { "type": "string", "minLength": 1 },
+              "styleExempt": { "type": "boolean" }
             }
           }
         }
+      }
+    },
+    "generationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "cwd", "timeoutSeconds"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "cwd": { "type": "string" },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "environment": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "maxLength": 4096
+          }
+        }
+      }
+    },
+    "generationRemediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer", "inputs", "generate", "verify", "prerequisites"],
+      "properties": {
+        "producer": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8192,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "generate": { "$ref": "#/$defs/generationCommand" },
+        "verify": { "$ref": "#/$defs/generationCommand" },
+        "prerequisites": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "message"],
+            "properties": {
+              "operation": { "enum": ["generate", "verify"] },
+              "message": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "dependencyFactInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analyzer",
+        "protocol",
+        "project",
+        "root",
+        "paths",
+        "factsSha256",
+        "partitionsSha256",
+        "resolutionSha256"
+      ],
+      "properties": {
+        "analyzer": { "const": "python-facts" },
+        "protocol": { "const": "python-facts/v3" },
+        "project": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "root": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "factsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "partitionsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "resolutionSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "externalComposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "sourceResolutionUnit",
+        "line",
+        "column",
+        "dependency",
+        "contract"
+      ],
+      "properties": {
+        "source": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "sourceResolutionUnit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "dependency": { "$ref": "#/$defs/externalDependency" },
+        "contract": { "$ref": "#/$defs/externalContract" }
+      }
+    },
+    "externalDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "lock",
+        "manifestSha256",
+        "lockSha256",
+        "distribution",
+        "version",
+        "kind",
+        "source",
+        "namespace"
+      ],
+      "properties": {
+        "project": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "lock": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "manifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lockSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "distribution": {
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "version": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "kind": { "enum": ["registry", "git"] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        }
+      }
+    },
+    "externalContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputGrammar",
+        "checkKind",
+        "protocol",
+        "runtimeType",
+        "checkLine",
+        "checkColumn",
+        "sourceSha256",
+        "runtimeSha256",
+        "inputSha256"
+      ],
+      "properties": {
+        "inputGrammar": { "const": "python-module-object/v1" },
+        "checkKind": { "enum": ["isinstance", "issubclass", "validator-call"] },
+        "protocol": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "runtimeType": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "checkLine": { "type": "integer", "minimum": 1 },
+        "checkColumn": { "type": "integer", "minimum": 1 },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "runtimeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "inputSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     }
   }

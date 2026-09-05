@@ -20,7 +20,7 @@ const (
 	latestFilename        = "latest.json"
 	logsDirectory         = "logs"
 	receiptsDirectory     = "receipts"
-	maximumReportBytes    = 8 << 20
+	maximumReportBytes    = 128 << 20
 	maximumReceiptBytes   = 64 << 10
 	maximumLogHeaderBytes = 32 << 10
 )

@@ -110,7 +110,7 @@ func (engine *Engine) suiteChangedPathOverlap(suite policy.TestSuite, changedPat
 			}
 			continue
 		}
-		if len(stringIntersection(engine.Repository.ModuleNames(path), suite.Modules)) > 0 {
+		if len(stringIntersection(engine.Repository.OwnerModuleNames(path), suite.Modules)) > 0 {
 			paths = append(paths, path)
 		}
 	}

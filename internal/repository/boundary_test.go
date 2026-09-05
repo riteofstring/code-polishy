@@ -473,11 +473,11 @@ func boundaryRepository(t *testing.T) (Repository, string) {
 }
 
 func boundaryConfig(otherPath string) string {
-	return `{"version":3,"project":{"kind":"content"},"modules":[` +
+	return `{"version":4,"project":{"kind":"content"},"modules":[` +
 		`{"name":"owned","paths":["owned/**"]},` +
 		`{"name":"other","paths":["` + otherPath + `"]},` +
 		`{"name":"control","paths":[".github/**"]}],` +
-		`"checks":[],"tests":{"suites":[` +
+		`"checks":[],"tests":{"ownership":[],"suites":[` +
 		`{"name":"owned-test","kind":"content","scope":"module","modules":["owned"],"argv":["go","test","./..."]},` +
 		`{"name":"full","kind":"content","scope":"repository","argv":["go","test","./..."]}]},` +
 		`"supplyChain":{},"exceptions":[]}`

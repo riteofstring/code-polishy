@@ -4,24 +4,42 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
 type ModuleSummary struct {
-	Name          string
-	Production    int
-	Tests         int
-	Incoming      int
-	Outgoing      int
-	FocusedSuites int
+	Name          string `json:"name"`
+	Production    int    `json:"production"`
+	Tests         int    `json:"tests"`
+	Incoming      int    `json:"incoming"`
+	Outgoing      int    `json:"outgoing"`
+	FocusedSuites int    `json:"focusedSuites"`
+	External      int    `json:"externalCompositions"`
 }
 
-func Summary(repo repository.Repository, files []string) []ModuleSummary {
+func Summary(repo repository.Repository, files []string, graph *sourcegraph.Graph) []ModuleSummary {
 	byName := initializeModuleSummaries(repo)
 	countIncomingDependencies(repo, byName)
 	countOwnedFiles(repo, files, byName)
 	countFocusedSuites(repo, byName)
+	countExternalCompositions(graph, byName)
 	return sortedModuleSummaries(byName)
+}
+
+func countExternalCompositions(graph *sourcegraph.Graph, summaries map[string]*ModuleSummary) {
+	if graph == nil {
+		return
+	}
+	owners := map[string]string{}
+	for _, node := range graph.Nodes {
+		owners[node.Path] = node.Module
+	}
+	for _, edge := range graph.External {
+		if summary := summaries[owners[edge.Source]]; summary != nil {
+			summary.External++
+		}
+	}
 }
 
 func initializeModuleSummaries(repo repository.Repository) map[string]*ModuleSummary {
@@ -47,7 +65,7 @@ func countOwnedFiles(repo repository.Repository, files []string, byName map[stri
 		if !repo.IsExecutableSource(path) {
 			continue
 		}
-		owners := repo.ModuleNames(path)
+		owners := repo.OwnerModuleNames(path)
 		if len(owners) != 1 || byName[owners[0]] == nil {
 			continue
 		}

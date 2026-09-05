@@ -25,9 +25,10 @@ const (
 )
 
 type SourceProject struct {
-	Sources    []Source          `json:"sources"`
-	Partitions []SourcePartition `json:"partitions"`
-	Identity   string            `json:"identity"`
+	Sources           []Source          `json:"sources"`
+	Partitions        []SourcePartition `json:"partitions"`
+	Identity          string            `json:"identity"`
+	PartitionIdentity string            `json:"partitionIdentity"`
 }
 
 type SourcePartition struct {
@@ -82,6 +83,12 @@ func analyzeProjectSources(ctx context.Context, python string, sources []Input, 
 		return SourceProject{}, err
 	}
 	project.Identity = identity
+	partitionData, err := json.Marshal(project.Partitions)
+	if err != nil {
+		return SourceProject{}, fmt.Errorf("encode python-facts partition identity: %w", err)
+	}
+	partitionDigest := sha256.Sum256(partitionData)
+	project.PartitionIdentity = hex.EncodeToString(partitionDigest[:])
 	return project, nil
 }
 

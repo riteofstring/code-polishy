@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 const (
-	Version            = 4
+	Version            = 5
 	DefaultStreamLimit = 1 << 20
 	MaximumStreamLimit = 8 << 20
 )
@@ -169,34 +172,40 @@ type BehaviorReview struct {
 }
 
 type IdentityInput struct {
-	Gate                GateKind
-	RequestedBase       string
-	ExactBase           string
-	Candidate           string
-	PolicyLevel         string
-	Release             ReleaseIdentity
-	ConfigurationSHA256 string
-	Platform            Platform
-	Commands            []CommandSpec
-	Environment         []EnvironmentInput
-	AmbientEnvironment  []EnvironmentInput
-	BehaviorReview      BehaviorReview
+	Gate                     GateKind
+	RequestedBase            string
+	ExactBase                string
+	Candidate                string
+	PolicyLevel              string
+	Release                  ReleaseIdentity
+	ConfigurationSHA256      string
+	ArchitectureReviewSHA256 string
+	GitEvidenceSHA256        string
+	PolicyValiditySHA256     string
+	Platform                 Platform
+	Commands                 []CommandSpec
+	Environment              []EnvironmentInput
+	AmbientEnvironment       []EnvironmentInput
+	BehaviorReview           BehaviorReview
 }
 
 type Identity struct {
-	Version             int                      `json:"version"`
-	Gate                GateKind                 `json:"gate"`
-	RequestedBase       string                   `json:"requested_base"`
-	ExactBase           string                   `json:"exact_base"`
-	Candidate           string                   `json:"candidate"`
-	PolicyLevel         string                   `json:"policy_level"`
-	Release             ReleaseIdentity          `json:"release"`
-	ConfigurationSHA256 string                   `json:"configuration_sha256"`
-	Platform            Platform                 `json:"platform"`
-	Commands            []CommandSpec            `json:"commands"`
-	Environment         []EnvironmentFingerprint `json:"environment"`
-	AmbientEnvironment  []EnvironmentFingerprint `json:"ambient_environment"`
-	BehaviorReview      BehaviorReview           `json:"behavior_review"`
+	Version                  int                      `json:"version"`
+	Gate                     GateKind                 `json:"gate"`
+	RequestedBase            string                   `json:"requested_base"`
+	ExactBase                string                   `json:"exact_base"`
+	Candidate                string                   `json:"candidate"`
+	PolicyLevel              string                   `json:"policy_level"`
+	Release                  ReleaseIdentity          `json:"release"`
+	ConfigurationSHA256      string                   `json:"configuration_sha256"`
+	ArchitectureReviewSHA256 string                   `json:"architecture_review_sha256"`
+	GitEvidenceSHA256        string                   `json:"git_evidence_sha256"`
+	PolicyValiditySHA256     string                   `json:"policy_validity_sha256"`
+	Platform                 Platform                 `json:"platform"`
+	Commands                 []CommandSpec            `json:"commands"`
+	Environment              []EnvironmentFingerprint `json:"environment"`
+	AmbientEnvironment       []EnvironmentFingerprint `json:"ambient_environment"`
+	BehaviorReview           BehaviorReview           `json:"behavior_review"`
 }
 
 type CommandRef struct {
@@ -249,31 +258,26 @@ type CommandOutcome struct {
 	PriorDurationMilliseconds int64           `json:"prior_duration_milliseconds,omitempty"`
 }
 
-type Finding struct {
-	Check   string `json:"check"`
-	Path    string `json:"path"`
-	Line    int    `json:"line,omitempty"`
-	Column  int    `json:"column,omitempty"`
-	Subject string `json:"subject"`
-	Message string `json:"message"`
-}
-
 type Report struct {
-	Version            int                 `json:"version"`
-	Identity           Identity            `json:"identity"`
-	IdentitySHA256     string              `json:"identity_sha256"`
-	ExecutionID        string              `json:"execution_id"`
-	Status             RunStatus           `json:"status"`
-	StartedAt          time.Time           `json:"started_at"`
-	CompletedAt        time.Time           `json:"completed_at"`
-	Commands           []CommandOutcome    `json:"commands"`
-	Findings           []Finding           `json:"findings"`
-	Notes              []string            `json:"notes"`
-	TestEvidence       []TestEvidence      `json:"test_evidence"`
-	TestDiagnostics    []TestDiagnostic    `json:"test_diagnostics"`
-	SuiteSatisfactions []SuiteSatisfaction `json:"suite_satisfactions"`
-	BehaviorReview     BehaviorReview      `json:"behavior_review"`
-	SHA256             string              `json:"sha256"`
+	SourceDependencyGraph *sourcegraph.Graph             `json:"source_dependency_graph,omitempty"`
+	Version               int                            `json:"version"`
+	Identity              Identity                       `json:"identity"`
+	IdentitySHA256        string                         `json:"identity_sha256"`
+	ExecutionID           string                         `json:"execution_id"`
+	Status                RunStatus                      `json:"status"`
+	StartedAt             time.Time                      `json:"started_at"`
+	CompletedAt           time.Time                      `json:"completed_at"`
+	Commands              []CommandOutcome               `json:"commands"`
+	Findings              []policy.Finding               `json:"findings"`
+	Suppressed            []policy.Suppressed            `json:"suppressed"`
+	Assessed              []policy.AssessedVulnerability `json:"vulnerability_assessments"`
+	ReleaseAges           []policy.AssessedReleaseAge    `json:"release_age_assessments"`
+	Notes                 []string                       `json:"notes"`
+	TestEvidence          []TestEvidence                 `json:"test_evidence"`
+	TestDiagnostics       []TestDiagnostic               `json:"test_diagnostics"`
+	SuiteSatisfactions    []SuiteSatisfaction            `json:"suite_satisfactions"`
+	BehaviorReview        BehaviorReview                 `json:"behavior_review"`
+	SHA256                string                         `json:"sha256"`
 }
 
 type TestEvidence struct {
@@ -332,14 +336,18 @@ type SuiteSatisfaction struct {
 }
 
 type FinalizeOptions struct {
-	Status             RunStatus
-	Findings           []Finding
-	Notes              []string
-	TestEvidence       []TestEvidence
-	TestDiagnostics    []TestDiagnostic
-	SuiteSatisfactions []SuiteSatisfactionInput
-	BehaviorReview     BehaviorReview
-	CompletedAt        time.Time
+	SourceDependencyGraph *sourcegraph.Graph
+	Status                RunStatus
+	Findings              []policy.Finding
+	Suppressed            []policy.Suppressed
+	Assessed              []policy.AssessedVulnerability
+	ReleaseAges           []policy.AssessedReleaseAge
+	Notes                 []string
+	TestEvidence          []TestEvidence
+	TestDiagnostics       []TestDiagnostic
+	SuiteSatisfactions    []SuiteSatisfactionInput
+	BehaviorReview        BehaviorReview
+	CompletedAt           time.Time
 }
 
 type ExecutionEvidence struct {
