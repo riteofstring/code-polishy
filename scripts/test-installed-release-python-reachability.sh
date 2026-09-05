@@ -9,6 +9,7 @@ exercise_python_reachability_fixture() {
   python="${interpreters[0]}"
   "${python}" -I -B - "${fixture_root}" "${launcher}" "${lock}" "${real_git}" <<'PY'
 import ast
+import base64
 import hashlib
 import json
 import pathlib
@@ -214,5 +215,108 @@ declaration["consumer"]["sourceSha256"] = digest("src/app/loader.py")
 save_config()
 architecture_failure("undeclared sibling loader")
 print("Installed Python external composition cases passed.")
+
+root = pathlib.Path(fixture) / "python-external-contracts"
+root.mkdir()
+config["scope"] = {}
+config["tests"]["suites"].append({"name": "full", "scope": "repository", "kind": "integration", "paths": ["src/tests/**"], "cwd": "src", "argv": ["python", "-m", "unittest", "discover", "-s", "tests"], "runOn": ["full"]})
+lock_check = "import pathlib,tomllib; project=tomllib.loads(pathlib.Path('pyproject.toml').read_text()); package=tomllib.loads(pathlib.Path('uv.lock').read_text())['package'][0]; source=package['source']; expected='framework=='+package['version'] if 'registry' in source else 'framework @ git+'+source['git'].split('?rev=')[0]+'@'+source['git'].split('#')[1]; assert project['project']['dependencies']==[expected]"
+config["checks"] = [
+    {"name": "build", "provides": ["build"], "modules": ["application"], "argv": ["python", "-B", "-m", "compileall", "-q", "src"], "runOn": ["build"]},
+    {"name": "lock-sync", "provides": ["lock-sync"], "modules": ["application"], "argv": ["python", "-I", "-B", "-c", lock_check], "runOn": ["supply-chain"]},
+]
+save_config()
+write("src/tests/test_factory.py", "import unittest\nfrom app.plugin import main\n\nclass FactoryTests(unittest.TestCase):\n    def test_loader_supports_independent_instances(self):\n        self.assertIsNot(main()(), main()())\n")
+write(".gitignore", ".code-polishy-reports/\n.venv/\n")
+shutil.copyfile(lock, root / ".code-polishy.lock.json")
+subprocess.run([git, "-C", str(root), "init", "--quiet"], check=True)
+command("agents", "install", machine=False)
+subprocess.run([sys.executable, "-I", "-B", "-m", "venv", "--copies", "--without-pip", str(root / ".venv")], check=True)
+site = next((root / ".venv/lib").glob("python*/site-packages"))
+manifest = "[project]\nname='contract-host'\nversion='1.0'\nrequires-python='==3.12.*'\ndependencies=['framework==1.0']\n[project.scripts]\ncontract-host='app.plugin:main'\n"
+write("pyproject.toml", manifest)
+write("uv.lock", "version=1\n[[package]]\nname='framework'\nversion='1.0'\nsource={registry='https://pypi.org/simple'}\n")
+
+
+def install_contract(source, origin=None):
+    metadata = "framework-1.0.dist-info/"
+    files = {"framework.py": source, metadata + "METADATA": "Metadata-Version: 2.4\nName: framework\nVersion: 1.0\n\n"}
+    origin_path = site / metadata / "direct_url.json"
+    if origin is not None:
+        files[metadata + "direct_url.json"] = json.dumps(origin)
+    elif origin_path.exists():
+        origin_path.unlink()
+    record = ""
+    for name, content in files.items():
+        write(str((site / name).relative_to(root)), content)
+        encoded = content.encode()
+        sha = base64.urlsafe_b64encode(hashlib.sha256(encoded).digest()).decode().rstrip("=")
+        record += f"{name},sha256={sha},{len(encoded)}\n"
+    write(str((site / metadata / "RECORD").relative_to(root)), record + metadata + "RECORD,,\n")
+
+
+def check_contract(*, rejected=False):
+    report = command("check", "--files", "src/app/plugin.py", status=1)
+    findings = report["findings"]
+    dead = {finding["line"] for finding in findings if finding["ruleId"] == "quality.deadCode"}
+    expected = {methods["unused_hook"].lineno}
+    if rejected:
+        expected.add(methods["on_event"].lineno)
+    errors = [finding for finding in findings if finding["ruleId"] == "policy.pythonReachability"]
+    if dead != expected or bool(errors) != rejected or any(finding["ruleId"] not in {"quality.deadCode", "policy.pythonReachability"} for finding in findings):
+        raise AssertionError(f"external contract retained wrong members or failed unrelated checks: {findings}")
+
+
+for kind in ("base", "protocol", "decorator", "entry-point"):
+    member = "    def on_event(self) -> int:\n        return 1\n"
+    remote = "class Contract:\n" + member
+    local = "from framework import Contract\n\nclass Plugin(Contract):\n"
+    if kind == "protocol":
+        remote = "from typing import Protocol\nclass Contract(Protocol):\n" + member
+    elif kind == "decorator":
+        remote = "def Contract(function):\n    return function\n"
+        local = "from framework import Contract\n\nclass Plugin:\n    @Contract\n"
+    elif kind == "entry-point":
+        remote = "from typing import Protocol\nclass Interface(Protocol):\n" + member + "def Contract(plugin: type[Interface]) -> type[Interface]:\n    return plugin\n"
+        local = "from framework import Contract\n\nclass Plugin:\n"
+    local += member + "    def unused_hook(self) -> int:\n        return 2\n"
+    if kind == "entry-point":
+        local += "\nContract(Plugin)\n"
+    local += "\ndef main() -> type[Plugin]:\n    return Plugin\n"
+    write("src/app/plugin.py", local)
+    install_contract(remote)
+    config["scope"] = {}
+    save_config()
+    command("format", "--files", "src/app/plugin.py")
+    tree = ast.parse((root / "src/app/plugin.py").read_text())
+    implementation = next(node for node in tree.body if isinstance(node, ast.ClassDef))
+    methods = {node.name: node for node in implementation.body if isinstance(node, ast.FunctionDef)}
+    binding = methods["on_event"] if kind == "decorator" else implementation
+    if kind == "entry-point":
+        binding = next(node.value for node in tree.body if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call))
+    consumer = {"kind": kind, "importer": "src/app/plugin.py", "module": "app.plugin", "site": position(binding), "sourceSha256": digest("src/app/plugin.py"), "distribution": "framework", "qualified": "framework.Contract", "implementation": "Plugin", "member": "on_event"}
+    target = {"module": "app.plugin", "symbol": "Plugin.on_event"}
+    config["scope"]["pythonDynamicReferences"] = [{"kind": "target", "project": "pyproject.toml", "target": target, "consumer": consumer}]
+    save_config()
+    check_contract()
+    if kind in {"base", "protocol", "entry-point"}:
+        consumer["member"], target["symbol"] = "unused_hook", "Plugin.unused_hook"
+        save_config()
+        check_contract(rejected=True)
+        consumer["member"], target["symbol"] = "on_event", "Plugin.on_event"
+        save_config()
+    if kind == "base":
+        url = "ssh://git@private.example.test/team/framework.git"
+        write("pyproject.toml", manifest.replace("framework==1.0", f"framework @ git+{url}@{commit}"))
+        write("uv.lock", f"version=1\n[[package]]\nname='framework'\nversion='1.0'\nsource={{git='{url}?rev={commit}#{commit}'}}\n")
+        origin = {"url": url, "vcs_info": {"vcs": "git", "commit_id": commit}}
+        install_contract(remote, origin)
+        check_contract()
+        origin["vcs_info"]["commit_id"] = "a" * 40
+        install_contract(remote, origin)
+        check_contract(rejected=True)
+        write("pyproject.toml", manifest)
+        write("uv.lock", "version=1\n[[package]]\nname='framework'\nversion='1.0'\nsource={registry='https://pypi.org/simple'}\n")
+    print(f"Installed external reachability contract passed: {kind}", flush=True)
 PY
 }
