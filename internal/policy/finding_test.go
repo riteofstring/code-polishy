@@ -49,3 +49,13 @@ func TestFindingFingerprintChangesWithOwnerAndGeneratedProducer(t *testing.T) {
 		t.Fatal("owner or generated producer did not change the semantic fingerprint")
 	}
 }
+
+func TestArtifactFinalizationFailureDoesNotOfferExecutionIDAsSuite(t *testing.T) {
+	finding := NormalizeFinding(Finding{
+		Check: "test.artifacts", Path: ".code-polishy-test-artifacts", Subject: "execution-20260905", Message: "cannot publish completed manifest: permission denied",
+	})
+	command := finding.Remediation.NextCommand
+	if command == nil || !slices.Equal(command.Argv, []string{"code-polishy", "test-plan"}) || command.Cwd != "." {
+		t.Fatalf("artifact recovery invents an executable suite: %+v", finding.Remediation)
+	}
+}

@@ -63,6 +63,12 @@ func defaultFindingScope(finding Finding) FindingScope {
 }
 
 func defaultFindingRemediation(finding Finding) FindingRemediation {
+	if finding.Check == "test.artifacts" {
+		return FindingRemediation{
+			Summary:     "Restore writable managed test-artifact storage and resolve the reported finalization error. Inspect the test plan before rerunning affected suites; the execution ID is not a suite name.",
+			NextCommand: &FindingCommand{Argv: []string{"code-polishy", "test-plan"}, Cwd: "."},
+		}
+	}
 	return FindingRemediation{
 		Summary:     fmt.Sprintf("Resolve %s for %s and rerun its owning policy command.", finding.Check, finding.Subject),
 		NextCommand: &FindingCommand{Argv: defaultFindingCommand(finding), Cwd: "."},
