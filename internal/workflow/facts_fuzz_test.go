@@ -13,7 +13,7 @@ func FuzzWorkflowFactsBoundary(f *testing.F) {
 		if len(source) > MaximumInputBytes+1 {
 			return
 		}
-		facts, err := Parse(".github/workflows/fuzz.yml", source)
+		facts, err := Parse(".github/workflows/fuzz.yml", source, nil)
 		if err != nil {
 			return
 		}

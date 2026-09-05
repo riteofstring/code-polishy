@@ -3,6 +3,7 @@ package quality
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -893,12 +894,7 @@ func toolFinding(tool, message string) policy.Finding {
 }
 
 func safeName(value string) string {
-	value = strings.Trim(value, "./")
-	value = strings.NewReplacer("/", "-", "\\", "-", ".", "-").Replace(value)
-	if value == "" {
-		return "root"
-	}
-	return value
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }
 
 func isLengthInput(path string) bool {

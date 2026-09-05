@@ -738,11 +738,7 @@ func pythonGitLockMessage(requirement repository.PythonRequirement, candidates [
 }
 
 func checkWorkflowPins(repo repository.Repository, path string) []policy.Finding {
-	data, err := repo.Read(path)
-	if err != nil {
-		return []policy.Finding{{Check: "supplyChain.workflow", Path: path, Subject: path, Message: err.Error()}}
-	}
-	facts, err := workflowfacts.Parse(path, data)
+	facts, err := workflowfacts.Read(path, repo.Read)
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.workflow", Path: path, Subject: path, Message: err.Error()}}
 	}

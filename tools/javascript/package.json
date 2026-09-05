@@ -10,6 +10,8 @@
     "node": "24.18.0"
   },
   "dependencies": {
+    "@astrojs/compiler": "4.0.0",
+    "@jridgewell/trace-mapping": "0.3.31",
     "@types/node": "24.13.3",
     "@typescript-eslint/parser": "8.64.0",
     "eslint": "9.39.5",

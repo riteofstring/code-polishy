@@ -22,16 +22,6 @@ if [[ ! -d "${bundle_dir}/node_modules" ]]; then
   exit 1
 fi
 
-prebuilt_binaries="$(
-  cd "${bundle_dir}" && find node_modules \( -type f -o -type l \) \
-    \( -name '*.node' -o -name '*.wasm' -o -name '*.exe' \
-    -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' \) -print
-)"
-if [[ -n "${prebuilt_binaries}" ]]; then
-  echo "The JavaScript bundle at ${bundle_dir} contains prebuilt binaries:" >&2
-  printf '%s\n' "${prebuilt_binaries}" >&2
-  exit 1
-fi
 
 
 
@@ -70,6 +60,32 @@ fi
 
 
 
+
+prebuilt_binaries="$(
+  cd "${bundle_dir}" && find node_modules \( -type f -o -type l \) \
+    \( -name '*.node' -o -name '*.wasm' -o -name '*.exe' \
+    -o -name '*.dll' -o -name '*.so' -o -name '*.dylib' \) -print
+)"
+wasm_checksums="$(dirname "${BASH_SOURCE[0]}")/javascript_wasm_checksums.txt"
+binary_digest() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{ print $1 }'
+  else
+    shasum -a 256 "$1" | awk '{ print $1 }'
+  fi
+}
+while IFS= read -r binary; do
+  [[ -n "${binary}" ]] || continue
+  expected="$(awk -v candidate="${binary}" '$2 == candidate { print $1 }' "${wasm_checksums}")"
+  actual=""
+  if [[ -f "${bundle_dir}/${binary}" && ! -L "${bundle_dir}/${binary}" ]]; then
+    actual="$(binary_digest "${bundle_dir}/${binary}")"
+  fi
+  if [[ -z "${expected}" || "${actual}" != "${expected}" ]]; then
+    echo "The JavaScript bundle contains an unapproved or altered prebuilt binary: ${binary}" >&2
+    exit 1
+  fi
+done <<<"${prebuilt_binaries}"
 
 metadata="${bundle_dir}/node_modules/.modules.yaml"
 if [[ ! -f "${metadata}" ]]; then

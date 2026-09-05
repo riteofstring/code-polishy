@@ -1,6 +1,7 @@
 import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
+import { astroIssuePosition } from "./astro.mjs";
 
 import typescript from "./node_modules/typescript/lib/typescript.js";
 
@@ -19,6 +20,7 @@ import {
 const MAXIMUM_DEADCODE_RESULTS = 5000;
 
 const DEADCODE_EXTENSIONS = [
+  ".astro",
   ".cjs",
   ".cts",
   ".js",
@@ -248,6 +250,11 @@ async function configurationFor(request, covered, unsupportedPaths) {
 
 function unusedExport(root, kind, issue) {
   const path = insideRoot(root, issue.filePath);
+  const position = astroIssuePosition(
+    issue.filePath,
+    issue.line ?? 0,
+    issue.col ?? 0,
+  );
   const symbol =
     issue.parentSymbol === undefined
       ? issue.symbol
@@ -256,8 +263,8 @@ function unusedExport(root, kind, issue) {
     ? null
     : {
         path,
-        line: issue.line ?? 0,
-        column: issue.col ?? 0,
+        line: position.line,
+        column: position.column,
         symbol: truncate(String(symbol)),
         kind,
       };
@@ -341,8 +348,12 @@ async function analyze(
   unsupportedPaths,
   scratch,
 ) {
-  const configurationPath = join(scratch, "policy-knip.json");
-  writeFileSync(configurationPath, JSON.stringify(configuration));
+  const configurationPath = join(scratch, "policy-knip.mjs");
+  const compilerUrl = new URL("./astro.mjs", import.meta.url).href;
+  writeFileSync(
+    configurationPath,
+    `import { compileAstro } from ${JSON.stringify(compilerUrl)};\nexport default { ...${JSON.stringify(configuration)}, compilers: { astro: compileAstro } };\n`,
+  );
   const directory = join(request.root, request.directory);
 
   process.argv = [

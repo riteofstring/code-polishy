@@ -5,6 +5,7 @@
 # Regenerate with ./scripts/check-javascript-bundle.sh --write-inventory
 # whenever the bundle manifest or lock changes; a manual edit is drift, not an
 # update.
+@astrojs/compiler@4.0.0	MIT
 @eslint-community/eslint-utils@4.9.1	MIT
 @eslint-community/regexpp@4.12.2	MIT
 @eslint/config-array@0.21.2	Apache-2.0
@@ -19,6 +20,9 @@
 @humanfs/types@0.15.0	Apache-2.0
 @humanwhocodes/module-importer@1.0.1	Apache-2.0
 @humanwhocodes/retry@0.4.3	Apache-2.0
+@jridgewell/resolve-uri@3.1.2	MIT
+@jridgewell/sourcemap-codec@1.5.5	MIT
+@jridgewell/trace-mapping@0.3.31	MIT
 @nodelib/fs.scandir@2.1.5	MIT
 @nodelib/fs.stat@2.0.5	MIT
 @nodelib/fs.walk@1.2.8	MIT

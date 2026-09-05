@@ -214,6 +214,17 @@ touch "${tree_fixture}/node_modules/native.node"
 expect_rejected "a tree carrying a prebuilt binary" "${verify_tree}" "${tree_fixture}"
 rm "${tree_fixture}/node_modules/native.node"
 
+wasm_path="node_modules/.pnpm/@astrojs+compiler@4.0.0/node_modules/@astrojs/compiler/dist/astro.wasm"
+mkdir -p "${tree_fixture}/$(dirname "${wasm_path}")"
+cp "${javascript_bundle_dir}/${wasm_path}" "${tree_fixture}/${wasm_path}"
+"${verify_tree}" "${tree_fixture}" || fail "the exact pinned Astro compiler was rejected"
+printf 'altered' >>"${tree_fixture}/${wasm_path}"
+expect_rejected "an altered Astro compiler" "${verify_tree}" "${tree_fixture}"
+rm "${tree_fixture}/${wasm_path}"
+touch "${tree_fixture}/node_modules/unapproved.wasm"
+expect_rejected "an unapproved WebAssembly compiler" "${verify_tree}" "${tree_fixture}"
+rm "${tree_fixture}/node_modules/unapproved.wasm"
+
 
 
 ln -s .pnpm/example/native.node "${tree_fixture}/node_modules/linked.node"

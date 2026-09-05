@@ -2,6 +2,7 @@ import { builtinModules } from "node:module";
 import { extname, join } from "node:path";
 
 import typescript from "./node_modules/typescript/lib/typescript.js";
+import { astroPosition, astroSource } from "./astro.mjs";
 
 import {
   containedRead,
@@ -21,6 +22,7 @@ const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/;
 const MAXIMUM_PACKAGE_NAME_CHARACTERS = 214;
 
 const IMPORT_LANGUAGES = {
+  ".astro": typescript.ScriptKind.TSX,
   ".cjs": typescript.ScriptKind.JS,
   ".js": typescript.ScriptKind.JS,
   ".jsx": typescript.ScriptKind.JSX,
@@ -40,12 +42,22 @@ const RESOLUTION_OPTIONS = {
   target: typescript.ScriptTarget.ESNext,
 };
 
+function astroResolutionPath(path) {
+  if (typescript.sys.fileExists(path) || !path.endsWith(".astro.ts"))
+    return path;
+  const source = path.slice(0, -3);
+  return typescript.sys.fileExists(source) && containedRead(source)
+    ? source
+    : path;
+}
+
 function containedResolutionHost(root) {
   return {
     useCaseSensitiveFileNames: true,
     getCurrentDirectory: () => root,
     fileExists: (path) =>
-      typescript.sys.fileExists(path) && containedRead(path),
+      typescript.sys.fileExists(astroResolutionPath(path)) &&
+      containedRead(astroResolutionPath(path)),
     directoryExists: (path) =>
       typescript.sys.directoryExists(path) && containedRead(path),
     getDirectories: (path) =>
@@ -161,7 +173,7 @@ function importFact(root, path, source, node, resolved) {
   };
 }
 
-function fileFacts(request, path, resolve, facts, unsupportedPaths) {
+async function fileFacts(request, path, resolve, facts, unsupportedPaths) {
   const kind = IMPORT_LANGUAGES[extname(path).toLowerCase()];
   if (kind === undefined) {
     unsupportedPaths.push(
@@ -179,10 +191,16 @@ function fileFacts(request, path, resolve, facts, unsupportedPaths) {
   }
   let source;
   let written;
+  let sourceMap;
   try {
+    const virtual =
+      extname(path).toLowerCase() === ".astro"
+        ? await astroSource(text, absolute)
+        : { code: text };
+    sourceMap = virtual.map;
     source = typescript.createSourceFile(
       absolute,
-      text,
+      virtual.code,
       typescript.ScriptTarget.Latest,
       true,
       kind,
@@ -193,45 +211,58 @@ function fileFacts(request, path, resolve, facts, unsupportedPaths) {
     return;
   }
   for (const node of written.computed) {
+    const line = originalNodeLine(source, node, sourceMap);
     unsupportedPaths.push(
       unsupported(
         path,
-        `line ${nodeLine(source, node)}: a dynamic import whose specifier is computed names no file to resolve`,
+        `line ${line}: a dynamic import whose specifier is computed names no file to resolve`,
       ),
     );
   }
   for (const node of written.specifiers) {
-    facts.push(
-      importFact(
-        request.root,
-        path,
-        source,
-        node,
-        resolve(node.text, absolute),
-      ),
+    const fact = importFact(
+      request.root,
+      path,
+      source,
+      node,
+      resolve(node.text, absolute),
     );
+    fact.line = originalNodeLine(source, node, sourceMap);
+    facts.push(fact);
   }
 }
 
-export function imports(request) {
+function originalNodeLine(source, node, sourceMap) {
+  if (!sourceMap) return nodeLine(source, node);
+  const position = source.getLineAndCharacterOfPosition(node.getStart(source));
+  return astroPosition(sourceMap, position.line + 1, position.character).line;
+}
+
+export async function imports(request) {
   const host = containedResolutionHost(request.root);
   const cache = typescript.createModuleResolutionCache(
     request.root,
     (name) => name,
     RESOLUTION_OPTIONS,
   );
-  const resolve = (specifier, containingFile) =>
-    typescript.resolveModuleName(
+  const resolve = (specifier, containingFile) => {
+    const resolved = typescript.resolveModuleName(
       specifier,
       containingFile,
       RESOLUTION_OPTIONS,
       host,
       cache,
     ).resolvedModule;
+    if (resolved)
+      resolved.resolvedFileName = astroResolutionPath(
+        resolved.resolvedFileName,
+      );
+    return resolved;
+  };
   const facts = [];
   const unsupportedPaths = [];
   for (const path of request.paths) {
-    fileFacts(request, path, resolve, facts, unsupportedPaths);
+    await fileFacts(request, path, resolve, facts, unsupportedPaths);
     if (facts.length > MAXIMUM_IMPORT_FACTS) {
       fail(
         `the imports operation produced more than the ${MAXIMUM_IMPORT_FACTS} result limit`,

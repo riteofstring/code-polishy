@@ -1,0 +1,1 @@
+a4ed5ef260d401dba6f172d52a3c27dbd933bfcd9b1698e91b430214c9701313  node_modules/.pnpm/@astrojs+compiler@4.0.0/node_modules/@astrojs/compiler/dist/astro.wasm

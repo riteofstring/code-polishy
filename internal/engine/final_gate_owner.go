@@ -19,8 +19,7 @@ func finalGateOwnerFindings(repo repository.Repository, files []string) []policy
 		if !finalGateWorkflowPath(repo, path) {
 			continue
 		}
-		data, err := repo.Read(path)
-		if err == nil && finalGateWorkflowContains(path, data) {
+		if finalGateWorkflowContains(repo, path) {
 			return nil
 		}
 	}
@@ -30,9 +29,9 @@ func finalGateOwnerFindings(repo repository.Repository, files []string) []policy
 	}}
 }
 
-func finalGateWorkflowContains(path string, data []byte) bool {
+func finalGateWorkflowContains(repo repository.Repository, path string) bool {
 	if strings.HasPrefix(filepath.ToSlash(path), ".github/workflows/") {
-		facts, err := workflowfacts.Parse(path, data)
+		facts, err := workflowfacts.Read(path, repo.Read)
 		if err != nil {
 			return false
 		}
@@ -45,7 +44,8 @@ func finalGateWorkflowContains(path string, data []byte) bool {
 		}
 		return false
 	}
-	return strings.Contains(string(data), finalGateCommandLiteral)
+	data, err := repo.Read(path)
+	return err == nil && strings.Contains(string(data), finalGateCommandLiteral)
 }
 
 func finalGateWorkflowPath(repo repository.Repository, path string) bool {
