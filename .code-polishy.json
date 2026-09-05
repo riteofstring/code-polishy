@@ -745,6 +745,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(Command|Dynamic|Module|Candidate|Impact|Configured|Language|Custom|Shell|Declared|Virtual|Every|Go|Tool|All|Explicit|Changed|Staged|Select|Merge|ReadRegular|Deletion|Rename|Policy|Conditional|Classify|Resolve|Nested|Design)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)(boundary|committed_source|contained_file|content_digest|revision|context_documents|design_context|handoffs|generation[^/]*|generated_javascript|go_modules|python[^/]*)[.]go$"
@@ -758,6 +760,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(ChangeBoundary|Protected|CleanHead|CandidateState|ResolveAncestor|IsAncestor|Ancestry|Git|Patch|Detached|RemoveWorktree|ReadRegularFileAt|ContentDigest)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)(repository[^/]*|selection|source_scope|impact|command_discovery|control_inputs|documentation_selection|test_ownership|context_documents|design_context|handoffs|generation[^/]*|generated_javascript|go_modules|python[^/]*)[.]go$"
@@ -771,6 +775,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(Operational|ContextDocuments|Generation|GeneratedJavaScript|InspectGoModules|Design|NestedGo)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)(repository[^/]*|selection|source_scope|impact|command_discovery|control_inputs|documentation_selection|test_ownership|boundary|committed_source|contained_file|content_digest|revision|python[^/]*)[.]go$"
@@ -784,6 +790,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(ParsePythonProject|ReadPythonProject|PythonProject|PythonModule|PythonTool)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)([^p/][^/]*|python_(object_imports|distribution[^/]*|entry_points|git[^/]*|lock|plugins|reachability[^/]*|requirement|ruff|toml))[.]go$"
@@ -797,6 +805,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(ParsePythonRequirement|ParsePythonUVLock|PythonGit|PythonProjectInventoryRetains)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)([^p/][^/]*|python|python_(object_imports|build|distribution[^/]*|entry_points|module|plugins|project|reachability[^/]*|ruff|tool))[.]go$"
@@ -810,6 +820,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(PythonPlugin|ParsePythonProject|PythonProjectDynamic|PythonRuff)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)([^p/][^/]*|python|python_(build|distribution[^/]*|git[^/]*|lock|module|project|reachability[^/]*|requirement|toml|tool))[.]go$"
@@ -823,6 +835,8 @@
         "modules": ["repository"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(PythonDistribution|PythonReachability)",
           "./internal/repository",
           "--exclude-files",
           "(^|/)([^p/][^/]*|python|python_(object_imports|build|entry_points|git[^/]*|lock|module|plugins|project|requirement|ruff|toml|tool))[.]go$"
@@ -923,6 +937,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(SourceComment|AllowComments|GoDirective|ShellSource|PythonDocstrings|PowerShellInterpolated)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -937,6 +953,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(SourceComment|AllowComments|GoDirective|ShellSource|PythonDocstrings|PowerShellInterpolated)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -951,6 +969,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(SourceComment|AllowComments|GoDirective|ShellSource|PythonDocstrings|PowerShellInterpolated)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--timeout-coefficient",
@@ -967,6 +987,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(SourceComment|AllowComments|GoDirective|ShellSource|PythonDocstrings|PowerShellInterpolated)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -981,6 +1003,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(Data|Check|ConfiguredStyle|Unbounded|Python|JavaScript)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -995,6 +1019,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^TestPython(Vulture|Reachability)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -1009,6 +1035,8 @@
         "modules": ["quality"],
         "argv": [
           "./scripts/go-mutation.sh",
+          "--fast-tests",
+          "^Test(Documentation|Markdown|FormatWrites)",
           "./internal/quality",
           "--conditionals-boundary=false",
           "--exclude-files",
@@ -1424,7 +1452,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1433",
+      "subject": "1461",
       "reason": "The explicit suite and test-ownership inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

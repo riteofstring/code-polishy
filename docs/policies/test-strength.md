@@ -85,6 +85,15 @@ equivalent subcommand flags. Before mutation, the runner asks pinned Go which
 production files are inactive on the current host and excludes exactly those
 files; Gremlins otherwise counts build-incompatible source as uncovered.
 
+The Go wrapper accepts `--fast-tests EXPRESSION` before the package target to
+try a focused Go test group first for each mutant. The expression must select
+tests and pass on the unchanged source. A failure kills the mutant immediately;
+a pass falls through to the complete package tests. Baseline coverage and the
+80% thresholds still use the complete suite. This changes test order without
+discarding mutants or accepting survivors based only on focused tests. Test
+result caching stays disabled, and every disposable copy retains the pinned
+toolchain needed by its tests.
+
 The quality module disables Gremlins' conditional-boundary operator. Its
 language scanners are tested through observable policy findings, while that
 operator predominantly changes private cursor comparisons without changing a

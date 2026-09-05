@@ -2,6 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fast_tests=""
+if [[ "${1:-}" == "--fast-tests" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "--fast-tests requires a nonempty Go test expression." >&2
+    exit 1
+  fi
+  fast_tests="$2"
+  shift 2
+fi
 gremlins="${repo_root}/.tools/bin/gremlins"
 if [[ ! -x "${gremlins}" ]]; then
   echo "Pinned Gremlins is unavailable; run ./tools/install-gremlins.sh." >&2
@@ -83,11 +92,20 @@ if [[ "${module_root}" == "${CODE_POLISHY_MUTATION_ROOT}/"* ]]; then
     exit 1
   fi
 fi
+if [[ "${1:-}" == test && -n "${CODE_POLISHY_MUTATION_FAST_TESTS}" ]]; then
+  for argument in "$@"; do
+    if [[ "${argument}" == -failfast ]]; then
+      "${CODE_POLISHY_MUTATION_GO}" "$@" -run "${CODE_POLISHY_MUTATION_FAST_TESTS}"
+      break
+    fi
+  done
+fi
 exec "${CODE_POLISHY_MUTATION_GO}" "$@"
 EOF
 chmod +x "${temporary_dir}/bin/go"
 export CODE_POLISHY_MUTATION_GO="${mutation_go}"
 export CODE_POLISHY_MUTATION_TOOLS="${repo_root}/.tools"
+export CODE_POLISHY_MUTATION_FAST_TESTS="${fast_tests}"
 CODE_POLISHY_MUTATION_ROOT="$(cd "${temporary_dir}" && pwd -P)"
 export CODE_POLISHY_MUTATION_ROOT
 export TMPDIR="${CODE_POLISHY_MUTATION_ROOT}"
@@ -96,6 +114,18 @@ export PATH="${temporary_dir}/bin:${PATH}"
 cd "${worktree}"
 inactive_patterns=()
 mutation_target="${1:-}"
+if [[ -n "${fast_tests}" ]]; then
+  if [[ -z "${mutation_target}" || "${mutation_target}" == -* ]]; then
+    echo "--fast-tests requires an explicit package target." >&2
+    exit 1
+  fi
+  listed_tests="$("${mutation_go}" test -list "${fast_tests}" "${mutation_target}")"
+  if [[ "${listed_tests}" != Test* && "${listed_tests}" != *$'\n'Test* ]]; then
+    echo "--fast-tests matches no tests." >&2
+    exit 1
+  fi
+  "${mutation_go}" test -run "${fast_tests}" "${mutation_target}"
+fi
 if [[ -n "${mutation_target}" && "${mutation_target}" != -* ]]; then
   module_directory="$("${mutation_go}" list -m -f '{{ .Dir }}')"
   go_list_template="{{ \$directory := .Dir }}{{ range .IgnoredGoFiles }}{{ printf \"%s/%s\\n\" \$directory . }}{{ end }}"

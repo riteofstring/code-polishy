@@ -57,6 +57,7 @@ cat >"${fixture_repo}/internal/sample/value.go" <<'EOF'
 package sample
 
 func Value() int { return 42 }
+func Other() int { return 7 }
 EOF
 cat >"${fixture_repo}/internal/sample/value_test.go" <<'EOF'
 package sample
@@ -71,6 +72,11 @@ func TestValue(t *testing.T) {
 	if Value() != 42 {
 		t.Fatal("unexpected value")
 	}
+}
+
+func TestOther(t *testing.T) {
+ if err := os.WriteFile(os.Getenv("GREMLINS_TEST_FALLBACK"), []byte("executed"), 0600); err != nil { t.Fatal(err) }
+ if Other() != 7 { t.Fatal("unexpected other value") }
 }
 EOF
 
@@ -111,6 +117,21 @@ if ! (cd "${shadow}/internal/sample" && go test -v .); then
   echo "Unchanged tests failed in the mutation copy." >&2
   exit 12
 fi
+if [[ -n "${CODE_POLISHY_MUTATION_FAST_TESTS}" ]]; then
+  rm -f "${GREMLINS_TEST_FALLBACK}"
+  sed 's/return 42/return 41/' internal/sample/value.go >"${shadow}/internal/sample/value.go"
+  if (cd "${shadow}/internal/sample" && go test -failfast .); then
+    echo "Focused tests failed to reject the mutation." >&2
+    exit 13
+  fi
+  [[ ! -e "${GREMLINS_TEST_FALLBACK}" ]]
+  sed 's/return 7/return 8/' internal/sample/value.go >"${shadow}/internal/sample/value.go"
+  if (cd "${shadow}/internal/sample" && go test -failfast .); then
+    echo "Full fallback failed to reject the surviving mutation." >&2
+    exit 14
+  fi
+  [[ -f "${GREMLINS_TEST_FALLBACK}" ]]
+fi
 printf '%s\n' invoked >"${GREMLINS_TEST_MARKER}"
 exit 10
 EOF
@@ -126,9 +147,26 @@ status=0
 GREMLINS_TEST_GO="${policy_root}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go" \
   GREMLINS_TEST_MARKER="${marker}" \
   GREMLINS_TEST_TOOLS="${fixture_repo}/.tools" \
+  GREMLINS_TEST_FALLBACK="${fixture_root}/fallback" \
   "${fixture_repo}/scripts/go-mutation.sh" ./internal/sample --timeout-coefficient 8 >"${output}" 2>&1 || status=$?
 [[ "${status}" == "10" ]] ||
   fail "threshold failure exited ${status}, expected 10: $(sed -n '1,10p' "${output}")"
 [[ -f "${marker}" ]] || fail "the configured Gremlins command did not run"
+
+status=0
+GREMLINS_TEST_GO="${policy_root}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go" \
+  GREMLINS_TEST_MARKER="${marker}" \
+  GREMLINS_TEST_TOOLS="${fixture_repo}/.tools" \
+  GREMLINS_TEST_FALLBACK="${fixture_root}/fallback" \
+  "${fixture_repo}/scripts/go-mutation.sh" --fast-tests '^TestValue$' ./internal/sample --timeout-coefficient 8 >"${output}" 2>&1 || status=$?
+[[ "${status}" == "10" ]] ||
+  fail "focused mutation execution exited ${status}, expected 10: $(tail -15 "${output}")"
+
+rm -f "${marker}"
+status=0
+GREMLINS_TEST_GO="${policy_root}/.tools/go/${mutation_os}-${mutation_arch}/go/bin/go" \
+  "${fixture_repo}/scripts/go-mutation.sh" --fast-tests '^TestMissing$' ./internal/sample >"${output}" 2>&1 || status=$?
+[[ "${status}" != "0" && ! -e "${marker}" ]] ||
+  fail "an empty focused selection reached mutation execution"
 
 echo "mutation-wrapper contract passed"
