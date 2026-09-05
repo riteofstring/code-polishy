@@ -117,6 +117,17 @@ jobs:
         shell: bash
         run: ./scripts/build.sh
 
+      - name: Restore accepted architecture review
+        if: github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
+            ./scripts/architecture-review-handoff.sh restore "${CODE_POLISHY_MERGE_BASE}"
+          fi
+
       - name: Run selected policy gate
         if: github.event_name != 'schedule'
         shell: bash
@@ -169,6 +180,17 @@ jobs:
       - name: Build policy engine
         shell: bash
         run: ./scripts/build.sh
+
+      - name: Restore accepted architecture review
+        if: github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
+            ./scripts/architecture-review-handoff.sh restore "${CODE_POLISHY_MERGE_BASE}"
+          fi
 
       - name: Run selected policy gate
         shell: bash

@@ -19,6 +19,13 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/architecture-review-handoff.md",
+        "sourcePaths": [
+          "scripts/architecture-review-handoff.sh",
+          "scripts/test-architecture-review-handoff.sh"
+        ]
+      },
+      {
         "path": "docs/design/agent-guidance.md",
         "module": "agents"
       },
@@ -353,6 +360,14 @@
     "requiredKinds": ["unit", "contract"],
     "requiredSupplementalKinds": ["mutation"],
     "suites": [
+      {
+        "name": "architecture-review-handoff-contract",
+        "kind": "contract",
+        "scope": "module",
+        "modules": ["tooling"],
+        "argv": ["./scripts/test-architecture-review-handoff.sh"],
+        "paths": ["scripts/test-architecture-review-handoff.sh"]
+      },
       {
         "name": "spdx-unit",
         "kind": "unit",
@@ -1028,6 +1043,7 @@
       }
     ],
     "paths": [
+      "scripts/test-architecture-review-handoff.sh",
       "scripts/test-mutation-wrapper.sh",
       "scripts/test-install.sh",
       "scripts/test-release-preflight.sh",
@@ -1039,6 +1055,11 @@
       "scripts/test-installed-release-contract.sh"
     ],
     "ownership": [
+      {
+        "paths": ["scripts/test-architecture-review-handoff.sh"],
+        "module": "tooling",
+        "focusedSuite": "architecture-review-handoff-contract"
+      },
       {
         "paths": ["internal/spdx/**/*_test.go"],
         "module": "spdx",
@@ -1341,7 +1362,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1350",
+      "subject": "1371",
       "reason": "The explicit suite and test-ownership inventory exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"
