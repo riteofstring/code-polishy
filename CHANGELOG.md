@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.24.0 - 2026-09-05
 
 - Require configuration schema 4. Declare executable tests through `tests.paths`
   and exact `tests.ownership` mappings to production modules and quick focused
@@ -30,6 +30,9 @@
   exact pins on the candidate. Support authenticated security and age evidence
   for exact Git commits, including private dependencies, and bind that evidence
   to reports and gate reuse.
+- Preserve historical review obligations when comparing an older repository
+  configuration with a schema 4 candidate, without admitting retired forms as
+  active policy.
 - Recommend exact direct versions from the current authoritative lock scope,
   reporting ambiguous or unavailable resolutions instead of guessing.
 - Add repository-aware capability discovery, explicit behavior-feature lookup,
