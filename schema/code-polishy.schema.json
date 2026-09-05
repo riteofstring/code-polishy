@@ -240,7 +240,12 @@
         "project": { "$ref": "#/$defs/pyprojectPath" },
         "target": { "$ref": "#/$defs/pythonDynamicTarget" },
         "registry": { "$ref": "#/$defs/pythonDynamicRegistry" },
-        "consumer": { "$ref": "#/$defs/pythonDynamicConsumer" }
+        "consumer": {
+          "oneOf": [
+            { "$ref": "#/$defs/pythonDynamicConsumer" },
+            { "$ref": "#/$defs/pythonExternalReachabilityConsumer" }
+          ]
+        }
       },
       "oneOf": [
         {
@@ -249,7 +254,10 @@
           "not": { "required": ["registry"] }
         },
         {
-          "properties": { "kind": { "const": "registry" } },
+          "properties": {
+            "kind": { "const": "registry" },
+            "consumer": { "$ref": "#/$defs/pythonDynamicConsumer" }
+          },
           "required": ["registry"],
           "not": { "required": ["target"] }
         }
@@ -939,6 +947,35 @@
           "maxLength": 4096,
           "pattern": "^(?:/(?:[^~]|~[01])*)*$"
         }
+      }
+    },
+    "pythonExternalReachabilityConsumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "importer",
+        "module",
+        "site",
+        "sourceSha256",
+        "distribution",
+        "qualified",
+        "implementation",
+        "member"
+      ],
+      "properties": {
+        "kind": { "enum": ["base", "protocol", "decorator", "entry-point"] },
+        "importer": { "$ref": "#/$defs/literalExactPath", "pattern": "\\.py$" },
+        "module": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "site": { "$ref": "#/$defs/pythonSourceLocation" },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "distribution": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "qualified": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "implementation": { "$ref": "#/$defs/pythonIdentifierChain" },
+        "member": { "$ref": "#/$defs/pythonIdentifierChain" }
       }
     },
     "pythonDynamicConsumer": {

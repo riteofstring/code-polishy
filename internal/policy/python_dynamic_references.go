@@ -27,7 +27,11 @@ func validatePythonDynamicReferences(references []PythonDynamicReference) error 
 }
 
 func pythonDynamicReferenceIdentity(reference PythonDynamicReference) string {
-	return fmt.Sprintf("%s\x00%s\x00%09d\x00%09d", reference.Project, reference.Consumer.Importer, reference.Consumer.Site.Line, reference.Consumer.Site.Column)
+	identity := fmt.Sprintf("%s\x00%s\x00%09d\x00%09d", reference.Project, reference.Consumer.Importer, reference.Consumer.Site.Line, reference.Consumer.Site.Column)
+	if reference.Consumer.Kind != "callsite" {
+		identity += "\x00" + reference.Consumer.Implementation + "\x00" + reference.Consumer.Member
+	}
+	return identity
 }
 
 func pythonDynamicReferenceDescription(reference PythonDynamicReference) string {

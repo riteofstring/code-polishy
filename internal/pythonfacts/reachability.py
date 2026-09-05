@@ -4,6 +4,7 @@ import posixpath
 import sys
 import unicodedata
 
+from external_contracts import external_consumer, resolve_external_contract
 from type_resolver import (
     MAX_FACT_BYTES,
     MAX_MODULES,
@@ -59,7 +60,13 @@ def _declaration(value):
     _path(value["project"])
     if posixpath.basename(value["project"]) != "pyproject.toml":
         raise ValueError("reachability project must name its manifest")
-    consumer = _consumer_declaration(value["consumer"])
+    consumer = value["consumer"]
+    if consumer.get("kind") == "callsite":
+        consumer = _consumer_declaration(consumer)
+    elif kind == "target":
+        consumer = external_consumer(consumer)
+    else:
+        raise ValueError("registry requires an exact callsite consumer")
     if kind == "target":
         _exact(value[kind], ("module", "symbol"), "reachability target")
         _module_object(value[kind]["module"] + ":" + value[kind]["symbol"])
@@ -337,8 +344,15 @@ class ReachabilityResolver:
 
     def resolve(self, request, inferred):
         declaration = request["declaration"]
-        module, call = self.consumer(declaration)
-        if declaration["kind"] == "target":
+        _declaration(declaration)
+        external = declaration["consumer"]["kind"] != "callsite"
+        if external:
+            names = resolve_external_contract(self, request)
+        else:
+            if request["dependency"] is not None:
+                raise ValueError("callsite cannot claim external dependency evidence")
+            module, call = self.consumer(declaration)
+        if not external and declaration["kind"] == "target":
             argument = call["arguments"][0]
             if argument["kind"] != "string":
                 raise ValueError(
@@ -349,7 +363,7 @@ class ReachabilityResolver:
             if actual != (target["module"], target["symbol"]):
                 raise ValueError("declared target is disconnected from its consumer")
             names = [actual]
-        else:
+        elif not external:
             dynamic = self.registry_selector(module, call, declaration)
             names = _registry_targets(
                 request["registry"], declaration["registry"]["jsonPointer"], dynamic
@@ -364,6 +378,7 @@ class ReachabilityResolver:
                 "facts": self.identity,
                 "declaration": declaration,
                 "registry": request["registry"],
+                "dependency": request["dependency"],
                 "targets": targets,
             }
         )
@@ -454,10 +469,17 @@ def resolve_reachability(modules, requests, inferred):
     consumers = {}
     for request in requests:
         _exact(
-            request, ("id", "declaration", "registry", "error"), "reachability input"
+            request,
+            ("id", "declaration", "registry", "error", "dependency"),
+            "reachability input",
         )
         consumer = request["declaration"].get("consumer", {})
-        identity = _identity({key: consumer.get(key) for key in ("importer", "site")})
+        identity = _identity(
+            {
+                key: consumer.get(key)
+                for key in ("importer", "site", "implementation", "member")
+            }
+        )
         consumers[identity] = consumers.get(identity, 0) + 1
     for request in requests:
         try:
@@ -465,7 +487,10 @@ def resolve_reachability(modules, requests, inferred):
                 raise ValueError(request["error"])
             consumer = request["declaration"].get("consumer", {})
             identity = _identity(
-                {key: consumer.get(key) for key in ("importer", "site")}
+                {
+                    key: consumer.get(key)
+                    for key in ("importer", "site", "implementation", "member")
+                }
             )
             if consumers[identity] != 1:
                 raise ValueError("consumer has duplicate reachability declarations")

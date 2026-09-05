@@ -96,7 +96,7 @@ func reachabilityRepository(t *testing.T) (Repository, PythonProject) {
 	project := PythonProject{Manifest: "pyproject.toml", Root: ".", SourceRoots: []string{"src"}, Files: []string{"src/loader.py"}}
 	repo.Config.Scope.PythonDynamicReferences = []policy.PythonDynamicReference{{Kind: "registry", Project: project.Manifest,
 		Registry: &policy.PythonDynamicRegistry{Path: "src/registry.json", JSONPointer: "/plugins"},
-		Consumer: policy.PythonDynamicConsumer{Importer: "src/loader.py", Module: "loader"},
+		Consumer: policy.PythonDynamicConsumer{Kind: "callsite", Importer: "src/loader.py", Module: "loader"},
 	}}
 	return repo, project
 }

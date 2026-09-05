@@ -175,15 +175,19 @@ type PythonDynamicRegistry struct {
 }
 
 type PythonDynamicConsumer struct {
-	Kind         string               `json:"kind"`
-	Importer     string               `json:"importer"`
-	Module       string               `json:"module"`
-	Callable     string               `json:"callable"`
-	Site         PythonSourceLocation `json:"site"`
-	Callee       string               `json:"callee"`
-	Shape        string               `json:"shape"`
-	Argument     string               `json:"argument"`
-	SourceSHA256 string               `json:"sourceSha256"`
+	Kind           string               `json:"kind"`
+	Importer       string               `json:"importer"`
+	Module         string               `json:"module"`
+	Callable       string               `json:"callable,omitempty"`
+	Site           PythonSourceLocation `json:"site"`
+	Callee         string               `json:"callee,omitempty"`
+	Shape          string               `json:"shape,omitempty"`
+	Argument       string               `json:"argument,omitempty"`
+	SourceSHA256   string               `json:"sourceSha256"`
+	Distribution   string               `json:"distribution,omitempty"`
+	Qualified      string               `json:"qualified,omitempty"`
+	Implementation string               `json:"implementation,omitempty"`
+	Member         string               `json:"member,omitempty"`
 }
 
 type PythonComputedImport struct {

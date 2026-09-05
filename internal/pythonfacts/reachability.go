@@ -15,11 +15,20 @@ import (
 //go:embed reachability.py
 var reachabilitySource string
 
+//go:embed external_contracts.py
+var externalContractsSource string
+
 type ReachabilityInput struct {
-	ID          string          `json:"id"`
-	Declaration json.RawMessage `json:"declaration"`
-	Registry    string          `json:"registry"`
-	Error       string          `json:"error"`
+	ID          string                  `json:"id"`
+	Declaration json.RawMessage         `json:"declaration"`
+	Registry    string                  `json:"registry"`
+	Error       string                  `json:"error"`
+	Dependency  *ReachabilityDependency `json:"dependency"`
+}
+
+type ReachabilityDependency struct {
+	Distribution string `json:"distribution"`
+	Identity     string `json:"identity"`
 }
 
 type ReachabilityDefinition struct {
@@ -43,7 +52,7 @@ type ReachabilityEvidence struct {
 }
 
 func ReachabilitySupportSource() string {
-	return embeddedPythonModule("reachability", reachabilitySource)
+	return embeddedPythonModule("external_contracts", externalContractsSource) + embeddedPythonModule("reachability", reachabilitySource)
 }
 
 type ReachabilityProblem struct {
@@ -74,7 +83,7 @@ func ResolveReachability(ctx context.Context, python string, modules []TypeModul
 		return ReachabilityProject{}, fmt.Errorf("reachability header exceeds its request boundary")
 	}
 	input := &typeProjectReader{modules: ordered, current: bytes.NewReader(append(header, '\n'))}
-	program := TypeSupportSource() + embeddedPythonModule("__main__", reachabilitySource)
+	program := TypeSupportSource() + embeddedPythonModule("external_contracts", externalContractsSource) + embeddedPythonModule("__main__", reachabilitySource)
 	data, err := runFactProject(ctx, python, input, program)
 	if err != nil {
 		return ReachabilityProject{}, err

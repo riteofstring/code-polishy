@@ -30,6 +30,11 @@ func (repo Repository) PythonReachabilityInputs(project PythonProject) []pythonf
 		input := pythonfacts.ReachabilityInput{ID: PythonReachabilityID(declaration), Declaration: data}
 		if err := repo.pythonReachabilityConsumer(project, declaration); err != nil {
 			input.Error = err.Error()
+		} else if declaration.Consumer.Kind != "callsite" {
+			input.Dependency, err = repo.pythonReachabilityDependency(project, declaration.Consumer.Distribution)
+			if err != nil {
+				input.Error = err.Error()
+			}
 		} else if declaration.Registry != nil {
 			content, err := repo.pythonReachabilityRegistry(project, declaration.Registry.Path)
 			if err != nil {
@@ -42,6 +47,22 @@ func (repo Repository) PythonReachabilityInputs(project PythonProject) []pythonf
 	}
 	slices.SortFunc(result, func(left, right pythonfacts.ReachabilityInput) int { return strings.Compare(left.ID, right.ID) })
 	return result
+}
+
+func (repo Repository) pythonReachabilityDependency(project PythonProject, distribution string) (*pythonfacts.ReachabilityDependency, error) {
+	facts, err := repo.PythonPluginDependencies(project, []string{distribution})
+	if err != nil {
+		return nil, err
+	}
+	if len(facts.Dependencies) != 1 || facts.Dependencies[0].Distribution != distribution || facts.Dependencies[0].Error != "" {
+		return nil, fmt.Errorf("external reachability contract has no admitted direct dependency: %+v", facts.Dependencies)
+	}
+	data, err := json.Marshal(facts)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(data)
+	return &pythonfacts.ReachabilityDependency{Distribution: distribution, Identity: hex.EncodeToString(digest[:])}, nil
 }
 
 func (repo Repository) pythonReachabilityConsumer(project PythonProject, declaration policy.PythonDynamicReference) error {
