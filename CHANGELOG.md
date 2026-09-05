@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- Require configuration schema 4. Declare executable tests through `tests.paths`
+  and exact `tests.ownership` mappings to production modules and quick focused
+  suites. Remove `scope.tests`, implicit test ownership, free-standing Python
+  dynamic symbols, and the former flat external-attribute receiver shape.
+- Return one canonical finding and report model across direct commands, gates,
+  JSON, and SARIF, including semantic identities, selection relationships,
+  remediation, warning counts, and preserved reviewed or suppressed outcomes.
+- Detect source-level cycles before projecting dependencies onto modules.
+  Preserve complete cycle evidence for production, generated, and test source,
+  and exclude unrelated Go and JavaScript projects from focused analysis.
+- Add architecture-review packets and receipts tied to the current graph and
+  candidate. Include unchanged implementation source in adoption reviews so
+  configuration-only changes can be assessed against the actual boundaries.
+- Require exact producers for project-generated executable output. Preserve
+  generated formatting while retaining non-style checks and reproducibility
+  coverage, and run JavaScript dead-code analysis from its owning package root.
+- Resolve Python imports and reachability across bounded source partitions.
+  Preserve proven TypedDict and Pydantic contracts and support exact typed-local
+  and instance attribute writes without suppressing unrelated assignments.
+- Bind dynamic Python targets to exact callsites, governed registry inputs, or
+  dependency-owned external contracts. Validate installed contract definitions
+  without importing dependency code and invalidate gate acceptance when those
+  dependency inputs change. Keep external plug-in composition evidence separate
+  from local dead-code reachability.
+- Accept historical dependency inputs when reviewing a repair while enforcing
+  exact pins on the candidate. Support authenticated security and age evidence
+  for exact Git commits, including private dependencies, and bind that evidence
+  to reports and gate reuse.
+- Recommend exact direct versions from the current authoritative lock scope,
+  reporting ambiguous or unavailable resolutions instead of guessing.
+- Add repository-aware capability discovery, explicit behavior-feature lookup,
+  bounded task-start context, and authenticated upgrade capability deltas.
+  Surface declared operational handoffs through normal context workflows while
+  keeping managed `AGENTS.md` canonical.
 - Direct adopting agents to map useful design rationale and maintain it when
   consequential boundaries change. Reuse retrieved design context until its
   scope, mappings, or relevant documents change.

@@ -17,6 +17,22 @@
     "design": [
       { "path": "docs/design/agent-guidance.md", "module": "agents" },
       {
+        "path": "docs/design/python-contract-evidence.md",
+        "sourcePaths": [
+          "internal/repository/python_plugins.go",
+          "internal/repository/python_distribution_sources.go",
+          "internal/repository/python_distribution_origin.go",
+          "internal/repository/python_reachability.go",
+          "internal/repository/python_reachability_contract.go",
+          "internal/repository/python_reachability_state.go",
+          "internal/pythonfacts/contract_definitions.go",
+          "internal/pythonfacts/contract_definitions.py",
+          "internal/pythonfacts/external_contracts.py",
+          "internal/pythonfacts/reachability_validation.go",
+          "internal/engine/python_reachability_state.go"
+        ]
+      },
+      {
         "path": "docs/design/design-context.md",
         "sourcePaths": [
           "internal/repository/design_context.go",
