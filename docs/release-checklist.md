@@ -11,27 +11,35 @@ every operation that creates a tag, pushes, publishes, or changes a target lock.
    plans and obsolete docs. Use focused checks while editing; do not run a full
    gate against a changing worktree.
 
-2. Stop changing the candidate and complete its one ordinary final gate. Honor
-   `verification.finalGateOwner`: run locally for `local`, or retain the native
-   CI result for `ci`. Ubuntu, macOS, and Windows must pass for the same commit.
-   An exact already-passed gate executes no commands, and new gate identities
-   may reuse only suite receipts whose complete inputs still match.
+2. Stop changing the candidate and run the full `code-polishy gate` locally.
+   This is required before every release, including minor and patch releases,
+   regardless of `verification.finalGateOwner`. A focused check, selected tests,
+   a reduced merge gate, or a CI result does not replace this local full gate.
+   Require a pass on the final candidate before tagging or publishing. Ubuntu,
+   macOS, and Windows CI must also pass for the same commit.
 
-3. Treat supplemental mutation and risk work as a separate release-hardening
-   event. First run the quick harness contract when mutation infrastructure is
-   selected:
+3. Before a major version release (an increase in `MAJOR` in
+   `MAJOR.MINOR.PATCH`), run the full declared mutation suite inventory on the
+   stable candidate after the local full gate passes. First verify its harness:
 
    ```sh
    code-polishy test --suite mutation-wrapper-contract
    ```
 
-   After it passes, use `code-polishy test --supplemental --resume`. Valid
-   receipts are reused; missing, failed, expired, or invalidated suites execute.
-   Run the complete supplemental set only when no trusted baseline exists,
-   shared mutation infrastructure, toolchain, or selection changed, impact
-   cannot be bounded, or an explicit periodic audit requires it. After a
-   failure, rerun exact failed or invalidated suites. Tagging, installation,
-   lock updates, and push preparation do not invalidate unchanged evidence.
+   Run every declared mutation suite, without reusing a previous release's
+   mutation baseline. In this repository the mutation inventory is selected by:
+
+   ```sh
+   code-polishy test --supplemental
+   ```
+
+   For retries on that release candidate, use `test --supplemental --resume`
+   to run only missing, failed, expired, or invalidated suites. Fix findings
+   before release. Minor and patch releases do not select mutation hardening;
+   run it only if separately requested by the caller or a checked-in event
+   workflow. Other supplemental work requires its own explicit selection.
+   Tagging, installation, lock updates, and push preparation do not invalidate
+   unchanged evidence.
 
 4. From the clean exact candidate, run the read-only preflight with Git's
    lowercase full commit object ID:

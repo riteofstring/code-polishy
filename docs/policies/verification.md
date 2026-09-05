@@ -105,9 +105,22 @@ An exact test is the smallest named suite or module suite that can observe the
 changed behavior. Run it after a coherent runnable slice, not after every edit.
 `test --changed` is broader task-boundary feedback. Skip it when a final merge
 gate immediately follows over the same candidate because that gate already
-selects the required changed-impact tests. One delivery event has one final-gate
+selects the required changed-impact tests. One ordinary delivery event has one final-gate
 owner; local and CI gates are both required only when independent evidence was
 explicitly requested.
+
+Release verification is an explicit exception: every release requires a passed
+local full `code-polishy gate` on the final candidate before tagging or
+publishing, regardless of `verification.finalGateOwner`. Required CI checks
+remain mandatory. Focused checks, selected tests, reduced merge gates, and CI
+results do not substitute for the local full gate.
+
+Major version releases (an increase in `MAJOR` in `MAJOR.MINOR.PATCH`) also
+require every declared mutation suite after the full gate passes. Start with
+a complete mutation run for that release; reuse matching receipts only for
+retries within that release. Minor and patch releases do not select mutation
+hardening unless separately requested by the caller or a checked-in event
+workflow. Other supplemental suites still require their own selection.
 
 A stable release candidate is the exact committed tree intended for tagging,
 after ordinary verification passes and planned source and policy changes stop.

@@ -151,10 +151,18 @@ tree. On a long-lived branch, finish each completed code-changing task with
 `code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
 and completing any selected behavior review. At a genuine merge checkpoint,
 run one `code-polishy merge-gate --base <merge-target>` for the unchanged final
-candidate. Local and CI execution need separate final gates only when the caller
+candidate. For ordinary delivery, local and CI execution need separate final gates only when the caller
 explicitly requests independent evidence. Honor `verification.finalGateOwner`:
 `local` is the default, while `ci` means the checked-in workflow owns that one
 final execution.
+
+Before every release, run the full `code-polishy gate` locally on the final
+candidate and require a pass before tagging or publishing. This release rule
+overrides `verification.finalGateOwner`; required CI checks still apply.
+Before a major version release (an increase in `MAJOR` in `MAJOR.MINOR.PATCH`),
+run all declared mutation suites after that gate passes. Minor and patch
+releases do not select mutation suites unless separately requested by the
+caller or a checked-in event workflow. See the [Release Checklist](release-checklist.md).
 
 A stable release candidate is the exact committed tree intended for tagging,
 with ordinary verification green and no planned source or policy edits. Run
@@ -164,7 +172,7 @@ selects it. Declarations, including `tests.requiredSupplementalKinds`, do not
 schedule execution. After a supplemental failure, rerun only failed suites and
 passes invalidated by changes to their tested production files or tests, or
 their own commands or configuration. Exact `test --suite` evidence composes
-with still-valid passes. Repeat every suite only when shared mutation
+with still-valid passes. Within a selected hardening event, repeat every suite only when shared mutation
 infrastructure, toolchain, or selection changes, or impact cannot be bounded.
 Ordinary development, gates, guidance synchronization, and lock upgrades leave
 unselected supplemental hardening `NOT RUN`.
