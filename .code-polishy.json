@@ -739,11 +739,94 @@
         "timeoutSeconds": 3600
       },
       {
-        "name": "repository-mutation",
+        "name": "repository-core-mutation",
         "kind": "mutation",
         "scope": "module",
         "modules": ["repository"],
-        "argv": ["./scripts/go-mutation.sh", "./internal/repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)(boundary|committed_source|contained_file|content_digest|revision|context_documents|design_context|handoffs|generation[^/]*|generated_javascript|go_modules|python[^/]*)[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-git-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)(repository[^/]*|selection|source_scope|impact|command_discovery|control_inputs|documentation_selection|test_ownership|context_documents|design_context|handoffs|generation[^/]*|generated_javascript|go_modules|python[^/]*)[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-context-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)(repository[^/]*|selection|source_scope|impact|command_discovery|control_inputs|documentation_selection|test_ownership|boundary|committed_source|contained_file|content_digest|revision|python[^/]*)[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-python-project-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)([^p/][^/]*|python_(object_imports|distribution[^/]*|entry_points|git[^/]*|lock|plugins|reachability[^/]*|requirement|ruff|toml))[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-python-dependencies-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)([^p/][^/]*|python|python_(object_imports|build|distribution[^/]*|entry_points|module|plugins|project|reachability[^/]*|ruff|tool))[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-python-runtime-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)([^p/][^/]*|python|python_(build|distribution[^/]*|git[^/]*|lock|module|project|reachability[^/]*|requirement|toml|tool))[.]go$"
+        ],
+        "timeoutSeconds": 3600
+      },
+      {
+        "name": "repository-python-reachability-mutation",
+        "kind": "mutation",
+        "scope": "module",
+        "modules": ["repository"],
+        "argv": [
+          "./scripts/go-mutation.sh",
+          "./internal/repository",
+          "--exclude-files",
+          "(^|/)([^p/][^/]*|python|python_(object_imports|build|entry_points|git[^/]*|lock|module|plugins|project|requirement|ruff|toml|tool))[.]go$"
+        ],
         "timeoutSeconds": 3600
       },
       {
@@ -1341,8 +1424,8 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1350",
-      "reason": "The explicit suite and test-ownership inventory exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
+      "subject": "1433",
+      "reason": "The explicit suite and test-ownership inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"
     }
