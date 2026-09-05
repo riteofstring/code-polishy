@@ -17,7 +17,11 @@ installer binds its artifact to that source revision.
 The broader release harness accepts an explicit prefix and lock so final
 verification can exercise an already built native artifact without rebuilding
 it between scenarios. Its complete run covers behavior review, language
-adoption, and Python regressions. The focused first-adoption result proves that
+adoption, and Python regressions. The scoped-analysis fixture exercises selected
+agent guidance beside Python source and JavaScript generated inside a Python
+package. It checks real unused-code findings, generated-byte preservation, and
+owner stability across caller directories and unrelated root manifests.
+The focused first-adoption result proves that
 boundary only; the release checklist still requires the complete installed
 fixture suite and native platform evidence.
 

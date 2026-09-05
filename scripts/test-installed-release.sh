@@ -7,7 +7,7 @@ lock="${policy_root}/.code-polishy.lock.json"
 fixture=""
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|python-adoption|python-reachability|python-pydantic]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|scoped-analysis|python-adoption|python-reachability|python-pydantic]" >&2
   exit 2
 }
 
@@ -50,7 +50,7 @@ while (($#)); do
   esac
 done
 case "${fixture}" in
-  "" | first-adoption | python-adoption | python-reachability | python-pydantic) ;;
+  "" | first-adoption | scoped-analysis | python-adoption | python-reachability | python-pydantic) ;;
   *) usage ;;
 esac
 
@@ -256,11 +256,17 @@ expect_no_target_commands() {
 source "${policy_root}/scripts/test-installed-release-architecture.sh"
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
+source "${policy_root}/scripts/test-installed-release-scoped-analysis.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-reachability.sh"
 source "${policy_root}/scripts/test-installed-release-python-pydantic.sh"
 
 case "${fixture}" in
+  scoped-analysis)
+    exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
+    echo "The installed release passed the scoped-analysis fixture."
+    exit 0
+    ;;
   first-adoption)
     exercise_first_adoption_fixture "${fixture_root}" "${real_git}" "${lock}" "${output}"
     echo "The installed release passed the first-adoption fixture."
@@ -469,6 +475,8 @@ expect_absent "go-only reported a JavaScript-owned check" \
 
 
 
+
+exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
 
 pnpm_app="${fixture_root}/pnpm-app"
 mkdir -p "${pnpm_app}"
