@@ -7,6 +7,7 @@ import (
 )
 
 func TestPythonReachabilityStateSelectsOnlyDeclaredDistributions(t *testing.T) {
+	t.Parallel()
 	repo, project, _ := distributionSourceFixture(t)
 	writeFile(t, repo.Root, project.Manifest, "[project]\nname='app'\ndependencies=['framework==1.0']\n")
 	writeFile(t, repo.Root, "uv.lock", "version=1\n[[package]]\nname='framework'\nversion='1.0'\nsource={registry='https://packages.example.test/simple'}\n")

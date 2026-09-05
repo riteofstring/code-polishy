@@ -8,6 +8,7 @@ import (
 )
 
 func TestPythonReachabilityBindsAdmittedExternalDependency(t *testing.T) {
+	t.Parallel()
 	repo, project, _ := distributionSourceFixture(t)
 	writeFile(t, repo.Root, project.Manifest, pluginDependencyManifest("framework==1.0"))
 	writeFile(t, repo.Root, "uv.lock", strings.ReplaceAll(pluginDependencyLock("1.0", "registry = 'https://packages.example.test/simple'"), "plug-dist", "framework"))

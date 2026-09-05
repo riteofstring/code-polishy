@@ -14,6 +14,7 @@ import (
 )
 
 func TestPythonDistributionOriginBindsExactGitSource(t *testing.T) {
+	t.Parallel()
 	commit := strings.Repeat("a", 40)
 	for _, repositoryURL := range []string{"https://git.example.test/team/framework.git", "ssh://git@git.example.test/team/private.git"} {
 		t.Run(repositoryURL, func(t *testing.T) {
@@ -42,6 +43,7 @@ func TestPythonDistributionOriginBindsExactGitSource(t *testing.T) {
 }
 
 func TestPythonDistributionOriginRejectsUnsupportedAndAmbiguousInputs(t *testing.T) {
+	t.Parallel()
 	commit := strings.Repeat("a", 40)
 	dependency := PythonPluginDependency{Kind: "git", Source: "git+https://git.example.test/framework.git@" + commit}
 	valid := fmt.Sprintf(`{"url":"https://git.example.test/framework.git","vcs_info":{"vcs":"git","commit_id":%q}}`, commit)
@@ -71,6 +73,7 @@ func TestPythonDistributionOriginRejectsUnsupportedAndAmbiguousInputs(t *testing
 }
 
 func TestPythonDistributionSourcesRejectUnrecordedOrigin(t *testing.T) {
+	t.Parallel()
 	repo, project, dependency := distributionSourceFixture(t)
 	writeFile(t, repo.Root, ".venv/lib/python3.12/site-packages/framework-1.0.dist-info/direct_url.json", `{}`)
 	if _, err := repo.ReadPythonDistributionSources(project, dependency); err == nil {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestPythonDistributionSourcesBindRecordedContentWithoutExecution(t *testing.T) {
+	t.Parallel()
 	repo, project, dependency := distributionSourceFixture(t)
 	first, err := repo.ReadPythonDistributionSources(project, dependency)
 	if err != nil || len(first.Sources) != 1 || first.Identity == "" || !strings.HasSuffix(first.Sources[0].Path, "framework.py") {
@@ -37,6 +38,7 @@ func TestPythonDistributionSourcesBindRecordedContentWithoutExecution(t *testing
 }
 
 func TestPythonDistributionSourcesRejectInvalidCustody(t *testing.T) {
+	t.Parallel()
 	for name, mutate := range map[string]func(Repository, *PythonProject, *PythonPluginDependency){
 		"absent environment": func(_ Repository, p *PythonProject, _ *PythonPluginDependency) { p.Venv = "" },
 		"wrong version":      func(_ Repository, _ *PythonProject, d *PythonPluginDependency) { d.Version = "2.0" },
@@ -79,6 +81,7 @@ func TestPythonDistributionSourcesRejectInvalidCustody(t *testing.T) {
 }
 
 func TestPythonDistributionSourcesEnforceSourceByteBoundary(t *testing.T) {
+	t.Parallel()
 	repo, project, dependency := distributionSourceFixture(t)
 	root := ".venv/lib/python3.12/site-packages"
 	source := strings.Repeat("x", (1<<20)+1)
@@ -90,6 +93,7 @@ func TestPythonDistributionSourcesEnforceSourceByteBoundary(t *testing.T) {
 }
 
 func TestPythonDistributionSourcesReadWindowsEnvironmentLayout(t *testing.T) {
+	t.Parallel()
 	repo, project, dependency := distributionSourceFixture(t)
 	destination := filepath.Join(repo.Root, ".venv", "Lib", "site-packages")
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestPythonPluginDependenciesBindCurrentManifestAndAuthoritativeLock(t *testing.T) {
+	t.Parallel()
 	repo, project := pluginDependencyRepository(t, "plug-dist==1.0", "1.0.0", "registry = 'https://packages.example.test/simple'")
 	first, err := repo.PythonPluginDependencies(project, []string{"plug-dist", "plug-dist"})
 	if err != nil || len(first.Dependencies) != 1 || first.Dependencies[0].Error != "" || first.Dependencies[0].Version != "1.0.0" || first.Dependencies[0].Kind != "registry" || first.Lock != "apps/api/uv.lock" {
@@ -31,6 +32,7 @@ func TestPythonPluginDependenciesBindCurrentManifestAndAuthoritativeLock(t *test
 }
 
 func TestPythonPluginDependenciesSupportExactPrivateGitCommits(t *testing.T) {
+	t.Parallel()
 	commit := strings.Repeat("a", 40)
 	requirement := "plug-dist @ git+ssh://git@private.example.test/team/plugins.git@" + commit + "#subdirectory=python/plugin"
 	locked := "git = 'ssh://git@private.example.test/team/plugins.git?rev=" + commit + "&subdirectory=python%2Fplugin#" + commit + "'"
@@ -55,6 +57,7 @@ func TestPythonPluginDependenciesSupportExactPrivateGitCommits(t *testing.T) {
 }
 
 func TestPythonPluginDependenciesRequireDirectExactAdmittedSources(t *testing.T) {
+	t.Parallel()
 	for name, fixture := range map[string]struct{ requirement, version, source string }{
 		"credentialed registry":   {"plug-dist==1.0", "1.0", "registry = 'https://user:password@packages.example.test/simple'"},
 		"moving registry query":   {"plug-dist==1.0", "1.0", "registry = 'https://packages.example.test/simple?token=secret'"},
@@ -77,6 +80,7 @@ func TestPythonPluginDependenciesRequireDirectExactAdmittedSources(t *testing.T)
 }
 
 func TestPythonPluginDependenciesRejectBuildAndDevelopmentOnlyDeclarations(t *testing.T) {
+	t.Parallel()
 	for name, group := range map[string]string{
 		"build":       "[build-system]\nrequires = ['plug-dist==1.0']\nbuild-backend = 'plug_dist.backend'\n",
 		"development": "[dependency-groups]\ndev = ['plug-dist==1.0']\n",
@@ -90,6 +94,7 @@ func TestPythonPluginDependenciesRejectBuildAndDevelopmentOnlyDeclarations(t *te
 }
 
 func TestPythonPluginDependenciesRejectUnownedLockSubstitutions(t *testing.T) {
+	t.Parallel()
 	for name, change := range map[string]func(*testing.T, Repository, PythonProject){
 		"missing lock": func(t *testing.T, repo Repository, _ PythonProject) {
 			if err := os.Remove(filepath.Join(repo.Root, "apps/api/uv.lock")); err != nil {
