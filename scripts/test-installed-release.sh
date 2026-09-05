@@ -253,6 +253,7 @@ expect_no_target_commands() {
   fi
 }
 
+source "${policy_root}/scripts/test-installed-release-architecture.sh"
 source "${policy_root}/scripts/test-installed-release-behavior-review.sh"
 source "${policy_root}/scripts/test-installed-release-first-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"

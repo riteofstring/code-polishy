@@ -342,31 +342,6 @@ python_adoption_expect_data_preserved() {
   fi
 }
 
-python_adoption_accept_architecture() {
-  local target="$1" base="$2" python="$3"
-  expect_pass "${target}" "python-adoption architecture packet" architecture-review prepare --base "${base}" --format json
-  "${python}" - "${target}" "${output}" <<'PY'
-import json
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-prepared = json.loads(pathlib.Path(sys.argv[2]).read_text())["architecturePreparation"]
-packet = json.loads((root / prepared["packetPath"]).read_text())
-index, source = next((index, source) for index, source in enumerate(packet["sources"]) if source["content"].strip())
-result = {
-    "protocol": packet["protocol"], "reviewId": packet["reviewId"],
-    "base": packet["base"], "candidate": packet["candidate"],
-    "topology": packet["topology"]["identity"], "decision": "accept",
-    "rationale": "The fixture assigns its application and worker operations to explicit project owners.",
-    "evidence": [{"pointer": f"/sources/{index}/content", "quote": source["content"],
-                  "rationale": "The unchanged candidate source supplies the fixture's worker implementation."}],
-    "findings": [],
-}
-(root / prepared["resultPath"]).write_text(json.dumps(result) + "\n")
-PY
-  expect_pass "${target}" "python-adoption architecture receipt" architecture-review finalize --base "${base}"
-}
 
 exercise_python_adoption_fixture() {
   local fixture_root="$1" real_git="$2" release="$3"
@@ -492,7 +467,7 @@ EOF
   : >"${command_log}"
   expect_findings "${target}" "python-adoption missing architecture review" merge-gate --base "${base}"
   expect_finding "python-adoption missing architecture review" "policy.architectureReview" ".code-polishy.json" "required"
-  python_adoption_accept_architecture "${target}" "${base}" "${host_python}"
+  fixture_accept_architecture "${target}" "${base}" "${host_python}"
   : >"${command_log}"
   expect_pass "${target}" "python-adoption selected merge gate" merge-gate --base "${base}"
   grep -Fqx "MERGE GATE: RECOMMENDED against ${base}" "${output}" ||

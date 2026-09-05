@@ -2,7 +2,7 @@
 
 # Sourced by test-installed-release.sh after its fixture helpers are defined.
 
-declare output
+declare output release
 
 fixture_pass() {
   local target="$1" scenario="$2" phase="$3" review_attempt="$4"
@@ -61,6 +61,9 @@ fixture_status() {
 
 fixture_gate_pass() {
   local target="$1" scenario="$2" phase="$3" base="$4" expected="$5" review_attempt="$6" command="$7"
+  local fixture_python
+  fixture_python="$(installed_fixture_python "${release}")"
+  fixture_accept_architecture "${target}" "${base}" "${fixture_python}"
   fixture_pass "${target}" "${scenario}" "${phase}" "${review_attempt}" "${command}" --base "${base}"
   assert_behavior_review_status_line "${scenario}: ${phase}" "${expected}"
 }
