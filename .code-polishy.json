@@ -8,6 +8,7 @@
       "internal/spdx/data/licenses.json"
     ],
     "entryPoints": [
+      "tools/javascript/astro.mjs",
       "tools/javascript/bundle-manifest.mjs",
       "tools/javascript/runner.mjs"
     ]
