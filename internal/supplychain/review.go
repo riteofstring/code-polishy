@@ -408,8 +408,18 @@ func newDependencyAgeCandidate(change DependencyChange) bool {
 		strings.Contains(" added updated ", " "+change.Change+" ") &&
 		strings.Contains(" runtime optional ", " "+change.Usage+" ") &&
 		change.To != "-" &&
-		(change.Ecosystem == "go" || exactVersion.MatchString(change.To)) &&
+		dependencyAgeVersion(change) &&
 		strings.Contains(" go npm pnpm pypi ", " "+change.Ecosystem+" ")
+}
+
+func dependencyAgeVersion(change DependencyChange) bool {
+	if change.Ecosystem == "go" {
+		return goVersion.MatchString(change.To)
+	}
+	if change.Ecosystem == "pypi" {
+		return change.To != "" && !strings.ContainsAny(change.To, "<>=~*,")
+	}
+	return exactVersion.MatchString(change.To)
 }
 
 func observedDependencyAgeAdvisory(observation releaseObservation, cutoff time.Time, preferredDays int) *policy.Advisory {

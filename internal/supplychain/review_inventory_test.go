@@ -29,6 +29,23 @@ func TestDependencyInventoryRejectsOversizedOrCanceledInputs(t *testing.T) {
 	}
 }
 
+func TestDependencyAgeCandidatesKeepPEP440VersionsAndExcludeRanges(t *testing.T) {
+	t.Parallel()
+	change := DependencyChange{Ecosystem: "pypi", Directness: "direct", Usage: "runtime", Change: "updated"}
+	for _, version := range []string{"1.0", "1!2.0", "2.0rc1", "2.0.post1"} {
+		change.To = version
+		if !newDependencyAgeCandidate(change) {
+			t.Fatalf("exact PEP 440 version lost age advice: %s", version)
+		}
+	}
+	for _, version := range []string{"<3,>=2.0", "!=1.0", "==2.*", "*", ""} {
+		change.To = version
+		if newDependencyAgeCandidate(change) {
+			t.Fatalf("historical range selected registry lookup: %s", version)
+		}
+	}
+}
+
 func TestDependencyReviewComparesHistoricalTagRepairAndRecordedResolution(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
