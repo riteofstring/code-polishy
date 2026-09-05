@@ -1,0 +1,235 @@
+{
+  "origin": {
+    "session": "01a05f8e-20b9-7460-aa19-b160b63da465",
+    "timestamp": "2026-09-02T05:11:27.933Z",
+    "releaseVersion": null,
+    "releaseEvidence": "The recorded command output does not identify its locked release."
+  },
+  "arguments": [
+    "check",
+    "--files",
+    "packages/workspace/src/index.ts",
+    "packages/workspace/src/publicApi.test.ts",
+    "packages/workspace/src/section/WorkspaceSectionSurface.tsx",
+    "packages/workspace/src/section/WorkspaceSectionSurface.test.tsx",
+    "packages/workspace/src/standalone/StandaloneWorkspaceSectionSurface.tsx",
+    "packages/workspace/src/standalone/StandaloneWorkspaceSectionSurface.test.tsx",
+    "packages/workspace/src/windowing/WorkspaceWindowManagerParts.tsx",
+    "apps/playground/src/FocusedSectionApp.tsx",
+    "apps/playground/src/main.tsx",
+    "apps/playground/src/index.css",
+    "scripts/inspect-playground.mjs",
+    "packages/workspace/README.md",
+    "docs/design/workspace.md",
+    "docs/design/development-tooling.md"
+  ],
+  "exitCode": 1,
+  "findings": [
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/attention/workspaceSectionAttention.ts",
+      "subject": "knip",
+      "message": "the export WORKSPACE_SECTION_FIT_MAXIMUM_ZOOM is exported but never used",
+      "line": 21,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/attention/workspaceSectionAttention.ts",
+      "subject": "knip",
+      "message": "the export WORKSPACE_SECTION_FIT_PADDING is exported but never used",
+      "line": 22,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/attention/workspaceSectionAttention.ts",
+      "subject": "knip",
+      "message": "the export useWorkspaceSectionAttention is exported but never used",
+      "line": 276,
+      "column": 17
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/attention/workspaceSectionAttention.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceSectionAttentionState is exported but never used",
+      "line": 30,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/documentViewportSync.ts",
+      "subject": "knip",
+      "message": "the export syncCanvasViewportTransform is exported but never used",
+      "line": 56,
+      "column": 17
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/external-drop/index.ts",
+      "subject": "knip",
+      "message": "no entry point reaches this file; delete it or declare it in scope.entryPoints"
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/store.ts",
+      "subject": "knip",
+      "message": "the export infiniteExtent is exported but never used",
+      "line": 12,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/utils.ts",
+      "subject": "knip",
+      "message": "the export getDimensions is exported but never used",
+      "line": 14,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/viewportHelpers.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceViewportBoundsFitResult is exported but never used",
+      "line": 23,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/wheelPolicy.ts",
+      "subject": "knip",
+      "message": "the exported type WheelTargetDisposition is exported but never used",
+      "line": 16,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/wheelPolicy.ts",
+      "subject": "knip",
+      "message": "the export isWrappedWithClass is exported but never used",
+      "line": 29,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/wheelPolicy.ts",
+      "subject": "knip",
+      "message": "the export isNativeVerticalWheelEvent is exported but never used",
+      "line": 55,
+      "column": 17
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/xyflow/useWorkspaceXyflowWheelBehavior.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceXyflowWheelBehaviorOptions is exported but never used",
+      "line": 20,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/xyflow/useWorkspaceXyflowWheelBehavior.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceXyflowViewportSetter is exported but never used",
+      "line": 31,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/xyflow/useWorkspaceXyflowWheelBehavior.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceXyflowWheelBehaviorHandlers is exported but never used",
+      "line": 35,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/canvas/xyflow/workspaceXyflowProjection.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceXyflowNodeProjector is exported but never used",
+      "line": 44,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/graph/WorkspaceGraphContext.tsx",
+      "subject": "knip",
+      "message": "the exported type WorkspaceGraphClientPoint is exported but never used",
+      "line": 23,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/graph/WorkspaceGraphContext.tsx",
+      "subject": "knip",
+      "message": "the exported type WorkspaceGraphGesture is exported but never used",
+      "line": 28,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/graph/geometry.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceGraphBezier is exported but never used",
+      "line": 11,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/graph/geometry.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceGraphViewportTransform is exported but never used",
+      "line": 9,
+      "column": 13
+    },
+    {
+      "ruleId": "quality.deadCode",
+      "path": "packages/workspace/src/graph/validation.ts",
+      "subject": "knip",
+      "message": "the exported type WorkspaceGraphConnectionEvaluation is exported but never used",
+      "line": 421,
+      "column": 14
+    },
+    {
+      "ruleId": "quality.typecheck",
+      "path": "packages/workspace/src/canvas/documentViewportSync.test.ts",
+      "subject": "TS2352",
+      "message": "Conversion of type 'undefined' to type '{ zoom: number; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' firs…",
+      "line": 198,
+      "column": 8
+    },
+    {
+      "ruleId": "quality.typecheck",
+      "path": "packages/workspace/src/canvas/documentViewportSync.test.ts",
+      "subject": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '0'.",
+      "line": 194,
+      "column": 40
+    },
+    {
+      "ruleId": "quality.typecheck",
+      "path": "packages/workspace/src/canvas/documentViewportSync.test.ts",
+      "subject": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '0'.",
+      "line": 198,
+      "column": 36
+    },
+    {
+      "ruleId": "quality.typecheck",
+      "path": "packages/workspace/src/saved-views/operations.test.ts",
+      "subject": "TS7006",
+      "message": "Parameter 'viewport' implicitly has an 'any' type.",
+      "line": 124,
+      "column": 19
+    },
+    {
+      "ruleId": "quality.typecheck",
+      "path": "packages/workspace/src/section/ungroupAction.test.ts",
+      "subject": "TS2305",
+      "message": "Module '\"../canvas/nodeInternalsActions\"' has no exported member 'updateNodeDimensionsFromResizeObserver'.",
+      "line": 20,
+      "column": 10
+    }
+  ]
+}

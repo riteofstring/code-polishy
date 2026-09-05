@@ -47,10 +47,12 @@ the remaining delta instead of describing those capabilities as absent.
 | Python reachability     | v0.22 infers exact Pydantic import aliases, re-exports, local subclass chains, fields, `model_config`, validators, serializers, and computed fields. It also supports exact dynamic symbols and external attribute writes through typed parameters.   | Infer TypedDict literal-key reads, support exact external writes through typed locals and `self`, and prevent free-standing or generated symbol inventories from suppressing dead-code findings.      |
 | Capability discovery    | The locked release exposes exact documentation topics and configuration names, and behavior-review features bind paths, modules, suites, and enforcement boundaries.                                                                                  | Add repository-aware capability discovery, descriptions and exact aliases, visible intent/status confirmations, upgrade deltas, and one bounded task-start packet.                                    |
 
-The later session supplies two exact regression cases. A 15-file `--files`
+The later session supplies two exact regression cases. A 14-file `--files`
 selection produced 26 findings whose primary paths were all outside that
 selection because whole-package analyzers ran without explaining the expanded
-context. A generated TypeScript format finding instructed the agent to run
+context. The recorded invocation from 2026-09-02 contains 14 operands; the
+earlier 15-file count was incorrect. Its command output does not identify the
+locked release, so the regression retains that version as unavailable evidence. A generated TypeScript format finding instructed the agent to run
 `code-polishy format`; that command reported a clean pass while correctly
 leaving the generator-owned file untouched. The agent then searched unrelated
 installed releases for a formatter and created a temporary source/output
@@ -1415,7 +1417,7 @@ Selection and command-surface fixtures must prove:
 - findings inside the selection, connected through exact analyzer evidence,
   merely discovered in package context, and global to policy receive the
   correct distinct relation;
-- the v0.22 15-file adoption fixture identifies all 26 unselected findings as
+- the recorded 14-file adoption fixture identifies all 26 unselected findings as
   context rather than pretending their paths were selected;
 - strict contextual findings still affect the unfiltered result while display
   filters alter neither evaluation nor exit status;
