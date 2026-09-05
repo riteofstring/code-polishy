@@ -59,3 +59,22 @@ func TestArtifactFinalizationFailureDoesNotOfferExecutionIDAsSuite(t *testing.T)
 		t.Fatalf("artifact recovery invents an executable suite: %+v", finding.Remediation)
 	}
 }
+
+func TestFindingRerunsTheAnalyzerThatOwnsItsRule(t *testing.T) {
+	for _, test := range []struct {
+		rule    string
+		command string
+	}{
+		{"portability.machinePath", "check"},
+		{"portability.siblingReference", "check"},
+		{"testing.fileCycle", "architecture"},
+	} {
+		t.Run(test.rule, func(t *testing.T) {
+			finding := NormalizeFinding(Finding{Check: test.rule, Path: "checks/contract_test.go", Subject: "diagnostic"})
+			want := []string{"code-polishy", test.command, "--files", "checks/contract_test.go"}
+			if finding.Remediation.NextCommand == nil || !slices.Equal(finding.Remediation.NextCommand.Argv, want) {
+				t.Fatalf("rerun cannot reproduce the selected finding: %+v", finding.Remediation)
+			}
+		})
+	}
+}

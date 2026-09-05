@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	pathpkg "path"
 	"slices"
 	"sort"
@@ -70,7 +69,7 @@ func defaultFindingRemediation(finding Finding) FindingRemediation {
 		}
 	}
 	return FindingRemediation{
-		Summary:     fmt.Sprintf("Resolve %s for %s and rerun its owning policy command.", finding.Check, finding.Subject),
+		Summary:     findingRemediationSummary(finding),
 		NextCommand: &FindingCommand{Argv: defaultFindingCommand(finding), Cwd: "."},
 	}
 }
@@ -78,9 +77,9 @@ func defaultFindingRemediation(finding Finding) FindingRemediation {
 func defaultFindingCommand(finding Finding) []string {
 	command := "doctor"
 	switch {
-	case strings.HasPrefix(finding.Check, "architecture."):
+	case strings.HasPrefix(finding.Check, "architecture."), finding.Check == "testing.fileCycle":
 		command = "architecture"
-	case strings.HasPrefix(finding.Check, "quality."):
+	case strings.HasPrefix(finding.Check, "quality."), strings.HasPrefix(finding.Check, "portability."):
 		command = "check"
 	case strings.HasPrefix(finding.Check, "supplyChain."):
 		return []string{"code-polishy", "supply-chain"}
