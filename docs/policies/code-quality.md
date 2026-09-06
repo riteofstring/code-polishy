@@ -432,6 +432,22 @@ exact reachable symbols from PEP 621 `project.scripts`,
 `project.gui-scripts`, and every `project.entry-points.*` table, and statically
 provable Pydantic model contracts.
 
+Built-in framework contracts also preserve `pytest.fixture(autouse=True)`
+functions, module-level `pytestmark` values built from resolved `pytest.mark`
+objects, `row_factory` writes on proven `sqlite3.Connection` receivers, and
+`teardown` overrides inherited from `hypothesis.stateful.RuleBasedStateMachine`.
+These contracts require no per-test declarations, fake callers, or dependency
+imports. Exact import aliases and project re-exports resolve through the same
+bounded project facts used by other Python analysis.
+
+SQLite receiver evidence includes direct construction, local aliases, annotated
+connection parameters, and context-manager bindings. Unknown custom factories,
+rebound receivers, shadowed framework imports, and ambiguous same-line writes
+do not receive positive evidence. Ordinary fixtures without literal
+`autouse=True`, unrelated methods, attributes, and local variables retain normal
+dead-code analysis. The built-in contracts model the named public APIs; they do
+not authenticate installed dependency contents or replace supply-chain checks.
+
 Pydantic inference requires exact imports or aliases of `pydantic.BaseModel`,
 `pydantic.v1.BaseModel`, or `pydantic_settings.BaseSettings`. It follows exact
 local subclasses and re-exports. On proven model classes it keeps model fields,

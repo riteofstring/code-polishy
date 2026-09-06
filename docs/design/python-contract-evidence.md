@@ -46,3 +46,26 @@ read set; an empty external-consumer set performs no dependency scan.
 
 The public declaration shapes and supported consumer syntax are documented in
 [Code Quality](../policies/code-quality.md#python-ruff-vulture-and-ty).
+
+## Release-owned framework contracts
+
+Known public framework APIs need shared semantic models rather than a local
+reachability declaration for each consumer. The framework resolver reuses the
+bounded source trees and compact project binding resolver. It recognizes exact
+pytest autouse decorators and module marks, SQLite connection row-factory
+writes, and Hypothesis state-machine teardown overrides. It never imports or
+executes target dependencies. Unknown frameworks continue to use the explicit
+external-contract mechanism described above.
+
+Positive evidence is a source location and symbol, not a global name whitelist.
+Re-exports and inheritance must resolve to the named external API. Receiver
+construction, parameter annotations, aliases, and active context bindings must
+be unambiguous. Custom factories and rebindings cannot prove a standard SQLite
+connection. When Vulture's line-based output cannot distinguish two same-named
+writes, neither write is hidden by the built-in contract.
+
+`framework_contracts` exports `framework_members` as its embedded Python API.
+The Go-owned Vulture adapter calls that API with the already parsed project and
+combines its exact locations with TypedDict, Pydantic, and configured contract
+evidence. The existing coverage-failure boundary still withholds derivative
+findings if complete project facts are unavailable.

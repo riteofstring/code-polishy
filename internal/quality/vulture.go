@@ -29,6 +29,7 @@ from source_parser import parse_source
 from type_facts import type_facts
 from type_resolver import typed_dict_reads
 from pydantic_resolver import pydantic_members
+from framework_contracts import framework_members
 P=7
 M=4194304
 S=4096
@@ -251,9 +252,11 @@ try:
   type_modules=_vulture_type_modules(fs)
   typed=typed_dict_reads(type_modules)
   models=pydantic_members(type_modules)
+  frameworks=framework_members(type_modules,fs)
  except Exception as z:
   o["facts_error"]=str(z)[:S];raise
  keep={(r["path"],r["line"],r["end"],r["name"]) for r in models}|{(r["field"]["path"],r["field"]["line"],r["field"]["line"],r["field"]["key"]) for r in typed}
+ keep.update(frameworks)
  for f in fs:keep.update(ka(f))
  for r in rs:
   try:

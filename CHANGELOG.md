@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.24.3 - 2026-09-05
+
+- Recognize pytest autouse fixtures and module-level pytest marks, SQLite
+  connection row factories, and Hypothesis state-machine teardown overrides
+  automatically during Python dead-code analysis.
+- Resolve framework imports, aliases, inheritance, and connection bindings
+  without importing project dependencies. Keep unrelated and ambiguous
+  same-named definitions visible.
+
 ## 0.24.2 - 2026-09-05
 
 - Make signed Git CI assessments opt-in with `supplyChain.gitEvidence.required`.
