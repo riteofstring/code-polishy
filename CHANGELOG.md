@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.24.5
+## 0.24.5 - 2026-09-05
 
 - Adopt pinned Astroid inference for contained Python ancestry and nested runtime
   exports without importing target dependencies.
