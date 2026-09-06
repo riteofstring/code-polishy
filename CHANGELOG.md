@@ -1,9 +1,12 @@
 # Changelog
 
-## 0.24.6 - 2026-09-05
+## 0.24.6 - 2026-09-06
 
-- Remove JSON and JSONC from source-file line budgets while retaining their
-  applicable formatting, syntax, schema, and policy checks.
+- Apply file-line budgets to programming source, scripts, and application
+  components. Exclude JSON/JSONC, YAML, TOML, HTML, CSS, SQL, and Proto while
+  retaining their other applicable checks.
+- Match lockfile exemptions by actual filename conventions, so ordinary source
+  such as `clock.py` receives its line budget.
 
 - Add repository-declared operator-controlled Python runtime loader boundaries,
   with exact source, grammar, nested attribute walk, and runtime protocol checks.

@@ -68,21 +68,37 @@ func TestSourceChecksExcludeMarkdownFromFileLength(t *testing.T) {
 	}
 }
 
-func TestJSONLengthDoesNotDisableTextHygiene(t *testing.T) {
+func TestDeclarativeFileLengthDoesNotDisableTextHygiene(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Quality.MaxFileLines = 2
-	for _, path := range []string{policy.ConfigFilename, "catalog/items.json", "settings/editor.JSON", "settings/editor.jsonc"} {
-		writeQualityFile(t, repo.Root, path, "{\n  \"items\": [1, 2, 3]  \n}")
+	for _, path := range []string{policy.ConfigFilename, "catalog/items.json", "settings/editor.JSON", "settings/editor.jsonc", "settings/app.yaml", "settings/app.yml", "settings/app.toml", "pages/index.html", "pages/index.htm", "styles/main.css", "schema/tables.sql", "schema/messages.proto"} {
+		writeQualityFile(t, repo.Root, path, "first\nsecond  \nthird")
 		findings := sourceChecks(repo, []string{path})
 		checks := findingChecks(findings)
 		if checks["quality.fileLength"] || !checks["quality.finalNewline"] || !checks["quality.trailingWhitespace"] {
-			t.Fatalf("JSON lost its distinct length and hygiene policy: %+v", findings)
+			t.Fatalf("%s lost its distinct length and hygiene policy: %+v", path, findings)
 		}
 	}
-	writeQualityFile(t, repo.Root, "src/main.js", "const first = 1;\nconst second = 2;\nexport { first, second };\n")
-	if !findingChecks(sourceChecks(repo, []string{"src/main.js"}))["quality.fileLength"] {
-		t.Fatal("JavaScript source lost its line budget")
+}
+
+func TestSourceLengthIncludesComponentsAndLockNamedCode(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Quality.MaxFileLines = 2
+	for _, path := range []string{"src/main.js", "src/clock.py", "src/blockchain.go", "src/lockfile.rs", "src/worker.lock.py", "src/Panel.vue", "src/Panel.svelte", "src/Panel.astro", "scripts/clock.sh"} {
+		writeQualityFile(t, repo.Root, path, "first\nsecond\nthird\n")
+		if !findingChecks(checkTextFile(repo, path))["quality.fileLength"] {
+			t.Fatalf("%s lost its source line budget", path)
+		}
+	}
+	repo.Config.Scope.Languages = []policy.LanguageRule{{Name: "shell", Paths: []string{"inputs/**"}}}
+	for _, path := range []string{"inputs/Cargo.lock", "inputs/go.sum", "inputs/go.work.sum", "inputs/LICENSE"} {
+		writeQualityFile(t, repo.Root, path, "first\nsecond  \nthird")
+		checks := findingChecks(checkTextFile(repo, path))
+		if checks["quality.fileLength"] || !checks["quality.finalNewline"] {
+			t.Fatalf("%s lost its lockfile or hygiene policy", path)
+		}
 	}
 }
 

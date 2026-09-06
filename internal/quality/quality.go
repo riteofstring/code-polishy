@@ -21,16 +21,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-var lengthCheckedExtensions = map[string]bool{
-	".bash": true, ".c": true, ".cc": true, ".cpp": true, ".css": true,
-	".go": true, ".h": true, ".hpp": true, ".html": true, ".java": true,
-	".js": true, ".jsx": true, ".kt": true, ".dart": true,
-	".kts": true, ".mjs": true, ".mts": true, ".php": true,
-	".proto": true, ".py": true, ".pyi": true, ".rb": true, ".rs": true,
-	".sh": true, ".sql": true, ".svelte": true, ".swift": true, ".toml": true,
-	".ts": true, ".tsx": true, ".vue": true, ".yaml": true, ".yml": true,
-}
-
 func Check(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
 	findings := sourceChecks(repo, selection.Files)
 	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
@@ -562,11 +552,12 @@ func checkTextFile(repo repository.Repository, path string) []policy.Finding {
 }
 
 func checksFileLength(repo repository.Repository, path string) bool {
-	extension := strings.ToLower(filepath.Ext(path))
-	if extension == ".md" || extension == ".markdown" || extension == ".json" || extension == ".jsonc" {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown", ".json", ".jsonc", ".yaml", ".yml", ".toml", ".html", ".htm", ".css", ".sql", ".proto":
 		return false
+	default:
+		return repo.IsExecutableSource(path)
 	}
-	return lengthCheckedExtensions[extension] || repo.IsExecutableSource(path)
 }
 
 func newlineFindings(path string, data []byte) []policy.Finding {
@@ -930,7 +921,7 @@ func safeName(value string) string {
 
 func isLengthInput(path string) bool {
 	name := strings.ToLower(filepath.Base(path))
-	return name == "go.sum" || strings.Contains(name, "lock") || name == "license"
+	return name == "go.sum" || name == "go.work.sum" || strings.HasSuffix(name, ".lock") || name == "license"
 }
 
 func isExecutable(path string) bool {

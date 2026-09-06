@@ -36,13 +36,20 @@ length budget by default because document length is not evidence of a code
 monolith. Markdown receives final-newline, trailing-whitespace, sealed-format,
 UTF-8, containment, regular-file, size, and local-link checks.
 
-JSON and JSONC files (case-insensitive extensions) are also excluded from the
-file-length budget. Their line count reflects formatting and declaration or data
-volume rather than executable complexity. They remain handwritten governed
-inputs: text hygiene, formatting, syntax, applicable schemas, security,
-ownership, and coverage checks still apply. The required Code Polishy control
-file retains its bounded parser and complete policy validation; it needs no
-file-length exception under this release.
+File-length budgets apply by default to programming-language source, scripts,
+and application components, including Vue, Svelte, and Astro. JSON/JSONC,
+YAML, TOML, plain HTML (`.html` and `.htm`), CSS, SQL, and Protocol Buffers
+(`.proto`) are excluded, with case-insensitive extension matching. Their line
+count often reflects formatting, declarations, or data volume rather than
+implementation complexity. Applicable text hygiene, formatting, syntax, schema,
+security, ownership, and coverage checks still apply. The Code Polishy control
+file retains its bounded parser and complete policy validation.
+
+Other files need a recognized source language, a shell shebang, or a
+repository-declared language to receive a line budget. Lockfile exemptions use
+the `.lock` suffix and exact `go.sum` and `go.work.sum` names; `LICENSE` is also
+exempt. A filename merely containing `lock`, such as `clock.py`, receives its
+ordinary source budget.
 
 Tests receive a higher Go complexity and file-size budget because table-driven
 fixtures and workflow setup are naturally larger. Python and
