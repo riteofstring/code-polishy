@@ -39,9 +39,9 @@ class _AstroidContracts:
         for contract in contracts:
             if contract["kind"] == "type":
                 module, _, name = contract["target"].rpartition(".")
-                self.models[module] = (
-                    self.models.get(module, "") + f"\nclass {name}: pass\n"
-                )
+                model = self.models.get(module, "")
+                if f"class {name}:" not in model and f"class {name}(" not in model:
+                    self.models[module] = model + f"\nclass {name}: pass\n"
 
     def __enter__(self):
         self.override.__enter__()

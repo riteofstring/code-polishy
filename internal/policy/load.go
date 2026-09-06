@@ -320,9 +320,6 @@ func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) 
 }
 
 func validateScope(config *Config) error {
-	if err := validatePythonContracts(config.Scope.PythonContracts); err != nil {
-		return err
-	}
 	if err := rejectUniversalPatterns(config.Scope.Exclude, "scope.exclude"); err != nil {
 		return err
 	}
@@ -338,16 +335,7 @@ func validateScope(config *Config) error {
 	if err := validateGeneratedJavaScript(config.Scope.GeneratedJavaScript); err != nil {
 		return err
 	}
-	if err := validatePythonDynamicReferences(config.Scope.PythonDynamicReferences); err != nil {
-		return err
-	}
-	if err := validatePythonComputedImports(config.Scope.PythonComputedImports); err != nil {
-		return err
-	}
-	if err := validatePythonExternalPluginImports(&config.Scope); err != nil {
-		return err
-	}
-	if err := validatePythonExternalAttributes(config.Scope.PythonExternalAttributes); err != nil {
+	if err := validatePythonDeclarations(&config.Scope); err != nil {
 		return err
 	}
 	if err := rejectUniversalPatterns(config.Scope.Development, "scope.development"); err != nil {
@@ -724,4 +712,20 @@ func repositoryPath(value, label string) error {
 		return fmt.Errorf("%s must be a concrete repository path", label)
 	}
 	return nil
+}
+
+func validatePythonDeclarations(scope *Scope) error {
+	if err := validatePythonDynamicReferences(scope.PythonDynamicReferences); err != nil {
+		return err
+	}
+	if err := validatePythonComputedImports(scope.PythonComputedImports); err != nil {
+		return err
+	}
+	if err := validatePythonExternalPluginImports(scope); err != nil {
+		return err
+	}
+	if err := validatePythonExternalAttributes(scope.PythonExternalAttributes); err != nil {
+		return err
+	}
+	return validatePythonContracts(scope.PythonContracts)
 }

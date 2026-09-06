@@ -151,3 +151,20 @@ func TestPythonEntryPointRejectsConditionalOrAmbiguousExports(t *testing.T) {
 		})
 	}
 }
+
+func TestPythonContractExtendsBundledType(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "io.RawIOBase", Members: []string{"custom_callback"}, Reason: "The application adds a callback to its stream interface."}
+	source := "import io\nclass Stream(io.RawIOBase):\n    def custom_callback(self):\n        return 1\n    def unused_hook(self):\n        return 2\n"
+	_, _, response, _ := runContractVulture(t, map[string]string{"src/streams.py": source}, []policy.PythonContract{contract})
+	if response.Error != "" || len(response.Problems) != 0 {
+		t.Fatalf("extension rejected: %+v", response)
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if diagnostic.Name == "custom_callback" {
+			t.Fatalf("configured callback is dead: %+v", response)
+		}
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "unused_hook" }) {
+		t.Fatal("unrelated hook was hidden")
+	}
+}
