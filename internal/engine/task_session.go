@@ -350,13 +350,6 @@ func (session *nativeTaskSession) validateCompletedTask() error {
 		_ = session.writeReceipt()
 		return err
 	}
-	if err := session.sourceUnchanged(context.Background()); err != nil {
-		session.retainWorktree = true
-		session.result.Status = "source-changed"
-		_ = session.snapshot(context.Background())
-		_ = session.writeReceipt()
-		return err
-	}
 	if err := session.checkBoundary(session.result.Workspace, filepath.Join(session.result.OutputDir, "boundary.log")); err != nil {
 		session.result.Status = "boundary-rejected"
 		_ = session.snapshot(context.Background())

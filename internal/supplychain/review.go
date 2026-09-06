@@ -255,7 +255,7 @@ func readResolvedLockInventory(ctx context.Context, repo repository.Repository, 
 		packages, err = parseUVLockWith(data, path, parseUVInventorySourceFields)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("parse %s: resolved dependency inventory is malformed, ambiguous, or unsupported", path)
+		return nil, fmt.Errorf("parse %s: resolved dependency inventory is malformed, ambiguous, or unsupported: %w", path, err)
 	}
 	return packages, nil
 }

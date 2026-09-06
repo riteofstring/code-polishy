@@ -102,11 +102,22 @@ func analyzeSourcePartitions(
 ) (SourceProject, error) {
 	project := SourceProject{Sources: make([]Source, 0, sourceCount), Partitions: make([]SourcePartition, 0, len(partitions))}
 	factBytes := 0
-	for index, partition := range partitions {
+	for index := 0; index < len(partitions); {
+		partition := partitions[index]
 		analyzed, err := analyzeSourcePartition(ctx, python, partition, index, len(partitions), requestLimit, analyzer)
+		if errors.Is(err, errResponseTooLarge) && len(partition) > 1 {
+			if len(partitions) >= maximumProjectPartitions {
+				return SourceProject{}, errors.New("python-facts project exceeds the partition count limit")
+			}
+			middle := len(partition) / 2
+			replacement := [][]Input{partition[:middle], partition[middle:]}
+			partitions = append(partitions[:index], append(replacement, partitions[index+1:]...)...)
+			continue
+		}
 		if err != nil {
 			return SourceProject{}, err
 		}
+		index++
 		if analyzed.bytes > maximumProjectFactSize-factBytes {
 			return SourceProject{}, errors.New("python-facts project exceeds the compact fact byte limit")
 		}
@@ -147,7 +158,7 @@ func analyzeSourcePartition(
 		return analyzedSourcePartition{}, fmt.Errorf("encode python-facts project partition %d response: %w", index+1, err)
 	}
 	if len(responseData) > maximumResponseSize {
-		return analyzedSourcePartition{}, fmt.Errorf("python-facts project partition %d response exceeds the byte limit", index+1)
+		return analyzedSourcePartition{}, fmt.Errorf("python-facts project partition %d: %w", index+1, errResponseTooLarge)
 	}
 	return analyzedSourcePartition{
 		sources: response.Sources, record: sourcePartitionIdentity(index, partition, requestData, responseData), bytes: len(responseData),

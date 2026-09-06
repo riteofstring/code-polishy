@@ -222,3 +222,32 @@ func runExternalWriteFixture(t *testing.T, fixture externalWriteFixture) pythonV
 	}
 	return response
 }
+
+func TestPythonVultureFrameworkAttributeContracts(t *testing.T) {
+	for _, test := range []struct{ name, qualified, attribute string }{
+		{"database row factory", "sqlite3.Connection", "row_factory"},
+		{"server lifecycle", "external.server.Server", "should_exit"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := externalWriteFixtures()["parameter"]
+			parts := strings.Split(test.qualified, ".")
+			imported := strings.Join(parts[:len(parts)-1], ".")
+			class := parts[len(parts)-1]
+			fixture.source = strings.ReplaceAll(fixture.source, "external.runtime", imported)
+			fixture.source = strings.ReplaceAll(fixture.source, "Settings", class)
+			fixture.source = strings.ReplaceAll(fixture.source, "output_path", test.attribute)
+			fixture.attribute.Receiver.Type = test.qualified
+			fixture.attribute.Attribute = test.attribute
+			response := runExternalWriteFixture(t, fixture)
+			if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || !slices.Contains(response.Resolved, pythonVultureAttributeID(fixture.attribute)) {
+				t.Fatalf("contract analysis=%+v", response)
+			}
+			if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == test.attribute }) {
+				t.Fatalf("consumed write reported dead: %+v", response.Diagnostics)
+			}
+			if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "unused_path" }) {
+				t.Fatalf("unrelated write hidden: %+v", response.Diagnostics)
+			}
+		})
+	}
+}

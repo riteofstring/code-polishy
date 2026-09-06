@@ -339,6 +339,8 @@ func encodeRequest(request Request) ([]byte, error) {
 	return data, nil
 }
 
+var errResponseTooLarge = errors.New("python-facts response exceeds the byte limit")
+
 func runAdapter(parent context.Context, python string, data []byte) ([]byte, error) {
 	input, err := ProgramInput(embeddedAdapterSource(), bytes.NewReader(data))
 	if err != nil {
@@ -359,6 +361,9 @@ func runAdapter(parent context.Context, python string, data []byte) ([]byte, err
 			return nil, errors.New("python-facts adapter exceeded its time limit")
 		}
 		message := strings.TrimSpace(string(stderr.Bytes()))
+		if message == "response exceeds the byte limit" {
+			return nil, errResponseTooLarge
+		}
 		if message == "" {
 			message = err.Error()
 		}

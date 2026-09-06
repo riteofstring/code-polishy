@@ -71,9 +71,20 @@ func nodeLockPath(repo repository.Repository, root, manager string) (string, boo
 }
 
 type packageLockDocument struct {
-	LockfileVersion int                         `json:"lockfileVersion"`
-	Packages        map[string]packageLockEntry `json:"packages"`
-	Dependencies    map[string]packageLockEntry `json:"dependencies"`
+	LockfileVersion int                               `json:"lockfileVersion"`
+	Packages        map[string]modernPackageLockEntry `json:"packages"`
+	Dependencies    map[string]packageLockEntry       `json:"dependencies"`
+}
+
+type modernPackageLockEntry struct {
+	Name                 string            `json:"name"`
+	Version              string            `json:"version"`
+	Resolved             string            `json:"resolved"`
+	Link                 bool              `json:"link"`
+	Dependencies         map[string]string `json:"dependencies"`
+	DevDependencies      map[string]string `json:"devDependencies"`
+	OptionalDependencies map[string]string `json:"optionalDependencies"`
+	PeerDependencies     map[string]string `json:"peerDependencies"`
 }
 
 type packageLockEntry struct {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.1 - 2026-09-05
+
+- Allow non-promoting task sessions to finish after independent caller commits.
+  Promotion still requires an unchanged clean caller and a contained candidate.
+- Parse modern npm dependency range maps separately from legacy recursive
+  lockfile records. Preserve modern inventory precedence and decoder causes
+  in dependency-review failures.
+- Split oversized Python fact responses and retry smaller source partitions,
+  retaining complete fact coverage and existing project resource limits.
+
 ## 0.24.0 - 2026-09-05
 
 - Require configuration schema 4. Declare executable tests through `tests.paths`

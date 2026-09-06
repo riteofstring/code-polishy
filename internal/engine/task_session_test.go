@@ -111,6 +111,13 @@ func TestNativeTaskSessionWorker(t *testing.T) {
 	if os.Getenv("CODE_POLISHY_TEST_TASK_WORKER") != "1" {
 		return
 	}
+	if root := os.Getenv("CODE_POLISHY_TEST_ADVANCE_SOURCE"); root != "" {
+		command := exec.Command("git", "-C", root, "commit", "--allow-empty", "-m", "Independent caller progress")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("advance caller: %v\n%s", err, output)
+		}
+		return
+	}
 	if os.Getenv("CODE_POLISHY_TEST_TASK_WORKER_MODE") == "wait" {
 		if err := os.WriteFile(filepath.Join(os.Getenv("CODE_POLISHY_TASK_ARTIFACT_DIR"), "worker-ready"), []byte("ready\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -136,5 +143,39 @@ func TestNativeTaskSessionWorker(t *testing.T) {
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", arguments, err, output)
 		}
+	}
+}
+
+func TestNativeTaskSessionCallerAdvance(t *testing.T) {
+	for _, promote := range []bool{false, true} {
+		t.Run(map[bool]string{false: "no promotion", true: "promotion"}[promote], func(t *testing.T) {
+			root := contentRepository(t, nil)
+			initializeEngineGitRepository(t, root)
+			executable, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("CODE_POLISHY_TEST_TASK_WORKER", "1")
+			t.Setenv("CODE_POLISHY_TEST_ADVANCE_SOURCE", root)
+			result, err := RunTaskSession(t.Context(), TaskSessionOptions{
+				RepoRoot: root, PolicyRoot: root, Modules: []string{"content"}, Promote: promote,
+				Command: []string{executable, "-test.run=^TestNativeTaskSessionWorker$"}, Executable: executable,
+			})
+			if promote {
+				if err == nil || result.Status != "promotion-rejected" {
+					t.Fatalf("result=%+v err=%v", result, err)
+				}
+				command := exec.Command("git", "-C", root, "worktree", "remove", "--force", result.Workspace)
+				if output, err := command.CombinedOutput(); err != nil {
+					t.Fatalf("cleanup: %v %s", err, output)
+				}
+			} else if err != nil || result.Status != "passed" {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+			head, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+			if err != nil || strings.TrimSpace(string(head)) == result.TrustedBase || result.CandidateHead != result.TrustedBase {
+				t.Fatalf("caller=%s result=%+v err=%v", head, result, err)
+			}
+		})
 	}
 }
