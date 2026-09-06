@@ -4,6 +4,8 @@ from astroid_contracts import _AstroidContracts
 from framework_contracts import _FrameworkResolver, _FrameworkVisitor
 from type_facts import _reference_name
 
+__all__ = ["framework_members"]
+
 
 class _ContractVisitor(_FrameworkVisitor):
     def __init__(self, resolver, source, contract):
@@ -156,7 +158,7 @@ def declared_members(resolver, sources, contracts):
                 raise ValueError("contract matches no source definitions")
             kept.update(found)
             resolved.append(contract["id"])
-        except (ValueError, *resolver.ancestry.errors) as error:
+        except (ValueError, TypeError, *resolver.ancestry.errors) as error:
             problems.append({"id": contract["id"], "message": str(error)[:4096]})
     return kept, resolved, problems
 

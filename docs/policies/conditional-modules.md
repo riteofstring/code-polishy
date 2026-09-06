@@ -98,10 +98,9 @@ PEP 621 `project.scripts`, `project.gui-scripts`, and every
 backends infer their statically defined standard hooks. Vulture's own
 version-matched import whitelists cover supported standard-library dynamic
 contracts, supplemented by Code Polishy's syntax-bound standard protocol
-inventory. Exact Pydantic imports and inheritance infer model fields,
-`model_config`, and supported validator, serializer, and computed-field
-methods; lookalike names do not. A target may add only a dynamic reference that
-remains invisible, using
+inventory. Repository-owned `scope.pythonContracts` declarations describe
+third-party consumed members and runtime exports through contained Astroid
+inference. For independently checked consumer evidence, a target can use
 `scope.pythonDynamicReferences` consumer-bound `target` or `registry` objects.
 A target requires an exact governed callsite or an admitted external
 base, protocol, decorator, or registration contract. A registry derives its

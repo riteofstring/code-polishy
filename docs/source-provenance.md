@@ -74,10 +74,11 @@ keep the sealed bundle portable and minimal.
 
 - Go remains the policy-engine implementation runtime. For Python policy work,
   the release carries CPython `3.12.13+20260728` from
-  python-build-standalone, PyPA `packaging` `26.3`, and Vulture `2.16`.
+  python-build-standalone, PyPA `packaging` `26.3`, Astroid `4.1.2`, and Vulture `2.16`.
   `packaging` comes from one exact hash-verified wheel represented by the
   policy-owned `pyproject.toml` and frozen `uv.lock`; the carried runtime has no
-  pip or ensurepip. Code Polishy never executes target Python to discover
+  pip or ensurepip. Astroid uses a separately pinned wheel and carries its
+  corresponding source archive and LGPL license. Code Polishy never executes target Python to discover
   imports, select a project, or perform dead-code analysis.
 - Python fact analysis and Vulture pass their embedded policy program as the
   first standard-input record. The isolated interpreter receives a fixed small
@@ -90,7 +91,7 @@ keep the sealed bundle portable and minimal.
   architecture work. Bounded `python-facts/v3` requests use CPython 3.12
   `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release.
   Complete source files are partitioned deterministically. Compact type facts
-  resolve TypedDict reads, Pydantic members, and module imports across the validated union through
+  resolve TypedDict reads and module imports across the validated union through
   `python-type-project/v3`, and
   Vulture uses the same parser, AST extractor, and semantic resolvers. Consumer
   target resolution also accepts bounded compact records through

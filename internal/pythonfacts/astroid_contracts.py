@@ -32,6 +32,9 @@ class _AstroidContracts:
         self.override = patch.object(
             self.manager_type, "ast_from_module_name", self.load
         )
+        self.declared_roots = {
+            contract["target"] for contract in contracts if contract["kind"] == "type"
+        }
         self.models = dict(_MODELS)
         for contract in contracts:
             if contract["kind"] == "type":
@@ -94,7 +97,6 @@ class _AstroidContracts:
             return self.has_base(classes[0], roots, set())
         except self.errors:
             return False
-        return False
 
     def has_base(self, node, roots, seen):
         from astroid import nodes
@@ -102,6 +104,8 @@ class _AstroidContracts:
         if node in seen or len(seen) >= MAX_DEPTH:
             return False
         seen = seen | {node}
+        if node.qname() in roots & self.declared_roots:
+            return True
         for base in node.bases:
             names = list(base.nodes_of_class(nodes.Name))
             if any(not self.unique_binding(name) for name in names):
@@ -143,6 +147,7 @@ class _AstroidContracts:
         if len(definitions) != 1:
             raise ValueError(f"entry-point member is stale or ambiguous: {name}")
         definition = definitions[0]
+        self.unconditional(definition)
         path = self.paths.get(definition.root().name)
         if path is None:
             raise ValueError(f"entry-point member is not project source: {name}")
@@ -165,3 +170,16 @@ class _AstroidContracts:
         ):
             raise ValueError(f"entry-point member cannot resolve uniquely: {name}")
         return inferred[0]
+
+    def unconditional(self, definition):
+        from astroid import nodes
+
+        current = definition.parent
+        while current is not None:
+            if isinstance(
+                current, (nodes.If, nodes.For, nodes.While, nodes.Try, nodes.With)
+            ):
+                raise TypeError("entry-point definition is conditional")
+            if isinstance(current, (nodes.FunctionDef, nodes.ClassDef, nodes.Module)):
+                return
+            current = current.parent

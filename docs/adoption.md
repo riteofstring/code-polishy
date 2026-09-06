@@ -259,8 +259,8 @@ an apparently valid empty result. See
   containing callable, argument, and source digest. A target names one object;
   a registry derives its current objects from one governed JSON input and
   structural selector connected to the consumer. Missing, stale, ambiguous,
-  or disconnected evidence fails. Inferred entry points and Pydantic contracts
-  remain inferred. Never generate a reachability inventory from Vulture output.
+  or disconnected evidence fails. Standard entry points remain inferred. Third-party framework consumption
+  can instead be declared through `scope.pythonContracts`. Never generate a reachability inventory from Vulture output.
   [Code Quality](policies/code-quality.md#python-ruff-vulture-and-ty) owns the
   supported consumer shapes and complete contract.
 - `scope.pythonExternalAttributes` models an exact assignment to a typed object
@@ -392,9 +392,9 @@ ceiling. See
 JavaScript and TypeScript dead code comes from their sealed bundle across the
 whole package tree a file belongs to; a target pins and installs no analyzer.
 Python dead code comes only from Vulture. Its version-matched standard-library
-whitelists, in-tree PEP 517 hooks, PEP 621 entry points, and statically proven
-Pydantic model fields, configuration, validators, serializers, and computed
-fields are inferred. Use consumer-bound `scope.pythonDynamicReferences` for
+whitelists, in-tree PEP 517 hooks, and PEP 621 entry points are inferred.
+Repository-owned `scope.pythonContracts` describes third-party model fields,
+callbacks, and runtime exports explicitly. Use consumer-bound `scope.pythonDynamicReferences` for
 remaining dynamic symbols with a proven loader or registry. This is imported policy, not a target-authored adapter.
 
 An incorrect activation may be disabled only by an exact-root

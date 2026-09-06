@@ -186,7 +186,8 @@ the carried Ruff baseline, C901, target additions, Vulture `2.16` full-project
 dead-code analysis, and structured `ty` diagnostics with those same roots.
 Vulture runs through carried CPython `3.12.13+20260728` from
 python-build-standalone, loads its version-matched standard whitelists, derives
-PEP 621 entry-point, in-tree backend-hook, and exact Pydantic model symbols, and
+PEP 621 entry-point and in-tree backend-hook symbols. Contained Astroid
+inference supports repository-owned `scope.pythonContracts`; the adapter also
 accepts consumer-bound target and registry `scope.pythonDynamicReferences`
 for remaining dynamic symbols. The shared compact resolver verifies the exact
 loader call, argument, source digest, and governed registry data flow before

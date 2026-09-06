@@ -521,6 +521,9 @@ func pythonQualitySelectedManifests(repo repository.Repository, selected []strin
 			}
 		}
 		if normalized == pythonVultureConfigPath(repo) {
+			for _, contract := range repo.Config.Scope.PythonContracts {
+				manifests[contract.Project] = true
+			}
 			for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 				manifests[reference.Project] = true
 			}

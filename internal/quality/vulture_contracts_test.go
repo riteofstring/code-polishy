@@ -135,3 +135,19 @@ func TestPythonEntryPointAnalysisDoesNotExecuteProjectCode(t *testing.T) {
 		t.Fatalf("contained static inference failed: %+v", response)
 	}
 }
+
+func TestPythonEntryPointRejectsConditionalOrAmbiguousExports(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "entry-point", Target: "plugins:exported", Reason: "Runtime configuration selects this object."}
+	for name, source := range map[string]string{
+		"conditional": "class Adapter: pass\nif condition:\n    exported = Adapter()\n",
+		"reassigned":  "class Adapter: pass\nexported = Adapter()\nexported = Adapter()\n",
+		"missing":     "class Adapter: pass\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, response, _ := runContractVulture(t, map[string]string{"src/plugins.py": source}, []policy.PythonContract{contract})
+			if response.Error != "" || len(response.Problems) != 1 {
+				t.Fatalf("invalid export was accepted: %+v", response)
+			}
+		})
+	}
+}

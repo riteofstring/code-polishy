@@ -35,10 +35,20 @@ func validatePythonContracts(contracts []PythonContract) error {
 }
 
 func validatePythonContract(contract PythonContract) error {
-	chain := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 	if strings.TrimSpace(contract.Reason) == "" {
 		return fmt.Errorf("reason is required")
 	}
+	if err := validatePythonContractTarget(contract); err != nil {
+		return err
+	}
+	if len(contract.Keywords) > 0 && contract.Kind != "decorator" {
+		return fmt.Errorf("only decorator contracts support literal keyword constraints")
+	}
+	return validatePythonContractMembers(contract)
+}
+
+func validatePythonContractTarget(contract PythonContract) error {
+	chain := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 	target := contract.Target
 	if contract.Kind == "entry-point" {
 		module, symbol, found := strings.Cut(target, ":")
@@ -48,20 +58,25 @@ func validatePythonContract(contract PythonContract) error {
 	} else if !chain.MatchString(target) {
 		return fmt.Errorf("target must be an exact qualified Python name")
 	}
-	if contract.Kind != "type" && (len(contract.Attributes) > 0 || len(contract.Decorators) > 0 || contract.AnnotatedFields) {
+	return nil
+}
+
+func validatePythonContractMembers(contract PythonContract) error {
+	if contract.Kind != "type" && contract.hasTypeMembers() {
 		return fmt.Errorf("only type contracts describe attributes, decorators, or annotated fields")
 	}
 	if contract.Kind == "decorator" && len(contract.Members) > 0 {
 		return fmt.Errorf("decorator contracts preserve only the decorated definition")
 	}
-	if len(contract.Keywords) > 0 && contract.Kind != "decorator" {
-		return fmt.Errorf("only decorator contracts support literal keyword constraints")
-	}
 	if contract.Kind == "module-binding" && len(contract.Members) == 0 {
 		return fmt.Errorf("module-binding contract requires exact binding names")
 	}
-	if contract.Kind == "type" && len(contract.Members)+len(contract.Attributes)+len(contract.Decorators) == 0 && !contract.AnnotatedFields {
+	if contract.Kind == "type" && len(contract.Members) == 0 && !contract.hasTypeMembers() {
 		return fmt.Errorf("type contract must describe consumed members")
 	}
 	return nil
+}
+
+func (contract PythonContract) hasTypeMembers() bool {
+	return len(contract.Attributes)+len(contract.Decorators) > 0 || contract.AnnotatedFields
 }
