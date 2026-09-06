@@ -17,8 +17,10 @@ const (
 	ConfigFilename = ".code-polishy.json"
 
 	LockFilename                            = ".code-polishy.lock.json"
-	MaxFileLines                            = 1000
-	MaxTestFileLines                        = 1500
+	ReviewFileLines                         = 1000
+	ReviewTestFileLines                     = 1000
+	MaxFileLines                            = 2500
+	MaxTestFileLines                        = 2500
 	MaxGoComplexity                         = 12
 	MaxGoTestComplexity                     = 20
 	MaxPythonComplexity                     = 10
@@ -231,14 +233,16 @@ type LanguageRule struct {
 }
 
 type Quality struct {
-	MaxFileLines     int        `json:"maxFileLines,omitempty"`
-	MaxTestFileLines int        `json:"maxTestFileLines,omitempty"`
-	Complexity       Complexity `json:"complexity,omitempty"`
-	AllowComments    *bool      `json:"allowComments,omitempty"`
-	MaxDepth         int        `json:"maxDepth,omitempty"`
-	MaxTestDepth     int        `json:"maxTestDepth,omitempty"`
-	MaxParams        int        `json:"maxParams,omitempty"`
-	MaxTestParams    int        `json:"maxTestParams,omitempty"`
+	ReviewFileLines     int        `json:"reviewFileLines,omitempty"`
+	ReviewTestFileLines int        `json:"reviewTestFileLines,omitempty"`
+	MaxFileLines        int        `json:"maxFileLines,omitempty"`
+	MaxTestFileLines    int        `json:"maxTestFileLines,omitempty"`
+	Complexity          Complexity `json:"complexity,omitempty"`
+	AllowComments       *bool      `json:"allowComments,omitempty"`
+	MaxDepth            int        `json:"maxDepth,omitempty"`
+	MaxTestDepth        int        `json:"maxTestDepth,omitempty"`
+	MaxParams           int        `json:"maxParams,omitempty"`
+	MaxTestParams       int        `json:"maxTestParams,omitempty"`
 }
 
 type Complexity struct {

@@ -2,6 +2,7 @@ package policy
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -75,7 +76,8 @@ func TestLoadAppliesNonBypassableDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Quality.MaxFileLines != 1000 || config.Quality.Complexity.Go != 12 ||
+	if config.Quality.ReviewFileLines != 1000 || config.Quality.ReviewTestFileLines != 1000 ||
+		config.Quality.MaxFileLines != 2500 || config.Quality.MaxTestFileLines != 2500 || config.Quality.Complexity.Go != 12 ||
 		config.Quality.Complexity.Python != 10 ||
 		config.Quality.MaxTestDepth != 8 || config.Quality.MaxTestParams != 8 {
 		t.Fatalf("baseline defaults were not applied: %+v", config.Quality)
@@ -631,11 +633,29 @@ func TestCustomLanguageRulesAreValidated(t *testing.T) {
 
 func TestLoadRejectsWeakenedBudgets(t *testing.T) {
 	t.Parallel()
-	config := strings.Replace(minimalConfig(), `"quality":{}`, `"quality":{"maxFileLines":1001}`, 1)
-	root := writeConfig(t, config)
-	_, err := Load(root, "")
-	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
-		t.Fatalf("expected budget error, got %v", err)
+	for field, value := range map[string]int{
+		"reviewFileLines": 1001, "reviewTestFileLines": 1001,
+		"maxFileLines": 2501, "maxTestFileLines": 2501,
+	} {
+		config := strings.Replace(minimalConfig(), `"quality":{}`, fmt.Sprintf(`"quality":{"%s":%d}`, field, value), 1)
+		root := writeConfig(t, config)
+		_, err := Load(root, "")
+		if err == nil || !strings.Contains(err.Error(), schemaRejection) {
+			t.Fatalf("%s: expected budget error, got %v", field, err)
+		}
+	}
+}
+
+func TestLoadAcceptsStricterFileLengthBudgets(t *testing.T) {
+	t.Parallel()
+	configText := strings.Replace(minimalConfig(), `"quality":{}`, `"quality":{"reviewFileLines":800,"reviewTestFileLines":900,"maxFileLines":2000,"maxTestFileLines":2200}`, 1)
+	config, err := Load(writeConfig(t, configText), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Quality.ReviewFileLines != 800 || config.Quality.ReviewTestFileLines != 900 ||
+		config.Quality.MaxFileLines != 2000 || config.Quality.MaxTestFileLines != 2200 {
+		t.Fatalf("file-length budgets = %+v", config.Quality)
 	}
 }
 

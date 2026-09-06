@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.10 - 2026-09-06
+
+- Treat code-file length as a review signal at 1,000 physical lines and a
+  blocking backstop above 2,500 lines. Keep both thresholds lowerable and
+  require exact owned, justified, expiring exceptions above the shared maximum.
+- Remediate long files by reviewing behavioral and dependency cohesion instead
+  of demanding arbitrary splits or forwarding-only fragments.
+
 ## 0.24.9 - 2026-09-06
 
 - Compile the bounded path-pattern grammar once and cache immutable repository

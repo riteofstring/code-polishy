@@ -15,7 +15,8 @@ The default policy is:
 | TypeScript/JavaScript cyclomatic complexity (fails at) |         10 |    10 |
 | TypeScript/JavaScript nesting depth (maximum)          |          4 |     8 |
 | TypeScript/JavaScript parameters (maximum)             |          5 |     8 |
-| File length (maximum lines)                            |      1,000 | 1,500 |
+| File length (review signal at physical lines)          |      1,000 | 1,000 |
+| File length (fails above physical lines)               |      2,500 | 2,500 |
 
 Generated, vendored, lock, and build-output files are excluded from
 edit-oriented text and complexity budgets. Generated output is exempt from
@@ -51,16 +52,28 @@ the `.lock` suffix and exact `go.sum` and `go.work.sum` names; `LICENSE` is also
 exempt. A filename merely containing `lock`, such as `clock.py`, receives its
 ordinary source budget.
 
-Tests receive a higher Go complexity and file-size budget because table-driven
-fixtures and workflow setup are naturally larger. Python and
+Tests receive a higher Go complexity budget because table-driven fixtures and
+workflow setup are naturally larger. Python and
 TypeScript/JavaScript tests keep the same complexity threshold as production
 because nested test orchestration becomes unreliable quickly. JavaScript and
 TypeScript tests receive explicit depth and parameter budgets instead of
 silently inheriting production values. Targets may lower `maxTestDepth` and
 `maxTestParams` independently.
 
-These values are maximum shared budgets. A target may lower them, but cannot
-raise them or disable a built-in checker.
+File length is a coarse review signal rather than an instruction to split a
+file. At the review threshold, Code Polishy emits a non-blocking warning so the
+file can be considered alongside its function and class responsibilities,
+complexity findings, and dependency cohesion. It becomes an error only above
+the blocking maximum. Remediation extracts code only when a clear behavioral or
+dependency boundary exists; forwarding-only fragments do not improve design.
+
+All baseline values are shared ceilings. Targets may configure stricter values,
+but cannot raise the defaults or disable a built-in checker. For file length,
+the configurable fields are `reviewFileLines`, `reviewTestFileLines`,
+`maxFileLines`, and `maxTestFileLines`. A code file that must exceed the
+blocking maximum needs an ordinary exact exception matching the path and
+current line-count subject, with an owner, reason, and expiry. Growth changes
+the subject and requires fresh review.
 
 A target also cannot replace one. A configured check may prove something no
 built-in checker can honestly infer, but a check that declares `format`,
