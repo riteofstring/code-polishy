@@ -37,8 +37,10 @@ packaging. It is a substantial staged program, not a missing adapter interface.
 The desired decentralized model fits the existing local-directory installer.
 Authors can publish repositories; an AI can obtain a reviewed pack, verify it,
 install it, and record its exact selection. No marketplace is required.
-Reproducible acquisition, selection changes, removal, and a useful authoring
-workflow still need product work.
+Reproducible acquisition, selection changes, removal, and CLI-assisted pack
+creation still need product work. In the target design, projects choose the
+languages and frameworks they need. The core accepts conforming providers
+without a built-in support allowlist or prescribed language/framework bundles.
 
 Observability is strongest at explaining findings and reconstructing governed
 gate commands. Version 0.24 substantially improves that foundation with managed
@@ -49,7 +51,9 @@ have material gaps.
 
 Recommended sequence: establish the current behavior baseline, extend the
 existing reporting and execution boundaries, prove a real shell pack, validate
-the project-aware contract, then extract Python, JavaScript/TypeScript, and Go.
+the project-aware contract, then relocate the remaining built-in behavior.
+The language inventory below orders existing extraction work; it does not
+prescribe the languages the product or a project must support, or pack layout.
 Treat observability as part of the pack contract from the first implementation.
 
 ## 1. What the latest code already provides
@@ -72,8 +76,10 @@ Ruff/Vulture/ty inventory alone would omit current behavior.
 
 The separate Astro branch also matters. Its authored-import, literal-filename,
 compiler, and JSON data-module fixes should be reconciled with the agreed
-implementation base before freezing JavaScript parity fixtures. This assessment
-does not assume they have already landed upstream.
+implementation base before freezing parity fixtures for that behavior. These
+are existing implementation facts; their current location does not determine
+which future pack supplies Astro support. This assessment does not assume they
+have already landed upstream.
 
 Evidence: [current changelog](https://github.com/riteofstring/code-polishy/blob/436c7a9855f030874878263a89807f51f402bf89/CHANGELOG.md),
 [capability discovery](https://github.com/riteofstring/code-polishy/blob/436c7a9855f030874878263a89807f51f402bf89/docs/capabilities.md),
@@ -179,7 +185,7 @@ Markdown formatting calls the JavaScript formatter. Parse-only data checks call
 the bundle's parser. GitLab inspection calls the bundle's GitLab operation.
 These remain core responsibilities in the proposed ownership model.
 
-Removing the JavaScript language pack must therefore not remove core Markdown,
+Removing a pack that supplies JavaScript support must not remove core Markdown,
 data, or repository-service checks. Give these services explicit core APIs and
 independent packaging before removing the present bundle. Evaluate a small
 core utility runtime versus native implementations using actual dependencies;
@@ -219,6 +225,23 @@ artifacts. Its implementation language is independent of the language it
 analyzes. Official packs use the same manifest, protocol, conformance, and
 runtime authority as community packs.
 
+Pack authors declare supported languages, frameworks, source patterns,
+discovery, and capabilities. Projects select providers for their own source and
+required checks. The engine validates those declarations and enforces the
+generic baseline; it does not choose an approved set of ecosystems. Adding an
+unfamiliar language or framework must work through the public pack contract
+without an engine release, built-in identifier, or central registration.
+
+For example, a project needing Astro support can select a dedicated pack or a
+broader pack whose declared capabilities cover that project. The contract must
+support either arrangement. Any cooperation between packs uses explicit,
+versioned interfaces and exact dependency identities. Provider ownership stays
+unambiguous. Recognizing TypeScript alone does not establish Astro coverage.
+
+Discovery uses selected pack metadata and explicit project classifications.
+Unclassified or uncovered source remains visible for resolution; an existing
+extension list must not silently define the limit of supported projects.
+
 Keep these concepts separate:
 
 | Concept                  | Recommended meaning                                                                           |
@@ -249,10 +272,10 @@ An AI setup workflow should be able to:
    selections and restoration metadata.
 6. Verify required coverage and run only the workflow-selected checks.
 
-Provide schema examples, a minimal working repository template, a conformance
-harness, and actionable errors before creating a large SDK. These are useful
-to both human authors and AI agents. Do not require registration, central
-publication, telemetry, or a marketplace account.
+Make pack creation a normal CLI workflow with machine-readable scaffolding,
+command-adapter helpers, schema examples, a conformance harness, and actionable
+errors. These are useful to both human authors and AI agents. Do not require
+registration, central publication, telemetry, or a marketplace account.
 
 Lifecycle semantics should distinguish deselecting a pack from deleting an
 installed artifact. Deselecting cannot silently leave governed source without
@@ -268,6 +291,57 @@ the pack runtime. An official repository or signed release index can provide
 the same information without becoming a mandatory centralized registry. The
 existing release capability catalog serves a different purpose and should
 remain distinct.
+
+### Create a pack from project needs
+
+A developer should be able to ask their AI to create a pack for the project's
+language and build system. Code Polishy's CLI supplies the creation workflow;
+the AI maps that ecosystem's tools and evidence into the generated contract.
+The core needs no built-in knowledge of the requested language.
+
+For example, a Rust/Cargo project can drive creation of a locally owned pack
+that invokes Cargo and the selected Rust toolchain's CLI commands. Rust/Cargo
+is one example of the generic workflow. A new ecosystem uses the same steps.
+
+Proposed authoring flow; `pack create` is new work, while local verification and
+installation already exist:
+
+```sh
+code-polishy pack create --directory ./code-polishy-cargo
+code-polishy pack verify --source ./code-polishy-cargo
+code-polishy pack install --source ./code-polishy-cargo
+```
+
+The developer's AI completes the generated pack between creation and
+verification. The creation command should provide:
+
+- A manifest, adapter entry point, documentation, and executable fixture layout.
+- A machine-readable description of required capabilities, missing mappings,
+  protocol schemas, and next authoring steps for the target project.
+- Reusable support for argument-array CLI invocation, explicit tool resolution,
+  working directories, bounded output, timeouts, and result normalization.
+- Fixture helpers that exercise passing code, real violations, tool failures,
+  incomplete coverage, and format check/write behavior.
+
+The pack owns the small ecosystem-specific layer: which CLI operations supply
+which capabilities, how project metadata and compiler results are interpreted,
+and what proves complete coverage. Prefer native structured output when the
+tool provides it. Tool exit status, diagnostics, and analysis coverage must be
+interpreted together; a successful process alone does not establish a policy
+pass. Generated scaffolding must expose unfinished capabilities and cannot pass
+conformance through placeholder success responses.
+
+CLI invocation belongs to the existing governed execution boundary. Pack
+authors should not have to reimplement process management, report storage,
+installation, or the wire protocol. Code Polishy may provide a generic command
+adapter runtime; it must not accumulate Rust, Cargo, Astro, or other ecosystem
+special cases inside that runtime. Custom adapters remain available for tools
+whose analysis cannot be expressed by the common command contract.
+
+After verification, normal selection records the exact pack and toolchain
+contract for the project. The developer can keep the pack local or publish its
+repository and artifacts for others to install. The same creation workflow
+should support project-specific needs as well as reusable public packs.
 
 ## 5. Is observability good today?
 
@@ -373,15 +447,17 @@ can be incremental; release surfaces must agree before old ownership is removed.
 ### Phase A: Establish the baseline and ownership map
 
 Use an agreed current upstream commit, then reconcile the separate Astro
-behavior before JavaScript extraction. Inventory each language's rules,
-configuration, parsers, tool assets, host assumptions, report identities,
+behavior before extracting its current implementation. Inventory each
+language's rules, configuration, parsers, tool assets, host assumptions, report identities,
 dependency evidence, and executable fixtures. Mark every item as core, pack,
 or shared protocol.
 
 Resolve three decisions first: the optional role of official distribution
 metadata; how core document/data/workflow services lose their dependence on the
 full JavaScript bundle; and where pack-specific schemas and effective baseline
-settings are owned and validated.
+settings are owned and validated. Choose pack boundaries from declared provider
+responsibilities and composition needs, independently of the current core's
+language names and framework groupings.
 
 Acceptance: every currently supported behavior has an owner and an observable
 parity case. The map includes current Python contracts, generated-source rules,
@@ -453,25 +529,46 @@ authority over required capabilities, effective baseline, exception validation,
 test scheduling, data protection, and report acceptance. Packs own ecosystem
 interpretation and language rule implementation.
 
+Move built-in language identifiers, source-pattern defaults, and
+ecosystem-specific coverage decisions to provider declarations. Resolve project
+requirements against those declarations through the same generic boundary for
+every pack. Define explicit dependency and shared-fact contracts where providers
+cooperate, including compatible schemas, exact identities, and rejected cycles
+or overlapping authority.
+
 Finish exact install/restore, installed-state listing, selection, update,
-deselection, and removal. Keep acquisition metadata reproducible and separate
-from policy authority. Multi-pack selection updates must either succeed
+deselection, and removal. Add the generic pack-creation command and command
+adapter helpers so an AI can author and verify a pack using ecosystem CLIs.
+Keep acquisition metadata reproducible and separate from policy authority.
+Multi-pack selection updates must either succeed
 completely or leave repository policy unchanged; verified downloaded artifacts
 may remain as unselected cache entries.
 
 Acceptance: an independent repository can publish a pack, another machine can
 restore its exact selection without a marketplace, and missing, tampered,
 incompatible, ambiguous, or incomplete providers fail with actionable output.
-Conformance verifies actual violations and coverage, not status alone.
+Conformance verifies actual violations and coverage, not status alone. Prove
+that a language or framework absent from engine source can be added through a
+pack, and that project-specific framework coverage can be supplied by either a
+dedicated provider or a broader provider without a special engine branch.
+Exercise the complete creation workflow with an ecosystem CLI: scaffold, supply
+the tool mappings and fixtures, verify, install, and select the resulting pack
+in a temporary project. No engine patch or handwritten process-management layer
+may be required.
 
-### Phase E: Cut over one complete language at a time
+### Phase E: Relocate existing behavior through complete provider cutovers
 
-| Order                 | Complete responsibility to transfer                                                                                                                      | Distinct parity risks                                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Shell                 | Detection, syntax/parser behavior, ShellCheck, comment/directive interpretation, applicable portability rules, tools, fixtures                           | Shebang-only scripts, generated/data classification, host Bash, supported dialects and platforms.                                         |
-| Python                | Project and dependency inventory, carried runtime, packaging/Astroid facts, Ruff/ty/Vulture, architecture, runtime contracts, uv/Git evidence            | Nested projects, local environments as inputs, dynamic loaders, external contracts, inference partitioning, graph and receipt identities. |
-| JavaScript/TypeScript | Runtime and language tools, project resolution, framework checks including Astro, imports/types/dead code, generated ownership, Node dependency evidence | Authored versus compiler-generated edges, literal route filenames, workspace resolution, lifecycle isolation, and core utility consumers. |
-| Go                    | Module/workspace interpretation, source graphs, formatting, vet/static analysis, build and dependency/vulnerability evidence                             | Build tags, nested modules, toolchain identity, environment, and distinction between target Go tooling and the engine's build language.   |
+This is the current implementation inventory and a suggested extraction order.
+It is not a required pack set, a supported-language allowlist, or a decision to
+bundle particular frameworks with a language. Assign each existing behavior to
+its selected provider boundary while preserving its observable guarantees.
+
+| Order                                        | Complete responsibility to transfer                                                                                                                                              | Distinct parity risks                                                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Shell                                        | Detection, syntax/parser behavior, ShellCheck, comment/directive interpretation, applicable portability rules, tools, fixtures                                                   | Shebang-only scripts, generated/data classification, host Bash, supported dialects and platforms.                                         |
+| Python                                       | Project and dependency inventory, carried runtime, packaging/Astroid facts, Ruff/ty/Vulture, architecture, runtime contracts, uv/Git evidence                                    | Nested projects, local environments as inputs, dynamic loaders, external contracts, inference partitioning, graph and receipt identities. |
+| Current JavaScript/TypeScript implementation | Runtime and language tools, project resolution, existing framework checks assigned to explicit providers, imports/types/dead code, generated ownership, Node dependency evidence | Authored versus compiler-generated edges, literal route filenames, workspace resolution, lifecycle isolation, and core utility consumers. |
+| Go                                           | Module/workspace interpretation, source graphs, formatting, vet/static analysis, build and dependency/vulnerability evidence                                                     | Build tags, nested modules, toolchain identity, environment, and distinction between target Go tooling and the engine's build language.   |
 
 For each release, remove the former implementation, installers, configuration
 ownership, and fallback dispatch together. Keep equivalent negative and positive
@@ -511,19 +608,22 @@ what a new user can actually install and remove.
 Use temporary repositories and exact, behavior-focused suites at each coherent
 source boundary. A compact acceptance matrix should cover:
 
-| Scenario                                  | Required observable result                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Exact pack restored on a clean machine    | Same verified identity and declared capabilities.                                                       |
-| Removed or corrupted selection            | Blocking diagnosis; no fallback or silent reduction.                                                    |
-| Two providers claim the same authority    | Deterministic conflict before affected analysis.                                                        |
-| Changed source needs a workspace manifest | Complete context with bounded active selection.                                                         |
-| Large discovery or graph evidence         | Complete digest-bound transport, or an explicit typed limit failure.                                    |
-| Adapter exits zero with invalid evidence  | Failed semantic operation, never an accepted pass.                                                      |
-| Real language violation                   | Expected stable rule, location, and coverage evidence.                                                  |
-| Format meets data/generated files         | Current ownership and no-rewrite guarantees preserved.                                                  |
-| Process is interrupted or loses storage   | Incomplete/operational outcome remains diagnosable; no reusable pass.                                   |
-| CI finishes or fails                      | Approved reports and referenced logs remain available.                                                  |
-| Pack/toolchain changes                    | Affected identities invalidate; unrelated evidence is reused only when its full identity remains valid. |
+| Scenario                                       | Required observable result                                                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact pack restored on a clean machine         | Same verified identity and declared capabilities.                                                                                                  |
+| Unfamiliar language or framework               | A conforming external pack supplies required coverage without an engine change or registry entry.                                                  |
+| Developer requests a pack for an ecosystem CLI | Creation scaffolds the contract; tool mappings and real fixtures produce a verifiable, installable pack without reimplementing execution plumbing. |
+| Project requires framework-specific analysis   | Declared provider coverage is verified; language recognition alone cannot satisfy it.                                                              |
+| Removed or corrupted selection                 | Blocking diagnosis; no fallback or silent reduction.                                                                                               |
+| Two providers claim the same authority         | Deterministic conflict before affected analysis.                                                                                                   |
+| Changed source needs a workspace manifest      | Complete context with bounded active selection.                                                                                                    |
+| Large discovery or graph evidence              | Complete digest-bound transport, or an explicit typed limit failure.                                                                               |
+| Adapter exits zero with invalid evidence       | Failed semantic operation, never an accepted pass.                                                                                                 |
+| Real language violation                        | Expected stable rule, location, and coverage evidence.                                                                                             |
+| Format meets data/generated files              | Current ownership and no-rewrite guarantees preserved.                                                                                             |
+| Process is interrupted or loses storage        | Incomplete/operational outcome remains diagnosable; no reusable pass.                                                                              |
+| CI finishes or fails                           | Approved reports and referenced logs remain available.                                                                                             |
+| Pack/toolchain changes                         | Affected identities invalidate; unrelated evidence is reused only when its full identity remains valid.                                            |
 
 Do not run supplemental suites merely because pack work touches many modules.
 Follow the governing release's event rules and the repository's final-gate
@@ -533,7 +633,8 @@ reserve selected broader platform and hardening work for its authorized event.
 To reduce interference with concurrent product development, keep initial work
 at the generic pack, report, and runner boundaries. Coordinate later extraction
 around an agreed committed language baseline, especially Python contracts and
-Astro. After a language's public cutover, subsequent fixes belong to its pack.
+Astro. After a provider's public cutover, subsequent fixes belong to its owning
+pack.
 
 The existing [universal-capabilities plan](https://github.com/riteofstring/code-polishy/blob/436c7a9855f030874878263a89807f51f402bf89/docs/plans/universal-language-pack-capabilities.md)
 and [first-party extraction plan](https://github.com/riteofstring/code-polishy/blob/436c7a9855f030874878263a89807f51f402bf89/docs/plans/installable-first-party-language-packs.md)
