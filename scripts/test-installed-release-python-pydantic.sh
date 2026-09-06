@@ -97,7 +97,7 @@ test_command = [python, "-B", "-m", "unittest", "discover", "-s", "src/tests", "
 config = {
     "version": 4,
     "project": {"kind": "application", "capabilities": []},
-    "scope": {"entryPoints": ["src/main.py"]},
+    "scope": {"entryPoints": ["src/main.py"], "pythonContracts": [{"project": "pyproject.toml", "kind": "type", "target": "pydantic.BaseModel", "attributes": ["model_config"], "annotatedFields": True, "reason": "Model validation consumes declared fields and configuration."}]},
     "quality": {},
     "modules": [{"name": "application", "paths": ["src/reported.py", "src/models/**", "src/main.py", "scripts/**"]}],
     "checks": [

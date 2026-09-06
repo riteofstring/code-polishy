@@ -320,6 +320,9 @@ func referencedSuite(suites []TestSuite, name, label string) (TestSuite, error) 
 }
 
 func validateScope(config *Config) error {
+	if err := validatePythonContracts(config.Scope.PythonContracts); err != nil {
+		return err
+	}
 	if err := rejectUniversalPatterns(config.Scope.Exclude, "scope.exclude"); err != nil {
 		return err
 	}

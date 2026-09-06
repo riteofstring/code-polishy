@@ -2,7 +2,7 @@
 name = "code-polishy-python-facts"
 version = "0.23.0"
 requires-python = "==3.12.*"
-dependencies = ["packaging==26.3"]
+dependencies = ["astroid==4.1.2", "packaging==26.3"]
 
 [tool.uv]
 package = false

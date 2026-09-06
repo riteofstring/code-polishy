@@ -2,7 +2,6 @@ import json
 import sys
 
 from module_imports import module_imports
-from pydantic_resolver import pydantic_members
 from type_resolver import (
     MAX_FACT_BYTES,
     MAX_MODULES,
@@ -20,7 +19,7 @@ def resolve_stream(source, output):
     )
     _exact(header, ("protocol", "count"), "type project header")
     if (
-        header["protocol"] != "python-type-project/v2"
+        header["protocol"] != "python-type-project/v3"
         or type(header["count"]) is not int
         or not 0 <= header["count"] <= MAX_MODULES
     ):
@@ -48,7 +47,6 @@ def resolve_stream(source, output):
             for item in modules
         ],
         "reads": typed_dict_reads(modules),
-        "pydantic": pydantic_members(modules),
         "imports": module_imports(modules),
     }
     encoded = json.dumps(

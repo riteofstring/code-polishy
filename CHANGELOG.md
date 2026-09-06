@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.24.5
+
+- Adopt pinned Astroid inference for contained Python ancestry and nested runtime
+  exports without importing target dependencies.
+- Add repository-owned Python runtime contracts for types, decorators, module
+  bindings, and entry points. Pytest uses bundled declarations; Pydantic,
+  pydantic-settings, Hypothesis, and other third-party integrations require
+  explicit configuration.
+- Keep React Hooks checks on authored source without applying them to generated
+  bundles; retain other applicable generated-code checks.
+- Include Astroid's license, corresponding source, and exact SBOM identity in
+  native release artifacts.
+
 ## 0.24.4 - 2026-09-05
 
 - Track SQLite connection construction at each write, including instance

@@ -47,36 +47,50 @@ read set; an empty external-consumer set performs no dependency scan.
 The public declaration shapes and supported consumer syntax are documented in
 [Code Quality](../policies/code-quality.md#python-ruff-vulture-and-ty).
 
-## Release-owned framework contracts
+## Repository-owned contracts and bundled integrations
 
-Known public framework APIs need shared semantic models rather than a local
-reachability declaration for each consumer. The framework resolver reuses the
-bounded source trees and compact project binding resolver. It recognizes exact
-pytest autouse decorators and module marks, SQLite connection row-factory
-writes, Hypothesis stateful registrations, and standard-library I/O and HTTP
-callbacks. It never imports or
-executes target dependencies. Unknown frameworks continue to use the explicit
-external-contract mechanism described above.
+`scope.pythonContracts` is repository authority for runtime consumption that
+static inference cannot discover. A declaration identifies one Python project,
+an exact type, decorator, module binding, or runtime entry point, and its
+consumed members. Its required reason explains the runtime contract. These
+records are reviewed source configuration and participate in gate identity.
+They are not independently authenticated dependency evidence, and do not bypass
+dependency admission or vulnerability checks. Existing external-consumer
+contracts above remain available when installed-source evidence is wanted.
 
-Positive evidence is a source location and symbol, not a global name whitelist.
-Re-exports and inheritance must resolve to the named external API. Receiver
-construction, parameter annotations, aliases, and active context bindings must
-be proven at the write. A forward flow state tracks local and instance-attribute
-receivers, including assignments in `try` blocks after `None` initialization.
-Reassignment invalidates prior receiver evidence. Branch joins retain only
-connections proven on every incoming path. Exception handlers, cleanup paths,
-and repeated loop bodies begin conservatively; construction within those paths
-can establish new evidence. Unresolved optional framework identities grant no
-positive evidence; they do not replace diagnostics for explicitly configured
-external contracts. Structural and resource failures while loading project facts
-still fail coverage. Unknown calls invalidate instance-attribute evidence
-and bindings that closures can reassign. Unknown context managers may suppress
-exceptions, so their normal exit alone cannot establish a connection. Custom
-factories cannot prove a standard SQLite connection. When Vulture's line-based output cannot distinguish two same-named
-writes, neither write is hidden by the built-in contract.
+Astroid supplies class ancestry and nested object inference over the complete
+contained project source snapshot. Its import resolver accepts only those
+snapshots and synthetic external class anchors identified by bundled or
+repository declarations. It does not load the target environment, execute
+project imports, or enable dependency-specific Astroid transforms. An external
+anchor expresses the declared contract; it does not claim to reconstruct an
+unavailable library's implementation. Inference failure cannot establish use.
 
-`framework_contracts` exports `framework_members` as its embedded Python API.
-The Go-owned Vulture adapter calls that API with the already parsed project and
-combines its exact locations with TypedDict, Pydantic, and configured contract
-evidence. The existing coverage-failure boundary still withholds derivative
-findings if complete project facts are unavailable.
+The contract interpreter matches exact source definitions. Type declarations
+identify consumed methods, attributes, decorated methods, and optionally
+annotated fields. Entry points name `module:attribute`, including nested instance
+attributes, with optional consumed methods. Missing or ambiguous entry points
+and declarations matching no source definitions produce explicit policy
+findings. Unrelated same-named symbols remain subject to dead-code analysis.
+Repositories must derive declarations from their real runtime interfaces,
+not generate them mechanically from unused-code reports.
+
+Pytest autouse fixtures and module marks are bundled declarations interpreted
+by this same mechanism. Standard-library callbacks and SQLite construction
+semantics remain release-owned. Third-party model and state-machine behavior
+requires explicit declarations; adding another library does not require adding
+branches to the analyzer.
+
+A forward flow state tracks local and instance-attribute receivers. Assignments
+inside `try` blocks can establish receiver evidence after `None` initialization.
+Reassignment invalidates prior evidence; branch joins retain only bindings
+proven on every incoming path. Unknown calls invalidate instance-attribute
+bindings and names writable by closures. Unknown context managers, exception
+handlers, and repeated loop bodies begin conservatively. Ambiguous same-line
+writes receive no positive evidence.
+
+The Go-owned Vulture adapter combines contract locations with TypedDict reads,
+standard-library protocols, and explicit external-consumer evidence. Complete
+source coverage remains mandatory. Invalid configuration is reported as a
+contract problem, while failure to obtain the whole project fact set withholds
+derivative findings.

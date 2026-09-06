@@ -91,7 +91,7 @@ keep the sealed bundle portable and minimal.
   `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release.
   Complete source files are partitioned deterministically. Compact type facts
   resolve TypedDict reads, Pydantic members, and module imports across the validated union through
-  `python-type-project/v2`, and
+  `python-type-project/v3`, and
   Vulture uses the same parser, AST extractor, and semantic resolvers. Consumer
   target resolution also accepts bounded compact records through
   `python-reachability-project/v1`. Independent object-import resolution uses

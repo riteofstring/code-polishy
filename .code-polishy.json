@@ -35,6 +35,10 @@
         "path": "docs/design/python-contract-evidence.md",
         "sourcePaths": [
           "internal/pythonfacts/framework_contracts.py",
+          "internal/pythonfacts/astroid_contracts.py",
+          "internal/pythonfacts/repository_contracts.py",
+          "internal/policy/python_contracts.go",
+          "internal/quality/vulture_contracts.go",
           "internal/pythonfacts/connection_flow.py",
           "internal/quality/vulture.go",
           "internal/repository/python_plugins.go",
@@ -1340,6 +1344,12 @@
   "supplyChain": {
     "releaseArtifacts": [
       {
+        "name": "astroid",
+        "versionFile": "tools/astroid-version.txt",
+        "source": "pypi",
+        "locator": "astroid"
+      },
+      {
         "name": "go",
         "versionFile": "scripts/go_version.txt",
         "source": "go-toolchain"
@@ -1464,7 +1474,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1473",
+      "subject": "1483",
       "reason": "The explicit suite, test-ownership, and design-mapping inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

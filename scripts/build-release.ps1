@@ -92,6 +92,21 @@ try {
         $PackagingMetadata.Count -ne 1 -or $PackagingMetadata[0].Name -ne "packaging-$PackagingRelease.dist-info") {
       throw "The release stage does not carry packaging $PackagingRelease."
     }
+    $AstroidRelease = (Get-Content -Raw -LiteralPath (Join-Path $Root 'tools/astroid-version.txt')).Trim()
+    if ($AstroidRelease -notmatch '^[0-9]+\.[0-9]+(?:\.[0-9]+)?$') {
+      throw 'The release stage has an invalid astroid carrier pin.'
+    }
+    $AstroidMarker = Join-Path $PythonRoot '.code-polishy-astroid-release'
+    $AstroidReported = @(& $Python -I -B -c 'import importlib.metadata; print(importlib.metadata.version("astroid"))')
+    $AstroidExitCode = $LASTEXITCODE
+    $AstroidMetadata = @(Get-ChildItem -LiteralPath $SitePackages -Directory -Filter 'astroid-*.dist-info')
+    if (-not (Test-Path -LiteralPath $AstroidMarker -PathType Leaf) -or
+        (Get-Content -Raw -LiteralPath $AstroidMarker).Trim() -ne $AstroidRelease -or
+        $AstroidExitCode -ne 0 -or $AstroidReported.Count -ne 1 -or $AstroidReported[0].Trim() -ne $AstroidRelease -or
+        $AstroidMetadata.Count -ne 1 -or $AstroidMetadata[0].Name -ne "astroid-$AstroidRelease.dist-info") {
+      throw "The release stage does not carry astroid $AstroidRelease."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $PythonRoot 'astroid-source.tar.gz') -PathType Leaf)) { throw 'Astroid corresponding source is missing.' }
     foreach ($Relative in @('Scripts/pip.exe','Scripts/pip3.exe','Scripts/pip3.12.exe','Lib/ensurepip','Lib/site-packages/pip')) {
       if (Test-Path -LiteralPath (Join-Path $PythonRoot $Relative)) {
         throw "The release stage carries the ungoverned Python installer $Relative."
@@ -102,7 +117,7 @@ try {
   foreach ($Relative in @(
     'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','artifact-security',
     'scripts/go_version.txt','tools/govulncheck-version.txt','tools/node-version.txt','tools/osv-scanner-version.txt',
-    'internal/pythonfacts/pyproject.toml','internal/pythonfacts/uv.lock','tools/packaging-version.txt','tools/packaging_wheel_checksums.txt',
+    'internal/pythonfacts/pyproject.toml','internal/pythonfacts/uv.lock','tools/packaging-version.txt','tools/packaging_wheel_checksums.txt','tools/astroid-version.txt','tools/astroid_checksums.txt',
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
     'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',

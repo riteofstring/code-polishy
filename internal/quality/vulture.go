@@ -17,7 +17,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 7
+const pythonVultureProtocolVersion = 8
 
 const pythonVultureVersion = "2.16"
 
@@ -28,9 +28,8 @@ from collections import defaultdict
 from source_parser import parse_source
 from type_facts import type_facts
 from type_resolver import typed_dict_reads
-from pydantic_resolver import pydantic_members
-from framework_contracts import framework_members
-P=7
+from repository_contracts import framework_members
+P=8
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -180,7 +179,7 @@ try:
  b=sys.stdin.buffer.read(M+1)
  if len(b)>M:raise ValueError("input exceeds limit")
  x=json.loads(b)
- if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends","attributes"}:raise ValueError("invalid request")
+ if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends","attributes","contracts"}:raise ValueError("invalid request")
  if type(x["protocol"]) is not int or x["protocol"]!=P or not isinstance(x["tool_version"],str):raise ValueError("invalid protocol")
  root=q(x["root"])
  if not os.path.isabs(root):raise ValueError("root is not absolute")
@@ -251,11 +250,11 @@ try:
  try:
   type_modules=_vulture_type_modules(fs)
   typed=typed_dict_reads(type_modules)
-  models=pydantic_members(type_modules)
-  frameworks=framework_members(type_modules,fs)
+  frameworks,resolved,problems=framework_members(type_modules,fs,x["contracts"])
+  o["resolved"].extend(resolved);o["problems"].extend(problems)
  except Exception as z:
   o["facts_error"]=str(z)[:S];raise
- keep={(r["path"],r["line"],r["end"],r["name"]) for r in models}|{(r["field"]["path"],r["field"]["line"],r["field"]["line"],r["field"]["key"]) for r in typed}
+ keep={(r["field"]["path"],r["field"]["line"],r["field"]["line"],r["field"]["key"]) for r in typed}
  keep.update(frameworks)
  for f in fs:keep.update(ka(f))
  for r in rs:
@@ -337,7 +336,13 @@ type pythonVultureAttribute struct {
 	Write     policy.PythonSourceLocation   `json:"write"`
 }
 
+type pythonVultureContract struct {
+	policy.PythonContract
+	ID string `json:"id"`
+}
+
 type pythonVultureRequest struct {
+	Contracts   []pythonVultureContract  `json:"contracts"`
 	Protocol    int                      `json:"protocol"`
 	ToolVersion string                   `json:"tool_version"`
 	Root        string                   `json:"root"`
@@ -408,7 +413,7 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 	attributes, _ := pythonVultureAttributes(repo, project)
 	request := pythonVultureRequest{
 		Protocol: pythonVultureProtocolVersion, ToolVersion: pythonVultureVersion, Root: repo.Root,
-		Files: files, References: references, Backends: backends, Attributes: attributes,
+		Files: files, References: references, Backends: backends, Attributes: attributes, Contracts: pythonVultureContracts(repo, project),
 	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
@@ -597,6 +602,9 @@ func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, pro
 func pythonQualityConfiguredReferenceOrigins(repo repository.Repository) map[string][]pythonVultureReferenceOrigin {
 	origins := map[string][]pythonVultureReferenceOrigin{}
 	configPath := pythonVultureConfigPath(repo)
+	for _, contract := range repo.Config.Scope.PythonContracts {
+		origins[contract.Project] = append(origins[contract.Project], pythonContractOrigin(repo, contract))
+	}
 	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 		origins[reference.Project] = append(origins[reference.Project], pythonVultureReferenceOrigin{
 			Check: "policy.pythonReachability", Path: configPath, Subject: pythonVultureConfigReferenceID(reference),
@@ -678,7 +686,11 @@ func pythonVultureFindings(repo repository.Repository, project repository.Python
 	for id, origin := range attributeOrigins {
 		origins[id] = origin
 	}
-	if err := validatePythonVultureResponse(project.Files, references, backends, attributes, response); err != nil {
+	contracts := pythonVultureContracts(repo, project)
+	for _, contract := range contracts {
+		origins[contract.ID] = pythonContractOrigin(repo, contract.PythonContract)
+	}
+	if err := validatePythonVultureResponse(project.Files, references, backends, attributes, contracts, response); err != nil {
 		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
 	}
 	findings := pythonVultureReferenceFindings(response.Problems, origins)
@@ -754,11 +766,11 @@ func pythonVultureResponseWireComplete(wire pythonVultureResponseWire) bool {
 		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil && wire.FactsError != nil && wire.Reachability != nil
 }
 
-func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, response pythonVultureResponse) error {
+func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract, response pythonVultureResponse) error {
 	if err := validatePythonVultureCovered(files, response.Covered); err != nil {
 		return err
 	}
-	if err := validatePythonVultureReferences(references, backends, attributes, response.Resolved, response.Problems); err != nil {
+	if err := validatePythonVultureReferences(references, backends, attributes, contracts, response.Resolved, response.Problems); err != nil {
 		return err
 	}
 	if err := validatePythonReachabilityEvidence(files, references, response); err != nil {
@@ -785,8 +797,8 @@ func validatePythonVultureCovered(files, covered []string) error {
 	return nil
 }
 
-func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, resolved []string, problems []pythonVultureProblem) error {
-	remaining, err := pythonVultureRequestedReferences(references, backends, attributes)
+func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract, resolved []string, problems []pythonVultureProblem) error {
+	remaining, err := pythonVultureRequestedReferences(references, backends, attributes, contracts)
 	if err != nil {
 		return err
 	}
@@ -802,7 +814,7 @@ func validatePythonVultureReferences(references []pythonVultureReference, backen
 	return nil
 }
 
-func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute) (map[string]bool, error) {
+func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract) (map[string]bool, error) {
 	requested := map[string]bool{}
 	for _, reference := range references {
 		if requested[reference.ID] {
@@ -821,6 +833,12 @@ func pythonVultureRequestedReferences(references []pythonVultureReference, backe
 			return nil, fmt.Errorf("vulture references are not unique")
 		}
 		requested[attribute.ID] = true
+	}
+	for _, contract := range contracts {
+		if requested[contract.ID] {
+			return nil, fmt.Errorf("vulture contracts are not unique")
+		}
+		requested[contract.ID] = true
 	}
 	return requested, nil
 }

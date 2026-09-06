@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const typeProjectProtocol = "python-type-project/v2"
+const typeProjectProtocol = "python-type-project/v3"
 
 //go:embed source_parser.py
 var sourceParserSource string
@@ -36,11 +36,14 @@ var typeProjectSource string
 //go:embed connection_flow.py
 var connectionFlowSource string
 
+//go:embed astroid_contracts.py
+var astroidContractsSource string
+
 //go:embed framework_contracts.py
 var frameworkContractsSource string
 
-//go:embed pydantic_resolver.py
-var pydanticResolverSource string
+//go:embed repository_contracts.py
+var repositoryContractsSource string
 
 //go:embed loader_bindings.py
 var loaderBindingsSource string
@@ -76,10 +79,9 @@ type TypedDictRead struct {
 }
 
 type TypeProject struct {
-	Imports  []ModuleImport           `json:"imports"`
-	Reads    []TypedDictRead          `json:"reads"`
-	Pydantic []ReachabilityDefinition `json:"pydantic"`
-	Identity string                   `json:"identity"`
+	Imports  []ModuleImport  `json:"imports"`
+	Reads    []TypedDictRead `json:"reads"`
+	Identity string          `json:"identity"`
 }
 
 type typeCoverage struct {
@@ -88,11 +90,10 @@ type typeCoverage struct {
 }
 
 type typeProjectResponse struct {
-	Imports  []ModuleImport           `json:"imports"`
-	Protocol string                   `json:"protocol"`
-	Covered  []typeCoverage           `json:"covered"`
-	Reads    []TypedDictRead          `json:"reads"`
-	Pydantic []ReachabilityDefinition `json:"pydantic"`
+	Imports  []ModuleImport  `json:"imports"`
+	Protocol string          `json:"protocol"`
+	Covered  []typeCoverage  `json:"covered"`
+	Reads    []TypedDictRead `json:"reads"`
 }
 
 type typeProjectReader struct {
@@ -121,7 +122,7 @@ func validateSourceTypeFacts(data json.RawMessage) error {
 }
 
 func TypeSupportSource() string {
-	return embeddedPythonModule("object_predicates", objectPredicatesSource) + embeddedPythonModule("type_facts", typeFactsSource) + embeddedPythonModule("type_resolver", typeResolverSource) + embeddedPythonModule("pydantic_resolver", pydanticResolverSource) + embeddedPythonModule("connection_flow", connectionFlowSource) + embeddedPythonModule("framework_contracts", frameworkContractsSource) + embeddedPythonModule("loader_bindings", loaderBindingsSource) + embeddedPythonModule("module_evidence", moduleEvidenceSource) + embeddedPythonModule("module_imports", moduleImportsSource)
+	return embeddedPythonModule("object_predicates", objectPredicatesSource) + embeddedPythonModule("type_facts", typeFactsSource) + embeddedPythonModule("type_resolver", typeResolverSource) + embeddedPythonModule("connection_flow", connectionFlowSource) + embeddedPythonModule("astroid_contracts", astroidContractsSource) + embeddedPythonModule("framework_contracts", frameworkContractsSource) + embeddedPythonModule("repository_contracts", repositoryContractsSource) + embeddedPythonModule("loader_bindings", loaderBindingsSource) + embeddedPythonModule("module_evidence", moduleEvidenceSource) + embeddedPythonModule("module_imports", moduleImportsSource)
 }
 
 func ParserSupportSource() string {
@@ -156,7 +157,7 @@ func ResolveTypeProject(ctx context.Context, python string, modules []TypeModule
 		return TypeProject{}, err
 	}
 	_, _ = digest.Write(data)
-	return TypeProject{Imports: response.Imports, Reads: response.Reads, Pydantic: response.Pydantic, Identity: hex.EncodeToString(digest.Sum(nil))}, nil
+	return TypeProject{Imports: response.Imports, Reads: response.Reads, Identity: hex.EncodeToString(digest.Sum(nil))}, nil
 }
 
 func newTypeProjectReader(modules []TypeModule) (*typeProjectReader, error) {
@@ -227,13 +228,10 @@ func decodeTypeProject(data []byte, modules []TypeModule) (typeProjectResponse, 
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return response, fmt.Errorf("python type project has trailing output")
 	}
-	if response.Protocol != typeProjectProtocol || response.Reads == nil || response.Pydantic == nil || response.Imports == nil {
+	if response.Protocol != typeProjectProtocol || response.Reads == nil || response.Imports == nil {
 		return response, fmt.Errorf("python type project has incomplete source coverage")
 	}
 	if _, err := projectCoveredFiles(response.Covered, modules); err != nil {
-		return response, err
-	}
-	if err := validatePydanticMembers(response.Pydantic, modules); err != nil {
 		return response, err
 	}
 	if err := validateModuleImports(response.Imports, modules); err != nil {

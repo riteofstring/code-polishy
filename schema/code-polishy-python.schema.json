@@ -7,15 +7,27 @@
       "additionalProperties": false,
       "required": ["url", "vcs_info"],
       "properties": {
-        "url": { "type": "string", "minLength": 1, "maxLength": 4096 },
-        "subdirectory": { "type": "string", "maxLength": 4096 },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "subdirectory": {
+          "type": "string",
+          "maxLength": 4096
+        },
         "vcs_info": {
           "type": "object",
           "additionalProperties": false,
           "required": ["vcs", "commit_id"],
           "properties": {
-            "vcs": { "const": "git" },
-            "commit_id": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+            "vcs": {
+              "const": "git"
+            },
+            "commit_id": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{40}$"
+            },
             "requested_revision": {
               "type": "string",
               "minLength": 1,
@@ -37,7 +49,9 @@
         "check"
       ],
       "properties": {
-        "project": { "$ref": "code-polishy.schema.json#/$defs/pyprojectPath" },
+        "project": {
+          "$ref": "code-polishy.schema.json#/$defs/pyprojectPath"
+        },
         "consumer": {
           "$ref": "code-polishy.schema.json#/$defs/pythonDynamicConsumer"
         },
@@ -50,8 +64,12 @@
           "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain",
           "maxLength": 4096
         },
-        "inputGrammar": { "const": "python-module-object/v1" },
-        "check": { "$ref": "#/$defs/runtimeCheck" },
+        "inputGrammar": {
+          "const": "python-module-object/v1"
+        },
+        "check": {
+          "$ref": "#/$defs/runtimeCheck"
+        },
         "configuration": {
           "$ref": "code-polishy.schema.json#/$defs/pythonObjectImportInput"
         }
@@ -62,13 +80,80 @@
       "additionalProperties": false,
       "required": ["kind", "protocol", "site"],
       "properties": {
-        "kind": { "enum": ["isinstance", "issubclass", "validator-call"] },
+        "kind": {
+          "enum": ["isinstance", "issubclass", "validator-call"]
+        },
         "protocol": {
           "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain",
           "maxLength": 4096
         },
         "site": {
           "$ref": "code-polishy.schema.json#/$defs/pythonSourceLocation"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "kind", "target", "reason"],
+      "properties": {
+        "project": {
+          "$ref": "code-polishy.schema.json#/$defs/pyprojectPath"
+        },
+        "kind": {
+          "enum": ["type", "decorator", "entry-point", "module-binding"]
+        },
+        "target": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "members": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "maxLength": 255
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "maxLength": 255
+          }
+        },
+        "decorators": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain",
+            "maxLength": 4096
+          }
+        },
+        "annotatedFields": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "keywords": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
         }
       }
     }

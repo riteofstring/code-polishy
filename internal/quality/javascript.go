@@ -203,6 +203,7 @@ func javascriptLimit(value, fallback int) int {
 }
 
 func javascriptLintActivation(repo repository.Repository, path string) javascript.LintActivation {
+	generated := repo.IsGenerated(path)
 	path = repo.JavaScriptContextPath(path)
 	activation := javascript.LintActivation{}
 	nearest := ""
@@ -212,6 +213,9 @@ func javascriptLintActivation(repo repository.Repository, path string) javascrip
 		}
 		nearest = scope.Root
 		activation = javascript.LintActivation{ReactHooks: scope.ReactHooks, JSXAccessibility: scope.JSXAccessibility}
+	}
+	if generated {
+		activation.ReactHooks = false
 	}
 	return activation
 }
@@ -223,6 +227,11 @@ func javascriptScopeOwns(root, path string) bool {
 func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult, complexity ...bool) []policy.Finding {
 	checkComplexity := len(complexity) == 0 || complexity[0]
 	findings := []policy.Finding{}
+	for _, entry := range result.Unsupported {
+		if repo.IsGenerated(entry.Path) {
+			findings = append(findings, policy.Finding{Check: "quality.lint", Path: entry.Path, Subject: "javascript-coverage", Message: "Generated JavaScript cannot be analyzed: " + entry.Reason})
+		}
+	}
 	findings = append(findings, javascriptLintCommentFindings(repo, result)...)
 	return append(findings, javascriptLintViolationFindings(result.Findings, checkComplexity)...)
 }

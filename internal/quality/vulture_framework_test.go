@@ -12,7 +12,7 @@ func TestPythonVultureBuiltInFrameworkContracts(t *testing.T) {
 	}{
 		{"pytest", "import pytest\npytestmark = [pytest.mark.integration]\n@pytest.fixture(autouse=True)\ndef prepare_environment():\n    return 1\n@pytest.fixture\ndef unused_fixture():\n    return 2\ndef unused_helper():\n    return 3\n", []string{"pytestmark", "prepare_environment"}, []string{"unused_fixture", "unused_helper"}},
 		{"sqlite", "import sqlite3\ndef configure():\n    connection = sqlite3.connect(':memory:')\n    connection.row_factory = sqlite3.Row\n    connection.unused_setting = True\n    return connection\n", []string{"row_factory"}, []string{"unused_setting"}},
-		{"hypothesis", "from hypothesis.stateful import RuleBasedStateMachine\nclass ExampleMachine(RuleBasedStateMachine):\n    def teardown(self):\n        print('cleanup')\n    def unused_hook(self):\n        return 1\n", []string{"teardown"}, []string{"unused_hook"}},
+		{"hypothesis", "from hypothesis.stateful import RuleBasedStateMachine\nclass ExampleMachine(RuleBasedStateMachine):\n    def teardown(self):\n        print('cleanup')\n    def unused_hook(self):\n        return 1\n", nil, []string{"teardown", "unused_hook"}},
 		{"unrelated", "class Plain:\n    def teardown(self):\n        return 1\ndef configure(value):\n    value.row_factory = str\npytestmark = 1\n", nil, []string{"teardown", "row_factory", "pytestmark"}},
 	}
 	for _, test := range cases {
@@ -44,7 +44,7 @@ func TestPythonVultureFrameworkAliasesAndReceiverBoundaries(t *testing.T) {
 		{"reexports", map[string]string{
 			"src/contracts.py": "from pytest import fixture as automatic\nfrom hypothesis.stateful import RuleBasedStateMachine as Machine\nclass BaseMachine(Machine):\n    pass\n",
 			"src/example.py":   "from contracts import automatic, BaseMachine\nfrom pytest import mark as markers\npytestmark = markers.integration\n@automatic(autouse=True)\ndef initialize_case():\n    return 1\nclass MachineCase(BaseMachine):\n    def teardown(self):\n        print('cleanup')\n    def unused_hook(self):\n        return 1\n",
-		}, []string{"pytestmark", "initialize_case", "teardown"}, []string{"unused_hook"}},
+		}, []string{"pytestmark", "initialize_case"}, []string{"teardown", "unused_hook"}},
 		{"connection aliases", map[string]string{"src/example.py": "from sqlite3 import connect as open_database, Connection\ndef configure():\n    connection = open_database(':memory:', factory=Connection)\n    alias = connection\n    alias.row_factory = str\n    alias.unused_setting = True\n    return alias\n"}, []string{"row_factory"}, []string{"unused_setting"}},
 		{"connection context", map[string]string{"src/example.py": "import sqlite3\ndef configure():\n    with sqlite3.connect(':memory:') as connection:\n        connection.row_factory = sqlite3.Row\n        connection.unused_setting = True\n"}, []string{"row_factory"}, []string{"unused_setting"}},
 		{"typed connection", map[string]string{"src/example.py": "from sqlite3 import Connection\ndef configure(connection: Connection):\n    connection.row_factory = str\n    connection.unused_setting = True\n"}, []string{"row_factory"}, []string{"unused_setting"}},

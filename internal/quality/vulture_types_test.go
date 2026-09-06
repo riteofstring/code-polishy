@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
@@ -116,7 +117,13 @@ func TestPythonVultureOversizedCallFactsWithholdProjectDiagnostics(t *testing.T)
 
 func runTypedDictVulture(t *testing.T, sources map[string]string) (repository.Repository, repository.PythonProject, pythonVultureResponse, []byte) {
 	t.Helper()
+	return runContractVulture(t, sources, nil)
+}
+
+func runContractVulture(t *testing.T, sources map[string]string, contracts []policy.PythonContract) (repository.Repository, repository.PythonProject, pythonVultureResponse, []byte) {
+	t.Helper()
 	repo := pythonQualityRepository(t)
+	repo.Config.Scope.PythonContracts = contracts
 	repo.PolicyRoot = pythonVulturePolicyRoot(t)
 	if !pythonVultureRuntimeInstalled(t, repo) {
 		t.Fatal("TypedDict tests require the policy-owned CPython and Vulture")

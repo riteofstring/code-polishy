@@ -11,7 +11,9 @@ policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "${policy_root}/tools/install-ty.sh"
 "${policy_root}/tools/install-python.sh"
 "${policy_root}/tools/install-packaging.sh"
+"${policy_root}/tools/install-astroid.sh"
 python_release="$(tr -d '[:space:]' <"${policy_root}/tools/python-version.txt")"
+astroid_version="$(tr -d '[:space:]' <"${policy_root}/tools/astroid-version.txt")"
 packaging_version="$(tr -d '[:space:]' <"${policy_root}/tools/packaging-version.txt")"
 case "$(uname -s)" in
   Darwin) python_os="darwin" ;;
@@ -30,6 +32,7 @@ facts_environment_valid() {
   [[ -f "${facts_environment}/pyvenv.cfg" ]] && [[ -x "${facts_python}" ]] &&
     [[ "$("${facts_python}" -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))' 2>/dev/null || true)" == "${python_release%%+*}" ]] &&
     [[ "$("${facts_python}" -I -B -c 'import importlib.metadata; print(importlib.metadata.version("packaging"))' 2>/dev/null || true)" == "${packaging_version}" ]] &&
+    [[ "$("${facts_python}" -I -B -c 'import importlib.metadata; print(importlib.metadata.version("astroid"))' 2>/dev/null || true)" == "${astroid_version}" ]] &&
     [[ ! -e "${facts_environment}/bin/pip" ]]
 }
 if ! facts_environment_valid; then

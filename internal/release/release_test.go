@@ -37,6 +37,8 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 	}
 	files[".tools/javascript/bundle/node_modules/.package-map.json"] = `{"packages":{".":{"url":"..","dependencies":{"fixture":"fixture@1.0.0"}},"fixture@1.0.0":{"url":"./fixture","dependencies":{"fixture":"fixture@1.0.0"}}}}`
 	files["tools/javascript_bundle_inventory.txt"] = "fixture@1.0.0\tMIT\n"
+	files["tools/astroid-version.txt"] = "4.1.2\n"
+	files[".tools/python/fixture/lib/python3.12/site-packages/astroid-4.1.2.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: astroid\nVersion: 4.1.2\nLicense-Expression: LGPL-2.1-or-later\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/packaging-26.3.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: packaging\nVersion: 26.3\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/vulture-2.16.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: vulture\nVersion: 2.16\nRequires-Dist: packaging>=25\n\n"
 	paths := append(slices.Collect(maps.Keys(files)), slices.Collect(maps.Keys(links))...)

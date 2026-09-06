@@ -566,7 +566,7 @@ func TestGeneratedJavaScriptUsesItsSourcePackageTypeProject(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptInheritsSourcePackageLintActivation(t *testing.T) {
+func TestGeneratedJavaScriptRetainsAccessibilityWithoutAuthoredHookRules(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
@@ -575,7 +575,7 @@ func TestGeneratedJavaScriptInheritsSourcePackageLintActivation(t *testing.T) {
 	}}
 	repo.Config.JavaScriptLintScopes = []policy.JavaScriptLintScope{{Root: "packages/web", ReactHooks: true, JSXAccessibility: true}}
 	activation := javascriptLintActivation(repo, "generated/view.tsx")
-	if !activation.ReactHooks || !activation.JSXAccessibility {
+	if activation.ReactHooks || !activation.JSXAccessibility {
 		t.Fatalf("activation = %+v", activation)
 	}
 }

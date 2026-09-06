@@ -29,6 +29,7 @@ Add-Checksums 'tools/windows_tool_checksums.txt'
 Add-Checksums 'tools/python_runtime_checksums.txt'
 Add-Checksums 'tools/vulture_wheel_checksums.txt'
 Add-Checksums 'tools/packaging_wheel_checksums.txt'
+Add-Checksums 'tools/astroid_checksums.txt'
 
 $Scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("code-polishy-tools-" + [guid]::NewGuid().ToString('N'))
 $BundleInstallation = $null
@@ -420,6 +421,11 @@ with zipfile.ZipFile(wheel) as archive:
     }
   }
 
+  $AstroidVersion = Read-Pin 'tools/astroid-version.txt'
+  $AstroidWheel = Get-Verified "astroid-$AstroidVersion-py3-none-any.whl" "https://files.pythonhosted.org/packages/54/97/4ee9b0438e85bf0a808a89ef0be357319252ab27e1b313ae0aef7aeaa5a6/astroid-$AstroidVersion-py3-none-any.whl"
+  $AstroidSource = Get-Verified "astroid-$AstroidVersion.tar.gz" "https://files.pythonhosted.org/packages/da/fd/24475b7cfb70298e8921bc077adb46a3fe77887422545d8a061573e130ee/astroid-$AstroidVersion.tar.gz"
+  & (Join-Path $PolicyRoot 'tools/install-astroid.ps1') -Python $Python -PythonRoot $PythonRoot -Wheel $AstroidWheel -Source $AstroidSource -Version $AstroidVersion
+
   $FactsEnvironment = Join-Path $PolicyRoot 'internal/pythonfacts/.venv'
   $FactsPython = Join-Path $FactsEnvironment 'Scripts/python.exe'
   function Test-PythonFactsEnvironment {
@@ -428,9 +434,9 @@ with zipfile.ZipFile(wheel) as archive:
         (Test-Path -LiteralPath (Join-Path $FactsEnvironment 'Scripts/pip.exe'))) {
       return $false
     }
-    $FactsProbe = @(& $FactsPython -I -B -c 'import importlib.metadata,sys; print(".".join(str(value) for value in sys.version_info[:3])); print(importlib.metadata.version("packaging"))')
-    return $LASTEXITCODE -eq 0 -and $FactsProbe.Count -eq 2 -and
-      $FactsProbe[0].Trim() -eq $PythonVersion -and $FactsProbe[1].Trim() -eq $PackagingVersion
+    $FactsProbe = @(& $FactsPython -I -B -c 'import importlib.metadata,sys; print(".".join(str(value) for value in sys.version_info[:3])); print(importlib.metadata.version("packaging")); print(importlib.metadata.version("astroid"))')
+    return $LASTEXITCODE -eq 0 -and $FactsProbe.Count -eq 3 -and
+      $FactsProbe[0].Trim() -eq $PythonVersion -and $FactsProbe[1].Trim() -eq $PackagingVersion -and $FactsProbe[2].Trim() -eq $AstroidVersion
   }
   if (-not (Test-PythonFactsEnvironment)) {
     if (Test-Path -LiteralPath $FactsEnvironment) {

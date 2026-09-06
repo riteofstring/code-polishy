@@ -146,7 +146,7 @@ func TestModuleImportEvidenceCannotSubstituteCurrentSourceCalls(t *testing.T) {
 		"kind":               func(value *typeProjectResponse) { value.Imports[0].Kind = "runtime" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			response := typeProjectResponse{Protocol: typeProjectProtocol, Covered: []typeCoverage{{Path: modules[0].Path, SourceSHA256: modules[0].SourceSHA256}}, Reads: []TypedDictRead{}, Pydantic: []ReachabilityDefinition{}, Imports: slices.Clone(resolved.Imports)}
+			response := typeProjectResponse{Protocol: typeProjectProtocol, Covered: []typeCoverage{{Path: modules[0].Path, SourceSHA256: modules[0].SourceSHA256}}, Reads: []TypedDictRead{}, Imports: slices.Clone(resolved.Imports)}
 			change(&response)
 			encoded, err := json.Marshal(response)
 			if err != nil {

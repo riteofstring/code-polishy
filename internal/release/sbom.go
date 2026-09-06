@@ -261,6 +261,11 @@ func (inventory *releaseSBOMInventory) addPython(root, rootRef string, manifest 
 		return err
 	}
 	expected := map[string]string{"packaging": manifest.Tools.Packaging, "vulture": manifest.Tools.Vulture}
+	astroid, err := os.ReadFile(filepath.Join(root, "tools", "astroid-version.txt"))
+	if err != nil {
+		return fmt.Errorf("read Astroid library pin: %w", err)
+	}
+	expected["astroid"] = strings.TrimSpace(string(astroid))
 	if len(inputs) != len(expected) {
 		return errors.New("release Python distribution inventory is incomplete or contains an ungoverned distribution")
 	}
@@ -320,7 +325,7 @@ func pythonReleaseDistributions(inputs []pythonfacts.Input, expected map[string]
 
 func (inventory *releaseSBOMInventory) addPythonComponents(rootRef string, expected map[string]string, distributions map[string]pythonfacts.Distribution) (map[string]string, error) {
 	refs := map[string]string{}
-	for _, name := range []string{"packaging", "vulture"} {
+	for _, name := range []string{"astroid", "packaging", "vulture"} {
 		version := expected[name]
 		distribution, found := distributions[name]
 		if !found || distribution.Version != version {

@@ -3,12 +3,14 @@ from collections import Counter
 
 from connection_flow import _ConnectionFlow
 from type_facts import _reference_name
-from type_resolver import MAX_DEPTH, _Resolver
-
-__all__ = ["framework_members"]
+from type_resolver import _Resolver
 
 
 class _FrameworkResolver(_Resolver):
+    def __init__(self, modules):
+        super().__init__(modules)
+        self.ancestry = None
+
     def reference(self, module, scope, name, seen=frozenset()):
         try:
             return super().reference(module, scope, name, seen)
@@ -25,26 +27,8 @@ class _FrameworkResolver(_Resolver):
         reference = self.reference(module, scope, name)
         return reference if isinstance(reference, str) else None
 
-    def derives(self, reference, roots, seen=frozenset()):
-        if isinstance(reference, str):
-            return reference in roots
-        if reference is None:
-            return False
-        path, binding = reference
-        identity = path, binding["scope"], binding["name"]
-        if identity in seen or len(seen) >= MAX_DEPTH:
-            return False
-        if binding["kind"] != "class":
-            return False
-        return any(
-            base["kind"] == "name"
-            and self.derives(
-                self.reference(self.files[path], binding["scope"], base["name"]),
-                roots,
-                seen | {identity},
-            )
-            for base in binding["bases"]
-        )
+    def derives(self, reference, roots):
+        return self.ancestry is not None and self.ancestry.derives(reference, roots)
 
 
 class _FrameworkVisitor(_ConnectionFlow):
@@ -67,7 +51,7 @@ class _FrameworkVisitor(_ConnectionFlow):
         start = decorators[0].lineno if decorators else node.lineno
         end = (
             node.end_lineno
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             else start
         )
         if self.writes[(start, name)] <= 1:
@@ -89,8 +73,6 @@ class _FrameworkVisitor(_ConnectionFlow):
         if self.callback(node):
             self.keep(node, node.name)
             self.callback_parameters(node)
-        if any(self.autouse(decorator) for decorator in node.decorator_list):
-            self.keep(node, node.name)
         previous = self.scope, self.owner, self.connections, self.mutable_names
         self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
         self.owner = None
@@ -108,47 +90,6 @@ class _FrameworkVisitor(_ConnectionFlow):
         self.connections = {path for path in self.connections if len(path) == 1}
 
     visit_AsyncFunctionDef = visit_FunctionDef
-
-    def autouse(self, node):
-        if self.module["scopes"][self.scope]["kind"] == "function":
-            return False
-        if (
-            not isinstance(node, ast.Call)
-            or node.args
-            or any(keyword.arg is None for keyword in node.keywords)
-            or self.qualified(node.func) != "pytest.fixture"
-        ):
-            return False
-        return any(
-            keyword.arg == "autouse"
-            and isinstance(keyword.value, ast.Constant)
-            and keyword.value.value is True
-            for keyword in node.keywords
-        )
-
-    def marks(self, node):
-        if isinstance(node, (ast.List, ast.Tuple)):
-            return bool(node.elts) and all(self.marks(value) for value in node.elts)
-        target = node.func if isinstance(node, ast.Call) else node
-        qualified = self.qualified(target)
-        return qualified is not None and qualified.startswith("pytest.mark.")
-
-    def visit_Assign(self, node):
-        if self.scope == "module" and self.marks(node.value):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "pytestmark":
-                    self.keep(target, target.id)
-        super().visit_Assign(node)
-
-    def visit_AnnAssign(self, node):
-        if (
-            self.scope == "module"
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "pytestmark"
-            and self.marks(node.value)
-        ):
-            self.keep(node.target, node.target.id)
-        super().visit_AnnAssign(node)
 
     def connection_call(self, node, scope):
         qualified = self.resolver.qualified(self.module, scope, node.func)
@@ -198,18 +139,6 @@ class _FrameworkVisitor(_ConnectionFlow):
             self.keep(node.args.vararg, node.args.vararg.arg)
 
     def callback(self, node):
-        if self.resolver.derives(
-            self.owner, {"hypothesis.stateful.RuleBasedStateMachine"}
-        ):
-            return node.name == "teardown" or any(
-                self.qualified(value.func if isinstance(value, ast.Call) else value)
-                in {
-                    "hypothesis.stateful.invariant",
-                    "hypothesis.stateful.rule",
-                    "hypothesis.stateful.initialize",
-                }
-                for value in node.decorator_list
-            )
         if self.resolver.derives(self.owner, {"io.RawIOBase"}):
             return node.name in {"readable", "readinto"}
         if self.resolver.derives(self.owner, {"http.server.BaseHTTPRequestHandler"}):
@@ -226,13 +155,3 @@ class _FrameworkVisitor(_ConnectionFlow):
         ):
             self.keep(node, node.attr)
         self.generic_visit(node)
-
-
-def framework_members(modules, sources):
-    resolver = _FrameworkResolver(modules)
-    kept = set()
-    for source in sources:
-        visitor = _FrameworkVisitor(resolver, source)
-        visitor.visit(source["tree"])
-        kept.update(visitor.kept)
-    return kept

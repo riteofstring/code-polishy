@@ -94,6 +94,7 @@ if [[ "\${1:-}" == "-I" && "\${2:-}" == "-B" && "\${3:-}" == "-c" ]]; then
   case "\${4:-}" in
     *sys.version_info*) printf '%s\n' "${python_version}" ;;
     *sysconfig.get_paths*) printf '%s\n' "\$(cd "\$(dirname "\$0")" && pwd -P)/lib/python3.12/site-packages" ;;
+    *'version("astroid")'*) printf '%s\n' "4.1.2" ;;
     *'version("packaging")'*) printf '%s\n' "${packaging_version}" ;;
     *'version("vulture")'*) printf '%s\n' "${vulture_version}" ;;
     *) echo "unexpected Python probe: \$*" >&2; exit 1 ;;
@@ -197,6 +198,8 @@ EOF
   printf 'v0.7.0\n' >"${source_root}/tools/staticcheck-version.txt"
   printf 'v1.3.0\n' >"${source_root}/tools/govulncheck-version.txt"
   printf 'v2.4.0\n' >"${source_root}/tools/osv-scanner-version.txt"
+  printf '4.1.2\n' >"${source_root}/tools/astroid-version.txt"
+  printf 'fixture\n' >"${source_root}/tools/astroid_checksums.txt"
   printf '26.3\n' >"${source_root}/tools/packaging-version.txt"
   printf '%s\n' 'packaging-26.3-py3-none-any.whl d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c' \
     >"${source_root}/tools/packaging_wheel_checksums.txt"
@@ -351,6 +354,9 @@ EOF
   printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
   printf '26.3\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-packaging-release"
   printf '2.16\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-vulture-release"
+  mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/astroid-4.1.2.dist-info"
+  printf '4.1.2\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-astroid-release"
+  printf 'fixture source\n' >"${source_root}/.tools/python/${platform_tag}/astroid-source.tar.gz"
   mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/packaging-26.3.dist-info"
   mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/vulture-2.16.dist-info"
 

@@ -429,14 +429,11 @@ contracts such as `ast.NodeVisitor`, `unittest.TestCase`, `unittest.mock`, and
 context-manager exit parameters, exception chaining, and `ZipInfo` metadata.
 It also infers the hooks actually defined by an in-tree PEP 517 build backend,
 exact reachable symbols from PEP 621 `project.scripts`,
-`project.gui-scripts`, and every `project.entry-points.*` table, and statically
-provable Pydantic model contracts.
+`project.gui-scripts`, and every `project.entry-points.*` table.
 
 Built-in framework contracts also preserve `pytest.fixture(autouse=True)`
 functions, module-level `pytestmark` values built from resolved `pytest.mark`
-objects, `row_factory` writes on proven `sqlite3.Connection` receivers, and
-`teardown` overrides and `invariant`, `rule`, or `initialize` registrations
-inherited from `hypothesis.stateful.RuleBasedStateMachine`. They also preserve
+objects, `row_factory` writes on proven `sqlite3.Connection` receivers. They also preserve
 `readable` and `readinto` overrides on `io.RawIOBase` subclasses and `do_*`
 dispatch methods and `log_message` on `http.server.BaseHTTPRequestHandler`
 subclasses. Required raw-read buffer and HTTP logging parameters are part of
@@ -457,15 +454,53 @@ do not receive positive evidence. Ordinary fixtures without literal
 dead-code analysis. The built-in contracts model the named public APIs; they do
 not authenticate installed dependency contents or replace supply-chain checks.
 
-Pydantic inference requires exact imports or aliases of `pydantic.BaseModel`,
-`pydantic.v1.BaseModel`, or `pydantic_settings.BaseSettings`. It follows exact
-local subclasses and re-exports. On proven model classes it keeps model fields,
-`Field` and `PrivateAttr` declarations, `model_config`, and methods selected by
-`field_validator`, `model_validator`, `field_serializer`, `model_serializer`,
-and `computed_field`, plus Pydantic v1 `validator` and `root_validator`.
-`ClassVar` members, ordinary methods, lookalike classes or decorators, wildcard
-imports, and unresolved aliases receive no exemption. The analyzer reads syntax
-only; it never imports or executes target Pydantic.
+Repositories declare third-party runtime contracts in `scope.pythonContracts`.
+No Pydantic, pydantic-settings, or Hypothesis integration activates implicitly.
+For example, a model library and a runtime-selected export can be described as:
+
+```json
+{
+  "scope": {
+    "pythonContracts": [
+      {
+        "project": "pyproject.toml",
+        "kind": "type",
+        "target": "vendor.api.Model",
+        "annotatedFields": true,
+        "attributes": ["configuration"],
+        "members": ["serialize"],
+        "decorators": ["vendor.api.validator"],
+        "reason": "Model validation consumes fields and registered validators."
+      },
+      {
+        "project": "pyproject.toml",
+        "kind": "entry-point",
+        "target": "app.adapters:registry.primary",
+        "members": ["execute"],
+        "reason": "The runtime adapter option selects this exported object."
+      }
+    ]
+  }
+}
+```
+
+Every record requires an exact `project`, `kind`, `target`, and nonempty `reason`.
+A `type` contract preserves only specified members on the resolved type and its
+subclasses. `annotatedFields` includes annotated class fields except direct
+`ClassVar` declarations; explicitly list other framework-consumed attributes.
+A `decorator` contract preserves the exact decorated definition; optional
+`keywords` require matching literal boolean keyword arguments. A
+`module-binding` contract names exact bindings in `members` whose values use
+APIs below its qualified `target`, including lists of such values. Pytest uses
+these latter two forms internally.
+
+An `entry-point` target supports nested attributes and requires a unique local
+source definition at each step. Its optional `members` name methods consumed by
+the loader's interface. Missing, ambiguous, or unused declarations produce
+`policy.pythonContract` findings. The configuration states repository-owned
+runtime knowledge; it does not prove that an external framework actually calls
+a member. It never executes Python configuration or imports target dependencies.
+This mechanism does not relax supply-chain or vulnerability checks.
 
 TypedDict inference uses the shared `python-facts/v3` AST contract. Exact
 `typing.TypedDict` and `typing_extensions.TypedDict` imports, aliases, local
@@ -491,10 +526,8 @@ Dependent dead-code results are withheld when the required fact set fails.
 
 The source coordinator partitions complete files into bounded requests and
 resolves compact type facts over their validated union. TypedDict declarations
-and reads, Pydantic model bases and subclasses, and decorator re-exports may
-live in different partitions. Pydantic resolution bounds inheritance and alias
-depth to 128 and reference visits to two million. It returns exact source member
-spans; substituted or duplicate output members fail fact validation.
+and reads can live in different partitions. Framework inference uses the complete
+contained project snapshot and preserves exact source locations.
 Type resolution streams one compact
 source record at a time, checks exact source coverage, and binds the resolved
 evidence identity to the current source digests and fact records. Vulture uses
@@ -565,7 +598,7 @@ missing selectors, empty collections, or invalid module-object strings fail.
 JSON has a depth limit of 64 and an item limit of 131,072. Derived evidence
 records every target and its exact definitions, source-fact identity, and input
 bytes. It cannot be suppressed or replaced by a path-level entry-point list.
-PEP 621 entry points, build hooks, and proven Pydantic contracts remain inferred;
+PEP 621 entry points and build hooks remain inferred;
 a configured target cannot repeat an already inferred consumer.
 No setup or remediation step generates these declarations from dead-code output.
 An unused-definition finding recommends deletion and provides an exact
@@ -823,3 +856,9 @@ Empty `paths` means always run. Repository-wide gates still use `--all`.
 - CI and local development use the same checked-in entrypoints.
 - After a broad failure, fix and rerun the narrowest relevant check before
   repeating the broad gate.
+
+Generated JavaScript retains syntax and other applicable semantic checks, but
+React Hooks rules run on authored source. Bundling and minification change
+function boundaries and names, so applying authored-component rules to emitted
+vendor code is not reliable. The source package's authored React code continues
+to receive Hooks checks.

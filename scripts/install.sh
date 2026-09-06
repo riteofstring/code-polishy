@@ -289,6 +289,8 @@ release_contents=(
   "tools/osv-scanner-version.txt"
   "internal/pythonfacts/pyproject.toml"
   "internal/pythonfacts/uv.lock"
+  "tools/astroid-version.txt"
+  "tools/astroid_checksums.txt"
   "tools/packaging-version.txt"
   "tools/packaging_wheel_checksums.txt"
   "tools/python-version.txt"
@@ -354,6 +356,7 @@ carried_tools=(
   "staticcheck:tools/staticcheck-version.txt"
   "govulncheck:tools/govulncheck-version.txt"
   "osv-scanner:tools/osv-scanner-version.txt"
+  "astroid:tools/astroid-version.txt"
   "packaging:tools/packaging-version.txt"
   "python:tools/python-version.txt"
   "ruff:tools/ruff-version.txt"
@@ -362,6 +365,7 @@ carried_tools=(
 )
 
 carried_markers=(
+  "astroid:${python_tool_dir}/.code-polishy-astroid-release:tools/astroid-version.txt"
   "packaging:${python_tool_dir}/.code-polishy-packaging-release:tools/packaging-version.txt"
   "python:${python_tool_dir}/.code-polishy-python-release:tools/python-version.txt"
   "vulture:${python_tool_dir}/.code-polishy-vulture-release:tools/vulture-version.txt"
@@ -413,6 +417,9 @@ probed_version() {
     osv-scanner)
       javascript_sealed_run "${policy_root}/.tools/bin/osv-scanner" --version |
         awk '/^osv-scanner version:/ { print $3 }'
+      ;;
+    astroid)
+      javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c 'import importlib.metadata; print(importlib.metadata.version("astroid"))'
       ;;
     packaging)
       javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c \
@@ -481,6 +488,32 @@ packaging_metadata_is_exact() {
   expected="${site_packages}/packaging-$(pinned_version "tools/packaging-version.txt").dist-info"
   shopt -s nullglob
   for metadata in "${site_packages}"/packaging-*.dist-info; do
+    if [[ ! -d "${metadata}" ]]; then
+      malformed=1
+    fi
+    count=$((count + 1))
+    exact="${metadata}"
+  done
+  shopt -u nullglob
+  [[ "${malformed}" -eq 0 ]] && [[ "${count}" -eq 1 ]] && [[ "${exact}" == "${expected}" ]]
+}
+
+astroid_metadata_is_exact() {
+  local site_packages metadata expected count=0 malformed=0 exact=""
+  if ! site_packages="$(javascript_sealed_run "${policy_root}/${python_tool_dir}/python" -I -B -c \
+    'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2>/dev/null)"; then
+    return 1
+  fi
+  if [[ "${site_packages}" == *$'\n'* ]]; then
+    return 1
+  fi
+  case "${site_packages}" in
+    "${policy_root}/${python_tool_dir}"/*) ;;
+    *) return 1 ;;
+  esac
+  expected="${site_packages}/astroid-$(pinned_version "tools/astroid-version.txt").dist-info"
+  shopt -s nullglob
+  for metadata in "${site_packages}"/astroid-*.dist-info; do
     if [[ ! -d "${metadata}" ]]; then
       malformed=1
     fi
@@ -620,6 +653,10 @@ if ! vulture_metadata_is_exact; then
   exit 1
 fi
 
+if ! astroid_metadata_is_exact || [[ ! -f "${policy_root}/${python_tool_dir}/astroid-source.tar.gz" ]]; then
+  echo "The Astroid carrier omits its exact metadata or corresponding source." >&2
+  exit 1
+fi
 if ! packaging_metadata_is_exact; then
   echo "The packaging carrier at ${python_tool_dir} has missing or stale packaging metadata." >&2
   echo "Run ./tools/install-policy-tools.sh before installing a release." >&2

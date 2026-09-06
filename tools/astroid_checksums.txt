@@ -1,0 +1,2 @@
+astroid-4.1.2-py3-none-any.whl 21312e682c0866dc5a309ee57e4b88ea92751b9955a58b1c31371cbbeb088707
+astroid-4.1.2.tar.gz d6c4a52bfcda4bbeb7359dead642b0248b90f7d9a07e690230bd86fefd6d37f1

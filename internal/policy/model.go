@@ -136,9 +136,10 @@ type Project struct {
 }
 
 type Scope struct {
-	Exclude   []string `json:"exclude,omitempty"`
-	Generated []string `json:"generated,omitempty"`
-	Data      []string `json:"data,omitempty"`
+	PythonContracts []PythonContract `json:"pythonContracts,omitempty"`
+	Exclude         []string         `json:"exclude,omitempty"`
+	Generated       []string         `json:"generated,omitempty"`
+	Data            []string         `json:"data,omitempty"`
 
 	EntryPoints                 []string                     `json:"entryPoints,omitempty"`
 	GeneratedJavaScript         []GeneratedJavaScript        `json:"generatedJavaScript,omitempty"`
