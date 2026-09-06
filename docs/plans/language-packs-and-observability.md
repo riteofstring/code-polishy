@@ -49,12 +49,13 @@ of complete runtime observability would be premature: startup failures,
 internal analysis operations, pack evidence, interruptions, and CI retention
 have material gaps.
 
-Recommended sequence: establish the current behavior baseline, extend the
-existing reporting and execution boundaries, prove a real shell pack, validate
-the project-aware contract, then relocate the remaining built-in behavior.
-The language inventory below orders existing extraction work; it does not
-prescribe the languages the product or a project must support, or pack layout.
-Treat observability as part of the pack contract from the first implementation.
+Deliver this in two phases. First, build the generic pack contract, CLI creation
+workflow, lifecycle, and execution evidence so a developer's AI can add an
+unfamiliar ecosystem without changing core. Second, use that same public
+workflow to move all currently built-in language support into packs and prove
+equivalent behavior. The existing language inventory supplies real acceptance
+cases; projects and pack authors continue to choose their own ecosystems and
+pack boundaries. Treat observability as part of the first phase's contract.
 
 ## 1. What the latest code already provides
 
@@ -441,10 +442,17 @@ Evidence: [report model](https://github.com/riteofstring/code-polishy/blob/436c7
 ## 6. Delivery sequence and acceptance boundaries
 
 The following phases describe proposed work, not currently available commands.
-Each public language cutover has one implementation owner. Private development
+Each public provider cutover has one implementation owner. Private development
 can be incremental; release surfaces must agree before old ownership is removed.
 
-### Phase A: Establish the baseline and ownership map
+### Phase 1: Build the generic pack system and creation workflow
+
+Deliver a usable authoring and runtime system for arbitrary conforming packs.
+Establish the contract with independent CLI-backed packs and bounded discovery
+prototypes. Existing core language implementations remain until their Phase 2
+cutovers; extracting them is the next phase's acceptance exercise.
+
+#### 1.1 Establish the baseline and ownership map
 
 Use an agreed current upstream commit, then reconcile the separate Astro
 behavior before extracting its current implementation. Inventory each
@@ -463,7 +471,7 @@ Acceptance: every currently supported behavior has an owner and an observable
 parity case. The map includes current Python contracts, generated-source rules,
 test ownership, architecture review, and the agreed Astro behavior.
 
-### Phase B: Extend the existing execution and report boundaries
+#### 1.2 Extend the existing execution and report boundaries
 
 Give every policy invocation a run identity and every analysis operation a
 linked record. Cover initialization, inventory, discovery, adapter execution,
@@ -493,29 +501,27 @@ timed-out adapter, zero-exit analysis failure, canceled gate, and missing pack
 can each be explained from bounded emitted records without adding debug code.
 Private fixture secrets are absent from approved exported artifacts.
 
-### Phase C: Prove the contract with a real shell pack and bounded prototypes
+#### 1.3 Prove generic CLI adaptation and discovery
 
-Build a private shell extraction using the current parser, syntax checks,
-ShellCheck behavior, comment/directive rules, source detection, and applicable
-portability behavior. State the actual Bash/ShellCheck platform and toolchain
-contract; do not infer native Windows support from engine support alone.
+Use the creation workflow to build an independent pack around an ecosystem's
+CLI, such as Rust/Cargo. Exercise actual metadata, diagnostics, passing code,
+and violations through the public adapter contract. Verify installation size,
+exact selection, runtime evidence, policy coverage, removal, and failure
+behavior without depending on an existing core language implementation.
 
-Use it to prove installation size, exact selection, runtime evidence, policy
-coverage, removal, and failure behavior. Do not call a wrapper around retained
-core shell checks an extraction.
+Use the discovery plan's contrasting Cargo, Gradle, Bundler, and CMake
+prototypes to test discovery, execution authority, scope, and transport
+conformance. These are contract test cases, not an approved language list or
+commitments to ship four production packs. Exercise a small case and a
+scale/conditional case for each. Measure actual bundle and inventory costs
+rather than guessing new caps.
 
-Alongside that proof, retain the discovery plan's deliberately different Cargo,
-Gradle, Bundler, and CMake prototypes before freezing a universal v2. Bound them
-to discovery, execution authority, scope, and transport conformance; they are
-not commitments to ship four additional production packs. Exercise a small
-case and a scale/conditional case for each. Measure actual bundle and inventory
-costs rather than guessing new caps.
+Acceptance: a pack for an ecosystem absent from core performs meaningful
+analysis, and prototype evidence supports the discovery and transport
+decisions. V1 remains the released contract until the coherent public cutover
+is ready.
 
-Acceptance: real shell semantics survive the proposed boundary, and the
-prototype evidence supports the discovery and transport decisions. V1 remains
-the released contract until the coherent public cutover is ready.
-
-### Phase D: Complete manifest/protocol v2 and decentralized lifecycle
+#### 1.4 Complete manifest/protocol v2 and decentralized lifecycle
 
 Define separate inventory and selection, mandatory discovery mode, validated
 scope identity, explicit host-toolchain requirements, typed baseline inputs,
@@ -529,12 +535,12 @@ authority over required capabilities, effective baseline, exception validation,
 test scheduling, data protection, and report acceptance. Packs own ecosystem
 interpretation and language rule implementation.
 
-Move built-in language identifiers, source-pattern defaults, and
-ecosystem-specific coverage decisions to provider declarations. Resolve project
-requirements against those declarations through the same generic boundary for
-every pack. Define explicit dependency and shared-fact contracts where providers
-cooperate, including compatible schemas, exact identities, and rejected cycles
-or overlapping authority.
+Provide declarations for language identifiers, source patterns, and
+ecosystem-specific coverage requirements so Phase 2 can move those decisions
+out of core. Resolve project requirements against provider declarations through
+the same generic boundary for every pack. Define explicit dependency and
+shared-fact contracts where providers cooperate, including compatible schemas,
+exact identities, and rejected cycles or overlapping authority.
 
 Finish exact install/restore, installed-state listing, selection, update,
 deselection, and removal. Add the generic pack-creation command and command
@@ -556,7 +562,26 @@ the tool mappings and fixtures, verify, install, and select the resulting pack
 in a temporary project. No engine patch or handwritten process-management layer
 may be required.
 
-### Phase E: Relocate existing behavior through complete provider cutovers
+Phase 1 is complete when a developer's AI can create, verify, install, select,
+update, and remove a meaningful pack through the generic workflow, with usable
+diagnostics and exact restoration on another machine. Phase 2 then tests that
+system against the full complexity of Code Polishy's own current support.
+
+### Phase 2: Move all existing core language support into packs
+
+Use the Phase 1 creation, adapter, verification, installation, and selection
+workflow for every extraction. Code Polishy's own packs get the same contracts
+and execution authority as a developer-created pack. A migration that requires
+a privileged adapter path or calls back into retained core language analysis
+has not proved the system works.
+
+The scope is exhaustive: move language-specific detection, parsing, rules,
+configuration defaults, tools, framework integrations, and analysis adapters
+found in the ownership inventory. Include partial language support outside the
+four primary implementations listed below. Keep generic document, data,
+repository, and gate responsibilities in core under their explicit boundaries.
+
+#### 2.1 Extract complete providers and prove parity
 
 This is the current implementation inventory and a suggested extraction order.
 It is not a required pack set, a supported-language allowlist, or a decision to
@@ -570,6 +595,17 @@ its selected provider boundary while preserving its observable guarantees.
 | Current JavaScript/TypeScript implementation | Runtime and language tools, project resolution, existing framework checks assigned to explicit providers, imports/types/dead code, generated ownership, Node dependency evidence | Authored versus compiler-generated edges, literal route filenames, workspace resolution, lifecycle isolation, and core utility consumers. |
 | Go                                           | Module/workspace interpretation, source graphs, formatting, vet/static analysis, build and dependency/vulnerability evidence                                                     | Build tags, nested modules, toolchain identity, environment, and distinction between target Go tooling and the engine's build language.   |
 
+Start with shell as a bounded extraction, then use the more project-aware
+implementations to test the contract's depth. State the actual Bash/ShellCheck
+platform and toolchain contract; engine support alone does not establish native
+Windows support for those tools. Finish every remaining language-specific item
+in the inventory, regardless of whether it appears in the table.
+
+When an extraction exposes a missing generic capability, improve the public
+contract and conformance suite before completing that cutover. The resulting
+capability must be available to independent pack authors on the same terms.
+Do not solve the gap by adding an ecosystem exception to core.
+
 For each release, remove the former implementation, installers, configuration
 ownership, and fallback dispatch together. Keep equivalent negative and positive
 fixtures in the owning pack and generic boundary tests in core. Do not retain
@@ -580,7 +616,12 @@ scope, evidence, and exception semantics; the same valid source passes. Removing
 an unused pack removes its optional tooling. A repository still selecting a
 removed pack fails visibly. Core services remain usable without that pack.
 
-### Phase F: Establish operational confidence and finish the public model
+#### 2.2 Adopt the packs and establish operational confidence
+
+Make Code Polishy's own repository and CI select their required exact packs.
+Exercise them through ordinary commands and gates after the corresponding
+native implementations and release assets have been removed. This verifies
+that the product depends on the same pack system offered to other developers.
 
 Verify clean-machine and offline restoration, core-only use, supported pack
 combinations, changed-file operations, update rollback, and native supported
@@ -603,6 +644,13 @@ analysis, and gate failures from retained records, including interrupted runs,
 without requesting a new instrumented build. The documented pack model matches
 what a new user can actually install and remove.
 
+Phase 2 is complete only when all inventoried core language support has moved
+to independently installable/removable packs, existing behavior and evidence
+remain equivalent, and Code Polishy's own verification uses those packs. A
+core-only installation retains its generic responsibilities and contains no
+hidden language-analysis fallback. Passing one reference pack alone does not
+complete this phase.
+
 ## 7. Verification and work coordination
 
 Use temporary repositories and exact, behavior-focused suites at each coherent
@@ -613,6 +661,8 @@ source boundary. A compact acceptance matrix should cover:
 | Exact pack restored on a clean machine         | Same verified identity and declared capabilities.                                                                                                  |
 | Unfamiliar language or framework               | A conforming external pack supplies required coverage without an engine change or registry entry.                                                  |
 | Developer requests a pack for an ecosystem CLI | Creation scaffolds the contract; tool mappings and real fixtures produce a verifiable, installable pack without reimplementing execution plumbing. |
+| Existing core support is extracted             | Every inventoried language behavior runs through ordinary packs with equivalent results and no retained native fallback.                           |
+| Code Polishy verifies its own repository       | Required packs are selected explicitly and execute through the same public workflow as independently authored packs.                               |
 | Project requires framework-specific analysis   | Declared provider coverage is verified; language recognition alone cannot satisfy it.                                                              |
 | Removed or corrupted selection                 | Blocking diagnosis; no fallback or silent reduction.                                                                                               |
 | Two providers claim the same authority         | Deterministic conflict before affected analysis.                                                                                                   |
