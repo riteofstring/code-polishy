@@ -35,6 +35,7 @@
         "path": "docs/design/python-contract-evidence.md",
         "sourcePaths": [
           "internal/pythonfacts/framework_contracts.py",
+          "internal/pythonfacts/connection_flow.py",
           "internal/quality/vulture.go",
           "internal/repository/python_plugins.go",
           "internal/repository/python_distribution_sources.go",
@@ -1463,7 +1464,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1472",
+      "subject": "1473",
       "reason": "The explicit suite, test-ownership, and design-mapping inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

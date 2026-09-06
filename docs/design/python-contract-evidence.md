@@ -53,15 +53,26 @@ Known public framework APIs need shared semantic models rather than a local
 reachability declaration for each consumer. The framework resolver reuses the
 bounded source trees and compact project binding resolver. It recognizes exact
 pytest autouse decorators and module marks, SQLite connection row-factory
-writes, and Hypothesis state-machine teardown overrides. It never imports or
+writes, Hypothesis stateful registrations, and standard-library I/O and HTTP
+callbacks. It never imports or
 executes target dependencies. Unknown frameworks continue to use the explicit
 external-contract mechanism described above.
 
 Positive evidence is a source location and symbol, not a global name whitelist.
 Re-exports and inheritance must resolve to the named external API. Receiver
 construction, parameter annotations, aliases, and active context bindings must
-be unambiguous. Custom factories and rebindings cannot prove a standard SQLite
-connection. When Vulture's line-based output cannot distinguish two same-named
+be proven at the write. A forward flow state tracks local and instance-attribute
+receivers, including assignments in `try` blocks after `None` initialization.
+Reassignment invalidates prior receiver evidence. Branch joins retain only
+connections proven on every incoming path. Exception handlers, cleanup paths,
+and repeated loop bodies begin conservatively; construction within those paths
+can establish new evidence. Unresolved optional framework identities grant no
+positive evidence; they do not replace diagnostics for explicitly configured
+external contracts. Structural and resource failures while loading project facts
+still fail coverage. Unknown calls invalidate instance-attribute evidence
+and bindings that closures can reassign. Unknown context managers may suppress
+exceptions, so their normal exit alone cannot establish a connection. Custom
+factories cannot prove a standard SQLite connection. When Vulture's line-based output cannot distinguish two same-named
 writes, neither write is hidden by the built-in contract.
 
 `framework_contracts` exports `framework_members` as its embedded Python API.

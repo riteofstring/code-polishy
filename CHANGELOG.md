@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.24.4 - 2026-09-05
+
+- Track SQLite connection construction at each write, including instance
+  attributes and construction inside `try` blocks after `None` initialization.
+  Reassignments and uncertain control-flow paths retain dead-code findings.
+- Recognize inherited Hypothesis stateful registrations, buffered raw-I/O
+  callbacks, and HTTP request-handler dispatch and logging methods, including
+  their required callback parameters. Preserve unrelated same-named methods.
+
 ## 0.24.3 - 2026-09-05
 
 - Recognize pytest autouse fixtures and module-level pytest marks, SQLite

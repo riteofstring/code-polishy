@@ -1,6 +1,7 @@
 import ast
 from collections import Counter
 
+from connection_flow import _ConnectionFlow
 from type_facts import _reference_name
 from type_resolver import MAX_DEPTH, _Resolver
 
@@ -8,6 +9,12 @@ __all__ = ["framework_members"]
 
 
 class _FrameworkResolver(_Resolver):
+    def reference(self, module, scope, name, seen=frozenset()):
+        try:
+            return super().reference(module, scope, name, seen)
+        except ValueError:
+            return None
+
     def qualified(self, module, scope, node):
         name = _reference_name(node)
         binding = self.binding(module, scope, name.partition(".")[0])
@@ -18,9 +25,9 @@ class _FrameworkResolver(_Resolver):
         reference = self.reference(module, scope, name)
         return reference if isinstance(reference, str) else None
 
-    def state_machine(self, reference, seen=frozenset()):
+    def derives(self, reference, roots, seen=frozenset()):
         if isinstance(reference, str):
-            return reference == "hypothesis.stateful.RuleBasedStateMachine"
+            return reference in roots
         if reference is None:
             return False
         path, binding = reference
@@ -31,33 +38,29 @@ class _FrameworkResolver(_Resolver):
             return False
         return any(
             base["kind"] == "name"
-            and self.state_machine(
+            and self.derives(
                 self.reference(self.files[path], binding["scope"], base["name"]),
+                roots,
                 seen | {identity},
             )
             for base in binding["bases"]
         )
 
 
-class _FrameworkVisitor(ast.NodeVisitor):
+class _FrameworkVisitor(_ConnectionFlow):
     def __init__(self, resolver, source):
+        super().__init__(self.connection_call)
         self.resolver = resolver
         self.module = resolver.files[source["path"]]
         self.scope = "module"
         self.owner = None
         self.kept = set()
-        self.context_bindings = {}
         self.writes = Counter(
             (node.lineno, node.attr if isinstance(node, ast.Attribute) else node.id)
             for node in ast.walk(source["tree"])
             if isinstance(node, (ast.Attribute, ast.Name))
             and isinstance(node.ctx, ast.Store)
         )
-        self.nodes = {
-            (node.lineno, node.col_offset + 1): node
-            for node in ast.walk(source["tree"])
-            if isinstance(node, ast.Call)
-        }
 
     def keep(self, node, name):
         decorators = getattr(node, "decorator_list", [])
@@ -74,24 +77,35 @@ class _FrameworkVisitor(ast.NodeVisitor):
         return self.resolver.qualified(self.module, self.scope, node)
 
     def visit_ClassDef(self, node):
-        previous = self.scope, self.owner
+        previous = self.scope, self.owner, self.connections, self.mutable_names
         self.owner = self.resolver.reference(self.module, self.scope, node.name)
         self.scope = f"{self.scope}/class:{node.lineno}:{node.col_offset + 1}"
-        for statement in node.body:
-            self.visit(statement)
-        self.scope, self.owner = previous
+        self.connections = self.block(node.body, set())
+        self.scope, self.owner, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
 
     def visit_FunctionDef(self, node):
-        if self.resolver.state_machine(self.owner) and node.name == "teardown":
+        if self.callback(node):
             self.keep(node, node.name)
+            self.callback_parameters(node)
         if any(self.autouse(decorator) for decorator in node.decorator_list):
             self.keep(node, node.name)
-        previous = self.scope, self.owner
+        previous = self.scope, self.owner, self.connections, self.mutable_names
         self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
         self.owner = None
+        self.connections = self.parameters(node, previous[0])
+        self.mutable_names = {
+            name
+            for value in ast.walk(node)
+            if isinstance(value, (ast.Nonlocal, ast.Global))
+            for name in value.names
+        }
         for statement in node.body:
             self.visit(statement)
-        self.scope, self.owner = previous
+        self.scope, self.owner, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
@@ -124,7 +138,7 @@ class _FrameworkVisitor(ast.NodeVisitor):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "pytestmark":
                     self.keep(target, target.id)
-        self.generic_visit(node)
+        super().visit_Assign(node)
 
     def visit_AnnAssign(self, node):
         if (
@@ -134,7 +148,7 @@ class _FrameworkVisitor(ast.NodeVisitor):
             and self.marks(node.value)
         ):
             self.keep(node.target, node.target.id)
-        self.generic_visit(node)
+        super().visit_AnnAssign(node)
 
     def connection_call(self, node, scope):
         qualified = self.resolver.qualified(self.module, scope, node.func)
@@ -154,65 +168,55 @@ class _FrameworkVisitor(ast.NodeVisitor):
             for value in factories
         )
 
-    def connection(self, node, scope=None, seen=frozenset()):
-        scope = self.scope if scope is None else scope
-        if isinstance(node, ast.Call):
-            return self.connection_call(node, scope)
-        if not isinstance(node, ast.Name):
-            return False
-        binding = self.resolver.binding(self.module, scope, node.id)
-        if binding is None:
-            binding = self.context_bindings.get((scope, node.id))
-        if binding is None or (binding["site"]["line"], binding["site"]["column"]) >= (
-            node.lineno,
-            node.col_offset + 1,
-        ):
-            return False
-        identity = binding["scope"], binding["name"]
-        if identity in seen or len(seen) >= MAX_DEPTH:
-            return False
-        return self.connection_binding(binding, seen | {identity})
-
-    def connection_binding(self, binding, seen):
-        if binding["kind"] == "parameter":
-            annotation = binding["annotation"]
-            return (
-                annotation["kind"] in {"name", "string"}
-                and self.resolver.reference(
-                    self.module, binding["annotationScope"], annotation["name"]
+    def parameters(self, node, scope):
+        result = set()
+        for argument in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
+            annotation = argument.annotation
+            if isinstance(annotation, ast.Constant) and isinstance(
+                annotation.value, str
+            ):
+                qualified = self.resolver.reference(
+                    self.module, scope, annotation.value
                 )
-                == "sqlite3.Connection"
-            )
-        site = binding["valueSite"] or binding["site"]
-        value = self.nodes.get((site["line"], site["column"]))
-        if value is None and binding["value"]["kind"] == "name":
-            value = ast.Name(
-                id=binding["value"]["name"],
-                lineno=site["line"],
-                col_offset=site["column"] - 1,
-            )
-        return self.connection(value, binding["scope"], seen)
+            else:
+                qualified = self.resolver.qualified(self.module, scope, annotation)
+            if qualified == "sqlite3.Connection":
+                result.add((argument.arg,))
+        return result
 
-    def visit_With(self, node):
-        previous = self.context_bindings.copy()
-        for item in node.items:
-            self.context_binding(item)
-        for statement in node.body:
-            self.visit(statement)
-        self.context_bindings = previous
+    def callback_parameters(self, node):
+        arguments = node.args.posonlyargs + node.args.args
+        buffered = node.name == "readinto" and self.resolver.derives(
+            self.owner, {"io.RawIOBase"}
+        )
+        logging = node.name == "log_message" and self.resolver.derives(
+            self.owner, {"http.server.BaseHTTPRequestHandler"}
+        )
+        if (buffered or logging) and len(arguments) > 1:
+            self.keep(arguments[1], arguments[1].arg)
+        if logging and node.args.vararg is not None:
+            self.keep(node.args.vararg, node.args.vararg.arg)
 
-    def context_binding(self, item):
-        target = item.optional_vars
-        if not isinstance(target, ast.Name):
-            return
-        bindings = self.module["bindings"].get((self.scope, target.id), [])
-        if len(bindings) != 1:
-            return
-        binding = bindings[0]
-        if binding["site"] != {"line": target.lineno, "column": target.col_offset + 1}:
-            return
-        self.context_bindings[(self.scope, target.id)] = binding
-        self.nodes[(target.lineno, target.col_offset + 1)] = item.context_expr
+    def callback(self, node):
+        if self.resolver.derives(
+            self.owner, {"hypothesis.stateful.RuleBasedStateMachine"}
+        ):
+            return node.name == "teardown" or any(
+                self.qualified(value.func if isinstance(value, ast.Call) else value)
+                in {
+                    "hypothesis.stateful.invariant",
+                    "hypothesis.stateful.rule",
+                    "hypothesis.stateful.initialize",
+                }
+                for value in node.decorator_list
+            )
+        if self.resolver.derives(self.owner, {"io.RawIOBase"}):
+            return node.name in {"readable", "readinto"}
+        if self.resolver.derives(self.owner, {"http.server.BaseHTTPRequestHandler"}):
+            return node.name == "log_message" or (
+                node.name.startswith("do_") and len(node.name) > 3
+            )
+        return False
 
     def visit_Attribute(self, node):
         if (

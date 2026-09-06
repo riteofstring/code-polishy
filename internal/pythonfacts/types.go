@@ -33,6 +33,9 @@ var typeResolverSource string
 //go:embed type_project.py
 var typeProjectSource string
 
+//go:embed connection_flow.py
+var connectionFlowSource string
+
 //go:embed framework_contracts.py
 var frameworkContractsSource string
 
@@ -118,7 +121,7 @@ func validateSourceTypeFacts(data json.RawMessage) error {
 }
 
 func TypeSupportSource() string {
-	return embeddedPythonModule("object_predicates", objectPredicatesSource) + embeddedPythonModule("type_facts", typeFactsSource) + embeddedPythonModule("type_resolver", typeResolverSource) + embeddedPythonModule("pydantic_resolver", pydanticResolverSource) + embeddedPythonModule("framework_contracts", frameworkContractsSource) + embeddedPythonModule("loader_bindings", loaderBindingsSource) + embeddedPythonModule("module_evidence", moduleEvidenceSource) + embeddedPythonModule("module_imports", moduleImportsSource)
+	return embeddedPythonModule("object_predicates", objectPredicatesSource) + embeddedPythonModule("type_facts", typeFactsSource) + embeddedPythonModule("type_resolver", typeResolverSource) + embeddedPythonModule("pydantic_resolver", pydanticResolverSource) + embeddedPythonModule("connection_flow", connectionFlowSource) + embeddedPythonModule("framework_contracts", frameworkContractsSource) + embeddedPythonModule("loader_bindings", loaderBindingsSource) + embeddedPythonModule("module_evidence", moduleEvidenceSource) + embeddedPythonModule("module_imports", moduleImportsSource)
 }
 
 func ParserSupportSource() string {

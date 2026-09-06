@@ -435,14 +435,23 @@ provable Pydantic model contracts.
 Built-in framework contracts also preserve `pytest.fixture(autouse=True)`
 functions, module-level `pytestmark` values built from resolved `pytest.mark`
 objects, `row_factory` writes on proven `sqlite3.Connection` receivers, and
-`teardown` overrides inherited from `hypothesis.stateful.RuleBasedStateMachine`.
+`teardown` overrides and `invariant`, `rule`, or `initialize` registrations
+inherited from `hypothesis.stateful.RuleBasedStateMachine`. They also preserve
+`readable` and `readinto` overrides on `io.RawIOBase` subclasses and `do_*`
+dispatch methods and `log_message` on `http.server.BaseHTTPRequestHandler`
+subclasses. Required raw-read buffer and HTTP logging parameters are part of
+those callback contracts.
 These contracts require no per-test declarations, fake callers, or dependency
 imports. Exact import aliases and project re-exports resolve through the same
 bounded project facts used by other Python analysis.
 
 SQLite receiver evidence includes direct construction, local aliases, annotated
-connection parameters, and context-manager bindings. Unknown custom factories,
-rebound receivers, shadowed framework imports, and ambiguous same-line writes
+connection parameters, context-manager bindings, and instance attributes.
+Construction inside a `try` block remains usable after an earlier `None`
+initialization. Evidence follows statement order and is invalidated by
+reassignment; uncertain branches, exception paths, and loop iterations do not
+borrow successful-path evidence. Unknown custom factories, shadowed framework
+imports, and ambiguous same-line writes
 do not receive positive evidence. Ordinary fixtures without literal
 `autouse=True`, unrelated methods, attributes, and local variables retain normal
 dead-code analysis. The built-in contracts model the named public APIs; they do
