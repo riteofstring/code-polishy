@@ -610,3 +610,51 @@ Superseded paths and tests to delete:
 Architecture work is complete only when callers use the new interface, the
 superseded implementation and shallow tests are removed, and the executable
 boundary is green.
+
+## Operator-selected Python adapters
+
+Use `scope.pythonRuntimeLoaders` when an operator supplies an open
+`package.module:object.path` target at startup. This is an explicit delegation of
+architecture authority, not a finite dependency inventory or proof that arbitrary
+imports are safe. It does not retain dead-code exports; use `scope.pythonContracts`
+for those independently.
+
+Each declaration contains `project`, `consumer`, `inputGrammar`, `check`, and a
+nonempty `reason`. The consumer identifies `kind: "callsite"`, exact `importer`,
+`module`, `callable`, one-based `site` (line and column),
+`callee: "importlib.import_module"`, `shape: "call"`, the module argument text,
+and the importer's `sourceSha256`. The check identifies `kind: "isinstance"`,
+the qualified local runtime protocol, and its exact one-based call site.
+
+The initial `inputGrammar: "ascii-module-object/v1"` requires a module-level
+`re.compile` with this pattern and no flags:
+
+```text
+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*
+```
+
+The single-parameter synchronous loader must perform these statements in order:
+
+1. Reject `PATTERN.fullmatch(target) is None` with a raise.
+2. Split into module and object names with `target.split(":", maxsplit=1)`
+   (positional `1` is also supported).
+3. Assign `importlib.import_module(module_name)` to a local name.
+4. Walk `object_path.split(".")`, assigning `getattr(loaded, attribute)` back
+   to that name.
+5. Reject `not isinstance(loaded, Protocol)` with a raise.
+6. Return the checked name.
+
+Names are arbitrary; annotations are optional. Protocols must resolve to a
+supported local runtime-checkable type. Decorated loaders, extra statements,
+shadowed operations, and other control-flow shapes require further analysis and
+remain coverage errors. Changing source requires refreshing the declaration's
+digest and any moved sites.
+
+Accepted declarations emit an informational coverage finding naming the
+operator-controlled boundary. Direct literal calls, including calls through
+resolved imports and re-exports, supply ordinary local dependency edges.
+Nonlocal targets are external; local-looking missing modules remain errors.
+This does not claim to infer every constant expression or runtime target.
+Repository dependency admission and vulnerability checks still run, but cannot
+scan arbitrary packages installed only on an operator's machine. Import executes
+before the protocol check.

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -61,6 +62,9 @@ func pythonComputedImportSourceCoverage(
 	}
 	matched := make([]bool, len(declarations))
 	for _, fact := range facts.ComputedImports {
+		if facts.RuntimeLoaders[pythonfacts.SourceLocation{Line: fact.Line, Column: fact.Column}] {
+			continue
+		}
 		position, message := pythonComputedDeclarationPosition(declarations, fact)
 		if message != "" {
 			return message

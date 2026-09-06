@@ -184,6 +184,9 @@ class ReachabilityResolver:
 
     def consumer_binding(self, expected):
         _consumer_declaration(expected)
+        return self.callsite_binding(expected)
+
+    def callsite_binding(self, expected):
         module = self.runtime_module(expected["module"])
         if (
             module["path"] != expected["importer"]

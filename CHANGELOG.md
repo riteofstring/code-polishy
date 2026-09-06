@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.6 - 2026-09-05
+
+- Remove JSON and JSONC from source-file line budgets while retaining their
+  applicable formatting, syntax, schema, and policy checks.
+
+- Add repository-declared operator-controlled Python runtime loader boundaries,
+  with exact source, grammar, nested attribute walk, and runtime protocol checks.
+- Preserve normal dependency direction checks for known local loader targets and
+  report unknown runtime targets explicitly as delegated architecture authority.
+
 ## 0.24.5 - 2026-09-05
 
 - Adopt pinned Astroid inference for contained Python ancestry and nested runtime

@@ -34,6 +34,16 @@
       {
         "path": "docs/design/python-contract-evidence.md",
         "sourcePaths": [
+          "internal/policy/python_runtime_loaders.go",
+          "internal/pythonfacts/runtime_loaders.go",
+          "internal/pythonfacts/runtime_loaders.py",
+          "internal/pythonfacts/runtime_loader_syntax.py",
+          "internal/pythonfacts/reachability.py",
+          "internal/architecture/python_runtime_loaders.go",
+          "internal/architecture/python_imports.go",
+          "internal/architecture/python_computed_imports.go",
+          "internal/architecture/python_graph.go",
+          "internal/architecture/python.go",
           "internal/pythonfacts/framework_contracts.py",
           "internal/pythonfacts/astroid_contracts.py",
           "internal/pythonfacts/repository_contracts.py",
@@ -1474,8 +1484,8 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1483",
-      "reason": "The explicit suite, test-ownership, and design-mapping inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
+      "subject": "1493",
+      "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"
     }

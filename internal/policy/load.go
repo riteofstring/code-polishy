@@ -715,6 +715,9 @@ func repositoryPath(value, label string) error {
 }
 
 func validatePythonDeclarations(scope *Scope) error {
+	if err := validatePythonRuntimeLoaders(scope); err != nil {
+		return err
+	}
 	if err := validatePythonDynamicReferences(scope.PythonDynamicReferences); err != nil {
 		return err
 	}

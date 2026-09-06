@@ -36,6 +36,14 @@ length budget by default because document length is not evidence of a code
 monolith. Markdown receives final-newline, trailing-whitespace, sealed-format,
 UTF-8, containment, regular-file, size, and local-link checks.
 
+JSON and JSONC files (case-insensitive extensions) are also excluded from the
+file-length budget. Their line count reflects formatting and declaration or data
+volume rather than executable complexity. They remain handwritten governed
+inputs: text hygiene, formatting, syntax, applicable schemas, security,
+ownership, and coverage checks still apply. The required Code Polishy control
+file retains its bounded parser and complete policy validation; it needs no
+file-length exception under this release.
+
 Tests receive a higher Go complexity and file-size budget because table-driven
 fixtures and workflow setup are naturally larger. Python and
 TypeScript/JavaScript tests keep the same complexity threshold as production

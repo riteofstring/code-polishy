@@ -156,6 +156,78 @@
           }
         }
       }
+    },
+    "runtimeLoader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "consumer", "inputGrammar", "check", "reason"],
+      "properties": {
+        "project": {
+          "$ref": "code-polishy.schema.json#/$defs/pyprojectPath"
+        },
+        "consumer": {
+          "$ref": "#/$defs/runtimeLoaderConsumer"
+        },
+        "inputGrammar": {
+          "const": "ascii-module-object/v1"
+        },
+        "check": {
+          "$ref": "#/$defs/runtimeCheck"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    },
+    "runtimeLoaderConsumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "importer",
+        "module",
+        "callable",
+        "site",
+        "callee",
+        "shape",
+        "argument",
+        "sourceSha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "callsite"
+        },
+        "importer": {
+          "$ref": "code-polishy.schema.json#/$defs/literalExactPath",
+          "pattern": "\\.py$"
+        },
+        "module": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain"
+        },
+        "callable": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonIdentifierChain"
+        },
+        "site": {
+          "$ref": "code-polishy.schema.json#/$defs/pythonSourceLocation"
+        },
+        "callee": {
+          "const": "importlib.import_module"
+        },
+        "shape": {
+          "const": "call"
+        },
+        "argument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "sourceSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     }
   }
 }

@@ -24,7 +24,7 @@ import (
 var lengthCheckedExtensions = map[string]bool{
 	".bash": true, ".c": true, ".cc": true, ".cpp": true, ".css": true,
 	".go": true, ".h": true, ".hpp": true, ".html": true, ".java": true,
-	".js": true, ".json": true, ".jsonc": true, ".jsx": true, ".kt": true, ".dart": true,
+	".js": true, ".jsx": true, ".kt": true, ".dart": true,
 	".kts": true, ".mjs": true, ".mts": true, ".php": true,
 	".proto": true, ".py": true, ".pyi": true, ".rb": true, ".rs": true,
 	".sh": true, ".sql": true, ".svelte": true, ".swift": true, ".toml": true,
@@ -563,7 +563,7 @@ func checkTextFile(repo repository.Repository, path string) []policy.Finding {
 
 func checksFileLength(repo repository.Repository, path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
-	if extension == ".md" || extension == ".markdown" {
+	if extension == ".md" || extension == ".markdown" || extension == ".json" || extension == ".jsonc" {
 		return false
 	}
 	return lengthCheckedExtensions[extension] || repo.IsExecutableSource(path)

@@ -94,3 +94,35 @@ standard-library protocols, and explicit external-consumer evidence. Complete
 source coverage remains mandatory. Invalid configuration is reported as a
 contract problem, while failure to obtain the whole project fact set withholds
 derivative findings.
+
+## Operator-controlled runtime loaders
+
+`scope.pythonRuntimeLoaders` declares an open runtime import boundary. It is
+separate from finite computed-import inventories and from dead-code retention.
+The repository delegates unknown target selection to an operator and supplies
+an exact source-bound loader, ASCII module/object grammar, and rejecting runtime
+protocol check. The analyzer verifies the supported loader structure using the
+bounded source parser and resolves operation and protocol identities over the
+complete project facts. It never imports the selected module.
+
+Acceptance produces an informational architecture coverage record that explicitly
+states that unknown targets are not statically verified. A successful local
+source graph proves only its represented edges; it cannot prove dependency
+direction or cycle freedom for future operator-selected targets. The protocol
+check runs after import, so neither that check nor syntax validation establishes
+import safety or dependency admission. Supply-chain policy remains independent;
+a package installed only on an operator's host is outside repository lock scans.
+
+Direct literal calls to the resolved loader add ordinary local dependency edges.
+Nonlocal targets remain external; missing targets under a local package root
+remain errors. The known calls are observations, not an exhaustive registry.
+Unknown calls retain the declared boundary. Existing `scope.pythonContracts`
+entry points express any repository exports that external hosts consume.
+
+The first supported syntax is a synchronous single-parameter loader with six
+statements: rejecting compiled-regex fullmatch, module/object split, direct
+import assignment, nested getattr loop, rejecting isinstance check, and return.
+Exact operation resolution rejects shadowed imports and builtins. Changed
+source digests, moved callsites, unsupported control flow, and stale declarations
+remain coverage errors. Supporting additional loader forms must extend this
+shared syntax contract rather than introduce application-specific names.

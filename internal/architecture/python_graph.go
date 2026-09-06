@@ -311,6 +311,15 @@ func pythonGraphImportCoverage(
 	coverage map[string]string,
 	sourceFacts map[string]pythonSourceFact,
 ) {
+	for _, source := range sources {
+		for _, target := range sourceFacts[source].RuntimeTargets {
+			for _, path := range newPythonModuleIndex(project).files[target.Module] {
+				if dependencies[source] != nil {
+					dependencies[source][path] = true
+				}
+			}
+		}
+	}
 	pythonObjectImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	pythonComputedImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	index := newPythonModuleIndex(project)

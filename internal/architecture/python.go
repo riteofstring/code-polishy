@@ -115,6 +115,11 @@ func pythonSources(repo repository.Repository, selected []string) []string {
 	seen := map[string]bool{}
 	sources := []string{}
 	candidates := append([]string{}, selected...)
+	for _, declaration := range repo.Config.Scope.PythonRuntimeLoaders {
+		if pythonComputedInputSelected(repo, selected, policy.PythonComputedImport{Project: declaration.Project}) {
+			candidates = append(candidates, declaration.Consumer.Importer)
+		}
+	}
 	for _, declaration := range repo.Config.Scope.PythonComputedImports {
 		if pythonComputedInputSelected(repo, selected, declaration) {
 			candidates = append(candidates, declaration.Importer)
@@ -242,7 +247,7 @@ func pythonProjectSourceGraph(
 	part.inputs = []sourcegraph.FactInput{sourceFacts.input}
 	part.external = sourceFacts.external
 	part.findings = append(part.findings, sourceFacts.pluginFindings...)
-	part.incomplete = part.incomplete || len(sourceFacts.pluginFindings) != 0
+	part.incomplete = part.incomplete || slices.ContainsFunc(sourceFacts.pluginFindings, func(finding policy.Finding) bool { return finding.Severity != policy.FindingInformation })
 	return part
 }
 

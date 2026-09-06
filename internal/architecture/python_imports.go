@@ -47,6 +47,8 @@ type pythonComputedConfigurationFact struct {
 }
 
 type pythonSourceFact struct {
+	RuntimeLoaders  map[pythonfacts.SourceLocation]bool
+	RuntimeTargets  []pythonImportReference
 	SHA256          string
 	Imports         []pythonImportReference
 	ComputedImports []pythonComputedImportFact
@@ -176,6 +178,12 @@ func pythonProjectResolution(ctx context.Context, repo repository.Repository, py
 	if err != nil {
 		return pythonResolution{}, err
 	}
+	runtime, err := pythonRuntimeLoaderProject(ctx, repo, python, project, modules, facts)
+	if err != nil {
+		return pythonResolution{}, err
+	}
+	resolved.findings = append(resolved.findings, runtime.findings...)
+	resolved.identity += runtime.identity
 	digest := sha256.Sum256([]byte(types.Identity + "\x00" + objects.Identity + "\x00" + resolved.identity))
 	resolved.identity = hex.EncodeToString(digest[:])
 	return resolved, nil

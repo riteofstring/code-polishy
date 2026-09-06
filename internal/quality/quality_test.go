@@ -68,6 +68,24 @@ func TestSourceChecksExcludeMarkdownFromFileLength(t *testing.T) {
 	}
 }
 
+func TestJSONLengthDoesNotDisableTextHygiene(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Quality.MaxFileLines = 2
+	for _, path := range []string{policy.ConfigFilename, "catalog/items.json", "settings/editor.JSON", "settings/editor.jsonc"} {
+		writeQualityFile(t, repo.Root, path, "{\n  \"items\": [1, 2, 3]  \n}")
+		findings := sourceChecks(repo, []string{path})
+		checks := findingChecks(findings)
+		if checks["quality.fileLength"] || !checks["quality.finalNewline"] || !checks["quality.trailingWhitespace"] {
+			t.Fatalf("JSON lost its distinct length and hygiene policy: %+v", findings)
+		}
+	}
+	writeQualityFile(t, repo.Root, "src/main.js", "const first = 1;\nconst second = 2;\nexport { first, second };\n")
+	if !findingChecks(sourceChecks(repo, []string{"src/main.js"}))["quality.fileLength"] {
+		t.Fatal("JavaScript source lost its line budget")
+	}
+}
+
 func TestGoComplexityUsesProductionThreshold(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
