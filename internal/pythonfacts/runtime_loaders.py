@@ -77,10 +77,8 @@ def known_targets(resolver, module, consumer):
             ):
                 continue
             value = arguments[0]["value"]
-            require(
-                re.fullmatch(PATTERN, value) is not None,
-                "known loader target violates its grammar",
-            )
+            if re.fullmatch(PATTERN, value) is None:
+                continue
             module_name, symbol = value.split(":")
             targets.append(
                 {

@@ -45,7 +45,7 @@ func TestPythonRuntimeLoaderBoundaryAndKnownEdges(t *testing.T) {
 	repo.PolicyRoot = root
 	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
 	writeArchitectureFile(t, repo.Root, "src/app/loader.py", runtimeLoaderExample)
-	writeArchitectureFile(t, repo.Root, "src/app/main.py", "from app.exports import load\nlocal = load(\"app.plugins.worker:registry.primary\")\nexternal = load(\"vendor_package.worker:instance\")\n")
+	writeArchitectureFile(t, repo.Root, "src/app/main.py", "from app.exports import load\nlocal = load(\"app.plugins.worker:registry.primary\")\nexternal = load(\"vendor_package.worker:instance\")\nrejected = load(\"not-a-target\")\n")
 	writeArchitectureFile(t, repo.Root, "src/app/exports.py", "from app.loader import load\n")
 	writeArchitectureFile(t, repo.Root, "src/app/plugins/worker.py", "raise RuntimeError(\"analysis must not execute this module\")\nregistry = object()\n")
 	repo.Config.Scope.PythonRuntimeLoaders = []policy.PythonRuntimeLoader{runtimeLoaderDeclaration(runtimeLoaderExample)}
