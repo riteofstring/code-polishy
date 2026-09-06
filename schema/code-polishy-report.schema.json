@@ -27,6 +27,7 @@
     "protocol": { "const": "code-polishy-report/v1" },
     "command": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "reportPath": { "type": "string" },
+    "execution": { "$ref": "#/$defs/executionTelemetry" },
     "requestedSelection": { "$ref": "#/$defs/requestedSelection" },
     "analysisContext": {
       "type": "array",
@@ -129,6 +130,114 @@
     }
   },
   "$defs": {
+    "executionTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluationDurationMilliseconds",
+        "scope",
+        "phases",
+        "commands",
+        "caches"
+      ],
+      "properties": {
+        "evaluationDurationMilliseconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestedOperands",
+            "selectedPaths",
+            "contextPaths",
+            "graphNodes",
+            "graphEdges"
+          ],
+          "properties": {
+            "requestedOperands": { "type": "integer", "minimum": 0 },
+            "selectedPaths": { "type": "integer", "minimum": 0 },
+            "contextPaths": { "type": "integer", "minimum": 0 },
+            "graphNodes": { "type": "integer", "minimum": 0 },
+            "graphEdges": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "phases": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "durationMilliseconds"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "durationMilliseconds": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "commands": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "phase",
+              "name",
+              "cwd",
+              "argv",
+              "durationMilliseconds",
+              "resourceWaitMilliseconds",
+              "exitStatus"
+            ],
+            "properties": {
+              "phase": { "type": "string" },
+              "name": { "type": "string", "minLength": 1 },
+              "cwd": { "type": "string" },
+              "argv": {
+                "type": "array",
+                "maxItems": 16384,
+                "items": { "type": "string" }
+              },
+              "durationMilliseconds": { "type": "integer", "minimum": 0 },
+              "resourceWaitMilliseconds": { "type": "integer", "minimum": 0 },
+              "exitStatus": { "type": "integer" },
+              "failureCategory": { "type": "string", "minLength": 1 },
+              "phases": {
+                "type": "array",
+                "maxItems": 128,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "durationMilliseconds"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "durationMilliseconds": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "caches": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "scope", "hits", "misses", "builds"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "scope": { "type": "string", "minLength": 1 },
+              "hits": { "type": "integer", "minimum": 0 },
+              "misses": { "type": "integer", "minimum": 0 },
+              "builds": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
     "designResolution": {
       "type": "object",
       "additionalProperties": false,
@@ -691,7 +800,7 @@
         {
           "properties": {
             "analyzer": { "const": "ruff" },
-            "protocol": { "const": "ruff-graph-facts/v1" }
+            "protocol": { "const": "ruff-graph-facts/v2" }
           }
         }
       ],
@@ -707,7 +816,7 @@
       ],
       "properties": {
         "analyzer": { "enum": ["python-facts", "ruff"] },
-        "protocol": { "enum": ["python-facts/v3", "ruff-graph-facts/v1"] },
+        "protocol": { "enum": ["python-facts/v3", "ruff-graph-facts/v2"] },
         "project": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "root": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "paths": {

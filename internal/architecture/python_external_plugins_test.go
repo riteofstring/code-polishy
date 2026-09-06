@@ -50,7 +50,7 @@ func TestPythonExternalPluginSelectionRetainsOnlyItsConsumerProject(t *testing.T
 		}
 	}
 	for _, selected := range [][]string{{"src/app/loader.py"}, {"uv.lock"}, {"pyproject.toml"}, {policy.ConfigFilename}} {
-		if commands := PythonGraphCommands(repo, selected); len(commands) != 1 {
+		if commands := PythonGraphCommands(repo, selected); len(commands) != 2 {
 			t.Fatalf("selected plug-in input did not select its project: %+v", commands)
 		}
 	}

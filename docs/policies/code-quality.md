@@ -429,13 +429,19 @@ managed diagnostic into a normal finding. A target Ruff configuration can make
 the target pass stricter; it cannot weaken the sealed lint or complexity
 baseline or alter the managed Python version, source roots, or line length.
 
-Vulture `2.16` is the sole Python dead-code provider. It analyzes the full
-governed contained project at fixed 60% confidence through the release-carried
+Vulture `2.16` is the sole Python dead-code provider. An explicit
+`code-polishy check --all` or merge gate analyzes each applicable governed
+contained project at fixed 60% confidence through the release-carried
 CPython `3.12.13+20260728` from python-build-standalone, rather than a target
 or ambient Python installation. Target Vulture configuration is ignored.
 Missing, unreadable, malformed, or incomplete analysis evidence is a coverage
 finding, never a clean result. Generated Python remains governed by this
 analysis; generated classification does not suppress dead-code coverage.
+
+Dead-code reachability is a repository property. A focused file check and a
+changed-scope checkpoint therefore run selected-file Ruff and ty checks and
+defer Vulture to a merge or complete selection. This keeps iteration bounded
+without treating partial reference evidence as a clean global result.
 
 Vulture loads its pinned release's import-selected standard whitelists for
 contracts such as `ast.NodeVisitor`, `unittest.TestCase`, `unittest.mock`, and

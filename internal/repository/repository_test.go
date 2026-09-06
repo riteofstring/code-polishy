@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,55 @@ func TestCustomLanguageRulesExtendDetectionWithoutOverridingBuiltIns(t *testing.
 	}
 	if got := repo.Languages("lib/main.go"); !slices.Equal(got, []string{"go"}) {
 		t.Fatalf("built-in language must win, got %v", got)
+	}
+}
+
+func TestPathFactsAreReusedWithoutSharingMutableResults(t *testing.T) {
+	t.Parallel()
+	repo := (Repository{Config: policy.Config{
+		Scope:   policy.Scope{Languages: []policy.LanguageRule{{Name: "template", Paths: []string{"src/**"}}}},
+		Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}},
+	}}).WithPathFactCache()
+
+	languages := repo.Languages("src/view.template")
+	modules := repo.OwnerModuleNames("src/view.template")
+	languages[0] = "changed"
+	modules[0] = "changed"
+	if got := repo.Languages("src/view.template"); !slices.Equal(got, []string{"template"}) {
+		t.Fatalf("cached languages = %v", got)
+	}
+	if got := repo.OwnerModuleNames("src/view.template"); !slices.Equal(got, []string{"application"}) {
+		t.Fatalf("cached modules = %v", got)
+	}
+	hits, misses, builds := repo.PathFactCacheStats()
+	if hits < 2 || misses == 0 || builds == 0 || misses != builds {
+		t.Fatalf("cache stats = hits %d, misses %d, builds %d", hits, misses, builds)
+	}
+}
+
+func TestPathFactCacheBoundsRepeatedRepositoryClassification(t *testing.T) {
+	t.Parallel()
+	modules := make([]policy.Module, 64)
+	for index := range modules {
+		modules[index] = policy.Module{Name: fmt.Sprintf("module-%d", index), Paths: []string{fmt.Sprintf("packages/p%d/**", index)}}
+	}
+	repo := (Repository{Config: policy.Config{Modules: modules}}).WithPathFactCache()
+	paths := make([]string, 1024)
+	for index := range paths {
+		paths[index] = fmt.Sprintf("packages/p%d/file-%d.go", index%len(modules), index)
+		if owners := repo.OwnerModuleNames(paths[index]); len(owners) != 1 {
+			t.Fatalf("owners for %s = %v", paths[index], owners)
+		}
+	}
+	_, _, initialBuilds := repo.PathFactCacheStats()
+	for repeat := 0; repeat < 4; repeat++ {
+		for _, path := range paths {
+			repo.OwnerModuleNames(path)
+		}
+	}
+	hits, _, builds := repo.PathFactCacheStats()
+	if builds != initialBuilds || hits < int64(4*len(paths)) {
+		t.Fatalf("cache stats after repeated classification = hits %d, builds %d; initial builds %d", hits, builds, initialBuilds)
 	}
 }
 

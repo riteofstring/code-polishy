@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/pythonfacts"
@@ -81,6 +82,9 @@ type pythonProjectInventoryCache struct {
 	inventory     PythonProjectInventory
 	manifestReads map[string]pythonProjectReadResult
 	building      bool
+	hits          atomic.Int64
+	misses        atomic.Int64
+	builds        atomic.Int64
 }
 
 type pythonProjectReadResult struct {
@@ -98,6 +102,7 @@ func (repo Repository) WithPythonProjectInventory(files []string) (Repository, e
 		return Repository{}, err
 	}
 	repo.pythonProjectCache = newPythonProjectInventoryCache(canonical)
+	repo.pythonProjectCache.builds.Add(1)
 	inventory := repo.pythonProjectInventory(canonical)
 	repo.pythonProjectCache.inventory = clonePythonProjectInventory(inventory)
 	repo.pythonProjectCache.building = false
@@ -107,10 +112,21 @@ func (repo Repository) WithPythonProjectInventory(files []string) (Repository, e
 func (repo Repository) PythonProjectInventory(files []string) PythonProjectInventory {
 	canonical, err := repo.canonicalPythonProjectInventoryFiles(files)
 	if err == nil && repo.pythonProjectCache != nil && slices.Equal(canonical, repo.pythonProjectCache.files) {
+		repo.pythonProjectCache.hits.Add(1)
 		return clonePythonProjectInventory(repo.pythonProjectCache.inventory)
+	}
+	if repo.pythonProjectCache != nil {
+		repo.pythonProjectCache.misses.Add(1)
 	}
 	repo.pythonProjectCache = nil
 	return repo.pythonProjectInventory(files)
+}
+
+func (repo Repository) PythonProjectInventoryCacheStats() (int64, int64, int64) {
+	if repo.pythonProjectCache == nil {
+		return 0, 0, 0
+	}
+	return repo.pythonProjectCache.hits.Load(), repo.pythonProjectCache.misses.Load(), repo.pythonProjectCache.builds.Load()
 }
 
 func (repo Repository) canonicalPythonProjectInventoryFiles(files []string) ([]string, error) {

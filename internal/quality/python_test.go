@@ -71,6 +71,7 @@ func pythonVultureCleanOutput(command policy.Command) (string, error) {
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
 		"diagnostics": []pythonVultureDiagnostic{}, "resolved": resolved, "problems": []pythonVultureProblem{}, "error": "", "facts_error": "", "reachability": []pythonfacts.ReachabilityEvidence{},
+		"timings": []pythonVultureTiming{{Name: "adapter-total", DurationNS: 1}},
 	})
 	if err != nil {
 		return "", err
@@ -771,6 +772,7 @@ func pythonVultureOutput(t *testing.T, covered []string, diagnostics []pythonVul
 	output, err := json.Marshal(map[string]any{
 		"protocol": pythonVultureProtocolVersion, "tool_version": pythonVultureVersion, "covered": covered,
 		"diagnostics": diagnostics, "resolved": resolved, "problems": problems, "error": analysisError, "facts_error": "", "reachability": []pythonfacts.ReachabilityEvidence{},
+		"timings": []pythonVultureTiming{{Name: "adapter-total", DurationNS: 1}},
 	})
 	if err != nil {
 		t.Fatal(err)

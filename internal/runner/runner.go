@@ -40,6 +40,15 @@ type StreamRunner interface {
 	RunWithWriters(context.Context, string, policy.Command, io.Writer, io.Writer) (Result, error)
 }
 
+type CommandPhase struct {
+	Name     string
+	Duration time.Duration
+}
+
+type CommandPhaseRecorder interface {
+	RecordCommandPhases(context.Context, policy.Command, []CommandPhase)
+}
+
 type OSRunner struct {
 	Stdout      io.Writer
 	Stderr      io.Writer

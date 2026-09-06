@@ -29,13 +29,17 @@ All captured sources contribute to identity, including sources that do not
 ultimately supply the selected definition.
 
 Architecture resolution does not build the Python semantic model. The pinned
-Ruff graph runs on the selected source paths, and the Go policy engine validates
-its paths, ownership, module direction, and cycles. A focused check therefore
-scales with its selection. A full gate selects the complete project and retains
-whole-project cycle coverage. Repository declarations add source-bound dynamic
-edges and runtime boundaries without causing unrelated files to enter a focused
-graph. TypedDict and dead-code analysis keep their separate complete-project
-fact model because those quality checks need cross-file semantics.
+Ruff graph runs on the selected source paths with type-checking imports enabled
+and disabled. Their validated difference preserves type-only edges while the Go
+policy engine applies runtime cycle traversal only to executable dependency
+relations. A focused check therefore scales with its selection. A full gate
+selects the complete project and retains whole-project cycle coverage.
+Repository declarations add source-bound dynamic edges and runtime boundaries
+without causing unrelated files to enter a focused graph. TypedDict and
+dead-code analysis keep their separate complete-project fact model because
+those quality checks need cross-file semantics. They run only for explicit
+complete selections and merge gates; focused checks defer that global
+conclusion.
 
 `METADATA`, `RECORD`, and an applicable Git `direct_url.json` establish current
 installation consistency. They do not authenticate the installer or prove

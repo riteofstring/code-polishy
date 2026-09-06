@@ -45,4 +45,9 @@ func TestCheckSelectedAgentGuidanceDoesNotStartPythonAnalysis(t *testing.T) {
 			t.Errorf("Python analysis ran for selected agent guidance: %+v", finding)
 		}
 	}
+	if report.Execution == nil || report.Execution.EvaluationDurationMilliseconds < 0 || !slices.ContainsFunc(report.Execution.Phases, func(phase engine.ExecutionPhase) bool {
+		return phase.Name == "architecture"
+	}) || len(report.Execution.Commands) != 0 {
+		t.Fatalf("execution telemetry = %+v", report.Execution)
+	}
 }

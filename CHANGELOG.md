@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.24.9 - 2026-09-06
+
+- Compile the bounded path-pattern grammar once and cache immutable repository
+  classification facts after policy composition. Selected checks and Markdown
+  formatting retain required global coverage without repeatedly rebuilding the
+  same language, generated, test, and ownership facts.
+- Record total evaluation and phase durations, exact analyzer subprocess
+  durations and arguments, resource wait, requested and expanded scope, graph
+  size, cache activity, and Vulture subphase timings in structured reports and
+  verbose human output.
+- Run repository-wide Python dead-code analysis only for explicit complete
+  selections and merge gates. Focused checks retain Ruff and ty, while Vulture
+  walks reuse exact ancestry results and scan framework contracts only
+  where diagnostics are requested.
+- Preserve imports guarded by `TYPE_CHECKING` as type-only graph edges and
+  exclude them from runtime dependency-cycle findings.
+
 ## 0.24.8 - 2026-09-06
 
 - Run Python architecture checks directly from the pinned Ruff dependency graph

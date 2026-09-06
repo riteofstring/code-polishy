@@ -22,11 +22,24 @@ func TestMatchUsesSegmentAwareWildcards(t *testing.T) {
 		{"file.ts", "**/*.ts", true},
 		{"deep/file.ts", "*.ts", false},
 		{"deep/file.ts", "**/*.ts", true},
+		{"src/deep/file.go", "src/**/file.go", true},
+		{"src/file.go", "src/**/file.go", true},
+		{"src/deep/file.go", "src/**/other.go", false},
+		{"résumé.py", "résumé.?y", true},
 	}
 	for _, test := range cases {
 		if got := Match(test.path, test.pattern); got != test.want {
 			t.Errorf("Match(%q, %q) = %v, want %v", test.path, test.pattern, got, test.want)
 		}
+	}
+}
+
+func TestMatchKeepsRepeatedPolicyEvaluationBounded(t *testing.T) {
+	allocations := testing.AllocsPerRun(100, func() {
+		Match("src/application/handlers/example.go", "src/**/handlers/*.go")
+	})
+	if allocations > 8 {
+		t.Fatalf("Match allocated %.0f objects per comparison", allocations)
 	}
 }
 

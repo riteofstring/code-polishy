@@ -14,6 +14,7 @@ type Report struct {
 	Protocol                string                                    `json:"protocol"`
 	Command                 string                                    `json:"command"`
 	ReportPath              string                                    `json:"reportPath"`
+	Execution               *ExecutionTelemetry                       `json:"execution,omitempty"`
 	RequestedSelection      *repository.RequestedSelection            `json:"requestedSelection,omitempty"`
 	AnalysisContext         []AnalysisContext                         `json:"analysisContext"`
 	RepositoryContext       *RepositoryContext                        `json:"repositoryContext,omitempty"`
@@ -40,6 +41,47 @@ type Report struct {
 	GitEvidence             []supplychain.GitEvidenceReceipt          `json:"gitEvidence,omitempty"`
 	Tables                  []Table                                   `json:"tables"`
 	Notes                   []string                                  `json:"notes"`
+}
+
+type ExecutionTelemetry struct {
+	EvaluationDurationMilliseconds int64              `json:"evaluationDurationMilliseconds"`
+	Scope                          ExecutionScope     `json:"scope"`
+	Phases                         []ExecutionPhase   `json:"phases"`
+	Commands                       []ExecutionCommand `json:"commands"`
+	Caches                         []ExecutionCache   `json:"caches"`
+}
+
+type ExecutionScope struct {
+	RequestedOperands int `json:"requestedOperands"`
+	SelectedPaths     int `json:"selectedPaths"`
+	ContextPaths      int `json:"contextPaths"`
+	GraphNodes        int `json:"graphNodes"`
+	GraphEdges        int `json:"graphEdges"`
+}
+
+type ExecutionPhase struct {
+	Name                 string `json:"name"`
+	DurationMilliseconds int64  `json:"durationMilliseconds"`
+}
+
+type ExecutionCommand struct {
+	Phase                string           `json:"phase"`
+	Name                 string           `json:"name"`
+	Cwd                  string           `json:"cwd"`
+	Argv                 []string         `json:"argv"`
+	DurationMilliseconds int64            `json:"durationMilliseconds"`
+	ResourceWaitMillis   int64            `json:"resourceWaitMilliseconds"`
+	ExitStatus           int              `json:"exitStatus"`
+	FailureCategory      string           `json:"failureCategory,omitempty"`
+	Phases               []ExecutionPhase `json:"phases,omitempty"`
+}
+
+type ExecutionCache struct {
+	Name   string `json:"name"`
+	Scope  string `json:"scope"`
+	Hits   int64  `json:"hits"`
+	Misses int64  `json:"misses"`
+	Builds int64  `json:"builds"`
 }
 
 type AnalysisContext struct {

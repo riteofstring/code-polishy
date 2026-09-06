@@ -19,7 +19,7 @@ import (
 type pythonGraph map[string][]string
 
 const (
-	pythonGraphProtocol       = "ruff-graph-facts/v1"
+	pythonGraphProtocol       = "ruff-graph-facts/v2"
 	pythonGraphRuffVersion    = "0.16.0"
 	pythonGraphMaximumBytes   = 8 << 20
 	pythonGraphMaximumSources = 4096

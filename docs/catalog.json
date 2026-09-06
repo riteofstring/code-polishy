@@ -111,6 +111,14 @@
       "public": true
     },
     {
+      "id": "execution-observability",
+      "path": "docs/design/execution-observability.md",
+      "title": "Execution Observability and Repository Facts",
+      "summary": "Understand execution timings, bounded caches, analyzer scope, and complete-project dead-code selection.",
+      "aliases": ["performance", "timings"],
+      "public": true
+    },
+    {
       "id": "exceptions",
       "path": "docs/policies/exceptions.md",
       "title": "Exception Policy",

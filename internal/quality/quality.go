@@ -30,7 +30,7 @@ func Check(ctx context.Context, repo repository.Repository, selection repository
 	findings = append(findings, JavaScriptLintFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptTypeCheckFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptDeadCodeFindings(ctx, repo, selection.Files)...)
-	findings = append(findings, PythonQualityFindings(ctx, repo, selection.Files, commandRunner)...)
+	findings = append(findings, pythonQualityFindingsForSelection(ctx, repo, selection, commandRunner, profile)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")
@@ -51,7 +51,7 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
-	commands = append(commands, pythonQualityCommands(repo, selection.Files)...)
+	commands = append(commands, pythonQualityCommandsForSelection(repo, selection, profile)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")

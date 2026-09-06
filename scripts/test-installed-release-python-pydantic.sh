@@ -171,7 +171,7 @@ for label, model, payload, source in cases:
     shutil.rmtree(root / "src", ignore_errors=True)
     if model == "InheritedModel":
         write("src/models/base.py", "from pydantic import BaseModel\n\n\nclass ProjectModel(BaseModel):\n    pass\n")
-        write("src/models/__init__.py", "from .base import ProjectModel as ModelBase\n")
+        write("src/models/__init__.py", "from .base import ProjectModel as ModelBase\n\n__all__ = [\"ModelBase\"]\n")
     write("src/reported.py", source)
     write("src/tests/__init__.py", "")
     write("src/main.py", f'''import json
@@ -205,7 +205,10 @@ class TestModels(unittest.TestCase):
     policy("test", "--suite", "application-unit")
     original = (root / "src/reported.py").read_text()
     write("src/reported.py", original + "\n\nclass Plain:\n    unrelated_field: str\n\n    def unused_method(self) -> int:\n        return 7\n")
-    report = policy("check", "--files", "src/reported.py", status=1)
+    focused = policy("check", "--files", "src/reported.py")
+    if any(finding["ruleId"] == "quality.deadCode" for finding in focused["findings"]):
+        raise AssertionError(f"{label}: focused check unexpectedly ran dead-code analysis: {focused['findings']}")
+    report = policy("check", "--all", status=1)
     first_line = original.count("\n") + 3
     locations = {(finding["path"], finding["line"]) for finding in report["findings"]}
     expected = {("src/reported.py", first_line + offset) for offset in (0, 1, 3)}

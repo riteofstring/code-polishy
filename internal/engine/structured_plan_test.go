@@ -53,7 +53,7 @@ func TestPlannedPolicyChecksIncludePythonArchitectureGraph(t *testing.T) {
 	}
 	commands := plannedPolicyCheckCommands(repo, repository.Selection{Files: []string{"src/app.py"}}, "check")
 	for _, command := range commands {
-		if strings.HasPrefix(command.Name, "ruff-graph-facts-v1-") {
+		if strings.HasPrefix(command.Name, "ruff-graph-facts-v2-") {
 			return
 		}
 	}

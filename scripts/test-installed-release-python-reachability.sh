@@ -195,7 +195,7 @@ config["checks"] = [
     {"name": "lock-sync", "provides": ["lock-sync"], "modules": ["application"], "argv": ["python", "-I", "-B", "-c", lock_check], "runOn": ["supply-chain"]},
 ]
 save_config()
-write("src/tests/test_factory.py", "import unittest\nfrom app.plugin import main\n\nclass FactoryTests(unittest.TestCase):\n    def test_loader_supports_independent_instances(self):\n        self.assertIsNot(main()(), main()())\n")
+write("src/tests/test_factory.py", "import unittest\n\nfrom app.plugin import main\n\n\nclass FactoryTests(unittest.TestCase):\n    def test_loader_supports_independent_instances(self):\n        self.assertIsNot(main()(), main()())\n")
 write(".gitignore", ".code-polishy-reports/\n.venv/\n")
 shutil.copyfile(lock, root / ".code-polishy.lock.json")
 subprocess.run([git, "-C", str(root), "init", "--quiet"], check=True)
@@ -225,7 +225,10 @@ def install_contract(source, origin=None):
 
 
 def check_contract(*, rejected=False):
-    report = command("check", "--files", "src/app/plugin.py", status=1)
+    focused = command("check", "--files", "src/app/plugin.py")
+    if any(finding["ruleId"] in {"quality.deadCode", "policy.pythonReachability"} for finding in focused["findings"]):
+        raise AssertionError(f"focused external contract check retained the wrong scope: {focused['findings']}")
+    report = command("check", "--all", status=1)
     findings = report["findings"]
     dead = {finding["line"] for finding in findings if finding["ruleId"] == "quality.deadCode"}
     expected = {methods["unused_hook"].lineno}

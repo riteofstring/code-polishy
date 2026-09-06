@@ -59,6 +59,15 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	}
 	coalesceReportOutcomes(&report)
 	report.AnalysisContext = reportArray(report.AnalysisContext)
+	if report.Execution != nil {
+		report.Execution.Phases = reportArray(report.Execution.Phases)
+		report.Execution.Commands = reportArray(report.Execution.Commands)
+		report.Execution.Caches = reportArray(report.Execution.Caches)
+		for index := range report.Execution.Commands {
+			report.Execution.Commands[index].Argv = reportArray(report.Execution.Commands[index].Argv)
+			report.Execution.Commands[index].Phases = reportArray(report.Execution.Commands[index].Phases)
+		}
+	}
 	report.TestCommands = reportArray(report.TestCommands)
 	report.TestDiagnostics = reportArray(report.TestDiagnostics)
 	report.TestAggregations = reportArray(report.TestAggregations)

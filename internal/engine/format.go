@@ -25,11 +25,18 @@ type FormatFile struct {
 }
 
 func (engine *Engine) Format(ctx context.Context, selection repository.Selection) Report {
-	files, err := engine.Repository.AllFiles()
+	files := []string{}
+	inventory := repository.GenerationInventory{}
+	var err error
+	engine.executionPhase(ctx, "format-inventory", func(context.Context) {
+		files, err = engine.Repository.AllFiles()
+		if err == nil {
+			inventory = engine.Repository.InspectGeneration(files)
+		}
+	})
 	if err != nil {
 		return engine.formatFailure(selection, "repository", err)
 	}
-	inventory := engine.Repository.InspectGeneration(files)
 	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
 	if engine.Repository.HasGeneratedExecutable(selection.Files) {
 		findings = append(findings, inventory.Findings...)
@@ -37,15 +44,27 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 	if len(findings) != 0 {
 		return engine.withSelection(engine.finish(findings, nil), selection)
 	}
-	before, err := engine.formatSnapshot(selection.Files)
+	before := map[string]string{}
+	engine.executionPhase(ctx, "format-input-snapshot", func(context.Context) {
+		before, err = engine.formatSnapshot(selection.Files)
+	})
 	if err != nil {
 		return engine.formatFailure(selection, "inputs", err)
 	}
-	findings = quality.Format(ctx, engine.Repository, selection, engine.Runner)
-	outcome, protectionFindings := engine.formatOutcome(selection.Files, before, inventory)
+	engine.executionPhase(ctx, "formatters", func(phaseContext context.Context) {
+		findings = quality.Format(phaseContext, engine.Repository, selection, engine.Runner)
+	})
+	outcome := FormatOutcome{}
+	protectionFindings := []policy.Finding{}
+	engine.executionPhase(ctx, "format-output-verification", func(context.Context) {
+		outcome, protectionFindings = engine.formatOutcome(selection.Files, before, inventory)
+	})
 	findings = append(findings, protectionFindings...)
-	report := engine.withSelection(engine.finish(findings, nil), selection)
-	report.Formatting = &outcome
+	report := Report{}
+	engine.executionPhase(ctx, "report-assembly", func(context.Context) {
+		report = engine.withSelection(engine.finish(findings, nil), selection)
+		report.Formatting = &outcome
+	})
 	return report
 }
 

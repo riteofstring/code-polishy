@@ -32,19 +32,24 @@ class _FrameworkResolver(_Resolver):
 
 
 class _FrameworkVisitor(_ConnectionFlow):
-    def __init__(self, resolver, source):
+    def __init__(self, resolver, source, writes=None):
         super().__init__(self.connection_call)
         self.resolver = resolver
         self.module = resolver.files[source["path"]]
         self.scope = "module"
         self.owner = None
         self.kept = set()
-        self.writes = Counter(
-            (node.lineno, node.attr if isinstance(node, ast.Attribute) else node.id)
-            for node in ast.walk(source["tree"])
-            if isinstance(node, (ast.Attribute, ast.Name))
-            and isinstance(node.ctx, ast.Store)
-        )
+        if writes is None:
+            writes = Counter(
+                (
+                    node.lineno,
+                    node.attr if isinstance(node, ast.Attribute) else node.id,
+                )
+                for node in ast.walk(source["tree"])
+                if isinstance(node, (ast.Attribute, ast.Name))
+                and isinstance(node.ctx, ast.Store)
+            )
+        self.writes = writes
 
     def keep(self, node, name):
         decorators = getattr(node, "decorator_list", [])
@@ -70,13 +75,13 @@ class _FrameworkVisitor(_ConnectionFlow):
         self.connections = {path for path in self.connections if len(path) == 1}
 
     def visit_FunctionDef(self, node):
-        if self.callback(node):
+        if self.callback(node) or self.pytest_autouse(node):
             self.keep(node, node.name)
             self.callback_parameters(node)
         previous = self.scope, self.owner, self.connections, self.mutable_names
         self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
-        self.owner = None
         self.connections = self.parameters(node, previous[0])
+        self.owner = None
         self.mutable_names = {
             name
             for value in ast.walk(node)
@@ -90,6 +95,51 @@ class _FrameworkVisitor(_ConnectionFlow):
         self.connections = {path for path in self.connections if len(path) == 1}
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+    def pytest_autouse(self, node):
+        for value in node.decorator_list:
+            target = value.func if isinstance(value, ast.Call) else value
+            if self.qualified(target) != "pytest.fixture":
+                continue
+            if not isinstance(value, ast.Call) or value.args:
+                continue
+            keywords = {keyword.arg: keyword.value for keyword in value.keywords}
+            autouse = keywords.get("autouse")
+            if isinstance(autouse, ast.Constant) and autouse.value is True:
+                return True
+        return False
+
+    def pytest_mark_value(self, node):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            return bool(node.elts) and all(
+                self.pytest_mark_value(value) for value in node.elts
+            )
+        target = node.func if isinstance(node, ast.Call) else node
+        qualified = self.qualified(target)
+        return qualified is not None and qualified.startswith("pytest.mark.")
+
+    def class_binding(self, target, value=None):
+        if not isinstance(target, ast.Name):
+            return
+        if (
+            self.scope == "module"
+            and target.id == "pytestmark"
+            and self.pytest_mark_value(value)
+        ):
+            self.keep(target, target.id)
+        if target.id == "daemon_threads" and self.resolver.derives(
+            self.owner, {"socketserver.ThreadingMixIn"}
+        ):
+            self.keep(target, target.id)
+
+    def visit_Assign(self, node):
+        for target in node.targets:
+            self.class_binding(target, node.value)
+        super().visit_Assign(node)
+
+    def visit_AnnAssign(self, node):
+        self.class_binding(node.target, node.value)
+        super().visit_AnnAssign(node)
 
     def connection_call(self, node, scope):
         qualified = self.resolver.qualified(self.module, scope, node.func)
@@ -111,7 +161,8 @@ class _FrameworkVisitor(_ConnectionFlow):
 
     def parameters(self, node, scope):
         result = set()
-        for argument in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
+        arguments = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+        for argument in arguments:
             annotation = argument.annotation
             if isinstance(annotation, ast.Constant) and isinstance(
                 annotation.value, str
@@ -123,6 +174,10 @@ class _FrameworkVisitor(_ConnectionFlow):
                 qualified = self.resolver.qualified(self.module, scope, annotation)
             if qualified == "sqlite3.Connection":
                 result.add((argument.arg,))
+        if arguments and self.resolver.derives(
+            self.owner, {"http.server.BaseHTTPRequestHandler"}
+        ):
+            result.add((arguments[0].arg,))
         return result
 
     def callback_parameters(self, node):
@@ -150,7 +205,7 @@ class _FrameworkVisitor(_ConnectionFlow):
     def visit_Attribute(self, node):
         if (
             isinstance(node.ctx, ast.Store)
-            and node.attr == "row_factory"
+            and (node.attr == "row_factory" or node.attr == "close_connection")
             and self.connection(node.value)
         ):
             self.keep(node, node.attr)

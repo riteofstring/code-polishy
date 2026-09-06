@@ -9,7 +9,6 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -17,23 +16,27 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-const pythonVultureProtocolVersion = 8
+const pythonVultureProtocolVersion = 10
 
 const pythonVultureVersion = "2.16"
 
 const pythonVultureInputMaximumBytes = 4 << 20
 
-const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys
+const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys,time
 from collections import defaultdict
 from source_parser import parse_source
 from type_facts import type_facts
 from type_resolver import typed_dict_reads
 from repository_contracts import framework_members
-P=8
+P=10
 M=4194304
 S=4096
 R=re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
-o={"protocol":P,"tool_version":"","covered":[],"diagnostics":[],"resolved":[],"problems":[],"facts_error":"","error":"","reachability":[]}
+o={"protocol":P,"tool_version":"","covered":[],"diagnostics":[],"resolved":[],"problems":[],"facts_error":"","error":"","reachability":[],"timings":[]}
+started=time.perf_counter_ns();lap=started
+def tm(name):
+ global lap
+ now=time.perf_counter_ns();o["timings"].append({"name":name,"duration_ns":now-lap});lap=now
 def e(x):
  o["error"]=str(x)[:S]
 def q(x):
@@ -179,7 +182,7 @@ try:
  b=sys.stdin.buffer.read(M+1)
  if len(b)>M:raise ValueError("input exceeds limit")
  x=json.loads(b)
- if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","references","backends","attributes","contracts"}:raise ValueError("invalid request")
+ if not isinstance(x,dict) or set(x)!={"protocol","tool_version","root","files","targets","complete","references","backends","attributes","contracts"}:raise ValueError("invalid request")
  if type(x["protocol"]) is not int or x["protocol"]!=P or not isinstance(x["tool_version"],str):raise ValueError("invalid protocol")
  root=q(x["root"])
  if not os.path.isabs(root):raise ValueError("root is not absolute")
@@ -188,6 +191,7 @@ try:
  import importlib.metadata
  o["tool_version"]=importlib.metadata.version("vulture")
  if o["tool_version"]!=x["tool_version"]:raise ValueError("Vulture version mismatch")
+ tm("request-validation")
  if not isinstance(x["files"],list) or not x["files"]:raise ValueError("invalid files")
  fs=[]; seen=set();source_bytes=0;ast_nodes=0
  for f in x["files"]:
@@ -206,6 +210,12 @@ try:
   except Exception as z:
    o["facts_error"]=str(z)[:S];raise
   fs.append({"path":path,"module":f["module"],"package":f["package"],"tree":tree,"source":s})
+ tm("source-parse")
+ if not isinstance(x["targets"],list) or any(not isinstance(path,str) for path in x["targets"]):raise ValueError("invalid targets")
+ targets=set(x["targets"])
+ if len(targets)!=len(x["targets"]) or not targets.issubset(seen):raise ValueError("invalid targets")
+ if type(x["complete"]) is not bool or x["complete"]!=(not targets or targets==seen):raise ValueError("invalid completeness")
+ target_fs=[f for f in fs if f["path"] in targets]
  if not isinstance(x["references"],list):raise ValueError("invalid references")
  rs=[]; configured=[]; ids=set()
  for r in x["references"]:
@@ -237,6 +247,7 @@ try:
  mods={}
  for f in fs:
   if f["path"].endswith(".py") and f["module"]:mods.setdefault(f["module"],[]).append(f)
+ tm("request-model")
  import vulture.core as vc
  vc.noqa.parse_noqa=lambda _:defaultdict(set)
  v=vc.Vulture()
@@ -247,10 +258,14 @@ try:
   try:d=pkgutil.get_data("vulture",w)
   except OSError:continue
   if d is not None:v.scan(d.decode("utf-8"),filename=w)
+ tm("vulture-scan")
  try:
   type_modules=_vulture_type_modules(fs)
+  tm("type-facts")
   typed=typed_dict_reads(type_modules)
-  frameworks,resolved,problems=framework_members(type_modules,fs,x["contracts"])
+  tm("typed-dict")
+  frameworks,resolved,problems=framework_members(type_modules,fs,target_fs,x["contracts"],x["complete"])
+  tm("framework-contracts")
   o["resolved"].extend(resolved);o["problems"].extend(problems)
  except Exception as z:
   o["facts_error"]=str(z)[:S];raise
@@ -291,8 +306,10 @@ try:
   try:
    keep.add(_external_write(a));o["resolved"].append(a["id"])
   except Exception as z:o["problems"].append({"id":a["id"],"message":str(z)[:S]})
+ tm("static-contracts")
  from reachability import resolve_reachability
  evidence,problems=resolve_reachability(type_modules,configured,keep)
+ tm("reachability")
  o["reachability"]=evidence;o["problems"].extend(problems)
  for item in evidence:
   o["resolved"].append(item["id"])
@@ -300,10 +317,12 @@ try:
    for definition in target["definitions"]:keep.add((definition["path"],definition["line"],definition["end"],definition["name"]))
  for z in v.get_unused_code(min_confidence=60):
   a=(str(z.filename),z.first_lineno,z.last_lineno,z.name)
-  if a in keep:continue
+  if a[0] not in targets or a in keep:continue
   if not z.name or len(z.name)>S or not z.message or len(z.message)>S:raise ValueError("invalid Vulture diagnostic")
   o["diagnostics"].append({"path":a[0],"line":a[1],"end":a[2],"name":z.name,"kind":z.typ,"confidence":z.confidence,"message":z.message})
+ tm("diagnostics")
 except Exception as z:e(z)
+o["timings"].append({"name":"adapter-total","duration_ns":time.perf_counter_ns()-started})
 sys.stdout.write(json.dumps(o,sort_keys=True,separators=(",",":")))`
 
 var pythonVultureProgram = pythonfacts.ParserSupportSource() + pythonfacts.TypeSupportSource() + pythonfacts.ReachabilitySupportSource() + pythonVultureTypeFacts + pythonVultureExternalAttributes + "\n" + pythonVultureAdapter
@@ -347,6 +366,8 @@ type pythonVultureRequest struct {
 	ToolVersion string                   `json:"tool_version"`
 	Root        string                   `json:"root"`
 	Files       []pythonVultureFile      `json:"files"`
+	Targets     []string                 `json:"targets"`
+	Complete    bool                     `json:"complete"`
 	References  []pythonVultureReference `json:"references"`
 	Backends    []pythonVultureBackend   `json:"backends"`
 	Attributes  []pythonVultureAttribute `json:"attributes"`
@@ -385,6 +406,7 @@ type pythonVultureResponseWire struct {
 	Problems     *[]pythonVultureProblem             `json:"problems"`
 	FactsError   *string                             `json:"facts_error"`
 	Error        *string                             `json:"error"`
+	Timings      *[]pythonVultureTiming              `json:"timings"`
 }
 
 type pythonVultureResponse struct {
@@ -395,25 +417,29 @@ type pythonVultureResponse struct {
 	Problems     []pythonVultureProblem
 	FactsError   string
 	Error        string
+	Timings      []pythonVultureTiming
 }
 
 func pythonVultureCommand(repo repository.Repository, project repository.PythonProject) (policy.Command, error) {
+	return pythonVultureCommandForSources(repo, project, project.Files)
+}
+
+func pythonVultureCommandForSources(repo repository.Repository, project repository.PythonProject, targets []string) (policy.Command, error) {
 	interpreter := repo.PythonTool()
 	if !filepath.IsAbs(interpreter) {
 		return policy.Command{}, fmt.Errorf("policy Python interpreter is not absolute")
 	}
-	files := make([]pythonVultureFile, 0, len(project.Files))
-	for _, source := range project.Files {
-		module, packageName := repository.PythonModuleName(project, source)
-		files = append(files, pythonVultureFile{Path: source, Module: module, Package: packageName})
+	files, targets, err := pythonVultureInputs(project, targets)
+	if err != nil {
+		return policy.Command{}, err
 	}
-	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
 	references, _ := pythonVultureReferences(repo, project)
 	backends, _ := pythonVultureBackends(project)
 	attributes, _ := pythonVultureAttributes(repo, project)
 	request := pythonVultureRequest{
 		Protocol: pythonVultureProtocolVersion, ToolVersion: pythonVultureVersion, Root: repo.Root,
-		Files: files, References: references, Backends: backends, Attributes: attributes, Contracts: pythonVultureContracts(repo, project),
+		Files: files, Targets: targets, Complete: len(targets) == 0 || len(targets) == len(files),
+		References: references, Backends: backends, Attributes: attributes, Contracts: pythonVultureContracts(repo, project),
 	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
@@ -442,6 +468,27 @@ func pythonVultureCommand(repo repository.Repository, project repository.PythonP
 		SealedEnvironment: true,
 		Stdin:             stdin,
 	}, nil
+}
+
+func pythonVultureInputs(project repository.PythonProject, targets []string) ([]pythonVultureFile, []string, error) {
+	files := make([]pythonVultureFile, 0, len(project.Files))
+	for _, source := range project.Files {
+		module, packageName := repository.PythonModuleName(project, source)
+		files = append(files, pythonVultureFile{Path: source, Module: module, Package: packageName})
+	}
+	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
+	available := map[string]bool{}
+	for _, file := range files {
+		available[file.Path] = true
+	}
+	targets = append([]string{}, targets...)
+	sort.Strings(targets)
+	for index, target := range targets {
+		if !available[target] || index > 0 && targets[index-1] == target {
+			return nil, nil, fmt.Errorf("vulture target %q is not a unique project source", target)
+		}
+	}
+	return files, targets, nil
 }
 
 func pythonVultureAttributes(repo repository.Repository, project repository.PythonProject) ([]pythonVultureAttribute, map[string]pythonVultureReferenceOrigin) {
@@ -667,282 +714,4 @@ func pythonQualityProjectHasRuntimeSource(project repository.PythonProject) bool
 		}
 	}
 	return false
-}
-
-func pythonVultureFindings(repo repository.Repository, project repository.PythonProject, data []byte) []policy.Finding {
-	response, err := parsePythonVultureResponse(data)
-	if err != nil {
-		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
-	}
-	if response.Error != "" {
-		if response.FactsError != "" {
-			return []policy.Finding{{Check: "architecture.pythonFactsCoverage", Path: project.Manifest, Subject: "python-facts", Message: "the Python project type fact set is unavailable: " + response.FactsError}}
-		}
-		return pythonVultureCoverage(project.Files, "the policy-owned Vulture analysis failed: "+response.Error)
-	}
-	references, origins := pythonVultureReferences(repo, project)
-	backends, backendOrigins := pythonVultureBackends(project)
-	attributes, attributeOrigins := pythonVultureAttributes(repo, project)
-	for id, origin := range backendOrigins {
-		origins[id] = origin
-	}
-	for id, origin := range attributeOrigins {
-		origins[id] = origin
-	}
-	contracts := pythonVultureContracts(repo, project)
-	for _, contract := range contracts {
-		origins[contract.ID] = pythonContractOrigin(repo, contract.PythonContract)
-	}
-	if err := validatePythonVultureResponse(project.Files, references, backends, attributes, contracts, response); err != nil {
-		return pythonVultureCoverage(project.Files, "the policy-owned Vulture output cannot be used: "+err.Error())
-	}
-	findings := pythonVultureReferenceFindings(response.Problems, origins)
-	for _, diagnostic := range response.Diagnostics {
-		findings = append(findings, policy.Finding{
-			Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line,
-			Subject: pythonVultureSubject(diagnostic), Message: pythonVultureMessage(diagnostic),
-			Remediation: policy.FindingRemediation{
-				Summary:     "Delete the unused definition. Do not generate reachability declarations or entry-point lists from dead-code findings.",
-				NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--files", diagnostic.Path}, Cwd: "."},
-			},
-		})
-	}
-	return findings
-}
-
-func parsePythonVultureResponse(data []byte) (pythonVultureResponse, error) {
-	if len(data) > pythonStructuredOutputMaximumBytes {
-		return pythonVultureResponse{}, fmt.Errorf("output exceeds %d bytes", pythonStructuredOutputMaximumBytes)
-	}
-	wire, err := decodePythonVultureResponse(data)
-	if err != nil {
-		return pythonVultureResponse{}, err
-	}
-	return pythonVultureResponseFromWire(wire)
-}
-
-func decodePythonVultureResponse(data []byte) (pythonVultureResponseWire, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	wire := pythonVultureResponseWire{}
-	if err := decoder.Decode(&wire); err != nil {
-		return pythonVultureResponseWire{}, fmt.Errorf("malformed JSON: %w", err)
-	}
-	if err := pythonVultureTrailingJSONError(decoder); err != nil {
-		return pythonVultureResponseWire{}, err
-	}
-	return wire, nil
-}
-
-func pythonVultureTrailingJSONError(decoder *json.Decoder) error {
-	var trailing any
-	err := decoder.Decode(&trailing)
-	if err == io.EOF {
-		return nil
-	}
-	if err == nil {
-		return fmt.Errorf("JSON has trailing data")
-	}
-	return fmt.Errorf("malformed trailing JSON: %w", err)
-}
-
-func pythonVultureResponseFromWire(wire pythonVultureResponseWire) (pythonVultureResponse, error) {
-	if !pythonVultureResponseWireComplete(wire) {
-		return pythonVultureResponse{}, fmt.Errorf("output omits required fields")
-	}
-	if *wire.Protocol != pythonVultureProtocolVersion {
-		return pythonVultureResponse{}, fmt.Errorf("protocol is not %d", pythonVultureProtocolVersion)
-	}
-	if *wire.ToolVersion != pythonVultureVersion {
-		return pythonVultureResponse{}, fmt.Errorf("vulture version is not %s", pythonVultureVersion)
-	}
-	if len(*wire.Error) > pythonStructuredMessageMaximumBytes {
-		return pythonVultureResponse{}, fmt.Errorf("error exceeds %d bytes", pythonStructuredMessageMaximumBytes)
-	}
-	return pythonVultureResponse{
-		Reachability: *wire.Reachability, Covered: *wire.Covered, Diagnostics: *wire.Diagnostics, Resolved: *wire.Resolved, Problems: *wire.Problems, Error: *wire.Error, FactsError: *wire.FactsError,
-	}, nil
-}
-
-func pythonVultureResponseWireComplete(wire pythonVultureResponseWire) bool {
-	return wire.Protocol != nil && wire.ToolVersion != nil && wire.Covered != nil && wire.Diagnostics != nil &&
-		wire.Resolved != nil && wire.Problems != nil && wire.Error != nil && wire.FactsError != nil && wire.Reachability != nil
-}
-
-func validatePythonVultureResponse(files []string, references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract, response pythonVultureResponse) error {
-	if err := validatePythonVultureCovered(files, response.Covered); err != nil {
-		return err
-	}
-	if err := validatePythonVultureReferences(references, backends, attributes, contracts, response.Resolved, response.Problems); err != nil {
-		return err
-	}
-	if err := validatePythonReachabilityEvidence(files, references, response); err != nil {
-		return err
-	}
-	return validatePythonVultureDiagnostics(files, response.Diagnostics)
-}
-
-func validatePythonVultureCovered(files, covered []string) error {
-	expected := map[string]bool{}
-	for _, path := range files {
-		expected[path] = true
-	}
-	actual := map[string]bool{}
-	for _, path := range covered {
-		if !expected[path] || actual[path] {
-			return fmt.Errorf("covered paths are not an exact project inventory")
-		}
-		actual[path] = true
-	}
-	if len(actual) != len(expected) {
-		return fmt.Errorf("covered paths omit governed Python source")
-	}
-	return nil
-}
-
-func validatePythonVultureReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract, resolved []string, problems []pythonVultureProblem) error {
-	remaining, err := pythonVultureRequestedReferences(references, backends, attributes, contracts)
-	if err != nil {
-		return err
-	}
-	if err := pythonVultureConsumeResolvedReferences(remaining, resolved); err != nil {
-		return err
-	}
-	if err := pythonVultureConsumeReferenceProblems(remaining, problems); err != nil {
-		return err
-	}
-	if len(remaining) != 0 {
-		return fmt.Errorf("reference result omits requested references")
-	}
-	return nil
-}
-
-func pythonVultureRequestedReferences(references []pythonVultureReference, backends []pythonVultureBackend, attributes []pythonVultureAttribute, contracts []pythonVultureContract) (map[string]bool, error) {
-	requested := map[string]bool{}
-	for _, reference := range references {
-		if requested[reference.ID] {
-			return nil, fmt.Errorf("policy dynamic references are not unique")
-		}
-		requested[reference.ID] = true
-	}
-	for _, backend := range backends {
-		if requested[backend.ID] {
-			return nil, fmt.Errorf("vulture references are not unique")
-		}
-		requested[backend.ID] = true
-	}
-	for _, attribute := range attributes {
-		if requested[attribute.ID] {
-			return nil, fmt.Errorf("vulture references are not unique")
-		}
-		requested[attribute.ID] = true
-	}
-	for _, contract := range contracts {
-		if requested[contract.ID] {
-			return nil, fmt.Errorf("vulture contracts are not unique")
-		}
-		requested[contract.ID] = true
-	}
-	return requested, nil
-}
-
-func pythonVultureConsumeResolvedReferences(remaining map[string]bool, resolved []string) error {
-	for _, id := range resolved {
-		if !remaining[id] {
-			return fmt.Errorf("resolved references are not an exact request")
-		}
-		delete(remaining, id)
-	}
-	return nil
-}
-
-func pythonVultureConsumeReferenceProblems(remaining map[string]bool, problems []pythonVultureProblem) error {
-	for _, problem := range problems {
-		if !remaining[problem.ID] || strings.TrimSpace(problem.Message) == "" || len(problem.Message) > pythonStructuredMessageMaximumBytes {
-			return fmt.Errorf("problem references are not an exact request")
-		}
-		delete(remaining, problem.ID)
-	}
-	return nil
-}
-
-func validatePythonVultureDiagnostics(files []string, diagnostics []pythonVultureDiagnostic) error {
-	if len(diagnostics) > pythonStructuredDiagnosticMaximum {
-		return fmt.Errorf("output contains more than %d diagnostics", pythonStructuredDiagnosticMaximum)
-	}
-	known := pythonVultureKnownFiles(files)
-	seen := map[string]bool{}
-	for _, diagnostic := range diagnostics {
-		if !pythonVultureDiagnosticIsValid(known, diagnostic) {
-			return fmt.Errorf("diagnostic is invalid")
-		}
-		key := pythonVultureDiagnosticIdentity(diagnostic)
-		if seen[key] {
-			return fmt.Errorf("diagnostic appears more than once")
-		}
-		seen[key] = true
-	}
-	return nil
-}
-
-func pythonVultureKnownFiles(files []string) map[string]bool {
-	known := map[string]bool{}
-	for _, path := range files {
-		known[path] = true
-	}
-	return known
-}
-
-func pythonVultureDiagnosticIsValid(known map[string]bool, diagnostic pythonVultureDiagnostic) bool {
-	return known[diagnostic.Path] && diagnostic.Line >= 1 && diagnostic.End >= diagnostic.Line && diagnostic.Name != "" &&
-		len(diagnostic.Name) <= pythonStructuredMessageMaximumBytes && pythonVultureDiagnosticKind(diagnostic.Kind) &&
-		diagnostic.Confidence >= 60 && diagnostic.Confidence <= 100 && strings.TrimSpace(diagnostic.Message) != "" &&
-		len(diagnostic.Message) <= pythonStructuredMessageMaximumBytes
-}
-
-func pythonVultureDiagnosticIdentity(diagnostic pythonVultureDiagnostic) string {
-	return strings.Join([]string{
-		diagnostic.Path, strconv.Itoa(diagnostic.Line), strconv.Itoa(diagnostic.End), diagnostic.Name, diagnostic.Kind,
-		strconv.Itoa(diagnostic.Confidence), diagnostic.Message,
-	}, "\x00")
-}
-
-func pythonVultureDiagnosticKind(kind string) bool {
-	return map[string]bool{
-		"attribute": true, "class": true, "function": true, "import": true, "method": true,
-		"property": true, "unreachable_code": true, "variable": true,
-	}[kind]
-}
-
-func pythonVultureReferenceFindings(problems []pythonVultureProblem, origins map[string]pythonVultureReferenceOrigin) []policy.Finding {
-	findings := make([]policy.Finding, 0, len(problems))
-	for _, problem := range problems {
-		origin := origins[problem.ID]
-		findings = append(findings, policy.Finding{
-			Check: origin.Check, Path: origin.Path, Line: origin.Line, Subject: origin.Subject,
-			Message: origin.Message + problem.Message,
-		})
-	}
-	return findings
-}
-
-func pythonVultureCoverage(files []string, message string) []policy.Finding {
-	return pythonQualityCoverage(files, "quality.deadCodeCoverage", "vulture", message)
-}
-
-func pythonVultureSubject(diagnostic pythonVultureDiagnostic) string {
-	identity := strings.Join([]string{
-		diagnostic.Path, strconv.Itoa(diagnostic.Line), strconv.Itoa(diagnostic.End), diagnostic.Name, diagnostic.Kind,
-		strconv.Itoa(diagnostic.Confidence), diagnostic.Message,
-	}, "\x00")
-	digest := sha256.Sum256([]byte(identity))
-	return "vulture:" + hex.EncodeToString(digest[:])
-}
-
-func pythonVultureMessage(diagnostic pythonVultureDiagnostic) string {
-	line := strconv.Itoa(diagnostic.Line)
-	if diagnostic.End != diagnostic.Line {
-		line += "-" + strconv.Itoa(diagnostic.End)
-	}
-	return "lines " + line + ": " + diagnostic.Message + " (" + diagnostic.Kind + ", " + strconv.Itoa(diagnostic.Confidence) + "% confidence)"
 }

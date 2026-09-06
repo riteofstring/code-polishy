@@ -22,6 +22,7 @@ type Repository struct {
 	Config               policy.Config
 	DynamicControlInputs []string
 	pythonProjectCache   *pythonProjectInventoryCache
+	pathFactCache        *pathFactCache
 }
 
 const DesignDocumentationCheck = "policy.designDocumentation"
@@ -391,6 +392,13 @@ func (repo Repository) Resolve(path string) (string, error) {
 }
 
 func (repo Repository) IsExcluded(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.excluded, path, cloneBool, func() bool { return repo.computeIsExcluded(path) })
+	}
+	return repo.computeIsExcluded(path)
+}
+
+func (repo Repository) computeIsExcluded(path string) bool {
 	if repo.isDynamicControlInput(path) {
 		return false
 	}
@@ -399,6 +407,13 @@ func (repo Repository) IsExcluded(path string) bool {
 }
 
 func (repo Repository) IsGenerated(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.generated, path, cloneBool, func() bool { return repo.computeIsGenerated(path) })
+	}
+	return repo.computeIsGenerated(path)
+}
+
+func (repo Repository) computeIsGenerated(path string) bool {
 	if repo.IsData(path) || repo.isDynamicControlInput(path) {
 		return false
 	}
@@ -407,16 +422,37 @@ func (repo Repository) IsGenerated(path string) bool {
 }
 
 func (repo Repository) IsData(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.data, path, cloneBool, func() bool { return repo.computeIsData(path) })
+	}
+	return repo.computeIsData(path)
+}
+
+func (repo Repository) computeIsData(path string) bool {
 	return !repo.IsControlInput(path) &&
 		!repo.IsExecutableSource(path) &&
 		policy.MatchesAny(path, repo.Config.Scope.Data)
 }
 
 func (repo Repository) IsTest(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.tests, path, cloneBool, func() bool { return repo.computeIsTest(path) })
+	}
+	return repo.computeIsTest(path)
+}
+
+func (repo Repository) computeIsTest(path string) bool {
 	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Tests.Paths)
 }
 
 func (repo Repository) IsDevelopment(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.development, path, cloneBool, func() bool { return repo.computeIsDevelopment(path) })
+	}
+	return repo.computeIsDevelopment(path)
+}
+
+func (repo Repository) computeIsDevelopment(path string) bool {
 	return repo.IsTest(path) || policy.MatchesAny(path, repo.Config.Scope.Development)
 }
 
@@ -524,6 +560,13 @@ func (repo Repository) Language(path string) string {
 }
 
 func (repo Repository) Languages(path string) []string {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.languages, path, cloneStrings, func() []string { return repo.computeLanguages(path) })
+	}
+	return repo.computeLanguages(path)
+}
+
+func (repo Repository) computeLanguages(path string) []string {
 	if language := repo.builtInLanguage(path); language != "" {
 		return []string{language}
 	}
@@ -557,11 +600,25 @@ func (repo Repository) builtInLanguage(path string) string {
 }
 
 func (repo Repository) IsExecutableSource(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.executable, path, cloneBool, func() bool { return repo.computeIsExecutableSource(path) })
+	}
+	return repo.computeIsExecutableSource(path)
+}
+
+func (repo Repository) computeIsExecutableSource(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
 	return len(repo.Languages(path)) > 0 || extension == ".ps1" || extension == ".psm1"
 }
 
 func (repo Repository) ModuleNames(path string) []string {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.modules, path, cloneStrings, func() []string { return repo.computeModuleNames(path) })
+	}
+	return repo.computeModuleNames(path)
+}
+
+func (repo Repository) computeModuleNames(path string) []string {
 	if repo.IsGenerated(path) && repo.Language(path) == "typescript" {
 		path = repo.JavaScriptContextPath(path)
 	}

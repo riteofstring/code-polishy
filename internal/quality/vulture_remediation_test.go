@@ -26,11 +26,11 @@ func TestPythonVultureRemediationRechecksTheEditedProject(t *testing.T) {
 	if !strings.HasPrefix(remediation.Summary, "Delete the unused definition.") || remediation.NextCommand == nil {
 		t.Fatalf("no actionable deletion remedy: %+v", remediation)
 	}
-	if !slices.Equal(remediation.NextCommand.Argv, []string{"code-polishy", "check", "--files", "src/app.py"}) || remediation.NextCommand.Cwd != "." {
-		t.Fatalf("recheck lost its exact file scope: %+v", remediation.NextCommand)
+	if !slices.Equal(remediation.NextCommand.Argv, []string{"code-polishy", "check", "--all"}) || remediation.NextCommand.Cwd != "." {
+		t.Fatalf("recheck lost its complete project scope: %+v", remediation.NextCommand)
 	}
 	writeQualityFile(t, repo.Root, "src/app.py", "print('ready')\n")
-	selection, err := repo.Select("files", remediation.NextCommand.Argv[3:])
+	selection, err := repo.Select("all", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

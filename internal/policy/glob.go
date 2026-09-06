@@ -3,7 +3,28 @@ package policy
 import (
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
+
+const globPatternCacheCapacity = 4096
+
+var sharedGlobPatterns = globPatternCache{entries: map[string]compiledGlob{}, order: make([]string, 0, globPatternCacheCapacity)}
+
+type compiledGlob struct {
+	matcher *regexp.Regexp
+	tokens  []globToken
+}
+
+type globPatternCache struct {
+	mutex   sync.RWMutex
+	entries map[string]compiledGlob
+	order   []string
+	next    int
+	hits    atomic.Int64
+	misses  atomic.Int64
+	builds  atomic.Int64
+}
 
 func MatchesAny(path string, patterns []string) bool {
 	path = strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
@@ -17,36 +38,7 @@ func MatchesAny(path string, patterns []string) bool {
 
 func Match(path, pattern string) bool {
 	path = strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
-	pattern = strings.TrimPrefix(strings.ReplaceAll(pattern, "\\", "/"), "./")
-	var expression strings.Builder
-	expression.WriteString("^")
-	for index := 0; index < len(pattern); {
-		character := pattern[index]
-		switch character {
-		case '*':
-			if index+1 < len(pattern) && pattern[index+1] == '*' {
-				index += 2
-				if index < len(pattern) && pattern[index] == '/' {
-					expression.WriteString("(?:.*/)?")
-					index++
-				} else {
-					expression.WriteString(".*")
-				}
-			} else {
-				expression.WriteString("[^/]*")
-				index++
-			}
-		case '?':
-			expression.WriteString("[^/]")
-			index++
-		default:
-			expression.WriteString(regexp.QuoteMeta(string(character)))
-			index++
-		}
-	}
-	expression.WriteString("$")
-	matched, err := regexp.MatchString(expression.String(), path)
-	return err == nil && matched
+	return cachedGlobPattern(pattern).matcher.MatchString(path)
 }
 
 func IsTestPath(path string) bool {
@@ -54,8 +46,8 @@ func IsTestPath(path string) bool {
 }
 
 func PatternsOverlap(left, right string) bool {
-	leftTokens := globPatternTokens(left)
-	rightTokens := globPatternTokens(right)
+	leftTokens := cachedGlobPattern(left).tokens
+	rightTokens := cachedGlobPattern(right).tokens
 	type state struct{ left, right int }
 	queued := []state{{}}
 	seen := map[state]bool{}
@@ -87,6 +79,70 @@ func PatternsOverlap(left, right string) bool {
 	return false
 }
 
+func GlobCacheStats() (int64, int64, int64) {
+	return sharedGlobPatterns.hits.Load(), sharedGlobPatterns.misses.Load(), sharedGlobPatterns.builds.Load()
+}
+
+func cachedGlobPattern(pattern string) compiledGlob {
+	pattern = strings.TrimPrefix(strings.ReplaceAll(pattern, "\\", "/"), "./")
+	sharedGlobPatterns.mutex.RLock()
+	compiled, found := sharedGlobPatterns.entries[pattern]
+	sharedGlobPatterns.mutex.RUnlock()
+	if found {
+		sharedGlobPatterns.hits.Add(1)
+		return compiled
+	}
+	sharedGlobPatterns.misses.Add(1)
+	compiled = compileGlob(pattern)
+	sharedGlobPatterns.mutex.Lock()
+	defer sharedGlobPatterns.mutex.Unlock()
+	if existing, present := sharedGlobPatterns.entries[pattern]; present {
+		sharedGlobPatterns.hits.Add(1)
+		return existing
+	}
+	sharedGlobPatterns.builds.Add(1)
+	if len(sharedGlobPatterns.order) < globPatternCacheCapacity {
+		sharedGlobPatterns.order = append(sharedGlobPatterns.order, pattern)
+	} else {
+		delete(sharedGlobPatterns.entries, sharedGlobPatterns.order[sharedGlobPatterns.next])
+		sharedGlobPatterns.order[sharedGlobPatterns.next] = pattern
+		sharedGlobPatterns.next = (sharedGlobPatterns.next + 1) % globPatternCacheCapacity
+	}
+	sharedGlobPatterns.entries[pattern] = compiled
+	return compiled
+}
+
+func compileGlob(pattern string) compiledGlob {
+	var expression strings.Builder
+	expression.WriteByte('^')
+	characters := []rune(pattern)
+	for index := 0; index < len(characters); {
+		switch characters[index] {
+		case '*':
+			if index+1 < len(characters) && characters[index+1] == '*' {
+				index += 2
+				if index < len(characters) && characters[index] == '/' {
+					expression.WriteString("(?:.*/)?")
+					index++
+				} else {
+					expression.WriteString(".*")
+				}
+			} else {
+				expression.WriteString("[^/]*")
+				index++
+			}
+		case '?':
+			expression.WriteString("[^/]")
+			index++
+		default:
+			expression.WriteString(regexp.QuoteMeta(string(characters[index])))
+			index++
+		}
+	}
+	expression.WriteByte('$')
+	return compiledGlob{matcher: regexp.MustCompile(expression.String()), tokens: globPatternTokens(pattern)}
+}
+
 type globTokenKind int
 
 const (
@@ -100,24 +156,24 @@ const (
 
 type globToken struct {
 	kind    globTokenKind
-	literal byte
+	literal rune
 }
 
 type globTransition struct {
 	kind    globTokenKind
-	literal byte
+	literal rune
 	next    int
 }
 
 func globPatternTokens(pattern string) []globToken {
-	pattern = strings.TrimPrefix(strings.ReplaceAll(pattern, "\\", "/"), "./")
+	characters := []rune(pattern)
 	tokens := []globToken{}
-	for index := 0; index < len(pattern); {
-		switch pattern[index] {
+	for index := 0; index < len(characters); {
+		switch characters[index] {
 		case '*':
-			if index+1 < len(pattern) && pattern[index+1] == '*' {
+			if index+1 < len(characters) && characters[index+1] == '*' {
 				index += 2
-				if index < len(pattern) && pattern[index] == '/' {
+				if index < len(characters) && characters[index] == '/' {
 					tokens = append(tokens, globToken{kind: globDirectoryStar})
 					index++
 					continue
@@ -131,7 +187,7 @@ func globPatternTokens(pattern string) []globToken {
 			tokens = append(tokens, globToken{kind: globSingleSegment})
 			index++
 		default:
-			tokens = append(tokens, globToken{kind: globLiteral, literal: pattern[index]})
+			tokens = append(tokens, globToken{kind: globLiteral, literal: characters[index]})
 			index++
 		}
 	}

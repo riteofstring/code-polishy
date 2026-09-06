@@ -309,12 +309,14 @@ of producing one secondary failure per file and tool. Ambient `VIRTUAL_ENV`,
 or an environment.
 
 For each selected project, the pinned Ruff runs `analyze graph` in isolated
-mode on the selected Python paths. Code Polishy supplies the
-`project.requires-python`-derived target and validated source roots, including
-`src` when present, asks Ruff to include imports under type-checking branches,
-and parses the bounded graph output once. Target Ruff configuration cannot
-change this evidence. Code Polishy then decides file and module ownership,
-allowed `dependsOn` edges, and coverage in Go.
+mode on the selected Python paths with and without type-checking imports. Code
+Polishy supplies the `project.requires-python`-derived target and validated
+source roots, including `src` when present, and parses both bounded graph
+outputs. The difference classifies imports guarded by `TYPE_CHECKING` as
+type-only without a second Python parser. Imports from stubs are also type-only.
+Target Ruff configuration cannot change this evidence. Code Polishy then
+decides file and module ownership, allowed `dependsOn` edges, and coverage in
+Go.
 
 Focused file checks remain bounded to their selected sources and the local
 targets Ruff resolves from them. They do not parse every Python source or claim
@@ -322,18 +324,20 @@ to prove cycles whose outgoing edges were not selected. `architecture --all`
 and the full gate select the complete project and therefore retain whole-project
 dependency and cycle coverage.
 
-The canonical source graph records one `ruff-graph-facts/v1` input per analyzed
-Python project slice. Its identity binds the normalized Ruff graph, every graph
-node's current source bytes, and declared dynamic resolution. Missing,
+The canonical source graph records one `ruff-graph-facts/v2` input per analyzed
+Python project slice. Its identity binds both normalized Ruff graphs, every
+graph node's current source bytes, and declared dynamic resolution. Missing,
 duplicated, mismatched, escaping, or cross-project graph evidence withholds the
 graph. Cycle and architecture-review topology identities depend on semantic
 dependencies and ownership, so a source-body change can invalidate graph
 evidence without changing those semantic identities.
 
 Ruff resolves ordinary imports, including imports under type-checking branches.
-Standard-library and third-party imports create no repository module edge.
-The normal `ty` quality pass owns unresolved imports and type correctness;
-architecture does not duplicate those checks with a second Python AST model.
+Type-only edges remain visible in dependency and review topology but do not
+participate in runtime cycle traversal. Standard-library and third-party
+imports create no repository module edge. The normal `ty` quality pass owns
+unresolved imports and type correctness; architecture does not duplicate those
+checks with a second Python AST model.
 
 Dynamic targets require an exact `scope.pythonComputedImports` declaration.
 The declaration binds the current source digest, project, importer module,

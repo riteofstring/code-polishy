@@ -39,12 +39,24 @@ func pythonRuffGraphSourcePart(
 	owners map[string]string,
 	allFiles []string,
 	graph pythonGraph,
+	runtimeGraph pythonGraph,
 ) sourceGraphPart {
 	dependencies, coverage, err := pythonGraphDependencies(repo, project, sources, graph)
 	if err != nil {
 		return sourceGraphPart{findings: pythonCoverageForSources(selectedSources, err.Error()), incomplete: true}
 	}
+	runtimeDependencies, runtimeCoverage, err := pythonGraphDependencies(repo, project, sources, runtimeGraph)
+	if err != nil {
+		return sourceGraphPart{findings: pythonCoverageForSources(selectedSources, err.Error()), incomplete: true}
+	}
 	pythonGraphMissingCoverage(sources, selectedSources, dependencies, coverage)
+	pythonGraphMissingCoverage(sources, selectedSources, runtimeDependencies, runtimeCoverage)
+	pythonRuffGraphRelationCoverage(dependencies, runtimeDependencies, runtimeCoverage)
+	for source, message := range runtimeCoverage {
+		if coverage[source] == "" {
+			coverage[source] = message
+		}
+	}
 	pythonGraphTargetCoverage(repo, project, owners, allFiles, dependencies, coverage)
 	declared := pythonDeclaredGraph(repo, project, sources, dependencies, coverage)
 	coverageFindings := pythonCoverageFindings(coverage)
@@ -59,8 +71,8 @@ func pythonRuffGraphSourcePart(
 		return part
 	}
 	part.nodes = pythonGraphNodes(repo, project, sources, dependencies)
-	part.edges = pythonRuffGraphEdges(sources, dependencies, declared.edges)
-	input, inputErr := pythonRuffGraphInput(repo, project, part.nodes, graph, declared)
+	part.edges = pythonRuffGraphEdges(sources, dependencies, runtimeDependencies, declared.edges)
+	input, inputErr := pythonRuffGraphInput(repo, project, part.nodes, graph, runtimeGraph, declared)
 	if inputErr != nil {
 		part.findings = append(part.findings, pythonImportCoverage(selectedSources[0], inputErr.Error()))
 		part.incomplete = true
@@ -68,6 +80,16 @@ func pythonRuffGraphSourcePart(
 	}
 	part.inputs = []sourcegraph.FactInput{input}
 	return part
+}
+
+func pythonRuffGraphRelationCoverage(complete, runtime map[string]map[string]bool, coverage map[string]string) {
+	for source, targets := range runtime {
+		for target := range targets {
+			if !complete[source][target] {
+				coverage[source] = "the runtime Ruff graph contains an edge absent from the complete graph"
+			}
+		}
+	}
 }
 
 func pythonDeclaredGraph(repo repository.Repository, project repository.PythonProject, sources []string, dependencies map[string]map[string]bool, coverage map[string]string) pythonDeclaredArchitecture {
@@ -208,7 +230,7 @@ func pythonAddDeclaredTargets(index pythonModuleIndex, source string, line, colu
 	return ""
 }
 
-func pythonRuffGraphEdges(sources []string, dependencies map[string]map[string]bool, declared map[string]map[string]pythonRuffEdgeEvidence) []sourcegraph.Edge {
+func pythonRuffGraphEdges(sources []string, dependencies, runtimeDependencies map[string]map[string]bool, declared map[string]map[string]pythonRuffEdgeEvidence) []sourcegraph.Edge {
 	edges := []sourcegraph.Edge{}
 	for _, source := range sources {
 		targets := make([]string, 0, len(dependencies[source]))
@@ -218,8 +240,10 @@ func pythonRuffGraphEdges(sources []string, dependencies map[string]map[string]b
 		sort.Strings(targets)
 		for _, target := range targets {
 			evidence := declared[source][target]
-			if evidence.Line == 0 {
+			if runtimeDependencies[source][target] && !strings.HasSuffix(source, ".pyi") {
 				evidence = pythonRuffEdgeEvidence{Line: 1, Column: 1, Kind: "runtime"}
+			} else if evidence.Line == 0 {
+				evidence = pythonRuffEdgeEvidence{Line: 1, Column: 1, Kind: "type-only"}
 			}
 			edges = append(edges, pythonGraphEdge(source, target, evidence.Line, evidence.Column, evidence.Kind))
 		}
@@ -282,7 +306,7 @@ func pythonComputedObjectValues(value any) ([]string, string) {
 	return values, ""
 }
 
-func pythonRuffGraphInput(repo repository.Repository, project repository.PythonProject, nodes []sourcegraph.Node, graph pythonGraph, declared pythonDeclaredArchitecture) (sourcegraph.FactInput, error) {
+func pythonRuffGraphInput(repo repository.Repository, project repository.PythonProject, nodes []sourcegraph.Node, graph, runtimeGraph pythonGraph, declared pythonDeclaredArchitecture) (sourcegraph.FactInput, error) {
 	paths := make([]string, 0, len(nodes))
 	partition := sha256.New()
 	for _, node := range nodes {
@@ -296,7 +320,10 @@ func pythonRuffGraphInput(repo repository.Repository, project repository.PythonP
 		_, _ = partition.Write([]byte{'\x00'})
 	}
 	sort.Strings(paths)
-	graphData, _ := json.Marshal(graph)
+	graphData, _ := json.Marshal(struct {
+		Complete pythonGraph `json:"complete"`
+		Runtime  pythonGraph `json:"runtime"`
+	}{graph, runtimeGraph})
 	resolutionData, _ := json.Marshal(struct {
 		Edges    map[string]map[string]pythonRuffEdgeEvidence
 		External []sourcegraph.ExternalComposition

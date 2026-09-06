@@ -68,7 +68,7 @@ func validFactAnalyzer(analyzer, protocol string) bool {
 	case "python-facts":
 		return protocol == "python-facts/v3"
 	case "ruff":
-		return protocol == "ruff-graph-facts/v1"
+		return protocol == "ruff-graph-facts/v2"
 	default:
 		return false
 	}

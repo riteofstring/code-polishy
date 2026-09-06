@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/agents"
 	"github.com/riteofstring/code-polishy/internal/engine"
@@ -96,10 +97,12 @@ func validateInvocation(invocation invocation) int {
 }
 
 func runPolicyCommand(invocation invocation) int {
+	started := time.Now()
 	outputOptions, commandArguments, parseErr := parseReportOutputOptions(invocation.command, invocation.arguments)
 	if parseErr != nil {
 		return commandUsageErrorForInvocation(invocation, parseErr.Error())
 	}
+	openStarted := time.Now()
 	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
@@ -109,12 +112,14 @@ func runPolicyCommand(invocation invocation) int {
 	if outputOptions.format != "human" {
 		policyEngine.RouteProgress(os.Stderr)
 	}
+	policyEngine.BeginExecution(started, time.Since(openStarted))
 	handler, exists := commandHandlers()[invocation.command]
 	if !exists {
 		return commandUsageError("", "unknown command "+invocation.command)
 	}
 	result, err := handler(context.Background(), policyEngine, commandArguments)
 	if err == nil && !result.quiet {
+		result.report = policyEngine.AttachExecution(result.report)
 		result.report = engine.PrepareReportDisplay(result.report, outputOptions.display)
 		result.report, err = policyEngine.FinalizeReport(invocation.command, result.report)
 	}
@@ -730,6 +735,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printGitEvidence(stdout, report)
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
+	printExecutionTelemetry(stdout, report.Execution, verbose)
 	printRepositoryContext(stdout, report.RepositoryContext)
 	limit := engine.DefaultFindingDisplayLimit
 	if report.Display != nil && report.Display.Limit > 0 {

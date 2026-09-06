@@ -5,10 +5,35 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+func printExecutionTelemetry(output io.Writer, telemetry *engine.ExecutionTelemetry, verbose bool) {
+	if telemetry == nil || !verbose {
+		return
+	}
+	fmt.Fprintln(output, "EVALUATION DURATION:", time.Duration(telemetry.EvaluationDurationMilliseconds)*time.Millisecond)
+	fmt.Fprintf(output, "SCOPE requested-operands=%d selected-paths=%d context-paths=%d graph-nodes=%d graph-edges=%d\n",
+		telemetry.Scope.RequestedOperands, telemetry.Scope.SelectedPaths, telemetry.Scope.ContextPaths,
+		telemetry.Scope.GraphNodes, telemetry.Scope.GraphEdges)
+	for _, phase := range telemetry.Phases {
+		fmt.Fprintf(output, "PHASE %s %s\n", phase.Name, time.Duration(phase.DurationMilliseconds)*time.Millisecond)
+	}
+	for _, command := range telemetry.Commands {
+		fmt.Fprintf(output, "COMMAND %s phase=%s duration=%s wait=%s exit=%d cwd=%s argv=%s\n",
+			command.Name, command.Phase, time.Duration(command.DurationMilliseconds)*time.Millisecond,
+			time.Duration(command.ResourceWaitMillis)*time.Millisecond, command.ExitStatus, command.Cwd, strings.Join(command.Argv, " "))
+		for _, phase := range command.Phases {
+			fmt.Fprintf(output, "COMMAND PHASE %s %s %s\n", command.Name, phase.Name, time.Duration(phase.DurationMilliseconds)*time.Millisecond)
+		}
+	}
+	for _, cache := range telemetry.Caches {
+		fmt.Fprintf(output, "CACHE %s scope=%s hits=%d misses=%d builds=%d\n", cache.Name, cache.Scope, cache.Hits, cache.Misses, cache.Builds)
+	}
+}
 
 func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
 	for _, finding := range findings {

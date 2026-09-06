@@ -120,7 +120,7 @@ func pythonQualityProjectManifests(selectedByProject map[string][]string) []stri
 	return manifests
 }
 
-func pythonQualityPlannedProject(repo repository.Repository, manifest string, selected []string, projects map[string]repository.PythonProject) (pythonQualityProject, bool, []policy.Finding) {
+func pythonQualityPlannedProjectForProfile(repo repository.Repository, manifest string, selected []string, projects map[string]repository.PythonProject, includeVulture bool) (pythonQualityProject, bool, []policy.Finding) {
 	sources := append([]string{}, selected...)
 	sort.Strings(sources)
 	project, found := projects[manifest]
@@ -128,11 +128,13 @@ func pythonQualityPlannedProject(repo repository.Repository, manifest string, se
 		message := "the Python project inventory returned an unknown project"
 		return pythonQualityProject{}, false, pythonQualityAllCoverage(sources, message)
 	}
-	commands, typecheckProblem, err := pythonQualityProjectCommands(repo, project, sources)
+	commands, typecheckProblem, err := pythonQualityProjectCommandsForProfile(repo, project, sources, includeVulture)
 	if err != nil {
 		message := "the Python project cannot produce a contained quality command: " + err.Error()
 		findings := pythonQualityNonDeadCodeCoverage(sources, message)
-		findings = append(findings, pythonVultureCoverage(project.Files, message)...)
+		if includeVulture {
+			findings = append(findings, pythonVultureCoverage(project.Files, message)...)
+		}
 		return pythonQualityProject{}, false, findings
 	}
 	findings := []policy.Finding{}

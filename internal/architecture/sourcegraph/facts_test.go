@@ -55,7 +55,7 @@ func TestGraphFactInputsAcceptRuffArchitectureEvidence(t *testing.T) {
 	node := Node{Path: "app.py", Language: "python", Root: ".", Module: "app", Resolution: "file:app.py"}
 	input := graphTestFactInput(".", node.Path)
 	input.Analyzer = "ruff"
-	input.Protocol = "ruff-graph-facts/v1"
+	input.Protocol = "ruff-graph-facts/v2"
 	graph, err := New([]Node{node}, nil, []FactInput{input}, nil)
 	if err != nil || Validate(graph) != nil {
 		t.Fatalf("Ruff graph fact input: %+v, %v", graph, err)

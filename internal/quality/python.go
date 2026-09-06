@@ -105,7 +105,14 @@ type pythonTyDiagnosticWire struct {
 }
 
 func PythonQualityFindings(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
-	plan := pythonQualityPlanFor(repo, selected)
+	return pythonQualityFindingsForPlan(ctx, repo, pythonQualityPlanFor(repo, selected), commandRunner)
+}
+
+func pythonQualityFindingsForSelection(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
+	return pythonQualityFindingsForPlan(ctx, repo, buildPythonQualityPlan(repo, selection.Files, selection.All || profile == "gate"), commandRunner)
+}
+
+func pythonQualityFindingsForPlan(ctx context.Context, repo repository.Repository, plan pythonQualityPlan, commandRunner runner.Runner) []policy.Finding {
 	findings := append([]policy.Finding{}, plan.findings...)
 	structured, supportsStructuredOutput := commandRunner.(runner.StructuredRunner)
 	for _, project := range plan.projects {
@@ -132,6 +139,9 @@ func pythonQualityCommandFindings(ctx context.Context, repo repository.Repositor
 	bounded, cancel := context.WithTimeout(ctx, pythonQualityBudget)
 	_, output, runErr := structured.RunStructured(bounded, repo.Root, specification.command)
 	cancel()
+	if specification.kind == pythonVultureQualityKind {
+		recordPythonVultureCommandPhases(ctx, specification.command, commandRunnerPhaseRecorder(structured), output.Stdout)
+	}
 	if runErr != nil {
 		if specification.kind == pythonVultureQualityKind {
 			return pythonVultureCoverage(project.project.Files, "the policy-owned Vulture analysis failed: "+runErr.Error())
@@ -139,6 +149,50 @@ func pythonQualityCommandFindings(ctx context.Context, repo repository.Repositor
 		return []policy.Finding{pythonQualityToolFinding(project.project, specification.kind, runErr.Error())}
 	}
 	return pythonQualityOutputFindings(repo, project, specification.kind, output.Stdout)
+}
+
+func commandRunnerPhaseRecorder(commandRunner runner.StructuredRunner) runner.CommandPhaseRecorder {
+	recorder, _ := commandRunner.(runner.CommandPhaseRecorder)
+	return recorder
+}
+
+type pythonVultureTiming struct {
+	Name       string `json:"name"`
+	DurationNS int64  `json:"duration_ns"`
+}
+
+func validatePythonVultureTimings(timings []pythonVultureTiming) error {
+	allowed := map[string]bool{
+		"request-validation": true, "source-parse": true, "request-model": true, "vulture-scan": true,
+		"type-facts": true, "typed-dict": true, "framework-contracts": true, "static-contracts": true,
+		"reachability": true, "diagnostics": true, "adapter-total": true,
+	}
+	seen := map[string]bool{}
+	for _, timing := range timings {
+		if !allowed[timing.Name] || seen[timing.Name] || timing.DurationNS < 0 || timing.DurationNS > int64(pythonQualityBudget) {
+			return fmt.Errorf("output contains invalid Vulture timing evidence")
+		}
+		seen[timing.Name] = true
+	}
+	if !seen["adapter-total"] {
+		return fmt.Errorf("output omits Vulture total timing evidence")
+	}
+	return nil
+}
+
+func recordPythonVultureCommandPhases(ctx context.Context, command policy.Command, recorder runner.CommandPhaseRecorder, data []byte) {
+	if recorder == nil {
+		return
+	}
+	response, err := parsePythonVultureResponse(data)
+	if err != nil {
+		return
+	}
+	phases := make([]runner.CommandPhase, 0, len(response.Timings))
+	for _, timing := range response.Timings {
+		phases = append(phases, runner.CommandPhase{Name: timing.Name, Duration: time.Duration(timing.DurationNS)})
+	}
+	recorder.RecordCommandPhases(ctx, command, phases)
 }
 
 func pythonQualityOutputFindings(repo repository.Repository, project pythonQualityProject, kind pythonQualityKind, output []byte) []policy.Finding {
@@ -152,7 +206,7 @@ func pythonQualityOutputFindings(repo repository.Repository, project pythonQuali
 	case pythonRuffComplexityQualityKind:
 		return pythonQualityRuffComplexityFindings(repo, project, output)
 	case pythonVultureQualityKind:
-		return pythonVultureFindings(repo, project.project, output)
+		return pythonVultureFindingsForSources(repo, project.project, project.sources, output)
 	case pythonTyQualityKind:
 		return pythonQualityTyFindings(repo, project, output)
 	}
@@ -222,7 +276,14 @@ func pythonRuffDiagnosticFindings(diagnostics []pythonRuffDiagnostic, check stri
 }
 
 func pythonQualityCommands(repo repository.Repository, selected []string) []policy.Command {
-	plan := pythonQualityPlanFor(repo, selected)
+	return pythonQualityPlanCommands(pythonQualityPlanFor(repo, selected))
+}
+
+func pythonQualityCommandsForSelection(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
+	return pythonQualityPlanCommands(buildPythonQualityPlan(repo, selection.Files, selection.All || profile == "gate"))
+}
+
+func pythonQualityPlanCommands(plan pythonQualityPlan) []policy.Command {
 	commands := []policy.Command{}
 	for _, project := range plan.projects {
 		for _, specification := range project.commands {
@@ -233,6 +294,10 @@ func pythonQualityCommands(repo repository.Repository, selected []string) []poli
 }
 
 func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQualityPlan {
+	return buildPythonQualityPlan(repo, selected, true)
+}
+
+func buildPythonQualityPlan(repo repository.Repository, selected []string, includeVulture bool) pythonQualityPlan {
 	sources := pythonQualitySources(repo, selected)
 	selectedManifests := pythonQualitySelectedManifests(repo, selected)
 	if len(sources) == 0 && len(selectedManifests) == 0 {
@@ -244,7 +309,7 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 		findings := pythonQualityAllCoverage(sources, message)
 		findings = append(findings, pythonQualityDynamicReferenceInventoryFindings(repo, selectedManifests, message)...)
 		findings = append(findings, pythonQualityExternalAttributeInventoryFindings(repo, selectedManifests, message)...)
-		return pythonQualityPlan{findings: findings}
+		return pythonQualityPlan{findings: pythonQualityProfileFindings(findings, includeVulture)}
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
 	findings, invalid, invalidProjects := pythonQualityInventoryFindings(sources, selectedManifests, inventory)
@@ -255,17 +320,28 @@ func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQ
 	findings = append(findings, referenceFindings...)
 	planned := []pythonQualityProject{}
 	for _, manifest := range pythonQualityProjectManifests(selectedByProject) {
-		project, found, projectFindings := pythonQualityPlannedProject(repo, manifest, selectedByProject[manifest], projects)
+		project, found, projectFindings := pythonQualityPlannedProjectForProfile(repo, manifest, selectedByProject[manifest], projects, includeVulture)
 		findings = append(findings, projectFindings...)
 		if found {
 			planned = append(planned, project)
 		}
 	}
-	planned, findings = pythonQualityReferenceOnlyProjects(repo, projects, selectedByProject, referenceOnly, planned, findings)
+	if includeVulture {
+		planned, findings = pythonQualityReferenceOnlyProjects(repo, projects, selectedByProject, referenceOnly, planned, findings)
+	}
 	sort.Slice(planned, func(left, right int) bool {
 		return planned[left].project.Manifest < planned[right].project.Manifest
 	})
-	return pythonQualityPlan{projects: planned, findings: findings}
+	return pythonQualityPlan{projects: planned, findings: pythonQualityProfileFindings(findings, includeVulture)}
+}
+
+func pythonQualityProfileFindings(findings []policy.Finding, includeVulture bool) []policy.Finding {
+	if includeVulture {
+		return findings
+	}
+	return slices.DeleteFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "quality.deadCodeCoverage"
+	})
 }
 
 func pythonQualityReferenceOnlyProjects(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject, referenceOnly map[string][]string, planned []pythonQualityProject, findings []policy.Finding) ([]pythonQualityProject, []policy.Finding) {
@@ -277,7 +353,7 @@ func pythonQualityReferenceOnlyProjects(repo repository.Repository, projects map
 		if !found {
 			continue
 		}
-		command, commandErr := pythonVultureCommand(repo, project)
+		command, commandErr := pythonVultureCommandForSources(repo, project, nil)
 		if commandErr != nil {
 			findings = append(findings, pythonVultureCoverage(project.Files, "the Python project cannot produce a contained Vulture command: "+commandErr.Error())...)
 			continue
@@ -300,7 +376,7 @@ func pythonQualityNonDeadCodeCoverage(sources []string, message string) []policy
 	return append(findings, pythonQualityCoverage(sources, "quality.typecheckCoverage", "ty", message)...)
 }
 
-func pythonQualityProjectCommands(repo repository.Repository, project repository.PythonProject, sources []string) ([]pythonQualityCommand, string, error) {
+func pythonQualityProjectCommandsForProfile(repo repository.Repository, project repository.PythonProject, sources []string, includeVulture bool) ([]pythonQualityCommand, string, error) {
 	paths, err := pythonQualityProjectPaths(project, sources)
 	if err != nil {
 		return nil, "", err
@@ -321,11 +397,13 @@ func pythonQualityProjectCommands(repo repository.Repository, project repository
 		{kind: pythonRuffComplexityQualityKind, command: pythonRuffComplexityCommand(repo, project, suffix, modules, paths, ruffOptions)},
 		{kind: pythonRuffTargetQualityKind, command: pythonRuffTargetCommand(repo, project, suffix, modules, paths, ruffOptions)},
 	}
-	vulture, err := pythonVultureCommand(repo, project)
-	if err != nil {
-		return nil, "", err
+	if includeVulture {
+		vulture, vultureErr := pythonVultureCommandForSources(repo, project, sources)
+		if vultureErr != nil {
+			return nil, "", vultureErr
+		}
+		commands = append(commands, pythonQualityCommand{kind: pythonVultureQualityKind, command: vulture})
 	}
-	commands = append(commands, pythonQualityCommand{kind: pythonVultureQualityKind, command: vulture})
 	if len(project.Requirements) == 0 {
 		commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, "")})
 		return commands, "", nil
