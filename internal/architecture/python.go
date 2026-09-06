@@ -279,7 +279,7 @@ func pythonGraphCommand(repo repository.Repository, project repository.PythonPro
 		repo.PolicyTool("ruff"), "analyze", "graph", "--quiet", "--isolated",
 	}
 	arguments = append(arguments, ruffOptions...)
-	arguments = append(arguments, "--detect-string-imports", "--min-dots", "0", "--type-checking-imports", "--")
+	arguments = append(arguments, "--type-checking-imports", "--")
 	arguments = append(arguments, paths...)
 	return policy.Command{
 		Name:              "ruff-graph-facts-v1-ruff-" + pythonGraphRuffVersion + "-" + pythonGraphName(project.Root),

@@ -1,7 +1,6 @@
 package architecture
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,17 +14,13 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func pythonExternalProject(ctx context.Context, repo repository.Repository, python string, project repository.PythonProject, modules []pythonfacts.TypeModule, facts map[string]pythonSourceFact) (pythonResolution, error) {
+func pythonExternalProject(repo repository.Repository, project repository.PythonProject, facts map[string]pythonSourceFact, runtime pythonfacts.RuntimeCheckProject) (pythonResolution, error) {
 	declarations := pythonExternalDeclarations(repo, project.Manifest)
 	result := pythonResolution{external: []sourcegraph.ExternalComposition{}, findings: pythonUndeclaredExternalImports(project, facts, declarations)}
 	if len(declarations) == 0 {
 		return result, nil
 	}
 	requests := pythonExternalRuntimeRequests(declarations)
-	runtime, err := pythonfacts.ResolveRuntimeChecks(ctx, python, modules, requests)
-	if err != nil {
-		return pythonResolution{}, err
-	}
 	distributions := []string{}
 	for _, declaration := range declarations {
 		distributions = append(distributions, declaration.Distribution)

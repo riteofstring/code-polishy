@@ -310,17 +310,21 @@ or an environment.
 
 For each selected project, the pinned Ruff runs `analyze graph` in isolated
 mode. Code Polishy supplies the `project.requires-python`-derived target and
-the validated source roots, including `src` when present, asks Ruff to detect
-literal string imports and imports under type-checking branches, and parses the
-bounded graph output once. Target Ruff configuration cannot change this
-evidence. Code Polishy, rather than Ruff or a target command, then decides file
-and module ownership, allowed `dependsOn` edges, and coverage.
+the validated source roots, including `src` when present, asks Ruff to include
+imports under type-checking branches, and parses the bounded graph output once.
+Arbitrary string literals are not import evidence. Proven dynamic loader calls
+come from the bounded Python facts resolver and add their exact targets to the
+graph. Target Ruff configuration cannot change this evidence. Code Polishy,
+rather than Ruff or a target command, then decides file and module ownership,
+allowed `dependsOn` edges, and coverage.
 
 The canonical source graph records one `python-facts/v3` input per analyzed
 Python project, covering its exact source paths. Its identity binds the
-normalized facts, deterministic partition records, and cross-file type
-resolution evidence. Missing, duplicated, or mismatched coverage withholds the
-graph. Cycle and architecture-review topology identities depend on semantic
+normalized facts, the streamed source snapshot, and cross-file resolution
+evidence. The bounded resolver returns its compact source facts for independent
+digest and callsite validation without sending that model through a second
+Python process. Missing, duplicated, or mismatched coverage withholds the graph.
+Cycle and architecture-review topology identities depend on semantic
 dependencies and ownership, so a source-body change can invalidate graph
 evidence without changing those semantic identities.
 

@@ -689,8 +689,8 @@ class _Resolver:
         return reads
 
 
-def typed_dict_reads(modules):
-    return _Resolver(modules).run()
+def typed_dict_reads(modules, facts=None):
+    return (facts or _Resolver(modules)).run()
 
 
 def _unique_object(pairs):

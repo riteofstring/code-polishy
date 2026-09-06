@@ -1,7 +1,6 @@
 package architecture
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -10,29 +9,46 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func pythonRuntimeLoaderProject(ctx context.Context, repo repository.Repository, python string, project repository.PythonProject, modules []pythonfacts.TypeModule, facts map[string]pythonSourceFact) (pythonResolution, error) {
-	result := pythonResolution{}
-	for _, declaration := range repo.Config.Scope.PythonRuntimeLoaders {
+func pythonRuntimeLoaderInputs(repo repository.Repository, project repository.PythonProject) ([]pythonfacts.ArchitectureRuntimeLoaderInput, error) {
+	inputs := []pythonfacts.ArchitectureRuntimeLoaderInput{}
+	for index, declaration := range repo.Config.Scope.PythonRuntimeLoaders {
 		if declaration.Project != project.Manifest {
 			continue
 		}
 		source, err := repo.Read(declaration.Consumer.Importer)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 		consumer, _ := json.Marshal(declaration.Consumer)
-		checked, err := pythonfacts.ResolveRuntimeLoader(ctx, python, modules, pythonfacts.RuntimeLoaderInput{Consumer: consumer, Source: string(source), InputGrammar: declaration.InputGrammar, Check: pythonfacts.RuntimeCheck{Kind: declaration.Check.Kind, Protocol: declaration.Check.Protocol, Site: pythonfacts.SourceLocation{Line: declaration.Check.Site.Line, Column: declaration.Check.Site.Column}}})
-		if err != nil {
-			return result, err
+		inputs = append(inputs, pythonfacts.ArchitectureRuntimeLoaderInput{
+			ID: fmt.Sprintf("runtime-loader:%04d", index),
+			Request: pythonfacts.RuntimeLoaderInput{Consumer: consumer, Source: string(source), InputGrammar: declaration.InputGrammar, Check: pythonfacts.RuntimeCheck{
+				Kind: declaration.Check.Kind, Protocol: declaration.Check.Protocol, Site: pythonfacts.SourceLocation{Line: declaration.Check.Site.Line, Column: declaration.Check.Site.Column},
+			}},
+		})
+	}
+	return inputs, nil
+}
+
+func pythonRuntimeLoaderProject(repo repository.Repository, project repository.PythonProject, facts map[string]pythonSourceFact, checked []pythonfacts.ArchitectureRuntimeLoaderResult) (pythonResolution, error) {
+	result := pythonResolution{}
+	position := 0
+	for _, declaration := range repo.Config.Scope.PythonRuntimeLoaders {
+		if declaration.Project != project.Manifest {
+			continue
 		}
-		result.identity += checked.Identity
+		if position >= len(checked) {
+			return result, fmt.Errorf("runtime loader project omitted a declaration")
+		}
+		resolved := checked[position]
+		position++
 		finding := policy.Finding{Check: "architecture.importCoverage", Path: declaration.Consumer.Importer, Line: declaration.Consumer.Site.Line, Column: declaration.Consumer.Site.Column, Subject: "runtime-loader"}
-		if checked.Error != "" {
-			finding.Message = checked.Error
+		if resolved.Error != "" {
+			finding.Message = resolved.Error
 			result.findings = append(result.findings, finding)
 			continue
 		}
-		if message := pythonRuntimeLoaderTargets(project, facts, checked.Targets); message != "" {
+		if message := pythonRuntimeLoaderTargets(project, facts, resolved.Targets); message != "" {
 			finding.Message = message
 			result.findings = append(result.findings, finding)
 			continue
@@ -46,6 +62,9 @@ func pythonRuntimeLoaderProject(ctx context.Context, repo repository.Repository,
 		finding.Severity = policy.FindingInformation
 		finding.Message = "Operator-controlled runtime loader boundary: unknown targets are delegated, not statically verified; import executes before the protocol check. " + declaration.Reason
 		result.findings = append(result.findings, finding)
+	}
+	if position != len(checked) {
+		return result, fmt.Errorf("runtime loader project returned an extra declaration")
 	}
 	return result, nil
 }

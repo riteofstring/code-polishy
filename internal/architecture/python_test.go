@@ -213,7 +213,7 @@ func assertPythonGraphCommand(t *testing.T, repo repository.Repository, commands
 func assertPythonGraphCommandIsIsolated(t *testing.T, repo repository.Repository, command policy.Command) {
 	t.Helper()
 	arguments := strings.Join(command.Argv, "\x00")
-	for _, flag := range []string{"--isolated", "--detect-string-imports", "--type-checking-imports"} {
+	for _, flag := range []string{"--isolated", "--type-checking-imports"} {
 		if !strings.Contains(arguments, flag) {
 			t.Fatalf("missing %s in command = %+v", flag, command)
 		}
@@ -228,9 +228,8 @@ func assertPythonGraphCommandIsIsolated(t *testing.T, repo repository.Repository
 			t.Fatalf("Ruff graph command lacks %q: %+v", expected, command)
 		}
 	}
-	minimumDots := slicesIndex(command.Argv, "--min-dots")
-	if minimumDots < 0 || minimumDots+1 >= len(command.Argv) || command.Argv[minimumDots+1] != "0" {
-		t.Fatalf("string import detection = %+v", command.Argv)
+	if strings.Contains(arguments, "--detect-string-imports") || strings.Contains(arguments, "--min-dots") {
+		t.Fatalf("speculative string import detection = %+v", command.Argv)
 	}
 	if strings.Contains(arguments, "exclude") || !strings.Contains(arguments, "src/web/app.py") {
 		t.Fatalf("target Ruff configuration changed the graph command: %+v", command.Argv)
@@ -619,6 +618,28 @@ func TestPythonArchitectureUsesPinnedRuffForOneComponentLiteralDynamicImports(t 
 	}
 }
 
+func TestPythonArchitectureDoesNotTreatOrdinaryStringsAsImports(t *testing.T) {
+	t.Parallel()
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := pythonArchitectureRepository(t, []policy.Module{
+		{Name: "model", Paths: []string{"src/model.py"}},
+		{Name: "application", Paths: []string{"src/app.py"}},
+	})
+	repo.PolicyRoot = policyRoot
+	if _, err := os.Stat(repo.PolicyTool("ruff")); err != nil {
+		t.Skip("the pinned Ruff executable is unavailable")
+	}
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	writeArchitectureFile(t, repo.Root, "src/model.py", "value = 1\n")
+	writeArchitectureFile(t, repo.Root, "src/app.py", "label = \"model\"\n")
+	if findings := Check(t.Context(), repo, []string{"src/app.py"}); len(findings) != 0 {
+		t.Fatalf("ordinary string created an import: %+v", findings)
+	}
+}
+
 func pythonArchitectureRepository(t *testing.T, modules []policy.Module) repository.Repository {
 	t.Helper()
 	config := policy.Config{Modules: modules, ModuleByName: map[string]int{}}
@@ -628,13 +649,4 @@ func pythonArchitectureRepository(t *testing.T, modules []policy.Module) reposit
 	policyRoot := t.TempDir()
 	writeArchitectureFile(t, policyRoot, "tools/ruff-version.txt", pythonGraphRuffVersion+"\n")
 	return repository.Repository{Root: t.TempDir(), PolicyRoot: policyRoot, Config: config}
-}
-
-func slicesIndex(values []string, target string) int {
-	for index, value := range values {
-		if value == target {
-			return index
-		}
-	}
-	return -1
 }

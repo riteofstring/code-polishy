@@ -311,24 +311,44 @@ func pythonGraphImportCoverage(
 	coverage map[string]string,
 	sourceFacts map[string]pythonSourceFact,
 ) {
-	for _, source := range sources {
-		for _, target := range sourceFacts[source].RuntimeTargets {
-			for _, path := range newPythonModuleIndex(project).files[target.Module] {
-				if dependencies[source] != nil {
-					dependencies[source][path] = true
-				}
-			}
-		}
-	}
+	index := newPythonModuleIndex(project)
+	pythonRuntimeTargetDependencies(index, sources, dependencies, sourceFacts)
+	pythonProvenDynamicDependencies(index, sources, dependencies, sourceFacts)
 	pythonObjectImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
 	pythonComputedImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
-	index := newPythonModuleIndex(project)
 	for _, source := range sources {
 		if coverage[source] != "" {
 			continue
 		}
 		if message := pythonSourceImportCoverage(index, source, dependencies[source], sourceFacts[source]); message != "" {
 			coverage[source] = message
+		}
+	}
+}
+
+func pythonRuntimeTargetDependencies(index pythonModuleIndex, sources []string, dependencies map[string]map[string]bool, sourceFacts map[string]pythonSourceFact) {
+	for _, source := range sources {
+		for _, target := range sourceFacts[source].RuntimeTargets {
+			for _, path := range index.files[target.Module] {
+				if dependencies[source] != nil {
+					dependencies[source][path] = true
+				}
+			}
+		}
+	}
+}
+
+func pythonProvenDynamicDependencies(index pythonModuleIndex, sources []string, dependencies map[string]map[string]bool, sourceFacts map[string]pythonSourceFact) {
+	for _, source := range sources {
+		for _, reference := range sourceFacts[source].Imports {
+			if reference.Kind != "proven-dynamic" {
+				continue
+			}
+			for _, path := range pythonReferenceTargets(index, source, reference, nil) {
+				if dependencies[source] != nil {
+					dependencies[source][path] = true
+				}
+			}
 		}
 	}
 }

@@ -124,8 +124,8 @@ def _definition_key(value):
 
 
 class ReachabilityResolver:
-    def __init__(self, modules):
-        self.facts = _Resolver(modules)
+    def __init__(self, modules, facts=None):
+        self.facts = facts or _Resolver(modules)
         self.identity = _identity(sorted(modules, key=lambda value: value["path"]))
 
     def runtime_module(self, name):

@@ -24,8 +24,8 @@ LOADER = "pkgutil.resolve_name"
 
 
 class ObjectImportResolver(ReachabilityResolver):
-    def __init__(self, modules, root, registries):
-        super().__init__(modules)
+    def __init__(self, modules, root, registries, facts=None):
+        super().__init__(modules, facts)
         if root != ".":
             _path(root)
         self.root = root

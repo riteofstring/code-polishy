@@ -30,8 +30,8 @@ def callable_names(module):
     return result
 
 
-def module_imports(modules):
-    facts = _Resolver(modules)
+def module_imports(modules, facts=None):
+    facts = facts or _Resolver(modules)
     bindings = LoaderBindings(facts, ("__import__", "next"))
     result = []
     for path, module in sorted(facts.files.items()):

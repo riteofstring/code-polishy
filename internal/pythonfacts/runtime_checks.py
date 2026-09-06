@@ -290,8 +290,8 @@ def resolve_stream(source, output):
     output.write(encoded)
 
 
-def resolve_runtime_checks(modules, requests):
-    resolver = RuntimeCheckResolver(modules)
+def resolve_runtime_checks(modules, requests, resolver=None):
+    resolver = resolver or RuntimeCheckResolver(modules)
     evidence, problems = [], []
     consumers = Counter(_consumer_identity(request) for request in requests)
     for request in requests:

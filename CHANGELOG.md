@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.7 - 2026-09-06
+
+- Build each selected Python project's source facts and architecture evidence in
+  one bounded streaming resolver, retaining whole-project context without
+  repeatedly parsing and transporting the same compact model.
+- Derive dynamic import edges from exact loader calls instead of treating
+  arbitrary module-shaped string literals as source dependency evidence.
+
 ## 0.24.6 - 2026-09-06
 
 - Apply file-line budgets to programming source, scripts, and application

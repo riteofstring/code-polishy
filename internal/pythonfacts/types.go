@@ -196,6 +196,10 @@ func runTypeProject(ctx context.Context, python string, input io.Reader) ([]byte
 }
 
 func runFactProject(ctx context.Context, python string, input io.Reader, program string) ([]byte, error) {
+	return runFactProjectWithLimit(ctx, python, input, program, maximumResponseSize)
+}
+
+func runFactProjectWithLimit(ctx context.Context, python string, input io.Reader, program string, outputLimit int) ([]byte, error) {
 	programInput, err := ProgramInput(program, input)
 	if err != nil {
 		return nil, err
@@ -206,14 +210,14 @@ func runFactProject(ctx context.Context, python string, input io.Reader, program
 	command.Dir = filepath.Dir(python)
 	command.Env = []string{}
 	command.Stdin = programInput
-	stdout := &boundedBuffer{maximum: maximumResponseSize}
+	stdout := &boundedBuffer{maximum: outputLimit}
 	stderr := &boundedBuffer{maximum: 64 * 1024}
 	command.Stdout, command.Stderr = stdout, stderr
 	if err := command.Run(); err != nil {
 		if bounded.Err() != nil {
-			return nil, fmt.Errorf("python type project exceeded its time limit")
+			return nil, fmt.Errorf("python fact project exceeded its time limit")
 		}
-		return nil, fmt.Errorf("python type project failed: %s: %w", strings.TrimSpace(string(stderr.Bytes())), err)
+		return nil, fmt.Errorf("python fact project failed: %s: %w", strings.TrimSpace(string(stderr.Bytes())), err)
 	}
 	return stdout.Bytes(), nil
 }

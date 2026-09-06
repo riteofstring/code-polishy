@@ -28,6 +28,12 @@ Stub-only modules remain usable when there is no competing runtime source.
 All captured sources contribute to identity, including sources that do not
 ultimately supply the selected definition.
 
+Architecture resolution constructs and validates the complete project model
+once per selected project. TypedDict reads, dynamic imports, object loaders,
+runtime checks, and operator loader declarations share that immutable model.
+Focused file selection changes the reported surface while retaining complete
+context; it does not repeat project parsing for each evidence consumer.
+
 `METADATA`, `RECORD`, and an applicable Git `direct_url.json` establish current
 installation consistency. They do not authenticate the installer or prove
 that a locally rewritten source and record match a published artifact.

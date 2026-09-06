@@ -114,7 +114,7 @@ func pythonConflictingModulePaths(paths []string) bool {
 }
 
 func pythonSourceFacts(ctx context.Context, repo repository.Repository, project repository.PythonProject, sources []string) (pythonProjectFacts, error) {
-	inputs := make([]pythonfacts.Input, 0, len(sources))
+	inputs := make([]pythonfacts.ArchitectureSourceInput, 0, len(sources))
 	data := make(map[string][]byte, len(sources))
 	for _, source := range sources {
 		contents, err := repo.Read(source)
@@ -122,18 +122,26 @@ func pythonSourceFacts(ctx context.Context, repo repository.Repository, project 
 			return pythonProjectFacts{}, fmt.Errorf("read %s for python-facts: %w", source, err)
 		}
 		data[source] = contents
-		inputs = append(inputs, pythonfacts.Input{Path: source, Source: string(contents)})
+		module, packageName := repository.PythonModuleName(project, source)
+		inputs = append(inputs, pythonfacts.ArchitectureSourceInput{Path: source, Module: module, Package: packageName, Source: string(contents)})
 	}
 	python, err := pythonFactInterpreter(repo)
 	if err != nil {
 		return pythonProjectFacts{}, err
 	}
-	response, err := pythonfacts.AnalyzeProjectSources(ctx, python, inputs)
+	registries := repo.PythonObjectImportInputs(project)
+	externalRequests := pythonExternalRuntimeRequests(pythonExternalDeclarations(repo, project.Manifest))
+	runtimeInputs, err := pythonRuntimeLoaderInputs(repo, project)
+	if err != nil {
+		return pythonProjectFacts{}, err
+	}
+	response, err := pythonfacts.ResolveArchitectureProject(ctx, python, inputs, pythonfacts.ArchitectureProjectInput{
+		Root: project.Root, Registries: registries, RuntimeChecks: externalRequests, RuntimeLoaders: runtimeInputs,
+	})
 	if err != nil {
 		return pythonProjectFacts{}, err
 	}
 	result := make(map[string]pythonSourceFact, len(sources))
-	types := make([]pythonfacts.TypeModule, 0, len(response.Sources))
 	for _, fact := range response.Sources {
 		source := fact.Path
 		if fact.Error != "" {
@@ -144,47 +152,36 @@ func pythonSourceFacts(ctx context.Context, repo repository.Repository, project 
 			return pythonProjectFacts{}, fmt.Errorf("parse %s facts: %w", source, err)
 		}
 		result[source] = converted
-		module, packageName := repository.PythonModuleName(project, source)
-		types = append(types, pythonfacts.TypeModule{Path: source, Module: module, Package: packageName, SourceSHA256: fact.SHA256, Facts: fact.TypeFacts})
 	}
-	resolution, err := pythonProjectResolution(ctx, repo, python, project, types, result)
+	resolution, err := pythonProjectResolution(repo, project, response, result)
 	if err != nil {
 		return pythonProjectFacts{}, err
 	}
 	return pythonProjectFacts{sources: result, external: resolution.external, pluginFindings: resolution.findings, input: sourcegraph.FactInput{
 		Analyzer: "python-facts", Protocol: pythonfacts.Protocol, Project: project.Manifest, Root: project.Root,
-		Paths: append([]string{}, sources...), FactsSHA256: response.Identity, PartitionsSHA256: response.PartitionIdentity, ResolutionSHA256: resolution.identity,
+		Paths: append([]string{}, sources...), FactsSHA256: response.FactsIdentity, PartitionsSHA256: response.PartitionIdentity, ResolutionSHA256: resolution.identity,
 	}}, nil
 }
 
-func pythonProjectResolution(ctx context.Context, repo repository.Repository, python string, project repository.PythonProject, modules []pythonfacts.TypeModule, facts map[string]pythonSourceFact) (pythonResolution, error) {
-	types, err := pythonfacts.ResolveTypeProject(ctx, python, modules)
-	if err != nil {
+func pythonProjectResolution(repo repository.Repository, project repository.PythonProject, resolvedProject pythonfacts.ArchitectureProject, facts map[string]pythonSourceFact) (pythonResolution, error) {
+	if err := pythonModuleImportFacts(resolvedProject.Types.Imports, facts); err != nil {
 		return pythonResolution{}, err
 	}
-	if err := pythonModuleImportFacts(types.Imports, facts); err != nil {
-		return pythonResolution{}, err
-	}
-	objects, err := pythonfacts.ResolveObjectImports(ctx, python, project.Root, modules, repo.PythonObjectImportInputs(project))
-	if err != nil {
-		return pythonResolution{}, err
-	}
-	for _, imported := range objects.Imports {
+	for _, imported := range resolvedProject.Objects.Imports {
 		fact := facts[imported.Path]
 		fact.ObjectImports = append(fact.ObjectImports, imported)
 		facts[imported.Path] = fact
 	}
-	resolved, err := pythonExternalProject(ctx, repo, python, project, modules, facts)
+	resolved, err := pythonExternalProject(repo, project, facts, resolvedProject.RuntimeChecks)
 	if err != nil {
 		return pythonResolution{}, err
 	}
-	runtime, err := pythonRuntimeLoaderProject(ctx, repo, python, project, modules, facts)
+	runtime, err := pythonRuntimeLoaderProject(repo, project, facts, resolvedProject.RuntimeLoaders)
 	if err != nil {
 		return pythonResolution{}, err
 	}
 	resolved.findings = append(resolved.findings, runtime.findings...)
-	resolved.identity += runtime.identity
-	digest := sha256.Sum256([]byte(types.Identity + "\x00" + objects.Identity + "\x00" + resolved.identity))
+	digest := sha256.Sum256([]byte(resolvedProject.Identity + "\x00" + resolved.identity))
 	resolved.identity = hex.EncodeToString(digest[:])
 	return resolved, nil
 }
