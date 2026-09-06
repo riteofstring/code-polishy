@@ -16,6 +16,12 @@ def _expression(node):
     reference = _reference_name(node)
     if reference:
         return {"kind": "name", "name": reference, "args": []}
+    if isinstance(node, ast.List):
+        return {
+            "kind": "list",
+            "name": "",
+            "args": [_expression(value) for value in node.elts],
+        }
     if isinstance(node, ast.Call):
         return {"kind": "call", "name": _reference_name(node.func), "args": []}
     if isinstance(node, ast.Subscript):
@@ -34,10 +40,17 @@ def _expression(node):
             "args": [_expression(node.left), _expression(node.right)],
         }
     if isinstance(node, ast.Constant):
-        if isinstance(node.value, str):
-            return {"kind": "string", "name": node.value, "args": []}
-        if node.value is None or isinstance(node.value, (int, float, bool)):
-            return {"kind": "literal", "name": repr(node.value), "args": []}
+        return _constant_expression(node.value)
+    return {"kind": "unknown", "name": "", "args": []}
+
+
+def _constant_expression(value):
+    if value is Ellipsis:
+        return {"kind": "ellipsis", "name": "", "args": []}
+    if isinstance(value, str):
+        return {"kind": "string", "name": value, "args": []}
+    if value is None or isinstance(value, (int, float, bool)):
+        return {"kind": "literal", "name": repr(value), "args": []}
     return {"kind": "unknown", "name": "", "args": []}
 
 

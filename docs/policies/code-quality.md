@@ -449,6 +449,12 @@ mapping establish field identities. An annotated receiver, exact constructor,
 or local receiver alias followed by `value["literal_key"]` preserves only that
 declared field, including the original declaration of an inherited field.
 Another type's same-named key stays subject to dead-code analysis.
+Callable fields support empty or explicit parameter lists and ellipsis signatures
+through exact `typing.Callable` or `collections.abc.Callable` imports, aliases,
+and re-exports, including nested Callable annotations. Parameter-list and
+ellipsis facts describe syntax; the analyzer never executes annotations.
+Unsupported field expressions and duplicate keys identify the source path,
+line, column, TypedDict name, and field in the coverage diagnostic.
 
 Dynamic keys, `Any`, union receivers, wildcard imports, unresolved or rebound
 receivers, and type objects provide no exemption. Dictionary methods such as

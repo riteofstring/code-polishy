@@ -49,9 +49,11 @@ def _expression(value, depth=0):
         "string",
         "literal",
         "unknown",
+        "list",
+        "ellipsis",
     }:
         raise ValueError("type expression kind is invalid")
-    if kind not in {"subscript", "union"} and value["args"]:
+    if kind not in {"subscript", "union", "list"} and value["args"]:
         raise ValueError("type expression has unexpected arguments")
     for argument in value["args"]:
         _expression(argument, depth + 1)
@@ -203,6 +205,14 @@ def _calls(values, scopes):
         if identity in seen:
             raise ValueError("source facts duplicate a consumer call")
         seen.add(identity)
+
+
+def _field_error(module, binding, field, reason):
+    site = field["site"]
+    return ValueError(
+        f"{module['path']}:{site['line']}:{site['column']}: "
+        f"TypedDict {binding['name']}.{field['name']}: {reason}"
+    )
 
 
 def _fields(fields):
@@ -556,14 +566,19 @@ class _Resolver:
         for parent in inherited:
             for name, field in parent.items():
                 if name in result and result[name] != field:
-                    raise ValueError(
-                        "TypedDict inheritance has ambiguous duplicate keys"
+                    raise _field_error(
+                        module,
+                        binding,
+                        {"name": name, "site": binding["site"]},
+                        "inheritance has ambiguous duplicate keys",
                     )
                 result[name] = field
         for field in fields:
-            if field["name"] in result or not self.field_type(field["type"]):
-                raise ValueError(
-                    "TypedDict has duplicate keys or unsupported field type expressions"
+            if field["name"] in result:
+                raise _field_error(module, binding, field, "duplicate keys")
+            if not self.field_type(module, binding["scope"], field["type"]):
+                raise _field_error(
+                    module, binding, field, "unsupported field type expression"
                 )
             result[field["name"]] = {
                 "path": module["path"],
@@ -575,13 +590,34 @@ class _Resolver:
             }
         return result
 
-    def field_type(self, expression):
+    def field_type(self, module, scope, expression):
         kind = expression["kind"]
         if kind in {"name", "string", "literal"}:
             return True
+        if kind == "subscript":
+            reference = self.reference(module, scope, expression["name"])
+            if isinstance(reference, str) and reference in {
+                "typing.Callable",
+                "collections.abc.Callable",
+            }:
+                return self.callable_type(module, scope, expression["args"])
         return kind in {"subscript", "union"} and all(
-            self.field_type(value) for value in expression["args"]
+            self.field_type(module, scope, value) for value in expression["args"]
         )
+
+    def callable_type(self, module, scope, arguments):
+        if len(arguments) != 2:
+            return False
+        parameters, result = arguments
+        if not self.field_type(module, scope, result):
+            return False
+        if parameters["kind"] == "ellipsis":
+            return True
+        if parameters["kind"] == "list":
+            return all(
+                self.field_type(module, scope, value) for value in parameters["args"]
+            )
+        return self.field_type(module, scope, parameters)
 
     def receiver(self, module, scope, expression, site, seen=frozenset()):
         if len(seen) >= MAX_DEPTH:

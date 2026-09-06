@@ -60,4 +60,8 @@ def resolve_stream(source, output):
 
 
 if __name__ == "__main__":
-    resolve_stream(sys.stdin.buffer, sys.stdout.buffer)
+    try:
+        resolve_stream(sys.stdin.buffer, sys.stdout.buffer)
+    except (ValueError, TypeError) as error:
+        sys.stderr.write(str(error) + "\n")
+        raise SystemExit(2) from None

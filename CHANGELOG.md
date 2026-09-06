@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.2 - 2026-09-05
+
+- Preserve TypedDict key-read evidence for Callable fields with empty, explicit,
+  or ellipsis parameter lists, including aliases and nested annotations.
+- Identify the source file, location, TypedDict, and field when a duplicate key
+  or unsupported field expression prevents complete Python analysis. Report
+  expected type-resolution errors without an internal traceback.
+
 ## 0.24.1 - 2026-09-05
 
 - Allow non-promoting task sessions to finish after independent caller commits.
