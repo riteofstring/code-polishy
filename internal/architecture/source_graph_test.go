@@ -122,7 +122,7 @@ func TestGeneratedAndTestOnlyJavaScriptCyclesRemainSeparate(t *testing.T) {
 	})
 }
 
-func TestPythonCycleUsesCompleteSelectedProject(t *testing.T) {
+func TestPythonFocusedGraphStaysBoundedAndFullSelectionDetectsCycles(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"app/**"}}})
 	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
@@ -132,20 +132,26 @@ func TestPythonCycleUsesCompleteSelectedProject(t *testing.T) {
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{
 		".": `{"app/a.py":["app/b.py"],"app/b.py":["app/a.py"]}`,
 	}}
-	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"app/a.py"}, graphRunner)
+	focused := AnalyzeWithRunner(t.Context(), repo, []string{"app/a.py"}, graphRunner)
+	if len(focused.Findings) != 0 || focused.Graph == nil || len(focused.Graph.Edges) != 1 ||
+		!slices.Equal(focused.Graph.Inputs[0].Paths, []string{"app/a.py", "app/b.py"}) ||
+		!slices.Equal(graphRunner.commands[0].Paths, []string{"app/a.py"}) {
+		t.Fatalf("focused analysis expanded beyond its selected source: %+v, commands = %+v", focused, graphRunner.commands)
+	}
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"app/a.py", "app/b.py"}, graphRunner)
 	finding := onlyCycleFinding(t, analysis.Findings, "architecture.fileCycle")
 	if analysis.Graph == nil || finding.DependencyComponent == nil || len(finding.DependencyComponent.Members) != 2 {
 		t.Fatalf("analysis = %+v", analysis)
 	}
-	if len(analysis.Graph.Inputs) != 1 || !slices.Equal(analysis.Graph.Inputs[0].Paths, []string{"app/__init__.py", "app/a.py", "app/b.py"}) {
-		t.Fatalf("selected project lost fact coverage: %+v", analysis.Graph.Inputs)
+	if len(analysis.Graph.Inputs) != 1 || !slices.Equal(analysis.Graph.Inputs[0].Paths, []string{"app/a.py", "app/b.py"}) {
+		t.Fatalf("full selected graph lost fact coverage: %+v", analysis.Graph.Inputs)
 	}
 	before, err := BuildReviewTopology(repo, *analysis.Graph)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeArchitectureFile(t, repo.Root, "app/b.py", "import app.a\nvalue = 2\n")
-	updated := AnalyzeWithRunner(t.Context(), repo, []string{"app/a.py"}, graphRunner)
+	updated := AnalyzeWithRunner(t.Context(), repo, []string{"app/a.py", "app/b.py"}, graphRunner)
 	updatedFinding := onlyCycleFinding(t, updated.Findings, "architecture.fileCycle")
 	if updated.Graph == nil || updated.Graph.Identity == analysis.Graph.Identity || updatedFinding.DependencyComponent.Identity != finding.DependencyComponent.Identity {
 		t.Fatalf("source change failed to invalidate evidence or changed semantic cycle: %+v", updated)

@@ -39,7 +39,7 @@ func normalizeFactInputs(inputs []FactInput, nodes map[string]Node) ([]FactInput
 }
 
 func normalizeFactInput(input FactInput) (FactInput, error) {
-	if input.Analyzer != "python-facts" || input.Protocol != "python-facts/v3" {
+	if !validFactAnalyzer(input.Analyzer, input.Protocol) {
 		return FactInput{}, fmt.Errorf("source dependency graph has an unsupported fact analyzer or protocol")
 	}
 	root, err := normalizePath(input.Root, true)
@@ -61,6 +61,17 @@ func normalizeFactInput(input FactInput) (FactInput, error) {
 	input.Root, input.Project = root, project
 	input.Paths, err = normalizeFactPaths(input.Paths)
 	return input, err
+}
+
+func validFactAnalyzer(analyzer, protocol string) bool {
+	switch analyzer {
+	case "python-facts":
+		return protocol == "python-facts/v3"
+	case "ruff":
+		return protocol == "ruff-graph-facts/v1"
+	default:
+		return false
+	}
 }
 
 func normalizeFactPaths(paths []string) ([]string, error) {

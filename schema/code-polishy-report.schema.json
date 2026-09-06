@@ -681,6 +681,20 @@
     "dependencyFactInput": {
       "type": "object",
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "analyzer": { "const": "python-facts" },
+            "protocol": { "const": "python-facts/v3" }
+          }
+        },
+        {
+          "properties": {
+            "analyzer": { "const": "ruff" },
+            "protocol": { "const": "ruff-graph-facts/v1" }
+          }
+        }
+      ],
       "required": [
         "analyzer",
         "protocol",
@@ -692,8 +706,8 @@
         "resolutionSha256"
       ],
       "properties": {
-        "analyzer": { "const": "python-facts" },
-        "protocol": { "const": "python-facts/v3" },
+        "analyzer": { "enum": ["python-facts", "ruff"] },
+        "protocol": { "enum": ["python-facts/v3", "ruff-graph-facts/v1"] },
         "project": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "root": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "paths": {

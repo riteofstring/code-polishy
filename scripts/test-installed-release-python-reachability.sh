@@ -53,14 +53,11 @@ def position(node):
     return {"line": node.lineno, "column": node.col_offset + 1}
 
 
-def declare_loader(argument, *, registry=None, guarded=False):
-    guard = "    if not permitted(name):\n        raise ValueError\n" if guarded else ""
+def declare_loader(argument, *, registry=None):
     imports = "from pkgutil import resolve_name\nfrom app.contracts import Contract\n"
     if registry:
         imports += "import json\nfrom pathlib import Path\n"
-    if guarded:
-        imports += "from app.validation import permitted\n"
-    source = imports + "\ndef load(name):\n" + guard + (
+    source = imports + "\ndef load(name):\n" + (
         f"    plugin = resolve_name({argument})\n"
         "    if not issubclass(plugin, Contract):\n"
         "        raise TypeError\n"
@@ -151,19 +148,19 @@ sarif = json.loads(sarif_text)
 if sarif["runs"][0]["properties"]["codePolishyReport"]["sourceDependencyGraph"] != literal:
     raise AssertionError("installed SARIF changed the canonical external graph")
 
-for description, argument in (
-    ("local target", "'app.contracts:Contract'"),
-    ("relative name", "'.third_party.plugins:Plugin'"),
-    ("wildcard name", "'third_party.*:Plugin'"),
-    ("expression", "'third_party.plugins:Plugin()'"),
-    ("unconstrained parameter", "name"),
-):
-    declare_loader(argument)
-    architecture_failure(description)
-
 declare_loader("'third_party.plugins:Plugin'")
 write("src/app/loader.py", (root / "src/app/loader.py").read_text() + "\n")
 architecture_failure("stale loader source")
+declaration = declare_loader("'third_party.plugins:Plugin'")
+source = (root / "src/app/loader.py").read_text()
+source = source.replace("plugin = resolve_name", "selected = resolve_name")
+source = source.replace("issubclass(plugin", "issubclass(selected")
+source = source.replace("return plugin", "return selected")
+write("src/app/loader.py", source)
+declaration["consumer"]["sourceSha256"] = digest("src/app/loader.py")
+config["scope"]["pythonExternalPluginImports"] = [declaration]
+save_config()
+architecture_pass()
 declare_loader("'third_party.plugins:Plugin'")
 write("pyproject.toml", "[project]\nname='plugin-host'\nrequires-python='==3.12.*'\ndependencies=[]\n")
 architecture_failure("transitive-only distribution")
@@ -186,34 +183,6 @@ updated = architecture_pass("src/app/registry.json")
 if updated["externalCompositions"][0]["contract"]["inputSha256"] == registry["externalCompositions"][0]["contract"]["inputSha256"]:
     raise AssertionError("registry update retained stale input proof")
 
-predicate = '''import keyword
-import unicodedata
-
-def permitted(value):
-    return (
-        type(value) is str
-        and unicodedata.normalize('NFKC', value) == value
-        and value.count(':') == 1
-        and value.startswith(('third_party.plugins:', 'third_party.plugins.'))
-        and all(part.isidentifier() and not keyword.iskeyword(part)
-                for part in value.replace(':', '.').split('.'))
-    )
-'''
-write("src/app/validation.py", predicate)
-declaration = declare_loader("name", guarded=True)
-guarded = architecture_pass()
-write("src/app/validation.py", predicate + "\n")
-refreshed = architecture_pass("src/app/validation.py")
-if refreshed["externalCompositions"][0]["contract"]["inputSha256"] == guarded["externalCompositions"][0]["contract"]["inputSha256"]:
-    raise AssertionError("predicate change retained stale input proof")
-write("src/app/validation.py", predicate.replace("== 1", ">= 1"))
-architecture_failure("weakened runtime grammar")
-write("src/app/validation.py", predicate)
-source = (root / "src/app/loader.py").read_text().replace("    return plugin", "    sibling = resolve_name(name)\n    return plugin, sibling")
-write("src/app/loader.py", source)
-declaration["consumer"]["sourceSha256"] = digest("src/app/loader.py")
-save_config()
-architecture_failure("undeclared sibling loader")
 print("Installed Python external composition cases passed.")
 
 root = pathlib.Path(fixture) / "python-external-contracts"

@@ -21,6 +21,9 @@ adoption, and Python regressions. The scoped-analysis fixture exercises selected
 agent guidance beside Python source and JavaScript generated inside a Python
 package. It checks real unused-code findings, generated-byte preservation, and
 owner stability across caller directories and unrelated root manifests.
+The Python architecture fixture verifies that external loader declarations bind
+current source, registry, and direct-dependency evidence while allowing the
+repository to own its loader implementation.
 The focused first-adoption result proves that
 boundary only; the release checklist still requires the complete installed
 fixture suite and native platform evidence.

@@ -28,11 +28,14 @@ Stub-only modules remain usable when there is no competing runtime source.
 All captured sources contribute to identity, including sources that do not
 ultimately supply the selected definition.
 
-Architecture resolution constructs and validates the complete project model
-once per selected project. TypedDict reads, dynamic imports, object loaders,
-runtime checks, and operator loader declarations share that immutable model.
-Focused file selection changes the reported surface while retaining complete
-context; it does not repeat project parsing for each evidence consumer.
+Architecture resolution does not build the Python semantic model. The pinned
+Ruff graph runs on the selected source paths, and the Go policy engine validates
+its paths, ownership, module direction, and cycles. A focused check therefore
+scales with its selection. A full gate selects the complete project and retains
+whole-project cycle coverage. Repository declarations add source-bound dynamic
+edges and runtime boundaries without causing unrelated files to enter a focused
+graph. TypedDict and dead-code analysis keep their separate complete-project
+fact model because those quality checks need cross-file semantics.
 
 `METADATA`, `RECORD`, and an applicable Git `direct_url.json` establish current
 installation consistency. They do not authenticate the installer or prove
@@ -107,9 +110,10 @@ derivative findings.
 separate from finite computed-import inventories and from dead-code retention.
 The repository delegates unknown target selection to an operator and supplies
 an exact source-bound loader, ASCII module/object grammar, and rejecting runtime
-protocol check. The analyzer verifies the supported loader structure using the
-bounded source parser and resolves operation and protocol identities over the
-complete project facts. It never imports the selected module.
+protocol declaration. The architecture check binds that declaration to its
+current project, module, source digest, and source locations. It never imports
+the selected module and does not run a project-wide Python parser to reinterpret
+the reviewed declaration.
 
 Acceptance produces an informational architecture coverage record that explicitly
 states that unknown targets are not statically verified. A successful local
@@ -119,16 +123,9 @@ check runs after import, so neither that check nor syntax validation establishes
 import safety or dependency admission. Supply-chain policy remains independent;
 a package installed only on an operator's host is outside repository lock scans.
 
-Direct literal calls to the resolved loader add ordinary local dependency edges.
-Nonlocal targets remain external; missing targets under a local package root
-remain errors. The known calls are observations, not an exhaustive registry.
-Unknown calls retain the declared boundary. Existing `scope.pythonContracts`
-entry points express any repository exports that external hosts consume.
-
-The first supported syntax is a synchronous single-parameter loader with six
-statements: rejecting compiled-regex fullmatch, module/object split, direct
-import assignment, nested getattr loop, rejecting isinstance check, and return.
-Exact operation resolution rejects shadowed imports and builtins. Changed
-source digests, moved callsites, unsupported control flow, and stale declarations
-remain coverage errors. Supporting additional loader forms must extend this
-shared syntax contract rather than introduce application-specific names.
+Known finite local targets belong in `scope.pythonComputedImports`; each becomes
+an ordinary dependency edge and must satisfy module direction. Unknown targets
+remain delegated by the loader declaration and do not become guessed local
+edges. Existing `scope.pythonContracts` entry points express repository exports
+that external hosts consume. Changed source digests, module identities, source
+locations, and unsupported input grammars remain coverage errors.

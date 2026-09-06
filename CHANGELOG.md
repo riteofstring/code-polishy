@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.8 - 2026-09-06
+
+- Run Python architecture checks directly from the pinned Ruff dependency graph
+  and validate ownership, module direction, and cycles in Go. Focused checks now
+  analyze only selected sources instead of constructing a whole-project Python
+  semantic model; full gates retain whole-project cycle coverage.
+- Keep computed imports, external plug-ins, and operator-controlled loaders as
+  explicit source-bound repository declarations. Their validation no longer
+  expands a focused graph or invalidates unrelated project evidence.
+
 ## 0.24.7 - 2026-09-06
 
 - Build each selected Python project's source facts and architecture evidence in

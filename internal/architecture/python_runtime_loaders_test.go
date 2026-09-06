@@ -3,12 +3,12 @@ package architecture
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"path/filepath"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
-	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 const runtimeLoaderExample = `import importlib
@@ -33,82 +33,49 @@ def load(target: str) -> Contract:
     return loaded
 `
 
-func TestPythonRuntimeLoaderBoundaryAndKnownEdges(t *testing.T) {
-	repo := pythonArchitectureRepository(t, []policy.Module{
-		{Name: "plugins", Paths: []string{"src/app/plugins/**"}},
-		{Name: "application", Paths: []string{"src/app/loader.py", "src/app/main.py", "src/app/exports.py"}},
-	})
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo.PolicyRoot = root
+func TestPythonRuntimeLoaderIsASelectedDeclarationWithoutProjectFactExpansion(t *testing.T) {
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
 	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
-	writeArchitectureFile(t, repo.Root, "src/app/loader.py", runtimeLoaderExample)
-	writeArchitectureFile(t, repo.Root, "src/app/main.py", "from app.exports import load\nlocal = load(\"app.plugins.worker:registry.primary\")\nexternal = load(\"vendor_package.worker:instance\")\nrejected = load(\"not-a-target\")\n")
-	writeArchitectureFile(t, repo.Root, "src/app/exports.py", "from app.loader import load\n")
-	writeArchitectureFile(t, repo.Root, "src/app/plugins/worker.py", "raise RuntimeError(\"analysis must not execute this module\")\nregistry = object()\n")
-	repo.Config.Scope.PythonRuntimeLoaders = []policy.PythonRuntimeLoader{runtimeLoaderDeclaration(runtimeLoaderExample)}
-	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/app/loader.py", "src/app/main.py"}, runner.OSRunner{})
-	information, dependency := 0, 0
-	for _, finding := range analysis.Findings {
-		if finding.Severity == policy.FindingInformation {
-			information++
-			continue
-		}
-		if finding.Check == "architecture.moduleDependency" {
-			dependency++
-			continue
-		}
-		t.Fatalf("unexpected findings: %+v", analysis.Findings)
+	writeArchitectureFile(t, repo.Root, "src/loader.py", runtimeLoaderExample)
+	for index := range 220 {
+		writeArchitectureFile(t, repo.Root, fmt.Sprintf("src/context_%03d.py", index), "value = 1\n")
 	}
-	if information != 1 || dependency != 1 {
-		t.Fatalf("runtime boundary lost delegation or local policy: %+v", analysis.Findings)
+	declaration := runtimeLoaderDeclaration(runtimeLoaderExample)
+	declaration.Consumer.Importer = "src/loader.py"
+	declaration.Consumer.Module = "loader"
+	repo.Config.Scope.PythonRuntimeLoaders = []policy.PythonRuntimeLoader{declaration}
+	runner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/loader.py":[]}`}}
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/loader.py"}, runner)
+	if analysis.Graph == nil || len(analysis.Graph.Nodes) != 1 || len(analysis.Graph.Edges) != 0 {
+		t.Fatalf("focused runtime loader expanded its project graph: %+v", analysis)
 	}
-	assertPythonModuleImportEdge(t, analysis.Graph, "src/app/main.py", "src/app/plugins/worker.py", "proven-dynamic")
-	repo.Config.Modules[1].DependsOn = []string{"plugins"}
-	for _, finding := range Check(t.Context(), repo, []string{"src/app/main.py"}) {
-		if finding.Severity != policy.FindingInformation {
-			t.Fatalf("authorized edge failed: %+v", finding)
-		}
+	if len(analysis.Findings) != 1 || analysis.Findings[0].Severity != policy.FindingInformation || analysis.Findings[0].Subject != "runtime-loader" {
+		t.Fatalf("runtime loader declaration was not reported independently: %+v", analysis.Findings)
+	}
+	if len(runner.commands) != 1 || !slices.Equal(runner.commands[0].Paths, []string{"src/loader.py"}) {
+		t.Fatalf("focused runtime loader command expanded beyond its consumer: %+v", runner.commands)
 	}
 }
 
-func TestPythonRuntimeLoaderRejectsChangedEvidence(t *testing.T) {
-	for name, change := range map[string]func(string) string{
-		"unguarded": func(s string) string {
-			return strings.Replace(s, "TARGET.fullmatch(target)", "TARGET.match(target)", 1)
-		},
-		"different value": func(s string) string {
-			return strings.Replace(s, "isinstance(loaded, Contract)", "isinstance(target, Contract)", 1)
-		},
-		"shadowed import": func(s string) string {
-			return strings.Replace(s, "import importlib", "from vendor import importlib", 1)
-		},
-		"shadowed getattr":    func(s string) string { return s + "\ngetattr = lambda value, name: value\n" },
-		"unchecked return":    func(s string) string { return strings.Replace(s, "return loaded", "return target", 1) },
-		"nonruntime protocol": func(s string) string { return strings.Replace(s, "@runtime_checkable", "", 1) },
+func TestPythonRuntimeLoaderDeclarationRejectsStaleSourceEvidence(t *testing.T) {
+	for name, mutate := range map[string]func(*policy.PythonRuntimeLoader){
+		"digest":   func(value *policy.PythonRuntimeLoader) { value.Consumer.SourceSHA256 = strings.Repeat("a", 64) },
+		"location": func(value *policy.PythonRuntimeLoader) { value.Consumer.Site.Line = 1000 },
+		"module":   func(value *policy.PythonRuntimeLoader) { value.Consumer.Module = "other" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/app/**"}}})
-			root, err := filepath.Abs("../..")
-			if err != nil {
-				t.Fatal(err)
-			}
-			repo.PolicyRoot = root
-			source := change(runtimeLoaderExample)
+			repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
 			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nrequires-python = \"==3.12.*\"\n")
-			writeArchitectureFile(t, repo.Root, "src/app/loader.py", source)
-			repo.Config.Scope.PythonRuntimeLoaders = []policy.PythonRuntimeLoader{runtimeLoaderDeclaration(source)}
-			findings := Check(t.Context(), repo, []string{"src/app/loader.py"})
-			failed := false
-			for _, finding := range findings {
-				if finding.Check == "architecture.importCoverage" && finding.Severity != policy.FindingInformation {
-					failed = true
-				}
-			}
-			if !failed {
-				t.Fatalf("invalid loader accepted: %+v", findings)
+			writeArchitectureFile(t, repo.Root, "src/loader.py", runtimeLoaderExample)
+			declaration := runtimeLoaderDeclaration(runtimeLoaderExample)
+			declaration.Consumer.Importer = "src/loader.py"
+			declaration.Consumer.Module = "loader"
+			mutate(&declaration)
+			repo.Config.Scope.PythonRuntimeLoaders = []policy.PythonRuntimeLoader{declaration}
+			runner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/loader.py":[]}`}}
+			findings := CheckWithRunner(t.Context(), repo, []string{"src/loader.py"}, runner)
+			if len(findings) != 1 || findings[0].Severity == policy.FindingInformation || findings[0].Subject != "runtime-loader" {
+				t.Fatalf("stale runtime declaration passed: %+v", findings)
 			}
 		})
 	}

@@ -309,48 +309,37 @@ of producing one secondary failure per file and tool. Ambient `VIRTUAL_ENV`,
 or an environment.
 
 For each selected project, the pinned Ruff runs `analyze graph` in isolated
-mode. Code Polishy supplies the `project.requires-python`-derived target and
-the validated source roots, including `src` when present, asks Ruff to include
-imports under type-checking branches, and parses the bounded graph output once.
-Arbitrary string literals are not import evidence. Proven dynamic loader calls
-come from the bounded Python facts resolver and add their exact targets to the
-graph. Target Ruff configuration cannot change this evidence. Code Polishy,
-rather than Ruff or a target command, then decides file and module ownership,
-allowed `dependsOn` edges, and coverage.
+mode on the selected Python paths. Code Polishy supplies the
+`project.requires-python`-derived target and validated source roots, including
+`src` when present, asks Ruff to include imports under type-checking branches,
+and parses the bounded graph output once. Target Ruff configuration cannot
+change this evidence. Code Polishy then decides file and module ownership,
+allowed `dependsOn` edges, and coverage in Go.
 
-The canonical source graph records one `python-facts/v3` input per analyzed
-Python project, covering its exact source paths. Its identity binds the
-normalized facts, the streamed source snapshot, and cross-file resolution
-evidence. The bounded resolver returns its compact source facts for independent
-digest and callsite validation without sending that model through a second
-Python process. Missing, duplicated, or mismatched coverage withholds the graph.
-Cycle and architecture-review topology identities depend on semantic
+Focused file checks remain bounded to their selected sources and the local
+targets Ruff resolves from them. They do not parse every Python source or claim
+to prove cycles whose outgoing edges were not selected. `architecture --all`
+and the full gate select the complete project and therefore retain whole-project
+dependency and cycle coverage.
+
+The canonical source graph records one `ruff-graph-facts/v1` input per analyzed
+Python project slice. Its identity binds the normalized Ruff graph, every graph
+node's current source bytes, and declared dynamic resolution. Missing,
+duplicated, mismatched, escaping, or cross-project graph evidence withholds the
+graph. Cycle and architecture-review topology identities depend on semantic
 dependencies and ownership, so a source-body change can invalidate graph
 evidence without changing those semantic identities.
 
-The built-in resolver covers flat, direct `src`, and in-tree PEP 517 backend
-layouts, nested projects with overlapping import names, regular and namespace
-packages, package `__init__.py` re-exports, `.py` and `.pyi` modules, absolute
-and valid relative imports, and exact one-argument calls through statically
-proved aliases of `importlib.import_module` and `builtins.__import__`.
+Ruff resolves ordinary imports, including imports under type-checking branches.
 Standard-library and third-party imports create no repository module edge.
+The normal `ty` quality pass owns unresolved imports and type correctness;
+architecture does not duplicate those checks with a second Python AST model.
 
-Module loaders and their supporting JSON, path, and entry-point calls resolve
-through the complete compact project, including imported aliases and re-exports
-across source partitions. Bounded collection and conditional-choice facts
-preserve every possible target. Exact start and end positions distinguish
-nested calls with the same starting location. Binding activation and branch
-facts preserve definition-time inputs and lexical shadowing; wildcard or
-ambiguous bindings cannot prove a loader. Resolved `typing.TYPE_CHECKING`
-guards and stub files retain type-only dynamic edges.
-
-A plain literal target is resolved directly. Any other recognized computed
-call must have one exact `scope.pythonComputedImports` declaration. The Python
-facts adapter binds the current source digest, project, importer module,
-containing callable or module scope, callee, one-based line and column,
-canonical AST shape, and canonical argument expression. Moving or rewriting
-the call, changing its alias, adding another match, or changing the source makes
-the declaration stale.
+Dynamic targets require an exact `scope.pythonComputedImports` declaration.
+The declaration binds the current source digest, project, importer module,
+containing callable or module scope, callee, one-based line and column, shape,
+and argument. The declaration is reviewed repository authority rather than an
+inferred AST whitelist. Moving or rewriting the source makes its digest stale.
 
 The target contract is either a contained namespace or one current PEP 621
 entry-point group. A namespace declaration names an exact in-source target set,
@@ -368,28 +357,15 @@ one governed file and its source module must already allow the target owner in
 `scope.pythonDynamicReferences` remains a separate exact Vulture reachability
 contract and cannot satisfy computed-import coverage in either direction.
 
-`pkgutil.resolve_name` object loads resolve over the compact facts for the whole
-project, including loader aliases and re-exports across source partitions.
-A literal `module:object` argument contributes a `proven-dynamic` edge to its
-local runtime module. Its normalized absolute module and identifier-chain
-object must satisfy `python-module-object/v1`; relative names, wildcards, and
-import expressions are unproven. Ambiguous and wildcard loader bindings fail
-coverage. A local parameter that shadows the loader is not an import.
-
-For a registry object load, `scope.pythonComputedImports` must independently
-bind the source and one governed JSON input. Use `callee: "pkgutil.resolve_name"`
-and `shape: "module-object-call/v1"`, plus the exact source digest, module,
-callable or module scope, line, column, canonical argument, and namespace.
-Its single `configuration` entry names the registry path, JSON pointer, and
-current SHA-256. It has no `targets` inventory or `entryPointGroup`.
-The supported argument is a direct expression such as
-`json.loads(Path('src/app/registry.json').read_text(encoding='utf-8'))['plugins'][name]`,
-where the final dynamic index is one current callable parameter. A fixed
-selector may name one string, and an empty pointer may select the JSON root.
-The current bounded registry supplies the object targets; every module must
-remain beneath the declared non-top-level namespace and resolve inside the
-same project. Registry paths in source are relative to the project root;
-configuration paths are relative to the repository root.
+For `pkgutil.resolve_name`, `scope.pythonComputedImports` binds the source and
+one governed JSON input. Use `callee: "pkgutil.resolve_name"` and
+`shape: "module-object-call/v1"`, plus the exact source digest, module,
+callable or module scope, line, column, argument, and namespace. Its single
+`configuration` entry names the registry path, JSON pointer, and current
+SHA-256. The selected value is a string, array, or object whose values use
+`module:object.path`. Every module must remain beneath the declared namespace
+and resolve inside the same project. Configuration paths are relative to the
+repository root.
 
 Registry files must be governed handwritten regular files of at most 2 MiB,
 without symbolic links or changes during the read. Duplicate keys, unsupported
@@ -399,60 +375,20 @@ targets. Selecting a registry checks its consuming project; unrelated selected
 documents do not activate configured Python consumers.
 
 External object loads use `scope.pythonExternalPluginImports`. Each declaration
-binds one exact loader consumer to a canonical distribution name, an explicit
-owned import namespace, `inputGrammar: "python-module-object/v1"`, and a
-runtime check. The current contained manifest and adjacent `uv.lock` must
-identify the same direct runtime or optional dependency through an exact
+binds one exact source digest and loader location to a canonical distribution,
+owned import namespace, `inputGrammar: "python-module-object/v1"`, and runtime
+protocol declaration. The current contained manifest and adjacent `uv.lock`
+must identify the same direct runtime or optional dependency through an exact
 registry pin or exact Git commit. Transitive-only and moving dependencies do
-not satisfy the contract. Namespace ownership is an explicit repository
-declaration; distribution spelling does not establish an import namespace.
+not satisfy the contract. Namespace ownership is explicit repository authority;
+distribution spelling does not establish an import namespace.
 
-The independent object-import resolver checks every literal or governed-registry
-target against that namespace. Registry input must match its declared path,
-JSON pointer, and current digest. Local modules and standard-library modules
-cannot become external composition targets. The loaded object must then pass a
-rejecting `isinstance` or `issubclass` check against the declared runtime type,
-or a proved synchronous validator containing that check. An annotation, an
-ignored boolean, a different checked value, or an unconstrained runtime input
-does not establish this evidence. Invalid or missing evidence emits
-`policy.pythonExternalPluginImport` and withholds a complete graph. Admission
-applies only to that loader callsite; other calls keep their own coverage rules.
-
-For a runtime parameter, a rejecting guard must call a governed predicate before
-the loader uses the same unchanged parameter. The supported predicate has one
-parameter and returns this conjunction, with the declared namespace substituted
-in both prefixes:
-
-```python
-import keyword
-import unicodedata
-
-
-def permitted(value):
-    return (
-        type(value) is str
-        and unicodedata.normalize("NFKC", value) == value
-        and value.count(":") == 1
-        and value.startswith(("third_party.plugins:", "third_party.plugins."))
-        and all(
-            part.isidentifier() and not keyword.iskeyword(part)
-            for part in value.replace(":", ".").split(".")
-        )
-    )
-```
-
-Use `if not permitted(name): raise ValueError(...)` before loading `name`,
-then perform the separately declared runtime protocol check on the loaded
-object. The name predicate admits normalized Unicode identifiers while
-rejecting keywords, empty components, expression syntax, extra colons, and
-neighboring namespace prefixes. Function and parameter names may differ;
-imports, aliases, and re-exports must resolve to the exact built-in and
-standard-library operations. The predicate must be synchronous, undecorated,
-and contain only that return expression. A swallowed or conditional rejection,
-rebound input, different checked argument, or check after loading is unproven.
-The graph binds the current predicate source digest as well as the loader's
-source. Predicate resolution uses the whole compact project and executes no
-application code.
+An optional governed registry must match its declared path, JSON pointer, and
+current digest. Invalid or missing source, dependency, grammar, or registry
+evidence emits `policy.pythonExternalPluginImport` and withholds a complete
+graph. Admission applies only to that loader callsite. The declaration does not
+execute or statically reinterpret the loader implementation, and it does not
+grant local dead-code reachability.
 
 Successful declarations appear in the graph's separate `externalCompositions`
 collection and module summaries. Each entry retains dependency, manifest,
@@ -463,19 +399,13 @@ tracks semantic external contracts, while proof digests remain part of the
 complete graph identity. Selecting the manifest, lockfile, registry, or
 configuration activates its declared consumer; unrelated documents do not.
 
-Computed shapes outside the bounded enumeration, governed-JSON, and PEP 621
-entry-point forms are unproven. Multi-argument calls and parenthesized
-references to a known import function are also unproven instead of disappearing
-from coverage.
-
 Every local edge must resolve to one contained governed Python file in the same
 project and to exactly one repository module. An omitted selected file,
-malformed graph response, ambiguous or escaping resolution, unreadable source,
-unresolved local-looking import, or dynamic import that cannot be proven emits
-`architecture.importCoverage`; it never reads as a clean graph. A resolved
-cross-module edge without the declaring module's `dependsOn` entry is the
-ordinary `architecture.moduleDependency` finding. Code Polishy does not execute
-project Python code to resolve imports.
+malformed graph response, escaping resolution, unreadable source, stale dynamic
+declaration, or cross-project target emits `architecture.importCoverage`; it
+never reads as a clean graph. A resolved cross-module edge without the declaring
+module's `dependsOn` entry is the ordinary `architecture.moduleDependency`
+finding. Code Polishy does not execute project Python code to resolve imports.
 
 Rust, Java, and other ecosystems still connect a target-native architecture
 command through `checks`:

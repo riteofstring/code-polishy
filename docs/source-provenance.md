@@ -88,46 +88,21 @@ keep the sealed bundle portable and minimal.
   fail before execution. Target source remains analysis data.
 - The repository boundary builds one validated Python project inventory from
   contained `pyproject.toml` files and reuses it for dependency, quality, and
-  architecture work. Bounded `python-facts/v3` requests use CPython 3.12
-  `tomllib`, `tokenize`, and `ast` plus the carried `packaging` release.
+  architecture work. Architecture uses pinned Ruff graph output for only the
+  selected paths and validates ownership, direction, and cycles in Go. Bounded
+  `python-facts/v3` requests are reserved for Python quality checks that need
+  cross-file semantic evidence; they use CPython 3.12 `tomllib`, `tokenize`,
+  and `ast` plus the carried `packaging` release.
   Complete source files are partitioned deterministically. Compact type facts
-  resolve TypedDict reads and module imports across the validated union through
-  `python-type-project/v3`, and
-  Vulture uses the same parser, AST extractor, and semantic resolvers. Consumer
-  target resolution also accepts bounded compact records through
-  `python-reachability-project/v1`. Independent object-import resolution uses
-  `python-object-import-project/v1` over the same compact facts and only declared
-  registry inputs. It bounds the registry header and each source record to
-  16 MiB, the compact project to 256 MiB, resolution depth to 128, and loader
-  binding visits to two million. The graph binds separate identities for the
-  normalized facts, partition records, and combined type and object-import
-  resolution, including current registry bytes and exact source coverage. Compact call facts
-  retain lexical scopes, argument and keyword shapes, UTF-8 byte spans,
-  assignment-to-call locations, direct statement positions, and rejecting
-  guards. Loader evidence also records bounded collections and conditional
-  choices, lexical branch identities, binding activation sites, type-only
-  guards, and the canonical call AST shape. Loader aliases and supporting
-  calls resolve across the entire compact project. Each argument's canonical text is bounded to
-  64 KiB; malformed call evidence fails project validation. Its
-  project, direct `src`, and in-tree PEP 517 backend roots are passed explicitly
-  to consumers. A project-local `.venv` is passed only to `ty` when dependencies
-  require it; Vulture always uses carried CPython and its pinned built-in
-  whitelists. Ambient Python paths and environments are not tool provenance.
-- `python-runtime-check-project/v1` resolves exact runtime checks over the same
-  compact project union. It binds the loader and check to current source spans,
-  traces consecutive local assignments and aliases, and resolves governed
-  runtime classes and protocols through project imports and re-exports.
-  Supported checks are rejecting `isinstance` or `issubclass` guards and direct
-  synchronous validators whose body performs one such guard. Annotations,
-  ignored booleans, another checked value, uses or exits before the check,
-  exception suppression, and asynchronous or generator validators provide no
-  evidence. Data protocols cannot satisfy a class check; unknown metaclasses,
-  decorators, and external bases remain unsupported. Header, source-record,
-  response, and aggregate limits match the object-import transport, and value
-  and inheritance resolution are bounded to 128 steps. Exact source coverage,
-  request identity, call spans, and loaded-value traces are checked at the Go
-  boundary. This query executes no target code and establishes no input grammar,
-  namespace ownership, or dependency admission by itself.
+  resolve TypedDict reads across the validated union through
+  `python-type-project/v3`, and Vulture uses the same parser, AST extractor, and
+  semantic resolvers. Consumer target resolution also accepts bounded compact
+  records through `python-reachability-project/v1`. Each source record is
+  limited to 16 MiB, the compact project to 256 MiB, and semantic traversal to
+  bounded depths and visits. A project-local `.venv` is passed only to `ty` when
+  dependencies require it; Vulture always uses carried CPython and its pinned
+  built-in whitelists. Ambient Python paths and environments are not tool
+  provenance.
 - Python manifests and `uv.lock` are target-owned inputs. Exact Git repository
   and commit facts remain source facts, not a fabricated PyPI age or
   vulnerability result when registry evidence is unavailable.

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -195,19 +194,6 @@ func pythonProblemAffectsSource(problem repository.PythonInventoryProblem, sourc
 	return false
 }
 
-func pythonProjectFindings(
-	ctx context.Context,
-	repo repository.Repository,
-	project repository.PythonProject,
-	sources []string,
-	owners map[string]string,
-	allFiles []string,
-	command policy.Command,
-	commandRunner runner.Runner,
-) []policy.Finding {
-	return pythonProjectSourceGraph(ctx, repo, project, sources, sources, owners, allFiles, command, commandRunner).findings
-}
-
 func pythonProjectSourceGraph(
 	ctx context.Context,
 	repo repository.Repository,
@@ -239,23 +225,7 @@ func pythonProjectSourceGraph(
 	if err != nil {
 		return sourceGraphPart{findings: pythonCoverageForSources(selectedSources, "the policy-owned Ruff graph output is malformed: "+err.Error()), incomplete: true}
 	}
-	sourceFacts, err := pythonSourceFacts(bounded, repo, project, sources)
-	if err != nil {
-		return sourceGraphPart{findings: []policy.Finding{pythonFactsCoverageFinding(project, err)}, incomplete: true}
-	}
-	part := pythonGraphSourcePart(repo, project, sources, selectedSources, owners, allFiles, facts.Graph, sourceFacts.sources)
-	part.inputs = []sourcegraph.FactInput{sourceFacts.input}
-	part.external = sourceFacts.external
-	part.findings = append(part.findings, sourceFacts.pluginFindings...)
-	part.incomplete = part.incomplete || slices.ContainsFunc(sourceFacts.pluginFindings, func(finding policy.Finding) bool { return finding.Severity != policy.FindingInformation })
-	return part
-}
-
-func pythonFactsCoverageFinding(project repository.PythonProject, err error) policy.Finding {
-	return policy.Finding{
-		Check: "architecture.pythonFactsCoverage", Path: project.Manifest, Subject: "python-facts",
-		Message: "the Python project fact set is unavailable; dependent per-source findings were withheld: " + err.Error(),
-	}
+	return pythonRuffGraphSourcePart(repo, project, sources, selectedSources, owners, allFiles, facts.Graph)
 }
 
 func pythonGraphCommand(repo repository.Repository, project repository.PythonProject, sources []string) (policy.Command, error) {
@@ -322,10 +292,7 @@ func pythonProjectSelection(repo repository.Repository, projects map[string]repo
 			}
 			continue
 		}
-		for _, source := range projects[manifest].Files {
-			if repo.Language(source) != "python" {
-				continue
-			}
+		for _, source := range selectedByProject[manifest] {
 			if _, err := sourceModuleOwner(repo, source); err != nil {
 				findings = append(findings, pythonImportCoverage(source, "Python source must belong to exactly one repository module"))
 				continue

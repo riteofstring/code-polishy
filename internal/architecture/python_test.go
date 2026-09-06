@@ -105,27 +105,6 @@ func TestPythonArchitectureRejectsRuffDiagnostics(t *testing.T) {
 	}
 }
 
-func TestPythonFactsFailureProducesOneProjectFindingWithoutSourceCascades(t *testing.T) {
-	t.Parallel()
-	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-	sources := []string{"src/a.py", "src/b.py", "src/c.py"}
-	writeArchitectureFile(t, repo.Root, sources[0], strings.Repeat("x", 2*1024*1024+1))
-	writeArchitectureFile(t, repo.Root, sources[1], "value = 1\n")
-	writeArchitectureFile(t, repo.Root, sources[2], "value = 2\n")
-	project := repository.PythonProject{Root: ".", Manifest: "pyproject.toml", Files: sources}
-	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/a.py":[],"src/b.py":[],"src/c.py":[]}`}}
-	findings := pythonProjectFindings(
-		t.Context(), repo, project, sources,
-		map[string]string{"src/a.py": project.Manifest, "src/b.py": project.Manifest, "src/c.py": project.Manifest},
-		append([]string{"pyproject.toml"}, sources...), policy.Command{Cwd: "."}, graphRunner,
-	)
-	if len(findings) != 1 || findings[0].Check != "architecture.pythonFactsCoverage" || findings[0].Path != project.Manifest ||
-		!strings.Contains(findings[0].Message, "dependent per-source findings were withheld") {
-		t.Fatalf("findings = %+v", findings)
-	}
-}
-
 func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{
@@ -349,18 +328,6 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 			output:  `{"src/web/app.py":["../../outside.py"]}`,
 			message: "outside the repository",
 		},
-		{
-			name:    "unresolved local-looking import",
-			source:  "import domain.missing\n",
-			output:  `{"src/web/app.py":[]}`,
-			message: "cannot be resolved",
-		},
-		{
-			name:    "nonliteral dynamic import",
-			source:  "import importlib\nimportlib.import_module(module_name)\n",
-			output:  `{"src/web/app.py":[]}`,
-			message: "computed Python import has no exact scope.pythonComputedImports declaration",
-		},
 	}
 	for _, testCase := range cases {
 		testCase := testCase
@@ -383,88 +350,6 @@ func TestPythonArchitectureReportsGraphCoverageFailures(t *testing.T) {
 	}
 }
 
-func TestPythonGraphFindingsRejectsOmittedSource(t *testing.T) {
-	t.Parallel()
-	findings := pythonGraphFindings(repository.Repository{}, repository.PythonProject{}, []string{"source.py"}, nil, nil, pythonGraph{}, nil)
-	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" || findings[0].Path != "source.py" || !strings.Contains(findings[0].Message, "omitted this selected Python source") {
-		t.Fatalf("findings = %+v", findings)
-	}
-}
-
-func TestPythonArchitectureCoversAliasedDynamicImportsWithoutGuessing(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name     string
-		source   string
-		output   string
-		findings int
-		message  string
-	}{
-		{
-			name:     "module alias with nonliteral argument",
-			source:   "import importlib as il\nil.import_module(module_name)\n",
-			output:   `{"src/web/app.py":[]}`,
-			findings: 1,
-			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
-		},
-		{
-			name:     "function alias with nonliteral argument",
-			source:   "from importlib import import_module as load\nload(module_name)\n",
-			output:   `{"src/web/app.py":[]}`,
-			findings: 1,
-			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
-		},
-		{
-			name:     "nested module import binds importlib",
-			source:   "import importlib.util\nimportlib.import_module(module_name)\n",
-			output:   `{"src/web/app.py":[]}`,
-			findings: 1,
-			message:  "computed Python import has no exact scope.pythonComputedImports declaration",
-		},
-		{
-			name:   "module alias with literal argument",
-			source: "import importlib as il\nil.import_module(\"domain.model\")\n",
-			output: `{"src/web/app.py":["src/domain/model.py"]}`,
-		},
-		{
-			name:   "function alias with literal argument",
-			source: "from importlib import import_module as load\nload(\"domain.model\")\n",
-			output: `{"src/web/app.py":["src/domain/model.py"]}`,
-		},
-		{
-			name:   "unrelated method",
-			source: "loader.import_module(module_name)\n",
-			output: `{"src/web/app.py":[]}`,
-		},
-		{
-			name:   "nested module alias does not bind importlib",
-			source: "import importlib.util as util\nutil.import_module(module_name)\n",
-			output: `{"src/web/app.py":[]}`,
-		},
-	}
-	for _, testCase := range cases {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			repo := pythonArchitectureRepository(t, []policy.Module{
-				{Name: "domain", Paths: []string{"src/domain/**"}},
-				{Name: "web", Paths: []string{"src/web/**"}, DependsOn: []string{"domain"}},
-			})
-			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
-			writeArchitectureFile(t, repo.Root, "src/web/app.py", testCase.source)
-			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": testCase.output}}
-			findings := CheckWithRunner(t.Context(), repo, []string{"src/web/app.py"}, graphRunner)
-			if len(findings) != testCase.findings {
-				t.Fatalf("findings = %+v", findings)
-			}
-			if testCase.message != "" && (findings[0].Check != "architecture.importCoverage" || !strings.Contains(findings[0].Message, testCase.message)) {
-				t.Fatalf("findings = %+v", findings)
-			}
-		})
-	}
-}
-
 func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{
@@ -475,11 +360,10 @@ func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
 	writeArchitectureFile(t, repo.Root, "src/app/plugins/first.py", "value = 1\n")
 	source := []byte("import importlib\nimportlib.import_module((\"app.plugins.first\",)[choice])\n")
 	writeArchitectureFile(t, repo.Root, "src/app/loader.py", string(source))
-	fact := pythonComputedTestFact(t, "src/app/loader.py", source).ComputedImports[0]
 	digest := sha256.Sum256(source)
 	repo.Config.Scope.PythonComputedImports = []policy.PythonComputedImport{{
 		Project: "pyproject.toml", Importer: "src/app/loader.py", Module: "app.loader", ModuleScope: true,
-		Callee: fact.Callee, Line: fact.Line, Column: fact.Column, Shape: fact.Shape, Argument: fact.Argument,
+		Callee: "importlib.import_module", Line: 2, Column: 1, Shape: "subscript", Argument: `(\"app.plugins.first\",)[choice]`,
 		SourceSHA256: hex.EncodeToString(digest[:]), Namespace: "app.plugins", Targets: []string{"app.plugins.first"},
 	}}
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/app/loader.py":[]}`}}
@@ -498,23 +382,6 @@ func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
 	}
 }
 
-func TestPythonArchitectureReportsConflictingSourceRoots(t *testing.T) {
-	t.Parallel()
-	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"**/*.py"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-	writeArchitectureFile(t, repo.Root, "shared.py", "")
-	writeArchitectureFile(t, repo.Root, "src/shared.py", "")
-	writeArchitectureFile(t, repo.Root, "src/web/app.py", "import shared\n")
-	graphRunner := &pythonGraphRunner{outputs: map[string]string{
-		".": `{"src/web/app.py":["src/shared.py"]}`,
-	}}
-	findings := CheckWithRunner(t.Context(), repo, []string{"src/web/app.py"}, graphRunner)
-	if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" ||
-		!strings.Contains(findings[0].Message, "conflicting source roots") {
-		t.Fatalf("findings = %+v", findings)
-	}
-}
-
 func TestPythonArchitectureReportsUnsupportedLayoutOnceAndStopsGraphAnalysis(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"packages/**"}}})
@@ -528,35 +395,6 @@ func TestPythonArchitectureReportsUnsupportedLayoutOnceAndStopsGraphAnalysis(t *
 	if len(graphRunner.commands) != 0 || len(findings) != 1 || findings[0].Check != "policy.pythonProject" ||
 		!strings.Contains(findings[0].Message, "Python project layout is unsupported") {
 		t.Fatalf("commands = %+v, findings = %+v", graphRunner.commands, findings)
-	}
-}
-
-func TestPythonArchitectureDetectsUnresolvedImportsInValidStatementShapes(t *testing.T) {
-	t.Parallel()
-	cases := []string{
-		"import domain.missing; marker = 1\n",
-		"import domain.\\\nmissing\n",
-		"from domain.missing import (\n    value,\n)\n",
-		"from domain.missing \\\n    import value\n",
-	}
-	for _, source := range cases {
-		source := source
-		t.Run(source, func(t *testing.T) {
-			t.Parallel()
-			repo := pythonArchitectureRepository(t, []policy.Module{
-				{Name: "domain", Paths: []string{"src/domain/**"}},
-				{Name: "web", Paths: []string{"src/web/**"}},
-			})
-			writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
-			writeArchitectureFile(t, repo.Root, "src/domain/model.py", "")
-			writeArchitectureFile(t, repo.Root, "src/web/app.py", source)
-			graphRunner := &pythonGraphRunner{outputs: map[string]string{".": `{"src/web/app.py":[]}`}}
-			findings := CheckWithRunner(t.Context(), repo, []string{"src/web/app.py"}, graphRunner)
-			if len(findings) != 1 || findings[0].Check != "architecture.importCoverage" ||
-				!strings.Contains(findings[0].Message, "cannot be resolved") {
-				t.Fatalf("findings = %+v", findings)
-			}
-		})
 	}
 }
 

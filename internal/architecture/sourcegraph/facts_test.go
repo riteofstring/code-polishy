@@ -50,6 +50,22 @@ func TestGraphFactInputsRequireExactPythonProjectCoverage(t *testing.T) {
 	}
 }
 
+func TestGraphFactInputsAcceptRuffArchitectureEvidence(t *testing.T) {
+	t.Parallel()
+	node := Node{Path: "app.py", Language: "python", Root: ".", Module: "app", Resolution: "file:app.py"}
+	input := graphTestFactInput(".", node.Path)
+	input.Analyzer = "ruff"
+	input.Protocol = "ruff-graph-facts/v1"
+	graph, err := New([]Node{node}, nil, []FactInput{input}, nil)
+	if err != nil || Validate(graph) != nil {
+		t.Fatalf("Ruff graph fact input: %+v, %v", graph, err)
+	}
+	input.Protocol = "python-facts/v3"
+	if _, err := New([]Node{node}, nil, []FactInput{input}, nil); err == nil {
+		t.Fatal("accepted a mismatched fact analyzer and protocol")
+	}
+}
+
 func TestGraphFactEvidenceChangesIdentityWithoutChangingCycles(t *testing.T) {
 	t.Parallel()
 	node := Node{Path: "a.py", Language: "python", Root: ".", Module: "app", Resolution: "file:a.py"}

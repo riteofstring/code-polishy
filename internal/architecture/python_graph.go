@@ -171,18 +171,6 @@ func pythonGraphNoTrailingJSON(decoder *json.Decoder) error {
 	}
 }
 
-func pythonGraphFindings(
-	repo repository.Repository,
-	project repository.PythonProject,
-	sources []string,
-	owners map[string]string,
-	allFiles []string,
-	graph pythonGraph,
-	sourceFacts map[string]pythonSourceFact,
-) []policy.Finding {
-	return pythonGraphSourcePart(repo, project, sources, sources, owners, allFiles, graph, sourceFacts).findings
-}
-
 func pythonGraphDependencies(
 	repo repository.Repository,
 	project repository.PythonProject,
@@ -194,17 +182,22 @@ func pythonGraphDependencies(
 	coverage := map[string]string{}
 	for rawSource, rawTargets := range graph {
 		source, err := pythonGraphPath(repo, project, rawSource)
-		if err != nil || !expected[source] {
-			return nil, nil, fmt.Errorf("the Ruff graph includes an unselected or escaping source path")
+		if err != nil {
+			return nil, nil, fmt.Errorf("the Ruff graph includes an escaping source path")
 		}
-		if _, duplicate := dependencies[source]; duplicate {
-			return nil, nil, fmt.Errorf("the Ruff graph identifies one source through multiple paths")
+		if !expected[source] {
+			continue
 		}
 		targets, message := pythonGraphTargets(repo, project, rawTargets)
 		if message != "" {
 			coverage[source] = message
 		}
-		dependencies[source] = targets
+		if dependencies[source] == nil {
+			dependencies[source] = map[string]bool{}
+		}
+		for target := range targets {
+			dependencies[source][target] = true
+		}
 	}
 	return dependencies, coverage, nil
 }
@@ -299,68 +292,6 @@ func pythonGraphTargetCoverageMessage(
 	}
 	if _, err := sourceModuleOwner(repo, target); err != nil {
 		return "the Ruff graph resolves a local import to an ambiguously owned module"
-	}
-	return ""
-}
-
-func pythonGraphImportCoverage(
-	repo repository.Repository,
-	project repository.PythonProject,
-	sources []string,
-	dependencies map[string]map[string]bool,
-	coverage map[string]string,
-	sourceFacts map[string]pythonSourceFact,
-) {
-	index := newPythonModuleIndex(project)
-	pythonRuntimeTargetDependencies(index, sources, dependencies, sourceFacts)
-	pythonProvenDynamicDependencies(index, sources, dependencies, sourceFacts)
-	pythonObjectImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
-	pythonComputedImportCoverage(repo, project, sources, dependencies, coverage, sourceFacts)
-	for _, source := range sources {
-		if coverage[source] != "" {
-			continue
-		}
-		if message := pythonSourceImportCoverage(index, source, dependencies[source], sourceFacts[source]); message != "" {
-			coverage[source] = message
-		}
-	}
-}
-
-func pythonRuntimeTargetDependencies(index pythonModuleIndex, sources []string, dependencies map[string]map[string]bool, sourceFacts map[string]pythonSourceFact) {
-	for _, source := range sources {
-		for _, target := range sourceFacts[source].RuntimeTargets {
-			for _, path := range index.files[target.Module] {
-				if dependencies[source] != nil {
-					dependencies[source][path] = true
-				}
-			}
-		}
-	}
-}
-
-func pythonProvenDynamicDependencies(index pythonModuleIndex, sources []string, dependencies map[string]map[string]bool, sourceFacts map[string]pythonSourceFact) {
-	for _, source := range sources {
-		for _, reference := range sourceFacts[source].Imports {
-			if reference.Kind != "proven-dynamic" {
-				continue
-			}
-			for _, path := range pythonReferenceTargets(index, source, reference, nil) {
-				if dependencies[source] != nil {
-					dependencies[source][path] = true
-				}
-			}
-		}
-	}
-}
-
-func pythonSourceImportCoverage(index pythonModuleIndex, source string, dependencies map[string]bool, facts pythonSourceFact) string {
-	if facts.SHA256 == "" {
-		return "the Python facts adapter omitted this selected source"
-	}
-	for _, reference := range facts.Imports {
-		if message := pythonUnprovenImport(index, source, reference, dependencies); message != "" {
-			return message
-		}
 	}
 	return ""
 }
