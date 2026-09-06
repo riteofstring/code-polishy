@@ -1,15 +1,22 @@
 # Git Dependency Evidence
 
-The online supply-chain profile accepts an exact Python Git dependency when a
-trusted CI assessment binds its repository, full commit, optional subdirectory,
-source contents, and complete resolved `uv.lock` inventory. The assessment must
-provide complete vulnerability and license results and an authenticated age
-record. Ordinary candidate pin, lock agreement, license, vulnerability, and
-minimum-age policy still apply.
+Signed CI assessments are optional. Ordinary local dependency review does not
+require an attestation service. By default, public registry vulnerability and
+minimum-age checks still run, including registry packages sharing a `uv.lock`
+with Git dependencies. Git identities are not sent to public registry scanners.
+A nonblocking `supplyChain.gitSourceCoverage` warning identifies unverified Git
+vulnerability, license, integrity, and authenticated age coverage. Passing the
+review does not establish that Git contents are safe or old enough.
+
+Set `supplyChain.gitEvidence.required` to `true` to require the signed assessment
+policy below. Missing, invalid, incomplete, or expired evidence then blocks the
+online review. With the option omitted or false, configured artifacts are not
+read or credited as coverage. Pinning, lock agreement, license checks, registry
+minimum-age checks, and ordinary vulnerability scanning remain active.
 
 ## Configure provider trust
 
-Configure `supplyChain.gitEvidence` in `.code-polishy.json`. It has two arrays:
+Configure `supplyChain.gitEvidence` in `.code-polishy.json`. Set `required` to `true` and configure its two arrays:
 `providers` and `attestations`. A declaration schedules no command, credential
 probe, installation, or supplemental test.
 

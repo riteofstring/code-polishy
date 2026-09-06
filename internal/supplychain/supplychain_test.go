@@ -1105,7 +1105,7 @@ func TestPythonGitSourceCoverageIsExplicit(t *testing.T) {
 	repo := supplyRepository(t)
 	writeSupplyFile(t, repo.Root, "uv.lock", "[[package]]\nname = \"private-tool\"\nversion = \"1.0.0\"\nsource = { git = \"https://github.com/example/private-tool.git?rev="+commit+"#"+commit+"\" }\n")
 	findings := onlinePythonFindings(t.Context(), repo)
-	if len(findings) != 1 || findings[0].Check != "supplyChain.gitEvidence" || findings[0].Subject != "unavailable" || !strings.Contains(findings[0].Remediation.Summary, "authorized CI provider") {
+	if len(findings) != 1 || findings[0].Check != "supplyChain.gitSourceCoverage" || findings[0].Severity != policy.FindingWarning || !strings.Contains(findings[0].Message, "unverified") {
 		t.Fatalf("findings = %+v", findings)
 	}
 }

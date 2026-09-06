@@ -23,6 +23,9 @@ type gitEvidenceBinding struct {
 }
 
 func ReadGitEvidenceState(repo repository.Repository, now time.Time) (GitEvidenceState, error) {
+	if !repo.Config.SupplyChain.GitEvidence.Required {
+		return GitEvidenceState{Receipts: []GitEvidenceReceipt{}}, nil
+	}
 	inputs, err := onlineUVInputs(repo)
 	if err != nil {
 		return GitEvidenceState{}, err

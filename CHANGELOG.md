@@ -2,6 +2,11 @@
 
 ## 0.24.2 - 2026-09-05
 
+- Make signed Git CI assessments opt-in with `supplyChain.gitEvidence.required`.
+  Local dependency review retains public registry scanning and minimum-age
+  checks, and warns about unverified Git-source coverage without requiring a
+  custom attestation service.
+
 - Preserve TypedDict key-read evidence for Callable fields with empty, explicit,
   or ellipsis parameter lists, including aliases and nested annotations.
 - Identify the source file, location, TypedDict, and field when a duplicate key

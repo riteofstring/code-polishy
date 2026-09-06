@@ -19,6 +19,15 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/git-evidence-policy.md",
+        "sourcePaths": [
+          "internal/policy/git_evidence.go",
+          "internal/supplychain/git_evidence.go",
+          "internal/supplychain/git_evidence_state.go",
+          "internal/supplychain/osv_uv.go"
+        ]
+      },
+      {
         "path": "docs/design/agent-guidance.md",
         "module": "agents"
       },
@@ -1452,8 +1461,8 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1461",
-      "reason": "The explicit suite and test-ownership inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
+      "subject": "1470",
+      "reason": "The explicit suite, test-ownership, and design-mapping inventory, including disjoint mutation groups bounded to one-hour executions, exceeds the general source-line budget. This exception binds only this exact line count; schema, ownership, command, and coverage checks remain mandatory. Review declaration consolidation without reducing test coverage before expiry.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"
     }

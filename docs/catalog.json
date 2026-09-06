@@ -122,8 +122,16 @@
       "id": "git-dependency-evidence",
       "path": "docs/git-dependency-evidence.md",
       "title": "Git Dependency Evidence",
-      "summary": "Verify signed CI evidence for exact public and private Git dependencies.",
+      "summary": "Configure optional signed CI evidence and understand unverified Git-source coverage.",
       "aliases": ["git-evidence"],
+      "public": true
+    },
+    {
+      "id": "git-evidence-policy",
+      "path": "docs/design/git-evidence-policy.md",
+      "title": "Optional Git assessments",
+      "summary": "Understand opt-in Git assessments and preserved public registry checks.",
+      "aliases": [],
       "public": true
     },
     {

@@ -249,6 +249,7 @@
       "additionalProperties": false,
       "required": [],
       "properties": {
+        "required": { "type": "boolean", "default": false },
         "providers": {
           "type": "array",
           "maxItems": 32,

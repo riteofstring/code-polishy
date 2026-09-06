@@ -22,6 +22,9 @@ type gitEvidencePackage struct {
 }
 
 func verifyGitLockEvidence(repo repository.Repository, scope string, packages []resolvedPackage, now time.Time) ([]policy.Finding, *GitEvidenceReceipt) {
+	if !repo.Config.SupplyChain.GitEvidence.Required {
+		return []policy.Finding{{Check: "supplyChain.gitSourceCoverage", Path: scope, Severity: policy.FindingWarning, Message: "Git-source vulnerability, license, integrity, and authenticated release-age coverage is unverified; public registry checks do not assess Git contents", Remediation: policy.FindingRemediation{Summary: "Review Git sources with a suitable scanner; optionally require signed CI assessments with supplyChain.gitEvidence.required."}}}, nil
+	}
 	declaration, provider, err := configuredGitEvidence(repo.Config.SupplyChain.GitEvidence, scope)
 	if err != nil {
 		return []policy.Finding{gitEvidenceFinding(scope, err)}, nil

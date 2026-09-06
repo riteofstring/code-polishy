@@ -13,6 +13,7 @@ import (
 )
 
 type GitEvidence struct {
+	Required     bool                     `json:"required,omitempty"`
 	Providers    []GitEvidenceProvider    `json:"providers,omitempty"`
 	Attestations []GitEvidenceAttestation `json:"attestations,omitempty"`
 }

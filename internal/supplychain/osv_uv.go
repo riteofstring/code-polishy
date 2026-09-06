@@ -65,7 +65,7 @@ func gitLockPackages(packages []resolvedPackage) bool {
 func osvUVScans(repo repository.Repository, inputs []onlineUVInput) ([]osvScan, error) {
 	scans := []osvScan{}
 	for _, input := range inputs {
-		if !osvCoversScope(repo.Config, input.Scope) || gitLockPackages(input.Packages) {
+		if !osvCoversScope(repo.Config, input.Scope) || (repo.Config.SupplyChain.GitEvidence.Required && gitLockPackages(input.Packages)) {
 			continue
 		}
 		projection, err := publicUVProjection(input)
@@ -109,7 +109,7 @@ func scopeInsideOSVRoot(scope, root string) bool {
 func publicUVProjection(input onlineUVInput) ([]byte, error) {
 	packages := []osvPackageResult{}
 	for _, item := range input.Packages {
-		if item.Source.Kind == "local" {
+		if item.Source.Kind == "local" || item.Source.Kind == "git" {
 			continue
 		}
 		if item.Source.Kind != "registry" || !publicPythonRegistry(item.Source.Registry) {

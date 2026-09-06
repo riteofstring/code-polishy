@@ -164,7 +164,7 @@ func gitEvidenceEngine(t *testing.T) *Engine {
 	}
 	path := ".code-polishy-reports/git-evidence/proof.json"
 	writeEngineFile(t, root, path, string(encoded), 0o600)
-	config := policy.Config{SupplyChain: policy.SupplyChain{MinimumReleaseAgeDays: 30, AllowedLicenses: []string{"MIT"}, GitEvidence: policy.GitEvidence{Providers: []policy.GitEvidenceProvider{provider}, Attestations: []policy.GitEvidenceAttestation{{Scope: "uv.lock", Provider: "ci", Path: path}}}}}
+	config := policy.Config{SupplyChain: policy.SupplyChain{MinimumReleaseAgeDays: 30, AllowedLicenses: []string{"MIT"}, GitEvidence: policy.GitEvidence{Required: true, Providers: []policy.GitEvidenceProvider{provider}, Attestations: []policy.GitEvidenceAttestation{{Scope: "uv.lock", Provider: "ci", Path: path}}}}}
 	return &Engine{Repository: repository.Repository{Root: root, PolicyRoot: root, Config: config}, Runner: &recordingEngineRunner{}}
 }
 

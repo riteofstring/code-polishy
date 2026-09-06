@@ -135,12 +135,16 @@ the carried CPython `tomllib`, reconciles the exact dependency and metadata,
 and binds the selected wheel to its checksum inventory. The ordinary uv
 release-age and OSV lanes then cover that complete resolved graph.
 
-Public registry releases reach the ordinary release-age and OSV lanes. Exact
-Git sources use [signed CI evidence](../git-dependency-evidence.md) for the
-resolved repository, commit, optional subdirectory, source contents, complete
-lock inventory, and authenticated age record. Missing or unverifiable evidence
-fails coverage. Dependency comparison retains the declared Git source and ref
-and any recorded full-commit resolution without inventing a PyPI age.
+Public registry releases reach the ordinary release-age and OSV lanes, including
+packages in locks containing Git sources. Git-source assessments are optional:
+`supplyChain.gitEvidence.required` defaults to false. Unverified Git content and
+authenticated-age coverage produces a nonblocking warning, without sending Git
+identities to public scanners or claiming those sources were assessed. Enabling
+[signed CI evidence](../git-dependency-evidence.md) requires complete, current
+assessments; missing or unverifiable evidence then fails coverage. Dependency
+comparison retains declared Git sources and full-commit resolutions without
+inventing a PyPI age. Ordinary pin, lock, license, vulnerability, and registry
+minimum-age policy remains active in either mode.
 
 ## GitLab CI control inputs
 

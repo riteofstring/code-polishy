@@ -209,7 +209,7 @@ func newGitEvidenceFixture(t *testing.T, private bool) gitEvidenceFixture {
 	}
 	fixture.key = key
 	provider := policy.GitEvidenceProvider{Name: "ci", Kind: "ed25519-ci/v1", Issuer: "https://ci.example.test/attestor", PublicKey: base64.StdEncoding.EncodeToString(public), PolicySHA256: strings.Repeat("1", 64), Scanners: []policy.GitEvidenceScanner{{Name: "approved-scanner", Version: "1.0.0", SHA256: strings.Repeat("2", 64)}}}
-	fixture.repo.Config.SupplyChain.GitEvidence = policy.GitEvidence{Providers: []policy.GitEvidenceProvider{provider}, Attestations: []policy.GitEvidenceAttestation{{Scope: "uv.lock", Provider: "ci", Path: "evidence/git.dsse.json"}}}
+	fixture.repo.Config.SupplyChain.GitEvidence = policy.GitEvidence{Required: true, Providers: []policy.GitEvidenceProvider{provider}, Attestations: []policy.GitEvidenceAttestation{{Scope: "uv.lock", Provider: "ci", Path: "evidence/git.dsse.json"}}}
 	fixture.repo.Config.SupplyChain.AllowedLicenses = []string{"MIT"}
 	fixture.repo.Config.SupplyChain.MinimumReleaseAgeDays = 30
 	repoURL, identity := "https://public.example.test/kit.git", "git+https://public.example.test/kit.git"

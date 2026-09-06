@@ -14,6 +14,7 @@ import (
 func TestGitEvidenceConfigurationDeclaresExactTrustWithoutScheduling(t *testing.T) {
 	t.Parallel()
 	declaration := gitEvidenceConfiguration(t)
+	declaration.Required = true
 	config, err := Parse(withGitEvidence(t, declaration), "")
 	if err != nil {
 		t.Fatal(err)
@@ -24,6 +25,9 @@ func TestGitEvidenceConfigurationDeclaresExactTrustWithoutScheduling(t *testing.
 	baseline, err := Parse([]byte(minimalConfig()), "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if baseline.SupplyChain.GitEvidence.Required {
+		t.Fatal("signed CI evidence is required by default")
 	}
 	if !reflect.DeepEqual(config.Checks, baseline.Checks) || !reflect.DeepEqual(config.Tests.Suites, baseline.Tests.Suites) {
 		t.Fatal("declaring a signed CI artifact scheduled repository execution")
