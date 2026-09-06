@@ -34,8 +34,8 @@ without constituting a review of Code Polishy's own candidate.
 Astroid is a separately installed, pinned Python library in the carried runtime.
 Its wheel and corresponding source archive are verified against checked-in
 hashes before installation. The release includes its distribution metadata,
-license texts, and `astroid-source.tar.gz`; the SBOM records its exact version
-and LGPL-2.1-or-later license. The library remains a separate Python package
+license texts, and `astroid-source.tar.gz`; the SBOM records its exact version. The archive includes its
+LGPL-2.1-or-later license. The library remains a separate Python package
 that recipients can replace; modified installations do not retain the original
 release's verified digest identity. Target project environments are not used
 for analyzer imports.
