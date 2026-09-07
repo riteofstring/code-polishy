@@ -1,4 +1,4 @@
-# Adding a language pack
+# Adding a Language Pack
 
 A pack connects independently owned analyzers to Code Polishy's policy engine.
 The engine resolves the exact installed pack, validates its output, and keeps

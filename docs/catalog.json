@@ -50,6 +50,14 @@
       "public": true
     },
     {
+      "id": "analysis-providers",
+      "path": "docs/design/analysis-providers.md",
+      "title": "Analysis providers",
+      "summary": "Understand deterministic provider ownership, verified facts, coverage, and exact runtime identity.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "architecture-policy",
       "path": "docs/policies/architecture.md",
       "title": "Architecture Policy",
@@ -111,19 +119,19 @@
       "public": true
     },
     {
-      "id": "execution-observability",
-      "path": "docs/design/execution-observability.md",
-      "title": "Execution Observability and Repository Facts",
-      "summary": "Understand execution timings, bounded caches, analyzer scope, and complete-project dead-code selection.",
-      "aliases": ["performance", "timings"],
-      "public": true
-    },
-    {
       "id": "exceptions",
       "path": "docs/policies/exceptions.md",
       "title": "Exception Policy",
       "summary": "Create bounded, owned, justified, and expiring policy exceptions.",
       "aliases": [],
+      "public": true
+    },
+    {
+      "id": "execution-observability",
+      "path": "docs/design/execution-observability.md",
+      "title": "Execution Observability and Repository Facts",
+      "summary": "Understand execution timings, bounded caches, analyzer scope, and complete-project dead-code selection.",
+      "aliases": ["performance", "timings"],
       "public": true
     },
     {
@@ -167,6 +175,22 @@
       "public": true
     },
     {
+      "id": "javascript-import-assets",
+      "path": "docs/design/javascript-import-assets.md",
+      "title": "JavaScript imports of local assets",
+      "summary": "Resolve contained stylesheet imports while retaining dependency and missing-file checks.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "javascript-provider",
+      "path": "docs/design/javascript-provider.md",
+      "title": "Optional JavaScript provider",
+      "summary": "Build and select the optional JS/TS provider and its framework adapters.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "operational-handoffs",
       "path": "docs/operational-handoffs.md",
       "title": "Repository Operational Handoffs",
@@ -199,6 +223,14 @@
       "public": true
     },
     {
+      "id": "provider-beta-acceptance",
+      "path": "docs/reviews/provider-beta-acceptance.md",
+      "title": "Provider beta acceptance",
+      "summary": "Recorded beta coverage and remaining limitations from real-project acceptance.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "python-contract-evidence",
       "path": "docs/design/python-contract-evidence.md",
       "title": "Python Contract Evidence",
@@ -212,6 +244,14 @@
       "title": "Release Checklist",
       "summary": "Cut and verify an immutable Code Polishy release.",
       "aliases": ["release"],
+      "public": true
+    },
+    {
+      "id": "robustness-plan-reviews",
+      "path": "docs/reviews/robustness-and-framework-integration.md",
+      "title": "Robustness and framework integration plan reviews",
+      "summary": "Advisory reviews of the robustness and framework integration plan.",
+      "aliases": [],
       "public": true
     },
     {
@@ -268,6 +308,14 @@
       "title": "Verification and Testing Policy",
       "summary": "Understand focused tests, merge selection, builds, gates, and supplemental suites.",
       "aliases": ["testing"],
+      "public": true
+    },
+    {
+      "id": "workflow-facts",
+      "path": "docs/design/workflow-facts.md",
+      "title": "Workflow facts and runner declarations",
+      "summary": "Validate contained runner-label declarations through shared workflow facts.",
+      "aliases": [],
       "public": true
     }
   ]
