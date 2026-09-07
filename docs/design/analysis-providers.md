@@ -51,3 +51,8 @@ sealed parsers and checkers. It does not execute target check scripts, compiler
 plugins, or lint configurations. Framework-specific parsers and mappings stay
 inside that provider. Local reports and diagnostics remain part of Code Polishy;
 dashboards, remote telemetry, and aggregate analytics are outside its product scope.
+
+Conformance context comes from the verified pack inventory beneath each declared
+fixture project. It never depends on an enclosing checkout's tracked files or
+ignore rules. Fixture language classification uses the same manifest declarations
+as installed analysis. Operational fixture failures retain the analyzer's reason.

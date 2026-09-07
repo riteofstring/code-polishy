@@ -21,6 +21,10 @@ func prepareInputs(repo repository.Repository, request *Request) error {
 	if err != nil {
 		return err
 	}
+	return prepareInputPaths(repo, request, paths)
+}
+
+func prepareInputPaths(repo repository.Repository, request *Request, paths []string) error {
 	paths = sortedUnique(append(paths, request.Files...))
 	if len(paths) > 10000 {
 		return errors.New("provider context exceeds 10000 files")

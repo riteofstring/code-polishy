@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -62,7 +63,8 @@ func (verifier fixtureVerifier) run(fixture Fixture) error {
 		return err
 	}
 	request := verifier.request(projectRoot, fixture)
-	if err := prepareInputs(repo, &request); err != nil {
+	repo.Config.Scope.Languages = append(repo.Config.Scope.Languages, manifestLanguageRules(verifier.tree.Manifest)...)
+	if err := prepareInputPaths(repo, &request, verifier.fixtureInputs(fixture)); err != nil {
 		return err
 	}
 	prepared, identity, err := runtimeCommand(repo, command, declared.Runtime)
@@ -89,6 +91,9 @@ func (verifier fixtureVerifier) request(projectRoot string, fixture Fixture) Req
 }
 
 func verifyFixtureResult(repo repository.Repository, fixture Fixture, request Request, response Response) error {
+	if response.Status == "operational-failure" {
+		return fmt.Errorf("analyzer failed: %s", response.Failure)
+	}
 	if response.Status != fixture.ExpectedStatus {
 		return fmt.Errorf("expected %s, received %s", fixture.ExpectedStatus, response.Status)
 	}
@@ -117,4 +122,15 @@ func fixtureRepository(root, policyRoot string) (repository.Repository, error) {
 
 func DefaultRunner() runner.OSRunner {
 	return runner.OSRunner{Stderr: os.Stderr}
+}
+
+func (verifier fixtureVerifier) fixtureInputs(fixture Fixture) []string {
+	paths := []string{}
+	prefix := fixture.Project + "/"
+	for _, file := range verifier.tree.Files {
+		if strings.HasPrefix(file.Path, prefix) {
+			paths = append(paths, strings.TrimPrefix(file.Path, prefix))
+		}
+	}
+	return paths
 }

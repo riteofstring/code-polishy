@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -287,6 +288,30 @@ func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
 		t.Fatalf("fixture verification failed: %+v %v", result, err)
 	}
+}
+
+func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
+	source := writePackSource(t)
+	writeTestFile(t, source, "fixtures/pass/package.json", "{}\n", 0o644)
+	writeTestFile(t, source, "fixtures/fail/package.json", "{}\n", 0o644)
+	writeTestFile(t, source, ".gitignore", "fixtures/\n", 0o644)
+	if output, err := exec.Command("git", "-C", source, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("initialize source checkout: %s %v", output, err)
+	}
+	boundary := &responseRunner{responses: [][]byte{
+		[]byte(`{"protocolVersion":2,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
+		[]byte(`{"protocolVersion":2,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
+	}}
+	result, err := VerifySource(context.Background(), source, source, boundary)
+	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
+		t.Fatalf("fixture verification failed: %+v %v", result, err)
+	}
+	for _, request := range boundary.requests {
+		if !slices.ContainsFunc(request.Context, func(input InputFile) bool { return input.Path == "package.json" }) {
+			t.Fatalf("fixture metadata disappeared inside a Git checkout: %+v", request.Context)
+		}
+	}
+
 }
 
 type responseRunner struct {
