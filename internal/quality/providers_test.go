@@ -9,18 +9,9 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func TestProviderMetricsAndCommentsRemainCorePolicyDecisions(t *testing.T) {
+func TestProviderCommentsRemainCorePolicyDecisions(t *testing.T) {
 	forbidden := false
 	repo := repository.Repository{Config: policy.Config{Quality: policy.EffectiveQuality(policy.Quality{AllowComments: &forbidden, Complexity: policy.Complexity{TypeScript: 3}})}}
-	functions := []pack.FunctionFact{{Path: "main.ts", Name: "branching", Line: 1, Column: 1, Complexity: 3, Parameters: 1}}
-	findings := packFunctionFindings(repo, functions)
-	if len(findings) != 1 || findings[0].Check != "quality.functioncomplexity" {
-		t.Fatalf("strict limit was not enforced: %+v", findings)
-	}
-	functions[0].Complexity = 2
-	if findings := packFunctionFindings(repo, functions); len(findings) != 0 {
-		t.Fatalf("valid function failed: %+v", findings)
-	}
 	comments := []pack.CommentFact{{Path: "main.ts", Kind: "Line", Raw: "// prose", Complete: true, Line: 1, Column: 1, BeforeCode: true, Preamble: true, ByteZero: true}}
 	if findings := packCommentFindings(repo, comments); len(findings) != 1 || findings[0].Check != "policy.sourceComment" {
 		t.Fatalf("prose was accepted: %+v", findings)

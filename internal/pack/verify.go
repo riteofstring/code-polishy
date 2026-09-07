@@ -94,14 +94,21 @@ func verifyFixtureResult(repo repository.Repository, fixture Fixture, request Re
 	if response.Status == "operational-failure" {
 		return fmt.Errorf("analyzer failed: %s", response.Failure)
 	}
-	if response.Status != fixture.ExpectedStatus {
-		return fmt.Errorf("expected %s, received %s", fixture.ExpectedStatus, response.Status)
-	}
 	if err := verifyAnalysisInputs(repo, request, response); err != nil {
 		return err
 	}
+	findings := analysisFindings(repo, &policy.PackAdapter{PackName: request.Pack.Name, Capability: request.Capability}, response)
+	status := response.Status
+	if status == "pass" && len(findings) > 0 {
+		status = "findings"
+	}
+	if status != fixture.ExpectedStatus {
+		return fmt.Errorf("expected %s, received %s", fixture.ExpectedStatus, status)
+	}
 	for _, rule := range fixture.ExpectedRules {
-		if !slices.ContainsFunc(response.Findings, func(finding ResponseFinding) bool { return finding.Rule == rule }) {
+		if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+			return finding.Check == rule || finding.Check == "pack."+request.Pack.Name+"."+rule
+		}) {
 			return fmt.Errorf("did not detect expected rule %s", rule)
 		}
 	}

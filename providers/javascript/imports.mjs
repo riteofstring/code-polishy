@@ -1,7 +1,7 @@
 import { packageFor } from "./context.mjs";
 import { isBuiltin, createRequire } from "node:module";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 
 import ts from "typescript";
 import glob from "fast-glob";
@@ -41,7 +41,7 @@ export function resolveImport(analysis, fact, configuration) {
     result.package = packageName(name);
     return result;
   }
-  if (name.startsWith(".") && assetExtension(name)) {
+  if (assetExtension(name)) {
     unresolvedImport(analysis, fact);
     return result;
   }
@@ -121,6 +121,8 @@ function containedAsset(analysis, candidate) {
   const canonical = realpathSync(candidate);
   if (!contained(analysis.root, canonical))
     throw new Error("local import escapes the project");
+  if (!statSync(canonical).isFile())
+    throw new Error("asset import does not resolve to a regular file");
   const path = relative(analysis.root, canonical).split(sep).join("/");
   analysis.read(path);
   return path;
@@ -207,7 +209,31 @@ function runtimePackage(analysis, fact) {
 }
 
 function assetExtension(name) {
-  return [".css", ".json", ".astro"].includes(extname(name));
+  return [
+    ".css",
+    ".json",
+    ".astro",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".avif",
+    ".ico",
+    ".mp3",
+    ".wav",
+    ".ogg",
+    ".flac",
+    ".mp4",
+    ".webm",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".pdf",
+  ].includes(extname(name).toLowerCase());
 }
 
 function packageName(name) {
@@ -231,6 +257,8 @@ function packageAsset(analysis, fact) {
   const absolute = realpathSync(path);
   if (!contained(analysis.root, absolute))
     throw new Error("package asset escapes project");
+  if (!statSync(absolute).isFile())
+    throw new Error("package asset is not a regular file");
   const resolved = relative(analysis.root, absolute).split(sep).join("/");
   analysis.read(resolved);
   return resolved;

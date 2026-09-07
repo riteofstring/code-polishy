@@ -57,6 +57,13 @@ fixture project. It never depends on an enclosing checkout's tracked files or
 ignore rules. Fixture language classification uses the same manifest declarations
 as installed analysis. Operational fixture failures retain the analyzer's reason.
 
+Function facts are interpreted once when the core constructs adapter findings.
+Conformance uses that same interpretation: its expected status and rule include
+the resulting core policy finding, even when the provider successfully returns
+measurements without judging them. Provider rules retain their pack namespace;
+core function rules retain their core identity. A fixture must detect its actual
+seeded policy violation; a count of returned facts cannot substitute.
+
 Managed JSON and SARIF reports retain provider rule namespaces and graph evidence.
 Their schema accepts declared language and ecosystem identifiers and binds pack
 facts to their version 2 protocol and exact provider identity. Native Python fact

@@ -36,7 +36,11 @@ version range, or missing runtime cannot substitute. Native contained executable
 adapters can omit the runtime reference.
 
 Each command/capability pair requires a passing fixture and a real seeded defect
-returning `findings` with `expectedRules`. Operational failure does not count as
+producing `findings` with `expectedRules` after core policy evaluation. Function
+metrics use the same core thresholds and rule identities during normal analysis
+and conformance; their provider response may contain measurements without any
+provider finding. Expected rules name either a provider rule or the exact core
+function rule. Operational failure does not count as
 defect detection. Fixtures select nonempty, distinct source paths. The SQLite
 syntax proof under `tools/fixtures/language-pack` demonstrates a non-native
 language using a real parser; it deliberately supplies lint only.

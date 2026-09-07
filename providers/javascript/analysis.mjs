@@ -56,8 +56,20 @@ async function format(analysis, path, adapter) {
 
 function analyzeFile(analysis, path, adapter, facts) {
   const source = analysis.read(path);
-  const { parsed, scripts, comments = [] } = adapter.parse(source, path);
-  const collected = sourceFacts(analysis, path, parsed, 0, comments);
+  const {
+    parsed,
+    scripts,
+    comments = [],
+    references = [],
+  } = adapter.parse(source, path);
+  const collected = sourceFacts(
+    analysis,
+    path,
+    parsed,
+    0,
+    comments,
+    references,
+  );
   collectMetricsAndScripts(analysis, path, { parsed, scripts, collected });
   const capability = analysis.request.capability;
   if (capability === "lint") {
@@ -77,9 +89,8 @@ function analyzeFile(analysis, path, adapter, facts) {
     collected.imports = collected.imports.flatMap((fact) =>
       resolveImport(analysis, fact, configuration),
     );
-  } else if (capability === "complexity") {
-    metricDiagnostics(analysis, path, collected.functions);
-  } else throw new Error(`unsupported operation: ${capability}`);
+  } else if (capability !== "complexity")
+    throw new Error(`unsupported operation: ${capability}`);
   for (const key of Object.keys(facts)) facts[key].push(...collected[key]);
 }
 
@@ -152,26 +163,6 @@ function reportLintMessage(analysis, path, source, offset, message) {
   const position =
     offset + prefix.length + (message.line > 1 ? 1 : 0) + message.column - 1;
   analysis.diagnostic(path, message.ruleId, message.message, position);
-}
-
-function metricDiagnostics(analysis, path, functions) {
-  const quality = analysis.request.policy.quality;
-  const test = analysis.classifications.get(path)?.test;
-  const maximum = test
-    ? quality.complexity.typescriptTest
-    : quality.complexity.typescript;
-  for (const fact of functions) {
-    if (fact.complexity < maximum) continue;
-    analysis.response.findings.push({
-      capability: "complexity",
-      path,
-      line: fact.line,
-      column: fact.column,
-      rule: "function-complexity",
-      subject: fact.name,
-      message: `Function complexity ${fact.complexity} must be below ${maximum}`,
-    });
-  }
 }
 
 function collectMetricsAndScripts(

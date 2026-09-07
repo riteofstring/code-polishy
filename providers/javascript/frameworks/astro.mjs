@@ -26,6 +26,7 @@ export const astro = {
     });
     const scripts = [];
     const comments = [];
+    const references = [];
     walk(parsed.ast, parsed.visitorKeys, (node) => {
       if (elementNamed(node, "style")) {
         comments.push(...styleComments(node, source));
@@ -33,6 +34,11 @@ export const astro = {
       }
       if (!elementNamed(node, "script")) return;
       if (!executableScript(node)) return;
+      const reference = scriptReference(node);
+      if (reference) {
+        references.push(reference);
+        return false;
+      }
       for (const child of node.children) {
         if (child.type !== "AstroRawText" && child.type !== "JSXText")
           throw new Error("embedded script source has an unsupported mapping");
@@ -46,9 +52,31 @@ export const astro = {
         });
       }
     });
-    return { parsed, scripts, comments };
+    return { parsed, scripts, comments, references };
   },
 };
+
+function scriptReference(node) {
+  const attributes = node.openingElement.attributes;
+  const source = attributes.find((attribute) => attribute.name?.name === "src");
+  if (attributes.some((attribute) => attribute.type === "JSXSpreadAttribute"))
+    return {
+      problem: "spread script attributes cannot establish source dependencies",
+    };
+  if (!source) return null;
+  if (typeof source.value?.value !== "string" || !source.value.value)
+    return { problem: "script src must be a nonempty static string" };
+  if (attributes.length !== 1 || !source.value.value.startsWith("."))
+    return {
+      problem:
+        "unprocessed or external script src has no verified module target",
+    };
+  return {
+    specifier: source.value.value,
+    kind: "runtime",
+    offset: source.value.range[0],
+  };
+}
 
 export function astroInstallation(analysis, path) {
   const owner = packageFor(analysis, path);

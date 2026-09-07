@@ -202,7 +202,14 @@ async function validateReachabilityInput(analysis, file) {
       join(analysis.root, file.path),
     );
   const parsed = adapter.parse(analysis.read(file.path), file.path);
-  const facts = sourceFacts(analysis, file.path, parsed.parsed);
+  const facts = sourceFacts(
+    analysis,
+    file.path,
+    parsed.parsed,
+    0,
+    [],
+    parsed.references,
+  );
   for (const script of parsed.scripts)
     facts.imports.push(
       ...sourceFacts(analysis, file.path, script.parsed, script.offset).imports,

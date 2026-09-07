@@ -422,6 +422,20 @@ lint_request() {
     "${target}" "$1" "$2" "$3"
 }
 lint_response="${fixture_root}/lint.json"
+printf 'export function value() { return 1; return 2; }\n' >"${lint_source}/unreachable.ts"
+printf 'export function value() { return 1; }\n' >"${lint_source}/reachable.ts"
+lint_request '["lint/unreachable.ts","lint/reachable.ts"]' \
+  '{"complexity":9,"depth":4,"parameters":5}' '{"reactHooks":false,"jsxAccessibility":false}' | \
+  run_runner >"${lint_response}" || fail "native bug checks could not run"
+"${javascript_node}" - "${lint_response}" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const response = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).result;
+assert.deepEqual(response.unsupported, []);
+assert.deepEqual(response.findings.map(({path, rule}) => ({path, rule})), [
+  {path: 'lint/unreachable.ts', rule: 'no-unreachable'},
+]);
+NODE
 lint_request '["lint/deep.ts","lint/directive.ts","lint/prose.ts","lint/reference-near-miss.ts","lint/reference-whitespace-near-miss.ts","lint/reference-trailing-near-miss.ts","lint/reference-suppression-near-miss.ts","lint/reference-after-code-near-miss.ts","lint/environment-after-code.test.ts","lint/environment-production.ts","lint/environment-happy.test.ts","lint/environment-line-whitespace.test.ts","lint/environment-block-whitespace.test.ts","lint/environment-trailing.test.ts","lint/environment-suppression.test.ts","lint/environment-after-comment.test.ts","lint/environment-over-boundary.test.ts","lint/jsx-comment.tsx","lint/allowed-reference.ts","lint/allowed-reference-only.d.ts","lint/allowed-environment-line.test.ts","lint/allowed-environment-block.test.ts","lint/allowed-shebang.ts","lint/empty-shebang.ts","lint/leading-space-shebang.ts","lint/literals.ts","lint/jsx-literal.tsx","lint/broken.ts","lint/broken-comment.ts","src/opaque.bin"]' \
   '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false}' |
   run_runner >"${lint_response}" || fail "the runner rejected a well-formed lint request"

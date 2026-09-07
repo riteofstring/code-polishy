@@ -34,6 +34,7 @@ export function sourceFacts(
   parsed,
   offset = 0,
   extraComments = [],
+  references = [],
 ) {
   const source = analysis.read(path);
   const imports = [],
@@ -45,6 +46,16 @@ export function sourceFacts(
     offset,
     extraComments,
   );
+  if (["architecture", "dead-code"].includes(analysis.request.capability))
+    for (const reference of references) {
+      if (reference.problem) throw new Error(reference.problem);
+      imports.push({
+        path,
+        ...analysis.location(path, reference.offset),
+        specifier: reference.specifier,
+        kind: reference.kind,
+      });
+    }
   walk(parsed.ast, parsed.visitorKeys, (node, parent) => {
     if (node.type === "AstroHTMLComment")
       comments.push({
@@ -84,6 +95,14 @@ function importReference(node) {
     return declarationReference(node);
   }
   if (isModuleGlob(node)) return globReference(node);
+  if (
+    node.type === "TSImportEqualsDeclaration" &&
+    node.moduleReference.type === "TSExternalModuleReference"
+  )
+    return literalReference(
+      node.moduleReference.expression,
+      node.importKind === "type" ? "type-only" : "runtime",
+    );
   if (node.type === "TSImportType")
     return literalReference(
       node.argument.type === "TSLiteralType"

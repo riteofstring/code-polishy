@@ -122,7 +122,7 @@ func runRequest(ctx context.Context, repo repository.Repository, command policy.
 	if err != nil {
 		return failedResult(adapter, err)
 	}
-	return Result{Findings: findingsForResponse(adapter, response), Request: request, Response: response, Digest: digest}
+	return Result{Findings: analysisFindings(repo, adapter, response), Request: request, Response: response, Digest: digest}
 }
 
 func failedResult(adapter *policy.PackAdapter, err error) Result {

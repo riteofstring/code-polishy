@@ -44,7 +44,9 @@ function requestFor(root, files, capability) {
       },
       files: context.map((input) => ({
         path: input.path,
-        language: input.path.endsWith(".ts") ? "typescript" : "",
+        language: /\.(?:[cm]?[jt]s|[jt]sx|astro)$/.test(input.path)
+          ? "typescript"
+          : "",
         generated: false,
         test: false,
         development: false,
@@ -92,7 +94,7 @@ test("each claimed capability analyzes valid source and catches its seeded defec
         const response = analyze(request);
         assert.equal(
           response.status,
-          fixture.expectedStatus,
+          fixture.capability === "complexity" ? "pass" : fixture.expectedStatus,
           JSON.stringify(response),
         );
         assert.deepEqual(
@@ -100,7 +102,16 @@ test("each claimed capability analyzes valid source and catches its seeded defec
           fixture.files.toSorted(),
         );
         assert.deepEqual(response.coverage.unsupported, []);
-        for (const rule of fixture.expectedRules ?? [])
+        if (fixture.capability === "complexity") {
+          assert.deepEqual(response.findings, []);
+          assert.deepEqual(
+            response.facts.functions.map((fact) => fact.complexity),
+            [fixture.expectedStatus === "findings" ? 11 : 1],
+          );
+        }
+        for (const rule of fixture.capability === "complexity"
+          ? []
+          : (fixture.expectedRules ?? []))
           assert.ok(
             response.findings.some((finding) => finding.rule === rule),
             JSON.stringify(response),
@@ -111,6 +122,166 @@ test("each claimed capability analyzes valid source and catches its seeded defec
           ),
         );
       });
+    }
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("TypeScript import-equals retains runtime and type-only dependency targets", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-equals-"));
+  try {
+    writeFileSync(join(root, "package.json"), '{"type":"commonjs"}');
+    writeFileSync(
+      join(root, "value.cts"),
+      "const value = 1; export = value;\n",
+    );
+    for (const [keyword, kind] of [
+      ["", "runtime"],
+      ["type ", "type-only"],
+    ]) {
+      writeFileSync(
+        join(root, "source.cts"),
+        `import ${keyword}value = require("./value.cts");\n`,
+      );
+      const response = analyze(
+        requestFor(root, ["source.cts"], "architecture"),
+      );
+      assert.equal(response.status, "pass", JSON.stringify(response));
+      assert.deepEqual(
+        response.facts.imports.map(({ resolved, kind }) => ({
+          resolved,
+          kind,
+        })),
+        [{ resolved: "value.cts", kind }],
+      );
+    }
+    rmSync(join(root, "value.cts"));
+    const missing = analyze(requestFor(root, ["source.cts"], "architecture"));
+    assert.ok(
+      missing.findings.some((finding) => finding.rule === "unresolved-import"),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("framework script sources retain dependency and reachability evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-script-src-"));
+  try {
+    mkdirSync(join(root, "node_modules/astro"), { recursive: true });
+    mkdirSync(join(root, "src/pages"), { recursive: true });
+    writeFileSync(
+      join(root, "package.json"),
+      '{"type":"module","dependencies":{"astro":"7.2.4"}}',
+    );
+    writeFileSync(
+      join(root, "node_modules/astro/package.json"),
+      '{"version":"7.2.4"}',
+    );
+    const path = "src/pages/index.astro";
+    writeFileSync(
+      join(root, path),
+      '<h1>Olá</h1>\n<script src="../client.ts"></script>\n',
+    );
+    writeFileSync(
+      join(root, "src/client.ts"),
+      "document.body.dataset.ready = 'yes';\n",
+    );
+    const response = analyze(requestFor(root, [path], "architecture"));
+    assert.equal(response.status, "pass", JSON.stringify(response));
+    assert.deepEqual(
+      response.facts.imports.map(({ resolved, line, kind }) => ({
+        resolved,
+        line,
+        kind,
+      })),
+      [{ resolved: "src/client.ts", line: 2, kind: "runtime" }],
+    );
+    const request = requestFor(root, [path, "src/client.ts"], "dead-code");
+    const reachable = analyze(request);
+    assert.equal(reachable.status, "pass", JSON.stringify(reachable));
+    writeFileSync(join(root, path), "<h1>Olá</h1>\n");
+    const unused = analyze(requestFor(root, ["src/client.ts"], "dead-code"));
+    assert.ok(
+      unused.findings.some(
+        (finding) =>
+          finding.rule === "unused-file" && finding.path === "src/client.ts",
+      ),
+      JSON.stringify(unused),
+    );
+    for (const attributes of [
+      "src={location}",
+      'src="../client.ts" is:inline',
+      'src="https://example.test/client.js"',
+      "{...properties}",
+    ]) {
+      writeFileSync(join(root, path), `<script ${attributes}></script>\n`);
+      const incomplete = analyze(requestFor(root, [path], "architecture"));
+      assert.equal(incomplete.status, "incomplete", JSON.stringify(incomplete));
+      assert.deepEqual(incomplete.coverage.analyzed, []);
+    }
+    writeFileSync(join(root, path), '<script src="../missing.ts"></script>\n');
+    const missing = analyze(requestFor(root, [path], "architecture"));
+    assert.ok(
+      missing.findings.some((finding) => finding.rule === "unresolved-import"),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("asset resolution requires real files and preserves unknown executable coverage", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-images-"));
+  try {
+    writeFileSync(
+      join(root, "icon.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"/>\n',
+    );
+    writeFileSync(
+      join(root, "source.ts"),
+      'import icon from "./icon.svg"; export { icon };\n',
+    );
+    const resolved = analyze(requestFor(root, ["source.ts"], "architecture"));
+    assert.equal(resolved.status, "pass", JSON.stringify(resolved));
+    assert.equal(resolved.facts.imports[0].resolved, "icon.svg");
+    rmSync(join(root, "icon.svg"));
+    writeFileSync(
+      join(root, "icon.d.svg.ts"),
+      "declare const value: string; export default value;\n",
+    );
+    const missing = analyze(requestFor(root, ["source.ts"], "architecture"));
+    assert.ok(
+      missing.findings.some((finding) => finding.rule === "unresolved-import"),
+    );
+    assert.equal(missing.facts.imports[0].resolved, "");
+    writeFileSync(
+      join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { paths: { "@/*": ["./*"] } } }),
+    );
+    writeFileSync(join(root, "source.ts"), 'import "@/icon.svg";\n');
+    const missingAlias = analyze(
+      requestFor(root, ["source.ts"], "architecture"),
+    );
+    assert.ok(
+      missingAlias.findings.some(
+        (finding) => finding.rule === "unresolved-import",
+      ),
+    );
+    assert.equal(missingAlias.facts.imports[0].resolved, "");
+    for (const extension of ["mdx", "vue", "svelte", "wasm"]) {
+      writeFileSync(join(root, `unknown.${extension}`), "opaque input\n");
+      writeFileSync(
+        join(root, "source.ts"),
+        `import "./unknown.${extension}";\n`,
+      );
+      const unknown = analyze(requestFor(root, ["source.ts"], "architecture"));
+      assert.ok(
+        unknown.findings.some(
+          (finding) => finding.rule === "unresolved-import",
+        ),
+      );
+      assert.equal(unknown.facts.imports[0].resolved, "");
     }
   } finally {
     rmSync(root, { recursive: true });

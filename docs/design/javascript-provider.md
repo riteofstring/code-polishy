@@ -50,3 +50,25 @@ scanner and mapped back to the original framework source. Strings remain data;
 unterminated strings or comments and unsupported stylesheet languages remain
 incomplete. This retains the core's comment policy without adding a framework
 parser to the engine.
+
+Static script-source references are adapter facts with original byte locations.
+The Astro adapter recognizes processed relative script sources according to the
+[framework's script processing rules](https://docs.astro.build/en/guides/client-side-scripts/).
+Computed, spread, external, and unprocessed script references remain incomplete
+for dependency and reachability analysis. The Knip compiler retains recognized
+script-source imports in its derived code so only reachable framework components
+make their scripts reachable.
+
+Ordinary TypeScript import-equals declarations retain runtime or type-only edges.
+Contained asset resolution covers CSS, JSON, images, common media, fonts, and PDF
+files, while Astro components remain executable source. A declaration file cannot
+replace a missing asset. Unknown executable formats and import parameters require
+further supported interpretation; they do not become data merely because a file
+exists. These distinctions retain core module checks without claiming asset bytes
+were analyzed as JavaScript.
+
+The native JS/TS runner and optional provider share deterministic rules for
+unreachable code, duplicate conditions and cases, constant binary expressions,
+unsafe finally blocks, invalid typeof comparisons, and incorrect NaN comparisons.
+These checks run without a provider selection or target ESLint configuration.
+Function metrics remain measurements; the core alone applies their thresholds.

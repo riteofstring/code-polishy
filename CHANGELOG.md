@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.25.0-beta.2 - 2026-09-07
+
+- Retain TypeScript import-equals and framework script-source dependencies in
+  provider analysis, including unused-code reachability and original locations.
+- Resolve contained image, media, font, and PDF assets while retaining missing
+  file findings and incomplete coverage for unsupported executable formats.
+- Evaluate provider function metrics once in the core and use the same policy
+  decisions for conformance fixtures.
+- Document the shared native and provider JS/TS checks for unreachable code,
+  duplicate conditions and cases, constant binary expressions, unsafe finally
+  blocks, invalid typeof comparisons, and incorrect NaN comparisons.
+
 ## 0.25.0-beta.1 - 2026-09-07
 
 - Allow exactly selected analysis providers to replace native capabilities through pack protocol v2, with verified runtime identity, original-source facts, complete coverage accounting, and core-owned policy checks.

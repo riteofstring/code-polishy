@@ -12,7 +12,7 @@ const defects = {
   typecheck: ["export const value: number = 'wrong';\n", "type-2322"],
   complexity: [
     `export function choose(value: number): number {\n${Array.from({ length: 10 }, (_, index) => `  if (value === ${index}) return ${index};`).join("\n")}\n  return -1;\n}\n`,
-    "function-complexity",
+    "quality.functioncomplexity",
   ],
   architecture: ['import "./missing.ts";\nexport {};\n', "unresolved-import"],
   "dead-code": ["export const unused = 1;\n", "unused-file"],
