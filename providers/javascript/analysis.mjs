@@ -84,15 +84,18 @@ function analyzeFile(analysis, path, adapter, facts) {
 }
 
 function lint(analysis, path, source, offset, extension) {
-  const owner = packageFor(analysis, path);
+  const metadata = packageFor(analysis, path)?.data ?? {};
   const dependencies = {
-    ...owner?.data.dependencies,
-    ...owner?.data.devDependencies,
+    ...metadata.dependencies,
+    ...metadata.devDependencies,
+    ...metadata.optionalDependencies,
+    ...metadata.peerDependencies,
   };
   const generated = analysis.classifications.get(path)?.generated;
   const activation = {
     reactHooks: Boolean(dependencies.react) && !generated,
-    jsxAccessibility: Boolean(dependencies.react) || extension === ".astro",
+    jsxAccessibility:
+      Boolean(dependencies["react-dom"]) || extension === ".astro",
   };
   const rules = lintRules({
     limits: { complexity: 1000, depth: 1000, parameters: 1000 },

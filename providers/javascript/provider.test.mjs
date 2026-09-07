@@ -245,3 +245,32 @@ test("builtins and package stylesheets resolve without executing target tools", 
     rmSync(root, { recursive: true });
   }
 });
+
+test("React peer and optional dependencies preserve native rule activation", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-react-"));
+  try {
+    const manifest = { peerDependencies: { react: "19.2.6" } };
+    writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
+    writeFileSync(
+      join(root, "view.tsx"),
+      'import { useState } from "react"; export function View({enabled}) { if (enabled) useState(0); return <img />; }\n',
+    );
+    const native = analyze(requestFor(root, ["view.tsx"], "lint"));
+    assert.ok(
+      native.findings.some(
+        (finding) => finding.rule === "react-hooks/rules-of-hooks",
+      ),
+    );
+    assert.ok(
+      !native.findings.some((finding) => finding.rule.startsWith("jsx-a11y/")),
+    );
+    manifest.optionalDependencies = { "react-dom": "19.2.6" };
+    writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
+    const dom = analyze(requestFor(root, ["view.tsx"], "lint"));
+    assert.ok(
+      dom.findings.some((finding) => finding.rule === "jsx-a11y/alt-text"),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
