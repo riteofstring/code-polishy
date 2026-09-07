@@ -33,7 +33,7 @@ Fable recommended evolving the existing installable pack mechanism into a genera
 2. Require explicit coverage for selected inputs and preserve stable provider rule identities.
 3. Feed provider source facts into the existing architecture checks.
 4. Pass necessary project context and reuse an exactly governed host runtime for ecosystem tooling.
-5. Demonstrate the mechanism with a provider outside the engine, while leaving complete built-in extraction and observability expansion deferred.
+5. Demonstrate the mechanism with a provider outside the engine, while leaving complete built-in extraction deferred.
 
 Fable agreed that the earlier blanket deferral was incompatible with the corrected objective. The primary author agrees with that conclusion and the choice to extend the existing pack mechanism. An installable pack can contain a broader ecosystem provider and its internal framework adapters; a standalone Astro pack is not required.
 
@@ -64,7 +64,9 @@ Relevant source evidence in the assessed 0.24.10 snapshot:
 - `internal/quality/comments.go:127` identifies unsupported framework comment analysis. `docs/policy-engine-architecture.md:98` describes the current sealed fact boundary and policy-owned decisions.
 - `internal/runner/runner.go:282` constructs the sealed environment. `internal/pack/install.go:17` sets pack size limits. Neither establishes OS sandboxing or proves analyzer correctness.
 
-The active plan therefore schedules the smallest complete provider boundary and concrete acceptance cases. It keeps dashboards, remote telemetry, analytics, speculative OpenTelemetry hooks, registries, complete built-in extraction, and universal build-system work outside the delivery. Some general engine changes are necessary; framework semantics remain in providers.
+The active plan therefore schedules the smallest complete provider boundary and concrete acceptance cases. Registries, complete built-in extraction, and universal build-system work remain outside this delivery. Some general engine changes are necessary; framework semantics remain in providers.
+
+The earlier summary incorrectly described observability as deferred work. Application dashboards, remote telemetry, aggregate analytics, and tracing are outside Code Polishy's product scope. The plan directs projects to established observability libraries and services and contains no future observability phase or integration-hook work. Local diagnostics and evidence needed to explain Code Polishy's own checks remain part of reliable analysis.
 
 ## Verification and evidence
 

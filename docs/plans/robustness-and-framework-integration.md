@@ -149,15 +149,15 @@ The invalid gate-identity report needs its original input or a reduced reproduct
 
 Acceptance: each chosen improvement has a concrete before/after interaction and a narrow deterministic boundary test. No new mandatory review stage is introduced.
 
-## Diagnostics and explicit non-goals
+## Product boundary
 
-Retain 0.24.9's local diagnostic records and improve only concrete failure paths that prevent diagnosis or misrepresent analysis. A tool exit and the validated semantic result remain distinct. Missing or malformed required evidence still fails closed.
+Code Polishy's responsibility is to analyze and polish code, identify defects, and report trustworthy check results. Application observability belongs with established libraries and services. Encourage projects to use those tools for dashboards, remote telemetry, aggregate analytics, and tracing. These capabilities are outside Code Polishy's product scope; this plan contains no observability implementation, exporter, integration-hook, or future-phase work.
 
-Do not weaken strict response validation merely because a field is called telemetry. The new Vulture timing requirement deserves examination only if a concrete failure or unnecessary coupling is demonstrated; it is not a confirmed regression and is not scheduled work here.
+Local check findings, failure diagnostics, and execution evidence remain part of reliable code analysis. Reuse the existing reports to explain what was checked and why analysis failed or remained incomplete. A tool exit and the validated semantic result remain distinct. Missing or malformed required analysis evidence still fails closed.
 
-This delivery excludes dashboards, remote telemetry, aggregate analytics, OpenTelemetry exporters or speculative hooks, a new event journal, a report-explorer product, and a new AI acceptance system. It also excludes complete extraction of built-in languages, a marketplace/catalog, a generalized pack lifecycle/scaffolder, a sandbox program, and a broad performance or complexity-policy redesign.
+This delivery also excludes a new event journal, a report-explorer product, a new AI acceptance system, complete extraction of built-in languages, a marketplace/catalog, a generalized pack lifecycle/scaffolder, a sandbox program, and a broad performance or complexity-policy redesign.
 
-The existing language-pack and observability plans remain broader proposals. This plan does not activate their phases or completion criteria. New requirements enter this delivery only when tied to a reproduced failure or missing required check and explicitly reconciled with its scope.
+Earlier combined language-pack and observability proposals do not define this roadmap. The provider work above is the selected code-analysis scope. New requirements must directly improve detection, correctness, or reliable enforcement of code-quality checks.
 
 ## Verification and repository delivery
 
