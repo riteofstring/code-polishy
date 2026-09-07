@@ -16,6 +16,8 @@ if [[ "${#releases[@]}" -ne 1 || ! -x "${releases[0]}" ]]; then
   exit 1
 fi
 "${releases[0]}" --repo-root "${fixture_root}/target" lock
+"${fixture_root}/prefix/bin/code-polishy" --repo-root "${fixture_root}/target" \
+  pack verify --source "${policy_root}/tools/fixtures/language-pack"
 "${policy_root}/scripts/test-installed-release.sh" \
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \

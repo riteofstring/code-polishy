@@ -763,30 +763,6 @@
         "modules": ["tooling"]
       },
       {
-        "name": "language-pack-contract",
-        "kind": "contract",
-        "scope": "repository",
-        "cost": "quick",
-        "paths": [
-          "cmd/code-polishy/**",
-          "internal/pack/**",
-          "scripts/go.sh",
-          "tools/fixtures/language-pack/**"
-        ],
-        "argv": [
-          "./scripts/go.sh",
-          "run",
-          "./cmd/code-polishy",
-          "--policy-root",
-          ".",
-          "pack",
-          "verify",
-          "--source",
-          "tools/fixtures/language-pack"
-        ],
-        "runOn": ["focused", "recommended", "full"]
-      },
-      {
         "name": "repository-full",
         "kind": "contract",
         "scope": "repository",
@@ -1218,7 +1194,10 @@
         "modules": ["tooling"],
         "paths": [
           "scripts/test-installed-release.sh",
-          "scripts/test-installed-release-contract.sh"
+          "scripts/test-installed-release-contract.sh",
+          "cmd/code-polishy/**",
+          "internal/pack/**",
+          "tools/fixtures/language-pack/**"
         ],
         "argv": ["./scripts/test-installed-release-contract.sh"]
       },
@@ -1579,7 +1558,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1588",
+      "subject": "1567",
       "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"
