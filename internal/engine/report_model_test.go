@@ -287,6 +287,53 @@ func TestPythonGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T)
 	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
 }
 
+func TestProviderFindingsAndGraphSurviveManagedReports(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	node := sourcegraph.Node{Path: "src/view.custom", Language: "custom", Root: ".", Module: "view", Resolution: "file:src/view.custom"}
+	edge := sourcegraph.Edge{Source: node.Path, Target: node.Path, SourceResolution: node.Resolution, TargetResolution: node.Resolution, Line: 1, Column: 1, Ecosystem: "custom", Kind: sourcegraph.EdgeRuntime}
+	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v2", Project: "pack/custom-provider/analyze", Root: ".", Paths: []string{node.Path}, FactsSHA256: digest, PartitionsSHA256: digest, ResolutionSHA256: digest,
+		Provider: &sourcegraph.ProviderInput{Name: "custom-provider", Version: "1.0.0-beta.1", Digest: digest, Languages: []string{"custom"}, InputsSHA256: digest, PolicySHA256: digest, RuntimeSHA256: digest}}
+	graph, err := sourcegraph.New([]sourcegraph.Node{node}, []sourcegraph.Edge{edge}, []sourcegraph.FactInput{input}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyEngine := &Engine{Repository: repository.Repository{Root: t.TempDir()}}
+	report, err := policyEngine.FinalizeReport("check", Report{SourceDependencyGraph: &graph, Findings: []policy.Finding{
+		{Check: "pack.custom-provider.type-2322", Path: node.Path, Line: 1, Column: 1, Subject: "type", Message: "type mismatch"},
+		{Check: "pack.custom-provider.@scope/no-unused", Path: node.Path, Line: 1, Column: 1, Subject: "unused", Message: "unused declaration"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(policyEngine.Repository.Root, filepath.FromSlash(report.ReportPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored Report
+	if err := json.Unmarshal(data, &stored); err != nil || stored.Summary.Errors != 2 || stored.SourceDependencyGraph == nil || stored.SourceDependencyGraph.Identity != graph.Identity {
+		t.Fatalf("provider evidence was lost: %+v, %v", stored, err)
+	}
+	encoded, err := SARIF(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateSchemaDocument(t, sarifSchema, policyschema.SARIF210, encoded)
+	for _, mutate := range []func(*sourcegraph.FactInput){
+		func(input *sourcegraph.FactInput) { input.Provider = nil },
+		func(input *sourcegraph.FactInput) { input.Provider.Digest = "invalid" },
+		func(input *sourcegraph.FactInput) { input.Protocol = "python-facts/v3" },
+		func(input *sourcegraph.FactInput) { input.Analyzer = "ruff" },
+	} {
+		altered := stored
+		altered.SourceDependencyGraph = sourcegraph.Clone(stored.SourceDependencyGraph)
+		mutate(&altered.SourceDependencyGraph.Inputs[0])
+		data, err := json.Marshal(altered)
+		if err != nil || validateCanonicalReport(data) == nil {
+			t.Fatalf("invalid provider evidence reached a report: %v", err)
+		}
+	}
+}
+
 func TestJSONAndSARIFMatchConsumerGoldenFacts(t *testing.T) {
 	finding := policy.NormalizeFinding(policy.Finding{
 		Check: "quality.lint", Path: "src/app.go", Line: 3, Column: 2, Subject: "unused", Message: "unused", Severity: policy.FindingWarning,

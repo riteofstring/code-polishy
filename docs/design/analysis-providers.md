@@ -56,3 +56,8 @@ Conformance context comes from the verified pack inventory beneath each declared
 fixture project. It never depends on an enclosing checkout's tracked files or
 ignore rules. Fixture language classification uses the same manifest declarations
 as installed analysis. Operational fixture failures retain the analyzer's reason.
+
+Managed JSON and SARIF reports retain provider rule namespaces and graph evidence.
+Their schema accepts declared language and ecosystem identifiers and binds pack
+facts to their version 2 protocol and exact provider identity. Native Python fact
+variants retain their existing protocol contracts.
