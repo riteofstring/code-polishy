@@ -19,6 +19,17 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/workflow-facts.md",
+        "module": "workflow"
+      },
+      {
+        "path": "docs/design/javascript-import-assets.md",
+        "sourcePaths": [
+          "tools/javascript/imports.mjs",
+          "internal/architecture/javascript_graph.go"
+        ]
+      },
+      {
         "path": "docs/design/git-evidence-policy.md",
         "sourcePaths": [
           "internal/policy/git_evidence.go",

@@ -8,7 +8,7 @@ import (
 
 func TestParseReturnsBoundedStableWorkflowFacts(t *testing.T) {
 	t.Parallel()
-	facts, err := Parse(".github/workflows/security.yml", []byte("name: Security\non:\n  schedule:\n    - cron: '0 4 * * 1'\n  workflow_dispatch:\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@0123456789012345678901234567890123456789\n      - run: code-polishy supply-chain\n"))
+	facts, err := Parse(".github/workflows/security.yml", []byte("name: Security\non:\n  schedule:\n    - cron: '0 4 * * 1'\n  workflow_dispatch:\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@0123456789012345678901234567890123456789\n      - run: code-polishy supply-chain\n"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestParseFailsClosedOnActionlintDiagnostics(t *testing.T) {
 		"semantic": "on: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    needs: missing\n    steps:\n      - run: echo ok\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Parse("workflow.yml", []byte(source)); err == nil || !strings.Contains(err.Error(), "actionlint rejected workflow") {
+			if _, err := Parse("workflow.yml", []byte(source), nil); err == nil || !strings.Contains(err.Error(), "actionlint rejected workflow") {
 				t.Fatalf("error = %v", err)
 			}
 		})
@@ -36,10 +36,10 @@ func TestParseFailsClosedOnActionlintDiagnostics(t *testing.T) {
 
 func TestParseRejectsOversizedWorkflowBeforeParsing(t *testing.T) {
 	t.Parallel()
-	if _, err := Parse("workflow.yml", bytes.Repeat([]byte{' '}, MaximumInputBytes+1)); err == nil || !strings.Contains(err.Error(), "byte limit") {
+	if _, err := Parse("workflow.yml", bytes.Repeat([]byte{' '}, MaximumInputBytes+1), nil); err == nil || !strings.Contains(err.Error(), "byte limit") {
 		t.Fatalf("error = %v", err)
 	}
-	if _, err := Parse(strings.Repeat("p", maximumStringBytes+1), []byte("on: push\njobs: {}\n")); err == nil || !strings.Contains(err.Error(), "encoding limit") {
+	if _, err := Parse(strings.Repeat("p", maximumStringBytes+1), []byte("on: push\njobs: {}\n"), nil); err == nil || !strings.Contains(err.Error(), "encoding limit") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: code-polishy supply-chain
-`))
+`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

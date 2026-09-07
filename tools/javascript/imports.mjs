@@ -1,5 +1,5 @@
 import { builtinModules } from "node:module";
-import { extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 
 import typescript from "typescript";
 
@@ -263,6 +263,14 @@ function fileFacts(request, path, resolve, facts, unsupportedPaths) {
   return true;
 }
 
+function localStylesheetResolution(root, host, specifier, containingFile) {
+  const candidate = join(dirname(containingFile), specifier);
+  if (insideRoot(root, candidate) === null || !host.fileExists(candidate)) {
+    return undefined;
+  }
+  return { resolvedFileName: candidate };
+}
+
 export function imports(request) {
   const host = containedResolutionHost(request.root);
   const cache = typescript.createModuleResolutionCache(
@@ -270,14 +278,23 @@ export function imports(request) {
     (name) => name,
     RESOLUTION_OPTIONS,
   );
-  const resolve = (specifier, containingFile) =>
-    typescript.resolveModuleName(
+  const resolve = (specifier, containingFile) => {
+    if (/^\.\.?\//.test(specifier) && extname(specifier) === ".css") {
+      return localStylesheetResolution(
+        request.root,
+        host,
+        specifier,
+        containingFile,
+      );
+    }
+    return typescript.resolveModuleName(
       specifier,
       containingFile,
       RESOLUTION_OPTIONS,
       host,
       cache,
     ).resolvedModule;
+  };
   const facts = [];
   const analyzed = [];
   const unsupportedPaths = [];

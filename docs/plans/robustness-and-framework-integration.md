@@ -1,6 +1,6 @@
 # Code Polishy robustness and framework integration
 
-Status: proposed implementation plan. No implementation or release is authorized by this document.
+Status: implementation in progress on `beta`. Publishing and downstream upgrades are separate delivery operations.
 
 ## Outcome and boundaries
 
@@ -12,7 +12,7 @@ The development branch is `beta`. Stable releases and other repositories' exact 
 
 ## Assessed baseline
 
-The intended implementation baseline is `v0.24.10`, source commit `754d8d1b87b4aad6147368230fc509f8c278f2d1`. The current `beta` source remains based on `v0.24.8`, commit `2f897bc7f3c4df0d270305309ad9a4a8bc66c527`; later planning commits do not integrate 0.24.10. Both source snapshots lock repository governance to Code Polishy `0.24.2`, digest `faff6137fcd6993b4e6779628fce2a68e1c71ca07cd677b303ed5deca84e51df`. Source version and governing release are separate identities.
+The architectural assessment used `v0.24.10`, source commit `754d8d1b87b4aad6147368230fc509f8c278f2d1`. The implementation baseline is `v0.24.11`, source commit `7d99b3a829fd26539fcc430875004b6a84e9952e`, now integrated into `beta`; it also preserves the upstream TypedDict dead-code correction. Both source snapshots lock repository governance to Code Polishy `0.24.2`, digest `faff6137fcd6993b4e6779628fce2a68e1c71ca07cd677b303ed5deca84e51df`. Source version and governing release are separate identities.
 
 Version 0.24.9 already adds local execution timings, scope counts, cache diagnostics, bounded focused Python checks, and type-only cycle handling. Version 0.24.10 changes file-length defaults to a review warning at 1,000 physical lines and a blocking maximum above 2,500; stricter configured limits remain effective. Function-complexity limits have not changed. Preserve these improvements without creating a second implementation.
 
@@ -37,7 +37,7 @@ The three reports under `docs/issues/` are historical evidence, including observ
 
 Before source implementation, restore the exact governing release if necessary, read its `agent-workflows`, and capture the original implementation request at the clean task base through the supported intent-capture command. This planning-only change does not itself require non-documentation intent capture.
 
-Integrate `v0.24.10` into `beta` while preserving unrelated work. The local `main` branch is older than `origin/main`; resolve the explicit release commit rather than assuming local `main` is current. A clean integration requires no tests. A manually resolved source conflict requires one affected exact test; a prose-only conflict follows the Markdown rule.
+Integrate the verified stable baseline into `beta` while preserving unrelated work. The local `main` branch is older than `origin/main`; resolve the explicit release commit rather than assuming local `main` is current. A clean integration requires no tests. A manually resolved source conflict requires one affected exact test; a prose-only conflict follows the Markdown rule.
 
 Record the resulting source base separately from the governing lock. Installations and future prerelease versions must preserve exact per-repository release identity. Publishing and changing downstream locks are separate caller-authorized delivery operations.
 
@@ -153,7 +153,7 @@ Acceptance: each chosen improvement has a concrete before/after interaction and 
 
 Code Polishy's responsibility is to analyze and polish code, identify defects, and report trustworthy check results. Application observability belongs with established libraries and services. Encourage projects to use those tools for dashboards, remote telemetry, aggregate analytics, and tracing. These capabilities are outside Code Polishy's product scope; this plan contains no observability implementation, exporter, integration-hook, or future-phase work.
 
-Local check findings, failure diagnostics, and execution evidence remain part of reliable code analysis. Reuse the existing reports to explain what was checked and why analysis failed or remained incomplete. A tool exit and the validated semantic result remain distinct. Missing or malformed required analysis evidence still fails closed.
+Preserve existing released functionality. The product boundary limits new observability work; it does not remove existing features. Local check findings, failure diagnostics, and execution evidence remain part of reliable code analysis. Reuse the existing reports to explain what was checked and why analysis failed or remained incomplete. A tool exit and the validated semantic result remain distinct. Missing or malformed required analysis evidence still fails closed.
 
 This delivery also excludes a new event journal, a report-explorer product, a new AI acceptance system, complete extraction of built-in languages, a marketplace/catalog, a generalized pack lifecycle/scaffolder, a sandbox program, and a broad performance or complexity-policy redesign.
 

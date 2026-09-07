@@ -72,7 +72,7 @@ const (
 	conditionTrue
 )
 
-func Parse(path string, data []byte) (Facts, error) {
+func Parse(path string, data, configuration []byte) (Facts, error) {
 	if len(data) > MaximumInputBytes {
 		return Facts{}, fmt.Errorf("workflow exceeds the %d byte limit", MaximumInputBytes)
 	}
@@ -86,7 +86,11 @@ func Parse(path string, data []byte) (Facts, error) {
 	if parsed == nil {
 		return Facts{}, errors.New("actionlint returned no workflow facts")
 	}
-	if diagnostics, err := semanticDiagnostics(path, parsed); err != nil {
+	config, err := parseConfiguration(configuration)
+	if err != nil {
+		return Facts{}, err
+	}
+	if diagnostics, err := semanticDiagnostics(path, parsed, config); err != nil {
 		return Facts{}, err
 	} else if len(diagnostics) > 0 {
 		return Facts{}, diagnosticError(diagnostics)
@@ -105,7 +109,7 @@ func Parse(path string, data []byte) (Facts, error) {
 	return facts, nil
 }
 
-func semanticDiagnostics(path string, parsed *actionlint.Workflow) ([]*actionlint.Error, error) {
+func semanticDiagnostics(path string, parsed *actionlint.Workflow, config *actionlint.Config) ([]*actionlint.Error, error) {
 	actions := actionlint.NewLocalActionsCache(nil, nil)
 	workflows := actionlint.NewLocalReusableWorkflowCache(nil, "", nil)
 	rules := []actionlint.Rule{
@@ -127,6 +131,7 @@ func semanticDiagnostics(path string, parsed *actionlint.Workflow) ([]*actionlin
 	}
 	visitor := actionlint.NewVisitor()
 	for _, rule := range rules {
+		rule.SetConfig(config)
 		visitor.AddPass(rule)
 	}
 	if err := visitor.Visit(parsed); err != nil {

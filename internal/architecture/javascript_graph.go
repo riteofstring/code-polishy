@@ -193,8 +193,10 @@ func javascriptGraphEdges(
 }
 
 func javascriptMissingGraphTarget(repo repository.Repository, governed map[string]bool, fact javascript.ImportFact) bool {
-	return governed[fact.Resolved] && repo.IsExecutableSource(fact.Resolved) ||
-		!installedPackage(fact.Resolved) && javascriptLocalSpecifier(fact.Specifier)
+	if governed[fact.Resolved] {
+		return repo.IsExecutableSource(fact.Resolved)
+	}
+	return !installedPackage(fact.Resolved) && javascriptLocalSpecifier(fact.Specifier)
 }
 
 func javascriptLocalSpecifier(specifier string) bool {
