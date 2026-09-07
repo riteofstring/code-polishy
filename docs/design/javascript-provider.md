@@ -44,3 +44,9 @@ Type checking enables actual JavaScript analysis for claimed JS inputs and repor
 project exclusions as incomplete coverage. Node builtins and exported package
 stylesheets resolve from metadata and contained files without executing target
 package entrypoints.
+
+Embedded CSS block comments are tokenized with the pinned CSS language service
+scanner and mapped back to the original framework source. Strings remain data;
+unterminated strings or comments and unsupported stylesheet languages remain
+incomplete. This retains the core's comment policy without adding a framework
+parser to the engine.

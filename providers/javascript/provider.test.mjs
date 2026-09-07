@@ -274,3 +274,33 @@ test("React peer and optional dependencies preserve native rule activation", () 
     rmSync(root, { recursive: true });
   }
 });
+
+test("embedded CSS comments remain original-source facts without treating strings as comments", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-style-"));
+  try {
+    mkdirSync(join(root, "node_modules/astro"), { recursive: true });
+    writeFileSync(
+      join(root, "package.json"),
+      '{"dependencies":{"astro":"7.2.4"}}',
+    );
+    writeFileSync(
+      join(root, "node_modules/astro/package.json"),
+      '{"version":"7.2.4"}',
+    );
+    writeFileSync(
+      join(root, "page.astro"),
+      '<h1>Olá</h1>\n<style>\n/* top */ a/* selector */ { color: /* value */red; content: "/* literal */"; }\n</style>\n',
+    );
+    const result = analyze(requestFor(root, ["page.astro"], "lint"));
+    assert.equal(result.status, "pass", JSON.stringify(result));
+    assert.deepEqual(
+      result.facts.comments.map((fact) => fact.raw),
+      ["/* top */", "/* selector */", "/* value */"],
+    );
+    assert.ok(
+      result.facts.comments.every((fact) => fact.line === 3 && fact.complete),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});

@@ -7,6 +7,7 @@ import astroParser from "astro-eslint-parser";
 import tsParser from "@typescript-eslint/parser";
 import * as prettierPlugin from "prettier-plugin-astro";
 
+import { cssComments } from "../css.mjs";
 import { parseJavaScript, walk } from "../ast.mjs";
 
 export const astro = {
@@ -24,12 +25,13 @@ export const astro = {
       sourceType: "module",
     });
     const scripts = [];
+    const comments = [];
     walk(parsed.ast, parsed.visitorKeys, (node) => {
-      if (
-        node.type !== "JSXElement" ||
-        node.openingElement.name?.name !== "script"
-      )
+      if (elementNamed(node, "style")) {
+        comments.push(...styleComments(node, source));
         return;
+      }
+      if (!elementNamed(node, "script")) return;
       if (!executableScript(node)) return;
       for (const child of node.children) {
         if (child.type !== "AstroRawText" && child.type !== "JSXText")
@@ -44,7 +46,7 @@ export const astro = {
         });
       }
     });
-    return { parsed, scripts };
+    return { parsed, scripts, comments };
   },
 };
 
@@ -143,4 +145,28 @@ function frameworkSourceRoot(analysis, root) {
 
 export function astroDeclaration(owner) {
   return owner?.data.dependencies?.astro ?? owner?.data.devDependencies?.astro;
+}
+
+function styleComments(node, source) {
+  const language = node.openingElement.attributes.find(
+    (attribute) => attribute.name?.name === "lang",
+  );
+  if (language && language.value?.value !== "css")
+    throw new Error("embedded stylesheet language is not supported");
+  const comments = [];
+  for (const child of node.children) {
+    if (!["AstroRawText", "JSXText"].includes(child.type))
+      throw new Error("embedded stylesheet has an unsupported source mapping");
+    comments.push(
+      ...cssComments(
+        source.slice(child.range[0], child.range[1]),
+        child.range[0],
+      ),
+    );
+  }
+  return comments;
+}
+
+function elementNamed(node, name) {
+  return node.type === "JSXElement" && node.openingElement.name?.name === name;
 }

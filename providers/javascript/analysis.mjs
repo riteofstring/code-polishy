@@ -56,8 +56,8 @@ async function format(analysis, path, adapter) {
 
 function analyzeFile(analysis, path, adapter, facts) {
   const source = analysis.read(path);
-  const { parsed, scripts } = adapter.parse(source, path);
-  const collected = sourceFacts(analysis, path, parsed);
+  const { parsed, scripts, comments = [] } = adapter.parse(source, path);
+  const collected = sourceFacts(analysis, path, parsed, 0, comments);
   collectMetricsAndScripts(analysis, path, { parsed, scripts, collected });
   const capability = analysis.request.capability;
   if (capability === "lint") {

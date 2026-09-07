@@ -53,6 +53,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vscode-css-languageservice:
+        specifier: 6.3.10
+        version: 6.3.10
       vscode-uri:
         specifier: 3.1.0
         version: 3.1.0

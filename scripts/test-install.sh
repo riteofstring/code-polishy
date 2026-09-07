@@ -286,7 +286,7 @@ EOF
 }
 EOF
   for bundle_source_file in pnpm-lock.yaml pnpm-workspace.yaml .npmrc runner.mjs \
-    protocol.mjs audit.mjs deadcode.mjs imports.mjs gitlab.mjs licenses.mjs packages.mjs; do
+    policy.mjs protocol.mjs audit.mjs deadcode.mjs imports.mjs gitlab.mjs licenses.mjs packages.mjs; do
     printf '// disposable %s\n' "${bundle_source_file}" \
       >"${source_root}/tools/javascript/${bundle_source_file}"
   done

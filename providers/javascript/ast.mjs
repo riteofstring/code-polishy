@@ -28,11 +28,23 @@ export function walk(ast, keys, enter, leave = () => {}) {
   visit(ast, null, 0);
 }
 
-export function sourceFacts(analysis, path, parsed, offset = 0) {
+export function sourceFacts(
+  analysis,
+  path,
+  parsed,
+  offset = 0,
+  extraComments = [],
+) {
   const source = analysis.read(path);
   const imports = [],
     functions = [];
-  const comments = sourceComments(analysis, path, parsed, offset);
+  const comments = sourceComments(
+    analysis,
+    path,
+    parsed,
+    offset,
+    extraComments,
+  );
   walk(parsed.ast, parsed.visitorKeys, (node, parent) => {
     if (node.type === "AstroHTMLComment")
       comments.push({
@@ -123,11 +135,14 @@ function literalReference(node, kind) {
   return { specifier: node.value, kind };
 }
 
-function sourceComments(analysis, path, parsed, offset) {
+function sourceComments(analysis, path, parsed, offset, extraComments) {
   const source = analysis.read(path);
   const comments = [];
   const firstToken = parsed.ast.tokens?.[0]?.range[0] ?? source.length;
-  for (const [index, comment] of (parsed.ast.comments ?? []).entries()) {
+  for (const [index, comment] of [
+    ...(parsed.ast.comments ?? []),
+    ...extraComments,
+  ].entries()) {
     const start = offset + comment.range[0];
     comments.push({
       path,
