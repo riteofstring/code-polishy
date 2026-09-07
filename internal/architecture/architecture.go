@@ -42,7 +42,7 @@ func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected
 		providers,
 		goSourceGraph(repo, nativeSelected, allFiles, goInventory),
 		javascriptSourceGraph(ctx, repo, nativeSelected, allFiles),
-		pythonSourceGraph(ctx, repo, repo.NativeAnalysisFiles(nativeSelected, "architecture", ""), allFiles, commandRunner),
+		pythonSourceGraph(ctx, repo, nativeSelected, allFiles, commandRunner),
 	)
 	connectProviderImports(repo, allFiles, &part)
 	if !part.incomplete {

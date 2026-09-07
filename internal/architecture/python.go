@@ -154,7 +154,7 @@ func pythonSources(repo repository.Repository, selected []string) []string {
 		}
 	}
 	for _, source := range candidates {
-		if repo.Language(source) != "python" || seen[source] {
+		if repo.Language(source) != "python" || seen[source] || !repo.NativeAnalysis(source, "architecture") {
 			continue
 		}
 		seen[source] = true

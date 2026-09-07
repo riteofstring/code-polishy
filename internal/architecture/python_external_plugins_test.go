@@ -43,7 +43,7 @@ func TestDeclaredPythonExternalPluginRejectsStaleSourceAndDependencyEvidence(t *
 }
 
 func TestPythonExternalPluginSelectionRetainsOnlyItsConsumerProject(t *testing.T) {
-	repo, _ := externalArchitectureFixture(t, false)
+	repo, runner := externalArchitectureFixture(t, false)
 	for _, selected := range [][]string{nil, {"AGENTS.md"}, {"README.md"}, {"other.go"}} {
 		if commands := PythonGraphCommands(repo, selected); len(commands) != 0 {
 			t.Fatalf("unrelated selection started plug-in analysis: %+v", commands)
@@ -52,6 +52,10 @@ func TestPythonExternalPluginSelectionRetainsOnlyItsConsumerProject(t *testing.T
 	for _, selected := range [][]string{{"src/app/loader.py"}, {"uv.lock"}, {"pyproject.toml"}, {policy.ConfigFilename}} {
 		if commands := PythonGraphCommands(repo, selected); len(commands) != 2 {
 			t.Fatalf("selected plug-in input did not select its project: %+v", commands)
+		}
+		analysis := AnalyzeWithRunner(t.Context(), repo, selected, runner)
+		if analysis.Graph == nil || len(analysis.Findings) != 0 || len(analysis.Graph.External) != 1 {
+			t.Fatalf("selected plug-in input %v lost its external composition: %+v", selected, analysis)
 		}
 	}
 }

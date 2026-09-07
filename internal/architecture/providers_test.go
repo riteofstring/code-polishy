@@ -17,7 +17,7 @@ import (
 )
 
 func TestProviderImportsParticipateInNativeGraphAndModulePolicy(t *testing.T) {
-	repo := providerGraphRepository(t)
+	repo := providerGraphRepository(t, "foreign")
 	boundary := providerGraphRunner{}
 	result := AnalyzeWithRunner(t.Context(), repo, []string{"foreign/main.fixture"}, boundary)
 	if result.Graph == nil {
@@ -48,7 +48,16 @@ func TestProviderImportsParticipateInNativeGraphAndModulePolicy(t *testing.T) {
 	}
 }
 
-func providerGraphRepository(t *testing.T) repository.Repository {
+func TestProviderOwnedPythonDoesNotRequireANativeProject(t *testing.T) {
+	repo := providerGraphRepository(t, "python")
+	repo.Config.Modules[0].DependsOn = []string{"native"}
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"foreign/main.fixture"}, providerGraphRunner{})
+	if analysis.Graph == nil || len(analysis.Findings) != 0 {
+		t.Fatalf("provider-owned Python acquired native project requirements: %+v", analysis)
+	}
+}
+
+func providerGraphRepository(t *testing.T, language string) repository.Repository {
 	t.Helper()
 	root, source, store := t.TempDir(), t.TempDir(), t.TempDir()
 	t.Cleanup(func() {
@@ -72,7 +81,7 @@ func providerGraphRepository(t *testing.T) repository.Repository {
 	writeArchitectureFile(t, source, "bin/analyze", "fixture analyzer entry\n")
 	writeArchitectureFile(t, source, "fixtures/pass/main.fixture", "valid\n")
 	writeArchitectureFile(t, source, "fixtures/fail/main.fixture", "invalid\n")
-	manifest := fmt.Sprintf(`{"manifestVersion":2,"protocolVersion":2,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":"foreign","sourcePatterns":["**/*.fixture"]}],"commands":[{"name":"analyze","argv":["bin/analyze"],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform())
+	manifest := fmt.Sprintf(`{"manifestVersion":2,"protocolVersion":2,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"]}],"commands":[{"name":"analyze","argv":["bin/analyze"],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language)
 	writeArchitectureFile(t, source, pack.ManifestFilename, manifest)
 	identity, _, err := pack.Install(source, store)
 	if err != nil {
