@@ -62,14 +62,10 @@ function analyzeFile(analysis, path, adapter, facts) {
     comments = [],
     references = [],
   } = adapter.parse(source, path);
-  const collected = sourceFacts(
-    analysis,
-    path,
-    parsed,
-    0,
+  const collected = sourceFacts(analysis, path, parsed, {
     comments,
     references,
-  );
+  });
   collectMetricsAndScripts(analysis, path, { parsed, scripts, collected });
   const capability = analysis.request.capability;
   if (capability === "lint") {
@@ -173,7 +169,9 @@ function collectMetricsAndScripts(
   if (analysis.request.capability === "complexity")
     collected.functions = functionMetrics(analysis, path, parsed);
   for (const script of scripts) {
-    const nested = sourceFacts(analysis, path, script.parsed, script.offset);
+    const nested = sourceFacts(analysis, path, script.parsed, {
+      offset: script.offset,
+    });
     if (analysis.request.capability === "complexity")
       nested.functions = functionMetrics(
         analysis,

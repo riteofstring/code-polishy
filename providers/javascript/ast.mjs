@@ -32,9 +32,7 @@ export function sourceFacts(
   analysis,
   path,
   parsed,
-  offset = 0,
-  extraComments = [],
-  references = [],
+  { offset = 0, comments: extraComments = [], references = [] } = {},
 ) {
   const source = analysis.read(path);
   const imports = [],
@@ -95,14 +93,8 @@ function importReference(node) {
     return declarationReference(node);
   }
   if (isModuleGlob(node)) return globReference(node);
-  if (
-    node.type === "TSImportEqualsDeclaration" &&
-    node.moduleReference.type === "TSExternalModuleReference"
-  )
-    return literalReference(
-      node.moduleReference.expression,
-      node.importKind === "type" ? "type-only" : "runtime",
-    );
+  if (node.type === "TSImportEqualsDeclaration")
+    return importEqualsReference(node);
   if (node.type === "TSImportType")
     return literalReference(
       node.argument.type === "TSLiteralType"
@@ -114,6 +106,14 @@ function importReference(node) {
     return literalReference(node.source, "proven-dynamic");
   if (isRequire(node)) return literalReference(node.arguments[0], "runtime");
   return null;
+}
+
+function importEqualsReference(node) {
+  if (node.moduleReference.type !== "TSExternalModuleReference") return null;
+  return literalReference(
+    node.moduleReference.expression,
+    node.importKind === "type" ? "type-only" : "runtime",
+  );
 }
 
 function isModuleGlob(node) {
