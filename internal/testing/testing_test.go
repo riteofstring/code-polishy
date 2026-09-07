@@ -527,7 +527,7 @@ func TestRepositoryPolicySelectsOwningModuleToolingContracts(t *testing.T) {
 	toolingSuites := []string{
 		"mutation-wrapper-contract", "install-contract", "release-preflight-contract",
 		"javascript-runtime-contract", "javascript-bundle-contract", "javascript-runner-contract",
-		"javascript-project-contract", "installed-release-contract",
+		"javascript-project-contract", "installed-release-contract", "javascript-provider-boundary",
 	}
 
 	tests := []struct {
