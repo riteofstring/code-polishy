@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.24.11 - 2026-09-06
+
+- Treat semantically resolved TypedDict fields as structural schema members in
+  Python dead-code analysis while retaining findings for unused schema classes
+  and ordinary annotated attributes.
+
+## 0.24.10 - 2026-09-06
+
+- Treat code-file length as a review signal at 1,000 physical lines and a
+  blocking backstop above 2,500 lines. Keep both thresholds lowerable and
+  require exact owned, justified, expiring exceptions above the shared maximum.
+- Remediate long files by reviewing behavioral and dependency cohesion instead
+  of demanding arbitrary splits or forwarding-only fragments.
+
+## 0.24.9 - 2026-09-06
+
+- Compile the bounded path-pattern grammar once and cache immutable repository
+  classification facts after policy composition. Selected checks and Markdown
+  formatting retain required global coverage without repeatedly rebuilding the
+  same language, generated, test, and ownership facts.
+- Record total evaluation and phase durations, exact analyzer subprocess
+  durations and arguments, resource wait, requested and expanded scope, graph
+  size, cache activity, and Vulture subphase timings in structured reports and
+  verbose human output.
+- Run repository-wide Python dead-code analysis only for explicit complete
+  selections and merge gates. Focused checks retain Ruff and ty, while Vulture
+  walks reuse exact ancestry results and scan framework contracts only
+  where diagnostics are requested.
+- Preserve imports guarded by `TYPE_CHECKING` as type-only graph edges and
+  exclude them from runtime dependency-cycle findings.
+
 ## 0.24.8 - 2026-09-06
 
 - Run Python architecture checks directly from the pinned Ruff dependency graph

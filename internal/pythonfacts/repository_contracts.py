@@ -8,8 +8,8 @@ __all__ = ["framework_members"]
 
 
 class _ContractVisitor(_FrameworkVisitor):
-    def __init__(self, resolver, source, contract):
-        super().__init__(resolver, source)
+    def __init__(self, resolver, source, contract, writes):
+        super().__init__(resolver, source, writes)
         self.contract = contract
         self.roots = {contract["target"]}
 
@@ -147,68 +147,55 @@ class _ContractVisitor(_FrameworkVisitor):
         self.generic_visit(node)
 
 
-def declared_members(resolver, sources, contracts):
+def declared_members(resolver, sources, contracts, writes, require_match):
     kept = set()
     problems = []
     resolved = []
     for contract in contracts:
         try:
-            found = contract_members(resolver, sources, contract)
-            if not found:
+            found = contract_members(resolver, sources, contract, writes)
+            if not found and require_match:
                 raise ValueError("contract matches no source definitions")
             kept.update(found)
-            resolved.append(contract["id"])
+            if require_match:
+                resolved.append(contract["id"])
         except (ValueError, TypeError, *resolver.ancestry.errors) as error:
-            problems.append({"id": contract["id"], "message": str(error)[:4096]})
+            if require_match:
+                problems.append({"id": contract["id"], "message": str(error)[:4096]})
     return kept, resolved, problems
 
 
-def contract_members(resolver, sources, contract):
+def contract_members(resolver, sources, contract, writes):
     if contract["kind"] == "entry-point":
         return resolver.ancestry.entry_point(
             contract["target"], contract.get("members", [])
         )
     kept = set()
     for source in sources:
-        visitor = _ContractVisitor(resolver, source, contract)
+        visitor = _ContractVisitor(resolver, source, contract, writes[source["path"]])
         visitor.visit(source["tree"])
         kept.update(visitor.kept)
     return kept
 
 
-_BUILTINS = (
-    {"kind": "decorator", "target": "pytest.fixture", "keywords": {"autouse": True}},
-    {"kind": "module-binding", "target": "pytest.mark", "members": ["pytestmark"]},
-    {
-        "kind": "type",
-        "target": "socketserver.ThreadingMixIn",
-        "attributes": ["daemon_threads"],
-    },
-    {
-        "kind": "type",
-        "target": "http.server.BaseHTTPRequestHandler",
-        "attributes": ["close_connection"],
-    },
-)
-
-
-def builtin_members(resolver, sources):
-    kept = set()
-    for contract in _BUILTINS:
-        kept.update(contract_members(resolver, sources, contract))
-    return kept
-
-
-def framework_members(modules, sources, contracts):
+def framework_members(modules, sources, targets, contracts, require_contracts):
     resolver = _FrameworkResolver(modules)
     kept = set()
     with _AstroidContracts(resolver, sources, contracts) as ancestry:
         resolver.ancestry = ancestry
-        for source in sources:
+        writes = {}
+        for source in targets:
             visitor = _FrameworkVisitor(resolver, source)
             visitor.visit(source["tree"])
             kept.update(visitor.kept)
-        kept.update(builtin_members(resolver, sources))
-        declared, resolved, problems = declared_members(resolver, sources, contracts)
+            writes[source["path"]] = visitor.writes
+        contract_sources = sources if require_contracts else targets
+        if contracts:
+            for source in contract_sources:
+                if source["path"] not in writes:
+                    writes[source["path"]] = _FrameworkVisitor(resolver, source).writes
+        declared, resolved, problems = declared_members(
+            resolver, contract_sources, contracts, writes, require_contracts
+        )
         kept.update(declared)
     return kept, resolved, problems

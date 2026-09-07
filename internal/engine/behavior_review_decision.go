@@ -127,8 +127,7 @@ func (engine *Engine) buildBehaviorReviewDecisionInput(
 		return behaviorReviewDecisionInput{}, err
 	}
 	candidateImpact := engine.Repository.CandidateImpact(selection.Candidate)
-	baseRepository := engine.Repository
-	baseRepository.Config = baseConfig
+	baseRepository := engine.Repository.WithConfig(baseConfig)
 	baseImpact := baseRepository.CandidateImpact(selection.Candidate)
 	features := behaviorReviewFeatureRequirements(
 		engine.Repository.Config, baseConfig, candidateImpact, baseImpact, boundary, requirements.RequestedFeatures,

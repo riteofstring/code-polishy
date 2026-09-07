@@ -33,10 +33,11 @@ def consume(options: Options):
 			t.Fatalf("consumed field %s reported dead: %+v", name, response.Diagnostics)
 		}
 	}
-	for _, test := range []struct{ path, name string }{{"src/models.py", "unused"}, {"src/unrelated.py", "unread_value"}} {
-		if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Path == test.path && d.Name == test.name }) {
-			t.Fatalf("lost unconsumed %s: %+v", test.name, response.Diagnostics)
-		}
+	if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Path == "src/models.py" && d.Name == "unused" }) {
+		t.Fatalf("TypedDict schema field reported dead: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Path == "src/unrelated.py" && d.Name == "unread_value" }) {
+		t.Fatalf("lost unrelated dead code: %+v", response.Diagnostics)
 	}
 	findings := pythonVultureFindings(repo, project, output)
 	if slices.ContainsFunc(findings, func(f policy.Finding) bool { return f.Check == "architecture.pythonFactsCoverage" }) {

@@ -40,6 +40,24 @@ func TestSourceChecksUseSeparateTestLengthBudget(t *testing.T) {
 	}
 }
 
+func TestSourceChecksWarnAtReviewThresholdAndFailAboveMaximum(t *testing.T) {
+	t.Parallel()
+	repo := qualityRepository(t)
+	repo.Config.Quality.ReviewFileLines = 3
+	repo.Config.Quality.MaxFileLines = 4
+	path := "internal/sample/file.go"
+	writeQualityFile(t, repo.Root, path, "package sample\n\n\n")
+	findings := sourceChecks(repo, []string{path})
+	if len(findings) != 1 || findings[0].Check != "quality.fileLength" || findings[0].Severity != policy.FindingWarning {
+		t.Fatalf("review findings = %+v", findings)
+	}
+	writeQualityFile(t, repo.Root, path, "package sample\n\n\n\n\n")
+	findings = sourceChecks(repo, []string{path})
+	if len(findings) != 1 || findings[0].Check != "quality.fileLength" || findings[0].Severity == policy.FindingWarning {
+		t.Fatalf("maximum findings = %+v", findings)
+	}
+}
+
 func TestFileLengthCountsFinalLineWithoutNewline(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
@@ -474,7 +492,7 @@ func qualityRepository(t *testing.T) repository.Repository {
 	allowComments := false
 	config := policy.Config{
 		Project: policy.Project{Kind: "content"},
-		Quality: policy.Quality{MaxFileLines: policy.MaxFileLines, MaxTestFileLines: policy.MaxTestFileLines, Complexity: policy.Complexity{Go: policy.MaxGoComplexity, GoTest: policy.MaxGoTestComplexity}, AllowComments: &allowComments},
+		Quality: policy.Quality{ReviewFileLines: policy.ReviewFileLines, ReviewTestFileLines: policy.ReviewTestFileLines, MaxFileLines: policy.MaxFileLines, MaxTestFileLines: policy.MaxTestFileLines, Complexity: policy.Complexity{Go: policy.MaxGoComplexity, GoTest: policy.MaxGoTestComplexity}, AllowComments: &allowComments},
 	}
 	return repository.Repository{Root: root, Config: config}
 }

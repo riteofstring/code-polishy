@@ -25,6 +25,13 @@ func (repo Repository) WithDynamicControlInputs(paths []string) (Repository, err
 }
 
 func (repo Repository) IsControlInput(path string) bool {
+	if repo.pathFactCache != nil {
+		return cachedPathFact(repo.pathFactCache, &repo.pathFactCache.controlInputs, path, cloneBool, func() bool { return repo.computeIsControlInput(path) })
+	}
+	return repo.computeIsControlInput(path)
+}
+
+func (repo Repository) computeIsControlInput(path string) bool {
 	return policy.IsSensitiveControlInput(path) || repo.isDynamicControlInput(path)
 }
 

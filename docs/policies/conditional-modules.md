@@ -78,20 +78,17 @@ architecture provider. Build semantics remain project-specific.
 ### Vulture
 
 The same Python inventory invokes policy-owned Vulture `2.16` as the sole
-Python `dead-code` provider during `check` and `gate`. It analyzes the full
-governed contained project at fixed 60% confidence through carried CPython
-`3.12.13+20260728` from python-build-standalone; it does not use a target or
-ambient Python interpreter, and target Vulture configuration is ignored.
+Python `dead-code` provider for `check --all` and merge gates. It analyzes the
+applicable governed contained project at fixed 60% confidence through carried
+CPython `3.12.13+20260728`; it does not use a target or ambient Python
+interpreter, and target Vulture configuration is ignored.
 
-A file selection activates Python analysis through selected Python source or
-an exact selected Python project input. Selecting the policy configuration
-validates its declared Python references and external attributes in their
-named projects. Those declarations alone do not activate Python analysis for
-unrelated files: `code-polishy check --files AGENTS.md` runs the selected
-guidance checks without starting Python facts or dead-code analysis. When
-Python analysis applies, Vulture retains the full governed context of each
-selected project; unrelated projects and their declarations stay outside that
-context. Repository-wide checks select their complete inputs explicitly.
+A file selection activates selected-file Ruff and ty analysis through Python
+source or an exact Python project input. It does not activate repository-wide
+dead-code reachability. Selecting unrelated guidance or configuration likewise
+does not start Vulture. Merge and complete checks validate Python references,
+external attributes, and dead code across each selected project; unrelated
+projects remain outside that context.
 
 PEP 621 `project.scripts`, `project.gui-scripts`, and every
 `project.entry-points.*` table infer reachable module symbols. In-tree PEP 517

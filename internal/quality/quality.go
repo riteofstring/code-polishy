@@ -30,7 +30,7 @@ func Check(ctx context.Context, repo repository.Repository, selection repository
 	findings = append(findings, JavaScriptLintFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptTypeCheckFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptDeadCodeFindings(ctx, repo, selection.Files)...)
-	findings = append(findings, PythonQualityFindings(ctx, repo, selection.Files, commandRunner)...)
+	findings = append(findings, pythonQualityFindingsForSelection(ctx, repo, selection, commandRunner, profile)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")
@@ -51,7 +51,7 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
-	commands = append(commands, pythonQualityCommands(repo, selection.Files)...)
+	commands = append(commands, pythonQualityCommandsForSelection(repo, selection, profile)...)
 	profiles := []string{profile}
 	if profile == "gate" {
 		profiles = append(profiles, "check")
@@ -541,12 +541,16 @@ func checkTextFile(repo repository.Repository, path string) []policy.Finding {
 	if len(data) > 0 && data[len(data)-1] != '\n' {
 		lineCount++
 	}
+	reviewAt := repo.Config.Quality.ReviewFileLines
 	limit := repo.Config.Quality.MaxFileLines
 	if repo.IsTest(path) {
+		reviewAt = repo.Config.Quality.ReviewTestFileLines
 		limit = repo.Config.Quality.MaxTestFileLines
 	}
 	if lineCount > limit {
-		findings = append(findings, policy.Finding{Check: "quality.fileLength", Path: path, Subject: strconv.Itoa(lineCount), Message: fmt.Sprintf("file has %d lines; maximum is %d", lineCount, limit)})
+		findings = append(findings, policy.Finding{Check: "quality.fileLength", Path: path, Subject: strconv.Itoa(lineCount), Message: fmt.Sprintf("file has %d physical lines; blocking maximum is %d", lineCount, limit)})
+	} else if lineCount >= reviewAt {
+		findings = append(findings, policy.Finding{Check: "quality.fileLength", Path: path, Subject: strconv.Itoa(lineCount), Message: fmt.Sprintf("file has %d physical lines; review threshold is %d and blocking maximum is %d", lineCount, reviewAt, limit), Severity: policy.FindingWarning})
 	}
 	return findings
 }

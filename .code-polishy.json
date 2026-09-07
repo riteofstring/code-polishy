@@ -56,6 +56,7 @@
           "internal/quality/vulture_contracts.go",
           "internal/pythonfacts/connection_flow.py",
           "internal/quality/vulture.go",
+          "internal/quality/vulture_response.go",
           "internal/repository/python_plugins.go",
           "internal/repository/python_distribution_sources.go",
           "internal/repository/python_distribution_origin.go",
@@ -94,6 +95,24 @@
           "internal/policy/review_snapshot.go",
           "internal/engine/behavior_review_decision.go",
           "internal/engine/merge_gate.go"
+        ]
+      },
+      {
+        "path": "docs/design/execution-observability.md",
+        "sourcePaths": [
+          "internal/policy/glob.go",
+          "internal/repository/path_facts.go",
+          "internal/repository/python_project.go",
+          "internal/repository/repository.go",
+          "internal/repository/control_inputs.go",
+          "internal/repository/test_ownership.go",
+          "internal/engine/engine.go",
+          "internal/engine/execution_telemetry.go",
+          "internal/engine/report_model.go",
+          "internal/engine/report_types.go",
+          "internal/engine/format.go",
+          "cmd/code-polishy/main.go",
+          "cmd/code-polishy/report.go"
         ]
       }
     ]
@@ -1489,7 +1508,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1498",
+      "subject": "1517",
       "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

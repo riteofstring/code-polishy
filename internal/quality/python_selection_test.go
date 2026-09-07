@@ -54,11 +54,31 @@ func TestPythonQualityExpandsOnlyTheSelectedProject(t *testing.T) {
 	if !slices.Equal(paths, []string{"src/app.py", "src/second.py"}) {
 		t.Fatalf("Vulture context = %v", paths)
 	}
-	findings := pythonVultureFindings(repo, plan.projects[0].project, pythonVultureOutput(t, paths, []pythonVultureDiagnostic{{
+	if !slices.Equal(request.Targets, []string{"src/app.py"}) {
+		t.Fatalf("Vulture targets = %v", request.Targets)
+	}
+	findings := pythonVultureFindingsForSources(repo, plan.projects[0].project, request.Targets, pythonVultureOutput(t, paths, []pythonVultureDiagnostic{{
 		Path: "src/second.py", Line: 1, End: 2, Name: "second", Kind: "function", Confidence: 60, Message: "unused function 'second'",
 	}}, nil, nil, ""))
-	if len(findings) != 1 || findings[0].Check != "quality.deadCode" || findings[0].Path != "src/second.py" {
-		t.Fatalf("project context finding was lost: %+v", findings)
+	if len(findings) != 1 || findings[0].Check != "quality.deadCodeCoverage" || findings[0].Path != "src/app.py" {
+		t.Fatalf("unselected project diagnostic was accepted: %+v", findings)
+	}
+}
+
+func TestPythonQualityRunsRepositoryDeadCodeOnlyForCompleteSelection(t *testing.T) {
+	t.Parallel()
+	repo := pythonSelectionRepository(t)
+	focused := pythonQualityCommandsForSelection(repo, repository.Selection{Files: []string{"src/app.py"}}, "check")
+	if slices.ContainsFunc(focused, func(command policy.Command) bool { return strings.HasPrefix(command.Name, "policy-vulture-") }) {
+		t.Fatalf("focused command plan includes repository dead-code analysis: %+v", focused)
+	}
+	complete := pythonQualityCommandsForSelection(repo, repository.Selection{Files: []string{"src/app.py"}, All: true}, "check")
+	if !slices.ContainsFunc(complete, func(command policy.Command) bool { return strings.HasPrefix(command.Name, "policy-vulture-") }) {
+		t.Fatalf("complete command plan omits repository dead-code analysis: %+v", complete)
+	}
+	merge := pythonQualityCommandsForSelection(repo, repository.Selection{Files: []string{"src/app.py"}}, "gate")
+	if !slices.ContainsFunc(merge, func(command policy.Command) bool { return strings.HasPrefix(command.Name, "policy-vulture-") }) {
+		t.Fatalf("merge command plan omits selected dead-code analysis: %+v", merge)
 	}
 }
 

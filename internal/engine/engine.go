@@ -35,6 +35,7 @@ type Engine struct {
 	PolicyModuleFindings []policy.Finding
 	PolicyModuleNotes    []string
 	PackDataRoot         string
+	execution            *executionRecorder
 }
 
 func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
@@ -57,6 +58,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 		packResolution = pack.Unavailable(config.Packs, dataRootErr)
 	}
 	pack.Apply(&repo.Config, packResolution)
+	repo = repo.WithPathFactCache()
 	files, err := repo.AllFiles()
 	if err != nil {
 		return nil, err
@@ -67,6 +69,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	}
 	moduleResolution := policymodule.Resolve(repo, files)
 	policymodule.Apply(&repo.Config, moduleResolution)
+	repo = repo.WithPathFactCache()
 
 	pathEntries := repo.CommandEnvironment().PathEntries
 	commandRunner := runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr, PathEntries: pathEntries}
@@ -169,20 +172,36 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 }
 
 func (engine *Engine) Check(ctx context.Context, selection repository.Selection, profile string) Report {
-	findings := engine.coverageFindings()
-	findings = append(findings, quality.Check(ctx, engine.Repository, selection, engine.Runner, profile)...)
-	findings = append(findings, testpolicy.SourceFindings(engine.Repository, selection.Files)...)
-	architectureAnalysis := architecture.AnalyzeWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)
-	findings = append(findings, architectureAnalysis.Findings...)
-	findings = engine.enrichTestOwnership(findings, architectureAnalysis.TestImports)
-	findings = append(findings, supplychain.Static(ctx, engine.Repository, selection.Files)...)
+	findings := []policy.Finding{}
+	engine.executionPhase(ctx, "coverage", func(context.Context) {
+		findings = append(findings, engine.coverageFindings()...)
+	})
+	engine.executionPhase(ctx, "quality", func(phaseContext context.Context) {
+		findings = append(findings, quality.Check(phaseContext, engine.Repository, selection, engine.Runner, profile)...)
+	})
+	engine.executionPhase(ctx, "test-policy", func(context.Context) {
+		findings = append(findings, testpolicy.SourceFindings(engine.Repository, selection.Files)...)
+	})
+	architectureAnalysis := architecture.Analysis{}
+	engine.executionPhase(ctx, "architecture", func(phaseContext context.Context) {
+		architectureAnalysis = architecture.AnalyzeWithRunner(phaseContext, engine.Repository, selection.Files, engine.Runner)
+		findings = append(findings, architectureAnalysis.Findings...)
+		findings = engine.enrichTestOwnership(findings, architectureAnalysis.TestImports)
+	})
+	engine.executionPhase(ctx, "supply-chain", func(phaseContext context.Context) {
+		findings = append(findings, supplychain.Static(phaseContext, engine.Repository, selection.Files)...)
+	})
 	notes := []string{fmt.Sprintf("checked %d files", len(selection.Files))}
 	if len(selection.Candidate.Deleted) > 0 {
 		notes = append(notes, fmt.Sprintf("%d deletions participated in command selection", len(selection.Candidate.Deleted)))
 	}
-	report := engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, selection.Files), notes)
-	report.SourceDependencyGraph = architectureAnalysis.Graph
-	return engine.withSelection(report, selection)
+	report := Report{}
+	engine.executionPhase(ctx, "report-assembly", func(context.Context) {
+		report = engine.finishWithAdvisories(findings, portability.Advisories(engine.Repository, selection.Files), notes)
+		report.SourceDependencyGraph = architectureAnalysis.Graph
+		report = engine.withSelection(report, selection)
+	})
+	return report
 }
 
 func (engine *Engine) CheckChangeAware(ctx context.Context, selection repository.Selection, profile string) Report {

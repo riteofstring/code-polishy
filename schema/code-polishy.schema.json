@@ -443,11 +443,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "maxFileLines": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "reviewFileLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "reviewTestFileLines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "maxFileLines": { "type": "integer", "minimum": 1, "maximum": 2500 },
         "maxTestFileLines": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 1500
+          "maximum": 2500
         },
         "complexity": { "$ref": "#/$defs/complexity" },
         "allowComments": { "type": "boolean", "default": true },

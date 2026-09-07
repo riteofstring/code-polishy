@@ -29,6 +29,8 @@ class _AstroidContracts:
         self.builder = AstroidBuilder(self.manager, apply_transforms=False)
         self.cache = {}
         self.paths = {}
+        self.classes = {}
+        self.derivations = {}
         self.override = patch.object(
             self.manager_type, "ast_from_module_name", self.load
         )
@@ -84,19 +86,32 @@ class _AstroidContracts:
         path, binding = reference
         if binding["kind"] != "class":
             return False
+        key = (
+            path,
+            binding["scope"],
+            binding["name"],
+            binding["site"]["line"],
+            tuple(sorted(roots)),
+        )
+        if key in self.derivations:
+            return self.derivations[key]
         try:
             module = self.load(self.resolver.files[path]["module"])
-            classes = [
-                node
-                for node in module.nodes_of_class(self.class_type)
-                if node.name == binding["name"]
-                and node.lineno == binding["site"]["line"]
-            ]
+            module_classes = self.classes.get(module.name)
+            if module_classes is None:
+                module_classes = {}
+                for node in module.nodes_of_class(self.class_type):
+                    module_classes.setdefault((node.name, node.lineno), []).append(node)
+                self.classes[module.name] = module_classes
+            classes = module_classes.get((binding["name"], binding["site"]["line"]), [])
             if len(classes) != 1:
-                return False
-            return self.has_base(classes[0], roots, set())
+                result = False
+            else:
+                result = self.has_base(classes[0], roots, set())
         except self.errors:
-            return False
+            result = False
+        self.derivations[key] = result
+        return result
 
     def has_base(self, node, roots, seen):
         from astroid import nodes

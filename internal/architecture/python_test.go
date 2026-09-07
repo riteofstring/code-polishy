@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -20,6 +21,7 @@ import (
 
 type pythonGraphRunner struct {
 	outputs     map[string]string
+	runtime     map[string]string
 	diagnostics map[string]string
 	commands    []policy.Command
 	err         error
@@ -35,7 +37,11 @@ func (graphRunner *pythonGraphRunner) RunStructured(_ context.Context, _ string,
 	if graphRunner.err != nil {
 		return runner.Result{}, runner.Output{}, graphRunner.err
 	}
-	output, found := graphRunner.outputs[command.Cwd]
+	outputs := graphRunner.outputs
+	if strings.Contains(strings.Join(command.Argv, "\x00"), "--no-type-checking-imports") && graphRunner.runtime != nil {
+		outputs = graphRunner.runtime
+	}
+	output, found := outputs[command.Cwd]
 	if !found {
 		return runner.Result{}, runner.Output{}, errors.New("no graph output was configured")
 	}
@@ -121,8 +127,10 @@ func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *
 	}}
 	findings := CheckWithRunner(t.Context(), repo, []string{"src/web/app.py"}, graphRunner)
 	assertPythonForbiddenImportFinding(t, findings)
-	command := assertPythonGraphCommand(t, repo, graphRunner.commands)
-	assertPythonGraphCommandIsIsolated(t, repo, command)
+	commands := assertPythonGraphCommands(t, repo, graphRunner.commands)
+	for _, command := range commands {
+		assertPythonGraphCommandIsIsolated(t, repo, command)
+	}
 	assertPythonGraphPlan(t, repo, graphRunner.commands)
 }
 
@@ -147,7 +155,7 @@ dependencies = []
 		".": `{"packages/setta-runtime/tests/test_runtime.py":["packages/setta-runtime/src/setta/runtime.py"]}`,
 	}}
 	findings := CheckWithRunner(t.Context(), repo, []string{"packages/setta-runtime/tests/test_runtime.py"}, graphRunner)
-	if len(findings) != 0 || len(graphRunner.commands) != 1 {
+	if len(findings) != 0 || len(graphRunner.commands) != 2 {
 		t.Fatalf("commands = %+v, findings = %+v", graphRunner.commands, findings)
 	}
 	if !strings.Contains(strings.Join(graphRunner.commands[0].Argv, "\x00"), `src = [".", "packages/setta-runtime", "packages/setta-runtime/src"]`) {
@@ -165,37 +173,41 @@ func assertPythonForbiddenImportFinding(t *testing.T, findings []policy.Finding)
 	}
 }
 
-func assertPythonGraphCommand(t *testing.T, repo repository.Repository, commands []policy.Command) policy.Command {
+func assertPythonGraphCommands(t *testing.T, repo repository.Repository, commands []policy.Command) []policy.Command {
 	t.Helper()
-	if len(commands) != 1 {
+	if len(commands) != 2 {
 		t.Fatalf("commands = %+v", commands)
 	}
-	command := commands[0]
-	checks := []struct {
-		name  string
-		valid bool
-	}{
-		{"working directory", command.Cwd == "."},
-		{"sealed environment", command.SealedEnvironment},
-		{"timeout", command.TimeoutSeconds == 900},
-		{"policy Ruff", command.Argv[0] == repo.PolicyTool("ruff")},
-		{"protocol identity", strings.HasPrefix(command.Name, "ruff-graph-facts-v1-ruff-"+pythonGraphRuffVersion+"-")},
-	}
-	for _, check := range checks {
-		if !check.valid {
-			t.Fatalf("%s command = %+v", check.name, command)
+	for _, command := range commands {
+		checks := []struct {
+			name  string
+			valid bool
+		}{
+			{"working directory", command.Cwd == "."},
+			{"sealed environment", command.SealedEnvironment},
+			{"timeout", command.TimeoutSeconds == 900},
+			{"policy Ruff", command.Argv[0] == repo.PolicyTool("ruff")},
+			{"protocol identity", strings.HasPrefix(command.Name, "ruff-graph-facts-v2-ruff-"+pythonGraphRuffVersion+"-")},
+		}
+		for _, check := range checks {
+			if !check.valid {
+				t.Fatalf("%s command = %+v", check.name, command)
+			}
 		}
 	}
-	return command
+	return commands
 }
 
 func assertPythonGraphCommandIsIsolated(t *testing.T, repo repository.Repository, command policy.Command) {
 	t.Helper()
 	arguments := strings.Join(command.Argv, "\x00")
-	for _, flag := range []string{"--isolated", "--type-checking-imports"} {
-		if !strings.Contains(arguments, flag) {
-			t.Fatalf("missing %s in command = %+v", flag, command)
-		}
+	if !strings.Contains(arguments, "--isolated") {
+		t.Fatalf("missing isolation in command = %+v", command)
+	}
+	complete := strings.Contains(arguments, "--type-checking-imports")
+	runtime := strings.Contains(arguments, "--no-type-checking-imports")
+	if complete == runtime {
+		t.Fatalf("graph relation mode is ambiguous = %+v", command)
 	}
 	for _, expected := range []string{
 		"--target-version\x00py312",
@@ -255,6 +267,29 @@ func TestPythonArchitectureCoversFlatNamespaceRelativeReexportStubTypeAndLiteral
 	}
 }
 
+func TestPythonArchitecturePreservesTypeOnlyEdgesWithoutRuntimeCycles(t *testing.T) {
+	t.Parallel()
+	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"src/**"}}})
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"example\"\nversion = \"0\"\nrequires-python = \"==3.12.*\"\n")
+	writeArchitectureFile(t, repo.Root, "src/a.py", "from src import b\n")
+	writeArchitectureFile(t, repo.Root, "src/b.py", "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from src import a\n")
+	graphRunner := &pythonGraphRunner{
+		outputs: map[string]string{".": `{"src/a.py":["src/b.py"],"src/b.py":["src/a.py"]}`},
+		runtime: map[string]string{".": `{"src/a.py":["src/b.py"],"src/b.py":[]}`},
+	}
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/a.py", "src/b.py"}, graphRunner)
+	if analysis.Graph == nil || len(analysis.Findings) != 0 || len(analysis.Graph.Edges) != 2 {
+		t.Fatalf("analysis = %+v", analysis)
+	}
+	kinds := map[string]sourcegraph.EdgeKind{}
+	for _, edge := range analysis.Graph.Edges {
+		kinds[edge.Source] = edge.Kind
+	}
+	if kinds["src/a.py"] != sourcegraph.EdgeRuntime || kinds["src/b.py"] != sourcegraph.EdgeTypeOnly {
+		t.Fatalf("edge kinds = %+v", kinds)
+	}
+}
+
 func TestPythonArchitectureScopesOverlappingImportsToEachNestedProject(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{
@@ -277,7 +312,7 @@ func TestPythonArchitectureScopesOverlappingImportsToEachNestedProject(t *testin
 	if findings := CheckWithRunner(t.Context(), repo, selected, graphRunner); len(findings) != 0 {
 		t.Fatalf("findings = %+v", findings)
 	}
-	if len(graphRunner.commands) != 2 || graphRunner.commands[0].Cwd != "apps/child" || graphRunner.commands[1].Cwd != "." {
+	if len(graphRunner.commands) != 4 || graphRunner.commands[0].Cwd != "apps/child" || graphRunner.commands[1].Cwd != "apps/child" || graphRunner.commands[2].Cwd != "." || graphRunner.commands[3].Cwd != "." {
 		t.Fatalf("commands = %+v", graphRunner.commands)
 	}
 }

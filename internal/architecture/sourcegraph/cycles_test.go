@@ -17,7 +17,7 @@ func TestCyclicComponentsAreCompleteClassifiedAndDeterministic(t *testing.T) {
 		{Path: "tests/c.ts", Language: "typescript", Test: true, Root: ".", Module: "app", Resolution: "file:tests/c.ts"},
 	}
 	edges := []Edge{
-		{Source: "app/b.ts", Target: "app/a.ts", SourceResolution: "file:app/b.ts", TargetResolution: "file:app/a.ts", Line: 7, Column: 1, Ecosystem: "javascript", Kind: EdgeTypeOnly},
+		{Source: "app/b.ts", Target: "app/a.ts", SourceResolution: "file:app/b.ts", TargetResolution: "file:app/a.ts", Line: 7, Column: 1, Ecosystem: "javascript", Kind: EdgeRuntime},
 		{Source: "app/a.ts", Target: "app/b.ts", SourceResolution: "file:app/a.ts", TargetResolution: "file:app/b.ts", Line: 3, Column: 2, Ecosystem: "javascript", Kind: EdgeRuntime},
 		{Source: "tests/c.ts", Target: "tests/c.ts", SourceResolution: "file:tests/c.ts", TargetResolution: "file:tests/c.ts", Line: 1, Column: 1, Ecosystem: "javascript", Kind: EdgeProvenDynamic},
 	}
@@ -56,6 +56,26 @@ func TestCyclicComponentsAreCompleteClassifiedAndDeterministic(t *testing.T) {
 		return left.Identity == right.Identity && slices.Equal(left.Witness, right.Witness)
 	}) {
 		t.Fatalf("graph or component identity changed with input order")
+	}
+}
+
+func TestTypeOnlyEdgesDoNotFormRuntimeCycles(t *testing.T) {
+	t.Parallel()
+	nodes := []Node{
+		{Path: "src/a.py", Language: "python", Root: ".", Module: "app", Resolution: "file:src/a.py"},
+		{Path: "src/b.py", Language: "python", Root: ".", Module: "app", Resolution: "file:src/b.py"},
+	}
+	edges := []Edge{
+		{Source: "src/a.py", Target: "src/b.py", SourceResolution: "file:src/a.py", TargetResolution: "file:src/b.py", Line: 1, Column: 1, Ecosystem: "python", Kind: EdgeRuntime},
+		{Source: "src/b.py", Target: "src/a.py", SourceResolution: "file:src/b.py", TargetResolution: "file:src/a.py", Line: 2, Column: 1, Ecosystem: "python", Kind: EdgeTypeOnly},
+	}
+	graph, err := New(nodes, edges, []FactInput{graphTestFactInput(".", "src/a.py", "src/b.py")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	components, err := CyclicComponents(graph)
+	if err != nil || len(components) != 0 || len(graph.Edges) != 2 {
+		t.Fatalf("components = %+v, graph = %+v, error = %v", components, graph, err)
 	}
 }
 

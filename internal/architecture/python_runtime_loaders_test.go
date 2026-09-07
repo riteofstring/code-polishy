@@ -52,7 +52,7 @@ func TestPythonRuntimeLoaderIsASelectedDeclarationWithoutProjectFactExpansion(t 
 	if len(analysis.Findings) != 1 || analysis.Findings[0].Severity != policy.FindingInformation || analysis.Findings[0].Subject != "runtime-loader" {
 		t.Fatalf("runtime loader declaration was not reported independently: %+v", analysis.Findings)
 	}
-	if len(runner.commands) != 1 || !slices.Equal(runner.commands[0].Paths, []string{"src/loader.py"}) {
+	if len(runner.commands) != 2 || !slices.Equal(runner.commands[0].Paths, []string{"src/loader.py"}) || !slices.Equal(runner.commands[1].Paths, []string{"src/loader.py"}) {
 		t.Fatalf("focused runtime loader command expanded beyond its consumer: %+v", runner.commands)
 	}
 }

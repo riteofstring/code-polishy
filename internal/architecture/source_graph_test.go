@@ -75,7 +75,7 @@ func TestAllowedModuleProjectionCannotHideJavaScriptSourceCycle(t *testing.T) {
 	repo := javascriptRepository(t, true)
 	repo.Config.Modules[0].DependsOn = []string{"web"}
 	repo.PolicyRoot = fakeImportBundle(t,
-		importFactKind("web/app.ts", 3, "../domain/model.js", "domain/model.ts", "", "type-only"),
+		importFactKind("web/app.ts", 3, "../domain/model.js", "domain/model.ts", "", "runtime"),
 		importFactKind("domain/model.ts", 4, "../web/app.js", "web/app.ts", "", "re-export"))
 	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"web/app.ts"}, &pythonGraphRunner{})
 	finding := onlyCycleFinding(t, analysis.Findings, "architecture.fileCycle")
@@ -84,7 +84,7 @@ func TestAllowedModuleProjectionCannotHideJavaScriptSourceCycle(t *testing.T) {
 	}
 	kinds := []string{finding.DependencyComponent.Edges[0].Kind, finding.DependencyComponent.Edges[1].Kind}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"re-export", "type-only"}) {
+	if !slices.Equal(kinds, []string{"re-export", "runtime"}) {
 		t.Fatalf("edge kinds = %+v", kinds)
 	}
 }

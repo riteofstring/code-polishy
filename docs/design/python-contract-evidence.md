@@ -29,13 +29,17 @@ All captured sources contribute to identity, including sources that do not
 ultimately supply the selected definition.
 
 Architecture resolution does not build the Python semantic model. The pinned
-Ruff graph runs on the selected source paths, and the Go policy engine validates
-its paths, ownership, module direction, and cycles. A focused check therefore
-scales with its selection. A full gate selects the complete project and retains
-whole-project cycle coverage. Repository declarations add source-bound dynamic
-edges and runtime boundaries without causing unrelated files to enter a focused
-graph. TypedDict and dead-code analysis keep their separate complete-project
-fact model because those quality checks need cross-file semantics.
+Ruff graph runs on the selected source paths with type-checking imports enabled
+and disabled. Their validated difference preserves type-only edges while the Go
+policy engine applies runtime cycle traversal only to executable dependency
+relations. A focused check therefore scales with its selection. A full gate
+selects the complete project and retains whole-project cycle coverage.
+Repository declarations add source-bound dynamic edges and runtime boundaries
+without causing unrelated files to enter a focused graph. TypedDict and
+dead-code analysis keep their separate complete-project fact model because
+those quality checks need cross-file semantics. They run only for explicit
+complete selections and merge gates; focused checks defer that global
+conclusion.
 
 `METADATA`, `RECORD`, and an applicable Git `direct_url.json` establish current
 installation consistency. They do not authenticate the installer or prove
@@ -98,11 +102,18 @@ bindings and names writable by closures. Unknown context managers, exception
 handlers, and repeated loop bodies begin conservatively. Ambiguous same-line
 writes receive no positive evidence.
 
-The Go-owned Vulture adapter combines contract locations with TypedDict reads,
+The Go-owned Vulture adapter combines contract locations with TypedDict schemas,
 standard-library protocols, and explicit external-consumer evidence. Complete
 source coverage remains mandatory. Invalid configuration is reported as a
 contract problem, while failure to obtain the whole project fact set withholds
 derivative findings.
+
+A semantically resolved TypedDict is a structural mapping schema. Its declared
+fields remain schema members even when consumers cross return, mixin,
+serialization, or dynamic mapping boundaries that erase the exact receiver
+type. Dead-code analysis therefore retains those field declarations while still
+allowing the TypedDict class itself and ordinary annotated attributes to be
+reported unused.
 
 ## Operator-controlled runtime loaders
 

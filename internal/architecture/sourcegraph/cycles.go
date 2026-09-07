@@ -10,6 +10,9 @@ import (
 )
 
 func CyclicComponents(graph Graph) ([]Component, error) {
+	graph.Edges = slices.DeleteFunc(slices.Clone(graph.Edges), func(edge Edge) bool {
+		return edge.Kind == EdgeTypeOnly
+	})
 	units, forward, reverse := graphTopology(graph)
 	order, err := finishingOrder(units, forward)
 	if err != nil {

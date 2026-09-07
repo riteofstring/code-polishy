@@ -81,6 +81,8 @@ func applyDefaults(config *Config) {
 	if behaviorReview := config.Verification.BehaviorReview; behaviorReview != nil {
 		defaultString(&behaviorReview.DefaultRequiredAt, BehaviorReviewOnRequest)
 	}
+	defaultInt(&config.Quality.ReviewFileLines, ReviewFileLines)
+	defaultInt(&config.Quality.ReviewTestFileLines, ReviewTestFileLines)
 	defaultInt(&config.Quality.MaxFileLines, MaxFileLines)
 	defaultInt(&config.Quality.MaxTestFileLines, MaxTestFileLines)
 	defaultInt(&config.Quality.Complexity.Go, MaxGoComplexity)
