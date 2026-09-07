@@ -22,6 +22,7 @@ import (
 )
 
 func Check(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
+	repo = repo.WithAnalysisProfile(profile)
 	findings := sourceChecks(repo, selection.Files)
 	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, goToolChecks(ctx, repo, selection.Files, commandRunner)...)
@@ -40,14 +41,11 @@ func Check(ctx context.Context, repo repository.Repository, selection repository
 }
 
 func CheckCommands(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
+	repo = repo.WithAnalysisProfile(profile)
 	commands := []policy.Command{}
-	goFiles := languageFiles(repo, selection.Files, "go")
-	if len(goFiles) > 0 {
-		if allFiles, err := repo.AllFiles(); err == nil {
-			packages, _ := goPackageInventory(repo, goFiles, repo.GoModules(allFiles))
-			goCommands, _ := goPackageToolCommands(repo, packages)
-			commands = append(commands, goCommands...)
-		}
+	if allFiles, err := repo.AllFiles(); err == nil {
+		goCommands, _ := nativeGoToolCommands(repo, selection.Files, allFiles)
+		commands = append(commands, goCommands...)
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
@@ -60,11 +58,12 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 }
 
 func Format(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner) []policy.Finding {
+	repo = repo.WithAnalysisProfile("format")
 	if repo.ClassifyDocumentationCandidate(selection).Ordinary {
 		return DocumentationFormatWrite(ctx, repo, selection.Candidate.AddedOrModified)
 	}
 	findings := []policy.Finding{}
-	goFiles := editableFiles(repo, languageFiles(repo, selection.Files, "go"))
+	goFiles := editableFiles(repo, languageFiles(repo, repo.NativeAnalysisFiles(selection.Files, "format", ""), "go"))
 	if len(goFiles) > 0 {
 		arguments := []string{"-w"}
 		for _, path := range goFiles {
@@ -88,6 +87,9 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 	commands, findings := configuredCommandsForProfiles(repo, selection, profiles...)
 	for _, command := range commands {
 		if command.Adapter != nil {
+			if command.Adapter.Capability == "architecture" {
+				continue
+			}
 			profile := profiles[0]
 			for _, candidate := range profiles {
 				if slices.Contains(command.RunOn, candidate) {
@@ -95,7 +97,7 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 					break
 				}
 			}
-			findings = append(findings, pack.RunAdapter(ctx, repo, selection, command, commandRunner, profile)...)
+			findings = append(findings, packQualityFindings(ctx, repo, selection, command, commandRunner, profile)...)
 			continue
 		}
 		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
@@ -148,6 +150,9 @@ func NamedCommands(repo repository.Repository, names []string) ([]policy.Command
 		if index < 0 {
 			return nil, fmt.Errorf("unknown configured check %q", name)
 		}
+		if adapter := repo.Config.Checks[index].Adapter; adapter != nil && adapter.Capability == "architecture" {
+			return nil, fmt.Errorf("architecture providers must run through the architecture command so core graph policy is evaluated")
+		}
 		if problem := generatedStyleCommandProblem(repo, repo.Config.Checks[index], files); problem != "" {
 			return nil, fmt.Errorf("%s", problem)
 		}
@@ -175,7 +180,7 @@ func RunNamedCommands(ctx context.Context, repo repository.Repository, commandRu
 	findings := []policy.Finding{}
 	for _, command := range commands {
 		if command.Adapter != nil {
-			findings = append(findings, pack.RunAdapter(ctx, repo, repository.Selection{Files: files, All: true}, command, commandRunner, command.RunOn[0])...)
+			findings = append(findings, packQualityFindings(ctx, repo, repository.Selection{Files: files, All: true}, command, commandRunner, command.RunOn[0])...)
 			continue
 		}
 		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
@@ -231,6 +236,13 @@ func commandEligiblePaths(repo repository.Repository, command policy.Command, pa
 }
 
 func commandEligiblePath(repo repository.Repository, command policy.Command, path string, profiles ...string) bool {
+	if command.Managed && command.Adapter == nil {
+		for _, capability := range command.Provides {
+			if slices.Contains(builtInCapabilities, capability) && !repo.NativeAnalysis(path, capability) {
+				return false
+			}
+		}
+	}
 	if repo.IsData(path) && slices.Contains(command.Provides, "format") {
 		return false
 	}
@@ -278,13 +290,12 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
-	styleLanguages, _ := inventoryModuleLanguages(repo, editableFiles(repo, files))
 	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
 	findings = append(findings, repo.InspectGeneration(files).Findings...)
 	findings = append(findings, generatedStyleCoverageFindings(repo, files)...)
 	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)
 	findings = append(findings, customLanguageRuleFindings(repo, files)...)
-	findings = append(findings, adapterCoverageFindings(repo.Config, languagesByModule, styleLanguages)...)
+	findings = append(findings, analysisCoverageFindings(repo, files)...)
 	findings = append(findings, builtInProviderFindings(repo, files)...)
 	findings = append(findings, buildCoverageFindings(repo.Config, languagesByModule)...)
 	findings = append(findings, pack.CoverageFindings(repo, files)...)
@@ -340,21 +351,20 @@ func inventoryModuleLanguages(repo repository.Repository, files []string) (map[s
 	return languagesByModule, findings
 }
 
-func adapterCoverageFindings(config policy.Config, languagesByModule, styleLanguages map[string]map[string]bool) []policy.Finding {
+func analysisCoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
-	for module, languages := range languagesByModule {
-		for language := range languages {
-			for _, capability := range requiredCapabilities(language) {
-				if (capability == "format" || capability == "complexity") && !styleLanguages[module][language] {
-					continue
-				}
-				if builtInCapability(language, capability) {
-					continue
-				}
-				missing := missingProviderProfiles(config.Checks, module, capability, "check", "gate")
-				if len(missing) > 0 {
-					message := fmt.Sprintf("%s module %q has no %s provider for %s", language, module, capability, strings.Join(missing, " and "))
-					findings = append(findings, policy.Finding{Check: "policy.checkCoverage", Path: policy.ConfigFilename, Subject: module + ":" + capability, Message: message})
+	for _, path := range files {
+		if !repo.IsExecutableSource(path) || len(repo.Languages(path)) != 1 {
+			continue
+		}
+		for _, capability := range requiredCapabilities(repo.Language(path)) {
+			if (capability == "format" || capability == "complexity") && (repo.IsGenerated(path) || repo.IsData(path)) {
+				continue
+			}
+			for _, profile := range []string{"check", "gate"} {
+				owner := repo.AnalysisOwner(path, capability, profile)
+				if owner.Problem != "" {
+					findings = append(findings, policy.Finding{Check: "policy.checkCoverage", Path: path, Subject: capability + ":" + profile, Message: owner.Problem})
 				}
 			}
 		}
@@ -450,29 +460,39 @@ func buildCoverageFindings(config policy.Config, languagesByModule map[string]ma
 
 func ToolFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
-	languages := map[string]bool{}
+	goCapabilities := map[string]bool{}
+	shellLint := false
 	for _, path := range files {
-		languages[repo.Language(path)] = true
+		if repo.Language(path) == "go" {
+			for _, capability := range builtInCapabilities {
+				if repo.NativeAnalysis(path, capability) {
+					goCapabilities[capability] = true
+				}
+			}
+		}
+		if repo.Language(path) == "shell" && repo.NativeAnalysis(path, "lint") {
+			shellLint = true
+		}
 	}
-	if languages["go"] {
-		findings = append(findings, goToolFindings(repo)...)
+	if len(goCapabilities) > 0 {
+		findings = append(findings, goToolFindings(repo, goCapabilities)...)
 	}
-	if languages["shell"] {
+	if shellLint {
 		findings = append(findings, shellToolFindings(repo)...)
 	}
 	return findings
 }
 
-func goToolFindings(repo repository.Repository) []policy.Finding {
+func goToolFindings(repo repository.Repository, capabilities map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
-	goTool := repo.GoTool("go")
-	if !isExecutable(goTool) {
-		findings = append(findings, toolFinding("go", "pinned Go toolchain is unavailable; run ./tools/install-policy-tools.sh"))
-	} else if !requiredGoVersion(repo, goTool) {
-		findings = append(findings, toolFinding("go", "Go toolchain does not match scripts/go_version.txt"))
+	if capabilities["lint"] || capabilities["typecheck"] || capabilities["dead-code"] {
+		findings = append(findings, goCompilerToolFindings(repo)...)
 	}
-	if !isExecutable(repo.GoTool("gofmt")) {
+	if capabilities["format"] && !isExecutable(repo.GoTool("gofmt")) {
 		findings = append(findings, toolFinding("gofmt", "pinned gofmt is unavailable; run ./tools/install-policy-tools.sh"))
+	}
+	if !capabilities["dead-code"] {
+		return findings
 	}
 	if !isExecutable(repo.PolicyTool("staticcheck")) {
 		return append(findings, toolFinding("staticcheck", "pinned staticcheck is unavailable; run ./tools/install-policy-tools.sh"))
@@ -481,6 +501,17 @@ func goToolFindings(repo repository.Repository) []policy.Finding {
 		findings = append(findings, toolFinding("staticcheck", "staticcheck does not match tools/staticcheck-version.txt"))
 	}
 	return findings
+}
+
+func goCompilerToolFindings(repo repository.Repository) []policy.Finding {
+	tool := repo.GoTool("go")
+	if !isExecutable(tool) {
+		return []policy.Finding{toolFinding("go", "pinned Go toolchain is unavailable; run ./tools/install-policy-tools.sh")}
+	}
+	if !requiredGoVersion(repo, tool) {
+		return []policy.Finding{toolFinding("go", "Go toolchain does not match scripts/go_version.txt")}
+	}
+	return nil
 }
 
 func shellToolFindings(repo repository.Repository) []policy.Finding {
@@ -582,9 +613,9 @@ func goToolChecks(ctx context.Context, repo repository.Repository, files []strin
 	if len(goFiles) == 0 {
 		return nil
 	}
-	findings := goFormatFindings(ctx, repo, editableFiles(repo, goFiles))
+	findings := goFormatFindings(ctx, repo, editableFiles(repo, repo.NativeAnalysisFiles(goFiles, "format", "")))
 	for _, path := range goFiles {
-		if !repo.IsGenerated(path) && !repo.IsData(path) {
+		if !repo.IsGenerated(path) && !repo.IsData(path) && repo.NativeAnalysis(path, "complexity") {
 			findings = append(findings, goComplexityFindings(repo, path)...)
 		}
 	}
@@ -592,10 +623,18 @@ func goToolChecks(ctx context.Context, repo repository.Repository, files []strin
 	if err != nil {
 		return append(findings, policy.Finding{Check: "quality.go", Path: "repository", Subject: "inventory", Message: err.Error()})
 	}
-	modules := repo.GoModules(allFiles)
-	packages, packageFindings := goPackageInventory(repo, goFiles, modules)
-	findings = append(findings, packageFindings...)
-	findings = append(findings, runGoPackageTools(ctx, repo, packages, commandRunner)...)
+	commands, routing := nativeGoToolCommands(repo, goFiles, allFiles)
+	findings = append(findings, routing...)
+	for _, command := range commands {
+		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+			check := "quality.goVet"
+			if strings.HasPrefix(command.Name, "staticcheck-") {
+				check = "quality.deadCode"
+			}
+			findings = append(findings, commandFinding(check, command.Name, err))
+		}
+	}
+
 	return findings
 }
 
@@ -626,21 +665,7 @@ func goPackageInventory(repo repository.Repository, goFiles []string, modules []
 	return packages, findings
 }
 
-func runGoPackageTools(ctx context.Context, repo repository.Repository, packages map[string]map[string]bool, commandRunner runner.Runner) []policy.Finding {
-	commands, findings := goPackageToolCommands(repo, packages)
-	for _, command := range commands {
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
-			check := "quality.goVet"
-			if strings.HasPrefix(command.Name, "staticcheck-") {
-				check = "quality.deadCode"
-			}
-			findings = append(findings, commandFinding(check, command.Name, err))
-		}
-	}
-	return findings
-}
-
-func goPackageToolCommands(repo repository.Repository, packages map[string]map[string]bool) ([]policy.Command, []policy.Finding) {
+func goPackageToolCommands(repo repository.Repository, packages map[string]map[string]bool, capability string) ([]policy.Command, []policy.Finding) {
 	commands := []policy.Command{}
 	findings := []policy.Finding{}
 	moduleRoots := map[string]bool{}
@@ -649,10 +674,13 @@ func goPackageToolCommands(repo repository.Repository, packages map[string]map[s
 	}
 	for _, moduleRoot := range sortedKeys(moduleRoots) {
 		packageNames := sortedKeys(packages[moduleRoot])
-		arguments := append([]string{"vet"}, packageNames...)
-		commands = append(commands, policy.Command{
-			Name: "go-vet-" + safeName(moduleRoot), Argv: append([]string{repo.GoTool("go")}, arguments...), Cwd: moduleRoot, TimeoutSeconds: 900,
-		})
+		if capability == "lint" {
+			arguments := append([]string{"vet"}, packageNames...)
+			commands = append(commands, policy.Command{
+				Name: "go-vet-" + safeName(moduleRoot), Argv: append([]string{repo.GoTool("go")}, arguments...), Cwd: moduleRoot, TimeoutSeconds: 900,
+			})
+			continue
+		}
 		staticcheck := repo.PolicyTool("staticcheck")
 		if isExecutable(staticcheck) {
 			commands = append(commands, policy.Command{
@@ -768,7 +796,14 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 	}
 	commands := make([]policy.Command, 0, len(shellFiles)+1)
 	for _, path := range shellFiles {
+		if !repo.NativeAnalysis(path, "typecheck") {
+			continue
+		}
 		commands = append(commands, policy.Command{Name: "shell-syntax-" + safeName(path), Argv: []string{"bash", "-n", path}, Cwd: ".", Paths: []string{path}, TimeoutSeconds: 60})
+	}
+	shellFiles = repo.NativeAnalysisFiles(shellFiles, "lint", "")
+	if len(shellFiles) == 0 {
+		return commands, nil
 	}
 	wrapper := filepath.Join(repo.PolicyRoot, "tools", "shellcheck.sh")
 	if !isExecutable(wrapper) {
@@ -823,16 +858,6 @@ func hasProvider(commands []policy.Command, module, capability string, profiles 
 		}
 	}
 	return false
-}
-
-func missingProviderProfiles(commands []policy.Command, module, capability string, profiles ...string) []string {
-	missing := []string{}
-	for _, profile := range profiles {
-		if !hasProvider(commands, module, capability, profile) {
-			missing = append(missing, profile)
-		}
-	}
-	return missing
 }
 
 func sliceIntersects(left, right []string) bool {

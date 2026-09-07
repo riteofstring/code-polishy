@@ -185,7 +185,7 @@ func normalizeEdgeTarget(edge Edge, node Node, nodes map[string]Node) (Edge, err
 			return Edge{}, fmt.Errorf("source dependency graph edge target: %w", targetErr)
 		}
 		targetNode, exists := nodes[target]
-		if !exists || targetNode.Resolution != edge.TargetResolution || targetNode.Language != node.Language {
+		if !exists || targetNode.Resolution != edge.TargetResolution {
 			return Edge{}, fmt.Errorf("source dependency graph edge from %q has a mismatched target file", edge.Source)
 		}
 		edge.Target = target
@@ -217,11 +217,11 @@ func boundedIdentity(value string) bool {
 }
 
 func validEcosystem(value string) bool {
-	return value == "go" || value == "javascript" || value == "python"
+	return providerIdentifier.MatchString(value) && len(value) <= 128
 }
 
 func validLanguage(value string) bool {
-	return value == "go" || value == "python" || value == "typescript"
+	return providerIdentifier.MatchString(value) && len(value) <= 128
 }
 
 func validKind(value EdgeKind) bool {

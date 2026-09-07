@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.0-beta.1 - 2026-09-07
+
+- Allow exactly selected analysis providers to replace native capabilities through pack protocol v2, with verified runtime identity, original-source facts, complete coverage accounting, and core-owned policy checks.
+- Add a separately built JS/TS provider with framework adapters, including Astro analysis from existing project metadata; keep framework tool dependencies outside the core release.
+- Respect declared self-hosted runner labels and resolve contained stylesheet imports while retaining dependency boundaries and missing-file findings.
+- Support exact prerelease versions in local release installation and preflight checks.
+
 ## 0.24.11 - 2026-09-06
 
 - Treat semantically resolved TypedDict fields as structural schema members in

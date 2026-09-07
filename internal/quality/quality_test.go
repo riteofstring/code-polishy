@@ -158,7 +158,7 @@ func TestCoverageRequiresAdaptersForUnknownLanguages(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
-	if len(withoutSourceCommentCoverage(findings)) != 6 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+	if len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("findings = %+v", findings)
 	}
 }
@@ -171,25 +171,25 @@ func TestGeneratedSourceStillRequiresModuleAndToolCoverage(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"generated": 0}
 	writeQualityFile(t, repo.Root, "generated/client.rs", "fn generated() {}\n")
 	findings := CoverageFindings(repo, []string{"generated/client.rs"})
-	if len(findings) != 5 || !findingChecks(findings)["policy.generationOwnership"] {
+	if len(findings) != 9 || !findingChecks(findings)["policy.generationOwnership"] {
 		t.Fatalf("generated executable source cannot bypass adapter coverage: %+v", findings)
 	}
 	for _, finding := range findings {
-		if finding.Subject == "generated:format" || finding.Subject == "generated:complexity" {
+		if strings.HasPrefix(finding.Subject, "format:") || strings.HasPrefix(finding.Subject, "complexity:") {
 			t.Fatalf("generated source required a style provider: %+v", finding)
 		}
 	}
 }
 
-func TestCoverageUsesModuleScopedProvider(t *testing.T) {
+func TestCoverageRequiresStructuredEvidenceBeyondModuleScopedCommand(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	repo.Config.Checks = []policy.Command{{Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check", "gate"}}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"}); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
-		t.Fatalf("provider should cover module: %+v", findings)
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+		t.Fatalf("an ordinary command cannot establish source coverage: %+v", findings)
 	}
 }
 
@@ -202,7 +202,7 @@ func TestCoverageRequiresProvidersInLocalAndGateProfiles(t *testing.T) {
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
 	findings = withoutSourceCommentCoverage(findings)
-	if len(findings) != 6 || !strings.Contains(findings[0].Message, "gate") {
+	if len(findings) != 12 || findings[0].Subject != "format:check" || findings[1].Subject != "format:gate" {
 		t.Fatalf("findings = %+v", findings)
 	}
 }
@@ -242,7 +242,7 @@ func TestCoverageRefusesRepositoryWideProviderForBuiltInCapability(t *testing.T)
 	}
 }
 
-func TestCoverageAdmitsProviderReachingSourceNoBuiltInDecides(t *testing.T) {
+func TestCoverageKeepsUnknownSourceUncoveredBesideNativeSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
@@ -253,8 +253,8 @@ func TestCoverageAdmitsProviderReachingSourceNoBuiltInDecides(t *testing.T) {
 	}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
 	writeQualityFile(t, repo.Root, "internal/sample/build.ts", "export const build = 1;\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs", "internal/sample/build.ts"}); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
-		t.Fatalf("a provider covering source no built-in decides is the target's own: %+v", findings)
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs", "internal/sample/build.ts"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+		t.Fatalf("unstructured commands cannot establish unknown-language analysis: %+v", findings)
 	}
 }
 
@@ -280,7 +280,7 @@ func TestCoverageRefusesTargetFormatterOnlyWhereTheSealedBundleFormats(t *testin
 	}
 }
 
-func TestCoverageAdmitsTargetProviderForSourceTheSealedBundleNeverReads(t *testing.T) {
+func TestCoverageRequiresStructuredProviderForFrameworkSource(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "web", Paths: []string{"frontend/**"}}}
@@ -292,16 +292,22 @@ func TestCoverageAdmitsTargetProviderForSourceTheSealedBundleNeverReads(t *testi
 	writeQualityFile(t, repo.Root, "frontend/App.vue", "<template />\n")
 	writeQualityFile(t, repo.Root, "frontend/main.ts", "export const value = 1;\n")
 	component := []string{"frontend/App.vue", "frontend/main.ts"}
-	if findings := CoverageFindings(repo, component); len(withoutSourceCommentCoverage(findings)) != 0 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+	if findings := CoverageFindings(repo, component); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("a check covering only single-file components is the target's own: %+v", findings)
 	}
 	repo.Config.Checks[0].Paths = []string{"frontend/**"}
 	findings := CoverageFindings(repo, component)
 	findings = withoutSourceCommentCoverage(findings)
-	if len(findings) != 3 {
+	if len(findings) != 15 {
 		t.Fatalf("a check reaching the source the bundle decides is refused: %+v", findings)
 	}
 	for _, found := range findings {
+		if found.Check == "policy.checkCoverage" {
+			if found.Path != "frontend/App.vue" {
+				t.Fatalf("native source lost coverage: %+v", found)
+			}
+			continue
+		}
 		if found.Check != "policy.builtInCapability" || !strings.Contains(found.Message, "frontend/main.ts") {
 			t.Fatalf("finding should name the source the bundle decides: %+v", found)
 		}

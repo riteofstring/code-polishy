@@ -52,14 +52,25 @@ type ExternalContract struct {
 }
 
 type FactInput struct {
-	Analyzer         string   `json:"analyzer"`
-	Protocol         string   `json:"protocol"`
-	Project          string   `json:"project"`
-	Root             string   `json:"root"`
-	Paths            []string `json:"paths"`
-	FactsSHA256      string   `json:"factsSha256"`
-	PartitionsSHA256 string   `json:"partitionsSha256"`
-	ResolutionSHA256 string   `json:"resolutionSha256"`
+	Analyzer         string         `json:"analyzer"`
+	Protocol         string         `json:"protocol"`
+	Project          string         `json:"project"`
+	Root             string         `json:"root"`
+	Paths            []string       `json:"paths"`
+	FactsSHA256      string         `json:"factsSha256"`
+	PartitionsSHA256 string         `json:"partitionsSha256"`
+	ResolutionSHA256 string         `json:"resolutionSha256"`
+	Provider         *ProviderInput `json:"provider,omitempty"`
+}
+
+type ProviderInput struct {
+	Name          string   `json:"name"`
+	Version       string   `json:"version"`
+	Digest        string   `json:"digest"`
+	Languages     []string `json:"languages"`
+	InputsSHA256  string   `json:"inputsSha256"`
+	PolicySHA256  string   `json:"policySha256"`
+	RuntimeSHA256 string   `json:"runtimeSha256,omitempty"`
 }
 
 type Node struct {

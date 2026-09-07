@@ -30,8 +30,8 @@ func normalizeFactInputs(inputs []FactInput, nodes map[string]Node) ([]FactInput
 		result = append(result, normalized)
 	}
 	for path, node := range nodes {
-		if node.Language == "python" && !covered[path] {
-			return nil, fmt.Errorf("source dependency graph has no validated Python fact input for %q", path)
+		if (node.Language == "python" || node.Language != "go" && node.Language != "typescript") && !covered[path] {
+			return nil, fmt.Errorf("source dependency graph has no validated %s fact input for %q", node.Language, path)
 		}
 	}
 	slices.SortFunc(result, func(left, right FactInput) int { return strings.Compare(left.Project, right.Project) })
@@ -39,6 +39,9 @@ func normalizeFactInputs(inputs []FactInput, nodes map[string]Node) ([]FactInput
 }
 
 func normalizeFactInput(input FactInput) (FactInput, error) {
+	if input.Provider != nil {
+		return normalizeProviderInput(input)
+	}
 	if !validFactAnalyzer(input.Analyzer, input.Protocol) {
 		return FactInput{}, fmt.Errorf("source dependency graph has an unsupported fact analyzer or protocol")
 	}
@@ -90,7 +93,11 @@ func normalizeFactPaths(paths []string) ([]string, error) {
 func coverFactInput(input FactInput, nodes map[string]Node, covered map[string]bool) error {
 	for _, path := range input.Paths {
 		node, exists := nodes[path]
-		if !exists || node.Language != "python" || node.Root != input.Root || covered[path] {
+		languageMatches := node.Language == "python"
+		if input.Provider != nil {
+			languageMatches = slices.Contains(input.Provider.Languages, node.Language)
+		}
+		if !exists || !languageMatches || node.Root != input.Root || covered[path] {
 			return fmt.Errorf("source dependency graph fact path %q is absent, duplicated, or outside its Python project", path)
 		}
 		covered[path] = true
@@ -135,6 +142,11 @@ func Clone(graph *Graph) *Graph {
 	result.Inputs = slices.Clone(graph.Inputs)
 	for index := range result.Inputs {
 		result.Inputs[index].Paths = slices.Clone(result.Inputs[index].Paths)
+		if result.Inputs[index].Provider != nil {
+			provider := *result.Inputs[index].Provider
+			provider.Languages = slices.Clone(provider.Languages)
+			result.Inputs[index].Provider = &provider
+		}
 	}
 	return &result
 }

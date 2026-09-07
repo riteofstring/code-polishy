@@ -17,15 +17,20 @@ import (
 )
 
 type Request struct {
-	ProtocolVersion int             `json:"protocolVersion"`
-	Operation       string          `json:"operation"`
-	Capability      string          `json:"capability"`
-	ProjectRoot     string          `json:"projectRoot"`
-	Files           []string        `json:"files"`
-	Modules         []RequestModule `json:"modules"`
-	Mode            string          `json:"mode"`
-	Profile         string          `json:"profile"`
-	OutputDirectory string          `json:"outputDirectory,omitempty"`
+	ProtocolVersion int                  `json:"protocolVersion"`
+	Operation       string               `json:"operation"`
+	Capability      string               `json:"capability"`
+	ProjectRoot     string               `json:"projectRoot"`
+	Files           []string             `json:"files"`
+	Modules         []RequestModule      `json:"modules"`
+	Mode            string               `json:"mode"`
+	Profile         string               `json:"profile"`
+	OutputDirectory string               `json:"outputDirectory,omitempty"`
+	Context         []InputFile          `json:"context"`
+	Policy          PolicyInput          `json:"policy"`
+	Runtime         *RuntimeIdentity     `json:"runtime,omitempty"`
+	Complete        bool                 `json:"complete"`
+	Pack            policy.PackSelection `json:"pack"`
 }
 
 type RequestModule struct {
@@ -41,6 +46,22 @@ type Response struct {
 	Findings        []ResponseFinding `json:"findings,omitempty"`
 	Notes           []string          `json:"notes,omitempty"`
 	Failure         string            `json:"failure,omitempty"`
+	Coverage        *Coverage         `json:"coverage,omitempty"`
+	Facts           *SourceFacts      `json:"facts,omitempty"`
+	Inputs          []InputFile       `json:"inputs,omitempty"`
+	Edits           []Edit            `json:"edits,omitempty"`
+}
+
+type Edit struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type Result struct {
+	Findings []policy.Finding
+	Response Response
+	Request  Request
+	Digest   string
 }
 
 type ResponseFinding struct {
@@ -50,31 +71,62 @@ type ResponseFinding struct {
 	Column     int    `json:"column,omitempty"`
 	Subject    string `json:"subject"`
 	Message    string `json:"message"`
+	Rule       string `json:"rule"`
 }
 
-func RunAdapter(ctx context.Context, repo repository.Repository, selection repository.Selection, command policy.Command, commandRunner runner.Runner, profile string) []policy.Finding {
+func RunAdapter(ctx context.Context, repo repository.Repository, selection repository.Selection, command policy.Command, commandRunner runner.Runner, profile string) Result {
 	adapter := command.Adapter
 	if adapter == nil {
-		return nil
+		return Result{}
+	}
+	for _, selected := range selection.Files {
+		if !packCommandSelects(repo, command, selected) || len(repo.Config.Checks) == 0 {
+			continue
+		}
+		owner := repo.AnalysisOwner(selected, adapter.Capability, profile)
+		if owner.Problem != "" {
+			return failedResult(adapter, errors.New(owner.Problem))
+		}
 	}
 	request := requestFor(repo, selection, command, profile)
-	if len(request.Files) == 0 && (adapter.Capability == "format" || adapter.Capability == "complexity") {
-		return nil
+	if len(request.Files) == 0 {
+		return Result{}
 	}
+	return runRequest(ctx, repo, command, commandRunner, request)
+}
+
+func runRequest(ctx context.Context, repo repository.Repository, command policy.Command, commandRunner runner.Runner, request Request) Result {
+	adapter := command.Adapter
 	if err := verifyAdapter(command); err != nil {
-		return []policy.Finding{packFailure(adapter, err)}
+		return failedResult(adapter, err)
 	}
 	if len(request.Files) > 10000 || len(request.Modules) > 1000 {
-		return []policy.Finding{packFailure(adapter, errors.New("adapter request exceeds its file or module count limit"))}
+		return failedResult(adapter, errors.New("adapter request exceeds its file or module count limit"))
 	}
-	response, err := execute(ctx, adapter.PackRoot, command, commandRunner, request)
+	if err := prepareInputs(repo, &request); err != nil {
+		return failedResult(adapter, err)
+	}
+	prepared, identity, err := runtimeCommand(repo, command, adapter.Runtime)
 	if err != nil {
-		return []policy.Finding{packFailure(adapter, err)}
+		return failedResult(adapter, err)
 	}
-	if err := verifyAdapter(command); err != nil {
-		return []policy.Finding{packFailure(adapter, fmt.Errorf("adapter changed during execution: %w", err))}
+	request.Runtime = identity
+	response, err := execute(ctx, adapter.PackRoot, prepared, commandRunner, request)
+	if err != nil {
+		return failedResult(adapter, err)
 	}
-	return findingsForResponse(adapter, response)
+	if err := verifyExecution(repo, command, request, response); err != nil {
+		return failedResult(adapter, err)
+	}
+	digest, err := analysisDigest(request, response)
+	if err != nil {
+		return failedResult(adapter, err)
+	}
+	return Result{Findings: findingsForResponse(adapter, response), Request: request, Response: response, Digest: digest}
+}
+
+func failedResult(adapter *policy.PackAdapter, err error) Result {
+	return Result{Findings: []policy.Finding{packFailure(adapter, err)}}
 }
 
 func execute(ctx context.Context, root string, command policy.Command, commandRunner runner.Runner, request Request) (Response, error) {
@@ -86,6 +138,9 @@ func execute(ctx context.Context, root string, command policy.Command, commandRu
 	if err != nil {
 		return Response{}, err
 	}
+	if len(data) > 8<<20 {
+		return Response{}, errors.New("adapter request exceeds 8 MiB")
+	}
 	command.Stdin = append(data, '\n')
 	result, output, runErr := boundary.RunStructured(ctx, root, command)
 	if runErr != nil {
@@ -95,8 +150,8 @@ func execute(ctx context.Context, root string, command policy.Command, commandRu
 }
 
 func parseResponse(data []byte, request Request) (Response, error) {
-	if len(data) == 0 || len(data) > 1<<20 {
-		return Response{}, errors.New("adapter response is empty or exceeds 1 MiB")
+	if len(data) == 0 || len(data) > 8<<20 {
+		return Response{}, errors.New("adapter response is empty or exceeds 8 MiB")
 	}
 	response, err := decodeResponse(data)
 	if err != nil {
@@ -132,6 +187,12 @@ func validateResponse(response Response, request Request) error {
 	if err := validateResponseStatus(response); err != nil {
 		return err
 	}
+	if err := validateAnalysisResponse(response, request); err != nil {
+		return err
+	}
+	if err := validateEdits(response.Edits, response.Status, request); err != nil {
+		return err
+	}
 	return validateResponseFindings(response.Findings, request)
 }
 
@@ -139,7 +200,7 @@ func validateResponseEnvelope(response Response) error {
 	if response.ProtocolVersion != ProtocolVersion {
 		return fmt.Errorf("adapter returned unsupported protocol version %d", response.ProtocolVersion)
 	}
-	if !slices.Contains([]string{"pass", "findings", "operational-failure"}, response.Status) {
+	if !slices.Contains([]string{"pass", "findings", "incomplete", "operational-failure"}, response.Status) {
 		return fmt.Errorf("adapter returned unknown status %q", response.Status)
 	}
 	if len(response.Notes) > 32 {
@@ -170,17 +231,57 @@ func validateResponseStrings(values []string, label string) error {
 func validateResponseStatus(response Response) error {
 	switch response.Status {
 	case "pass":
-		if len(response.Evidence) == 0 || len(response.Findings) != 0 || response.Failure != "" {
+		if len(response.Evidence) == 0 || responseHasFailure(response) {
 			return errors.New("pass response requires evidence and no findings or failure")
 		}
 	case "findings":
 		if len(response.Findings) == 0 || response.Failure != "" {
 			return errors.New("findings response requires at least one finding and no failure")
 		}
+	case "incomplete":
+		return validateIncompleteStatus(response)
 	case "operational-failure":
 		if strings.TrimSpace(response.Failure) == "" || len(response.Findings) != 0 {
 			return errors.New("operational-failure response requires a failure and no findings")
 		}
+	}
+	return nil
+}
+
+func responseHasFailure(response Response) bool {
+	return len(response.Findings) != 0 || response.Failure != ""
+}
+
+func validateIncompleteStatus(response Response) error {
+	if response.Coverage == nil || len(response.Coverage.Unsupported) == 0 || response.Failure != "" {
+		return errors.New("incomplete response requires unsupported coverage and no operational failure")
+	}
+	return nil
+}
+
+func verifyExecution(repo repository.Repository, command policy.Command, request Request, response Response) error {
+	if err := verifyAdapter(command); err != nil {
+		return fmt.Errorf("adapter changed during execution: %w", err)
+	}
+	if err := verifyRuntimeIdentity(repo, command, request.Runtime, command.Adapter.Runtime); err != nil {
+		return err
+	}
+	if err := verifyAnalysisInputs(repo, request, response); err != nil {
+		return err
+	}
+	return applyEdits(repo, request, response)
+}
+
+func verifyRuntimeIdentity(repo repository.Repository, command policy.Command, identity *RuntimeIdentity, requested *policy.PackRuntime) error {
+	if identity == nil {
+		return nil
+	}
+	_, current, err := runtimeCommand(repo, command, requested)
+	if err != nil {
+		return err
+	}
+	if current == nil || *current != *identity {
+		return errors.New("runtime changed during provider execution")
 	}
 	return nil
 }
@@ -211,7 +312,7 @@ func validateResponseFinding(finding ResponseFinding, request Request) error {
 }
 
 func malformedResponseFinding(finding ResponseFinding, capability string) bool {
-	missing := finding.Capability != capability || strings.TrimSpace(finding.Subject) == "" || strings.TrimSpace(finding.Message) == ""
+	missing := finding.Capability != capability || strings.TrimSpace(finding.Subject) == "" || strings.TrimSpace(finding.Message) == "" || !validRule(finding.Rule)
 	oversized := len(finding.Subject) > 1024 || len(finding.Message) > 4096
 	invalidLocation := finding.Line < 0 || finding.Column < 0 || finding.Column > 0 && finding.Line == 0
 	return missing || oversized || invalidLocation
@@ -221,6 +322,10 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 	files := []string{}
 	for _, selected := range selection.Files {
 		if packCommandSelects(repo, command, selected) {
+			owner := repo.AnalysisOwner(selected, command.Adapter.Capability, profile)
+			if owner.Name != command.Name && len(repo.Config.Checks) > 0 {
+				continue
+			}
 			files = append(files, selected)
 		}
 	}
@@ -236,11 +341,11 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 			mode = "write"
 		}
 	}
-	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile}
+	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
 }
 
 func packCommandSelects(repo repository.Repository, command policy.Command, selected string) bool {
-	if (len(command.Paths) > 0 && !policy.MatchesAny(selected, command.Paths)) || !moduleMatches(repo, command.Modules, selected) {
+	if !repo.CommandOwnsPath(command, selected) {
 		return false
 	}
 	return packCapabilitySelects(repo, command.Adapter.Capability, selected)
@@ -259,25 +364,18 @@ func packCapabilitySelects(repo repository.Repository, capability, selected stri
 	return capability != "format"
 }
 
-func moduleMatches(repo repository.Repository, modules []string, selected string) bool {
-	if len(modules) == 0 {
-		return true
-	}
-	for _, owner := range repo.OwnerModuleNames(selected) {
-		if slices.Contains(modules, owner) {
-			return true
-		}
-	}
-	return false
-}
-
 func findingsForResponse(adapter *policy.PackAdapter, response Response) []policy.Finding {
 	if response.Status == "operational-failure" {
 		return []policy.Finding{packFailure(adapter, errors.New(response.Failure))}
 	}
 	findings := make([]policy.Finding, 0, len(response.Findings))
 	for _, found := range response.Findings {
-		findings = append(findings, policy.Finding{Check: "pack." + found.Capability, Path: found.Path, Line: found.Line, Column: found.Column, Subject: found.Subject, Message: found.Message})
+		findings = append(findings, policy.Finding{Check: "pack." + adapter.PackName + "." + found.Rule, Path: found.Path, Line: found.Line, Column: found.Column, Subject: found.Subject, Message: found.Message})
+	}
+	if response.Coverage != nil {
+		for _, unsupported := range response.Coverage.Unsupported {
+			findings = append(findings, policy.Finding{Check: "policy.packCoverage", Path: unsupported.Path, Subject: adapter.Capability, Message: unsupported.Reason})
+		}
 	}
 	return findings
 }
@@ -296,7 +394,7 @@ func verifyAdapter(command policy.Command) error {
 	}
 	executable := path.Clean(strings.ReplaceAll(command.Argv[0], "\\", "/"))
 	for _, entry := range receipt.Files {
-		if entry.Path == executable && entry.Executable {
+		if entry.Path == executable && (entry.Executable || command.Adapter.Runtime != nil) {
 			return nil
 		}
 	}

@@ -1,14 +1,28 @@
-#!/bin/sh
-set -eu
+import { createHash } from "node:crypto";
+import { readFileSync, realpathSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-IFS= read -r request
-project_root=$(printf '%s\n' "$request" | /usr/bin/sed -n 's/.*"projectRoot":"\([^"]*\)".*/\1/p')
-if [ -z "$project_root" ]; then
-  printf '%s\n' '{"protocolVersion":1,"status":"operational-failure","failure":"request omitted projectRoot"}'
-  exit 0
-fi
-if /usr/bin/grep -q BAD "$project_root/src/main.fixture"; then
-  printf '%s\n' '{"protocolVersion":1,"status":"findings","findings":[{"capability":"lint","path":"src/main.fixture","line":1,"column":1,"subject":"fixture marker","message":"remove the BAD marker"}]}'
-  exit 0
-fi
-printf '%s\n' '{"protocolVersion":1,"status":"pass","evidence":["fixture source inspected"]}'
+let input = "";
+for await (const chunk of process.stdin) input += chunk;
+const request = JSON.parse(input);
+const response = { protocolVersion: 2, status: "pass", evidence: ["SQLite parsed each selected SELECT statement without execution"], coverage: { analyzed: [], unsupported: [] }, facts: { comments: [] }, inputs: [], findings: [] };
+const database = new DatabaseSync(":memory:");
+try {
+  for (const path of request.files) {
+    const absolute = realpathSync(join(request.projectRoot, path));
+    if (relative(realpathSync(request.projectRoot), absolute).split(sep).includes("..")) throw new Error("source escapes project");
+    const data = readFileSync(absolute);
+    response.inputs.push({ path, sha256: createHash("sha256").update(data).digest("hex") });
+    const source = data.toString("utf8");
+    if (!/^SELECT\s/i.test(source) || /--|\/\*/.test(source)) {
+      response.coverage.unsupported.push({ path, reason: "this syntax proof accepts comment-free SELECT statements only" });
+      continue;
+    }
+    try { database.prepare(source); }
+    catch (error) { response.findings.push({ capability: "lint", path, rule: "sql-syntax", subject: "SELECT", message: error.message, line: 1, column: 1 }); }
+    response.coverage.analyzed.push(path);
+  }
+  response.status = response.coverage.unsupported.length ? "incomplete" : response.findings.length ? "findings" : "pass";
+  process.stdout.write(`${JSON.stringify(response)}\n`);
+} finally { database.close(); }

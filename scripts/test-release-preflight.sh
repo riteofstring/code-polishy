@@ -191,6 +191,19 @@ grep -qF "git tag -a v9.9.9 -m \"Code Polishy 9.9.9\" ${candidate}" "${output}" 
   fail "the derived tag command was not reported exactly"
 
 
+printf '9.9.9-beta.1\n' >"${source_root}/VERSION"
+printf '# Changelog\n\n## 9.9.9-beta.1 - 2026-09-07\n' >"${source_root}/CHANGELOG.md"
+commit_checkout "disposable prerelease candidate"
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+expect_pass "an exact prerelease candidate" "${candidate}"
+for invalid_version in '9.9.9-beta.01' '9.9.9-' '9.9.9-beta..1'; do
+  printf '%s\n' "${invalid_version}" >"${source_root}/VERSION"
+  commit_checkout "disposable malformed prerelease"
+  candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+  expect_fail "a malformed prerelease" "not a strict MAJOR.MINOR.PATCH semantic version" "${candidate}"
+done
+printf '# Changelog\n\n## 9.9.9 - 2026-09-07\n' >"${source_root}/CHANGELOG.md"
+
 printf '9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable malformed version"
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"

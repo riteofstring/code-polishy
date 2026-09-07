@@ -35,14 +35,18 @@ func javascriptFactFindings(repo repository.Repository, packages *nodePackages,
 }
 
 func javascriptImportFinding(repo repository.Repository, governed map[string]bool, fact javascript.ImportFact) (policy.Finding, bool) {
-	if repo.IsTest(fact.Path) {
+	return importModuleFinding(repo, governed, fact.Path, fact.Resolved, fact.Line)
+}
+
+func importModuleFinding(repo repository.Repository, governed map[string]bool, source, resolved string, line int) (policy.Finding, bool) {
+	if repo.IsTest(source) {
 		return policy.Finding{}, false
 	}
-	if fact.Resolved == "" || !governed[fact.Resolved] {
+	if resolved == "" || !governed[resolved] {
 		return policy.Finding{}, false
 	}
-	owners := repo.OwnerModuleNames(fact.Path)
-	targets := repo.OwnerModuleNames(fact.Resolved)
+	owners := repo.OwnerModuleNames(source)
+	targets := repo.OwnerModuleNames(resolved)
 	if len(owners) != 1 || len(targets) != 1 || owners[0] == targets[0] {
 		return policy.Finding{}, false
 	}
@@ -52,37 +56,41 @@ func javascriptImportFinding(repo repository.Repository, governed map[string]boo
 	}
 	return policy.Finding{
 		Check:   "architecture.moduleDependency",
-		Path:    fact.Path,
+		Path:    source,
 		Subject: targets[0],
-		Message: fmt.Sprintf("line %d module %q imports module %q without declaring dependsOn", fact.Line, owners[0], targets[0]),
+		Message: fmt.Sprintf("line %d module %q imports module %q without declaring dependsOn", line, owners[0], targets[0]),
 	}, true
 }
 
 func javascriptPackageFinding(repo repository.Repository, packages *nodePackages,
 	fact javascript.ImportFact) (policy.Finding, bool) {
-	if fact.Package == "" {
+	return nodePackageFinding(repo, packages, fact.Path, fact.Resolved, fact.Package, fact.Line)
+}
+
+func nodePackageFinding(repo repository.Repository, packages *nodePackages, source, resolved, name string, line int) (policy.Finding, bool) {
+	if name == "" {
 		return policy.Finding{}, false
 	}
-	owner, owned := packages.owning(fact.Path)
-	if !owned || fact.Package == owner.name || owner.runtime[fact.Package] {
+	owner, owned := packages.owning(source)
+	if !owned || name == owner.name || owner.runtime[name] {
 		return policy.Finding{}, false
 	}
 	message := ""
 	switch {
-	case owner.development[fact.Package]:
-		if repo.IsDevelopment(fact.Path) {
+	case owner.development[name]:
+		if repo.IsDevelopment(source) {
 			return policy.Finding{}, false
 		}
 		message = fmt.Sprintf("line %d package %q imports development dependency %q from source that ships",
-			fact.Line, owner.root, fact.Package)
-	case installedPackage(fact.Resolved):
+			line, owner.root, name)
+	case installedPackage(resolved):
 		message = fmt.Sprintf("line %d package %q imports %q without declaring it as a dependency",
-			fact.Line, owner.root, fact.Package)
+			line, owner.root, name)
 	default:
 		return policy.Finding{}, false
 	}
 	return policy.Finding{
-		Check: "architecture.packageDependency", Path: fact.Path, Subject: fact.Package, Message: message,
+		Check: "architecture.packageDependency", Path: source, Subject: name, Message: message,
 	}, true
 }
 

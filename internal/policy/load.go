@@ -76,24 +76,29 @@ func requireEOF(decoder *json.Decoder) error {
 	return errors.New("configuration contains more than one JSON value")
 }
 
+func EffectiveQuality(quality Quality) Quality {
+	defaultInt(&quality.ReviewFileLines, ReviewFileLines)
+	defaultInt(&quality.ReviewTestFileLines, ReviewTestFileLines)
+	defaultInt(&quality.MaxFileLines, MaxFileLines)
+	defaultInt(&quality.MaxTestFileLines, MaxTestFileLines)
+	defaultInt(&quality.Complexity.Go, MaxGoComplexity)
+	defaultInt(&quality.Complexity.GoTest, MaxGoTestComplexity)
+	defaultInt(&quality.Complexity.Python, MaxPythonComplexity)
+	defaultInt(&quality.Complexity.TypeScript, MaxTypeScriptComplexity)
+	defaultInt(&quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity)
+	defaultInt(&quality.MaxDepth, MaxTypeScriptDepth)
+	defaultInt(&quality.MaxTestDepth, MaxTypeScriptTestDepth)
+	defaultInt(&quality.MaxParams, MaxTypeScriptParams)
+	defaultInt(&quality.MaxTestParams, MaxTypeScriptTestParams)
+	return quality
+}
+
 func applyDefaults(config *Config) {
 	generationDefaults(&config.Generation)
 	if behaviorReview := config.Verification.BehaviorReview; behaviorReview != nil {
 		defaultString(&behaviorReview.DefaultRequiredAt, BehaviorReviewOnRequest)
 	}
-	defaultInt(&config.Quality.ReviewFileLines, ReviewFileLines)
-	defaultInt(&config.Quality.ReviewTestFileLines, ReviewTestFileLines)
-	defaultInt(&config.Quality.MaxFileLines, MaxFileLines)
-	defaultInt(&config.Quality.MaxTestFileLines, MaxTestFileLines)
-	defaultInt(&config.Quality.Complexity.Go, MaxGoComplexity)
-	defaultInt(&config.Quality.Complexity.GoTest, MaxGoTestComplexity)
-	defaultInt(&config.Quality.Complexity.Python, MaxPythonComplexity)
-	defaultInt(&config.Quality.Complexity.TypeScript, MaxTypeScriptComplexity)
-	defaultInt(&config.Quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity)
-	defaultInt(&config.Quality.MaxDepth, MaxTypeScriptDepth)
-	defaultInt(&config.Quality.MaxTestDepth, MaxTypeScriptTestDepth)
-	defaultInt(&config.Quality.MaxParams, MaxTypeScriptParams)
-	defaultInt(&config.Quality.MaxTestParams, MaxTypeScriptTestParams)
+	config.Quality = EffectiveQuality(config.Quality)
 	defaultInt(&config.SupplyChain.MinimumReleaseAgeDays, MinimumReleaseAgeDays)
 	defaultInt(&config.SupplyChain.PreferredNewDependencyAgeDays, PreferredNewDependencyAgeDays)
 	defaultString(&config.SupplyChain.AuditLevel, "low")

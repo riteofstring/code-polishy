@@ -23,6 +23,7 @@ type Repository struct {
 	DynamicControlInputs []string
 	pythonProjectCache   *pythonProjectInventoryCache
 	pathFactCache        *pathFactCache
+	analysisProfile      string
 }
 
 const DesignDocumentationCheck = "policy.designDocumentation"

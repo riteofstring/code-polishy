@@ -25,8 +25,14 @@ func goSourceGraph(repo repository.Repository, selected, allFiles []string, inve
 	files := map[string]*ast.File{}
 	positions := token.NewFileSet()
 	packages := map[string]string{}
+	unitProblems := nativeGoGraphUnits(repo, allFiles)
 	for index := 0; index < len(scope.queue); index++ {
 		path := scope.queue[index]
+		if err := unitProblems[filepath.Dir(path)]; err != nil {
+			part.incomplete = true
+			part.findings = append(part.findings, goGraphCoverage(path, err.Error()))
+			continue
+		}
 		node, importPath, parsed, err := readGoGraphSource(repo, path, modules, positions)
 		if err == nil {
 			node, err = resolveGoGraphPackage(node, importPath, parsed.Name.Name, packages, unitByImport)
@@ -212,4 +218,19 @@ func goGraphModuleFindings(
 
 func goGraphCoverage(path, message string) policy.Finding {
 	return policy.Finding{Check: "architecture.importCoverage", Path: path, Subject: "go", Message: message}
+}
+
+func nativeGoGraphUnits(repo repository.Repository, allFiles []string) map[string]error {
+	units := map[string][]string{}
+	for _, path := range allFiles {
+		if repo.Language(path) == "go" {
+			directory := filepath.Dir(path)
+			units[directory] = append(units[directory], path)
+		}
+	}
+	problems := map[string]error{}
+	for directory, paths := range units {
+		_, problems[directory] = repo.NativeUnit(paths, "architecture")
+	}
+	return problems
 }

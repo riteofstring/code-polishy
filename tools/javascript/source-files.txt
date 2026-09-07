@@ -12,3 +12,4 @@ licenses.mjs
 packages.mjs
 bundle-manifest.mjs
 source-files.txt
+policy.mjs

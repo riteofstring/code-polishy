@@ -152,12 +152,12 @@ type javascriptLintGroup struct {
 func javascriptLintGroups(repo repository.Repository, files []string) []javascriptLintGroup {
 	grouped := map[string]*javascriptLintGroup{}
 	for _, path := range files {
-		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
+		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] || !repo.NativeAnalysis(path, "lint") && !repo.NativeAnalysis(path, "complexity") {
 			continue
 		}
 		limits := javascriptLintLimits(repo, repo.IsTest(path))
 		activation := javascriptLintActivation(repo, path)
-		checkComplexity := !repo.IsGenerated(path)
+		checkComplexity := !repo.IsGenerated(path) && repo.NativeAnalysis(path, "complexity")
 		key := fmt.Sprintf("%+v|%+v|%t", limits, activation, checkComplexity)
 		group, exists := grouped[key]
 		if !exists {
@@ -233,7 +233,17 @@ func javascriptLintResultFindings(repo repository.Repository, result javascript.
 		}
 	}
 	findings = append(findings, javascriptLintCommentFindings(repo, result)...)
-	return append(findings, javascriptLintViolationFindings(result.Findings, checkComplexity)...)
+	violations := []javascript.LintViolation{}
+	for _, violation := range result.Findings {
+		capability := "lint"
+		if javascriptComplexityRules[violation.Rule] {
+			capability = "complexity"
+		}
+		if repo.NativeAnalysis(violation.Path, capability) {
+			violations = append(violations, violation)
+		}
+	}
+	return append(findings, javascriptLintViolationFindings(violations, checkComplexity)...)
 }
 
 func javascriptLintCommentFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
@@ -241,7 +251,13 @@ func javascriptLintCommentFindings(repo repository.Repository, result javascript
 		return nil
 	}
 	findings := javascriptLintCommentCoverageFindings(repo, result.Unsupported)
-	return append(findings, javascriptLintProseCommentFindings(repo, result.Comments)...)
+	comments := []javascript.LintComment{}
+	for _, comment := range result.Comments {
+		if repo.NativeAnalysis(comment.Path, "lint") {
+			comments = append(comments, comment)
+		}
+	}
+	return append(findings, javascriptLintProseCommentFindings(repo, comments)...)
 }
 
 func javascriptLintCommentCoverageFindings(repo repository.Repository, unsupported []javascript.Unsupported) []policy.Finding {
@@ -364,6 +380,12 @@ func JavaScriptTypeCheckFindings(ctx context.Context, repo repository.Repository
 	defer cancel()
 	bundle := javascript.Bundle{PolicyRoot: repo.PolicyRoot}
 	for _, project := range projects {
+		if err := javascriptUnitProblem(repo, inventory, project.paths, "typecheck"); err != nil {
+			for _, path := range project.paths {
+				findings = append(findings, javascriptCoverageFinding(path, err.Error()))
+			}
+			continue
+		}
 		result, err := bundle.TypeCheckInherited(ctx, repo.Root, project.project, project.paths, project.inherited)
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
@@ -413,7 +435,7 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 func javascriptTypeCheckFiles(repo repository.Repository, files []string) []string {
 	selected := []string{}
 	for _, path := range files {
-		if javascriptTypeCheckExtensions[strings.ToLower(filepath.Ext(path))] {
+		if javascriptTypeCheckExtensions[strings.ToLower(filepath.Ext(path))] && repo.NativeAnalysis(path, "typecheck") {
 			selected = append(selected, path)
 		}
 	}
@@ -513,15 +535,33 @@ func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository,
 	}
 	ctx, cancel := context.WithTimeout(ctx, javascriptDeadCodeBudget)
 	defer cancel()
-	bundle := javascript.Bundle{PolicyRoot: repo.PolicyRoot}
 	for _, analysis := range analyses {
-		result, err := bundle.DeadCode(ctx, repo.Root, analysis.directory, analysis.workspaces)
+		result, err := nativeJavaScriptDeadCodeAnalysis(ctx, repo, analysis, inventory)
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
 		}
-		findings = append(findings, javascriptDeadCodeResultFindings(analysis, result)...)
+		findings = append(findings, result...)
 	}
 	return findings
+}
+
+func nativeJavaScriptDeadCodeAnalysis(ctx context.Context, repo repository.Repository, analysis javascriptDeadCodeAnalysis, inventory []string) ([]policy.Finding, error) {
+	paths := []string{}
+	for _, workspace := range analysis.workspaces {
+		paths = append(paths, workspace.Project...)
+	}
+	if err := javascriptUnitProblem(repo, inventory, paths, "dead-code"); err != nil {
+		findings := []policy.Finding{}
+		for _, path := range paths {
+			findings = append(findings, javascriptDeadCodeCoverageFinding(path, err.Error()))
+		}
+		return findings, nil
+	}
+	result, err := (javascript.Bundle{PolicyRoot: repo.PolicyRoot}).DeadCode(ctx, repo.Root, analysis.directory, analysis.workspaces)
+	if err != nil {
+		return nil, err
+	}
+	return javascriptDeadCodeResultFindings(analysis, result), nil
 }
 
 type javascriptDeadCodeAnalysis struct {
@@ -555,27 +595,34 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 		if repo.Language(path) != "typescript" {
 			continue
 		}
+		owner := repo.AnalysisOwner(path, "dead-code", "")
+		if !owner.Native {
+			if owner.Problem != "" {
+				uncovered = append(uncovered, javascriptUncoveredFile{path, "the policy-owned dead-code analyzer does not analyze this file: " + owner.Problem})
+			}
+			continue
+		}
 		if !javascriptSourceExtensions[strings.ToLower(filepath.Ext(path))] {
 			uncovered = append(uncovered, javascriptUncoveredFile{path,
 				"the policy-owned dead-code analyzer does not analyze this file"})
 			continue
 		}
-		owner, owned := javascriptOwningPackage(packages, repo.JavaScriptContextPath(path))
+		packageOwner, owned := javascriptOwningPackage(packages, repo.JavaScriptContextPath(path))
 		if !owned {
 			uncovered = append(uncovered, javascriptUncoveredFile{path,
 				"no package.json governs this file, so no package declares what it belongs to"})
 			continue
 		}
-		workspace, exists := grouped[owner]
+		workspace, exists := grouped[packageOwner]
 		if !exists {
-			workspace = &javascript.DeadCodeWorkspace{Root: owner, Entry: []string{}, Project: []string{}}
-			grouped[owner] = workspace
+			workspace = &javascript.DeadCodeWorkspace{Root: packageOwner, Entry: []string{}, Project: []string{}}
+			grouped[packageOwner] = workspace
 		}
 		workspace.Project = append(workspace.Project, path)
 		if _, inherited := repo.GeneratedJavaScriptOwner(path); inherited {
 			workspace.Inherited = append(workspace.Inherited, path)
 		}
-		if javascriptEntryPoint(repo, owner, path) {
+		if javascriptEntryPoint(repo, packageOwner, path) {
 			workspace.Entry = append(workspace.Entry, path)
 		}
 	}
@@ -768,7 +815,7 @@ func javascriptFormatFiles(repo repository.Repository, files []string) []string 
 	selected := []string{}
 	for _, path := range files {
 		name := strings.ToLower(filepath.Base(path))
-		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) {
+		if !javascriptFormatExtensions[strings.ToLower(filepath.Ext(path))] || repo.IsData(path) || !repo.NativeAnalysis(path, "format") {
 			continue
 		}
 		if repo.IsGenerated(path) {

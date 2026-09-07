@@ -19,6 +19,11 @@ func applyRuff(repo repository.Repository, active policy.ActivePolicyModule, inv
 		resolution.Findings = append(resolution.Findings, finding("ruff", active.Root, "python", "enabled Ruff policy did not find governed Python source at this root"))
 		return
 	}
+	if !slices.ContainsFunc(project.Files, func(path string) bool {
+		return repo.NativeAnalysis(path, "format") || repo.NativeAnalysis(path, "lint") || repo.NativeAnalysis(path, "complexity")
+	}) {
+		return
+	}
 	configurationFindings := pythonRuffConfigurationFindings(inventory, project)
 	if len(configurationFindings) > 0 {
 		resolution.Findings = append(resolution.Findings, configurationFindings...)
@@ -76,6 +81,9 @@ func applyTy(repo repository.Repository, active policy.ActivePolicyModule, inven
 		resolution.Findings = append(resolution.Findings, finding("ty", active.Root, "python", "enabled ty policy did not find governed Python source at this root"))
 		return
 	}
+	if len(repo.NativeAnalysisFiles(pythonFiles, "typecheck", "")) == 0 {
+		return
+	}
 	ty := repo.PolicyTool("ty")
 	if pin := repo.ToolPin("ty"); pin == "" || !tyExecutableVersion(ty, pin) {
 		resolution.Findings = append(resolution.Findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "ty", Message: "conditional Python policy requires the ty version tools/ty-version.txt pins; run ./tools/install-policy-tools.sh"})
@@ -86,6 +94,9 @@ func applyVulture(repo repository.Repository, active policy.ActivePolicyModule, 
 	pythonFiles := pythonProjectFiles(inventory, active.Root)
 	if len(pythonFiles) == 0 {
 		resolution.Findings = append(resolution.Findings, finding("vulture", active.Root, "python", "enabled Vulture policy did not find governed Python source at this root"))
+		return
+	}
+	if len(repo.NativeAnalysisFiles(pythonFiles, "dead-code", "")) == 0 {
 		return
 	}
 	if !pythonRuntimeVersion(repo, repo.ToolPin("python")) {

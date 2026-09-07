@@ -29,7 +29,7 @@ func newJavaScriptGraphScope(repo repository.Repository, selected, allFiles []st
 	sortProjectRoots(scope.roots)
 	scope.roots = slices.Compact(scope.roots)
 	for _, path := range allFiles {
-		if repo.Language(path) == "typescript" {
+		if repo.Language(path) == "typescript" && repo.NativeAnalysis(path, "architecture") {
 			root := scope.project(path)
 			scope.files[root] = append(scope.files[root], path)
 		}
@@ -45,13 +45,13 @@ func (scope *javascriptGraphScope) selectPath(path string, allFiles []string) {
 		roots := javascriptPackageRoots(allFiles)
 		owner := filepath.ToSlash(filepath.Dir(path))
 		for _, source := range allFiles {
-			if scope.repo.Language(source) == "typescript" && javascriptPackageRoot(scope.repo.JavaScriptContextPath(source), roots) == owner {
+			if scope.repo.Language(source) == "typescript" && scope.repo.NativeAnalysis(source, "architecture") && javascriptPackageRoot(scope.repo.JavaScriptContextPath(source), roots) == owner {
 				scope.includePath(source)
 			}
 		}
 		return
 	}
-	if scope.repo.Language(path) == "typescript" || javascriptProjectControl(path) {
+	if scope.repo.Language(path) == "typescript" && scope.repo.NativeAnalysis(path, "architecture") || javascriptProjectControl(path) {
 		scope.includePath(path)
 	}
 }
@@ -76,7 +76,7 @@ func (scope *javascriptGraphScope) includePath(path string) {
 
 func (scope *javascriptGraphScope) includeImports(facts []javascript.ImportFact) {
 	for _, fact := range facts {
-		if scope.governed[fact.Resolved] && scope.repo.Language(fact.Resolved) == "typescript" {
+		if scope.governed[fact.Resolved] && scope.repo.Language(fact.Resolved) == "typescript" && scope.repo.NativeAnalysis(fact.Resolved, "architecture") {
 			scope.includePath(fact.Resolved)
 		}
 	}

@@ -62,7 +62,7 @@ func packIntegrationSource(t *testing.T) string {
 		Commands:  []pack.Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}},
 		Fixtures: []pack.Fixture{
 			{Name: "lint-pass", Command: "adapter", Capability: "lint", Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},
-			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings"},
+			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings", ExpectedRules: []string{"invalid-source"}},
 		},
 	}
 	manifestData, _ := json.Marshal(manifest)

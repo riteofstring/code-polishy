@@ -13,7 +13,9 @@
     "generated": ["internal/engine/testdata/**", "schema/sarif*.json"],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
-      "tools/javascript/runner.mjs"
+      "tools/javascript/runner.mjs",
+      "providers/javascript/run.mjs",
+      "providers/javascript/build.mjs"
     ]
   },
   "documentation": {
@@ -125,6 +127,14 @@
           "cmd/code-polishy/main.go",
           "cmd/code-polishy/report.go"
         ]
+      },
+      {
+        "path": "docs/design/analysis-providers.md",
+        "module": "pack"
+      },
+      {
+        "path": "docs/design/javascript-provider.md",
+        "module": "javascript-provider"
       }
     ]
   },
@@ -156,7 +166,8 @@
         "engine",
         "cli",
         "launcher",
-        "tooling"
+        "tooling",
+        "javascript-provider"
       ]
     }
   },
@@ -253,7 +264,8 @@
         "policy",
         "pythonfacts",
         "repository",
-        "runner"
+        "runner",
+        "pack"
       ]
     },
     {
@@ -290,7 +302,7 @@
     {
       "name": "pack",
       "paths": ["internal/pack/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["policy", "repository", "runner", "release"]
     },
     {
       "name": "portability",
@@ -358,6 +370,11 @@
         "templates/policy-exception.md",
         "tools/**"
       ]
+    },
+    {
+      "name": "javascript-provider",
+      "paths": ["providers/javascript/**"],
+      "dependsOn": ["tooling"]
     }
   ],
   "checks": [
@@ -408,6 +425,13 @@
       "argv": ["./scripts/check-python-facts-lock.sh"],
       "modules": ["pythonfacts"],
       "runOn": ["supply-chain"]
+    },
+    {
+      "name": "javascript-provider-build",
+      "provides": ["build"],
+      "argv": ["./scripts/build-javascript-provider.sh"],
+      "modules": ["javascript-provider"],
+      "runOn": ["build"]
     }
   ],
   "tests": {
@@ -1197,6 +1221,20 @@
           "scripts/test-installed-release-contract.sh"
         ],
         "argv": ["./scripts/test-installed-release-contract.sh"]
+      },
+      {
+        "name": "javascript-provider-boundary",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["javascript-provider"],
+        "argv": ["./scripts/test-javascript-provider.sh"],
+        "paths": [
+          "providers/javascript/**",
+          "tools/javascript/policy.mjs",
+          "scripts/test-javascript-provider.sh"
+        ],
+        "runOn": ["focused", "recommended", "full"]
       }
     ],
     "paths": [
@@ -1208,7 +1246,8 @@
       "scripts/test-javascript-runner.sh",
       "scripts/test-javascript-project.sh",
       "scripts/test-installed-release.sh",
-      "scripts/test-installed-release-contract.sh"
+      "scripts/test-installed-release-contract.sh",
+      "scripts/test-javascript-provider.sh"
     ],
     "ownership": [
       {
@@ -1383,6 +1422,14 @@
         ],
         "module": "tooling",
         "focusedSuite": "installed-release-contract"
+      },
+      {
+        "paths": [
+          "providers/javascript/provider.test.mjs",
+          "scripts/test-javascript-provider.sh"
+        ],
+        "module": "javascript-provider",
+        "focusedSuite": "javascript-provider-boundary"
       }
     ]
   },
@@ -1511,6 +1558,19 @@
         "owner": "code-polishy-maintainer",
         "reviewed": "2026-08-26",
         "expires": "2026-09-12"
+      },
+      {
+        "id": "provider-fast-uri-security-fix",
+        "ecosystem": "pnpm",
+        "package": "fast-uri",
+        "version": "3.1.7",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/advisories/GHSA-f65p-4m7j-42xc",
+        "reason": "The provider type checker transitively requires fast-uri through Ajv. Version 3.1.7 fixes the remaining URI-normalization advisories affecting the aged 3.1.5 candidate; native audit and OSV remain required.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-07",
+        "expires": "2026-10-02"
       }
     ]
   },
@@ -1519,7 +1579,7 @@
       "id": "declarative-suite-inventory-size",
       "check": "quality.fileLength",
       "path": ".code-polishy.json",
-      "subject": "1517",
+      "subject": "1588",
       "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
       "owner": "code-polishy-maintainer",
       "expires": "2026-10-05"

@@ -1,6 +1,6 @@
 # Code Polishy robustness and framework integration
 
-Status: implementation in progress on `beta`. Publishing and downstream upgrades are separate delivery operations.
+Status: implemented on `beta` as `0.25.0-beta.1`. Publishing and downstream upgrades are separate delivery operations.
 
 ## Outcome and boundaries
 
@@ -9,6 +9,14 @@ Improve deterministic detection of code defects, remove confirmed false positive
 Each implementation change must name a reproducible failure or missing check, its owning code, and an observable acceptance test. An AI may help author code and review a design; ordinary analysis, provider selection, coverage acceptance, exceptions, and gate outcomes must remain deterministic. Existing explicitly selected human or agent reviews retain their current authority. This work introduces no new mandatory AI judgment.
 
 The development branch is `beta`. Stable releases and other repositories' exact locks remain independent. Periodic upstream integration uses a verified release commit. This plan does not publish a beta, change another repository, or change the stable release process.
+
+## Implemented boundary
+
+The beta implements deterministic provider selection, the coherent pack v2 contract, exact runtime verification, original-source facts and coverage, shared graph enforcement, and a separately built JS/TS provider. Its framework adapter uses existing Astro metadata; it adds no Astro dispatch or tooling dependencies to core. A real SQLite syntax proof demonstrates a second language through the same contract. Native analyzer improvements and existing local diagnostics remain intact. No observability product or integration hooks were added.
+
+Contained stylesheet imports and declared runner labels have executable positive and negative regressions. The Electron report remains unresolved: the current `learnportugal-content` checkout has removed the reported desktop implementation, while historical revision `06e0355` already declares Electron as a peer dependency alongside its development dependency. Those observations do not establish a current reproducible runtime boundary. No broad dependency exemption or speculative runtime declaration was introduced. A current main/preload/renderer reproduction is still needed for that repair.
+
+Both named Astro repositories were exercised in disposable copies, including seeded syntax/rule/type/import defects, literal routes, original-source mappings, focused formatting, graph construction, and preservation of existing bytes. Capability results and remaining coverage limits are recorded in [the beta acceptance report](../reviews/provider-beta-acceptance.md). Missing test ownership and excluded compilation inputs remain adoption findings; an application build is not credited as source-analysis coverage.
 
 ## Assessed baseline
 

@@ -6,7 +6,8 @@ OCI images. Tags and published digests are immutable. A maintainer performs
 every operation that creates a tag, pushes, publishes, or changes a target lock.
 
 1. Bring the candidate to release shape as one reviewed commit. `VERSION` must
-   contain the strict `MAJOR.MINOR.PATCH` version, and `CHANGELOG.md` must have
+   contain a strict `MAJOR.MINOR.PATCH` version, optionally followed by a SemVer
+   prerelease suffix such as `-beta.1`, and `CHANGELOG.md` must have
    an exact `## <VERSION> - <YYYY-MM-DD>` section. Remove completed temporary
    plans and obsolete docs. Use focused checks while editing; do not run a full
    gate against a changing worktree.

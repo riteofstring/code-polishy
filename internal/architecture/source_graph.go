@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
+	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
@@ -18,6 +19,7 @@ type sourceGraphPart struct {
 	findings    []policy.Finding
 	incomplete  bool
 	testImports map[string][]string
+	imports     []pack.ImportFact
 }
 
 func mergeSourceGraphParts(parts ...sourceGraphPart) sourceGraphPart {
@@ -33,6 +35,7 @@ func mergeSourceGraphParts(parts ...sourceGraphPart) sourceGraphPart {
 			merged.testImports[path] = imports
 		}
 		merged.nodes = append(merged.nodes, part.nodes...)
+		merged.imports = append(merged.imports, part.imports...)
 		merged.edges = append(merged.edges, part.edges...)
 		merged.inputs = append(merged.inputs, part.inputs...)
 		merged.external = append(merged.external, part.external...)

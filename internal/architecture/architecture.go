@@ -31,11 +31,23 @@ func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected
 		return Analysis{Findings: []policy.Finding{{Check: "architecture.inventory", Path: "repository", Subject: "files", Message: err.Error()}}}
 	}
 	goInventory := repo.InspectGoModules(allFiles)
+	providers := providerSourceGraph(ctx, repo, selected, allFiles, commandRunner)
+	nativeSelected := append([]string{}, selected...)
+	for _, fact := range providers.imports {
+		if fact.Resolved != "" {
+			nativeSelected = append(nativeSelected, fact.Resolved)
+		}
+	}
 	part := mergeSourceGraphParts(
-		goSourceGraph(repo, selected, allFiles, goInventory),
-		javascriptSourceGraph(ctx, repo, selected, allFiles),
-		pythonSourceGraph(ctx, repo, selected, allFiles, commandRunner),
+		providers,
+		goSourceGraph(repo, nativeSelected, allFiles, goInventory),
+		javascriptSourceGraph(ctx, repo, nativeSelected, allFiles),
+		pythonSourceGraph(ctx, repo, repo.NativeAnalysisFiles(nativeSelected, "architecture", ""), allFiles, commandRunner),
 	)
+	connectProviderImports(repo, allFiles, &part)
+	if !part.incomplete {
+		part.testImports = resolvedTestImports(part.nodes, part.edges)
+	}
 	graph, findings := completeSourceGraph(part, selected)
 	return Analysis{Findings: findings, Graph: graph, TestImports: part.testImports}
 }

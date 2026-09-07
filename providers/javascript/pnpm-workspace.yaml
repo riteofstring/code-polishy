@@ -1,0 +1,23 @@
+packages: []
+onlyBuiltDependencies: []
+strictDepBuilds: true
+ignoreScripts: true
+enablePrePostScripts: false
+frozenLockfile: true
+preferFrozenLockfile: true
+autoInstallPeers: false
+resolutionMode: highest
+saveExact: true
+verifyStoreIntegrity: true
+nodeLinker: isolated
+hoist: false
+shamefullyHoist: false
+minimumReleaseAge: 43200
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+blockExoticSubdeps: true
+trustLockfile: false
+trustPolicy: no-downgrade
+updateNotifier: false
+minimumReleaseAgeExclude:
+  - fast-uri@3.1.7

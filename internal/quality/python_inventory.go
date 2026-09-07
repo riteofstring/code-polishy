@@ -2,6 +2,7 @@ package quality
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -143,14 +144,15 @@ func pythonQualityPlannedProjectForProfile(repo repository.Repository, manifest 
 			Check: "quality.typecheckCoverage", Path: project.Manifest, Subject: "ty", Message: typecheckProblem,
 		})
 	}
-	return pythonQualityProject{project: project, sources: sources, commands: commands}, true, findings
+	planned, routing := nativePythonCommands(repo, pythonQualityProject{project: project, sources: sources, commands: commands})
+	return planned, true, append(findings, routing...)
 }
 
 func pythonQualitySources(repo repository.Repository, selected []string) []string {
 	seen := map[string]bool{}
 	sources := []string{}
 	for _, source := range selected {
-		if repo.Language(source) != "python" || seen[source] {
+		if repo.Language(source) != "python" || seen[source] || !slices.ContainsFunc([]string{"lint", "typecheck", "complexity", "dead-code"}, func(capability string) bool { return repo.NativeAnalysis(source, capability) }) {
 			continue
 		}
 		seen[source] = true

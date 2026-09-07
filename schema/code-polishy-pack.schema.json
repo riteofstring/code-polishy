@@ -15,11 +15,22 @@
     "fixtures"
   ],
   "properties": {
-    "$schema": { "type": "string", "minLength": 1 },
-    "manifestVersion": { "const": 1 },
-    "name": { "$ref": "#/$defs/identifier" },
-    "version": { "$ref": "#/$defs/semanticVersion" },
-    "protocolVersion": { "const": 1 },
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "manifestVersion": {
+      "const": 2
+    },
+    "name": {
+      "$ref": "#/$defs/identifier"
+    },
+    "version": {
+      "$ref": "#/$defs/semanticVersion"
+    },
+    "protocolVersion": {
+      "const": 2
+    },
     "platforms": {
       "type": "array",
       "minItems": 1,
@@ -37,17 +48,23 @@
     "languages": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/language" }
+      "items": {
+        "$ref": "#/$defs/language"
+      }
     },
     "commands": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/command" }
+      "items": {
+        "$ref": "#/$defs/command"
+      }
     },
     "fixtures": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/fixture" }
+      "items": {
+        "$ref": "#/$defs/fixture"
+      }
     }
   },
   "$defs": {
@@ -66,16 +83,24 @@
     "paths": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "$ref": "#/$defs/path" }
+      "items": {
+        "$ref": "#/$defs/path"
+      }
     },
     "language": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id"],
       "properties": {
-        "id": { "$ref": "#/$defs/identifier" },
-        "sourcePatterns": { "$ref": "#/$defs/paths" },
-        "dependencyManifests": { "$ref": "#/$defs/paths" }
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "sourcePatterns": {
+          "$ref": "#/$defs/paths"
+        },
+        "dependencyManifests": {
+          "$ref": "#/$defs/paths"
+        }
       },
       "allOf": [
         {
@@ -104,7 +129,11 @@
           },
           "then": {
             "required": ["sourcePatterns"],
-            "properties": { "sourcePatterns": { "minItems": 1 } }
+            "properties": {
+              "sourcePatterns": {
+                "minItems": 1
+              }
+            }
           }
         }
       ]
@@ -120,12 +149,21 @@
         "timeoutSeconds"
       ],
       "properties": {
-        "name": { "$ref": "#/$defs/identifier" },
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
         "argv": {
           "type": "array",
           "minItems": 1,
-          "prefixItems": [{ "$ref": "#/$defs/path" }],
-          "items": { "type": "string", "pattern": ".*\\S.*" }
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/path"
+            }
+          ],
+          "items": {
+            "type": "string",
+            "pattern": ".*\\S.*"
+          }
         },
         "capabilities": {
           "type": "array",
@@ -163,11 +201,34 @@
             ]
           }
         },
-        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
         "environment": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "paths": {
+          "$ref": "#/$defs/paths"
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/identifier"
+            },
+            "version": {
+              "$ref": "#/$defs/semanticVersion"
+            }
+          }
         }
       }
     },
@@ -183,15 +244,61 @@
         "expectedStatus"
       ],
       "properties": {
-        "name": { "$ref": "#/$defs/identifier" },
-        "command": { "$ref": "#/$defs/identifier" },
-        "capability": { "$ref": "#/$defs/identifier" },
-        "project": { "$ref": "#/$defs/path" },
-        "files": { "$ref": "#/$defs/paths" },
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "command": {
+          "$ref": "#/$defs/identifier"
+        },
+        "capability": {
+          "$ref": "#/$defs/identifier"
+        },
+        "project": {
+          "$ref": "#/$defs/path"
+        },
+        "files": {
+          "$ref": "#/$defs/paths",
+          "minItems": 1
+        },
         "expectedStatus": {
           "enum": ["pass", "findings", "operational-failure"]
+        },
+        "expectedRules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "expectedStatus": {
+                "const": "findings"
+              }
+            }
+          },
+          "then": {
+            "required": ["expectedRules"],
+            "properties": {
+              "expectedRules": {
+                "minItems": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "expectedRules": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

@@ -11,13 +11,15 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 const (
 	ManifestFilename = "code-polishy-pack.json"
 	ReceiptFilename  = "installation-receipt.json"
-	ManifestVersion  = 1
-	ProtocolVersion  = 1
+	ManifestVersion  = 2
+	ProtocolVersion  = 2
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
@@ -43,12 +45,14 @@ type Language struct {
 }
 
 type Command struct {
-	Name           string   `json:"name"`
-	Argv           []string `json:"argv"`
-	Capabilities   []string `json:"capabilities"`
-	Profiles       []string `json:"profiles"`
-	TimeoutSeconds int      `json:"timeoutSeconds"`
-	Environment    []string `json:"environment,omitempty"`
+	Name           string              `json:"name"`
+	Argv           []string            `json:"argv"`
+	Capabilities   []string            `json:"capabilities"`
+	Profiles       []string            `json:"profiles"`
+	TimeoutSeconds int                 `json:"timeoutSeconds"`
+	Environment    []string            `json:"environment,omitempty"`
+	Paths          []string            `json:"paths,omitempty"`
+	Runtime        *policy.PackRuntime `json:"runtime,omitempty"`
 }
 
 type Fixture struct {
@@ -58,6 +62,7 @@ type Fixture struct {
 	Project        string   `json:"project"`
 	Files          []string `json:"files"`
 	ExpectedStatus string   `json:"expectedStatus"`
+	ExpectedRules  []string `json:"expectedRules,omitempty"`
 }
 
 func ParseManifest(data []byte, source string) (Manifest, error) {
@@ -199,6 +204,12 @@ func validateCommand(command Command, index int, seen map[string]bool, capabilit
 	if command.TimeoutSeconds < 1 || command.TimeoutSeconds > 3600 {
 		return fmt.Errorf("%s.timeoutSeconds must be between 1 and 3600", label)
 	}
+	if err := validatePatterns(command.Paths, label+".paths"); err != nil {
+		return err
+	}
+	if !validRuntimeDeclaration(command.Runtime) {
+		return fmt.Errorf("%s.runtime requires a tool name and exact semantic version", label)
+	}
 	return validateCommandEnvironment(command.Environment, label)
 }
 
@@ -238,10 +249,10 @@ func validateFixtures(commands []Command, fixtures []Fixture) error {
 		if err := validateFixture(fixture, index, provided, seen); err != nil {
 			return err
 		}
-		if coverage[fixture.Capability] == nil {
-			coverage[fixture.Capability] = map[string]bool{}
+		if coverage[fixture.Command+":"+fixture.Capability] == nil {
+			coverage[fixture.Command+":"+fixture.Capability] = map[string]bool{}
 		}
-		coverage[fixture.Capability][fixture.ExpectedStatus] = true
+		coverage[fixture.Command+":"+fixture.Capability][fixture.ExpectedStatus] = true
 	}
 	return validateFixtureCoverage(commands, coverage)
 }
@@ -269,13 +280,37 @@ func validateFixture(fixture Fixture, index int, provided map[string]map[string]
 	if err := exactRelativePath(fixture.Project); err != nil {
 		return fmt.Errorf("%s.project: %w", label, err)
 	}
+	if len(fixture.Files) == 0 {
+		return fmt.Errorf("%s.files must select real source", label)
+	}
+	if err := validateUnique(fixture.Files, label+".files"); err != nil {
+		return err
+	}
 	for _, file := range fixture.Files {
 		if err := exactRelativePath(file); err != nil {
 			return fmt.Errorf("%s.files: %w", label, err)
 		}
 	}
+	return validateFixtureExpectation(fixture, label)
+}
+
+func validateFixtureExpectation(fixture Fixture, label string) error {
 	if !slices.Contains([]string{"pass", "findings", "operational-failure"}, fixture.ExpectedStatus) {
 		return fmt.Errorf("%s.expectedStatus is invalid", label)
+	}
+	if fixture.ExpectedStatus == "findings" && len(fixture.ExpectedRules) == 0 {
+		return fmt.Errorf("%s requires expectedRules for the seeded defect", label)
+	}
+	if fixture.ExpectedStatus != "findings" && len(fixture.ExpectedRules) > 0 {
+		return fmt.Errorf("%s expectedRules require findings status", label)
+	}
+	for _, rule := range fixture.ExpectedRules {
+		if !validRule(rule) {
+			return fmt.Errorf("%s has an invalid expected rule", label)
+		}
+	}
+	if err := validateUnique(fixture.ExpectedRules, label+".expectedRules"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -283,8 +318,8 @@ func validateFixture(fixture Fixture, index int, provided map[string]map[string]
 func validateFixtureCoverage(commands []Command, coverage map[string]map[string]bool) error {
 	for _, command := range commands {
 		for _, capability := range command.Capabilities {
-			covered := coverage[capability]
-			if !covered["pass"] || !(covered["findings"] || covered["operational-failure"]) {
+			covered := coverage[command.Name+":"+capability]
+			if !covered["pass"] || !covered["findings"] {
 				return fmt.Errorf("capability %q requires passing and deliberately failing fixtures", capability)
 			}
 		}
@@ -348,4 +383,8 @@ func exactRelativePath(value string) error {
 
 func CurrentPlatform() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
+}
+
+func validRuntimeDeclaration(runtime *policy.PackRuntime) bool {
+	return runtime == nil || identifierPattern.MatchString(runtime.Name) && semanticVersionPattern.MatchString(runtime.Version)
 }

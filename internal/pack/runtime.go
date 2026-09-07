@@ -66,6 +66,9 @@ func Resolve(selected []policy.PackSelection, dataRoot string) Resolution {
 }
 
 func Apply(config *policy.Config, resolution Resolution) {
+	for _, finding := range resolution.Findings {
+		config.UnavailablePacks = append(config.UnavailablePacks, finding.Subject)
+	}
 	config.Scope.Languages = append(config.Scope.Languages, resolution.Languages...)
 	config.PackManifests = append(config.PackManifests, resolution.Manifests...)
 	config.Checks = append(config.Checks, resolution.Commands...)
@@ -98,15 +101,30 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 				}
 				paths = sortedUnique(paths)
 			}
+			if len(declared.Paths) > 0 {
+				paths = slices.Clone(declared.Paths)
+			}
 			resolution.Commands = append(resolution.Commands, policy.Command{
 				Name:     "pack." + selection.Name + "." + declared.Name + "." + capability,
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest), Runtime: declared.Runtime},
 			})
 		}
 	}
+}
+
+func manifestLanguageRules(manifest Manifest) []policy.LanguageRule {
+	languages := make([]policy.LanguageRule, 0, len(manifest.Languages))
+	for _, language := range manifest.Languages {
+		patterns := slices.Clone(language.SourcePatterns)
+		if len(patterns) == 0 {
+			patterns = builtInPatterns(language.ID)
+		}
+		languages = append(languages, policy.LanguageRule{Name: language.ID, Paths: patterns})
+	}
+	return languages
 }
 
 func FullTreeFindings(selected []policy.PackSelection, dataRoot string) []policy.Finding {
@@ -133,19 +151,9 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 				continue
 			}
 			manifestOwnersByPath[manifest] = append(manifestOwnersByPath[manifest], declared.Pack)
-			owners := manifestOwners(repo, files, manifest, declared.Language)
-			if len(owners) == 0 {
-				owners = []string{""}
-			}
-			for _, owner := range owners {
-				for _, capability := range []string{"dependency-policy", "lock-sync", "release-age", "security"} {
-					if !hasProvider(repo.Config.Checks, owner, capability) {
-						subject := declared.Pack + ":" + capability
-						if owner != "" {
-							subject = owner + ":" + capability
-						}
-						findings = append(findings, policy.Finding{Check: "policy.packCoverage", Path: manifest, Subject: subject, Message: "pack-owned dependency manifest lacks a complete supply-chain provider"})
-					}
+			for _, capability := range []string{"dependency-policy", "lock-sync", "release-age", "security"} {
+				if !manifestHasProvider(repo, manifest, declared.Pack, capability) {
+					findings = append(findings, policy.Finding{Check: "policy.packCoverage", Path: manifest, Subject: declared.Pack + ":" + capability, Message: "pack-owned dependency manifest lacks a provider for its exact path and required profile"})
 				}
 			}
 		}
@@ -164,6 +172,9 @@ func providerConflictFindings(repo repository.Repository, files []string) []poli
 	commands := repo.Config.Checks
 	for left := range commands {
 		for right := left + 1; right < len(commands); right++ {
+			if nativeManagedCommand(commands[left]) || nativeManagedCommand(commands[right]) {
+				continue
+			}
 			if commands[left].Adapter == nil && commands[right].Adapter == nil {
 				continue
 			}
@@ -179,48 +190,24 @@ func providerConflictFindings(repo repository.Repository, files []string) []poli
 }
 
 func commandsOverlap(repo repository.Repository, files []string, left, right policy.Command, capability string) bool {
+	if !intersects(left.RunOn, right.RunOn) && !(slices.Contains(left.RunOn, "gate") && slices.Contains(right.RunOn, "check")) && !(slices.Contains(right.RunOn, "gate") && slices.Contains(left.RunOn, "check")) {
+		return false
+	}
 	for _, file := range files {
 		if !packCapabilitySelects(repo, capability, file) {
 			continue
 		}
-		leftPath := len(left.Paths) == 0 || policy.MatchesAny(file, left.Paths)
-		rightPath := len(right.Paths) == 0 || policy.MatchesAny(file, right.Paths)
-		if leftPath && rightPath && moduleCommandMatches(repo, left.Modules, file) && moduleCommandMatches(repo, right.Modules, file) {
+		if repo.CommandOwnsPath(left, file) && repo.CommandOwnsPath(right, file) {
 			return true
 		}
 	}
 	return false
 }
 
-func moduleCommandMatches(repo repository.Repository, modules []string, file string) bool {
-	if len(modules) == 0 {
-		return true
-	}
-	for _, owner := range repo.OwnerModuleNames(file) {
-		if slices.Contains(modules, owner) {
-			return true
-		}
-	}
-	return false
-}
-
-func manifestOwners(repo repository.Repository, files []string, manifest, language string) []string {
-	directory := strings.TrimSuffix(filepath.ToSlash(filepath.Dir(manifest)), ".")
-	owners := []string{}
-	for _, file := range files {
-		if repo.Language(file) != language || directory != "" && !strings.HasPrefix(file, directory+"/") {
-			continue
-		}
-		owners = append(owners, repo.OwnerModuleNames(file)...)
-	}
-	return sortedUnique(owners)
-}
-
-func hasProvider(commands []policy.Command, module, capability string) bool {
+func manifestHasProvider(repo repository.Repository, path, packName, capability string) bool {
 	requiredProfiles := map[string][]string{"dependency-policy": {"supply-chain"}, "lock-sync": {"supply-chain"}, "release-age": {"supply-chain-online"}, "security": {"security"}}
-	for _, command := range commands {
-		moduleCovered := module == "" && len(command.Modules) == 0 || module != "" && (len(command.Modules) == 0 || slices.Contains(command.Modules, module))
-		if moduleCovered && slices.Contains(command.Provides, capability) && intersects(command.RunOn, requiredProfiles[capability]) {
+	for _, command := range repo.Config.Checks {
+		if command.Adapter != nil && command.Adapter.PackName == packName && repo.CommandOwnsPath(command, path) && slices.Contains(command.Provides, capability) && intersects(command.RunOn, requiredProfiles[capability]) {
 			return true
 		}
 	}
@@ -266,4 +253,8 @@ func uniqueFindings(findings []policy.Finding) []policy.Finding {
 	return slices.CompactFunc(findings, func(left, right policy.Finding) bool {
 		return left.Check == right.Check && left.Path == right.Path && left.Subject == right.Subject && left.Message == right.Message
 	})
+}
+
+func nativeManagedCommand(command policy.Command) bool {
+	return command.Managed && command.Adapter == nil
 }
