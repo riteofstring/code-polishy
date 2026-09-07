@@ -10,7 +10,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-func TestPythonVultureTypedDictReadsPreserveOnlyTheirExactFields(t *testing.T) {
+func TestPythonVultureTypedDictSchemasPreserveFieldsWithoutHidingOrdinaryDeclarations(t *testing.T) {
 	sources := map[string]string{
 		"src/models.py": `from typing import TypedDict
 class Request(TypedDict):
@@ -20,6 +20,8 @@ class Other(TypedDict):
     name: str
 class Child(Request):
     extra: int
+class Ordinary:
+    unused: str
 `,
 		"src/contracts.py": "from models import Child as Payload\n",
 		"src/service.py":   "from contracts import Payload\ndef handle(payload: Payload):\n    alias = payload\n    return alias[\"name\"]\n",
@@ -28,24 +30,29 @@ class Child(Request):
 	if response.Error != "" || len(response.Problems) != 0 {
 		t.Fatalf("TypedDict analysis = %+v", response)
 	}
-	if slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
-		return diagnostic.Path == "src/models.py" && diagnostic.Name == "name" && diagnostic.Line == 3
-	}) {
-		t.Fatalf("proven TypedDict field was reported dead: %+v", response.Diagnostics)
-	}
 	for _, field := range []struct {
 		name string
 		line int
-	}{{"unused", 4}, {"name", 6}, {"extra", 8}} {
-		if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
+	}{{"name", 3}, {"unused", 4}, {"name", 6}, {"extra", 8}} {
+		if slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
 			return diagnostic.Path == "src/models.py" && diagnostic.Name == field.name && diagnostic.Line == field.line
 		}) {
-			t.Fatalf("unrelated %s at line %d was hidden: %+v", field.name, field.line, response.Diagnostics)
+			t.Fatalf("TypedDict schema field %s at line %d was reported dead: %+v", field.name, field.line, response.Diagnostics)
 		}
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
+		return diagnostic.Path == "src/models.py" && diagnostic.Name == "unused" && diagnostic.Line == 10
+	}) {
+		t.Fatalf("ordinary class field was hidden: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
+		return diagnostic.Path == "src/models.py" && diagnostic.Name == "Other" && diagnostic.Line == 5
+	}) {
+		t.Fatalf("unused TypedDict class was hidden: %+v", response.Diagnostics)
 	}
 }
 
-func TestPythonVultureTypedDictUnknownReceiversAndDictionaryMethodsDoNotPreserveKeys(t *testing.T) {
+func TestPythonVultureTypedDictSchemaMembersDoNotDependOnReceiverInference(t *testing.T) {
 	source := `from typing import Any, TypedDict
 class Payload(TypedDict):
     key: str
@@ -55,10 +62,10 @@ def methods(value: Payload, dynamic_key):
     return value.get("key"), value.pop("key"), value[dynamic_key]
 `
 	_, _, response, _ := runTypedDictVulture(t, map[string]string{"src/source.py": source})
-	if response.Error != "" || !slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
+	if response.Error != "" || slices.ContainsFunc(response.Diagnostics, func(diagnostic pythonVultureDiagnostic) bool {
 		return diagnostic.Name == "key" && diagnostic.Path == "src/source.py" && diagnostic.Line == 3
 	}) {
-		t.Fatalf("unproven key acquired reachability: %+v", response)
+		t.Fatalf("TypedDict schema field depended on receiver inference: %+v", response)
 	}
 }
 

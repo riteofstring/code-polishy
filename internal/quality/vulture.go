@@ -262,14 +262,14 @@ try:
  try:
   type_modules=_vulture_type_modules(fs)
   tm("type-facts")
-  typed=typed_dict_reads(type_modules)
+  typed=typed_dict_reads(type_modules,fields=True)
   tm("typed-dict")
   frameworks,resolved,problems=framework_members(type_modules,fs,target_fs,x["contracts"],x["complete"])
   tm("framework-contracts")
   o["resolved"].extend(resolved);o["problems"].extend(problems)
  except Exception as z:
   o["facts_error"]=str(z)[:S];raise
- keep={(r["field"]["path"],r["field"]["line"],r["field"]["line"],r["field"]["key"]) for r in typed}
+ keep={(f["path"],f["line"],f["line"],f["key"]) for f in typed}
  keep.update(frameworks)
  for f in fs:keep.update(ka(f))
  for r in rs:

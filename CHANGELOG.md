@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.11 - 2026-09-06
+
+- Treat semantically resolved TypedDict fields as structural schema members in
+  Python dead-code analysis while retaining findings for unused schema classes
+  and ordinary annotated attributes.
+
 ## 0.24.10 - 2026-09-06
 
 - Treat code-file length as a review signal at 1,000 physical lines and a

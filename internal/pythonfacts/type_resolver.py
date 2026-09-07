@@ -657,11 +657,31 @@ class _Resolver:
             site["column"],
         )
 
-    def run(self):
+    def resolve_definitions(self):
         for module in self.files.values():
             for binding in module["facts"]["bindings"]:
                 if binding["kind"] in {"class", "alias"}:
                     self.definition((module["path"], binding))
+
+    def fields(self):
+        self.resolve_definitions()
+        fields = {
+            (
+                field["path"],
+                field["typeScope"],
+                field["typeName"],
+                field["key"],
+                field["line"],
+                field["column"],
+            ): field
+            for resolved in self.types.values()
+            if resolved is not None
+            for field in resolved.values()
+        }
+        return [fields[key] for key in sorted(fields)]
+
+    def run(self):
+        self.resolve_definitions()
         reads = []
         for module in self.files.values():
             for read in module["facts"]["reads"]:
@@ -689,8 +709,9 @@ class _Resolver:
         return reads
 
 
-def typed_dict_reads(modules, facts=None):
-    return (facts or _Resolver(modules)).run()
+def typed_dict_reads(modules, facts=None, *, fields=False):
+    resolver = facts or _Resolver(modules)
+    return resolver.fields() if fields else resolver.run()
 
 
 def _unique_object(pairs):

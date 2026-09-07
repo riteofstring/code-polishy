@@ -539,10 +539,11 @@ This mechanism does not relax supply-chain or vulnerability checks.
 TypedDict inference uses the shared `python-facts/v3` AST contract. Exact
 `typing.TypedDict` and `typing_extensions.TypedDict` imports, aliases, local
 re-exports, class inheritance, and functional definitions with a literal field
-mapping establish field identities. An annotated receiver, exact constructor,
-or local receiver alias followed by `value["literal_key"]` preserves only that
-declared field, including the original declaration of an inherited field.
-Another type's same-named key stays subject to dead-code analysis.
+mapping establish field identities. Every field of a semantically resolved
+TypedDict is retained as a structural schema member even when repository code
+does not expose an exact receiver read. The TypedDict class itself can still be
+reported unused. Another type's same-named attribute stays subject to dead-code
+analysis.
 Callable fields support empty or explicit parameter lists and ellipsis signatures
 through exact `typing.Callable` or `collections.abc.Callable` imports, aliases,
 and re-exports, including nested Callable annotations. Parameter-list and
@@ -550,10 +551,11 @@ ellipsis facts describe syntax; the analyzer never executes annotations.
 Unsupported field expressions and duplicate keys identify the source path,
 line, column, TypedDict name, and field in the coverage diagnostic.
 
-Dynamic keys, `Any`, union receivers, wildcard imports, unresolved or rebound
-receivers, and type objects provide no exemption. Dictionary methods such as
-`get`, `pop`, and `setdefault`, iteration, unpacking, and serialization do not
-establish literal-key evidence. Duplicate definitions or keys, escaping
+Annotated receivers, exact constructors, and local receiver aliases followed by
+`value["literal_key"]` still establish exact read evidence for the shared type
+fact model. Dynamic keys, `Any`, union receivers, wildcard imports, unresolved
+or rebound receivers, and type objects do not establish such a read. Duplicate
+definitions or keys, escaping
 re-exports, unsupported TypedDict definitions, or missing compact facts produce
 one non-suppressible `architecture.pythonFactsCoverage` failure for the project.
 Dependent dead-code results are withheld when the required fact set fails.

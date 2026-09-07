@@ -94,7 +94,7 @@ keep the sealed bundle portable and minimal.
   cross-file semantic evidence; they use CPython 3.12 `tomllib`, `tokenize`,
   and `ast` plus the carried `packaging` release.
   Complete source files are partitioned deterministically. Compact type facts
-  resolve TypedDict reads across the validated union through
+  resolve TypedDict schemas and literal-key reads across the validated union through
   `python-type-project/v3`, and Vulture uses the same parser, AST extractor, and
   semantic resolvers. Consumer target resolution also accepts bounded compact
   records through `python-reachability-project/v1`. Each source record is

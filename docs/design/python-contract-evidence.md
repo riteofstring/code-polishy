@@ -102,11 +102,18 @@ bindings and names writable by closures. Unknown context managers, exception
 handlers, and repeated loop bodies begin conservatively. Ambiguous same-line
 writes receive no positive evidence.
 
-The Go-owned Vulture adapter combines contract locations with TypedDict reads,
+The Go-owned Vulture adapter combines contract locations with TypedDict schemas,
 standard-library protocols, and explicit external-consumer evidence. Complete
 source coverage remains mandatory. Invalid configuration is reported as a
 contract problem, while failure to obtain the whole project fact set withholds
 derivative findings.
+
+A semantically resolved TypedDict is a structural mapping schema. Its declared
+fields remain schema members even when consumers cross return, mixin,
+serialization, or dynamic mapping boundaries that erase the exact receiver
+type. Dead-code analysis therefore retains those field declarations while still
+allowing the TypedDict class itself and ordinary annotated attributes to be
+reported unused.
 
 ## Operator-controlled runtime loaders
 
