@@ -1552,16 +1552,5 @@
         "expires": "2026-10-02"
       }
     ]
-  },
-  "exceptions": [
-    {
-      "id": "declarative-suite-inventory-size",
-      "check": "quality.fileLength",
-      "path": ".code-polishy.json",
-      "subject": "1567",
-      "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
-      "owner": "code-polishy-maintainer",
-      "expires": "2026-10-05"
-    }
-  ]
+  }
 }
