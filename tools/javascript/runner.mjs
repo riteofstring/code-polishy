@@ -143,35 +143,39 @@ function parse(request) {
       continue;
     }
     try {
-      switch (extname(path).toLowerCase()) {
-        case ".js":
-        case ".mjs":
-          parseLiteralDataModule(path, source);
-          break;
-        case ".json":
-          JSON.parse(source);
-          break;
-        case ".jsonc":
-          parseJsonc(path, source);
-          break;
-        case ".yaml":
-        case ".yml":
-          yaml.loadAll(source, undefined, {
-            filename: path,
-            schema: yaml.JSON_SCHEMA,
-          });
-          break;
-        default:
-          throw new Error(
-            "the policy-owned data parser does not support this file extension",
-          );
-      }
+      parseData(path, source);
       covered.push(path);
     } catch (error) {
       unsupportedPaths.push(unsupported(path, error.message));
     }
   }
   return { covered, unsupported: unsupportedPaths };
+}
+
+function parseData(path, source) {
+  switch (extname(path).toLowerCase()) {
+    case ".js":
+    case ".mjs":
+      parseLiteralDataModule(path, source);
+      break;
+    case ".json":
+      JSON.parse(source);
+      break;
+    case ".jsonc":
+      parseJsonc(path, source);
+      break;
+    case ".yaml":
+    case ".yml":
+      yaml.loadAll(source, undefined, {
+        filename: path,
+        schema: yaml.JSON_SCHEMA,
+      });
+      break;
+    default:
+      throw new Error(
+        "the policy-owned data parser does not support this file extension",
+      );
+  }
 }
 
 function parseJsonc(path, source) {

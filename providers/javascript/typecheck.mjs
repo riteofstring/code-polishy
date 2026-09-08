@@ -76,9 +76,8 @@ function checkerFor(analysis, project) {
       );
   }
   const { options, files } = projectInputs(analysis, project);
-  analysis.note(
-    `Compilation unit ${project.configuration?.path ?? `${project.owner?.root ?? "."} (inferred)`}: ${files.length} root files; provider-required allowJs=true, checkJs=true, noEmit=true, noCheck=false; effective strict=${Boolean(options.strict)}, skipLibCheck=${Boolean(options.skipLibCheck)}`,
-  );
+  analysis.note(compilationUnitNote(project, options, files.length));
+
   const checker = createTypeScriptInferredChecker(
     plugins,
     services,
@@ -176,6 +175,10 @@ function reportDiagnostic(analysis, path, diagnostic) {
     diagnostic.message,
     prefix.length + (position.line ? 1 : 0) + position.character,
   );
+}
+
+function compilationUnitNote(project, options, count) {
+  return `Compilation unit ${project.configuration?.path ?? `${project.owner?.root ?? "."} (inferred)`}: ${count} root files; provider-required allowJs=true, checkJs=true, noEmit=true, noCheck=false; effective strict=${Boolean(options.strict)}, skipLibCheck=${Boolean(options.skipLibCheck)}`;
 }
 
 function projectInputs(analysis, project) {

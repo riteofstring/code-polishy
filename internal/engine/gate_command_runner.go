@@ -183,25 +183,10 @@ func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root strin
 	if commandRunner.err != nil {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
 	}
-	index := commandRunner.next
-	if index < len(commandRunner.expected) && !samePolicyCommand(commandRunner.expected[index].Command, command) && artifactsecurity.IsCleanupCommand(command) {
-		for candidate := index + 1; candidate < len(commandRunner.expected); candidate++ {
-			if samePolicyCommand(commandRunner.expected[candidate].Command, command) {
-				index = candidate
-				break
-			}
-		}
-	}
-	if index >= len(commandRunner.expected) || !samePolicyCommand(commandRunner.expected[index].Command, command) {
-		commandRunner.err = fmt.Errorf("gate started a command outside its artifact plan at position %d", commandRunner.next+1)
-		if index < len(commandRunner.expected) {
-			commandRunner.err = unplannedCommand("gate", "artifact", index, commandRunner.expected[index].Command, command)
-		}
-		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
-	}
-	if expectedRoot := commandRunner.expected[index].Root; expectedRoot != "" && root != expectedRoot {
-		commandRunner.err = fmt.Errorf("gate command %q has an unplanned working root at position %d", command.Name, index+1)
-		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
+	index, err := commandRunner.plannedIndex(root, command)
+	if err != nil {
+		commandRunner.err = err
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
 	commandRunner.next = index + 1
 	if receipt, ok := commandRunner.reusable[index]; ok {
@@ -213,6 +198,30 @@ func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root strin
 		return runner.Result{ExitStatus: 0}, runner.Output{}, nil
 	}
 	return commandRunner.execute(ctx, root, index, command, captureOutput, false)
+}
+
+func (commandRunner *gateArtifactRunner) plannedIndex(root string, command policy.Command) (int, error) {
+	index := commandRunner.next
+	if index < len(commandRunner.expected) && !samePolicyCommand(commandRunner.expected[index].Command, command) && artifactsecurity.IsCleanupCommand(command) {
+		for candidate := index + 1; candidate < len(commandRunner.expected); candidate++ {
+			if samePolicyCommand(commandRunner.expected[candidate].Command, command) {
+				index = candidate
+				break
+			}
+		}
+	}
+	if index >= len(commandRunner.expected) || !samePolicyCommand(commandRunner.expected[index].Command, command) {
+		err := fmt.Errorf("gate started a command outside its artifact plan at position %d", commandRunner.next+1)
+		if index < len(commandRunner.expected) {
+			err = unplannedCommand("gate", "artifact", index, commandRunner.expected[index].Command, command)
+		}
+		return 0, err
+	}
+	if expectedRoot := commandRunner.expected[index].Root; expectedRoot != "" && root != expectedRoot {
+		err := fmt.Errorf("gate command %q has an unplanned working root at position %d", command.Name, index+1)
+		return 0, err
+	}
+	return index, nil
 }
 
 func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root string, index int, command policy.Command, captureOutput, diagnostic bool) (runner.Result, runner.Output, error) {
