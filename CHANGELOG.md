@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.0-beta.4 - 2026-09-08
+
+- Allow owned integration tests and imported helpers to declare their full-profile
+  execution suite while retaining their module's quick boundary suite.
+- Reject separate test execution that leaves the referenced quick suite without
+  owned test source.
+
 ## 0.25.0-beta.3 - 2026-09-08
 
 - Prepare provider commands consistently for execution and gate evidence, retaining
