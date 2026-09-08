@@ -22,24 +22,57 @@ func providerSourceGraph(ctx context.Context, repo repository.Repository, select
 		return part
 	}
 	part = providerArchitectureCoverage(repo, selected)
+	for _, operation := range providerOperations(repo, selected, allFiles) {
+		result := pack.RunAdapter(ctx, repo, operation.selection, operation.command, boundary, repo.AnalysisProfile())
+		part = mergeSourceGraphParts(part, providerResultGraph(repo, operation.command, result))
+	}
+	return part
+}
+
+type providerOperation struct {
+	command   policy.Command
+	selection repository.Selection
+}
+
+func providerOperations(repo repository.Repository, selected, allFiles []string) []providerOperation {
+	operations := []providerOperation{}
+	if len(selected) == 0 {
+		return operations
+	}
 	for _, command := range repo.Config.Checks {
 		if command.Adapter == nil || command.Adapter.Capability != "architecture" {
 			continue
 		}
 		files := []string{}
 		for _, path := range allFiles {
-			owner := repo.AnalysisOwner(path, "architecture", "")
-			if owner.Name == command.Name {
+			if repo.AnalysisOwner(path, "architecture", "").Name == command.Name {
 				files = append(files, path)
 			}
 		}
-		if len(files) == 0 {
+		if len(files) > 0 {
+			operations = append(operations, providerOperation{command: command, selection: repository.Selection{Files: files, All: true}})
+		}
+	}
+	return operations
+}
+
+func ProviderCommands(repo repository.Repository, selected []string) []policy.Command {
+	allFiles, err := repo.AllFiles()
+	if err != nil {
+		return nil
+	}
+	commands := []policy.Command{}
+	for _, operation := range providerOperations(repo, selected, allFiles) {
+		prepared, selected, err := pack.PlannedExecution(repo, operation.selection, operation.command, repo.AnalysisProfile())
+		if !selected {
 			continue
 		}
-		result := pack.RunAdapter(ctx, repo, repository.Selection{Files: files, All: true}, command, boundary, repo.AnalysisProfile())
-		part = mergeSourceGraphParts(part, providerResultGraph(repo, command, result))
+		if err != nil {
+			prepared = operation.command
+		}
+		commands = append(commands, prepared)
 	}
-	return part
+	return commands
 }
 
 func providerArchitectureCoverage(repo repository.Repository, selected []string) sourceGraphPart {

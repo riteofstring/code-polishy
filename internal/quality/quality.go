@@ -54,7 +54,12 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	if profile == "gate" {
 		profiles = append(profiles, "check")
 	}
-	return append(commands, CommandsForProfiles(repo, selection, profiles...)...)
+	for _, command := range CommandsForProfiles(repo, selection, profiles...) {
+		if command.Adapter == nil || command.Adapter.Capability != "architecture" {
+			commands = append(commands, command)
+		}
+	}
+	return commands
 }
 
 func Format(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner) []policy.Finding {
@@ -90,13 +95,7 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 			if command.Adapter.Capability == "architecture" {
 				continue
 			}
-			profile := profiles[0]
-			for _, candidate := range profiles {
-				if slices.Contains(command.RunOn, candidate) {
-					profile = candidate
-					break
-				}
-			}
+			profile := commandProfile(command, profiles)
 			findings = append(findings, packQualityFindings(ctx, repo, selection, command, commandRunner, profile)...)
 			continue
 		}
@@ -109,7 +108,29 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 
 func CommandsForProfiles(repo repository.Repository, selection repository.Selection, profiles ...string) []policy.Command {
 	commands, _ := configuredCommandsForProfiles(repo, selection, profiles...)
-	return commands
+	prepared := make([]policy.Command, 0, len(commands))
+	for _, command := range commands {
+		if command.Adapter != nil {
+			invocation, selected, err := pack.PlannedExecution(repo, selection, command, commandProfile(command, profiles))
+			if !selected {
+				continue
+			}
+			if err == nil {
+				command = invocation
+			}
+		}
+		prepared = append(prepared, command)
+	}
+	return prepared
+}
+
+func commandProfile(command policy.Command, profiles []string) string {
+	for _, profile := range profiles {
+		if slices.Contains(command.RunOn, profile) {
+			return profile
+		}
+	}
+	return profiles[0]
 }
 
 func configuredCommandsForProfiles(repo repository.Repository, selection repository.Selection, profiles ...string) ([]policy.Command, []policy.Finding) {
@@ -547,6 +568,12 @@ func requiredShellCheckVersion(repo repository.Repository, shellcheck string) bo
 func sourceChecks(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
+		if repo.IsSymbolicLink(path) {
+			if _, _, err := repo.AssetLinkIdentity(path); err != nil {
+				findings = append(findings, policy.Finding{Check: "quality.path", Path: path, Subject: "asset-link", Message: err.Error()})
+			}
+			continue
+		}
 		if repo.IsGenerated(path) || repo.IsData(path) {
 			continue
 		}

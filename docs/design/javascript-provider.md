@@ -54,8 +54,12 @@ parser to the engine.
 Static script-source references are adapter facts with original byte locations.
 The Astro adapter recognizes processed relative script sources according to the
 [framework's script processing rules](https://docs.astro.build/en/guides/client-side-scripts/).
-Computed, spread, external, and unprocessed script references remain incomplete
-for dependency and reachability analysis. The Knip compiler retains recognized
+Literal HTTP(S) URLs, protocol-relative URLs, and templates whose static prefix
+proves a complete external authority establish browser-loaded boundaries. They
+produce visible informational notes, no local import edges, and no remote fetches.
+Local expressions retain lint and type checking at original source locations.
+Unknown origins, spread attributes, and unprocessed local script references remain
+incomplete for dependency and reachability analysis. The Knip compiler retains recognized
 script-source imports in its derived code so only reachable framework components
 make their scripts reachable.
 
@@ -72,3 +76,15 @@ unreachable code, duplicate conditions and cases, constant binary expressions,
 unsafe finally blocks, invalid typeof comparisons, and incorrect NaN comparisons.
 These checks run without a provider selection or target ESLint configuration.
 Function metrics remain measurements; the core alone applies their thresholds.
+
+Formatting and analysis have separate manifest commands. Only the formatting
+capability runs in the format profile; check and gate retain all six capabilities.
+The core continues honoring every provider's explicit manifest profiles.
+
+Compilation units use the nearest enclosing tsconfig.json or jsconfig.json.
+Required allowJs and checkJs overrides apply while discovering root files and
+while compiling them; noEmit and noCheck overrides retain actual analysis without
+writes. Strictness and library checking retain the selected project's settings.
+Bounded informational notes identify the config, root-file count, and effective
+options. Selected sources excluded by that config remain incomplete; sibling
+configs are not merged or guessed. Nested configs can own tooling or test source.

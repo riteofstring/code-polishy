@@ -630,12 +630,12 @@ func TestLoadReadsDevelopmentScope(t *testing.T) {
 
 func TestScopeDataAcceptsDedicatedStructuredData(t *testing.T) {
 	t.Parallel()
-	configText := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"data":["data/catalog.json","data/catalog.jsonc","data/catalog.yaml","data/catalog.yml"]},"quality":{}`, 1)
+	configText := strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"data":["data/catalog.json","data/catalog.jsonc","data/catalog.yaml","data/catalog.yml","data/catalog.js","data/catalog.mjs"]},"quality":{}`, 1)
 	config, err := Load(writeConfig(t, configText), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(config.Scope.Data, []string{"data/catalog.json", "data/catalog.jsonc", "data/catalog.yaml", "data/catalog.yml"}) {
+	if !slices.Equal(config.Scope.Data, []string{"data/catalog.json", "data/catalog.jsonc", "data/catalog.yaml", "data/catalog.yml", "data/catalog.js", "data/catalog.mjs"}) {
 		t.Fatalf("scope.data = %v", config.Scope.Data)
 	}
 }

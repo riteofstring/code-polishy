@@ -15,6 +15,7 @@ export function contained(root, absolute) {
 class Analysis {
   constructor(request) {
     this.request = request;
+    this.notes = new Set();
     this.root = realpathSync(request.projectRoot);
     this.inputs = new Map(request.context.map((input) => [input.path, input]));
     this.classifications = new Map(
@@ -78,7 +79,17 @@ class Analysis {
     });
   }
 
+  note(message) {
+    this.notes.add(message.slice(0, 4096));
+  }
+
   finish() {
+    const notes = [...this.notes].sort();
+    this.response.notes = notes.slice(0, 31);
+    if (notes.length > 31)
+      this.response.notes.push(
+        `${notes.length - 31} additional provider context notes omitted from the bounded summary`,
+      );
     if (this.response.coverage.unsupported.length)
       this.response.status = "incomplete";
     else if (this.response.findings.length) this.response.status = "findings";

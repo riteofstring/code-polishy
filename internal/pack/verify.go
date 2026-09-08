@@ -99,7 +99,9 @@ func verifyFixtureResult(repo repository.Repository, fixture Fixture, request Re
 	}
 	findings := analysisFindings(repo, &policy.PackAdapter{PackName: request.Pack.Name, Capability: request.Capability}, response)
 	status := response.Status
-	if status == "pass" && len(findings) > 0 {
+	if status == "pass" && slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Severity != policy.FindingInformation && finding.Severity != policy.FindingWarning
+	}) {
 		status = "findings"
 	}
 	if status != fixture.ExpectedStatus {

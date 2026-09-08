@@ -73,17 +73,24 @@ function prepare() {
     ],
     commands: [
       {
+        name: "format",
+        argv: ["providers/javascript/run.mjs"],
+        capabilities: ["format"],
+        profiles: ["check", "gate", "format"],
+        timeoutSeconds: 600,
+        runtime: { name: "node", version: metadata.engines.node },
+      },
+      {
         name: "analyze",
         argv: ["providers/javascript/run.mjs"],
         capabilities: [
-          "format",
           "lint",
           "typecheck",
           "complexity",
           "dead-code",
           "architecture",
         ],
-        profiles: ["check", "gate", "format"],
+        profiles: ["check", "gate"],
         timeoutSeconds: 600,
         runtime: { name: "node", version: metadata.engines.node },
       },

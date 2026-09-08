@@ -19,6 +19,7 @@ import jsxAccessibility from "eslint-plugin-jsx-a11y";
 import yaml from "js-yaml";
 
 import { audit } from "./audit.mjs";
+import { parseLiteralDataModule } from "./data-modules.mjs";
 import { deadcode, requireWorkspaces } from "./deadcode.mjs";
 import { imports } from "./imports.mjs";
 import { gitlab } from "./gitlab.mjs";
@@ -143,6 +144,10 @@ function parse(request) {
     }
     try {
       switch (extname(path).toLowerCase()) {
+        case ".js":
+        case ".mjs":
+          parseLiteralDataModule(path, source);
+          break;
         case ".json":
           JSON.parse(source);
           break;

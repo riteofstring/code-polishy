@@ -114,6 +114,10 @@ func (commandRunner *gateArtifactRunner) RunWithOutput(ctx context.Context, root
 	return commandRunner.runNext(ctx, root, command, true)
 }
 
+func (commandRunner *gateArtifactRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	return commandRunner.runNext(ctx, root, command, true)
+}
+
 func (commandRunner *gateArtifactRunner) ManagesTestArtifacts() bool { return true }
 
 func (commandRunner *gateArtifactRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
@@ -190,6 +194,13 @@ func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root strin
 	}
 	if index >= len(commandRunner.expected) || !samePolicyCommand(commandRunner.expected[index].Command, command) {
 		commandRunner.err = fmt.Errorf("gate started a command outside its artifact plan at position %d", commandRunner.next+1)
+		if index < len(commandRunner.expected) {
+			commandRunner.err = unplannedCommand("gate", "artifact", index, commandRunner.expected[index].Command, command)
+		}
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
+	}
+	if expectedRoot := commandRunner.expected[index].Root; expectedRoot != "" && root != expectedRoot {
+		commandRunner.err = fmt.Errorf("gate command %q has an unplanned working root at position %d", command.Name, index+1)
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
 	}
 	commandRunner.next = index + 1

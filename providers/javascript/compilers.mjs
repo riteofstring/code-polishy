@@ -10,10 +10,12 @@ export async function compileAstro(source, path) {
   if (result.diagnostics.some((diagnostic) => diagnostic.severity === 1))
     throw new Error(`framework compilation failed for ${path}`);
   const references = astro.parse(source, path).references;
-  const imports = references.map((reference) => {
-    if (reference.problem) throw new Error(reference.problem);
-    return `import ${JSON.stringify(reference.specifier)};`;
-  });
+  const imports = references
+    .filter((reference) => !reference.external)
+    .map((reference) => {
+      if (reference.problem) throw new Error(reference.problem);
+      return `import ${JSON.stringify(reference.specifier)};`;
+    });
   mappings.set(path, new TraceMap(result.map));
   return `${result.code}\n${imports.join("\n")}`;
 }

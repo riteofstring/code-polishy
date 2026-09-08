@@ -201,6 +201,24 @@ test("framework script sources retain dependency and reachability evidence", () 
     const request = requestFor(root, [path, "src/client.ts"], "dead-code");
     const reachable = analyze(request);
     assert.equal(reachable.status, "pass", JSON.stringify(reachable));
+    writeFileSync(
+      join(root, path),
+      '<script src="https://example.com/browser.js" is:inline></script>\n<script src="../client.ts"></script>\n',
+    );
+    const externalReachable = analyze(
+      requestFor(root, [path, "src/client.ts"], "dead-code"),
+    );
+    assert.equal(
+      externalReachable.status,
+      "pass",
+      JSON.stringify(externalReachable),
+    );
+    assert.ok(
+      externalReachable.notes.some((note) =>
+        note.includes("external browser script"),
+      ),
+      JSON.stringify(externalReachable),
+    );
     writeFileSync(join(root, path), "<h1>Olá</h1>\n");
     const unused = analyze(requestFor(root, ["src/client.ts"], "dead-code"));
     assert.ok(
@@ -213,7 +231,6 @@ test("framework script sources retain dependency and reachability evidence", () 
     for (const attributes of [
       "src={location}",
       'src="../client.ts" is:inline',
-      'src="https://example.test/client.js"',
       "{...properties}",
     ]) {
       writeFileSync(join(root, path), `<script ${attributes}></script>\n`);
@@ -226,6 +243,142 @@ test("framework script sources retain dependency and reachability evidence", () 
     assert.ok(
       missing.findings.some((finding) => finding.rule === "unresolved-import"),
     );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("external browser scripts retain local diagnostics and bounded dependency coverage", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-external-"));
+  try {
+    mkdirSync(join(root, "node_modules/astro"), { recursive: true });
+    writeFileSync(
+      join(root, "node_modules/astro/package.json"),
+      '{"version":"7.2.4"}',
+    );
+    writeFileSync(
+      join(root, "package.json"),
+      '{"dependencies":{"astro":"7.2.4"}}',
+    );
+    const path = "page.astro";
+    for (const value of [
+      '"https://example.test/client.js"',
+      "{`https://example.test/client.js?id=${client}`}",
+      "{`//example.test/client.js?id=${client}`}",
+    ]) {
+      writeFileSync(
+        join(root, path),
+        `<script is:inline src=${value}></script>\n`,
+      );
+      const response = analyze(requestFor(root, [path], "architecture"));
+      assert.equal(response.status, "pass", JSON.stringify(response));
+      assert.deepEqual(response.facts.imports, []);
+      assert.ok(
+        response.notes.some((note) =>
+          note.includes("remote bytes were not fetched or checked"),
+        ),
+      );
+    }
+    const source =
+      "<h1>Olá</h1>\n<script is:inline src={`https://example.test/a?id=${1 === NaN}`}></script>\n";
+    writeFileSync(join(root, path), source);
+    const lint = analyze(requestFor(root, [path], "lint"));
+    const finding = lint.findings.find((item) => item.rule === "use-isnan");
+    assert.ok(finding, JSON.stringify(lint));
+    assert.equal(finding.path, path);
+    assert.equal(finding.line, 2);
+    assert.equal(
+      finding.column,
+      source.split("\n")[1].indexOf("1 === NaN") + 1,
+    );
+    for (const value of [
+      "{source}",
+      "{`https://${host}/a.js`}",
+      "{`https://example.test${tail}`}",
+    ]) {
+      writeFileSync(join(root, path), `<script src=${value}></script>\n`);
+      const response = analyze(requestFor(root, [path], "architecture"));
+      assert.equal(response.status, "incomplete", JSON.stringify(response));
+    }
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("nearest compilation units retain strict JavaScript checks and explicit exclusions", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-units-"));
+  try {
+    mkdirSync(join(root, "src"));
+    mkdirSync(join(root, "scripts"));
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    writeFileSync(
+      join(root, "tsconfig.json"),
+      '{"include":["src/**/*.ts"],"compilerOptions":{"strict":true}}',
+    );
+    writeFileSync(
+      join(root, "src/main.ts"),
+      "export const value: number = 1;\n",
+    );
+    writeFileSync(
+      join(root, "scripts/task.js"),
+      "export const value = 1; value();\n",
+    );
+    const excluded = analyze(
+      requestFor(root, ["src/main.ts", "scripts/task.js"], "typecheck"),
+    );
+    assert.ok(excluded.coverage.analyzed.includes("src/main.ts"));
+    assert.ok(
+      excluded.coverage.unsupported.some(
+        (item) => item.path === "scripts/task.js",
+      ),
+    );
+    writeFileSync(
+      join(root, "scripts/tsconfig.json"),
+      '{"include":["*.js"],"compilerOptions":{"allowJs":false,"checkJs":false}}',
+    );
+    const checked = analyze(
+      requestFor(root, ["src/main.ts", "scripts/task.js"], "typecheck"),
+    );
+    assert.deepEqual(checked.coverage.unsupported, []);
+    assert.ok(
+      checked.findings.some(
+        (item) => item.path === "scripts/task.js" && item.rule === "type-2349",
+      ),
+      JSON.stringify(checked),
+    );
+    assert.ok(
+      checked.notes.some(
+        (note) =>
+          note.includes("scripts/tsconfig.json") &&
+          note.includes("checkJs=true"),
+      ),
+    );
+    writeFileSync(join(root, "scripts/task.js"), "export const value = 1;\n");
+    const valid = analyze(
+      requestFor(root, ["src/main.ts", "scripts/task.js"], "typecheck"),
+    );
+    assert.equal(valid.status, "pass", JSON.stringify(valid));
+    writeFileSync(
+      join(root, "scripts/tsconfig.json"),
+      '{"include":["*.js"],"compilerOptions":{"types":["missing-fixture-types"]}}',
+    );
+    const missingTypes = analyze(
+      requestFor(root, ["scripts/task.js"], "typecheck"),
+    );
+    assert.notEqual(missingTypes.status, "pass", JSON.stringify(missingTypes));
+    assert.ok(
+      missingTypes.findings.some((finding) => finding.rule === "type-2688") ||
+        missingTypes.coverage.unsupported.length > 0,
+      JSON.stringify(missingTypes),
+    );
+    writeFileSync(
+      join(root, "scripts/tsconfig.json"),
+      '{"include":["*.js"],"references":[{"path":"../src"}]}',
+    );
+    const references = analyze(
+      requestFor(root, ["scripts/task.js"], "typecheck"),
+    );
+    assert.equal(references.status, "incomplete", JSON.stringify(references));
   } finally {
     rmSync(root, { recursive: true });
   }

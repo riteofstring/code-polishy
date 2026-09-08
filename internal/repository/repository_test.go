@@ -122,6 +122,31 @@ func TestDeclaredDataRemainsGovernedAndOverridesDefaultGeneratedClassification(t
 	}
 }
 
+func TestDeclaredLiteralDataRetainsOwnershipAndLeavesExecutableSelection(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "data/catalog.js", "const catalog = {value: 1};\nexport default catalog;\n")
+	config := policy.Config{Scope: policy.Scope{Data: []string{"data/catalog.js"}}, Modules: []policy.Module{{Name: "snapshots", Paths: []string{"data/**"}}}, ModuleByName: map[string]int{"snapshots": 0}}
+	repo := Repository{Root: root, Config: config}
+	files, err := repo.AllFiles()
+	if err != nil || !slices.Equal(files, []string{"data/catalog.js"}) {
+		t.Fatalf("inventory = %v, %v", files, err)
+	}
+	if !repo.IsData(files[0]) || repo.IsExecutableSource(files[0]) || repo.Language(files[0]) != "" || !slices.Equal(repo.OwnerModuleNames(files[0]), []string{"snapshots"}) {
+		t.Fatal("literal data lost its governed non-executable classification")
+	}
+	for _, content := range []string{"#!/bin/sh\n", "export default 1;\n"} {
+		writeFile(t, root, files[0], content)
+		if content[0] != '#' {
+			if err := os.Chmod(filepath.Join(root, files[0]), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := repo.AllFiles(); err == nil {
+			t.Fatal("executable literal data accepted")
+		}
+	}
+}
+
 func TestDeclaredDataCannotHideAnActualNestedControlInput(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

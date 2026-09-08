@@ -47,6 +47,13 @@ export function sourceFacts(
   if (["architecture", "dead-code"].includes(analysis.request.capability))
     for (const reference of references) {
       if (reference.problem) throw new Error(reference.problem);
+      if (reference.external) {
+        const position = analysis.location(path, reference.offset);
+        analysis.note(
+          `${path}:${position.line}:${position.column}: external browser script is outside local source analysis; remote bytes were not fetched or checked`,
+        );
+        continue;
+      }
       imports.push({
         path,
         ...analysis.location(path, reference.offset),

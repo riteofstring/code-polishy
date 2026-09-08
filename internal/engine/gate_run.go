@@ -296,13 +296,16 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 func gateRunCommandSpec(planned MergeGateExecutionCommand, receipts *testReceiptController) gaterun.CommandSpec {
 	command := planned.Command
 	specification := gaterun.CommandSpec{
-		Category: planned.Category, Scope: planned.Scope, Cost: planned.Cost, Name: command.Name,
+		Root: planned.Root, Category: planned.Category, Scope: planned.Scope, Cost: planned.Cost, Name: command.Name,
 		Provides: append([]string{}, command.Provides...), Argv: append([]string{}, command.Argv...), Cwd: command.Cwd,
 		Paths: append([]string{}, command.Paths...), Modules: append([]string{}, command.Modules...), RunOn: append([]string{}, command.RunOn...),
 		Environment: append([]string{}, command.Environment...), ExclusiveResources: append([]string{}, command.ExclusiveResources...),
 		TimeoutSeconds: command.TimeoutSeconds, Managed: command.Managed, PassFiles: command.PassFiles,
 		PassFilePaths: append([]string{}, command.PassFilePaths...), SealedEnvironment: command.SealedEnvironment,
 		Artifacts: gateRunArtifactSpecs(command.TestArtifacts),
+	}
+	if len(command.Stdin) > 0 {
+		specification.InputSHA256 = gaterun.ContentSHA256(command.Stdin)
 	}
 	if receipts != nil {
 		if identity, found := receipts.identities[command.Name]; found {

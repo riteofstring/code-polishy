@@ -32,7 +32,7 @@ export function materializeFixtures(root) {
       }
       fixtures.push({
         name,
-        command: "analyze",
+        command: capability === "format" ? "format" : "analyze",
         capability,
         project,
         files: Object.keys(files).filter((path) => path.endsWith(".ts")),

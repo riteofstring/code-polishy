@@ -64,6 +64,8 @@ function scriptReference(node) {
       problem: "spread script attributes cannot establish source dependencies",
     };
   if (!source) return null;
+  const external = externalScriptSource(source.value);
+  if (external) return { external, offset: source.value.range[0] };
   if (typeof source.value?.value !== "string" || !source.value.value)
     return { problem: "script src must be a nonempty static string" };
   if (attributes.length !== 1 || !source.value.value.startsWith("."))
@@ -76,6 +78,35 @@ function scriptReference(node) {
     kind: "runtime",
     offset: source.value.range[0],
   };
+}
+
+function externalScriptSource(attribute) {
+  const value =
+    attribute?.type === "JSXExpressionContainer"
+      ? attribute.expression
+      : attribute;
+  if (typeof value?.value === "string")
+    return externalURL(value.value) ? value.value : "";
+  if (value?.type !== "TemplateLiteral") return "";
+  return externalTemplateSource(value);
+}
+
+function externalTemplateSource(value) {
+  const prefix = value.quasis[0]?.value.cooked;
+  if (!prefix) return "";
+  if (!value.expressions.length) return externalURL(prefix) ? prefix : "";
+  if (!/^(?:https?:)?\/\/[^/?#\s\\]+[/?#]/i.test(prefix)) return "";
+  return externalURL(prefix) ? prefix : "";
+}
+
+function externalURL(value) {
+  if (!/^(?:https?:)?\/\//i.test(value) || /[\s\\]/.test(value)) return false;
+  try {
+    const url = new URL(value.startsWith("//") ? `https:${value}` : value);
+    return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function astroInstallation(analysis, path) {

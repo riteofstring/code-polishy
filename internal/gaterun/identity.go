@@ -208,6 +208,12 @@ func validateCommand(command CommandSpec) error {
 	if !validCommandIdentity(command) {
 		return fmt.Errorf("command category or identity is invalid")
 	}
+	if command.InputSHA256 != "" && !validSHA256(command.InputSHA256) {
+		return fmt.Errorf("command structured input identity is invalid")
+	}
+	if strings.ContainsAny(command.Root, "\x00\r\n") {
+		return fmt.Errorf("command working root is invalid")
+	}
 	if !validCommandInvocation(command) {
 		return fmt.Errorf("command invocation is invalid")
 	}

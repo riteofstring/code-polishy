@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
@@ -55,7 +56,7 @@ func (repo Repository) walkIncludedFiles() ([]string, error) {
 			}
 			return nil
 		}
-		if entry.Type().IsRegular() && !repo.IsExcluded(normalized) {
+		if (entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0) && !repo.IsExcluded(normalized) {
 			files = append(files, normalized)
 		}
 		return nil
@@ -101,7 +102,7 @@ func (repo Repository) validateDataClassification(path string) error {
 	if repo.IsControlInput(path) {
 		return fmt.Errorf("scope.data must not classify policy-sensitive control input %s", path)
 	}
-	if repo.IsExecutableSource(path) {
+	if repo.dataExecutableClassification(path) {
 		return fmt.Errorf("scope.data must not classify executable source %s", path)
 	}
 	return nil
@@ -139,4 +140,12 @@ func (repo Repository) validateDataFilePrefix(path, resolved string) error {
 		return fmt.Errorf("scope.data must not classify shebang source %s", path)
 	}
 	return nil
+}
+
+func (repo Repository) dataExecutableClassification(path string) bool {
+	extension := strings.ToLower(filepath.Ext(path))
+	if extension == ".js" || extension == ".mjs" {
+		return false
+	}
+	return repo.builtInLanguage(path) != "" || extension == ".ps1" || extension == ".psm1" || len(repo.computeDeclaredLanguages(path)) > 0
 }

@@ -103,14 +103,11 @@ func runRequest(ctx context.Context, repo repository.Repository, command policy.
 	if len(request.Files) > 10000 || len(request.Modules) > 1000 {
 		return failedResult(adapter, errors.New("adapter request exceeds its file or module count limit"))
 	}
-	if err := prepareInputs(repo, &request); err != nil {
-		return failedResult(adapter, err)
-	}
-	prepared, identity, err := runtimeCommand(repo, command, adapter.Runtime)
+	prepared, preparedRequest, err := prepareExecution(repo, command, request)
 	if err != nil {
 		return failedResult(adapter, err)
 	}
-	request.Runtime = identity
+	request = preparedRequest
 	response, err := execute(ctx, adapter.PackRoot, prepared, commandRunner, request)
 	if err != nil {
 		return failedResult(adapter, err)
@@ -352,7 +349,7 @@ func packCommandSelects(repo repository.Repository, command policy.Command, sele
 }
 
 func packCapabilitySelects(repo repository.Repository, capability, selected string) bool {
-	if repo.IsData(selected) && capability == "format" {
+	if repo.IsData(selected) && slices.Contains([]string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, capability) {
 		return false
 	}
 	if !repo.IsGenerated(selected) {

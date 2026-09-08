@@ -38,6 +38,7 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 		return engine.formatFailure(selection, "repository", err)
 	}
 	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
+	findings = append(findings, quality.DataSyntaxFindings(ctx, engine.Repository, selection.Files)...)
 	if engine.Repository.HasGeneratedExecutable(selection.Files) {
 		findings = append(findings, inventory.Findings...)
 	}
@@ -76,7 +77,7 @@ func (engine *Engine) formatFailure(selection repository.Selection, subject stri
 func (engine *Engine) formatSnapshot(files []string) (map[string]string, error) {
 	before := make(map[string]string, len(files))
 	for _, path := range files {
-		digest, err := engine.Repository.ContentDigest(path)
+		digest, err := engine.Repository.InputDigest(path)
 		if err != nil {
 			return nil, fmt.Errorf("format input %q: %w", path, err)
 		}
@@ -107,11 +108,11 @@ func (engine *Engine) formatOutcome(files []string, before map[string]string, in
 }
 
 func (engine *Engine) formatFileOutcome(path, before string, inventory repository.GenerationInventory) (FormatFile, *policy.Finding) {
-	file := FormatFile{Path: path, State: "unchanged", StyleExempt: engine.Repository.IsGenerated(path) || engine.Repository.IsData(path)}
+	file := FormatFile{Path: path, State: "unchanged", StyleExempt: engine.Repository.IsGenerated(path) || engine.Repository.IsData(path) || engine.Repository.IsSymbolicLink(path)}
 	if producer, found := inventory.ProducerFor(path); found {
 		file.Producer = producer.Declaration.Name
 	}
-	after, err := engine.Repository.ContentDigest(path)
+	after, err := engine.Repository.InputDigest(path)
 	if err != nil {
 		file.State = "unavailable"
 		return file, &policy.Finding{Check: "policy.formatEvidence", Path: path, Subject: "output", Message: err.Error()}

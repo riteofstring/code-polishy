@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.25.0-beta.3 - 2026-09-08
+
+- Prepare provider commands consistently for execution and gate evidence, retaining
+  exact runtime, request, working-root, and operation-selection checks.
+- Preserve contained asset-directory links during formatting and provider reads;
+  reject linked write targets.
+- Protect explicitly declared literal JavaScript data modules without evaluating
+  or rewriting them.
+- Keep external browser-script boundaries visible while analyzing local code;
+  retain strict JavaScript checks within the nearest compilation unit.
+- Restrict the optional JS/TS provider format profile to formatting.
+
 ## 0.25.0-beta.2 - 2026-09-07
 
 - Retain TypeScript import-equals and framework script-source dependencies in

@@ -219,7 +219,7 @@ verification workflow has the same source of truth as generation.
 
 `scope.data` names hand-written `.json`, `.jsonc`, `.yaml`, and `.yml` product
 inputs whose bytes may be identity-sensitive. The category is intentionally
-narrow: configuration rejects executable source, dependency and lock inputs,
+narrow: configuration rejects other executable source, dependency and lock inputs,
 tool configuration, CI, Dockerfiles, other policy-sensitive controls, and any
 overlap with `scope.exclude` or `scope.generated`.
 
@@ -230,6 +230,17 @@ providers, tests, and gates. `check` reports malformed data, while every
 formatting path leaves its bytes unchanged. `scope.data` is therefore not an
 exclusion or a way to evade product validation. The configuration patterns and
 format-provider boundary are defined in [Adopting Code Polishy](../adoption.md#5-define-scope-narrowly).
+
+Explicit `.js` and `.mjs` data selections also support immutable literal modules.
+A module may export a literal directly, export one named const literal binding,
+or declare one const literal binding and default-export it. Values are finite
+numbers, strings, booleans, null, arrays, and plain object properties. The native
+parser rejects malformed syntax, imports, calls, getters, spreads, computed values,
+duplicate keys, prototype setters, and arbitrary statements without evaluating the
+module. Nesting is bounded to 100 levels. Validation precedes formatting writes.
+Data classification retains ownership and dependency obligations while excluding
+these modules from executable provider capabilities. Executable modes, shebangs,
+control inputs, and generated or excluded overlaps remain forbidden.
 
 Generated JavaScript and TypeScript can inherit one real source package's
 analysis context through `scope.generatedJavaScript`. Each declaration maps

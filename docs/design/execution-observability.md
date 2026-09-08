@@ -32,3 +32,13 @@ Cache lifetime follows its evidence lifetime. Repository facts are reused
 within one command after configuration composition. Cross-process analyzer
 results are reused only through an existing digest-bound receipt mechanism;
 ordinary files are never trusted from a timestamp-only persistent cache.
+
+Contained asset links have a read-only identity shared by formatting snapshots
+and provider context. It binds link text, canonical target, and bounded target-file
+hashes. Targets must contain owned image, media, font, or PDF assets; escaping,
+broken, cyclic, nested-link, control, and executable targets fail verification.
+Inventory retains link entries without traversing them. Formatting protects the
+link and its target identity. Ordinary content reads and all provider edit targets
+retain the strict regular-file boundary, including every parent component; a link
+cannot become an authorized write route. No new asset-link configuration is
+required.

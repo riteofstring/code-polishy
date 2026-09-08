@@ -221,8 +221,8 @@ an apparently valid empty result. See
   lockfile, TypeScript, lint, dead-code, dependency, and module context.
 
 - `scope.data` is the non-rewrite category for hand-written product data. Use
-  narrow patterns that can match only `.json`, `.jsonc`, `.yaml`, or `.yml`, for
-  example:
+  narrow patterns for `.json`, `.jsonc`, `.yaml`, `.yml`, or validated literal
+  `.js`/`.mjs` modules, for example:
 
   ```json
   {
@@ -238,8 +238,10 @@ an apparently valid empty result. See
   ```
 
   Data stays contained, owned, selected by tests and gates, UTF-8 and
-  syntax-validated. Configuration rejects patterns that overlap executable
-  source, custom-language source, generated or excluded paths, dependency
+  syntax-validated. Literal JavaScript modules must contain only a supported literal
+  export; imports, calls, and computed values are rejected without evaluation.
+  Configuration rejects other executable or custom-language source, generated
+  or excluded paths, dependency
   manifests, locks, tool configuration, CI, Dockerfiles, or other protected
   control inputs. `format` leaves its bytes unchanged, and a target command
   cannot run in the `format` profile while `scope.data` is declared. See

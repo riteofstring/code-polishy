@@ -9,6 +9,9 @@ import (
 
 func analysisFindings(repo repository.Repository, adapter *policy.PackAdapter, response Response) []policy.Finding {
 	findings := findingsForResponse(adapter, response)
+	for _, note := range response.Notes {
+		findings = append(findings, policy.Finding{Check: "pack." + adapter.PackName + ".note", Path: policy.ConfigFilename, Subject: adapter.Capability, Message: note, Severity: policy.FindingInformation, SemanticIdentity: []string{note}})
+	}
 	if response.Facts != nil && response.Facts.Functions != nil {
 		findings = append(findings, functionFindings(repo, *response.Facts.Functions)...)
 	}

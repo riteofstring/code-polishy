@@ -76,6 +76,9 @@ function checkerFor(analysis, project) {
       );
   }
   const { options, files } = projectInputs(analysis, project);
+  analysis.note(
+    `Compilation unit ${project.configuration?.path ?? `${project.owner?.root ?? "."} (inferred)`}: ${files.length} root files; provider-required allowJs=true, checkJs=true, noEmit=true, noCheck=false; effective strict=${Boolean(options.strict)}, skipLibCheck=${Boolean(options.skipLibCheck)}`,
+  );
   const checker = createTypeScriptInferredChecker(
     plugins,
     services,

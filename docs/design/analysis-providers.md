@@ -68,3 +68,24 @@ Managed JSON and SARIF reports retain provider rule namespaces and graph evidenc
 Their schema accepts declared language and ecosystem identifiers and binds pack
 facts to their version 2 protocol and exact provider identity. Native Python fact
 variants retain their existing protocol contracts.
+
+Provider planning and execution share preparation of the exact runtime command,
+pack root, profile, capability, selected files, and serialized request. Empty
+selections produce no invocation. Architecture operations appear at their actual
+execution phase, including test-ownership discovery. Persisted gate identities
+bind the working root and request digest. Exact command enforcement remains in
+both planning and artifact recording; mismatches expose field names without
+printing request or environment values. Provider notes use existing informational
+findings and do not turn a successful capability into a policy failure.
+
+Explicit scope.data selections may protect .js and .mjs literal modules. The
+native parser accepts a default literal export, a single const literal binding
+followed by its default export, or a named exported const literal binding. Values
+are finite numbers, strings, booleans, null, arrays, and plain object properties.
+Imports, calls, getters, spreads, computed keys, prototype setters, duplicate keys,
+other statements, and malformed syntax are rejected without evaluating source.
+Validation runs during checks and before formatting; protected bytes are never
+reformatted. Control inputs, executable modes, shebangs, excluded paths, and
+generated-output overlaps cannot acquire data protection. Data retains module
+ownership, dependency obligations, and input hashes while leaving executable
+capability selections. Existing structured-data formats remain supported.

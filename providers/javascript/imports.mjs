@@ -176,7 +176,7 @@ function parseConfiguration(analysis, candidate, root) {
   };
   const parsed = ts.getParsedCommandLineOfConfigFile(
     join(analysis.root, candidate),
-    {},
+    { allowJs: true, checkJs: true },
     host,
     undefined,
     undefined,

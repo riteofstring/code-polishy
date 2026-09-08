@@ -430,9 +430,7 @@ func (repo Repository) IsData(path string) bool {
 }
 
 func (repo Repository) computeIsData(path string) bool {
-	return !repo.IsControlInput(path) &&
-		!repo.IsExecutableSource(path) &&
-		policy.MatchesAny(path, repo.Config.Scope.Data)
+	return policy.MatchesAny(path, repo.Config.Scope.Data) && !repo.IsControlInput(path) && !repo.dataExecutableClassification(path)
 }
 
 func (repo Repository) IsTest(path string) bool {
@@ -568,9 +566,16 @@ func (repo Repository) Languages(path string) []string {
 }
 
 func (repo Repository) computeLanguages(path string) []string {
+	if repo.IsData(path) {
+		return nil
+	}
 	if language := repo.builtInLanguage(path); language != "" {
 		return []string{language}
 	}
+	return repo.computeDeclaredLanguages(path)
+}
+
+func (repo Repository) computeDeclaredLanguages(path string) []string {
 	languages := []string{}
 	for _, rule := range repo.Config.Scope.Languages {
 		if policy.MatchesAny(path, rule.Paths) {

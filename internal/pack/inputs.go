@@ -37,7 +37,7 @@ func prepareInputPaths(repo repository.Repository, request *Request, paths []str
 	}
 	defer root.Close()
 	for _, path := range paths {
-		data, err := readInput(root, path)
+		data, err := readContextInput(repo, root, path)
 		if err != nil {
 			return err
 		}
@@ -45,6 +45,14 @@ func prepareInputPaths(repo repository.Repository, request *Request, paths []str
 		request.Policy.Files = append(request.Policy.Files, SourceInput{Path: path, Language: repo.Language(path), Test: repo.IsTest(path), Generated: repo.IsGenerated(path), Development: repo.IsDevelopment(path)})
 	}
 	return nil
+}
+
+func readContextInput(repo repository.Repository, root *os.Root, path string) ([]byte, error) {
+	data, link, err := repo.AssetLinkIdentity(path)
+	if err != nil || link {
+		return data, err
+	}
+	return readInput(root, path)
 }
 
 func readInput(root *os.Root, path string) ([]byte, error) {
@@ -90,7 +98,7 @@ func verifyAnalysisInputs(repo repository.Repository, request Request, response 
 	}
 	defer root.Close()
 	for _, input := range append(slices.Clone(request.Context), response.Inputs...) {
-		data, err := readInput(root, input.Path)
+		data, err := readContextInput(repo, root, input.Path)
 		if err != nil {
 			return err
 		}
@@ -207,11 +215,6 @@ func applyEdits(repo repository.Repository, request Request, response Response) 
 	if len(response.Edits) == 0 {
 		return nil
 	}
-	root, err := os.OpenRoot(repo.Root)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
 	if err := validateEdits(response.Edits, response.Status, request); err != nil {
 		return err
 	}
@@ -219,13 +222,12 @@ func applyEdits(repo repository.Repository, request Request, response Response) 
 		if repo.IsGenerated(edit.Path) || repo.IsData(edit.Path) {
 			return errors.New("provider edits cannot target generated source or data")
 		}
-	}
-	for _, edit := range response.Edits {
-		info, err := root.Stat(edit.Path)
-		if err != nil {
+		if err := repo.ValidateRegularFile(edit.Path); err != nil {
 			return err
 		}
-		if err := root.WriteFile(edit.Path, []byte(edit.Content), info.Mode().Perm()); err != nil {
+	}
+	for _, edit := range response.Edits {
+		if err := repo.WriteRegularFile(edit.Path, []byte(edit.Content)); err != nil {
 			return err
 		}
 	}
