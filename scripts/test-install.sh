@@ -285,11 +285,13 @@ EOF
   }
 }
 EOF
-  for bundle_source_file in pnpm-lock.yaml pnpm-workspace.yaml .npmrc runner.mjs \
-    policy.mjs protocol.mjs audit.mjs deadcode.mjs imports.mjs gitlab.mjs licenses.mjs packages.mjs; do
+  while IFS= read -r bundle_source_file; do
+    if [[ -f "${source_root}/tools/javascript/${bundle_source_file}" ]]; then
+      continue
+    fi
     printf '// disposable %s\n' "${bundle_source_file}" \
       >"${source_root}/tools/javascript/${bundle_source_file}"
-  done
+  done <"${source_root}/tools/javascript/source-files.txt"
 
   write_file "${source_root}/.tools/javascript/${platform_tag}/node/bin/node" <<EOF
 #!/usr/bin/env bash
