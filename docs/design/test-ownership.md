@@ -9,6 +9,10 @@ production owner, and test imports do not authorize production dependencies.
 identifies a distinct ordinary suite when the test runs elsewhere. Omitting it
 means the focused suite executes the test. Both references are validated;
 selecting expensive integration evidence never replaces quick module coverage.
+When execution is separate, the referenced focused suite must retain at least
+one governed test source that it owns and covers in its own execution paths.
+Listing production files or moving every owned test to full-only execution
+cannot satisfy that check, regardless of the execution suite's declared cost.
 
 The execution suite must list the owned paths, include the full profile, and
 have either the same module owner or repository scope. Supplemental execution

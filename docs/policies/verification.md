@@ -43,6 +43,10 @@ When another suite executes the owned test, name it in `executionSuite`. This
 suite must have repository scope or the same module owner, include the test in
 its explicit execution paths, and run in full without supplemental execution.
 Without `executionSuite`, the focused suite must include the owned test itself.
+When execution is separate, the focused suite must still directly execute at
+least one governed, owned test source through its own declared paths. Moving
+every test to a full-only suite leaves quick coverage incomplete and blocks
+doctor and gates, even when the focused suite declares nonempty paths.
 Imported test helpers use the suite that imports them; listing a helper does
 not claim it is an independent test command. These declarations do not change
 suite costs, execution profiles, or gate selection. Test imports never become

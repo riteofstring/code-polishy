@@ -27,9 +27,7 @@
           "internal/policy/model.go",
           "internal/testing/ownership.go",
           "internal/testing/ownership_diagnostics.go",
-          "internal/testing/testing.go",
-          "schema/code-polishy.schema.json",
-          "schema/code-polishy-architecture-review.schema.json"
+          "internal/testing/testing.go"
         ]
       },
       {

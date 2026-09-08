@@ -63,6 +63,42 @@ func TestIntegrationOwnershipCannotReplaceQuickCoverageOrHideExecution(t *testin
 	}
 }
 
+func TestFullOnlyExecutionCannotEmptyFocusedOwnership(t *testing.T) {
+	t.Parallel()
+	for _, cost := range []string{"quick", "standard", "expensive"} {
+		t.Run(cost, func(t *testing.T) {
+			repo, files := integrationOwnershipRepository(t)
+			repo.Config.Tests.Ownership[0].ExecutionSuite = "browser-integration"
+			repo.Config.Tests.Suites[0].Paths = []string{"domain/value.go"}
+			repo.Config.Tests.Suites[2].Cost = cost
+			repo.Config.Tests.Suites[2].Paths = append(repo.Config.Tests.Suites[2].Paths, "domain/value_test.go")
+			findings := CoverageFindings(repo, files)
+			if len(findings) != 1 || findings[0].Check != "policy.testOwnership" || findings[0].Subject != "domain-unit" ||
+				!strings.Contains(findings[0].Message, "no owned executable test") {
+				t.Fatalf("empty quick coverage admitted at cost %s: %+v", cost, findings)
+			}
+		})
+	}
+}
+
+func TestSeparateExecutionRequiresItsReferencedFocusedSuiteToOwnTests(t *testing.T) {
+	t.Parallel()
+	repo, files := integrationOwnershipRepository(t)
+	empty := repo.Config.Tests.Suites[0]
+	empty.Name, empty.Paths = "empty-focused", []string{"domain/value.go"}
+	repo.Config.Tests.Suites = append(repo.Config.Tests.Suites, empty)
+	repo.Config.Tests.Ownership[1].FocusedSuite = empty.Name
+	findings := CoverageFindings(repo, files)
+	if len(findings) != 1 || findings[0].Subject != empty.Name || !strings.Contains(findings[0].Message, "no owned executable test") {
+		t.Fatalf("unrelated quick suite concealed empty referenced suite: %+v", findings)
+	}
+	repo.Config.Tests.Ownership[1].FocusedSuite = "domain-unit"
+	repo.Config.Tests.Ownership[0].ExecutionSuite = "domain-unit"
+	if findings := CoverageFindings(repo, files); len(findings) != 0 {
+		t.Fatalf("explicit quick execution rejected: %+v", findings)
+	}
+}
+
 func integrationOwnershipRepository(t *testing.T) (repository.Repository, []string) {
 	t.Helper()
 	repo := ownershipRepository(t)

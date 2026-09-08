@@ -2,6 +2,7 @@ package testing
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -96,4 +97,37 @@ func compatibleOwnerSuite(config policy.Config, module, path string) string {
 		return ""
 	}
 	return names[0]
+}
+
+func focusedTestOwnershipFindings(repo repository.Repository, files []string) []policy.Finding {
+	coverage := map[string]bool{}
+	for _, owner := range repo.Config.Tests.Ownership {
+		if owner.ExecutionSuite != "" && owner.ExecutionSuite != owner.FocusedSuite {
+			coverage[owner.FocusedSuite] = false
+		}
+	}
+	for _, path := range files {
+		recordFocusedTestOwnership(repo, path, coverage)
+	}
+	findings := []policy.Finding{}
+	for _, name := range slices.Sorted(maps.Keys(coverage)) {
+		if !coverage[name] {
+			findings = append(findings, testOwnershipFinding(policy.ConfigFilename, name, "focused suite has no owned executable test in its execution paths; separate execution cannot replace quick boundary coverage"))
+		}
+	}
+	return findings
+}
+
+func recordFocusedTestOwnership(repo repository.Repository, path string, coverage map[string]bool) {
+	owners := repo.TestOwnerships(path)
+	if len(owners) != 1 {
+		return
+	}
+	owner := owners[0]
+	if owner.ExecutionSuite != "" && owner.ExecutionSuite != owner.FocusedSuite {
+		return
+	}
+	if testOwnerCoverageMessage(repo, path, owner) == "" {
+		coverage[owner.FocusedSuite] = true
+	}
 }

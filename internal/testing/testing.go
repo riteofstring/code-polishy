@@ -703,6 +703,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, requiredSupplementalKindFindings(config)...)
 	findings = append(findings, gherkinCoverageFindings(config.Tests.Suites, files)...)
 	findings = append(findings, OwnershipFindings(repo, files)...)
+	findings = append(findings, focusedTestOwnershipFindings(repo, files)...)
 	return findings
 }
 
