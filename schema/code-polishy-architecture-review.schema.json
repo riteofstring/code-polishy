@@ -355,6 +355,9 @@
         "focusedSuite": {
           "type": "string"
         },
+        "executionSuite": {
+          "type": "string"
+        },
         "paths": {
           "type": "array",
           "items": {

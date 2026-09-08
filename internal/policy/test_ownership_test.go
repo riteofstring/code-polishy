@@ -72,3 +72,61 @@ func TestTestOwnershipCutoverRejectsSupersededForms(t *testing.T) {
 		}
 	}
 }
+
+func TestTestOwnershipSeparatesFocusedCoverageFromFullExecution(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name   string
+		change func(map[string]any, map[string]any, map[string]any)
+		want   string
+	}{
+		{"repository integration", func(map[string]any, map[string]any, map[string]any) {}, ""},
+		{"module integration", func(_ map[string]any, suite, _ map[string]any) {
+			suite["scope"], suite["modules"] = "module", []any{"content"}
+		}, ""},
+		{"unknown execution", func(owner, _, _ map[string]any) { owner["executionSuite"] = "missing" }, "unknown test suite"},
+		{"empty execution", func(owner, _, _ map[string]any) { owner["executionSuite"] = "" }, "executionSuite"},
+		{"missing focused", func(owner, _, _ map[string]any) { delete(owner, "focusedSuite") }, "focusedSuite"},
+		{"unknown focused", func(owner, _, _ map[string]any) { owner["focusedSuite"] = "missing" }, "unknown test suite"},
+		{"repository focused", func(owner, _, _ map[string]any) { owner["focusedSuite"] = "full" }, "quick module-scoped"},
+		{"unbounded execution", func(_ map[string]any, suite, _ map[string]any) { delete(suite, "paths") }, "explicit execution paths"},
+		{"unbounded focused", func(_, _ map[string]any, focused map[string]any) { delete(focused, "paths") }, "explicit execution paths"},
+		{"supplemental execution", func(_ map[string]any, suite, _ map[string]any) {
+			suite["runOn"] = []any{"supplemental"}
+		}, "without supplemental execution"},
+		{"no-op execution", func(_ map[string]any, suite, _ map[string]any) { suite["argv"] = []any{"true"} }, "no-op"},
+		{"empty-test execution", func(_ map[string]any, suite, _ map[string]any) {
+			suite["argv"] = []any{"vitest", "--pass-with-no-tests"}
+		}, "without executing tests"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var config map[string]any
+			if err := json.Unmarshal([]byte(minimalConfig()), &config); err != nil {
+				t.Fatal(err)
+			}
+			tests := config["tests"].(map[string]any)
+			owner := map[string]any{"paths": []any{"spec/browser.test.js", "spec/browser-helper.js"}, "module": "content", "focusedSuite": "content-test", "executionSuite": "full"}
+			tests["ownership"] = []any{owner}
+			suites := tests["suites"].([]any)
+			focused, execution := suites[0].(map[string]any), suites[1].(map[string]any)
+			focused["paths"] = []any{"content/unit_test.go"}
+			execution["paths"], execution["cost"] = []any{"spec/**"}, "expensive"
+			execution["runOn"] = []any{"full"}
+			testCase.change(owner, execution, focused)
+			data, err := json.Marshal(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := Parse(data, ConfigFilename)
+			if testCase.want != "" {
+				if err == nil || !strings.Contains(err.Error(), testCase.want) {
+					t.Fatalf("expected %q, got %v", testCase.want, err)
+				}
+				return
+			}
+			if err != nil || loaded.Tests.Ownership[0].ExecutionSuite != "full" {
+				t.Fatalf("ownership = %+v, error = %v", loaded.Tests.Ownership, err)
+			}
+		})
+	}
+}

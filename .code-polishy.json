@@ -21,6 +21,18 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/test-ownership.md",
+        "sourcePaths": [
+          "internal/policy/test_ownership.go",
+          "internal/policy/model.go",
+          "internal/testing/ownership.go",
+          "internal/testing/ownership_diagnostics.go",
+          "internal/testing/testing.go",
+          "schema/code-polishy.schema.json",
+          "schema/code-polishy-architecture-review.schema.json"
+        ]
+      },
+      {
         "path": "docs/design/workflow-facts.md",
         "module": "workflow"
       },

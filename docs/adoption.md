@@ -194,9 +194,12 @@ an apparently valid empty result. See
   applicable. See [Generated producers](policies/code-quality.md#generated-producers).
 - `tests.paths` adds repository-specific test locations to the built-in naming
   conventions. `tests.ownership` assigns every governed executable test to one
-  production module and its primary quick focused suite. That suite explicitly
-  includes the test in its execution paths. Production module paths do not
-  assign test ownership, and test imports do not create production dependency
+  production module and that module's quick focused suite. An optional
+  `executionSuite` names the full-profile module or repository suite that
+  actually runs a test when it differs from the focused suite. The executing
+  suite explicitly includes the test and imported helpers in its paths.
+  Production module paths do not assign test ownership, and test imports do not
+  create production dependency
   edges.
 - `scope.generatedJavaScript` gives generated JavaScript or TypeScript the
   package context of one real source package without a fake manifest or lock in

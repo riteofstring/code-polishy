@@ -794,7 +794,8 @@
       "properties": {
         "paths": { "$ref": "#/$defs/nonemptyPaths", "maxItems": 128 },
         "module": { "$ref": "#/$defs/identifier" },
-        "focusedSuite": { "$ref": "#/$defs/identifier" }
+        "focusedSuite": { "$ref": "#/$defs/identifier" },
+        "executionSuite": { "$ref": "#/$defs/identifier" }
       }
     },
     "testArtifact": {

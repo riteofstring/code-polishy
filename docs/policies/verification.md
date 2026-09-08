@@ -36,13 +36,36 @@ Explicit values may refine ordinary defaults, but:
 
 Every governed test source, including an unconventional path selected by
 `tests.paths`, must match exactly one `tests.ownership` entry. The entry names
-the production `module` it verifies and its primary quick `focusedSuite`;
-production module paths do not infer test ownership. The named suite must
-explicitly cover the owned test paths and run in focused, recommended, and full
-profiles. Test imports never become production dependency edges. Every module
-must have at least one quick module-scoped focused suite, and every repository
+the production `module` it verifies and that module's quick `focusedSuite`;
+production module paths do not infer test ownership. The focused suite must
+declare explicit execution paths and run in focused, recommended, and full.
+When another suite executes the owned test, name it in `executionSuite`. This
+suite must have repository scope or the same module owner, include the test in
+its explicit execution paths, and run in full without supplemental execution.
+Without `executionSuite`, the focused suite must include the owned test itself.
+Imported test helpers use the suite that imports them; listing a helper does
+not claim it is an independent test command. These declarations do not change
+suite costs, execution profiles, or gate selection. Test imports never become
+production dependency edges. Every module must have at least one quick
+module-scoped focused suite, and every repository
 must have at least one repository-scoped full suite. A project may also list
 `tests.requiredKinds` to make specific layers mandatory.
+
+For example, a browser test and its imported helper can share one owner while
+running only in the repository's full-profile browser suite:
+
+```json
+{
+  "paths": ["tests/browser.test.js", "tests/browser-helper.js"],
+  "module": "application",
+  "focusedSuite": "application-unit",
+  "executionSuite": "browser-integration"
+}
+```
+
+`application-unit` still runs real quick boundary tests through its own command
+and paths. `browser-integration` lists both browser paths and invokes the test
+entrypoint. Supplemental evidence cannot substitute for ordinary test execution.
 
 Built-in project capabilities imply these repository-scoped full-profile
 requirements:

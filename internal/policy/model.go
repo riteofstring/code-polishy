@@ -351,9 +351,10 @@ type Testing struct {
 }
 
 type TestOwnership struct {
-	Paths        []string `json:"paths"`
-	Module       string   `json:"module"`
-	FocusedSuite string   `json:"focusedSuite"`
+	Paths          []string `json:"paths"`
+	Module         string   `json:"module"`
+	FocusedSuite   string   `json:"focusedSuite"`
+	ExecutionSuite string   `json:"executionSuite,omitempty"`
 }
 
 type TestSuite struct {

@@ -119,6 +119,14 @@
       "public": true
     },
     {
+      "id": "test-ownership",
+      "path": "docs/design/test-ownership.md",
+      "title": "Test Ownership and Execution",
+      "summary": "Bind tests to production owners, quick boundary coverage, and their actual execution suites.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "exceptions",
       "path": "docs/policies/exceptions.md",
       "title": "Exception Policy",

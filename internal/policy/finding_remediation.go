@@ -42,7 +42,7 @@ var findingRemediationRules = []struct {
 	{"policy.agentGuidance", "Synchronize managed agent guidance from the exact locked release; keep repository-specific procedures in declared operational handoffs."},
 	{"policy.architectureReview", "Prepare the selected architecture review against the trusted merge base, resolve findings, and finalize the accepted result for the candidate topology."},
 	{"policy.behaviorReview", "Inspect behavior-review status against the trusted review base and complete its selected review and regression-proof requirements before the gate."},
-	{"policy.testOwnership", "Declare exactly one production owner and primary quick focused suite for the reported test, using actual boundary ownership and explicit suite paths."},
+	{"policy.testOwnership", "Declare exactly one production owner and its quick focused suite. Name a separate full-profile executionSuite when it runs the test, with explicit execution paths."},
 	{"policy.testCoverage policy.testStrength", "Provide an executable quick boundary suite covering the reported module or test behavior, with meaningful assertions and exact declared ownership."},
 	{"policy.moduleCoverage policy.conditionalModule", "Correct module paths so each governed production file has one substantive owner and every declared module matches its intended source."},
 	{"policy.languageCoverage", "Declare one supported language owner for each selected executable file and remove overlapping or stale language mappings."},
