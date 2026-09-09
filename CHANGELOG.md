@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.25.0-beta.5 - 2026-09-09
 
 - Replace the prerelease provider protocol with version 3, carrying effective
   package ownership, lint policy, analysis units, and separate diagnostic/write
@@ -10,6 +10,10 @@
   configuration names, and literal entry-point semantics.
 - Preserve native diagnostics outside unavailable pack claims, bound provider
   source facts and text, and reject invalid UTF-8 before formatting writes.
+- Resolve generated-source package imports and nested TypeScript configuration
+  aliases during unused-code analysis while preserving physical relative imports.
+- Respect effective generated-source module formats and conditional exports in
+  provider type checking and architecture analysis.
 - Update js-yaml to 4.3.2 in both JavaScript tool graphs to fix CPU exhaustion
   through empty YAML merge sources (GHSA-2883-xcg3-v3hh).
 
