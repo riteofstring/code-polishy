@@ -239,6 +239,14 @@
       "public": true
     },
     {
+      "id": "provider-scope",
+      "path": "docs/design/provider-scope.md",
+      "title": "Analysis ownership and operation scope",
+      "summary": "Resolve provider ownership, generated-source context, and focused diagnostic authority.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "python-contract-evidence",
       "path": "docs/design/python-contract-evidence.md",
       "title": "Python Contract Evidence",
