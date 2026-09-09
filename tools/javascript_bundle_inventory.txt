@@ -160,7 +160,7 @@ is-weakset@2.0.4	MIT
 isarray@2.0.5	MIT
 isexe@2.0.0	ISC
 jiti@2.7.0	MIT
-js-yaml@4.3.1	MIT
+js-yaml@4.3.2	MIT
 json-buffer@3.0.1	MIT
 json-schema-traverse@0.4.1	MIT
 json-stable-stringify-without-jsonify@1.0.1	MIT

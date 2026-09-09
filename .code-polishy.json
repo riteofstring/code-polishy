@@ -1559,6 +1559,32 @@
         "expires": "2026-09-12"
       },
       {
+        "id": "bundle-js-yaml-security-fix",
+        "ecosystem": "pnpm",
+        "package": "js-yaml",
+        "version": "4.3.2",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/nodeca/js-yaml/security/advisories/GHSA-2883-xcg3-v3hh",
+        "reason": "Version 4.3.2 counts empty YAML merge sources against the parsing budget, fixing CPU exhaustion in the bundle's lockfile parser and analyzer dependencies. Native audit and OSV remain required.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-09",
+        "expires": "2026-09-25"
+      },
+      {
+        "id": "provider-js-yaml-security-fix",
+        "ecosystem": "pnpm",
+        "package": "js-yaml",
+        "version": "4.3.2",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/nodeca/js-yaml/security/advisories/GHSA-2883-xcg3-v3hh",
+        "reason": "Version 4.3.2 fixes CPU exhaustion through empty YAML merge sources in the provider's ESLint and Knip dependency graph. Native audit and OSV remain required.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-09",
+        "expires": "2026-09-25"
+      },
+      {
         "id": "provider-fast-uri-security-fix",
         "ecosystem": "pnpm",
         "package": "fast-uri",

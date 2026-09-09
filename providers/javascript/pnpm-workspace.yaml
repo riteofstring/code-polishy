@@ -21,3 +21,4 @@ trustPolicy: no-downgrade
 updateNotifier: false
 minimumReleaseAgeExclude:
   - fast-uri@3.1.7
+  - js-yaml@4.3.2

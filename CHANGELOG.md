@@ -10,6 +10,8 @@
   configuration names, and literal entry-point semantics.
 - Preserve native diagnostics outside unavailable pack claims, bound provider
   source facts and text, and reject invalid UTF-8 before formatting writes.
+- Update js-yaml to 4.3.2 in both JavaScript tool graphs to fix CPU exhaustion
+  through empty YAML merge sources (GHSA-2883-xcg3-v3hh).
 
 ## 0.25.0-beta.4 - 2026-09-08
 
