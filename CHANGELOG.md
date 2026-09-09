@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Replace the prerelease provider protocol with version 3, carrying effective
+  package ownership, lint policy, analysis units, and separate diagnostic/write
+  scopes. The optional JavaScript provider remains opt-in.
+- Restore dependent type errors, package-wide unused-code findings, focused
+  architecture dependency closures, nested package roots, alternate TypeScript
+  configuration names, and literal entry-point semantics.
+- Preserve native diagnostics outside unavailable pack claims, bound provider
+  source facts and text, and reject invalid UTF-8 before formatting writes.
+
 ## 0.25.0-beta.4 - 2026-09-08
 
 - Allow owned integration tests and imported helpers to declare their full-profile

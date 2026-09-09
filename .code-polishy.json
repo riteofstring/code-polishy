@@ -21,6 +21,16 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/provider-scope.md",
+        "sourcePaths": [
+          "internal/repository/providers.go",
+          "internal/repository/generated_javascript.go",
+          "internal/quality/javascript.go",
+          "internal/quality/quality.go",
+          "internal/architecture/providers.go"
+        ]
+      },
+      {
         "path": "docs/design/test-ownership.md",
         "sourcePaths": [
           "internal/policy/test_ownership.go",

@@ -2,6 +2,8 @@ package architecture
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -81,7 +83,7 @@ func providerGraphRepository(t *testing.T, language string) repository.Repositor
 	writeArchitectureFile(t, source, "bin/analyze", "fixture analyzer entry\n")
 	writeArchitectureFile(t, source, "fixtures/pass/main.fixture", "valid\n")
 	writeArchitectureFile(t, source, "fixtures/fail/main.fixture", "invalid\n")
-	manifest := fmt.Sprintf(`{"manifestVersion":2,"protocolVersion":2,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"]}],"commands":[{"name":"analyze","argv":["bin/analyze"],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language)
+	manifest := fmt.Sprintf(`{"manifestVersion":2,"protocolVersion":3,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"]}],"commands":[{"name":"analyze","argv":["bin/analyze"],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language)
 	writeArchitectureFile(t, source, pack.ManifestFilename, manifest)
 	identity, _, err := pack.Install(source, store)
 	if err != nil {
@@ -112,7 +114,28 @@ func (boundary providerGraphRunner) RunStructured(_ context.Context, _ string, c
 		analyzed = []string{}
 	}
 	imports := []pack.ImportFact{{Path: "foreign/main.fixture", Line: 1, Column: 1, Specifier: "./native/value.go", Resolved: "native/value.go", Kind: "runtime"}}
-	response := pack.Response{ProtocolVersion: 2, Status: "pass", Evidence: []string{"fixture parser completed"}, Inputs: request.Context, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
-	data, err := json.Marshal(response)
+	data, err := os.ReadFile(filepath.Join(request.ProjectRoot, "native/value.go"))
+	if err != nil {
+		return runner.Result{}, runner.Output{}, err
+	}
+	digest := sha256.Sum256(data)
+	inputs := append(slices.Clone(request.Context), pack.InputFile{Path: "native/value.go", SHA256: hex.EncodeToString(digest[:])})
+	response := pack.Response{ProtocolVersion: 3, Status: "pass", Evidence: []string{"fixture parser completed"}, Inputs: inputs, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
+	data, err = json.Marshal(response)
 	return runner.Result{}, runner.Output{Stdout: data}, err
+}
+
+func TestFocusedProviderArchitectureDoesNotScheduleUnselectedLanguages(t *testing.T) {
+	repo := providerGraphRepository(t, "foreign")
+	files, err := repo.AllFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operations := providerOperations(repo, []string{"native/value.go"}, files); len(operations) != 0 {
+		t.Fatalf("native selection scheduled foreign provider: %+v", operations)
+	}
+	operations := providerOperations(repo, []string{"foreign/main.fixture"}, files)
+	if len(operations) != 1 || operations[0].selection.All {
+		t.Fatalf("focused provider selection became global: %+v", operations)
+	}
 }

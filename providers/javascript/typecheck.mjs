@@ -1,5 +1,5 @@
 import { packageFor } from "./context.mjs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import ts from "typescript";
 import { createTypeScriptInferredChecker } from "@volar/kit";
@@ -37,14 +37,31 @@ export async function typecheck(analysis) {
 
 async function checkProject(analysis, project) {
   try {
-    const { checker, programDiagnostics } = checkerFor(analysis, project);
-    const included = new Set(checker.getRootFileNames());
-    for (const path of project.paths)
-      await checkFile(analysis, path, {
-        checker,
-        programDiagnostics,
-        included,
-      });
+    const { checker, programDiagnostics, compilationFiles } = checkerFor(
+      analysis,
+      project,
+    );
+    await checker.check(join(analysis.root, project.paths[0]));
+    const compiled = compilationFiles();
+    validateCompilationOwnership(analysis, compiled);
+    const included = new Set([...checker.getRootFileNames(), ...compiled]);
+    const paths = new Set(project.paths);
+    for (const absolute of included) {
+      const path = relative(analysis.root, absolute).replaceAll("\\", "/");
+      if (analysis.reportable.has(path) && analysis.owns(path)) paths.add(path);
+    }
+    for (const path of paths) {
+      try {
+        adapterFor(analysis, path);
+        await checkFile(analysis, path, {
+          checker,
+          programDiagnostics,
+          included,
+        });
+      } catch (error) {
+        analysis.unsupported(path, error.message);
+      }
+    }
   } catch (error) {
     for (const path of project.paths) analysis.unsupported(path, error.message);
   }
@@ -85,6 +102,7 @@ function checkerFor(analysis, project) {
     options,
     ({ project: checkerProject }) => {
       const host = checkerProject.typescript.languageServiceHost;
+      bindGeneratedResolution(analysis, host);
       host.getCurrentDirectory = () =>
         join(
           analysis.root,
@@ -112,6 +130,13 @@ function checkerFor(analysis, project) {
   );
   return {
     checker,
+    compilationFiles() {
+      return serviceContext
+        .inject("typescript/languageService")
+        .getProgram()
+        .getSourceFiles()
+        .map((file) => file.fileName);
+    },
     programDiagnostics() {
       const program = serviceContext
         ?.inject("typescript/languageService")
@@ -155,7 +180,7 @@ async function checkFile(
   }
   for (const diagnostic of diagnostics)
     reportDiagnostic(analysis, path, diagnostic);
-  analysis.response.coverage.analyzed.push(path);
+  analysis.analyzed(path);
 }
 
 function reportDiagnostic(analysis, path, diagnostic) {
@@ -200,14 +225,52 @@ function projectInputs(analysis, project) {
     allowJs: true,
     checkJs: true,
   };
-  const files =
-    parsed?.fileNames ??
-    [...analysis.classifications.values()]
-      .filter(
-        (file) =>
-          file.language === "typescript" &&
-          packageFor(analysis, file.path)?.root === project.owner?.root,
-      )
-      .map((file) => join(analysis.root, file.path));
+  const unit = analysis.unit(project.paths[0]);
+  const inherited = [...analysis.classifications.values()]
+    .filter(
+      (file) =>
+        file.sourcePackage && file.unit === unit.id && analysis.owns(file.path),
+    )
+    .map((file) => join(analysis.root, file.path));
+  const files = [
+    ...new Set([
+      ...(parsed?.fileNames ??
+        unit.members.map((path) => join(analysis.root, path))),
+      ...inherited,
+    ]),
+  ];
   return { options, files };
+}
+
+function bindGeneratedResolution(analysis, host) {
+  const original = host.resolveModuleNameLiterals?.bind(host);
+  host.resolveModuleNameLiterals = (literals, containingFile, ...rest) => {
+    const path = relative(analysis.root, containingFile).replaceAll("\\", "/");
+    const owner = analysis.classifications.get(path)?.sourcePackage;
+    return literals.map((literal) => {
+      if (original && (!owner || literal.text.startsWith(".")))
+        return original([literal], containingFile, ...rest)[0];
+      const source =
+        owner && !literal.text.startsWith(".")
+          ? join(analysis.root, owner)
+          : containingFile;
+      return ts.resolveModuleName(
+        literal.text,
+        source,
+        host.getCompilationSettings(),
+        ts.sys,
+      );
+    });
+  };
+}
+
+function validateCompilationOwnership(analysis, files) {
+  for (const absolute of files) {
+    const path = relative(analysis.root, absolute).replaceAll("\\", "/");
+    const source = analysis.classifications.get(path);
+    if (source?.language === "typescript" && !analysis.owns(path))
+      throw new Error(
+        `compilation member belongs to another analyzer: ${path}`,
+      );
+  }
 }

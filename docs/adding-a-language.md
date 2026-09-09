@@ -9,8 +9,8 @@ framework does not require its own pack or a second project configuration fragme
 ## Pack contract
 
 A local pack contains `code-polishy-pack.json`, `README.md`, contained adapter
-entries, pinned tools, and conformance projects. Manifest and protocol version 2
-form one public contract. Use `schema/code-polishy-pack.schema.json` for the
+entries, pinned tools, and conformance projects. Manifest version 2 and protocol version 3
+form one public contract; earlier prerelease protocols are rejected. Use `schema/code-polishy-pack.schema.json` for the
 manifest. Declare an exact version, supported platforms, languages and source
 patterns, dependency manifests, command paths, capabilities, execution profiles,
 timeouts, and permitted environment names.
@@ -52,21 +52,25 @@ capability, project root, selected files, modules, mode, and profile fields are
 joined by exact pack/runtime identity, full-versus-focused scope, effective policy,
 source classifications, entry points, and hashed read context.
 
-Selected files are diagnostic and potential format-write targets. Context supplies
-necessary project information and never grants write authority. Record every
+`files` requires explicit coverage. `diagnosticFiles` permits findings and additional
+coverage in owned analysis units; `writeFiles` alone authorizes selected format
+edits. Resolved `units` contain roots, manifests, configurations, members, and exact
+entry files. Each policy source carries its unit, provider owner, source-package
+mapping, and effective lint activation. Context supplies necessary project
+information and never grants write authority. Record every
 selected source and each additional dependency/configuration input in `inputs`,
 using contained repository-relative paths and SHA-256 digests. The engine verifies
 identities after execution, including import targets. Changed inputs invalidate
 analysis.
 
-Return exactly one JSON response with `protocolVersion: 2` and one status:
+Return exactly one JSON response with `protocolVersion: 3` and one status:
 
 - `pass`: nonempty evidence, no findings, complete coverage.
 - `findings`: at least one finding and explicit coverage.
 - `incomplete`: unsupported paths with concrete reasons; required work blocks.
 - `operational-failure`: a failure description, with no analysis coverage or facts.
 
-For every selected path, `coverage.analyzed` or `coverage.unsupported` must account
+For every required path, `coverage.analyzed` or `coverage.unsupported` must account
 for it exactly once. Both arrays are explicit, including when empty. Findings
 include the requested capability, original path, stable `rule`, subject, and
 message. Locations use one-based UTF-8 byte columns. The engine namespaces rules
@@ -74,8 +78,9 @@ as `pack.<name>.<rule>`; providers cannot claim core policy rule identities.
 
 Architecture returns authored imports with original locations, resolved targets,
 package identity when applicable, and runtime/type-only/re-export/proven-dynamic
-edge kinds. Lint supplies complete lexical comment facts when comments are
-forbidden. Complexity supplies function complexity, depth, and parameter counts.
+edge kinds. Lint supplies lexical comment facts when comments are
+forbidden; raw text is capped at 65,536 UTF-8 bytes and truncation sets `complete`
+to false. Complexity supplies function complexity, depth, and parameter counts.
 Explicit empty fact collections distinguish an inspected file without those facts
 from omitted evidence. The core derives ownership and classifications and applies
 its existing dependency, cycle, directive, and metric policies.
@@ -96,8 +101,10 @@ claims are rejected.
 
 An explicitly selected pack owns each matching path/capability/profile it claims,
 replacing the corresponding native route. Competing claims fail. Missing or failed
-selected packs do not enable a hidden fallback. Unclaimed native syntax retains
-its existing analyzer. Whole-program checks must own coherent compilation units;
+selected packs remain repository errors. Authenticated retained claims block
+native fallback for their exact paths and capabilities. A missing pack without a
+trusted manifest cannot disable unrelated analyzers. Unclaimed native syntax
+retains its existing analyzer. Whole-program checks must own coherent compilation units;
 partial handoffs cannot imply whole-project coverage. Ordinary configured commands
 still run, but their successful exit does not establish structured source coverage.
 Architecture providers run through the architecture command so graph policy is

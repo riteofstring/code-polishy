@@ -102,3 +102,20 @@ func generatedJavaScriptExtension(path string) bool {
 func generatedJavaScriptFinding(path, message string) policy.Finding {
 	return policy.Finding{Check: "policy.generatedJavaScriptOwnership", Path: path, Subject: "source-package", Message: message}
 }
+
+func (repo Repository) JavaScriptLintActivation(file string) policy.JavaScriptLintScope {
+	context := repo.JavaScriptContextPath(file)
+	activation := policy.JavaScriptLintScope{}
+	for _, scope := range repo.Config.JavaScriptLintScopes {
+		if scope.Root != "." && !strings.HasPrefix(context, scope.Root+"/") {
+			continue
+		}
+		if activation.Root == "" || len(scope.Root) > len(activation.Root) {
+			activation = scope
+		}
+	}
+	if repo.IsGenerated(file) {
+		activation.ReactHooks = false
+	}
+	return activation
+}

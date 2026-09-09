@@ -845,6 +845,9 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 }
 
 func commandApplies(repo repository.Repository, command policy.Command, selection repository.Selection) bool {
+	if command.Adapter != nil {
+		return len(pack.SelectedFiles(repo, selection, command, repo.AnalysisProfile())) > 0
+	}
 	if len(command.Paths) == 0 && len(command.Modules) == 0 {
 		return selection.All
 	}

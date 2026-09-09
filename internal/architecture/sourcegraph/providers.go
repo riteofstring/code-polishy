@@ -68,5 +68,5 @@ func normalizeProviderLanguages(languages []string) ([]string, error) {
 }
 
 func validProviderIdentity(input FactInput, provider ProviderInput) bool {
-	return input.Analyzer == "pack" && input.Protocol == "code-polishy-pack/v2" && providerIdentifier.MatchString(provider.Name) && providerVersion.MatchString(provider.Version)
+	return input.Analyzer == "pack" && input.Protocol == "code-polishy-pack/v3" && providerIdentifier.MatchString(provider.Name) && providerVersion.MatchString(provider.Version)
 }

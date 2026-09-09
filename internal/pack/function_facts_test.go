@@ -15,7 +15,7 @@ func TestFunctionFactsUseCorePolicyInAnalysisAndConformance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := Request{Capability: "complexity", Files: []string{"main.ts"}, Pack: policy.PackSelection{Name: "metrics"}}
+	request := Request{Capability: "complexity", Files: []string{"main.ts"}, DiagnosticFiles: []string{"main.ts"}, WriteFiles: []string{"main.ts"}, Pack: policy.PackSelection{Name: "metrics"}}
 	if err := prepareInputs(repo, &request); err != nil {
 		t.Fatal(err)
 	}

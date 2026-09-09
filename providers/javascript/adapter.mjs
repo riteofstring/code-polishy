@@ -5,15 +5,21 @@ import { deadcode } from "./deadcode.mjs";
 
 function validateRequest(request) {
   if (
-    request.protocolVersion !== 2 ||
+    request.protocolVersion !== 3 ||
     request.runtime?.name !== "node" ||
     request.runtime.version !== process.versions.node
   )
     throw new Error("request requires the exact policy-owned Node runtime");
+  validateScope(request);
+}
+
+function validateScope(request) {
+  const arrays = ["files", "context", "units", "diagnosticFiles", "writeFiles"];
   if (
-    !Array.isArray(request.files) ||
-    !Array.isArray(request.context) ||
-    !request.policy
+    !arrays.every((name) => Array.isArray(request[name])) ||
+    !request.policy ||
+    typeof request.provider !== "string" ||
+    typeof request.complete !== "boolean"
   )
     throw new Error("request is missing its scope or effective policy");
 }

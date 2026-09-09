@@ -1,4 +1,3 @@
-import { packageFor } from "./context.mjs";
 import { extname } from "node:path";
 
 import { Linter } from "eslint";
@@ -18,12 +17,21 @@ import { projectConfiguration, resolveImport } from "./imports.mjs";
 export async function analyzeSource(analysis) {
   const capability = analysis.request.capability;
   const facts = { comments: [], functions: [], imports: [] };
-  for (const path of analysis.request.files) {
+  const queue = [...analysis.request.files];
+  const seen = new Set();
+  if (capability === "architecture")
+    for (const path of queue) includeUnit(analysis, path, queue, seen);
+  const analyzed = new Set();
+  for (const path of queue) {
+    if (analyzed.has(path)) continue;
+    analyzed.add(path);
     try {
       const adapter = adapterFor(analysis, path);
       if (capability === "format") await format(analysis, path, adapter);
       else analyzeFile(analysis, path, adapter, facts);
-      analysis.response.coverage.analyzed.push(path);
+      if (capability === "architecture")
+        includeImportedUnits(analysis, facts.imports, queue, seen);
+      analysis.analyzed(path);
     } catch (error) {
       analysis.unsupported(path, error.message);
     }
@@ -44,6 +52,12 @@ async function format(analysis, path, adapter) {
     ...adapter.formatter,
   });
   if (formatted === source) return;
+  if (
+    analysis.request.mode === "write" &&
+    (!analysis.writable.has(path) ||
+      analysis.classifications.get(path)?.generated)
+  )
+    throw new Error("source is not an authorized write target");
   if (analysis.request.mode === "write")
     (analysis.response.edits ??= []).push({ path, content: formatted });
   else
@@ -81,7 +95,7 @@ function analyzeFile(analysis, path, adapter, facts) {
       );
     }
   } else if (capability === "architecture") {
-    const configuration = projectConfiguration(analysis, path);
+    const configuration = architectureConfiguration(analysis, path);
     collected.imports = collected.imports.flatMap((fact) =>
       resolveImport(analysis, fact, configuration),
     );
@@ -91,18 +105,11 @@ function analyzeFile(analysis, path, adapter, facts) {
 }
 
 function lint(analysis, path, source, offset, extension) {
-  const metadata = packageFor(analysis, path)?.data ?? {};
-  const dependencies = {
-    ...metadata.dependencies,
-    ...metadata.devDependencies,
-    ...metadata.optionalDependencies,
-    ...metadata.peerDependencies,
-  };
-  const generated = analysis.classifications.get(path)?.generated;
+  const effective = analysis.classifications.get(path)?.lint;
+  if (!effective) throw new Error("source has no effective lint activation");
   const activation = {
-    reactHooks: Boolean(dependencies.react) && !generated,
-    jsxAccessibility:
-      Boolean(dependencies["react-dom"]) || extension === ".astro",
+    ...effective,
+    jsxAccessibility: effective.jsxAccessibility || extension === ".astro",
   };
   const rules = lintRules({
     limits: { complexity: 1000, depth: 1000, parameters: 1000 },
@@ -140,7 +147,7 @@ function lintMessages(source, extension, rules) {
     languageOptions: {
       parser: extension === ".astro" ? astroParser : tsParser,
       parserOptions: { parser: tsParser, ecmaFeatures: { jsx: true } },
-      sourceType: extension === ".cjs" ? "commonjs" : "module",
+      sourceType: [".cjs", ".cts"].includes(extension) ? "commonjs" : "module",
     },
     rules,
   };
@@ -182,4 +189,28 @@ function collectMetricsAndScripts(
     for (const key of Object.keys(collected))
       collected[key].push(...nested[key]);
   }
+}
+
+function includeUnit(analysis, path, queue, seen) {
+  const unit = analysis.unit(path);
+  if (seen.has(unit.id)) return;
+  seen.add(unit.id);
+  queue.push(...unit.members.filter((member) => analysis.owns(member)));
+}
+
+function architectureConfiguration(analysis, path) {
+  try {
+    return projectConfiguration(analysis, path);
+  } catch (error) {
+    analysis.note(
+      `${path}: ${error.message}; import resolution uses source defaults`,
+    );
+    return null;
+  }
+}
+
+function includeImportedUnits(analysis, imports, queue, seen) {
+  for (const fact of imports)
+    if (analysis.owns(fact.resolved))
+      includeUnit(analysis, fact.resolved, queue, seen);
 }

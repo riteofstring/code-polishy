@@ -36,6 +36,7 @@ func Resolve(selected []policy.PackSelection, dataRoot string) Resolution {
 		receipt, err := VerifyInstalled(root)
 		if err != nil {
 			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
+			retainUnavailableClaims(root, selection, &resolution)
 			continue
 		}
 		if receipt.Name != selection.Name || receipt.Version != selection.Version || receipt.Digest != selection.Digest {

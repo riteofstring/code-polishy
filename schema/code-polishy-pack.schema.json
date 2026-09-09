@@ -29,7 +29,7 @@
       "$ref": "#/$defs/semanticVersion"
     },
     "protocolVersion": {
-      "const": 2
+      "const": 3
     },
     "platforms": {
       "type": "array",

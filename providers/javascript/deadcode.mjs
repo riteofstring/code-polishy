@@ -1,5 +1,5 @@
 import { packageFor } from "./context.mjs";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 
@@ -8,6 +8,7 @@ import { frameworkEntryPoint } from "./frameworks/astro.mjs";
 
 import { adapterFor } from "./frameworks.mjs";
 import { compileAstro, originalLocation } from "./compilers.mjs";
+import { bindKnip } from "./reachability.mjs";
 import { sourceFacts } from "./ast.mjs";
 import { projectConfiguration, resolveGlob } from "./imports.mjs";
 
@@ -23,31 +24,32 @@ const issueKinds = [
 ];
 
 export async function deadcode(analysis) {
-  const files = await deadCodeFiles(analysis);
-  if (!files) return;
-  const configuration = await configurationFor(analysis, files);
+  const trees = packageTrees(analysis);
+  for (const [root, files] of trees) {
+    try {
+      for (const path of files)
+        await validateReachabilityInput(
+          analysis,
+          analysis.classifications.get(path),
+        );
+      await analyzeTree(analysis, root, files);
+    } catch (error) {
+      for (const path of files) analysis.unsupported(path, error.message);
+    }
+  }
+}
+
+async function analyzeTree(analysis, root, files) {
+  const configuration = await configurationFor(analysis, root, files);
+  const directory = join(analysis.root, root);
   const scratch = mkdtempSync(
     join(tmpdir(), "code-polishy-provider-deadcode-"),
   );
-  const priorArgv = process.argv;
+  const restoreOwnership = await bindKnip(analysis, root, files, configuration);
   try {
-    const configPath = join(scratch, "knip.config.mjs");
-    const compilerModule = new URL("./compilers.mjs", import.meta.url).href;
-    writeFileSync(
-      configPath,
-      `import { compileAstro } from ${JSON.stringify(compilerModule)};\nexport default { ...${JSON.stringify(configuration)}, compilers: { astro: compileAstro } };\n`,
-    );
-    process.argv = [
-      process.argv[0],
-      process.argv[1],
-      "--directory",
-      analysis.root,
-      "--config",
-      relative(analysis.root, configPath),
-    ];
     const { main } = await import("knip/dist/index.js");
     const result = await main({
-      cwd: analysis.root,
+      cwd: directory,
       cacheLocation: join(scratch, "cache"),
       gitignore: false,
       includedIssueTypes: issueKinds,
@@ -72,25 +74,30 @@ export async function deadcode(analysis) {
       tags: [[], []],
     });
     reportIssues(analysis, result.issues);
-    for (const path of analysis.request.files)
+    for (const path of files)
       if (
         !analysis.response.coverage.unsupported.some(
           (item) => item.path === path,
         )
       )
-        analysis.response.coverage.analyzed.push(path);
+        analysis.analyzed(path);
   } finally {
-    process.argv = priorArgv;
+    restoreOwnership();
     rmSync(scratch, { recursive: true });
   }
 }
 
-async function configurationFor(analysis, files) {
+async function configurationFor(analysis, root, files) {
   const workspaces = {};
   for (const path of files) {
     const owner = packageFor(analysis, path);
     if (!owner) throw new Error(`source has no package owner: ${path}`);
-    const workspace = (workspaces[owner.root] ??= { entry: [], project: [] });
+    const workspaceName =
+      relative(root, owner.root).split(sep).join("/") || ".";
+    const workspace = (workspaces[workspaceName] ??= {
+      entry: [],
+      project: [],
+    });
     const name = relative(owner.root, path).split(sep).join("/");
     workspace.project.push(glob.escapePath(name));
     if (entryPoint(analysis, owner, path))
@@ -104,14 +111,7 @@ async function configurationFor(analysis, files) {
 
 function entryPoint(analysis, owner, path) {
   if (analysis.classifications.get(path)?.test) return true;
-  if (
-    (analysis.request.policy.entryPoints ?? []).some((pattern) =>
-      glob.isDynamicPattern(pattern)
-        ? glob.sync(pattern, { cwd: analysis.root }).includes(path)
-        : pattern === path,
-    )
-  )
-    return true;
+  if (analysis.unit(path).entryFiles.includes(path)) return true;
   const name = relative(owner.root, path).split(sep).join("/");
   const entries = [
     owner.data.main,
@@ -138,7 +138,7 @@ function manifestPaths(value) {
 function reportIssues(analysis, issues) {
   for (const absolute of issues.files) {
     const path = relative(analysis.root, absolute).split(sep).join("/");
-    if (analysis.request.files.includes(path))
+    if (analysis.reportable.has(path) && analysis.owns(path))
       analysis.diagnostic(
         path,
         "unused-file",
@@ -156,7 +156,7 @@ function reportIssues(analysis, issues) {
 
 function reportSymbol(analysis, kind, issue) {
   const path = relative(analysis.root, issue.filePath).split(sep).join("/");
-  if (!analysis.request.files.includes(path)) return;
+  if (!analysis.reportable.has(path) || !analysis.owns(path)) return;
   const position = path.endsWith(".astro")
     ? originalLocation(issue.filePath, issue.line, issue.col)
     : { line: issue.line, column: issue.col };
@@ -176,22 +176,6 @@ function reportSymbol(analysis, kind, issue) {
     prefix.length + (position.line > 1 ? 1 : 0) + position.column - 1,
     issue.symbol,
   );
-}
-
-async function deadCodeFiles(analysis) {
-  const files = [];
-  for (const file of analysis.classifications.values()) {
-    if (file.language !== "typescript") continue;
-    try {
-      await validateReachabilityInput(analysis, file);
-      files.push(file.path);
-    } catch (error) {
-      for (const selected of analysis.request.files)
-        analysis.unsupported(selected, `${file.path}: ${error.message}`);
-      return;
-    }
-  }
-  return files;
 }
 
 async function validateReachabilityInput(analysis, file) {
@@ -225,4 +209,25 @@ async function validateReachabilityInput(analysis, file) {
       );
   }
   projectConfiguration(analysis, file.path);
+}
+
+function packageTrees(analysis) {
+  const trees = new Map();
+  for (const unit of analysis.units.values()) {
+    const members = unit.members.filter(
+      (path) =>
+        analysis.owns(path) &&
+        (analysis.request.complete || analysis.reportable.has(path)),
+    );
+    if (!members.length) continue;
+    if (!unit.manifest) {
+      for (const path of members)
+        analysis.unsupported(path, "source has no package owner");
+      continue;
+    }
+    const tree = trees.get(unit.workspaceRoot) ?? [];
+    tree.push(...members);
+    trees.set(unit.workspaceRoot, tree);
+  }
+  return trees;
 }

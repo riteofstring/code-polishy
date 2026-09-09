@@ -63,7 +63,11 @@ func (verifier fixtureVerifier) run(fixture Fixture) error {
 		return err
 	}
 	request := verifier.request(projectRoot, fixture)
-	repo.Config.Scope.Languages = append(repo.Config.Scope.Languages, manifestLanguageRules(verifier.tree.Manifest)...)
+	resolution := Resolution{}
+	compileManifest(verifier.root, request.Pack, verifier.tree.Manifest, &resolution)
+	Apply(&repo.Config, resolution)
+	request.Provider = "pack." + request.Pack.Name + "." + fixture.Command + "." + fixture.Capability
+	request.Profile = declared.Profiles[0]
 	if err := prepareInputPaths(repo, &request, verifier.fixtureInputs(fixture)); err != nil {
 		return err
 	}

@@ -17,6 +17,10 @@ import (
 )
 
 type Request struct {
+	Provider        string               `json:"provider"`
+	Units           []AnalysisUnit       `json:"units"`
+	DiagnosticFiles []string             `json:"diagnosticFiles"`
+	WriteFiles      []string             `json:"writeFiles"`
 	ProtocolVersion int                  `json:"protocolVersion"`
 	Operation       string               `json:"operation"`
 	Capability      string               `json:"capability"`
@@ -302,8 +306,8 @@ func validateResponseFinding(finding ResponseFinding, request Request) error {
 	if err := exactRelativePath(finding.Path); err != nil {
 		return fmt.Errorf("adapter finding path: %w", err)
 	}
-	if !slices.Contains(request.Files, finding.Path) {
-		return fmt.Errorf("adapter finding path %q was not selected", finding.Path)
+	if !slices.Contains(request.DiagnosticFiles, finding.Path) {
+		return fmt.Errorf("adapter finding path %q is outside diagnostic scope", finding.Path)
 	}
 	return nil
 }
@@ -316,16 +320,7 @@ func malformedResponseFinding(finding ResponseFinding, capability string) bool {
 }
 
 func requestFor(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) Request {
-	files := []string{}
-	for _, selected := range selection.Files {
-		if packCommandSelects(repo, command, selected) {
-			owner := repo.AnalysisOwner(selected, command.Adapter.Capability, profile)
-			if owner.Name != command.Name && len(repo.Config.Checks) > 0 {
-				continue
-			}
-			files = append(files, selected)
-		}
-	}
+	files := SelectedFiles(repo, selection, command, profile)
 	modules := make([]RequestModule, 0, len(repo.Config.Modules))
 	for _, module := range repo.Config.Modules {
 		modules = append(modules, RequestModule{Name: module.Name, Paths: slices.Clone(module.Paths), DependsOn: slices.Clone(module.DependsOn)})
@@ -338,7 +333,7 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 			mode = "write"
 		}
 	}
-	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
+	return Request{Provider: command.Name, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
 }
 
 func packCommandSelects(repo repository.Repository, command policy.Command, selected string) bool {

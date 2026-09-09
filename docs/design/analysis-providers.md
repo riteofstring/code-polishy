@@ -8,21 +8,47 @@ cannot enable a native fallback. Unclaimed native syntax retains its existing
 analyzers. Configured project commands retain their execution profiles; a build
 command cannot establish structured source-analysis coverage.
 
-Pack manifest and protocol version 2 are an atomic public contract. A response
+Pack manifest version 2 and protocol version 3 form one public contract.
+Earlier prerelease protocols are rejected. A response
 accounts for every requested file exactly once as analyzed or unsupported, retains
 a stable namespaced rule identifier, and returns facts needed for core decisions.
 Unsupported work blocks a required capability. An operational failure establishes
 neither facts nor coverage. Conformance requires a passing source fixture and a
 seeded defect with an expected rule for every claimed capability.
 
-Requests distinguish selected targets from contained read context and carry the
-effective quality policy, classifications, entry points, and exact pack identity.
-Every selected input must be recorded in the response. Context and reported
-additional dependency inputs have SHA-256 identities verified after execution.
-Coordinates are one-based UTF-8 byte positions in original source; comment bytes
-must match that position. Facts and findings outside selected targets are invalid.
-Providers return format edits; the core validates all targets before applying any
-edit. Generated source, declared data, and context files cannot become edit targets.
+Requests separate required analysis targets (`files`), permitted diagnostic paths
+(`diagnosticFiles`), and selected format writes (`writeFiles`). Resolved units
+carry package/workspace roots, manifests, configuration paths, governed members,
+and exact entry files. Source classifications bind the effective generated
+`sourcePackage`, per-capability provider owner, and resolved lint activation.
+Providers use that context without changing original paths for reads or findings.
+
+Only selected sources and relevant unit metadata are hashed before execution.
+Unit discovery inventories are path metadata, not mandatory reads. Providers
+record the inputs they actually read, including additional contained dependency
+inputs. Core verifies initial context and reported identities afterward; unrelated
+assets neither consume context limits nor become mandatory analyzer inputs.
+
+Coordinates are one-based UTF-8 byte positions in original source. Comment bytes
+must match that position; truncated comments remain bounded facts marked
+incomplete and cannot establish a permitted directive. Format writes require
+valid UTF-8 in both original and replacement bytes. Core validates every target
+before applying any edit. Generated source and declared data remain non-writable.
+
+Focused type checking reports owned members of the effective compilation program.
+Focused dead-code analysis retains inventory-wide package reachability, including
+unchanged files and metadata-triggered work. Architecture starts only for selected
+providers and follows connected project units. Core validates coverage against
+that dependency closure and rejects unrelated findings. Graph evidence groups
+ordinary sources by actual package root. Inherited generated files outside that
+physical root retain a containing graph root; their effective package binding is
+part of the request evidence.
+
+An unavailable selected pack remains a repository error. If its manifest can
+still be authenticated independently against the selected receipt digest, core
+retains its exact claims and blocks their native fallback. A wholly missing pack
+has no trusted claim inventory: it cannot suppress unrelated native analysis or
+make the failing run pass.
 
 A runtime declaration requests an exact policy-owned tool version. The first
 runtime implementation resolves Node from a verified installed release, checks
@@ -66,7 +92,7 @@ seeded policy violation; a count of returned facts cannot substitute.
 
 Managed JSON and SARIF reports retain provider rule namespaces and graph evidence.
 Their schema accepts declared language and ecosystem identifiers and binds pack
-facts to their version 2 protocol and exact provider identity. Native Python fact
+facts to their version 3 protocol and exact provider identity. Native Python fact
 variants retain their existing protocol contracts.
 
 Provider planning and execution share preparation of the exact runtime command,

@@ -1,4 +1,5 @@
-import { packageFor } from "./context.mjs";
+import { astroDeclaration } from "./frameworks/astro.mjs";
+import { packageFor, resolutionPath } from "./context.mjs";
 import { isBuiltin, createRequire } from "node:module";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { existsSync, realpathSync, statSync } from "node:fs";
@@ -9,16 +10,9 @@ import glob from "fast-glob";
 import { contained } from "./context.mjs";
 
 export function projectConfiguration(analysis, path) {
-  let root = dirname(path);
-  for (;;) {
-    for (const name of ["tsconfig.json", "jsconfig.json"]) {
-      const candidate = root === "." ? name : `${root}/${name}`;
-      if (analysis.inputs.has(candidate))
-        return parseConfiguration(analysis, candidate, root);
-    }
-    if (root === ".") return null;
-    root = dirname(root);
-  }
+  const candidate = analysis.unit(path).configuration;
+  if (!candidate) return null;
+  return parseConfiguration(analysis, candidate, dirname(candidate));
 }
 
 export function resolveImport(analysis, fact, configuration) {
@@ -53,7 +47,12 @@ function resolveTypedImport(analysis, fact, options) {
   const name = fact.specifier;
   const resolved = ts.resolveModuleName(
     name,
-    join(analysis.root, fact.path),
+    join(
+      analysis.root,
+      fact.specifier.startsWith(".")
+        ? fact.path
+        : resolutionPath(analysis, fact.path),
+    ),
     options,
     ts.sys,
   ).resolvedModule;
@@ -124,7 +123,7 @@ function containedAsset(analysis, candidate) {
   if (!statSync(canonical).isFile())
     throw new Error("asset import does not resolve to a regular file");
   const path = relative(analysis.root, canonical).split(sep).join("/");
-  analysis.read(path);
+  analysis.readBytes(path);
   return path;
 }
 
@@ -162,7 +161,7 @@ export function resolveGlob(analysis, fact) {
       if (!contained(analysis.root, canonical))
         throw new Error("module glob resolves outside project");
       const path = relative(analysis.root, canonical).split(sep).join("/");
-      analysis.read(path);
+      analysis.readBytes(path);
       return { ...reference, resolved: path, package: "" };
     });
 }
@@ -199,13 +198,8 @@ function parseConfiguration(analysis, candidate, root) {
 
 function runtimePackage(analysis, fact) {
   if (isBuiltin(fact.specifier)) return fact.specifier;
-  const owner = packageFor(analysis, fact.path);
-  if (
-    fact.specifier.startsWith("astro:") &&
-    (owner?.data.dependencies?.astro || owner?.data.devDependencies?.astro)
-  )
-    return "astro";
-  return "";
+  if (!fact.specifier.startsWith("astro:")) return "";
+  return astroDeclaration(packageFor(analysis, fact.path)) ? "astro" : "";
 }
 
 function assetExtension(name) {
@@ -248,9 +242,9 @@ function packageAsset(analysis, fact) {
     return "";
   let path;
   try {
-    path = createRequire(join(analysis.root, fact.path)).resolve(
-      fact.specifier,
-    );
+    path = createRequire(
+      join(analysis.root, resolutionPath(analysis, fact.path)),
+    ).resolve(fact.specifier);
   } catch {
     return "";
   }
@@ -260,7 +254,7 @@ function packageAsset(analysis, fact) {
   if (!statSync(absolute).isFile())
     throw new Error("package asset is not a regular file");
   const resolved = relative(analysis.root, absolute).split(sep).join("/");
-  analysis.read(resolved);
+  analysis.readBytes(resolved);
   return resolved;
 }
 

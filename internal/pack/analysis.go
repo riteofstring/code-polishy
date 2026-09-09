@@ -18,17 +18,20 @@ type InputFile struct {
 }
 
 type PolicyInput struct {
-	Quality     policy.Quality `json:"quality"`
-	Files       []SourceInput  `json:"files"`
-	EntryPoints []string       `json:"entryPoints"`
+	Quality policy.Quality `json:"quality"`
+	Files   []SourceInput  `json:"files"`
 }
 
 type SourceInput struct {
-	Path        string `json:"path"`
-	Language    string `json:"language"`
-	Test        bool   `json:"test"`
-	Generated   bool   `json:"generated"`
-	Development bool   `json:"development"`
+	Unit          string         `json:"unit"`
+	Owner         string         `json:"owner"`
+	SourcePackage string         `json:"sourcePackage"`
+	Lint          LintActivation `json:"lint"`
+	Path          string         `json:"path"`
+	Language      string         `json:"language"`
+	Test          bool           `json:"test"`
+	Generated     bool           `json:"generated"`
+	Development   bool           `json:"development"`
 }
 
 type RuntimeIdentity struct {
@@ -98,6 +101,9 @@ func validateAnalysisResponse(response Response, request Request) error {
 	if err := validateSourceFacts(response, request); err != nil {
 		return err
 	}
+	if err := validateDiagnosticCoverage(request, response); err != nil {
+		return err
+	}
 	return validateInputs(response.Inputs)
 }
 
@@ -105,7 +111,7 @@ func validateCoverage(response Response, request Request) error {
 	if response.Coverage == nil || response.Coverage.Analyzed == nil || response.Coverage.Unsupported == nil {
 		return errors.New("analysis requires explicit analyzed and unsupported coverage")
 	}
-	accounted, err := accountCoverage(*response.Coverage, request.Files)
+	accounted, err := accountCoverage(*response.Coverage, request.DiagnosticFiles)
 	if err != nil {
 		return err
 	}
@@ -210,7 +216,7 @@ func validateCommentFacts(facts *[]CommentFact, capability string, analyzed []st
 }
 
 func validCommentFact(fact CommentFact, analyzed []string) bool {
-	return validFactLocation(fact.Path, fact.Line, fact.Column, analyzed) && fact.Complete && len(fact.Raw) > 0 && len(fact.Raw) <= 65536 && slices.Contains([]string{"Line", "Block", "Docstring", "HTML", "Shebang"}, fact.Kind)
+	return validFactLocation(fact.Path, fact.Line, fact.Column, analyzed) && len(fact.Raw) > 0 && len(fact.Raw) <= 65536 && slices.Contains([]string{"Line", "Block", "Docstring", "HTML", "Shebang"}, fact.Kind)
 }
 
 func validateFunctionFacts(facts *[]FunctionFact, capability string, analyzed []string) error {

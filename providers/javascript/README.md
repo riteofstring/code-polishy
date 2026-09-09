@@ -1,6 +1,6 @@
 # JavaScript and TypeScript analysis provider
 
-This optional protocol v2 pack adds framework-aware analysis to Code Polishy.
+This optional protocol v3 pack adds framework-aware analysis to Code Polishy.
 Its JS/TS provider includes an Astro adapter and retains ordinary JavaScript,
 TypeScript, JSX, and TSX support. Framework parsing and tooling stay in this
 separately installed artifact. The core release does not include its dependencies.

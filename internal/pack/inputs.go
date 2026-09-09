@@ -25,12 +25,13 @@ func prepareInputs(repo repository.Repository, request *Request) error {
 }
 
 func prepareInputPaths(repo repository.Repository, request *Request, paths []string) error {
-	paths = sortedUnique(append(paths, request.Files...))
+	paths = sortedUnique(append(slices.Clone(paths), request.Files...))
+	request.Policy = PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Files: []SourceInput{}}
+	paths = prepareUnits(repo, request, paths)
 	if len(paths) > 10000 {
 		return errors.New("provider context exceeds 10000 files")
 	}
 	request.Context = make([]InputFile, 0, len(paths))
-	request.Policy = PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Files: []SourceInput{}, EntryPoints: slices.Clone(repo.Config.Scope.EntryPoints)}
 	root, err := os.OpenRoot(repo.Root)
 	if err != nil {
 		return err
@@ -42,7 +43,6 @@ func prepareInputPaths(repo repository.Repository, request *Request, paths []str
 			return err
 		}
 		request.Context = append(request.Context, InputFile{Path: path, SHA256: inputDigest(data)})
-		request.Policy.Files = append(request.Policy.Files, SourceInput{Path: path, Language: repo.Language(path), Test: repo.IsTest(path), Generated: repo.IsGenerated(path), Development: repo.IsDevelopment(path)})
 	}
 	return nil
 }
@@ -107,16 +107,20 @@ func verifyAnalysisInputs(repo repository.Repository, request Request, response 
 		}
 	}
 	if response.Status != "operational-failure" {
-		for _, selected := range request.Files {
+		required := slices.Clone(request.Files)
+		if response.Coverage != nil {
+			required = append(required, response.Coverage.Analyzed...)
+		}
+		for _, selected := range required {
 			if !slices.ContainsFunc(response.Inputs, func(input InputFile) bool { return input.Path == selected }) {
 				return fmt.Errorf("provider did not record selected input %s", selected)
 			}
 		}
 	}
-	return verifyLocations(root, response)
+	return verifyLocations(root, request, response)
 }
 
-func verifyLocations(root *os.Root, response Response) error {
+func verifyLocations(root *os.Root, request Request, response Response) error {
 	for _, finding := range response.Findings {
 		if finding.Path == "repository" {
 			continue
@@ -128,7 +132,7 @@ func verifyLocations(root *os.Root, response Response) error {
 	if response.Facts == nil {
 		return nil
 	}
-	for _, err := range []error{verifyImportLocations(root, response), verifyCommentLocations(root, response.Facts.Comments), verifyFunctionLocations(root, response.Facts.Functions)} {
+	for _, err := range []error{verifyImportLocations(root, request, response), verifyCommentLocations(root, response.Facts.Comments), verifyFunctionLocations(root, response.Facts.Functions)} {
 		if err != nil {
 			return err
 		}
@@ -136,12 +140,12 @@ func verifyLocations(root *os.Root, response Response) error {
 	return nil
 }
 
-func verifyImportLocations(root *os.Root, response Response) error {
+func verifyImportLocations(root *os.Root, request Request, response Response) error {
 	if response.Facts.Imports == nil {
 		return nil
 	}
 	for _, fact := range *response.Facts.Imports {
-		if fact.Resolved != "" && !slices.ContainsFunc(response.Inputs, func(input InputFile) bool { return input.Path == fact.Resolved }) {
+		if fact.Resolved != "" && !slices.ContainsFunc(append(slices.Clone(request.Context), response.Inputs...), func(input InputFile) bool { return input.Path == fact.Resolved }) {
 			return fmt.Errorf("resolved import %s has no verified input identity", fact.Resolved)
 		}
 		if err := verifyLocation(root, fact.Path, fact.Line, fact.Column, ""); err != nil {
@@ -222,6 +226,10 @@ func applyEdits(repo repository.Repository, request Request, response Response) 
 		if repo.IsGenerated(edit.Path) || repo.IsData(edit.Path) {
 			return errors.New("provider edits cannot target generated source or data")
 		}
+		data, err := repo.Read(edit.Path)
+		if err != nil || !utf8.Valid(data) {
+			return fmt.Errorf("provider edit target %s is not valid UTF-8 source", edit.Path)
+		}
 		if err := repo.ValidateRegularFile(edit.Path); err != nil {
 			return err
 		}
@@ -243,7 +251,7 @@ func validateEdits(edits []Edit, status string, request Request) error {
 	}
 	seen := map[string]bool{}
 	for _, edit := range edits {
-		if seen[edit.Path] || !slices.Contains(request.Files, edit.Path) || !utf8.ValidString(edit.Content) {
+		if seen[edit.Path] || !slices.Contains(request.WriteFiles, edit.Path) || !utf8.ValidString(edit.Content) {
 			return errors.New("provider edits must target distinct selected UTF-8 files")
 		}
 		seen[edit.Path] = true

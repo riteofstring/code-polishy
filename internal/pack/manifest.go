@@ -19,7 +19,7 @@ const (
 	ManifestFilename = "code-polishy-pack.json"
 	ReceiptFilename  = "installation-receipt.json"
 	ManifestVersion  = 2
-	ProtocolVersion  = 2
+	ProtocolVersion  = 3
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)

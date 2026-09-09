@@ -45,7 +45,7 @@ function prepare() {
   );
   const manifest = {
     manifestVersion: 2,
-    protocolVersion: 2,
+    protocolVersion: 3,
     name: "javascript",
     version: metadata.version,
     platforms: [

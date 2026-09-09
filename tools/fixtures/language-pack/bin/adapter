@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 let input = "";
 for await (const chunk of process.stdin) input += chunk;
 const request = JSON.parse(input);
-const response = { protocolVersion: 2, status: "pass", evidence: ["SQLite parsed each selected SELECT statement without execution"], coverage: { analyzed: [], unsupported: [] }, facts: { comments: [] }, inputs: [], findings: [] };
+const response = { protocolVersion: 3, status: "pass", evidence: ["SQLite parsed each selected SELECT statement without execution"], coverage: { analyzed: [], unsupported: [] }, facts: { comments: [] }, inputs: [], findings: [] };
 const database = new DatabaseSync(":memory:");
 try {
   for (const path of request.files) {

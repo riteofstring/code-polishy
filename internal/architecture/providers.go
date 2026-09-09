@@ -43,14 +43,9 @@ func providerOperations(repo repository.Repository, selected, allFiles []string)
 		if command.Adapter == nil || command.Adapter.Capability != "architecture" {
 			continue
 		}
-		files := []string{}
-		for _, path := range allFiles {
-			if repo.AnalysisOwner(path, "architecture", "").Name == command.Name {
-				files = append(files, path)
-			}
-		}
-		if len(files) > 0 {
-			operations = append(operations, providerOperation{command: command, selection: repository.Selection{Files: files, All: true}})
+		selection := repository.Selection{Files: selected, All: len(selected) == len(allFiles) && slices.Equal(selected, allFiles)}
+		if len(pack.SelectedFiles(repo, selection, command, repo.AnalysisProfile())) > 0 {
+			operations = append(operations, providerOperation{command: command, selection: selection})
 		}
 	}
 	return operations
@@ -108,21 +103,30 @@ func providerResultGraph(repo repository.Repository, command policy.Command, res
 			part.findings = append(part.findings, sourceGraphCoverageFinding(err.Error()))
 			continue
 		}
-		part.nodes = append(part.nodes, sourcegraph.Node{Path: path, Language: repo.Language(path), Generated: repo.IsGenerated(path), Test: repo.IsTest(path), Root: ".", Module: owner, Resolution: "file:" + path})
+		part.nodes = append(part.nodes, sourcegraph.Node{Path: path, Language: repo.Language(path), Generated: repo.IsGenerated(path), Test: repo.IsTest(path), Root: providerSourceRoot(result.Request, path), Module: owner, Resolution: "file:" + path})
 	}
 	part.imports = slices.Clone(*result.Response.Facts.Imports)
-	input, err := providerFactInput(command, result, part.nodes)
-	if err != nil {
-		part.incomplete = true
-		part.findings = append(part.findings, sourceGraphCoverageFinding(err.Error()))
-		return part
+	for _, nodes := range providerNodeGroups(part.nodes) {
+		input, err := providerFactInput(command, result, nodes)
+		if err != nil {
+			part.incomplete = true
+			part.findings = append(part.findings, sourceGraphCoverageFinding(err.Error()))
+			return part
+		}
+		part.inputs = append(part.inputs, input)
 	}
-	part.inputs = []sourcegraph.FactInput{input}
 	return part
 }
 
 func providerFactInput(command policy.Command, result pack.Result, nodes []sourcegraph.Node) (sourcegraph.FactInput, error) {
-	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v2", Project: "pack/" + command.Adapter.PackName + "/" + command.Name, Root: ".", Paths: slices.Clone(result.Response.Coverage.Analyzed), FactsSHA256: result.Digest}
+	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v3", Project: "pack/" + command.Adapter.PackName + "/" + command.Name, Root: ".", Paths: slices.Clone(result.Response.Coverage.Analyzed), FactsSHA256: result.Digest}
+	input.Root = nodes[0].Root
+	rootDigest := sha256.Sum256([]byte(input.Root))
+	input.Project += "/" + hex.EncodeToString(rootDigest[:])
+	input.Paths = []string{}
+	for _, node := range nodes {
+		input.Paths = append(input.Paths, node.Path)
+	}
 	provider := &sourcegraph.ProviderInput{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}
 	for _, language := range command.Adapter.Languages {
 		provider.Languages = append(provider.Languages, language.Name)
@@ -228,4 +232,33 @@ func providerPackageReference(fact pack.ImportFact) bool {
 func providerGraphProblem(part *sourceGraphPart, fact pack.ImportFact, reason string) {
 	part.incomplete = true
 	part.findings = append(part.findings, policy.Finding{Check: "architecture.importCoverage", Path: fact.Path, Line: fact.Line, Column: fact.Column, Subject: fact.Specifier, Message: fmt.Sprintf("%s: %s", fact.Specifier, reason)})
+}
+
+func providerSourceRoot(request pack.Request, file string) string {
+	for _, unit := range request.Units {
+		if slices.Contains(unit.Members, file) {
+			if unit.PackageRoot == "." || strings.HasPrefix(file, unit.PackageRoot+"/") {
+				return unit.PackageRoot
+			}
+			return "."
+		}
+	}
+	return "."
+}
+
+func providerNodeGroups(nodes []sourcegraph.Node) [][]sourcegraph.Node {
+	groups := map[string][]sourcegraph.Node{}
+	roots := []string{}
+	for _, node := range nodes {
+		if groups[node.Root] == nil {
+			roots = append(roots, node.Root)
+		}
+		groups[node.Root] = append(groups[node.Root], node)
+	}
+	slices.Sort(roots)
+	result := [][]sourcegraph.Node{}
+	for _, root := range roots {
+		result = append(result, groups[root])
+	}
+	return result
 }

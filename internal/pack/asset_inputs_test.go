@@ -21,7 +21,7 @@ func TestProviderContextIncludesProtectedLinkIdentityAndRejectsChanges(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := Request{Files: []string{}, Capability: "format"}
+	request := Request{Files: []string{"public/images"}, DiagnosticFiles: []string{"public/images"}, Capability: "architecture"}
 	if err := prepareInputs(repo, &request); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestProviderEditsRejectAllLinkedTargetsBeforeWriting(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	repo := repository.Repository{Root: root}
-	request := Request{Capability: "format", Mode: "write", Files: []string{"src/first.js", "src/linked.js"}}
+	request := Request{Capability: "format", Mode: "write", Files: []string{"src/first.js", "src/linked.js"}, DiagnosticFiles: []string{"src/first.js", "src/linked.js"}, WriteFiles: []string{"src/first.js", "src/linked.js"}}
 	response := Response{Status: "pass", Edits: []Edit{{Path: "src/first.js", Content: "new first"}, {Path: "src/linked.js", Content: "bad"}}}
 	if err := applyEdits(repo, request, response); err == nil {
 		t.Fatal("linked write target accepted")

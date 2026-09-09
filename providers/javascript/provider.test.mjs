@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -30,8 +30,8 @@ function requestFor(root, files, capability) {
           .digest("hex"),
       };
     });
-  return {
-    protocolVersion: 2,
+  const request = {
+    protocolVersion: 3,
     projectRoot: root,
     operation: "check",
     capability,
@@ -44,14 +44,15 @@ function requestFor(root, files, capability) {
       },
       files: context.map((input) => ({
         path: input.path,
-        language: /\.(?:[cm]?[jt]s|[jt]sx|astro)$/.test(input.path)
-          ? "typescript"
-          : "",
+        language:
+          !input.path.includes("node_modules/") &&
+          /\.(?:[cm]?[jt]s|[jt]sx|astro)$/.test(input.path)
+            ? "typescript"
+            : "",
         generated: false,
         test: false,
         development: false,
       })),
-      entryPoints: [],
     },
     runtime: {
       name: "node",
@@ -63,6 +64,98 @@ function requestFor(root, files, capability) {
     modules: [],
     complete: true,
   };
+  const declarations = context.some(
+    (input) => input.path === ".code-polishy.json",
+  )
+    ? (JSON.parse(readFileSync(join(root, ".code-polishy.json"), "utf8")).scope
+        ?.generatedJavaScript ?? [])
+    : [];
+  const mappings = Object.fromEntries(
+    declarations.flatMap((entry) =>
+      entry.paths.map((path) => [path, entry.sourcePackage]),
+    ),
+  );
+  resolveTestUnits(request, mappings);
+  return request;
+}
+
+function resolveTestUnits(request, mappings = {}) {
+  request.provider = "javascript";
+  const inputs = new Set(request.context.map((file) => file.path));
+  const units = new Map();
+  for (const file of request.policy.files) {
+    if (!file.language || file.path.includes("node_modules/")) continue;
+    const candidate = testUnitFor(inputs, mappings[file.path] ?? file.path);
+    if (!units.has(candidate.id)) units.set(candidate.id, candidate);
+    bindTestSource(request, file, units.get(candidate.id), mappings);
+  }
+  request.units = [...units.values()];
+  request.diagnosticFiles = ["typecheck", "architecture", "dead-code"].includes(
+    request.capability,
+  )
+    ? request.units.flatMap((unit) => unit.members)
+    : request.files;
+  request.writeFiles = request.files.filter((path) => !mappings[path]);
+}
+
+function nearestTestInput(inputs, path, names) {
+  for (let root = dirname(path); ; root = dirname(root)) {
+    for (const name of names) {
+      const candidate = join(root, name).replaceAll("\\", "/");
+      if (inputs.has(candidate)) return candidate;
+    }
+    const alternatives = [...inputs].filter(
+      (file) =>
+        dirname(file) === root &&
+        /^tsconfig.*\.json$/.test(file.split("/").at(-1)),
+    );
+    if (names.includes("tsconfig.json") && alternatives.length === 1)
+      return alternatives[0];
+    if (root === ".") return "";
+  }
+}
+
+function testUnitFor(inputs, context) {
+  const manifest = nearestTestInput(inputs, context, ["package.json"]);
+  const configuration = nearestTestInput(inputs, context, [
+    "tsconfig.json",
+    "jsconfig.json",
+  ]);
+  const packageRoot = dirname(manifest || ".");
+  let workspaceRoot = packageRoot;
+  for (let directory = packageRoot; directory !== ".";) {
+    directory = dirname(directory);
+    if (inputs.has(join(directory, "package.json"))) workspaceRoot = directory;
+  }
+  return {
+    id: `${manifest}:${configuration}`,
+    root: configuration ? dirname(configuration) : packageRoot,
+    packageRoot,
+    manifest,
+    workspaceRoot,
+    configuration,
+    members: [],
+    entryFiles: [],
+  };
+}
+
+function bindTestSource(request, file, unit, mappings) {
+  file.unit = unit.id;
+  file.owner = /\.(?:[cm]?[jt]s|[jt]sx|astro)$/.test(file.path)
+    ? request.provider
+    : "";
+  file.sourcePackage = mappings[file.path] ?? "";
+  file.generated = Boolean(file.sourcePackage);
+  file.lint = { reactHooks: false, jsxAccessibility: false };
+  if (file.owner) unit.members.push(file.path);
+  const name = file.path.slice(
+    unit.packageRoot === "." ? 0 : unit.packageRoot.length + 1,
+  );
+  if (
+    /^(?:src\/)?(?:index|main|cli)\.[cm]?[jt]sx?$/.test(name) ||
+    /^[^/]+\.config\.[cm]?[jt]sx?$/.test(name)
+  )
+    unit.entryFiles.push(file.path);
 }
 
 function analyze(request) {
@@ -236,7 +329,7 @@ test("framework script sources retain dependency and reachability evidence", () 
       writeFileSync(join(root, path), `<script ${attributes}></script>\n`);
       const incomplete = analyze(requestFor(root, [path], "architecture"));
       assert.equal(incomplete.status, "incomplete", JSON.stringify(incomplete));
-      assert.deepEqual(incomplete.coverage.analyzed, []);
+      assert.ok(!incomplete.coverage.analyzed.includes(path));
     }
     writeFileSync(join(root, path), '<script src="../missing.ts"></script>\n');
     const missing = analyze(requestFor(root, [path], "architecture"));
@@ -579,7 +672,11 @@ test("React peer and optional dependencies preserve native rule activation", () 
       join(root, "view.tsx"),
       'import { useState } from "react"; export function View({enabled}) { if (enabled) useState(0); return <img />; }\n',
     );
-    const native = analyze(requestFor(root, ["view.tsx"], "lint"));
+    const nativeRequest = requestFor(root, ["view.tsx"], "lint");
+    nativeRequest.policy.files.find(
+      (file) => file.path === "view.tsx",
+    ).lint.reactHooks = true;
+    const native = analyze(nativeRequest);
     assert.ok(
       native.findings.some(
         (finding) => finding.rule === "react-hooks/rules-of-hooks",
@@ -590,7 +687,12 @@ test("React peer and optional dependencies preserve native rule activation", () 
     );
     manifest.optionalDependencies = { "react-dom": "19.2.6" };
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-    const dom = analyze(requestFor(root, ["view.tsx"], "lint"));
+    const domRequest = requestFor(root, ["view.tsx"], "lint");
+    domRequest.policy.files.find((file) => file.path === "view.tsx").lint = {
+      reactHooks: true,
+      jsxAccessibility: true,
+    };
+    const dom = analyze(domRequest);
     assert.ok(
       dom.findings.some((finding) => finding.rule === "jsx-a11y/alt-text"),
     );
@@ -623,6 +725,278 @@ test("embedded CSS comments remain original-source facts without treating string
     );
     assert.ok(
       result.facts.comments.every((fact) => fact.line === 3 && fact.complete),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("focused type checking reports errors in unchanged compilation members", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-dependent-"));
+  try {
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    writeFileSync(
+      join(root, "tsconfig.app.json"),
+      '{"compilerOptions":{"strict":true},"include":["*.ts"]}',
+    );
+    writeFileSync(join(root, "a.ts"), 'export const value = "text";\n');
+    writeFileSync(
+      join(root, "b.ts"),
+      'import { value } from "./a"; export const length = value.toFixed();\n',
+    );
+    const request = requestFor(root, ["a.ts"], "typecheck");
+    request.complete = false;
+    const response = analyze(request);
+    assert.equal(response.status, "findings", JSON.stringify(response));
+    assert.ok(
+      response.findings.some(
+        (finding) => finding.path === "b.ts" && finding.rule === "type-2551",
+      ),
+      JSON.stringify(response),
+    );
+    assert.ok(response.coverage.analyzed.includes("b.ts"));
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("generated source uses its frontend package and remains non-writable", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-generated-"));
+  const path = "python_pkg/generated/bundle.js";
+  try {
+    mkdirSync(join(root, "frontend/node_modules/library"), { recursive: true });
+    mkdirSync(join(root, "python_pkg/generated"), { recursive: true });
+    writeFileSync(
+      join(root, "frontend/package.json"),
+      '{"type":"module","dependencies":{"library":"1.0.0"}}',
+    );
+    writeFileSync(
+      join(root, "frontend/tsconfig.app.json"),
+      '{"compilerOptions":{"strict":true},"include":["*.ts"]}',
+    );
+    writeFileSync(join(root, "frontend/index.ts"), "export const value = 1;\n");
+    writeFileSync(
+      join(root, "frontend/node_modules/library/package.json"),
+      '{"name":"library","version":"1.0.0","types":"index.d.ts"}',
+    );
+    writeFileSync(
+      join(root, "frontend/node_modules/library/index.d.ts"),
+      "export function consume(value: number): void;\n",
+    );
+    writeFileSync(
+      join(root, path),
+      'import { consume } from "library"; consume("wrong");\n',
+    );
+    const mappings = { [path]: "frontend/package.json" };
+    for (const capability of [
+      "lint",
+      "typecheck",
+      "architecture",
+      "dead-code",
+    ]) {
+      const request = requestFor(root, [path], capability);
+      resolveTestUnits(request, mappings);
+      for (const unit of request.units)
+        if (unit.members.includes(path)) unit.entryFiles.push(path);
+      const response = analyze(request);
+      assert.ok(
+        ["pass", "findings"].includes(response.status),
+        JSON.stringify(response),
+      );
+      assert.ok(
+        response.coverage.analyzed.includes(path),
+        JSON.stringify(response),
+      );
+      assert.equal(
+        response.coverage.unsupported.length,
+        0,
+        JSON.stringify(response),
+      );
+      if (capability === "typecheck")
+        assert.ok(
+          response.findings.some(
+            (finding) => finding.path === path && finding.rule === "type-2345",
+          ),
+          JSON.stringify(response),
+        );
+      if (capability === "architecture")
+        assert.equal(
+          response.facts.imports[0].resolved,
+          "frontend/node_modules/library/index.d.ts",
+        );
+      assert.ok(!response.edits?.length);
+    }
+    const request = requestFor(root, [path], "format");
+    resolveTestUnits(request, mappings);
+    request.mode = "write";
+    const before = readFileSync(join(root, path));
+    const response = analyze(request);
+    assert.equal(response.status, "incomplete", JSON.stringify(response));
+    assert.ok(!response.edits?.length);
+    assert.deepEqual(readFileSync(join(root, path)), before);
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("focused dead code checks nested package trees and unchanged files", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-trees-"));
+  try {
+    for (const name of ["frontend", "worker"]) {
+      mkdirSync(join(root, name));
+      writeFileSync(join(root, name, "package.json"), '{"type":"module"}');
+      writeFileSync(join(root, name, "index.ts"), "export const value = 1;\n");
+      writeFileSync(
+        join(root, name, "unreachable.ts"),
+        "export const lost = 1;\n",
+      );
+    }
+    writeFileSync(join(root, "frontend/unknown.vue"), "<invalid>");
+    const request = requestFor(root, ["frontend/index.ts"], "dead-code");
+    request.complete = false;
+    request.policy.files.push({
+      path: "frontend/unknown.vue",
+      language: "typescript",
+      owner: "native:typescript",
+    });
+    const response = analyze(request);
+    assert.equal(response.status, "findings", JSON.stringify(response));
+    for (const name of ["frontend", "worker"])
+      assert.ok(
+        response.findings.some(
+          (finding) =>
+            finding.path === `${name}/unreachable.ts` &&
+            finding.rule === "unused-file",
+        ),
+        JSON.stringify(response),
+      );
+    assert.deepEqual(response.coverage.unsupported, []);
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("architecture follows connected projects while ignoring unrelated failures", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-closure-"));
+  try {
+    for (const name of ["app", "shared", "unrelated"]) {
+      mkdirSync(join(root, name));
+      writeFileSync(join(root, name, "package.json"), '{"type":"module"}');
+    }
+    writeFileSync(
+      join(root, "app/main.ts"),
+      'export { value } from "../shared/value";\n',
+    );
+    writeFileSync(join(root, "shared/value.ts"), "export const value = 1;\n");
+    writeFileSync(join(root, "shared/other.ts"), "export const other = 2;\n");
+    writeFileSync(join(root, "unrelated/broken.ts"), "this is invalid syntax");
+    const request = requestFor(root, ["app/main.ts"], "architecture");
+    request.complete = false;
+    const response = analyze(request);
+    assert.equal(response.status, "pass", JSON.stringify(response));
+    assert.deepEqual(response.coverage.analyzed.toSorted(), [
+      "app/main.ts",
+      "shared/other.ts",
+      "shared/value.ts",
+    ]);
+    assert.ok(
+      !response.inputs.some((input) => input.path === "unrelated/broken.ts"),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("effective lint policy survives invalid metadata and disabled React", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-policy-"));
+  try {
+    writeFileSync(
+      join(root, "package.json"),
+      '{"dependencies":{"react":"19.2.6","react-dom":"19.2.6"}}',
+    );
+    writeFileSync(
+      join(root, "view.tsx"),
+      'import { useState } from "react"; export function View({ show }: { show: boolean }) { if (show) useState(0); return <img src="picture.png" />; }\n',
+    );
+    const disabled = analyze(requestFor(root, ["view.tsx"], "lint"));
+    assert.ok(
+      !disabled.findings.some((finding) =>
+        /^(react-hooks|jsx-a11y)\//.test(finding.rule),
+      ),
+      JSON.stringify(disabled),
+    );
+    writeFileSync(join(root, "package.json"), "{broken");
+    writeFileSync(
+      join(root, "view.tsx"),
+      "export function broken() { return; return 1; }\n",
+    );
+    const broken = analyze(requestFor(root, ["view.tsx"], "lint"));
+    assert.ok(
+      broken.findings.some((finding) => finding.rule === "no-unreachable"),
+      JSON.stringify(broken),
+    );
+    assert.deepEqual(broken.coverage.unsupported, []);
+    writeFileSync(join(root, "tsconfig.json"), "{broken");
+    writeFileSync(join(root, "other.ts"), "export const value = 1;\n");
+    writeFileSync(join(root, "view.tsx"), 'export { value } from "./other";\n');
+    const graph = analyze(requestFor(root, ["view.tsx"], "architecture"));
+    assert.equal(graph.status, "pass", JSON.stringify(graph));
+    assert.equal(graph.facts.imports[0].resolved, "other.ts");
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("invalid UTF-8 is rejected and oversized comments remain bounded facts", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-bytes-"));
+  try {
+    const invalid = Buffer.from([47, 47, 32, 255, 10]);
+    writeFileSync(join(root, "source.js"), invalid);
+    const request = requestFor(root, ["source.js"], "format");
+    request.mode = "write";
+    const response = analyze(request);
+    assert.equal(
+      response.status,
+      "operational-failure",
+      JSON.stringify(response),
+    );
+    assert.match(response.failure, /UTF-8/);
+    assert.deepEqual(readFileSync(join(root, "source.js")), invalid);
+    writeFileSync(
+      join(root, "source.js"),
+      `/* ${"é".repeat(40000)} */\nexport const value = 1;\n`,
+    );
+    const comments = analyze(requestFor(root, ["source.js"], "lint"));
+    assert.equal(comments.status, "pass", JSON.stringify(comments));
+    assert.equal(comments.facts.comments[0].complete, false);
+    assert.ok(Buffer.byteLength(comments.facts.comments[0].raw) <= 65536);
+    assert.ok(!comments.facts.comments[0].raw.includes("\ufffd"));
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("normalized entries preserve literal route names and configuration conventions", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-entries-"));
+  try {
+    mkdirSync(join(root, "src/routes"), { recursive: true });
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    for (const path of [
+      "src/routes/[id].ts",
+      "src/routes/i.ts",
+      "build-tool.config.ts",
+      "src/cli.ts",
+    ])
+      writeFileSync(join(root, path), "export const value = 1;\n");
+    const request = requestFor(root, ["src/cli.ts"], "dead-code");
+    request.units[0].entryFiles.push("src/routes/[id].ts");
+    const result = analyze(request);
+    assert.equal(result.status, "findings", JSON.stringify(result));
+    assert.deepEqual(
+      result.findings
+        .filter((finding) => finding.rule === "unused-file")
+        .map((finding) => finding.path),
+      ["src/routes/i.ts"],
     );
   } finally {
     rmSync(root, { recursive: true });

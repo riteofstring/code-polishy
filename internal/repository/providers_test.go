@@ -45,7 +45,23 @@ func TestProviderOwnershipUsesPathsCapabilitiesAndProfiles(t *testing.T) {
 		t.Fatalf("native route ignored conflict: %v", files)
 	}
 	repo.Config.UnavailablePacks = []string{"compiler"}
-	if repo.AnalysisOwner("other/main.ts", "lint", "check").Native {
-		t.Fatal("unresolved selected pack enabled a hidden fallback")
+	if !repo.AnalysisOwner("other/main.ts", "lint", "check").Native {
+		t.Fatal("unavailable pack suppressed an unclaimed source")
+	}
+}
+
+func TestUnavailablePackBlocksOnlyItsDeclaredClaims(t *testing.T) {
+	command := policy.Command{Name: "pack.javascript.lint", Provides: []string{"lint"}, RunOn: []string{"check"}, Paths: []string{"frontend/**"}, Adapter: &policy.PackAdapter{PackName: "javascript", Capability: "lint", Languages: []policy.LanguageRule{{Name: "typescript", Paths: []string{"**/*.ts"}}}}}
+	repo := Repository{Config: policy.Config{Checks: []policy.Command{command}, UnavailablePacks: []string{"javascript"}}}
+	if owner := repo.AnalysisOwner("frontend/a.ts", "lint", "check"); owner.Native || !strings.Contains(owner.Problem, "unavailable") {
+		t.Fatalf("unavailable declared claim fell back: %+v", owner)
+	}
+	for _, file := range []string{"app.py", "main.go", "run.sh", "other/a.ts"} {
+		if !repo.NativeAnalysis(file, "lint") {
+			t.Fatalf("unrelated %s lost native lint", file)
+		}
+	}
+	if !repo.NativeAnalysis("frontend/a.ts", "typecheck") {
+		t.Fatal("unclaimed capability was suppressed")
 	}
 }

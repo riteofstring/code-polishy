@@ -291,7 +291,7 @@ func TestProviderFindingsAndGraphSurviveManagedReports(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	node := sourcegraph.Node{Path: "src/view.custom", Language: "custom", Root: ".", Module: "view", Resolution: "file:src/view.custom"}
 	edge := sourcegraph.Edge{Source: node.Path, Target: node.Path, SourceResolution: node.Resolution, TargetResolution: node.Resolution, Line: 1, Column: 1, Ecosystem: "custom", Kind: sourcegraph.EdgeRuntime}
-	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v2", Project: "pack/custom-provider/analyze", Root: ".", Paths: []string{node.Path}, FactsSHA256: digest, PartitionsSHA256: digest, ResolutionSHA256: digest,
+	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v3", Project: "pack/custom-provider/analyze", Root: ".", Paths: []string{node.Path}, FactsSHA256: digest, PartitionsSHA256: digest, ResolutionSHA256: digest,
 		Provider: &sourcegraph.ProviderInput{Name: "custom-provider", Version: "1.0.0-beta.1", Digest: digest, Languages: []string{"custom"}, InputsSHA256: digest, PolicySHA256: digest, RuntimeSHA256: digest}}
 	graph, err := sourcegraph.New([]sourcegraph.Node{node}, []sourcegraph.Edge{edge}, []sourcegraph.FactInput{input}, nil)
 	if err != nil {

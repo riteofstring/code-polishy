@@ -172,7 +172,9 @@ export function frameworkEntryPoint(analysis, owner, name) {
 }
 
 function frameworkSourceRoot(analysis, root) {
-  const configPath = [...analysis.inputs.keys()].find(
+  const configPath = [
+    ...new Set([...analysis.context.keys(), ...analysis.inputs.keys()]),
+  ].find(
     (path) =>
       dirname(path) === root &&
       /^astro\.config\.[cm]?[jt]s$/.test(basename(path)),

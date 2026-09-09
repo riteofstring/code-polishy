@@ -20,14 +20,14 @@ func (repo Repository) AnalysisOwner(path, capability, profile string) AnalysisO
 	if profile == "" {
 		profile = repo.AnalysisProfile()
 	}
-	if len(repo.Config.UnavailablePacks) > 0 {
-		return AnalysisOwner{Problem: "selected language packs are unavailable: " + strings.Join(repo.Config.UnavailablePacks, ", ")}
-	}
 	claimed := false
 	owner := AnalysisOwner{}
 	for _, command := range repo.Config.Checks {
 		if !repo.commandClaimsAnalysis(command, path, capability) {
 			continue
+		}
+		if slices.Contains(repo.Config.UnavailablePacks, command.Adapter.PackName) {
+			return AnalysisOwner{Problem: "selected language pack is unavailable: " + command.Adapter.PackName}
 		}
 		claimed = true
 		if !analysisProfileMatches(command.RunOn, profile) {

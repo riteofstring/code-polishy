@@ -203,25 +203,8 @@ func javascriptLimit(value, fallback int) int {
 }
 
 func javascriptLintActivation(repo repository.Repository, path string) javascript.LintActivation {
-	generated := repo.IsGenerated(path)
-	path = repo.JavaScriptContextPath(path)
-	activation := javascript.LintActivation{}
-	nearest := ""
-	for _, scope := range repo.Config.JavaScriptLintScopes {
-		if !javascriptScopeOwns(scope.Root, path) || (nearest != "" && len(scope.Root) <= len(nearest)) {
-			continue
-		}
-		nearest = scope.Root
-		activation = javascript.LintActivation{ReactHooks: scope.ReactHooks, JSXAccessibility: scope.JSXAccessibility}
-	}
-	if generated {
-		activation.ReactHooks = false
-	}
-	return activation
-}
-
-func javascriptScopeOwns(root, path string) bool {
-	return root == "." || strings.HasPrefix(path, root+"/")
+	activation := repo.JavaScriptLintActivation(path)
+	return javascript.LintActivation{ReactHooks: activation.ReactHooks, JSXAccessibility: activation.JSXAccessibility}
 }
 
 func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult, complexity ...bool) []policy.Finding {

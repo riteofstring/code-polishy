@@ -3,7 +3,7 @@
   "manifestVersion": 2,
   "name": "sqlite-syntax-proof",
   "version": "1.0.0",
-  "protocolVersion": 2,
+  "protocolVersion": 3,
   "platforms": ["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"],
   "languages": [
     {

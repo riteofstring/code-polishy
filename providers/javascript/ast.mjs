@@ -1,3 +1,5 @@
+import { boundedText } from "./context.mjs";
+
 import tsParser from "@typescript-eslint/parser";
 
 export function parseJavaScript(source, path) {
@@ -8,7 +10,7 @@ export function parseJavaScript(source, path) {
     tokens: true,
     comment: true,
     ecmaVersion: "latest",
-    sourceType: path.endsWith(".cjs") ? "commonjs" : "module",
+    sourceType: /\.c[jt]s$/.test(path) ? "commonjs" : "module",
     ecmaFeatures: { jsx: true },
   });
 }
@@ -85,7 +87,7 @@ export function sourceFacts(
         ...reference,
       });
   });
-  return { imports, functions, comments };
+  return { imports, functions, comments: comments.map(boundedComment) };
 }
 
 function importReference(node) {
@@ -209,4 +211,9 @@ function isRequire(node) {
     node.callee.type === "Identifier" &&
     node.callee.name === "require"
   );
+}
+
+function boundedComment(comment) {
+  const raw = boundedText(comment.raw, 65536);
+  return { ...comment, raw, complete: raw === comment.raw };
 }

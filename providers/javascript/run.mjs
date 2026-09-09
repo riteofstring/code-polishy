@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 process.chdir(dirname(fileURLToPath(import.meta.url)));
 const { analyze } = await import("./adapter.mjs");
+const { boundedText } = await import("./context.mjs");
 
 let input = "";
 for await (const chunk of process.stdin) {
@@ -14,6 +15,6 @@ try {
   process.stdout.write(`${JSON.stringify(await analyze(JSON.parse(input)))}\n`);
 } catch (error) {
   process.stdout.write(
-    `${JSON.stringify({ protocolVersion: 2, status: "operational-failure", failure: error.message.slice(0, 4096) })}\n`,
+    `${JSON.stringify({ protocolVersion: 3, status: "operational-failure", failure: boundedText(error.message, 4096) })}\n`,
   );
 }

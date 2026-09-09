@@ -44,7 +44,7 @@ func (boundary *providerPlanRunner) RunStructured(_ context.Context, root string
 	case "complexity":
 		facts.Functions = &functions
 	}
-	response := pack.Response{ProtocolVersion: 2, Status: "pass", Evidence: []string{"fixture parsed"}, Coverage: &pack.Coverage{Analyzed: request.Files, Unsupported: []pack.Unsupported{}}, Inputs: request.Context, Facts: facts}
+	response := pack.Response{ProtocolVersion: 3, Status: "pass", Evidence: []string{"fixture parsed"}, Coverage: &pack.Coverage{Analyzed: request.Files, Unsupported: []pack.Unsupported{}}, Inputs: request.Context, Facts: facts}
 	data, err := json.Marshal(response)
 	return runner.Result{ExitStatus: 0}, runner.Output{Stdout: data}, err
 }
@@ -119,7 +119,7 @@ func providerPlanRepository(t *testing.T) repository.Repository {
 	t.Helper()
 	source := t.TempDir()
 	capabilities := []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}
-	manifest := pack.Manifest{ManifestVersion: 2, ProtocolVersion: 2, Name: "fixture-language", Version: "1.0.0", Platforms: []string{pack.CurrentPlatform()}, Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}}}, Commands: []pack.Command{{Name: "analyze", Argv: []string{"adapter"}, Capabilities: capabilities, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}}}
+	manifest := pack.Manifest{ManifestVersion: 2, ProtocolVersion: 3, Name: "fixture-language", Version: "1.0.0", Platforms: []string{pack.CurrentPlatform()}, Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}}}, Commands: []pack.Command{{Name: "analyze", Argv: []string{"adapter"}, Capabilities: capabilities, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}}}
 	for _, capability := range capabilities {
 		for _, status := range []string{"pass", "findings"} {
 			fixture := pack.Fixture{Name: capability + "-" + status, Command: "analyze", Capability: capability, Project: "fixtures/" + status, Files: []string{"main.fixture"}, ExpectedStatus: status}

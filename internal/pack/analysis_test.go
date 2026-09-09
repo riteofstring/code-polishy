@@ -10,7 +10,7 @@ import (
 )
 
 func TestAnalysisCoverageCannotOmitOrInventWork(t *testing.T) {
-	request := Request{Capability: "typecheck", Files: []string{"src/a.fixture", "src/b.fixture"}}
+	request := Request{Capability: "typecheck", Files: []string{"src/a.fixture", "src/b.fixture"}, DiagnosticFiles: []string{"src/a.fixture", "src/b.fixture"}, WriteFiles: []string{"src/a.fixture", "src/b.fixture"}}
 	for _, test := range []struct {
 		name            string
 		coverage        *Coverage
@@ -50,7 +50,7 @@ func TestFactsRequiredByPolicyAreNotOptional(t *testing.T) {
 	for _, capability := range []string{"lint", "architecture", "complexity"} {
 		t.Run(capability, func(t *testing.T) {
 			forbidden := false
-			request := Request{Capability: capability, Files: []string{"src/a.fixture"}, Policy: PolicyInput{Quality: policy.Quality{AllowComments: &forbidden}}}
+			request := Request{Capability: capability, Files: []string{"src/a.fixture"}, DiagnosticFiles: []string{"src/a.fixture"}, WriteFiles: []string{"src/a.fixture"}, Policy: PolicyInput{Quality: policy.Quality{AllowComments: &forbidden}}}
 			response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"analyzer completed"}, Coverage: &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}}}
 			if err := validateResponse(response, request); err == nil {
 				t.Fatal("missing policy facts passed")
@@ -80,7 +80,7 @@ func TestProviderInputsLocationsAndWritesUseOriginalSelectedSource(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := Request{Capability: "lint", Files: []string{"a.fixture"}}
+	request := Request{Capability: "lint", Files: []string{"a.fixture"}, DiagnosticFiles: []string{"a.fixture"}, WriteFiles: []string{"a.fixture"}}
 	if err := prepareInputs(repo, &request); err != nil {
 		t.Fatal(err)
 	}
@@ -93,11 +93,13 @@ func TestProviderInputsLocationsAndWritesUseOriginalSelectedSource(t *testing.T)
 		t.Fatal("invented original coordinate passed")
 	}
 	response.Facts = nil
-	writeTestFile(t, root, "context.fixture", "changed\n", 0o644)
+	writeTestFile(t, root, "a.fixture", "changed source\n", 0o644)
 	if err := verifyAnalysisInputs(repo, request, response); err == nil {
-		t.Fatal("changed context passed")
+		t.Fatal("changed selected source passed")
 	}
+	writeTestFile(t, root, "context.fixture", "changed\n", 0o644)
 	request.Capability, request.Mode = "format", "write"
+	request.WriteFiles = []string{"a.fixture"}
 	response.Edits = []Edit{{Path: "context.fixture", Content: "unauthorized\n"}}
 	if err := applyEdits(repo, request, response); err == nil {
 		t.Fatal("context write passed")

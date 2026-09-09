@@ -1,3 +1,5 @@
+import { boundedText } from "./context.mjs";
+
 import { Linter } from "eslint";
 import eslintInternals from "eslint/use-at-your-own-risk";
 
@@ -16,7 +18,7 @@ export function functionMetrics(analysis, path, parsed, offset = 0) {
       facts.set(node, {
         path,
         ...analysis.location(path, offset + node.range[0]),
-        name: functionName(node),
+        name: boundedText(functionName(node), 1024),
         complexity: 1,
         depth: 0,
         parameters: 0,
