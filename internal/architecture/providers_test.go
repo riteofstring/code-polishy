@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -137,5 +139,18 @@ func TestFocusedProviderArchitectureDoesNotScheduleUnselectedLanguages(t *testin
 	operations := providerOperations(repo, []string{"foreign/main.fixture"}, files)
 	if len(operations) != 1 || operations[0].selection.All {
 		t.Fatalf("focused provider selection became global: %+v", operations)
+	}
+}
+
+func TestProviderGraphRetainsActualPackageBoundaries(t *testing.T) {
+	repo := providerGraphRepository(t, "foreign")
+	imports := []pack.ImportFact{}
+	result := pack.Result{Digest: strings.Repeat("a", 64), Request: pack.Request{Units: []pack.AnalysisUnit{{PackageRoot: "foreign", Members: []string{"foreign/main.fixture"}}}}, Response: pack.Response{Coverage: &pack.Coverage{Analyzed: []string{"foreign/main.fixture"}, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}}
+	part := providerResultGraph(repo, repo.Config.Checks[0], result)
+	if part.incomplete || len(part.nodes) != 1 || part.nodes[0].Root != "foreign" || len(part.inputs) != 1 || part.inputs[0].Root != "foreign" {
+		t.Fatalf("provider package boundaries disappeared: %+v", part)
+	}
+	if _, err := sourcegraph.New(part.nodes, part.edges, part.inputs, nil); err != nil {
+		t.Fatal(err)
 	}
 }

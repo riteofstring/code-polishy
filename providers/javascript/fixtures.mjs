@@ -65,6 +65,27 @@ function generatedFixtures(root) {
     const files = {
       ".code-polishy.json": JSON.stringify({
         version: 4,
+        project: { kind: "application", capabilities: [] },
+        modules: [{ name: "frontend", paths: ["frontend/**"] }],
+        tests: {
+          ownership: [
+            {
+              paths: ["frontend/boundary.test.mjs"],
+              module: "frontend",
+              focusedSuite: "frontend-boundary",
+            },
+          ],
+          suites: [
+            {
+              name: "frontend-boundary",
+              kind: "boundary",
+              scope: "module",
+              modules: ["frontend"],
+              paths: ["frontend/boundary.test.mjs"],
+              argv: ["node", "--test", "frontend/boundary.test.mjs"],
+            },
+          ],
+        },
         scope: {
           generated: ["python_pkg/generated/bundle.js"],
           generatedJavaScript: [
@@ -79,6 +100,8 @@ function generatedFixtures(root) {
       "frontend/tsconfig.app.json":
         '{"compilerOptions":{"strict":true,"module":"ESNext","moduleResolution":"Bundler"},"include":["*.ts"]}',
       "frontend/index.ts": "export const value = 1;\n",
+      "frontend/boundary.test.mjs":
+        'import assert from "node:assert/strict";\nimport { value } from "../python_pkg/generated/bundle.js";\nassert.equal(value, 1);\n',
       "python_pkg/generated/bundle.js": failing
         ? "export const value = 1; value.toUpperCase();\n"
         : "export const value = 1; value.toFixed();\n",
