@@ -1,5 +1,6 @@
 import { astroDeclaration } from "./frameworks/astro.mjs";
 import { packageFor, resolutionPath } from "./context.mjs";
+import { moduleFormat } from "./typescript-context.mjs";
 import { isBuiltin, createRequire } from "node:module";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { existsSync, realpathSync, statSync } from "node:fs";
@@ -55,6 +56,9 @@ function resolveTypedImport(analysis, fact, options) {
     ),
     options,
     ts.sys,
+    undefined,
+    undefined,
+    importMode(analysis, fact, options),
   ).resolvedModule;
   if (resolved) {
     const absolute = realpathSync(resolved.resolvedFileName);
@@ -66,6 +70,14 @@ function resolveTypedImport(analysis, fact, options) {
   result.package = packageName(name);
   if (!resolved) unresolvedImport(analysis, fact);
   return result;
+}
+
+function importMode(analysis, fact, options) {
+  const format = moduleFormat(analysis, fact.path, options);
+  if (!fact.usage) return format;
+  const source = fact.usage.getSourceFile();
+  source.impliedNodeFormat = format;
+  return ts.getModeForUsageLocation(source, fact.usage, options);
 }
 
 function localCandidate(analysis, fact, options, configuration) {

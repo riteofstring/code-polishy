@@ -80,14 +80,29 @@ export function sourceFacts(
     )
       ? importReference(node)
       : null;
-    if (reference)
-      imports.push({
+    if (reference) {
+      const fact = {
         path,
         ...analysis.location(path, offset + node.range[0]),
         ...reference,
+      };
+      const original = parsed.services?.esTreeNodeToTSNodeMap?.get(node);
+      Object.defineProperty(fact, "usage", {
+        value: original && importUsage(original),
       });
+      imports.push(fact);
+    }
   });
   return { imports, functions, comments: comments.map(boundedComment) };
+}
+
+function importUsage(node) {
+  return (
+    node.moduleSpecifier ??
+    node.moduleReference?.expression ??
+    node.argument?.literal ??
+    node.arguments?.[0]
+  );
 }
 
 function importReference(node) {

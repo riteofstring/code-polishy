@@ -1202,6 +1202,33 @@ test("generated module format follows its source package and explicit extensions
         response.findings.every((finding) => finding.rule === "type-1309"),
         JSON.stringify(response),
       );
+      for (const path of files) {
+        const commonjs =
+          path.endsWith(".cjs") ||
+          (path.endsWith(".js") && type === "commonjs");
+        writeFileSync(
+          join(root, path),
+          commonjs
+            ? 'const { consume } = require("library"); consume("text"); import("library");\n'
+            : 'import { consume } from "library"; consume(1); import("library");\n',
+        );
+      }
+      const graphRequest = requestFor(root, files, "architecture");
+      resolveTestUnits(graphRequest, mappings);
+      const graph = analyze(graphRequest);
+      assert.equal(graph.status, "pass", JSON.stringify(graph));
+      assert.equal(graph.facts.imports.length, files.length * 2);
+      for (const fact of graph.facts.imports) {
+        const commonjs =
+          fact.kind !== "proven-dynamic" &&
+          (fact.path.endsWith(".cjs") ||
+            (fact.path.endsWith(".js") && type === "commonjs"));
+        assert.equal(
+          fact.resolved,
+          `frontend/node_modules/library/${commonjs ? "cjs.d.cts" : "esm.d.ts"}`,
+          JSON.stringify(fact),
+        );
+      }
     }
   } finally {
     rmSync(root, { recursive: true });

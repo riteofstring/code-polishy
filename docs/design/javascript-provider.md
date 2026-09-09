@@ -113,7 +113,8 @@ options so overlapping aliases cannot exchange targets between units.
 
 For type checking, generated source inherits the effective package's module
 format before TypeScript creates its source document. Explicit `.mjs` and `.cjs`
-extensions retain their normal precedence. Conditional package exports use the
-import's resulting resolution mode. The document registry retains the physical
+extensions retain their normal precedence. Type checking and architecture resolve
+typed conditional package exports using the original import expression's resolution
+mode, including dynamic imports and CommonJS requires. The document registry retains the physical
 filename and original text, so diagnostics and input evidence keep their source
 coordinates without creating or rewriting source files.

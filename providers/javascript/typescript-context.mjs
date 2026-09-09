@@ -26,10 +26,19 @@ function inheritModuleFormat(analysis, host, absolute, options) {
   const path = relative(analysis.root, absolute).split(sep).join("/");
   const owner = analysis.classifications.get(path)?.sourcePackage;
   if (!owner) return;
-  options.impliedNodeFormat = ts.getImpliedNodeFormatForFile(
-    join(analysis.root, dirname(owner), basename(path)),
+  options.impliedNodeFormat = moduleFormat(
+    analysis,
+    path,
+    host.getCompilationSettings(),
+  );
+}
+
+export function moduleFormat(analysis, path, options) {
+  const owner = analysis.classifications.get(path)?.sourcePackage;
+  return ts.getImpliedNodeFormatForFile(
+    join(analysis.root, owner ? join(dirname(owner), basename(path)) : path),
     undefined,
     ts.sys,
-    host.getCompilationSettings(),
+    options,
   );
 }
