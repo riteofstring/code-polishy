@@ -1,6 +1,26 @@
 # Language-Pack Discovery and Universal Capabilities
 
-Status: proposed
+Status: proposed; companion protocol direction for the language-pack migration
+
+## Relationship to the beta migration
+
+The [first-party migration plan](installable-first-party-language-packs.md)
+owns the `beta-language-packs` branch, complete feature inventory, equivalence
+runner, and extraction sequence for shell, Python, JavaScript/TypeScript, and Go.
+Its test framework lands before native implementations are removed.
+
+The current implementation uses manifest version 2 and protocol version 3.
+This document describes a future contract, not the current wire schema. Preserve
+protocol v3's effective generated-source context, per-capability ownership,
+unit-wide diagnostic authority, focused architecture closure, and restricted
+write targets when moving ecosystem discovery into packs.
+
+Implement the contract needed by those four existing language groups first.
+The broader ecosystem prototypes below are a separate research track. They are
+required evidence before claiming support for those additional discovery models,
+not prerequisites for migrating the current languages. Choose version numbers
+when the replacement schema is concrete and cut over all affected release
+surfaces together, without a compatibility translation layer.
 
 ## Outcome
 
@@ -100,20 +120,30 @@ The prompt should describe the concrete authority, for example:
 
 ### 3. Separate repository inventory from active selection
 
-Every adapter request receives two bounded file sets:
+Every operation keeps four bounded scopes separate:
 
-- `inventory`: all governed, pack-relevant files needed to understand the
-  repository consistently;
-- `selection`: the files in scope for the current command or change.
+- `inventory`: governed, pack-relevant read context needed for the analysis;
+- `selection`: the files or metadata that triggered this operation, with explicit
+  full-versus-focused intent and required capability coverage;
+- `diagnostic scope`: validated analysis members or dependency closures on which
+  this capability may report findings, including unchanged sources;
+- `write targets`: selected source files that core explicitly allows to change.
 
-Each inventory entry includes engine-owned classifications such as executable
-language source, module, generated output, parse-only data, control file, and
-dependency input. Paths are canonical repository-relative paths. The adapter
-cannot expand either set by walking the repository.
+Inventory entries include engine-owned classifications such as executable
+source, module, generated output, parse-only data, control file, and dependency
+input, plus exact per-capability ownership and validated effective source-context
+mappings. Paths remain canonical repository-relative physical paths. A generated
+file's effective package context never changes its finding path or write status.
+Core supplies effective locked policy and normalizes repository-policy globs to
+literal paths. Packs interpret ecosystem metadata within that authority.
 
-This lets a changed-file command understand a workspace-level manifest without
-allowing findings or rewrites outside the active selection. Format commands
-continue to exclude `scope.data` from writes.
+The adapter cannot expand read authority by walking the repository. Discovery
+returns candidate membership and closure facts; core validates their inputs,
+ownership, and capability-specific scope before analysis. A typecheck may report
+an unchanged compilation member, and dead-code analysis may report package-wide
+findings. Architecture follows selected dependency closures. None of these
+expands formatting writes, and generated source and `scope.data` remain
+non-writable. Local operations need not discover unrelated project graphs.
 
 ### 4. Keep discovery results ecosystem-specific and bounded
 
@@ -123,6 +153,8 @@ properties only:
 
 - strict JSON shape, protocol version, size, count, and depth limits;
 - canonical paths contained in the supplied inventory;
+- exact per-capability ownership and validated membership/closure evidence for
+  the requested diagnostic scope, without granting additional write authority;
 - deterministic ordering and an `analysisScopeDigest`;
 - no unknown fields, extra JSON values, or evidence-free success;
 - no capability result referring to a different scope digest.
@@ -132,9 +164,11 @@ locks}` project object, exactly-one file ownership, or non-overlapping projects.
 A Cargo adapter may describe workspaces and packages; a Gradle adapter may
 describe builds and projects; a CMake adapter may describe configured targets.
 
-The same validated scope and digest are reused by every capability in one
-engine invocation. Packs may return a concise display summary for diagnostics,
-but the engine does not infer policy from display text.
+Validated discovery facts and their digest are reused by capabilities sharing
+that discovery input in one engine invocation. Each capability retains its own
+selection, coverage, diagnostic, and write authority; local work need not obtain
+a graph it does not use. Packs may return a concise display summary for
+diagnostics, but the engine does not infer policy from display text.
 
 ### 5. Identify packs by ecosystem provider
 
@@ -198,14 +232,17 @@ second scheduler.
 
 ## Scale requirements
 
-The current 10,000-file request limit and 1 MiB response limit are too small for
-large real repositories. Protocol design must solve scale before a public v2 is
-frozen.
+Measure the current request, context, per-file, and response bounds against
+large relevant units before freezing a replacement protocol. Protocol v3 already
+scopes context to the operation; preserve that isolation. An unrelated large
+asset or repository file count must not block one-file formatting or linting,
+while genuinely oversized required input must fail explicitly.
 
 The chosen transport must:
 
-- preserve a complete logical inventory without one unbounded JSON message;
-- stream or page deterministically with a final content digest;
+- preserve complete relevant analysis context without one unbounded JSON message;
+- use deterministic bounded transport with a final content digest, introducing
+  paging or streaming only where measurements require it;
 - put explicit byte, entry, depth, and time budgets on both sides;
 - avoid repeated full-inventory transfer for every capability in one run;
 - keep adapters unable to enumerate files outside the governed inventory;
@@ -216,9 +253,16 @@ or another transport until prototypes measure the tradeoffs.
 
 ## Implementation sequence
 
-### Phase 0: Prove the boundary before freezing it
+### Phase 0: Prove the required discovery models
 
-Build disposable adapters for four deliberately different systems:
+For the beta migration, use the four existing language inventories and shared
+conformance fixtures from the first-party migration plan. Identify capability
+gaps before extraction, including dependency/build adapters, test and portability
+facts, policy activation, and toolchain distribution. Prove each actual project
+model with small, nested, focused, generated-source, and large-unit fixtures.
+
+For future expansion beyond those languages, build disposable adapters for four
+deliberately different systems:
 
 1. Cargo for a mostly static workspace model;
 2. Gradle for evaluated, conditional multi-project configuration;
@@ -227,9 +271,13 @@ Build disposable adapters for four deliberately different systems:
 
 Each prototype must exercise a small repository and a large or deeply nested
 fixture. Record the minimum inventory, toolchain, authority, output, and scale
-requirements. Use the results to decide the transport and final v2 schema.
+requirements. Use those results before claiming that the contract supports
+these additional ecosystems. Do not introduce evaluated discovery or new host
+execution merely to move an existing static analyzer into a pack.
 
-Do not remove protocol v1 or require migration during this phase.
+Do not remove the current protocol or require repository migration during
+contract prototyping. Keep any replacement cutover coordinated with the owning
+migration plan.
 
 ### Phase 1: Define the manifest contract
 
@@ -243,9 +291,12 @@ Do not remove protocol v1 or require migration during this phase.
 
 ### Phase 2: Add governed inventory transport
 
-1. Build the complete pack-relevant inventory once per engine invocation.
-2. Classify entries at the existing authoritative file-policy boundary.
-3. Add the active selection separately for each operation.
+1. Build the governed inventory once and derive the relevant context for each
+   operation without repeatedly hashing unrelated repository contents.
+2. Classify entries at the authoritative file-policy boundary, including source
+   context and exact per-capability ownership.
+3. Keep selection, required coverage, diagnostic scope, and write targets
+   separate for each operation.
 4. Implement the bounded transport selected from Phase 0.
 5. Validate the complete logical input before adapter execution.
 
@@ -254,7 +305,8 @@ Do not remove protocol v1 or require migration during this phase.
 1. Add strict discovery requests, responses, typed failures, and evidence.
 2. Validate returned paths against inventory and enforce resource limits.
 3. Calculate or verify the canonical `analysisScopeDigest`.
-4. Reuse one validated scope for every capability in the invocation.
+4. Reuse validated discovery facts where inputs match while keeping each
+   capability's diagnostic and write authority distinct.
 5. Reject capability evidence tied to another digest.
 6. Keep the scope in memory; do not add persistent caching in this change.
 
@@ -269,9 +321,11 @@ Do not remove protocol v1 or require migration during this phase.
 
 ### Phase 5: Integrate capabilities and diagnostics
 
-1. Feed inventory, selection, and the validated scope digest into capability
-   requests.
-2. Keep findings and format writes within their existing allowed scopes.
+1. Feed relevant inventory, selection, required coverage, and validated discovery
+   identity into capability requests, with explicit full/focused semantics.
+2. Keep findings within validated capability-specific diagnostic scope and format
+   edits within selected write authority; test unchanged dependent diagnostics
+   and generated-source non-writability directly.
 3. Make architecture evidence include Code Polishy's module graph and the
    pack's ecosystem analysis scope.
 4. Make dependency capabilities identify the manifests, locks, or resolved
@@ -280,18 +334,24 @@ Do not remove protocol v1 or require migration during this phase.
 6. Make `doctor --strict` report mode, approval, toolchain, platform, provider
    conflicts, capability coverage, and bounded discovery summaries.
 
-### Phase 6: Freeze and cut over protocol v2
+### Phase 6: Freeze and cut over the required contract
 
-Only after the four prototypes pass the same conformance boundary:
+Only after every affected current language passes its declared conformance
+boundary and the reference-versus-pack behavior matrix:
 
-1. freeze manifest and protocol version 2;
-2. convert the bundled fixture and permanent documentation;
-3. publish reviewed v2 releases of supported packs;
-4. verify install, selection, doctor, format, changed-scope checks, gates, and
-   native Windows behavior where supported;
-5. make the engine accept v2 packs in one coherent public release;
-6. remove v1 only when every release surface and supported pack is ready for
-   the atomic cutover.
+1. freeze the required manifest and protocol schemas with explicit versions;
+2. convert affected fixtures, schemas, CLI help, and permanent documentation;
+3. build and verify exact pack artifacts and their authenticated catalog;
+4. verify migration, install, selection, doctor, format, focused diagnostics,
+   gates, and installed execution on supported platforms;
+5. obtain release authorization before publishing the compatible artifacts and
+   engine as one coherent public cutover;
+6. remove the previous protocol only when every affected supported pack and
+   release surface is ready, without a dual-protocol translation layer.
+
+Future ecosystem prototypes remain necessary evidence for expanding evaluated
+or target-specific support; their completion is not a gate on the four-language
+migration.
 
 No dual-protocol translation layer is planned. Delaying the cutover is cheaper
 than maintaining a permanent compatibility path for an unproven contract.
@@ -305,7 +365,10 @@ Add observable boundary coverage for:
 - self-contained and host-toolchain executable resolution;
 - rejected tool versions, platforms, ambient lookup, environment, and network;
 - deterministic inventory transport above the current file and response caps;
-- inventory versus selection behavior for changed-file operations;
+- read context, required coverage, diagnostic scope, and write authority for full,
+  focused, metadata-only, and empty-selection operations;
+- generated-source effective package ownership and unchanged physical paths;
+- missing packs and invalid metadata preserving unrelated useful diagnostics;
 - canonical paths, links, special files, missing files, and escaping paths;
 - deterministic analysis scopes and cross-capability digest consistency;
 - aggregate workspaces, shared locks, overlapping targets, optional locks, and
@@ -331,11 +394,15 @@ gates.
 - Evaluated discovery and host toolchains cannot run without exact authority.
 - Large repositories receive a complete logical inventory within explicit
   resource limits.
-- Every capability in one run uses the same validated analysis scope.
+- Capabilities reuse matching validated discovery facts while retaining their
+  own required coverage, diagnostic scope, and write authority.
 - Ecosystem-specific structure stays in the owning pack instead of becoming a
   lossy universal project model.
 - Data safety, supplemental isolation, installation integrity, evidence, and
   gates remain engine-owned and cannot be weakened by a pack.
-- Cargo, Gradle, Bundler, and CMake prove the contract before v2 is frozen.
+- The current four-language migration proves all required discovery and execution
+  models through shared conformance fixtures before its protocol cutover.
+- Cargo, Gradle, Bundler, and CMake prove any later claim of support for their
+  additional discovery models.
 - Permanent documentation, schema, CLI help, fixtures, and platform checks agree
   at the public cutover.
