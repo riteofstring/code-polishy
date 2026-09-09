@@ -1167,20 +1167,15 @@ test("generated module format follows its source package and explicit extensions
     const mappings = Object.fromEntries(
       files.map((path) => [path, "frontend/package.json"]),
     );
-    for (const type of ["module", "commonjs"]) {
+    for (const [type, commonjsFiles] of [
+      ["module", [files[2]]],
+      ["commonjs", [files[2], files[0]]],
+    ]) {
       writeFileSync(
         join(root, "frontend/package.json"),
         JSON.stringify({ type }),
       );
-      for (const path of files) {
-        const commonjs =
-          path.endsWith(".cjs") ||
-          (path.endsWith(".js") && type === "commonjs");
-        writeFileSync(
-          join(root, path),
-          `import { consume } from "library"; consume(${commonjs ? '"text"' : "1"}); export const value = await Promise.resolve(1);\n`,
-        );
-      }
+      writeModuleTypecheckSources(root, files, commonjsFiles);
       const request = requestFor(root, files, "typecheck");
       resolveTestUnits(request, mappings);
       const response = analyze(request);
@@ -1193,44 +1188,46 @@ test("generated module format follows its source package and explicit extensions
         .filter((finding) => finding.rule === "type-1309")
         .map((finding) => finding.path)
         .toSorted();
-      assert.deepEqual(
-        commonjs,
-        type === "module" ? [files[2]] : [files[2], files[0]],
-        JSON.stringify(response),
-      );
+      assert.deepEqual(commonjs, commonjsFiles, JSON.stringify(response));
       assert.ok(
         response.findings.every((finding) => finding.rule === "type-1309"),
         JSON.stringify(response),
       );
-      for (const path of files) {
-        const commonjs =
-          path.endsWith(".cjs") ||
-          (path.endsWith(".js") && type === "commonjs");
-        writeFileSync(
-          join(root, path),
-          commonjs
-            ? 'const { consume } = require("library"); consume("text"); import("library");\n'
-            : 'import { consume } from "library"; consume(1); import("library");\n',
-        );
-      }
-      const graphRequest = requestFor(root, files, "architecture");
-      resolveTestUnits(graphRequest, mappings);
-      const graph = analyze(graphRequest);
-      assert.equal(graph.status, "pass", JSON.stringify(graph));
-      assert.equal(graph.facts.imports.length, files.length * 2);
-      for (const fact of graph.facts.imports) {
-        const commonjs =
-          fact.kind !== "proven-dynamic" &&
-          (fact.path.endsWith(".cjs") ||
-            (fact.path.endsWith(".js") && type === "commonjs"));
-        assert.equal(
-          fact.resolved,
-          `frontend/node_modules/library/${commonjs ? "cjs.d.cts" : "esm.d.ts"}`,
-          JSON.stringify(fact),
-        );
-      }
+      assertModuleGraph(root, files, mappings, commonjsFiles);
     }
   } finally {
     rmSync(root, { recursive: true });
   }
 });
+
+function writeModuleTypecheckSources(root, files, commonjsFiles) {
+  for (const path of files)
+    writeFileSync(
+      join(root, path),
+      `import { consume } from "library"; consume(${commonjsFiles.includes(path) ? '\"text\"' : "1"}); export const value = await Promise.resolve(1);\n`,
+    );
+}
+
+function assertModuleGraph(root, files, mappings, commonjsFiles) {
+  for (const path of files)
+    writeFileSync(
+      join(root, path),
+      commonjsFiles.includes(path)
+        ? 'const { consume } = require("library"); consume("text"); import("library");\n'
+        : 'import { consume } from "library"; consume(1); import("library");\n',
+    );
+  const request = requestFor(root, files, "architecture");
+  resolveTestUnits(request, mappings);
+  const graph = analyze(request);
+  assert.equal(graph.status, "pass", JSON.stringify(graph));
+  assert.equal(graph.facts.imports.length, files.length * 2);
+  for (const fact of graph.facts.imports) {
+    const commonjs =
+      fact.kind !== "proven-dynamic" && commonjsFiles.includes(fact.path);
+    assert.equal(
+      fact.resolved,
+      `frontend/node_modules/library/${commonjs ? "cjs.d.cts" : "esm.d.ts"}`,
+      JSON.stringify(fact),
+    );
+  }
+}
