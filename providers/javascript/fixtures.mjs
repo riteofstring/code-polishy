@@ -98,13 +98,13 @@ function generatedFixtures(root) {
       }),
       "frontend/package.json": '{"type":"module"}',
       "frontend/tsconfig.app.json":
-        '{"compilerOptions":{"strict":true,"module":"ESNext","moduleResolution":"Bundler"},"include":["*.ts"]}',
+        '{"compilerOptions":{"strict":true,"module":"NodeNext","moduleResolution":"NodeNext"},"include":["*.ts"]}',
       "frontend/index.ts": "export const value = 1;\n",
       "frontend/boundary.test.mjs":
         'import assert from "node:assert/strict";\nimport { value } from "../python_pkg/generated/bundle.js";\nassert.equal(value, 1);\n',
       "python_pkg/generated/bundle.js": failing
-        ? "export const value = 1; value.toUpperCase();\n"
-        : "export const value = 1; value.toFixed();\n",
+        ? "export const value = await Promise.resolve(1); value.toUpperCase();\n"
+        : "export const value = await Promise.resolve(1); value.toFixed();\n",
     };
     for (const [path, content] of Object.entries(files)) {
       const absolute = join(root, project, path);

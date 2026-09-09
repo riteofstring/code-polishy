@@ -104,3 +104,16 @@ valid compilation configuration. Unsupported framework contracts remain explicit
 The provider remains opt-in. Its regression fixtures establish the covered
 behaviors, without claiming complete parity with native analysis or arbitrary
 framework configurations.
+
+Dead-code module resolution uses each source's resolved compilation options,
+including nested configurations within one package. Generated bare and package
+imports resolve from the declared source package; relative imports keep their
+physical source directory. Resolvers remain scoped to these compilation
+options so overlapping aliases cannot exchange targets between units.
+
+For type checking, generated source inherits the effective package's module
+format before TypeScript creates its source document. Explicit `.mjs` and `.cjs`
+extensions retain their normal precedence. Conditional package exports use the
+import's resulting resolution mode. The document registry retains the physical
+filename and original text, so diagnostics and input evidence keep their source
+coordinates without creating or rewriting source files.

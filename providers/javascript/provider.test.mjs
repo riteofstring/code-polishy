@@ -1002,3 +1002,208 @@ test("normalized entries preserve literal route names and configuration conventi
     rmSync(root, { recursive: true });
   }
 });
+
+test("generated entries resolve package imports without relocating relative imports", () => {
+  const root = mkdtempSync(
+    join(tmpdir(), "code-polishy-provider-import-context-"),
+  );
+  const bundle = "python_pkg/generated/bundle.js";
+  const local = "python_pkg/generated/local.js";
+  try {
+    mkdirSync(join(root, "frontend"));
+    mkdirSync(join(root, "python_pkg/generated"), { recursive: true });
+    writeFileSync(
+      join(root, "frontend/package.json"),
+      JSON.stringify({
+        type: "module",
+        imports: { "#internal": "./used.ts" },
+      }),
+    );
+    writeFileSync(
+      join(root, "frontend/tsconfig.app.json"),
+      JSON.stringify({
+        compilerOptions: { module: "esnext", moduleResolution: "bundler" },
+        include: ["*.ts"],
+      }),
+    );
+    writeFileSync(join(root, "frontend/used.ts"), "export const value = 1;\n");
+    writeFileSync(
+      join(root, "frontend/local.js"),
+      "export const nearby = 2;\n",
+    );
+    writeFileSync(join(root, local), "export const nearby = 3;\n");
+    writeFileSync(
+      join(root, bundle),
+      'import { value } from "#internal"; import { nearby } from "./local.js"; console.log(value, nearby);\n',
+    );
+    const mappings = {
+      [bundle]: "frontend/package.json",
+      [local]: "frontend/package.json",
+    };
+    const check = () => {
+      const request = requestFor(root, [bundle], "dead-code");
+      resolveTestUnits(request, mappings);
+      for (const unit of request.units)
+        if (unit.members.includes(bundle)) unit.entryFiles.push(bundle);
+      request.complete = false;
+      return analyze(request);
+    };
+    const used = check();
+    assert.deepEqual(used.coverage.unsupported, [], JSON.stringify(used));
+    assert.deepEqual(
+      used.findings
+        .filter((finding) => finding.rule === "unused-file")
+        .map((finding) => finding.path),
+      ["frontend/local.js"],
+    );
+    writeFileSync(
+      join(root, bundle),
+      'import { nearby } from "./local.js"; console.log(nearby);\n',
+    );
+    const removed = check();
+    assert.ok(
+      removed.findings.some(
+        (finding) =>
+          finding.path === "frontend/used.ts" && finding.rule === "unused-file",
+      ),
+      JSON.stringify(removed),
+    );
+    assert.ok(
+      !removed.findings.some((finding) => finding.path === local),
+      JSON.stringify(removed),
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("dead code uses each nested compilation unit's aliases", () => {
+  const root = mkdtempSync(
+    join(tmpdir(), "code-polishy-provider-nested-aliases-"),
+  );
+  try {
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    for (const directory of ["src", "tools"]) {
+      mkdirSync(join(root, directory));
+      writeFileSync(
+        join(root, directory, "tsconfig.app.json"),
+        JSON.stringify({
+          compilerOptions: {
+            module: "esnext",
+            moduleResolution: "bundler",
+            paths: { "@internal": ["./used.ts"] },
+          },
+          include: ["*.ts"],
+        }),
+      );
+      writeFileSync(
+        join(root, directory, "used.ts"),
+        "export const value = 1;\n",
+      );
+      writeFileSync(
+        join(root, directory, "unused.ts"),
+        "export const lost = 2;\n",
+      );
+      writeFileSync(
+        join(root, directory, "main.ts"),
+        'import { value } from "@internal"; console.log(value);\n',
+      );
+    }
+    const request = requestFor(root, ["src/main.ts"], "dead-code");
+    for (const unit of request.units)
+      unit.entryFiles.push(`${unit.root}/main.ts`);
+    const response = analyze(request);
+    assert.deepEqual(
+      response.coverage.unsupported,
+      [],
+      JSON.stringify(response),
+    );
+    assert.deepEqual(
+      response.findings
+        .filter((finding) => finding.rule === "unused-file")
+        .map((finding) => finding.path)
+        .toSorted(),
+      ["src/unused.ts", "tools/unused.ts"],
+    );
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("generated module format follows its source package and explicit extensions", () => {
+  const root = mkdtempSync(
+    join(tmpdir(), "code-polishy-provider-module-format-"),
+  );
+  try {
+    mkdirSync(join(root, "frontend/node_modules/library"), { recursive: true });
+    mkdirSync(join(root, "python_pkg/generated"), { recursive: true });
+    writeFileSync(
+      join(root, "frontend/tsconfig.app.json"),
+      JSON.stringify({
+        compilerOptions: { module: "nodenext", moduleResolution: "nodenext" },
+        include: ["*.ts"],
+      }),
+    );
+    writeFileSync(join(root, "frontend/index.ts"), "export const value = 1;\n");
+    writeFileSync(
+      join(root, "frontend/node_modules/library/package.json"),
+      JSON.stringify({
+        name: "library",
+        type: "module",
+        exports: { import: "./esm.d.ts", require: "./cjs.d.cts" },
+      }),
+    );
+    writeFileSync(
+      join(root, "frontend/node_modules/library/esm.d.ts"),
+      "export function consume(value: number): void;\n",
+    );
+    writeFileSync(
+      join(root, "frontend/node_modules/library/cjs.d.cts"),
+      "export function consume(value: string): void;\n",
+    );
+    const files = ["js", "mjs", "cjs"].map(
+      (extension) => `python_pkg/generated/bundle.${extension}`,
+    );
+    const mappings = Object.fromEntries(
+      files.map((path) => [path, "frontend/package.json"]),
+    );
+    for (const type of ["module", "commonjs"]) {
+      writeFileSync(
+        join(root, "frontend/package.json"),
+        JSON.stringify({ type }),
+      );
+      for (const path of files) {
+        const commonjs =
+          path.endsWith(".cjs") ||
+          (path.endsWith(".js") && type === "commonjs");
+        writeFileSync(
+          join(root, path),
+          `import { consume } from "library"; consume(${commonjs ? '"text"' : "1"}); export const value = await Promise.resolve(1);\n`,
+        );
+      }
+      const request = requestFor(root, files, "typecheck");
+      resolveTestUnits(request, mappings);
+      const response = analyze(request);
+      assert.deepEqual(
+        response.coverage.unsupported,
+        [],
+        JSON.stringify(response),
+      );
+      const commonjs = response.findings
+        .filter((finding) => finding.rule === "type-1309")
+        .map((finding) => finding.path)
+        .toSorted();
+      assert.deepEqual(
+        commonjs,
+        type === "module" ? [files[2]] : [files[2], files[0]],
+        JSON.stringify(response),
+      );
+      assert.ok(
+        response.findings.every((finding) => finding.rule === "type-1309"),
+        JSON.stringify(response),
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});

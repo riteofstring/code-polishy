@@ -1,4 +1,5 @@
 import { packageFor } from "./context.mjs";
+import { compilerFor } from "./typescript-context.mjs";
 import { join, relative } from "node:path";
 
 import ts from "typescript";
@@ -73,7 +74,7 @@ function checkerFor(analysis, project) {
     ? astroInstallation(analysis, project.paths[0])
     : null;
   const plugins = installation ? [getAstroLanguagePlugin()] : [];
-  const services = typeScriptServices(ts);
+  const services = typeScriptServices(compilerFor(analysis));
   let serviceContext;
   services.push({
     name: "provider-program-coverage",
@@ -259,6 +260,13 @@ function bindGeneratedResolution(analysis, host) {
         source,
         host.getCompilationSettings(),
         ts.sys,
+        undefined,
+        rest[0],
+        ts.getModeForUsageLocation(
+          rest[2],
+          literal,
+          host.getCompilationSettings(),
+        ),
       );
     });
   };
