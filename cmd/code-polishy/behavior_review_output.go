@@ -13,6 +13,7 @@ type behaviorReviewOutputDocument struct {
 	Action   string                              `json:"action"`
 	State    string                              `json:"state"`
 	Capture  *engine.BehaviorReviewIntentCapture `json:"capture,omitempty"`
+	Cleanup  *engine.BehaviorReviewCleanupResult `json:"cleanup,omitempty"`
 	Status   *engine.BehaviorReviewStatus        `json:"status,omitempty"`
 }
 
@@ -23,6 +24,12 @@ func behaviorReviewConfirmation(options behaviorReviewOptions, document behavior
 	document.Protocol = "behavior-review/v1"
 	document.Action = options.action
 	document.State = "captured"
+	if document.Cleanup != nil {
+		document.State = "absent"
+		if document.Cleanup.Removed {
+			document.State = "removed"
+		}
+	}
 	if document.Status != nil {
 		document.State = string(document.Status.State)
 	}
@@ -33,6 +40,14 @@ func behaviorReviewConfirmation(options behaviorReviewOptions, document behavior
 	return commandResult{quiet: true, messages: []string{string(data)}}, nil
 }
 
+func behaviorReviewCleanupMessage(result engine.BehaviorReviewCleanupResult) string {
+	path := strings.TrimSuffix(result.Path, "/") + "/"
+	if result.Removed {
+		return fmt.Sprintf("Behavior review artifacts removed: %s", path)
+	}
+	return fmt.Sprintf("Behavior review artifacts already absent: %s", path)
+}
+
 func behaviorReviewFeatureList(features []string) string {
 	if len(features) == 0 {
 		return "none"
@@ -41,7 +56,7 @@ func behaviorReviewFeatureList(features []string) string {
 }
 
 func parseBehaviorReviewFormat(options *behaviorReviewOptions, arguments []string) ([]string, error) {
-	if options.action != "capture-intent" && options.action != "status" {
+	if options.action != "capture-intent" && options.action != "cleanup" && options.action != "status" {
 		return arguments, nil
 	}
 	remaining := []string{}

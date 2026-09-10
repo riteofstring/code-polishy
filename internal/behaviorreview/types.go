@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/riteofstring/code-polishy/internal/finalstate"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -59,6 +60,7 @@ type PrepareOptions struct {
 
 type CaptureIntentOptions struct {
 	IntentPath string
+	Intent     io.Reader
 	Features   []string
 }
 
@@ -72,6 +74,11 @@ type CaptureIntentResult struct {
 	RequirementID     string   `json:"requirement_id,omitempty"`
 	RequirementSHA256 string   `json:"requirement_sha256,omitempty"`
 	Features          []string `json:"features"`
+}
+
+type CleanupResult struct {
+	Path    string `json:"path"`
+	Removed bool   `json:"removed"`
 }
 
 type RequireOptions struct {
@@ -244,6 +251,10 @@ func Prepare(ctx context.Context, repo repository.Repository, options PrepareOpt
 
 func CaptureIntent(ctx context.Context, repo repository.Repository, options CaptureIntentOptions) (CaptureIntentResult, error) {
 	return captureIntent(ctx, repo, options)
+}
+
+func Cleanup(ctx context.Context, repo repository.Repository) (CleanupResult, error) {
+	return cleanupArtifacts(ctx, repo)
 }
 
 func Require(ctx context.Context, repo repository.Repository, options RequireOptions) (RequireResult, error) {

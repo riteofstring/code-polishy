@@ -88,6 +88,45 @@ func TestBehaviorReviewCaptureWithoutFeaturesConfirmsNone(t *testing.T) {
 	}
 }
 
+func TestBehaviorReviewCaptureAcceptsStandardInput(t *testing.T) {
+	root, _ := newFeatureBehaviorReviewCLIBaseRepository(t)
+	arguments := []string{
+		"--repo-root", root, "--policy-root", behaviorReviewCLIPolicyRoot(t),
+		"behavior-review", "capture-intent", "--intent-file", "-", "--feature", "checkout",
+	}
+	status, stdout, stderr := captureRunOutputWithStdin(t, arguments, "Capture this exact request without a transport file.\n")
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
+	if !strings.Contains(stdout, "features checkout") {
+		t.Fatalf("stdin capture confirmation = %q", stdout)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".code-polishy-reports", "behavior-review", "intent-journal.json"))
+	if err != nil || !strings.Contains(string(data), "Capture this exact request without a transport file.\\n") {
+		t.Fatalf("stdin intent was not captured: %v %s", err, data)
+	}
+}
+
+func TestBehaviorReviewCleanupRemovesCompleteEvidenceAndIsIdempotent(t *testing.T) {
+	root, intent := newFeatureBehaviorReviewCLIBaseRepository(t)
+	common := []string{"--repo-root", root, "--policy-root", behaviorReviewCLIPolicyRoot(t), "behavior-review"}
+	status, stdout, stderr := runBehaviorReviewCLI(t, append(slices.Clone(common), "capture-intent", "--intent-file", intent, "--feature", "checkout"))
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
+	writeBehaviorReviewCLIFile(t, filepath.Join(root, ".code-polishy-reports", "behavior-review"), "packet.json", "sensitive review packet\n")
+	status, stdout, stderr = runBehaviorReviewCLI(t, append(slices.Clone(common), "cleanup", "--format", "json"))
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
+	var document behaviorReviewOutputDocument
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil || document.Cleanup == nil || !document.Cleanup.Removed || document.State != "removed" {
+		t.Fatalf("cleanup document=%+v error=%v stdout=%q", document, err, stdout)
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !os.IsNotExist(err) {
+		t.Fatalf("cleanup retained behavior review evidence: %v", err)
+	}
+	status, stdout, stderr = runBehaviorReviewCLI(t, append(slices.Clone(common), "cleanup"))
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
+	if !strings.Contains(stdout, "already absent") {
+		t.Fatalf("idempotent cleanup confirmation = %q", stdout)
+	}
+}
+
 func assertCanonicalCaptureConfirmation(t *testing.T, format, stdout, journalPath string) {
 	t.Helper()
 	if format == "json" {

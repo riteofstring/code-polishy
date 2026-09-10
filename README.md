@@ -64,8 +64,11 @@ A coding agent runs these commands as it works:
 # Read the documentation carried by this repo's Code Polishy release
 code-polishy docs read agent-workflows
 
-# Save the user's request before changing code; this runs no tests or AI review
-code-polishy behavior-review capture-intent --intent-file REQUEST_FILE
+# Start ordinary work without retaining the request when review is optional
+code-polishy task-start --module MODULE
+
+# When policy selects behavior review, provide the exact request over stdin
+code-polishy task-start --module MODULE --intent-file -
 
 # Inspect any configured or task-requested feature review
 code-polishy behavior-review status --base TASK_BASE

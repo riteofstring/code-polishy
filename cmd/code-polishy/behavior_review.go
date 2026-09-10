@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ type behaviorReviewAction struct {
 
 var behaviorReviewActions = map[string]behaviorReviewAction{
 	"capture-intent": {parse: parseBehaviorReviewCaptureIntent, handle: handleBehaviorReviewCaptureIntent},
+	"cleanup":        {parse: parseBehaviorReviewCleanup, handle: handleBehaviorReviewCleanup},
 	"require":        {parse: parseBehaviorReviewRequire, handle: handleBehaviorReviewRequire},
 	"status":         {parse: parseBehaviorReviewStatus, handle: handleBehaviorReviewStatus},
 	"prepare":        {parse: parseBehaviorReviewPrepare, handle: handleBehaviorReviewPrepare},
@@ -50,13 +52,27 @@ func handleBehaviorReview(ctx context.Context, policyEngine *engine.Engine, argu
 }
 
 func handleBehaviorReviewCaptureIntent(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
-	result, err := policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile, options.features)
+	var result engine.BehaviorReviewIntentCapture
+	var err error
+	if options.intentFile == "-" {
+		result, err = policyEngine.CaptureBehaviorReviewIntentInput(ctx, os.Stdin, options.features)
+	} else {
+		result, err = policyEngine.CaptureBehaviorReviewIntent(ctx, options.intentFile, options.features)
+	}
 	if err != nil {
 		return commandResult{}, err
 	}
 	return behaviorReviewConfirmation(options, behaviorReviewOutputDocument{
 		Capture: &result,
 	}, behaviorReviewIntentCapturedMessage(result.JournalPath, result.ID, result.Features))
+}
+
+func handleBehaviorReviewCleanup(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
+	result, err := policyEngine.CleanupBehaviorReview(ctx)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return behaviorReviewConfirmation(options, behaviorReviewOutputDocument{Cleanup: &result}, behaviorReviewCleanupMessage(result))
 }
 
 func handleBehaviorReviewRequire(ctx context.Context, policyEngine *engine.Engine, options behaviorReviewOptions) (commandResult, error) {
@@ -149,7 +165,7 @@ func regressionProofMessage(proofPath, proofID string) string {
 
 func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, error) {
 	if len(arguments) == 0 {
-		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, require, status, prepare, or finalize")
+		return behaviorReviewOptions{}, fmt.Errorf("behavior-review requires capture-intent, cleanup, require, status, prepare, or finalize")
 	}
 	options := behaviorReviewOptions{action: arguments[0], format: "human"}
 	action, found := behaviorReviewActions[options.action]
@@ -164,6 +180,13 @@ func parseBehaviorReviewOptions(arguments []string) (behaviorReviewOptions, erro
 		return behaviorReviewOptions{}, err
 	}
 	return options, nil
+}
+
+func parseBehaviorReviewCleanup(_ *behaviorReviewOptions, arguments []string) error {
+	if len(arguments) != 0 {
+		return fmt.Errorf("behavior-review cleanup accepts only --format human or --format json")
+	}
+	return nil
 }
 
 func parseBehaviorReviewStatus(options *behaviorReviewOptions, arguments []string) error {
@@ -204,7 +227,7 @@ func parseBehaviorReviewCaptureIntent(options *behaviorReviewOptions, arguments 
 		return fmt.Errorf("unknown behavior-review capture-intent option %q", arguments[index])
 	}
 	if options.intentFile == "" {
-		return fmt.Errorf("behavior-review capture-intent requires exactly one --intent-file PATH")
+		return fmt.Errorf("behavior-review capture-intent requires exactly one --intent-file PATH|-")
 	}
 	return nil
 }

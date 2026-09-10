@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
@@ -12,6 +13,10 @@ func handleTaskStart(ctx context.Context, policyEngine *engine.Engine, arguments
 	request, err := parseTaskStartOptions(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
+	}
+	if request.IntentPath == "-" {
+		request.IntentPath = ""
+		request.Intent = os.Stdin
 	}
 	data, err := policyEngine.TaskStart(ctx, request)
 	if err != nil {
@@ -38,8 +43,8 @@ func parseTaskStartOptions(arguments []string) (engine.TaskStartRequest, error) 
 		}
 		arguments = arguments[consumed:]
 	}
-	if request.IntentPath == "" || seen["--files"] == seen["--module"] {
-		return request, fmt.Errorf("task-start requires --intent-file PATH and exactly one --files PATH or --module NAME")
+	if seen["--files"] == seen["--module"] {
+		return request, fmt.Errorf("task-start requires exactly one --files PATH or --module NAME")
 	}
 	return request, nil
 }

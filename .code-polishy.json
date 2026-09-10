@@ -82,6 +82,18 @@
         ]
       },
       {
+        "path": "docs/design/behavior-review-intent.md",
+        "sourcePaths": [
+          "internal/behaviorreview/intent.go",
+          "internal/behaviorreview/cleanup.go",
+          "internal/behaviorreview/types.go",
+          "internal/engine/behavior_review.go",
+          "cmd/code-polishy/behavior_review.go",
+          "cmd/code-polishy/behavior_review_output.go",
+          "cmd/code-polishy/task_start.go"
+        ]
+      },
+      {
         "path": "docs/design/installed-release-verification.md",
         "sourcePaths": [
           "scripts/test-installed-release.sh",

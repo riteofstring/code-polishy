@@ -622,13 +622,18 @@ request selects it. Base-aware plans and both gates disclose both `BEHAVIOR
 REVIEW` and `FINAL STATE`. Optional review reads no packet, proof, or receipt
 and does not change ordinary command selection or runtime.
 
-Before implementation, the agent harness supplies the user's original request
-and acceptance criteria to `behavior-review capture-intent` at the task base.
-The harness repeats capture before acting on each later correction. Correction
-capture may bind a dirty candidate-state digest; it invokes no tests or AI
-review. Repeated `--feature` options select configured features immediately;
-`behavior-review require --base TASK_BASE` can append feature coverage later
-only when that original intent exists. Records are additive.
+Before implementation, `task-start` projects the selected scope through current
+behavior-review policy. Optional review retains no request. When checked-in
+policy or an explicit feature selects review, the agent harness supplies the
+user's exact original request and acceptance criteria at the task base,
+preferably through bounded standard input. The harness repeats capture before
+acting on a later message only when it changes final artifacts, observable
+behavior, or acceptance criteria; status questions, approvals, authentication
+or publication directions, and operational coordination are not review intent.
+Correction capture may bind a dirty candidate-state digest; it invokes no tests
+or AI review. Repeated `--feature` options select configured features
+immediately; `behavior-review require --base TASK_BASE` can append feature
+coverage later only when that original intent exists. Records are additive.
 
 For selected review, `checkpoint-gate` and `merge-gate` validate the current
 clean candidate's receipt against the resolved base, base and candidate policy,
@@ -650,10 +655,12 @@ limits.
 
 An AI collaborator should treat the levels differently:
 
-1. Before implementing a non-documentation request, capture the exact
-   harness-supplied request at the task base with `behavior-review
-capture-intent`. Capture each later correction before acting on it. During
-   implementation, run exact named or module tests as useful.
+1. Before implementing a non-documentation request, run `task-start` for the
+   planned scope. When it reports that intent will be used, supply the exact
+   harness-provided request at the task base through task-start or
+   `behavior-review capture-intent --intent-file -`. Capture only later
+   artifact-affecting corrections before acting on them. During implementation,
+   run exact named or module tests as useful.
 2. For ordinary Markdown-only work, run `format --git-changes`, fix the built-in
    documentation findings, and run no application tests. This needs no user
    approval.

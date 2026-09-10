@@ -39,7 +39,7 @@ func TestDesignContextCLIExplainsModuleMatches(t *testing.T) {
 }
 
 func TestTaskStartCarriesActionableDesignGapsAndMatchesStandaloneContext(t *testing.T) {
-	root, policyRoot, intent := newTaskStartCLIRepository(t)
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
 	path := filepath.Join(root, policy.ConfigFilename)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestTaskStartCarriesActionableDesignGapsAndMatchesStandaloneContext(t *test
 	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
 	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename)
 	gitBehaviorReviewCLI(t, root, "commit", "-m", "Adopt without mapped rationale")
-	status, stdout, stderr := captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, intent), "--files", "value.go"))
+	status, stdout, stderr := captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "value.go"))
 	var packet engine.TaskStartPacket
 	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || packet.RepositoryContext == nil {
 		t.Fatalf("task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)

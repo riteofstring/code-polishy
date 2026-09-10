@@ -117,19 +117,21 @@ includes that product input.
 
 ## Bind a task request
 
-The harness should preserve the user's exact request before implementation and
-append each later correction before acting on it, even when review is currently
-optional. Intent capture is cheap: it runs no tests, launches no reviewer, and
-creates no review packet.
+Intent capture is required only when repository policy or an explicit feature
+selects behavior review. It runs no tests or reviewer, but it creates plaintext
+local evidence, so optional tasks must not capture requests speculatively.
 
-Capture the original request at the task-base commit:
+Capture a selected review's original request at the task-base commit,
+preferably without a duplicate transport file:
 
 ```sh
-code-polishy behavior-review capture-intent --intent-file PATH
+code-polishy behavior-review capture-intent --intent-file -
 ```
 
-Run the same command with a new exact intent file before acting on each
-correction. Correction capture may run while the worktree contains staged,
+Run the same command before acting on a later message only when it changes final
+artifacts, observable behavior, or acceptance criteria. Do not capture status
+questions, approvals, authentication or publication directions, or operational
+coordination. Correction capture may run while the worktree contains staged,
 unstaged, deleted, or untracked candidate paths. Each append records the exact
 text, current HEAD, a deterministic candidate-state digest, and the previous
 journal digest under one lock. If candidate state changes during capture, the
@@ -140,7 +142,7 @@ To request configured features immediately, repeat `--feature`:
 
 ```sh
 code-polishy behavior-review capture-intent \
-  --intent-file PATH \
+  --intent-file - \
   --feature checkout \
   --feature search
 ```
@@ -167,21 +169,27 @@ Inspect the decision without creating a packet or running commands:
 code-polishy behavior-review status --base TASK_BASE
 ```
 
-Capture and status always print a confirmation on standard output, including
-when piped, captured by an agent harness, or invoked through the installed
-launcher. Capture reports the canonical requested features and managed journal
-path. Status reports the review state, configured, affected, task-requested,
-required, completed, and missing features, plus the accepted receipt path when
-available. Status remains read-only.
+Capture, cleanup, and status always print a confirmation on standard output,
+including when piped, captured by an agent harness, or invoked through the
+installed launcher. Capture reports the canonical requested features and
+managed journal path. Status reports the review state, configured, affected,
+task-requested, required, completed, and missing features, plus the accepted
+receipt path when available. Status remains read-only.
 
-Add `--format json` to either command for one `behavior-review/v1` document
-with `action`, `state`, and the typed `capture` or `status` result. This replaces
-the human confirmation on standard output and does not create a report file:
+Add `--format json` to any of those commands for one `behavior-review/v1`
+document with `action`, `state`, and a typed result. This replaces the human
+confirmation on standard output and does not create a report file:
 
 ```sh
-code-polishy behavior-review capture-intent --intent-file PATH --format json
+code-polishy behavior-review capture-intent --intent-file - --format json
 code-polishy behavior-review status --base TASK_BASE --format json
+code-polishy behavior-review cleanup --format json
 ```
+
+Keep the complete behavior-review directory until every selected gate and
+evidence transfer has finished. Then `code-polishy behavior-review cleanup`
+removes the journal, packets, proofs, and receipts together. Cleanup is
+idempotent; running it earlier intentionally discards required review evidence.
 
 ## Complete a selected review
 
@@ -348,11 +356,13 @@ directories below `.code-polishy-reports`.
 Each captured request and the canonical reviewer instructions are limited to
 64 KiB. The journal permits at most 128 intent entries and 128 additive
 requirement entries within 4 MiB. Results and mapped design documents are
-limited to 256 KiB; artifact reads are limited to 8 MiB. Intent inputs must be
-regular, contained, bounded UTF-8 files. Candidate snapshots bind staged and
-unstaged patches plus deleted and untracked state without printing their
-contents. Artifact writes are atomic and concurrent journal appends use an
-interprocess lock.
+limited to 256 KiB; artifact reads are limited to 8 MiB. Intent input must be
+bounded UTF-8 from standard input or a regular contained file. Candidate
+snapshots bind staged and unstaged patches plus deleted and untracked state
+without printing their contents. Artifact writes are atomic and concurrent
+journal appends use an interprocess lock. Cleanup removes only the complete
+managed behavior-review directory, refuses symlink traversal, and is safe to
+repeat when the directory is absent.
 
 Digests and re-derivation detect stale or partially edited evidence; they are not
 signatures. The harness remains responsible for authentic request capture,

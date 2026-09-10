@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -103,18 +104,37 @@ func captureIntentInputs(ctx context.Context, repo repository.Repository, option
 	if err := ctx.Err(); err != nil {
 		return repository.CandidateStateSnapshot{}, nil, operational("capture behavior review intent", err)
 	}
-	if strings.TrimSpace(options.IntentPath) == "" {
-		return repository.CandidateStateSnapshot{}, nil, fmt.Errorf("%w: intent path is required", ErrInvalidInput)
-	}
 	snapshot, err := repo.CandidateState()
 	if err != nil {
 		return repository.CandidateStateSnapshot{}, nil, err
 	}
-	intent, err := readExternalRegularUTF8(options.IntentPath, maximumIntentBytes, true, "intent file")
+	intent, err := readIntentInput(options)
 	if err != nil {
 		return repository.CandidateStateSnapshot{}, nil, err
 	}
 	return snapshot, intent, nil
+}
+
+func readIntentInput(options CaptureIntentOptions) ([]byte, error) {
+	hasPath := strings.TrimSpace(options.IntentPath) != ""
+	hasReader := options.Intent != nil
+	if hasPath == hasReader {
+		return nil, fmt.Errorf("%w: exactly one intent file or standard input is required", ErrInvalidInput)
+	}
+	if hasPath {
+		return readExternalRegularUTF8(options.IntentPath, maximumIntentBytes, true, "intent file")
+	}
+	data, err := io.ReadAll(io.LimitReader(options.Intent, maximumIntentBytes+1))
+	if err != nil {
+		return nil, operational("read intent standard input", err)
+	}
+	if len(data) > maximumIntentBytes {
+		return nil, fmt.Errorf("%w: intent standard input exceeds %d bytes", ErrInvalidInput, maximumIntentBytes)
+	}
+	if !utf8.Valid(data) || strings.TrimSpace(string(data)) == "" {
+		return nil, fmt.Errorf("%w: intent standard input must be non-empty valid UTF-8", ErrInvalidInput)
+	}
+	return data, nil
 }
 
 func intentCaptureResult(appendResult intentJournalAppend, features []string) CaptureIntentResult {

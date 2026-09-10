@@ -44,7 +44,7 @@
     {
       "name": "behavior-review",
       "kind": "command",
-      "description": "Capture exact intent and verify requested behavior and final state.",
+      "description": "Capture selected-review intent, clean up its evidence, and verify requested behavior and final state.",
       "aliases": ["behavior proof"],
       "paths": [],
       "modules": [],
@@ -234,7 +234,7 @@
     {
       "name": "task-start",
       "kind": "command",
-      "description": "Validate task context and atomically capture the exact request in one packet.",
+      "description": "Validate task context and capture the exact request only when selected review will use it.",
       "aliases": ["task preparation"],
       "paths": [],
       "modules": [],

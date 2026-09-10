@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -45,11 +46,22 @@ type checkpointGateReviewPreparation struct {
 }
 
 type BehaviorReviewIntentCapture = behaviorreview.CaptureIntentResult
+type BehaviorReviewCleanupResult = behaviorreview.CleanupResult
 
 func (engine *Engine) CaptureBehaviorReviewIntent(ctx context.Context, intentPath string, features []string) (BehaviorReviewIntentCapture, error) {
 	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{
 		IntentPath: intentPath, Features: append([]string{}, features...),
 	})
+}
+
+func (engine *Engine) CaptureBehaviorReviewIntentInput(ctx context.Context, intent io.Reader, features []string) (BehaviorReviewIntentCapture, error) {
+	return behaviorreview.CaptureIntent(ctx, engine.Repository, behaviorreview.CaptureIntentOptions{
+		Intent: intent, Features: append([]string{}, features...),
+	})
+}
+
+func (engine *Engine) CleanupBehaviorReview(ctx context.Context) (BehaviorReviewCleanupResult, error) {
+	return behaviorreview.Cleanup(ctx, engine.Repository)
 }
 
 func (engine *Engine) PrepareBehaviorReview(ctx context.Context, base string) (behaviorreview.PrepareResult, error) {

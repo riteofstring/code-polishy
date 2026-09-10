@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.14 - 2026-09-10
+
+- Retain task intent only when configured or explicitly requested behavior
+  review will consume it, and make that decision explicit in task-start output.
+- Accept bounded intent through standard input, limit correction guidance to
+  artifact-affecting requests, and add explicit cleanup for review evidence.
+
 ## 0.24.13 - 2026-09-10
 
 - Accept a passing candidate test retry as suite evidence while retaining the

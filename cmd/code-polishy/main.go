@@ -23,7 +23,7 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 Commands:
   version
   capabilities [--query TEXT] [--format human|json]
-  task-start --intent-file PATH (--files PATH | --module NAME) [--feature NAME] [--situation NAME]
+  task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME] [--situation NAME]
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
@@ -35,7 +35,8 @@ Commands:
   gate
   checkpoint-gate --base REF
   merge-gate --base REF [--resume]
-  behavior-review capture-intent --intent-file PATH [--feature NAME...] [--format human|json]
+  behavior-review capture-intent --intent-file PATH|- [--feature NAME...] [--format human|json]
+  behavior-review cleanup [--format human|json]
   behavior-review require --base REF --feature NAME...
   behavior-review status --base REF [--format human|json]
   behavior-review prepare --base REF

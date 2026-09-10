@@ -79,6 +79,14 @@
       "public": true
     },
     {
+      "id": "behavior-review-intent-design",
+      "path": "docs/design/behavior-review-intent.md",
+      "title": "Behavior Review Intent Custody",
+      "summary": "Understand conditional intent capture, input custody, corrections, and cleanup.",
+      "aliases": ["intent-custody"],
+      "public": true
+    },
+    {
       "id": "capabilities",
       "path": "docs/capabilities.md",
       "title": "Repository Capability Discovery",

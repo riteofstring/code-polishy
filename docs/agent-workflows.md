@@ -10,22 +10,25 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 
 ## Choose a workflow
 
-| Task                                   | First command                                                                |
-| -------------------------------------- | ---------------------------------------------------------------------------- |
-| Read-only capability question          | `code-polishy capabilities --query "QUERY"`                                  |
-| Ordinary implementation                | `code-polishy task-start --intent-file PATH --module NAME`                   |
-| Explicit behavior-sensitive change     | `code-polishy task-start --intent-file PATH --module NAME --feature FEATURE` |
-| Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`                  |
-| Dependency change                      | `code-polishy docs read supply-chain`                                        |
-| Release or upgrade                     | `code-polishy docs read release-checklist`                                   |
-| Final delivery                         | `code-polishy behavior-review status --base REVIEW_BASE`                     |
+| Task                                   | First command                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| Read-only capability question          | `code-polishy capabilities --query "QUERY"`                               |
+| Ordinary implementation                | `code-polishy task-start --module NAME`                                   |
+| Explicit behavior-sensitive change     | `code-polishy task-start --intent-file - --module NAME --feature FEATURE` |
+| Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`               |
+| Dependency change                      | `code-polishy docs read supply-chain`                                     |
+| Release or upgrade                     | `code-polishy docs read release-checklist`                                |
+| Final delivery                         | `code-polishy merge-gate --base MERGE_TARGET`                             |
 
 Use one file or directory operand with `--files PATH` instead of `--module NAME`
-when that identifies the task scope. A successful `task-start` already captures
-the request and returns its current design context and operational handoffs;
-read that packet before editing and do not recapture the same request through
-the component command. The first command does not replace selected reviews or
-event-required verification. Read-only
+when that identifies the task scope. `task-start` returns current design context
+and operational handoffs. Its `intent.captured` and `intent.willBeUsed` fields
+state whether selected behavior review retained the request. Optional tasks
+create no intent journal and schedule no review-status action. If configured
+policy selects review, rerun the unchanged task-start command with
+`--intent-file -` and supply the exact request on standard input before editing.
+Do not recapture a request already captured by task-start. The first command
+does not replace selected reviews or event-required verification. Read-only
 questions require no capture or tests. For delivery, follow the status and
 the configured final-gate owner. Capability queries identify candidates only;
 explicit feature operands require the caller's intended canonical name or
@@ -94,36 +97,35 @@ invalid selected handoff blocks context composition. Discovery does not execute
 procedure commands, obtain credentials, or grant approval. Keep managed
 `AGENTS.md` canonical; see [Operational Handoffs](operational-handoffs.md).
 
-Before implementing a non-documentation request, have the harness save the
-user's original request and supplied acceptance criteria to a bounded UTF-8
-file, then run this command from the clean task-base commit:
+Intent is review evidence, not task memory. Capture the original request only
+when checked-in policy or an explicitly selected feature requires behavior
+review. A harness can supply the exact request without a transport file:
 
 ```sh
-code-polishy behavior-review capture-intent --intent-file PATH
+code-polishy behavior-review capture-intent --intent-file -
 ```
 
-Code Polishy copies that text into its managed journal. If implementation has
-already started without a capture at the task base, stop and report the missing
-boundary instead of writing a new summary of the request.
-
-`task-start --intent-file PATH` with one file, directory, or module selector
-performs this same capture after validating its complete bounded context
-packet. Use either capture entry point once for each exact request or later
-correction; see [Capability Discovery](capabilities.md#start-a-task).
+`task-start` performs the same bounded standard-input or regular-file capture
+only when its selected scope will use the intent. If selected review reaches
+implementation without a capture at the task base, stop and report the missing
+boundary instead of inventing a summary. See [Capability
+Discovery](capabilities.md#start-a-task).
 
 An upgrade has one explicit authority transition. The outgoing locked release
 and its installed guidance govern until the exact verified incoming release's
 `lock` command atomically replaces `.code-polishy.lock.json`. That command may
 run while the outgoing lock is active and is the only incoming mutation allowed
-before the cutover. Incoming guidance governs immediately afterward. If the
-outgoing release had no intent-capture requirement, capture the caller's exact
-upgrade request from the new clean lock commit before making any further target
-change.
+before the cutover. Incoming guidance governs immediately afterward. If
+incoming policy selects review that outgoing guidance did not capture, capture
+the caller's exact upgrade request from the new clean lock commit before any
+further target change.
 
-When the user corrects the implementation, capture that exact correction before
-acting on it. This later append may run while candidate files are staged,
-unstaged, deleted, or untracked. It records the current HEAD and a candidate
-state digest; it still runs no tests or AI review.
+While selected review remains active, capture a later user message only when it
+changes final artifacts, observable behavior, or acceptance criteria. Do not
+capture status questions, approvals, authentication or publication directions,
+or other operational coordination. An artifact-affecting correction may be
+captured from standard input while files are staged, unstaged, deleted, or
+untracked; the append records the current HEAD and candidate-state digest.
 
 Choose verification from the event that actually changed risk:
 
@@ -275,13 +277,12 @@ was skipped reports `NOT RUN` and does not block. A selected clean-context
 subagent review becomes gate-checkable evidence without making the subagent a
 policy engine:
 
-1. Before implementation, run `code-polishy behavior-review capture-intent`
-   from the task base with the exact user request supplied by the harness. Run
-   it again before acting on every later user correction. Later captures may
-   occur while code is staged, unstaged, deleted, or untracked; Code Polishy
-   binds each entry to the exact HEAD and a digest of that candidate state.
-   Repeat `--feature` only for configured features the user explicitly named.
-   Capture itself runs no tests or AI review.
+1. When task-start reports `intent.willBeUsed: true`, capture the exact request
+   at the task base through task-start or `behavior-review capture-intent
+--intent-file -`. Capture later messages only when they alter artifacts,
+   behavior, or acceptance criteria. Later captures may occur with a dirty
+   candidate and bind its exact state. Repeat `--feature` only for configured
+   features the user explicitly named. Capture runs no tests or AI review.
 2. If the user adds review coverage later, commit the clean candidate and run
    `code-polishy behavior-review require --base TASK_BASE --feature NAME`.
    Requirements are additive and cannot be removed. Never infer a feature from
@@ -321,6 +322,10 @@ candidates stay optional unless a task request or deliberately configured
 feature selects them. Ordinary agent reviews remain useful advisory evidence.
 Local digests do not authenticate the source of the request, subagent identity,
 or subagent context; see the policy's trust limits.
+
+After no gate or evidence transfer needs the review artifacts, remove their
+plaintext and derived evidence explicitly with `code-polishy behavior-review
+cleanup`. Running cleanup earlier intentionally invalidates the selected review.
 
 ## Isolated task sessions
 

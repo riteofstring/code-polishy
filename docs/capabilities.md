@@ -76,34 +76,46 @@ the managed record when moving a repository that needs later upgrade inspection.
 
 ## Start a task
 
-When the request is ready to implement, supply its exact original text and one
-file, directory, or module scope:
+When the request is ready to implement, select one file, directory, or module
+scope. Ordinary optional-review work needs no intent input:
 
 ```sh
-code-polishy task-start --intent-file /tmp/request.txt --files frontend
-code-polishy task-start --intent-file /tmp/request.txt --module application \
+code-polishy task-start --files frontend
+code-polishy task-start --module application --situation deployment
+```
+
+`task-start` projects that scope through configured merge/checkpoint review
+policy. If policy or an explicit `--feature` selects review, supply the exact
+request through bounded standard input or an existing regular file:
+
+```sh
+code-polishy task-start --intent-file - --module application \
   --feature checkout --situation deployment
 ```
 
-`task-start` validates all supplied inputs and composes the complete packet
-before publishing the same atomic intent capture used by `behavior-review
-capture-intent`. The first capture requires a clean task base; later corrections
-may be captured against a dirty candidate. Only explicit `--feature` operands
-activate configured features. Request wording never selects them.
+Selected review requires intent and atomically publishes the same capture used
+by `behavior-review capture-intent`. Optional review rejects an unnecessary
+intent input instead of retaining plaintext that no review will consume. Only
+explicit `--feature` operands activate configured features; request wording
+never selects them. Task-start requires a clean task base. Capture later
+artifact-affecting corrections with the component command.
 
-The command emits one `task-start/v1` JSON document, bounded to 16 MiB. It
-contains the locked release and catalog identity, capture identity and canonical
-features, requested and expanded selection, current design documents, selected
-operational handoffs, workflow references, configured guards and verification
-requirements, final-gate owner,
-and ordered next actions. Guard entries preserve capability discovery's
+The command emits one `task-start/v2` JSON document, bounded to 16 MiB. Its
+`intent.captured` and `intent.willBeUsed` fields make custody and review
+selection explicit. It also contains the task base, locked release and catalog
+identity, any capture identity and canonical features, requested and expanded
+selection, current design documents, selected operational handoffs, workflow
+references, configured guards and verification requirements, final-gate owner,
+and ordered next actions. Optional tasks omit review-status actions. Guard
+entries preserve capability discovery's
 availability and enforcement facts; listing a guard does not execute or
 activate it. Document selection uses the same context resolver, with
 `task-start` as its actual workflow situation.
 
 Invalid selection, unknown feature operands, unavailable catalog evidence,
-invalid selected documents, and oversized packets create no capture. A
-candidate or intent journal that changes during preparation prevents publication
-of the prepared entry. The command runs no tests, reviews, dependency operations,
-or repository-controlled commands. Follow the packet's next actions using the
-authoritative component commands and the locked workflow's event rules.
+invalid selected documents, missing or unused intent, and oversized packets
+create no capture. A candidate or intent journal that changes during preparation
+prevents publication of the prepared entry. The command runs no tests, reviews,
+dependency operations, or repository-controlled commands. Follow the packet's
+next actions using the authoritative component commands and the locked
+workflow's event rules.

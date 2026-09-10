@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/riteofstring/code-polishy/internal/engine"
 )
 
 func TestParseBehaviorReviewOptionsAcceptsStrictFeatureAndReviewRequests(t *testing.T) {
@@ -23,6 +25,11 @@ func TestParseBehaviorReviewOptionsAcceptsStrictFeatureAndReviewRequests(t *test
 			name:      "capture intent",
 			arguments: []string{"capture-intent", "--feature", "checkout", "--intent-file=intent.md", "--feature=search"},
 			want:      behaviorReviewOptions{format: "human", action: "capture-intent", intentFile: "intent.md", features: []string{"checkout", "search"}},
+		},
+		{
+			name:      "cleanup",
+			arguments: []string{"cleanup", "--format=json"},
+			want:      behaviorReviewOptions{format: "json", action: "cleanup"},
 		},
 		{
 			name:      "require",
@@ -66,6 +73,8 @@ func TestParseBehaviorReviewOptionsRejectsIncompleteDuplicateAndUnknownRequests(
 		{"capture-intent", "--intent-file", "intent.md", "--intent-file", "other.md"},
 		{"capture-intent", "--intent-file", "intent.md", "--feature"},
 		{"capture-intent", "--base", "origin/main"},
+		{"cleanup", "extra"},
+		{"cleanup", "--base", "origin/main"},
 		{"require"},
 		{"require", "--base", "origin/main"},
 		{"require", "--feature", "checkout"},
@@ -127,6 +136,7 @@ func TestBehaviorReviewSuccessMessagesStayConciseAndAlwaysNameTheArtifact(t *tes
 	t.Parallel()
 	for name, message := range map[string]string{
 		"capture":  behaviorReviewIntentCapturedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "intent-123", nil),
+		"cleanup":  behaviorReviewCleanupMessage(engine.BehaviorReviewCleanupResult{Path: ".code-polishy-reports/behavior-review", Removed: true}),
 		"require":  behaviorReviewRequirementAddedMessage(".code-polishy-reports/behavior-review/intent-journal.json", "requirement-123", []string{"checkout", "search"}),
 		"prepare":  behaviorReviewPreparedMessage(".code-polishy-reports/behavior-review/packet.json", "review-123"),
 		"finalize": behaviorReviewFinalizedMessage(".code-polishy-reports/behavior-review/receipt.json", "review-123"),
@@ -150,7 +160,8 @@ func assertBehaviorReviewCLIHelpContract(t *testing.T, policyRoot string) {
 	status, stdout, stderr := runBehaviorReviewCLI(t, []string{"--policy-root", policyRoot, "help"})
 	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
 	for _, syntax := range []string{
-		"behavior-review capture-intent --intent-file PATH [--feature NAME...]",
+		"behavior-review capture-intent --intent-file PATH|- [--feature NAME...]",
+		"behavior-review cleanup [--format human|json]",
 		"behavior-review require --base REF --feature NAME...",
 		"behavior-review status --base REF",
 		"behavior-review prepare --base REF",

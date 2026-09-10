@@ -6,6 +6,8 @@ composes those facts with bounded document content and operational handoffs.
 The CLI renders the result; it must not implement a second mapping algorithm.
 Task-start uses the same engine operation so an agent receives the same rationale
 and coverage information whether it starts a task or performs a separate lookup.
+It composes that context with behavior-review selection, while request custody
+and cleanup follow the separately mapped behavior-review intent design.
 
 Module and source mappings are additive. A source-specific decision can explain
 a local exception or boundary without replacing the module's wider constraints.
