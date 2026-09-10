@@ -54,6 +54,20 @@ func TestRunWithEvidencePreservesSuiteAttemptAndObservedFailure(t *testing.T) {
 	}
 }
 
+func TestRetrySuiteUsesFocusedCommandWithoutRequiringFullSuiteArtifacts(t *testing.T) {
+	suite := policy.TestSuite{
+		Name: "unit", Argv: []string{"test", "all"}, RetryArgv: []string{"test", "failed"},
+		Artifacts: []policy.TestArtifact{{Path: "junit.xml", Type: "junit", Required: true}},
+	}
+	retry := RetrySuite(suite)
+	if !slices.Equal(retry.Argv, []string{"test", "failed"}) || len(retry.Artifacts) != 0 {
+		t.Fatalf("retry suite = %+v", retry)
+	}
+	if !slices.Equal(suite.Argv, []string{"test", "all"}) || len(suite.Artifacts) != 1 {
+		t.Fatalf("source suite changed = %+v", suite)
+	}
+}
+
 func TestRunUsesVerboseReporterForDetailedDirectExecution(t *testing.T) {
 	t.Parallel()
 	repo := repository.Repository{Root: t.TempDir()}

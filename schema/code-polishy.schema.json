@@ -674,6 +674,7 @@
         "scope": { "enum": ["module", "repository"] },
         "reusable": { "type": "boolean" },
         "cost": { "enum": ["quick", "standard", "expensive"] },
+        "retryArgv": { "$ref": "#/$defs/argv" },
         "extraInputs": { "$ref": "#/$defs/paths" },
         "covers": { "$ref": "#/$defs/identifierArray" },
         "artifacts": {

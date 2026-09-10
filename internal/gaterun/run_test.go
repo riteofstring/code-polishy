@@ -215,6 +215,27 @@ func TestDiagnosticAttemptDoesNotChangePlannedOutcomeOrReceipt(t *testing.T) {
 	}
 }
 
+func TestPassingPlannedRetryChangesOutcomeAndWritesReceipt(t *testing.T) {
+	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit")})
+	run := startRun(t, t.TempDir(), identity)
+	recordAttempt(t, run, 0, Failed, 1, "", "first failure", 16)
+	retried := recordAttempt(t, run, 0, Passed, 0, "focused retry pass", "", 16)
+	if retried.Status != Passed || retried.ReceiptPath == "" || retried.ReceiptSHA256 == "" || len(retried.Attempts) != 2 ||
+		retried.Attempts[1].Diagnostic || retried.Attempts[1].Status != Passed {
+		t.Fatalf("retried outcome = %+v", retried)
+	}
+	final, err := run.Finalize(FinalizeOptions{Status: RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(final.Commands) != 1 || final.Commands[0].ReceiptPath == "" {
+		t.Fatalf("final report = %+v", final)
+	}
+	if _, err := os.Stat(physicalArtifactPath(run.repositoryRoot, final.Commands[0].ReceiptPath)); err != nil {
+		t.Fatalf("retry receipt error = %v", err)
+	}
+}
+
 func TestDiagnosticAttemptRequiresFailedPlannedOutcome(t *testing.T) {
 	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit")})
 	run := startRun(t, t.TempDir(), identity)

@@ -49,6 +49,7 @@ type gateArtifactRunner struct {
 	reusable          map[int]gaterun.ReusableReceipt
 	logPaths          map[testLogKey]string
 	failedTests       map[string]int
+	retryCommands     map[string]policy.Command
 	artifacts         map[testLogKey][]testartifact.Record
 	artifactExecution *testartifact.Execution
 	receipts          *testReceiptController
@@ -63,6 +64,10 @@ type testLogKey struct {
 }
 
 type gateDiagnosticRunner struct {
+	parent *gateArtifactRunner
+}
+
+type gateRetryRunner struct {
 	parent *gateArtifactRunner
 }
 
@@ -157,9 +162,14 @@ func newGateArtifactRunner(engine *Engine, run *gaterun.Run, commands []MergeGat
 		progress = io.Discard
 	}
 	receipts.RenderPlan()
+	retryCommands := map[string]policy.Command{}
+	for _, suite := range engine.Repository.Config.Tests.Suites {
+		retryCommands[suite.Name] = suiteCommand(testpolicy.RetrySuite(suite))
+	}
 	return &gateArtifactRunner{
 		delegate: engine.Runner, run: run, expected: commands, reusable: reusable,
-		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, artifacts: map[testLogKey][]testartifact.Record{}, progress: progress,
+		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, retryCommands: retryCommands,
+		artifacts: map[testLogKey][]testartifact.Record{}, progress: progress,
 		artifactExecution: artifacts, receipts: receipts,
 	}
 }
@@ -509,7 +519,7 @@ func gateRunTestEvidence(commands []TestCommandEvidence) []gaterun.TestEvidence 
 			ChangedModuleOverlap: append([]string{}, command.ChangedModuleOverlap...), ImpactedModuleOverlap: append([]string{}, command.ImpactedModuleOverlap...),
 			ChangedPathOverlap: append([]string{}, command.ChangedPathOverlap...), Status: status,
 			FailureCategory: gaterun.FailureCategory(command.FailureCategory), FailureMessage: command.FailureMessage,
-			Attempt: command.Attempt, LogPath: command.LogPath, Diagnostic: command.Attempt > 1 || command.Target != "working-tree",
+			Attempt: command.Attempt, LogPath: command.LogPath, Diagnostic: command.Diagnostic,
 			Artifacts: gateRunTestArtifacts(command.Artifacts),
 			Reused:    command.Reused, ReceiptSourcePath: command.ReceiptPath, ReceiptSourceSHA256: command.ReceiptSHA256,
 		})

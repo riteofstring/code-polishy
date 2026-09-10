@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
@@ -53,6 +54,7 @@ type TestCommandEvidence struct {
 	LogPath               string                 `json:"logPath,omitempty"`
 	Artifacts             []testartifact.Record  `json:"artifacts"`
 	Reused                bool                   `json:"reused"`
+	Diagnostic            bool                   `json:"diagnostic"`
 	ReceiptPath           string                 `json:"receiptPath,omitempty"`
 	ReceiptSHA256         string                 `json:"receiptSha256,omitempty"`
 }
@@ -66,6 +68,10 @@ type TestFailureDiagnostic struct {
 
 type TestDiagnosticRunnerProvider interface {
 	TestDiagnosticRunner() runner.Runner
+}
+
+type TestRetryRunnerProvider interface {
+	TestRetryRunner() runner.Runner
 }
 
 func NewChangedTestScope(request testpolicy.Request) *ChangedTestScope {
@@ -94,7 +100,8 @@ func (engine *Engine) testCommandEvidence(plan testpolicy.Plan, selection reposi
 			Result:                execution.Result, FailureCategory: execution.FailureCategory, FailureMessage: execution.FailureMessage,
 			Attempt:   execution.Attempt,
 			Artifacts: append([]testartifact.Record{}, execution.Artifacts...),
-			Reused:    execution.Reused, ReceiptPath: execution.ReceiptPath, ReceiptSHA256: execution.ReceiptSHA256,
+			Reused:    execution.Reused, Diagnostic: target != "working-tree",
+			ReceiptPath: execution.ReceiptPath, ReceiptSHA256: execution.ReceiptSHA256,
 		}
 		result = append(result, evidence)
 	}
@@ -123,43 +130,74 @@ func (engine *Engine) testFailureDiagnostics(ctx context.Context, plan testpolic
 	}
 	diagnostics := []TestFailureDiagnostic{}
 	evidence := []TestCommandEvidence{}
-	commandRunner := testDiagnosticRunner(engine.Runner)
+	diagnosticRunner := testDiagnosticRunner(engine.Runner)
 	for _, original := range executions {
 		if !original.Failed() {
 			continue
 		}
-		retry := testpolicy.ExecuteSuite(ctx, engine.Repository.Root, commandRunner, original.Suite, original.Attempt+1)
-		retryEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{retry}, "working-tree")[0]
-		evidence = append(evidence, retryEvidence)
-		diagnostic := TestFailureDiagnostic{Suite: original.Suite.Name, CandidateRetry: &retryEvidence}
-		if !retry.Failed() {
-			diagnostic.State = TestDiagnosticIntermittentObserved
-			diagnostics = append(diagnostics, diagnostic)
-			continue
-		}
-		if retry.FailureCategory != runner.FailureCommandExit {
-			diagnostic.State = TestDiagnosticBaselineUnavailable
-			diagnostics = append(diagnostics, diagnostic)
-			continue
-		}
-		baseline, available := engine.replayTestBaseline(ctx, selection.Base, commandRunner, original.Suite, original.Attempt+2)
-		if baseline != nil {
-			baselineEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{*baseline}, selection.Base)[0]
-			evidence = append(evidence, baselineEvidence)
-			diagnostic.BaselineReplay = &baselineEvidence
-		}
-		if !available || baseline == nil {
-			diagnostic.State = TestDiagnosticBaselineUnavailable
-		} else if !baseline.Failed() {
-			diagnostic.State = TestDiagnosticCandidateRegression
-		} else if baseline.FailureCategory == runner.FailureCommandExit {
-			diagnostic.State = TestDiagnosticBaselineReproduced
-		} else {
-			diagnostic.State = TestDiagnosticBaselineUnavailable
-		}
+		diagnostic, diagnosticEvidence := engine.diagnoseTestFailure(ctx, plan, selection, original, diagnosticRunner)
 		diagnostics = append(diagnostics, diagnostic)
+		evidence = append(evidence, diagnosticEvidence...)
 	}
 	return diagnostics, evidence
+}
+
+func (engine *Engine) diagnoseTestFailure(ctx context.Context, plan testpolicy.Plan, selection repository.Selection, original testpolicy.SuiteExecution, diagnosticRunner runner.Runner) (TestFailureDiagnostic, []TestCommandEvidence) {
+	outcomeBearingRetry := original.FailureCategory == runner.FailureCommandExit
+	retryRunner := diagnosticRunner
+	if outcomeBearingRetry {
+		retryRunner = testRetryRunner(engine.Runner)
+	}
+	retry := testpolicy.ExecuteSuite(ctx, engine.Repository.Root, retryRunner, testpolicy.RetrySuite(original.Suite), original.Attempt+1)
+	retryEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{retry}, "working-tree")[0]
+	retryEvidence.Diagnostic = !outcomeBearingRetry
+	diagnostic := TestFailureDiagnostic{Suite: original.Suite.Name, CandidateRetry: &retryEvidence}
+	evidence := []TestCommandEvidence{retryEvidence}
+	if !retry.Failed() {
+		diagnostic.State = passingRetryState(outcomeBearingRetry)
+		return diagnostic, evidence
+	}
+	if !outcomeBearingRetry || retry.FailureCategory != runner.FailureCommandExit {
+		diagnostic.State = TestDiagnosticBaselineUnavailable
+		return diagnostic, evidence
+	}
+	baseline, available := engine.replayTestBaseline(ctx, selection.Base, diagnosticRunner, original.Suite, original.Attempt+2)
+	if baseline != nil {
+		baselineEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{*baseline}, selection.Base)[0]
+		evidence = append(evidence, baselineEvidence)
+		diagnostic.BaselineReplay = &baselineEvidence
+	}
+	diagnostic.State = baselineDiagnosticState(baseline, available)
+	return diagnostic, evidence
+}
+
+func passingRetryState(outcomeBearing bool) string {
+	if outcomeBearing {
+		return TestDiagnosticIntermittentObserved
+	}
+	return TestDiagnosticBaselineUnavailable
+}
+
+func baselineDiagnosticState(baseline *testpolicy.SuiteExecution, available bool) string {
+	if !available || baseline == nil {
+		return TestDiagnosticBaselineUnavailable
+	}
+	if !baseline.Failed() {
+		return TestDiagnosticCandidateRegression
+	}
+	if baseline.FailureCategory == runner.FailureCommandExit {
+		return TestDiagnosticBaselineReproduced
+	}
+	return TestDiagnosticBaselineUnavailable
+}
+
+func testRetryRunner(commandRunner runner.Runner) runner.Runner {
+	if provider, ok := commandRunner.(TestRetryRunnerProvider); ok {
+		if retryRunner := provider.TestRetryRunner(); retryRunner != nil {
+			return retryRunner
+		}
+	}
+	return commandRunner
 }
 
 func testDiagnosticRunner(commandRunner runner.Runner) runner.Runner {
@@ -169,6 +207,26 @@ func testDiagnosticRunner(commandRunner runner.Runner) runner.Runner {
 		}
 	}
 	return commandRunner
+}
+
+func resolveIntermittentTestFindings(findings []policy.Finding, diagnostics []TestFailureDiagnostic) []policy.Finding {
+	recovered := map[string]bool{}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.State == TestDiagnosticIntermittentObserved {
+			recovered[diagnostic.Suite] = true
+		}
+	}
+	if len(recovered) == 0 {
+		return findings
+	}
+	result := make([]policy.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if finding.Path == "repository" && recovered[finding.Subject] && strings.HasPrefix(finding.Check, "test.") {
+			continue
+		}
+		result = append(result, finding)
+	}
+	return result
 }
 
 func (engine *Engine) replayTestBaseline(ctx context.Context, base string, commandRunner runner.Runner, suite policy.TestSuite, attempt int) (*testpolicy.SuiteExecution, bool) {
@@ -229,6 +287,7 @@ func sameTestSuiteIdentity(candidate, baseline policy.TestSuite) bool {
 
 func sameTestSuiteCollections(candidate, baseline policy.TestSuite) bool {
 	return slices.Equal(candidate.Modules, baseline.Modules) && slices.Equal(candidate.Argv, baseline.Argv) &&
+		slices.Equal(candidate.RetryArgv, baseline.RetryArgv) &&
 		slices.Equal(candidate.Paths, baseline.Paths) && slices.Equal(candidate.RunOn, baseline.RunOn) &&
 		slices.Equal(candidate.ExtraInputs, baseline.ExtraInputs) &&
 		slices.Equal(candidate.Covers, baseline.Covers) &&

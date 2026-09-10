@@ -18,9 +18,10 @@ Every test suite declares:
   `full` profiles, or the isolated `supplemental` profile.
 
 A suite may also declare bounded `extraInputs`, exact JUnit or Cobertura XML
-outputs under `artifacts`, and compatible component suites it `covers`. Code
-Polishy gives each attempt a private managed directory, validates declared
-outputs after the command exits, and records their digests in gate evidence.
+outputs under `artifacts`, a focused `retryArgv`, and compatible component
+suites it `covers`. Code Polishy gives each attempt a private managed directory,
+validates declared outputs after the command exits, and records their digests
+in gate evidence.
 
 Module suites default to quick and all three profiles. Repository suites
 default to standard and full only. Browser, visual, E2E, performance, and live
@@ -485,11 +486,28 @@ assessments, and final status. It records command failure categories
 from runner facts only: `command-exit`, `timeout`, `canceled`, `environment`,
 `resource`, or `operational`. Test evidence also identifies suite ownership,
 changed and impacted overlap, exit status, attempt count, and log path.
-Before an exact-base replay, Code Polishy loads the base release and
-configuration and requires the named base suite to match the candidate suite
-definition. An unavailable or changed suite reports `baseline-unavailable`
-instead of guessing. Candidate retries and exact-base replays may add observed
-diagnostic states; they never turn the original gate failure into a pass.
+After a candidate suite fails, Code Polishy makes one candidate retry. By
+default it repeats the suite command. A non-reusable suite may instead declare
+`retryArgv` for a repository-owned command that uses the test runner's recorded
+failure state to execute only the failed tests. Declaring it asserts that the
+first command continues through its complete selection after failures and that
+the retry command selects every failure from that attempt. The retry remains
+bound to the same suite, working directory, environment, resources, and timeout.
+Its command must satisfy the same no-shell, no-no-op, and no-pass-with-no-tests
+rules as the full command.
+
+A passing candidate retry satisfies the suite only when the first failure was
+an ordinary nonzero test-command exit, and records a gate-run receipt. Timeout,
+cancellation, environment, resource, operational, and artifact failures remain
+blocking even if a diagnostic retry exits zero. The original failed attempt,
+its artifacts and log, the passing retry, and the `intermittent-observed`
+diagnosis all remain in the gate report. A failed retry remains a blocking
+failure. Before an exact-base replay, Code
+Polishy loads the base release and configuration and requires the named base
+suite, including its retry contract, to match the candidate definition. An
+unavailable or changed suite reports `baseline-unavailable` instead of guessing.
+Exact-base replays are diagnostic only and can never turn the candidate result
+into a pass.
 
 After documentation classification, recommended is selected only when every
 changed path maps to exactly one allowlisted module and the existing impact

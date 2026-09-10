@@ -316,6 +316,8 @@ func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, s
 		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, runResult.Executions)
 		report.TestDiagnostics = diagnostics
 		report.TestCommands = append(report.TestCommands, diagnosticEvidence...)
+		report.Findings = resolveIntermittentTestFindings(report.Findings, diagnostics)
+		report.Summary = summarizeReport(report)
 	}
 	return report, nil
 }

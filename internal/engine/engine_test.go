@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -453,7 +454,7 @@ func TestDirectChangedTestPreservesCommandEvidenceWithoutDiagnosticRetry(t *test
 	}
 }
 
-func TestGateStyleTestFailureDiagnosticsStayFactBasedAndKeepOriginalFinding(t *testing.T) {
+func TestGateStyleTestFailureDiagnosticsResolveOnlyPassingCommandFailures(t *testing.T) {
 	for _, testCase := range []struct {
 		name              string
 		candidateFailures int
@@ -461,22 +462,27 @@ func TestGateStyleTestFailureDiagnosticsStayFactBasedAndKeepOriginalFinding(t *t
 		baselineFailure   bool
 		wantState         string
 		wantCommands      int
+		wantFindings      int
 	}{
 		{
 			name: "intermittent observed", candidateFailures: 1,
-			wantState: TestDiagnosticIntermittentObserved, wantCommands: 2,
+			wantState: TestDiagnosticIntermittentObserved, wantCommands: 2, wantFindings: 0,
 		},
 		{
 			name: "candidate regression", candidateFailures: 2,
-			wantState: TestDiagnosticCandidateRegression, wantCommands: 3,
+			wantState: TestDiagnosticCandidateRegression, wantCommands: 3, wantFindings: 1,
 		},
 		{
 			name: "baseline reproduced", candidateFailures: 2, baselineFailure: true,
-			wantState: TestDiagnosticBaselineReproduced, wantCommands: 3,
+			wantState: TestDiagnosticBaselineReproduced, wantCommands: 3, wantFindings: 1,
 		},
 		{
 			name: "baseline unavailable", candidateFailures: 2, candidateCategory: runner.FailureEnvironment,
-			wantState: TestDiagnosticBaselineUnavailable, wantCommands: 2,
+			wantState: TestDiagnosticBaselineUnavailable, wantCommands: 2, wantFindings: 1,
+		},
+		{
+			name: "environment recovery remains unavailable", candidateFailures: 1, candidateCategory: runner.FailureEnvironment,
+			wantState: TestDiagnosticBaselineUnavailable, wantCommands: 2, wantFindings: 1,
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -501,7 +507,7 @@ func TestGateStyleTestFailureDiagnosticsStayFactBasedAndKeepOriginalFinding(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(report.Findings) != 1 || len(report.TestDiagnostics) != 1 || report.TestDiagnostics[0].State != testCase.wantState ||
+			if len(report.Findings) != testCase.wantFindings || len(report.TestDiagnostics) != 1 || report.TestDiagnostics[0].State != testCase.wantState ||
 				len(report.TestCommands) != testCase.wantCommands {
 				t.Fatalf("report=%+v", report)
 			}
@@ -515,6 +521,46 @@ func TestGateStyleTestFailureDiagnosticsStayFactBasedAndKeepOriginalFinding(t *t
 				}
 			}
 		})
+	}
+}
+
+func TestGateStyleFailureUsesConfiguredFocusedRetry(t *testing.T) {
+	root := contentRepository(t, nil)
+	configurationPath := filepath.Join(root, policy.ConfigFilename)
+	configuration, err := os.ReadFile(configurationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured := strings.Replace(
+		string(configuration),
+		`"argv":["go","test","./..."]`,
+		`"argv":["go","test","./..."],"retryArgv":["go","test","./...","-run","TestFailed"]`,
+		1,
+	)
+	writeEngineFile(t, root, policy.ConfigFilename, configured, 0o600)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "content/data.json", "{\"updated\":true}\n", 0o600)
+	commitEngineCandidate(t, root, "candidate")
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &focusedRetryEngineRunner{candidateRoot: policyEngine.Repository.Root}
+	policyEngine.Runner = commandRunner
+	selection, err := policyEngine.SelectBase("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := policyEngine.test(t.Context(), testpolicy.Request{Changed: selection}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || len(report.TestDiagnostics) != 1 || report.TestDiagnostics[0].State != TestDiagnosticIntermittentObserved {
+		t.Fatalf("report = %+v", report)
+	}
+	want := [][]string{{"go", "test", "./..."}, {"go", "test", "./...", "-run", "TestFailed"}}
+	if !reflect.DeepEqual(commandRunner.commands, want) {
+		t.Fatalf("commands = %v, want %v", commandRunner.commands, want)
 	}
 }
 
@@ -1462,6 +1508,27 @@ type diagnosticEngineRunner struct {
 	candidateCategory runner.FailureCategory
 	baselineFailure   bool
 	candidateRuns     int
+}
+
+type focusedRetryEngineRunner struct {
+	candidateRoot string
+	commands      [][]string
+}
+
+func (testRunner *focusedRetryEngineRunner) Run(ctx context.Context, root string, command policy.Command) error {
+	_, err := testRunner.RunWithResult(ctx, root, command)
+	return err
+}
+
+func (testRunner *focusedRetryEngineRunner) RunWithResult(_ context.Context, root string, command policy.Command) (runner.Result, error) {
+	if root != testRunner.candidateRoot {
+		return runner.Result{}, nil
+	}
+	testRunner.commands = append(testRunner.commands, slices.Clone(command.Argv))
+	if len(testRunner.commands) == 1 {
+		return runner.Result{ExitStatus: 17, FailureCategory: runner.FailureCommandExit}, errors.New("candidate suite failed")
+	}
+	return runner.Result{ExitStatus: 0}, nil
 }
 
 func (testRunner *diagnosticEngineRunner) Run(ctx context.Context, root string, command policy.Command) error {

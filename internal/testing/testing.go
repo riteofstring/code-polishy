@@ -288,6 +288,7 @@ func duplicateSuiteKey(suite policy.TestSuite) (string, bool) {
 	}
 	payload := struct {
 		Argv               []string
+		RetryArgv          []string
 		Cwd                string
 		Scope              string
 		Reusable           bool
@@ -298,7 +299,7 @@ func duplicateSuiteKey(suite policy.TestSuite) (string, bool) {
 		ExclusiveResources []string
 		TimeoutSeconds     int
 	}{
-		suite.Argv, suite.Cwd, suite.Scope, suite.Reusable, suite.Modules, suite.Paths, suite.ExtraInputs,
+		suite.Argv, suite.RetryArgv, suite.Cwd, suite.Scope, suite.Reusable, suite.Modules, suite.Paths, suite.ExtraInputs,
 		suite.Environment, suite.ExclusiveResources, suite.TimeoutSeconds,
 	}
 	data, err := json.Marshal(payload)
@@ -585,6 +586,16 @@ func ExecuteSuite(ctx context.Context, root string, commandRunner runner.Runner,
 	return result
 }
 
+func RetrySuite(suite policy.TestSuite) policy.TestSuite {
+	retry := cloneSuite(suite)
+	if len(retry.RetryArgv) == 0 {
+		return retry
+	}
+	retry.Argv = append([]string{}, retry.RetryArgv...)
+	retry.Artifacts = nil
+	return retry
+}
+
 func executeSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int, artifactExecution *testartifact.Execution) SuiteExecution {
 	command := suiteCommand(suite)
 	if artifactExecution != nil {
@@ -646,6 +657,7 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 func cloneSuite(suite policy.TestSuite) policy.TestSuite {
 	suite.Modules = append([]string{}, suite.Modules...)
 	suite.Argv = append([]string{}, suite.Argv...)
+	suite.RetryArgv = append([]string{}, suite.RetryArgv...)
 	suite.Paths = append([]string{}, suite.Paths...)
 	suite.ExtraInputs = append([]string{}, suite.ExtraInputs...)
 	suite.Covers = append([]string{}, suite.Covers...)

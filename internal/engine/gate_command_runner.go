@@ -175,6 +175,10 @@ func (commandRunner *gateArtifactRunner) TestDiagnosticRunner() runner.Runner {
 	return &gateDiagnosticRunner{parent: commandRunner}
 }
 
+func (commandRunner *gateArtifactRunner) TestRetryRunner() runner.Runner {
+	return &gateRetryRunner{parent: commandRunner}
+}
+
 func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root string, command policy.Command, captureOutput bool) (runner.Result, runner.Output, error) {
 	if commandRunner.err != nil {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
@@ -283,6 +287,18 @@ func (commandRunner *gateArtifactRunner) runDiagnostic(ctx context.Context, root
 	return result, err
 }
 
+func (commandRunner *gateArtifactRunner) runRetry(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
+	index, ok := commandRunner.failedTests[command.Name]
+	expected, configured := commandRunner.retryCommands[command.Name]
+	if !ok || !configured || !samePolicyCommand(expected, command) {
+		err := fmt.Errorf("test retry command %q does not match a failed planned suite", command.Name)
+		commandRunner.err = errors.Join(commandRunner.err, err)
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, err
+	}
+	result, _, err := commandRunner.execute(ctx, root, index, command, false, false)
+	return result, err
+}
+
 func (diagnostic *gateDiagnosticRunner) Run(ctx context.Context, root string, command policy.Command) error {
 	_, err := diagnostic.RunWithResult(ctx, root, command)
 	return err
@@ -296,6 +312,21 @@ func (diagnostic *gateDiagnosticRunner) ManagesTestArtifacts() bool { return tru
 
 func (diagnostic *gateDiagnosticRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
 	return diagnostic.parent.TestArtifacts(name, attempt)
+}
+
+func (retry *gateRetryRunner) Run(ctx context.Context, root string, command policy.Command) error {
+	_, err := retry.RunWithResult(ctx, root, command)
+	return err
+}
+
+func (retry *gateRetryRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
+	return retry.parent.runRetry(ctx, root, command)
+}
+
+func (retry *gateRetryRunner) ManagesTestArtifacts() bool { return true }
+
+func (retry *gateRetryRunner) TestArtifacts(name string, attempt int) []testartifact.Record {
+	return retry.parent.TestArtifacts(name, attempt)
 }
 
 func runGateCommand(ctx context.Context, commandRunner runner.Runner, root string, command policy.Command, stdout, stderr io.Writer, captureOutput bool) (runner.Result, runner.Output, error) {

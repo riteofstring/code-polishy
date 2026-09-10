@@ -280,6 +280,7 @@ func intersectsStrings(left, right []string) bool {
 func cloneReceiptSuite(suite policy.TestSuite) policy.TestSuite {
 	suite.Modules = append([]string{}, suite.Modules...)
 	suite.Argv = append([]string{}, suite.Argv...)
+	suite.RetryArgv = append([]string{}, suite.RetryArgv...)
 	suite.Paths = append([]string{}, suite.Paths...)
 	suite.ExtraInputs = append([]string{}, suite.ExtraInputs...)
 	suite.Covers = append([]string{}, suite.Covers...)

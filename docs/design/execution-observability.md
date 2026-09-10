@@ -32,3 +32,13 @@ Cache lifetime follows its evidence lifetime. Repository facts are reused
 within one command after configuration composition. Cross-process analyzer
 results are reused only through an existing digest-bound receipt mechanism;
 ordinary files are never trusted from a timestamp-only persistent cache.
+
+Candidate test retries are outcome-bearing attempts, not baseline diagnostics.
+The first full attempt establishes all tests except the observed failures; an
+optional repository-declared retry command can establish those failures at a
+narrower runner-native boundary. A passing retry therefore satisfies the suite
+while both attempts remain immutable in the report, but only after a normal
+test-command exit; infrastructure and artifact failures stay diagnostic.
+Baseline replays remain diagnostic and cannot satisfy the candidate. The gate
+runner, rather than the report renderer, authorizes the configured retry command
+and writes the receipt for the resulting combined outcome.

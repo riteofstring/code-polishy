@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.13 - 2026-09-10
+
+- Accept a passing candidate test retry as suite evidence while retaining the
+  initial failure and intermittent diagnosis in the gate report.
+- Let non-reusable suites declare a validated `retryArgv` that reruns only the
+  test runner's recorded failures instead of repeating an expensive full suite.
+
 ## 0.24.12 - 2026-09-09
 
 - Publish installed release roots with traversal permissions so OCI images can

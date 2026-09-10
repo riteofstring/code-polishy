@@ -482,6 +482,15 @@ func (commandRunner *mergeGatePlannedRunner) TestDiagnosticRunner() runner.Runne
 	return commandRunner.delegate
 }
 
+func (commandRunner *mergeGatePlannedRunner) TestRetryRunner() runner.Runner {
+	if provider, ok := commandRunner.delegate.(TestRetryRunnerProvider); ok {
+		if retryRunner := provider.TestRetryRunner(); retryRunner != nil {
+			return retryRunner
+		}
+	}
+	return commandRunner.delegate
+}
+
 func (commandRunner *mergeGatePlannedRunner) ManagesTestArtifacts() bool { return true }
 
 func (commandRunner *mergeGatePlannedRunner) TestArtifacts(name string, attempt int) []testartifact.Record {

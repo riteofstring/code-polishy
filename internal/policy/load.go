@@ -394,6 +394,9 @@ func validateTestSuite(config *Config, suite *TestSuite, index int, names map[st
 	if err := validateTestCommandArgv(suite.Argv, label); err != nil {
 		return err
 	}
+	if err := validateTestRetry(suite, label); err != nil {
+		return err
+	}
 	if err := validateTestEvidence(suite, label); err != nil {
 		return err
 	}
@@ -407,6 +410,19 @@ func validateTestSuite(config *Config, suite *TestSuite, index int, names map[st
 		return fmt.Errorf("%s.kind live requires a typed external approval gate and cannot be an automatic test suite", label)
 	}
 	return nil
+}
+
+func validateTestRetry(suite *TestSuite, label string) error {
+	if len(suite.RetryArgv) == 0 {
+		return nil
+	}
+	if suite.Reusable {
+		return fmt.Errorf("%s.retryArgv cannot depend on mutable failure state for a reusable suite", label)
+	}
+	if err := validateCommandArgv(suite.RetryArgv, label+".retryArgv"); err != nil {
+		return err
+	}
+	return validateTestCommandArgv(suite.RetryArgv, label+".retryArgv")
 }
 
 func validateTestCoverageRelations(suites []TestSuite) error {

@@ -570,19 +570,33 @@ func validateTestDiagnostic(diagnostic TestDiagnostic, known map[string]TestEvid
 	if !validToken(diagnostic.Suite) || !validToken(diagnostic.State) || diagnostic.CandidateRetry == nil {
 		return fmt.Errorf("%w: test diagnostic is invalid", ErrInvalidArtifact)
 	}
-	if err := validateDiagnosticEvidence(diagnostic.Suite, diagnostic.CandidateRetry, known, referenced); err != nil {
+	if err := validateCandidateRetryEvidence(diagnostic.Suite, diagnostic.CandidateRetry, known, referenced); err != nil {
 		return err
 	}
 	return validateDiagnosticEvidence(diagnostic.Suite, diagnostic.BaselineReplay, known, referenced)
+}
+
+func validateCandidateRetryEvidence(suite string, evidence *TestEvidence, known map[string]TestEvidence, referenced map[string]bool) error {
+	if evidence == nil || evidence.Attempt < 2 {
+		return fmt.Errorf("%w: test retry evidence is invalid", ErrInvalidArtifact)
+	}
+	return validateReferencedTestEvidence(suite, evidence, known, referenced)
 }
 
 func validateDiagnosticEvidence(suite string, evidence *TestEvidence, known map[string]TestEvidence, referenced map[string]bool) error {
 	if evidence == nil {
 		return nil
 	}
+	if !evidence.Diagnostic {
+		return fmt.Errorf("%w: diagnostic test evidence is invalid", ErrInvalidArtifact)
+	}
+	return validateReferencedTestEvidence(suite, evidence, known, referenced)
+}
+
+func validateReferencedTestEvidence(suite string, evidence *TestEvidence, known map[string]TestEvidence, referenced map[string]bool) error {
 	key := testEvidenceKey(*evidence)
 	stored, found := known[key]
-	if !found || evidence.Name != suite || !evidence.Diagnostic || !reflect.DeepEqual(stored, *evidence) {
+	if !found || evidence.Name != suite || !reflect.DeepEqual(stored, *evidence) {
 		return fmt.Errorf("%w: diagnostic test evidence is invalid", ErrInvalidArtifact)
 	}
 	referenced[key] = true

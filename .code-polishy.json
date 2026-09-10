@@ -111,8 +111,16 @@
           "internal/engine/report_model.go",
           "internal/engine/report_types.go",
           "internal/engine/format.go",
+          "internal/engine/gate_command_runner.go",
+          "internal/engine/gate_run.go",
+          "internal/engine/test_evidence.go",
+          "internal/gaterun/run.go",
+          "internal/gaterun/validation.go",
+          "internal/policy/load.go",
+          "internal/policy/model.go",
           "cmd/code-polishy/main.go",
-          "cmd/code-polishy/report.go"
+          "cmd/code-polishy/report.go",
+          "internal/testing/testing.go"
         ]
       }
     ]

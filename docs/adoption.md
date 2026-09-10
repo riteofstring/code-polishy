@@ -555,10 +555,18 @@ Standard repository suites can join the impact-based recommended set:
   "scope": "repository",
   "cost": "standard",
   "argv": ["./scripts/test_integration.sh"],
+  "retryArgv": ["./scripts/test_integration.sh", "--last-failed"],
   "paths": ["cmd/**", "internal/**", "frontend/**"],
   "runOn": ["recommended", "full"]
 }
 ```
+
+`retryArgv` is optional. Use it only when the checked-in command can consume
+failure state from a complete first attempt and run every failed test. If the
+retry passes, the gate passes while retaining both attempts as intermittent
+evidence. Without it, Code Polishy retries the full suite. Reusable suites
+cannot declare `retryArgv` because their sealed execution view does not retain
+mutable failure state between attempts.
 
 Suites that produce CI evidence declare it explicitly and write only inside
 their managed attempt directory:

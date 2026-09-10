@@ -1409,6 +1409,49 @@ func TestTestSuiteRejectsObviousNoOpAndPassWithoutTests(t *testing.T) {
 	}
 }
 
+func TestTestSuiteAcceptsAValidatedFocusedRetryCommand(t *testing.T) {
+	configured := strings.Replace(
+		minimalConfig(),
+		`"argv":["go","test","./..."]`,
+		`"argv":["go","test","./..."],"retryArgv":["go","test","./...","-run","TestFailed"]`,
+		1,
+	)
+	config, err := Parse([]byte(configured), ConfigFilename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(config.Tests.Suites[0].RetryArgv, []string{"go", "test", "./...", "-run", "TestFailed"}) {
+		t.Fatalf("retry argv = %v", config.Tests.Suites[0].RetryArgv)
+	}
+}
+
+func TestTestSuiteRejectsAnUnsafeOrNonTestingRetryCommand(t *testing.T) {
+	for name, retry := range map[string]string{
+		"shell":     `["sh","-c","go test ./..."]`,
+		"no-op":     `["true"]`,
+		"empty run": `["go","test","./...","-run","^$"]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			configured := strings.Replace(minimalConfig(), `"argv":["go","test","./..."]`, `"argv":["go","test","./..."],"retryArgv":`+retry, 1)
+			if _, err := Parse([]byte(configured), ConfigFilename); err == nil {
+				t.Fatal("unsafe retry command was accepted")
+			}
+		})
+	}
+}
+
+func TestReusableTestSuiteRejectsFocusedRetryState(t *testing.T) {
+	configured := strings.Replace(
+		minimalConfig(),
+		`"argv":["go","test","./..."]`,
+		`"reusable":true,"argv":["go","test","./..."],"retryArgv":["go","test","./...","-run","TestFailed"]`,
+		1,
+	)
+	if _, err := Parse([]byte(configured), ConfigFilename); err == nil || !strings.Contains(err.Error(), "mutable failure state") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestCheckedInSchemaAndTemplatesLoad(t *testing.T) {
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

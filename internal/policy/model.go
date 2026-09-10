@@ -356,6 +356,7 @@ type TestSuite struct {
 	Cost               string         `json:"cost,omitempty"`
 	Modules            []string       `json:"modules,omitempty"`
 	Argv               []string       `json:"argv"`
+	RetryArgv          []string       `json:"retryArgv,omitempty"`
 	Cwd                string         `json:"cwd,omitempty"`
 	Paths              []string       `json:"paths,omitempty"`
 	ExtraInputs        []string       `json:"extraInputs,omitempty"`
