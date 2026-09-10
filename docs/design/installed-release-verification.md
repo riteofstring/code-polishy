@@ -28,6 +28,18 @@ The focused first-adoption result proves that
 boundary only; the release checklist still requires the complete installed
 fixture suite and native platform evidence.
 
+The complete harness repeatedly enters through the stable launcher so every
+scenario also exercises the installed manifest boundary. That is intentionally
+broader than a source gate or one image smoke test. Run it once per selected
+native archive on a matching native executor, with the archive, installed
+prefix, and fixtures on an executor-local filesystem. Cross-architecture QEMU
+or Rosetta execution is not native platform evidence and magnifies the cost of
+repeated manifest verification; a host bind mount adds another avoidable I/O
+penalty. Release automation must fail fast or move to a native runner rather
+than treating emulation as a fallback. An exact completed native archive run is
+the release evidence and must not be repeated merely to obtain another copy of
+the same result.
+
 Executable test entrypoints have explicit production ownership and primary
 focused suites. Sourced scenario helpers remain test-support code selected by
 the harness; they are not independent executable test commands. All fixtures

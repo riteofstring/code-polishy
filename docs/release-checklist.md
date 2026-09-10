@@ -44,10 +44,12 @@ changes a target lock.
    candidate.
 
 5. Select the publication scope before starting builds. For a GHCR-only release,
-   build only the `linux-x64` publication directory on Linux x86-64; do not
-   build the other native hosts or a release index. For a complete native
-   release, build one publication directory on every supported host from that
-   exact commit. Install pinned policy tools first. On Linux and macOS:
+   build only the `linux-x64` publication directory on a native Linux x86-64
+   executor; do not build the other native hosts or a release index. An amd64
+   container or virtual machine emulated on an Arm host is not a native
+   executor. For a complete native release, build one publication directory on
+   every supported host from that exact commit. Install pinned policy tools
+   first. On Linux and macOS:
 
    ```sh
    ./scripts/build-release.sh --output /absolute/path/to/publication
@@ -83,7 +85,10 @@ changes a target lock.
    consumers must use `image@sha256:...`.
 
 7. Exercise one fresh archive installation for every native host in the
-   selected publication scope with the descriptor's archive SHA-256:
+   selected publication scope with the descriptor's archive SHA-256. Build the
+   archive and exercise it on the same native host architecture, with the
+   publication, installed prefix, and disposable fixtures on that executor's
+   native filesystem:
 
    ```sh
    code-polishy install-bundle \
@@ -95,8 +100,12 @@ changes a target lock.
    Run representative sequential commands through the installed launcher and
    verify the release manifest afterward. Run
    `./scripts/test-installed-release.sh --prefix PREFIX --lock LOCK` for the
-   installed target contracts; use its exact fixture selector only for a
-   bounded retry.
+   installed target contracts exactly once; use its exact fixture selector only
+   for a bounded retry. The complete harness deliberately invokes the stable
+   launcher many times, and each invocation verifies the installed release.
+   Never run it through QEMU, Rosetta, Docker Desktop architecture emulation, or
+   a macOS bind mount. If no native executor is available, stop before tagging
+   or publishing instead of substituting local emulation.
 
 8. Create the annotated tag and rerun preflight:
 
@@ -126,9 +135,19 @@ Use this path when the requested release artifact is only the public Linux x64
 image at `ghcr.io/riteofstring/code-polishy`. It does not require macOS,
 Windows, Linux arm64, or a five-host release index.
 
-Run the publication commands in a Linux x86-64 environment. Do not invoke
-`scripts/build-oci-image.sh` directly on macOS: it intentionally requires Linux
-and GNU `sha256sum`. Use a Linux runner or VM instead of reconstructing its
+Run the entire archive build, fresh-install contract, and publication sequence
+on a native Linux x86-64 runner or VM. An amd64 Docker container on an Apple
+Silicon or other Arm host does not qualify: it runs the installed-contract
+matrix through architecture emulation, and a macOS bind mount makes its repeated
+release verification slower still. `uname -m` inside an emulated container is
+not proof of native execution; confirm the runner or VM host architecture before
+starting. If the process list contains `qemu-x86_64` or Rosetta while exercising
+the release, stop and move the work to a native executor.
+
+Do not invoke `scripts/build-oci-image.sh` directly on macOS: it intentionally
+requires Linux and GNU `sha256sum`. Buildx may assemble the final OCI image, but
+Buildx architecture support does not turn an emulated container into acceptable
+native release-verification evidence. Do not reconstruct the repository's
 Buildx command by hand.
 
 Before building, select an already provisioned Buildx builder and inspect it:
@@ -151,8 +170,10 @@ printf '%s' "$GHCR_TOKEN" | \
   docker login ghcr.io --username "$GHCR_USER" --password-stdin
 ```
 
-From the clean tagged source commit, verify the tag, build only the Linux x64
-publication, and let the repository script push and verify the image:
+From the clean tagged source commit, verify the tag and build only the Linux x64
+publication. Before the registry push, install that archive and complete step 7
+on the same native executor. Then let the repository script push and verify the
+image:
 
 ```sh
 release_version="$(tr -d '[:space:]' < VERSION)"
@@ -198,6 +219,7 @@ Stop at the first failed prerequisite instead of retrying the build:
 
 | Symptom                                      | Resolution                                                              |
 | -------------------------------------------- | ----------------------------------------------------------------------- |
+| Host is Arm or a release process uses QEMU   | Stop before building; schedule the run on native Linux x86-64.          |
 | Script prints usage immediately on macOS     | Move the publication to Linux x86-64.                                   |
 | Buildx reports unsupported attestations      | Select an admitted `docker-container` builder.                          |
 | GHCR returns denied or unauthorized          | Refresh the maintainer credential with package-write access.            |
