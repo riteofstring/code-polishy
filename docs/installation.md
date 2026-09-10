@@ -151,22 +151,25 @@ workflow and invocation uses the reported
 user 65532, starts in `/workspace`, keeps the stable launcher on `PATH`, and
 verifies its internal release on every command.
 
-A GitLab job may use the image directly:
+A GitLab job may use the public canonical image directly. The package currently
+publishes Linux x86-64, and a public pull needs no GHCR credentials:
 
 ```yaml
 policy:
   image:
-    name: registry.example/code-polishy@sha256:<digest>
+    name: ghcr.io/riteofstring/code-polishy@sha256:<index-digest>
     entrypoint: [""]
   script:
     - code-polishy merge-gate --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
 ```
 
 The equivalent GitHub Actions job sets
-`container: registry.example/code-polishy@sha256:<digest>` and runs the same
-command after checkout. Private or self-managed GitLab needs only registry
-access or a mirrored digest; Code Polishy needs no GitLab account, API token,
-monitoring provider, or machine-global runner installation.
+`container: ghcr.io/riteofstring/code-polishy@sha256:<index-digest>` and runs
+the same command after checkout. A private or self-managed GitLab repository
+does not make this public image private; the runner needs only outbound GHCR
+access. Code Polishy needs no GitLab account, API token, monitoring provider,
+or machine-global runner installation. Maintainer publication instructions are
+in the [GHCR-only Linux x64 runbook](release-checklist.md#ghcr-only-linux-x64-runbook).
 
 The Unix prefix defaults to `~/.local/share/code-polishy`; the Windows prefix
 defaults to `%LOCALAPPDATA%\CodePolishy`. Releases are installed under

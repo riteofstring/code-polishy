@@ -61,6 +61,6 @@ and aliases. Search is local, bounded, and deterministic.
 - [Source Provenance](source-provenance.md) records public design references,
   toolchain origins, and implementation boundaries.
 - [Release Checklist](release-checklist.md) defines immutable tags, native
-  publications, and digest-pinned OCI releases.
+  publications, and the focused GHCR-only Linux x64 runbook.
 - [Adding a Language Pack](adding-a-language.md) defines local language
   packs, conformance verification, exact installation, and adapter protocol.
