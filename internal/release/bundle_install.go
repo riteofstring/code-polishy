@@ -95,6 +95,9 @@ func publishStagedRelease(staging, target string, manifest Manifest, keepStaging
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return false, err
 		}
+		if err := os.Chmod(staging, 0o755); err != nil {
+			return false, err
+		}
 		if err := os.Rename(staging, target); err != nil {
 			return false, err
 		}

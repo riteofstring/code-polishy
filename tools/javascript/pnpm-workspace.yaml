@@ -37,6 +37,8 @@ shamefullyHoist: false
 minimumReleaseAge: 43200
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeExclude:
+  - js-yaml@4.3.2
 
 # Only registry sources are admitted, and a recorded resolution may never be
 # downgraded to a weaker one by a later resolution.

@@ -73,8 +73,10 @@ every operation that creates a tag, pushes, publishes, or changes a target lock.
      --push
    ```
 
-   Retain the exact image digest and Buildx SBOM/provenance attestations. Tags
-   aid discovery; examples and consumers must use `image@sha256:...`.
+   Push mode pulls the exact registry digest and exercises the installed
+   launcher as the image's declared non-root user. Retain that digest and the
+   Buildx SBOM/provenance attestations. Tags aid discovery; examples and
+   consumers must use `image@sha256:...`.
 
 7. Exercise one fresh archive installation per native host with the descriptor's
    archive SHA-256:

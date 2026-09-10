@@ -1186,6 +1186,21 @@
           "scripts/test-installed-release-contract.sh"
         ],
         "argv": ["./scripts/test-installed-release-contract.sh"]
+      },
+      {
+        "name": "oci-image-contract",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["tooling"],
+        "paths": [
+          "release/oci.Containerfile.template",
+          "scripts/build-oci-image.sh",
+          "scripts/test-build-oci-image.sh",
+          "internal/release/**"
+        ],
+        "argv": ["./scripts/test-build-oci-image.sh"],
+        "runOn": ["focused", "recommended", "full"]
       }
     ],
     "paths": [
@@ -1197,7 +1212,8 @@
       "scripts/test-javascript-runner.sh",
       "scripts/test-javascript-project.sh",
       "scripts/test-installed-release.sh",
-      "scripts/test-installed-release-contract.sh"
+      "scripts/test-installed-release-contract.sh",
+      "scripts/test-build-oci-image.sh"
     ],
     "ownership": [
       {
@@ -1372,6 +1388,11 @@
         ],
         "module": "tooling",
         "focusedSuite": "installed-release-contract"
+      },
+      {
+        "paths": ["scripts/test-build-oci-image.sh"],
+        "module": "tooling",
+        "focusedSuite": "oci-image-contract"
       }
     ]
   },
@@ -1500,6 +1521,19 @@
         "owner": "code-polishy-maintainer",
         "reviewed": "2026-08-26",
         "expires": "2026-09-12"
+      },
+      {
+        "id": "js-yaml-4-3-2-security-fix",
+        "ecosystem": "pnpm",
+        "package": "js-yaml",
+        "version": "4.3.2",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/nodeca/js-yaml/security/advisories/GHSA-2883-xcg3-v3hh",
+        "reason": "js-yaml 4.3.2 is the first 4.x release that bounds empty merge sources. Code Polishy invokes Knip on repository-controlled pnpm workspace YAML through js-yaml's merge-enabled default schema, so older 4.x releases expose the policy runner to attacker-controlled CPU exhaustion.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-09",
+        "expires": "2026-09-25"
       }
     ]
   },

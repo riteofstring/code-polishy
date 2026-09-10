@@ -160,7 +160,7 @@ is-weakset@2.0.4	MIT
 isarray@2.0.5	MIT
 isexe@2.0.0	ISC
 jiti@2.7.0	MIT
-js-yaml@4.3.1	MIT
+js-yaml@4.3.2	MIT
 json-buffer@3.0.1	MIT
 json-schema-traverse@0.4.1	MIT
 json-stable-stringify-without-jsonify@1.0.1	MIT
@@ -218,7 +218,7 @@ side-channel-list@1.0.1	MIT
 side-channel-map@1.0.1	MIT
 side-channel-weakmap@1.0.2	MIT
 side-channel@1.1.1	MIT
-smol-toml@1.7.0	BSD-3-Clause
+smol-toml@1.7.1	BSD-3-Clause
 stop-iteration-iterator@1.1.0	MIT
 string.prototype.includes@2.0.1	MIT
 string.prototype.trim@1.2.11	MIT

@@ -143,11 +143,13 @@ second release tree. On the matching Linux architecture:
   --push
 ```
 
-Buildx emits SBOM and provenance attestations and prints the registry's exact
-image digest. Tags aid discovery only. Every workflow and invocation uses the
-reported `registry.example/code-polishy@sha256:...` identity. The image runs as
-non-root user 65532, starts in `/workspace`, keeps the stable launcher on
-`PATH`, and verifies its internal release on every command.
+Buildx emits SBOM and provenance attestations. Push mode resolves and pulls the
+registry's exact image digest, then exercises the installed launcher as the
+image's declared user before reporting success. Tags aid discovery only. Every
+workflow and invocation uses the reported
+`registry.example/code-polishy@sha256:...` identity. The image runs as non-root
+user 65532, starts in `/workspace`, keeps the stable launcher on `PATH`, and
+verifies its internal release on every command.
 
 A GitLab job may use the image directly:
 

@@ -209,6 +209,14 @@ func TestPublicationRejectsTamperedSidecarsAndNonLinuxOCIContext(t *testing.T) {
 		if prepared.ReleaseDigest != manifest.ReleaseDigest {
 			t.Fatalf("prepared release = %s", prepared.ReleaseDigest)
 		}
+		releaseRoot := filepath.Join(context, "root", "opt", "code-polishy", "releases", manifest.CodePolishyVersion+"-"+manifest.ReleaseDigest)
+		info, err := os.Stat(releaseRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("OCI release mode = %#o, want %#o", info.Mode().Perm(), os.FileMode(0o755))
+		}
 		arguments, err := os.ReadFile(filepath.Join(context, "build-args.env"))
 		if err != nil || !strings.Contains(string(arguments), "CODE_POLISHY_BUNDLE_SHA256="+artifact.Archive.SHA256) {
 			t.Fatalf("build arguments = %q, error = %v", arguments, err)

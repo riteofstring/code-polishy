@@ -144,12 +144,25 @@ arguments+=("${context}")
 docker "${arguments[@]}"
 
 if [[ "${push}" == true ]]; then
-  image_digest="$(docker buildx imagetools inspect "${image_ref}" --format '{{.Manifest.Digest}}')"
+  raw_manifest="${scratch}/registry-manifest.json"
+  docker buildx imagetools inspect "${image_ref}" --raw >"${raw_manifest}"
+  image_digest="sha256:$(sha256sum "${raw_manifest}" | awk '{print $1}')"
   if [[ ! "${image_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     echo "The registry returned no exact OCI digest for ${image_ref}." >&2
     exit 1
   fi
-  echo "image=${image_ref}@${image_digest}"
+  digest_ref="${image_ref}@${image_digest}"
+  docker pull --platform "${platform}" "${digest_ref}"
+  runtime_version="$(docker run --rm --platform "${platform}" --workdir /tmp --entrypoint /bin/sh "${digest_ref}" -eu -c '
+release_root="/opt/code-polishy/releases/$1-$2"
+"${release_root}/bin/code-polishy" --policy-root "${release_root}" --repo-root /tmp lock >/dev/null
+exec /opt/code-polishy/bin/code-polishy --version
+' code-polishy "${version}" "${release_digest}")"
+  if [[ "${runtime_version}" != "code-polishy ${version}" ]]; then
+    echo "The digest-pinned OCI image reported an unexpected version: ${runtime_version}" >&2
+    exit 1
+  fi
+  echo "image=${digest_ref}"
 else
   echo "ociArchive=${output}"
   echo "ociArchiveSHA256=$(sha256sum "${output}" | awk '{print $1}')"

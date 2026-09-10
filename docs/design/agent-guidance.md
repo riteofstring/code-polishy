@@ -73,6 +73,12 @@ infrastructure, toolchain, or selection changes, or when impact is unbounded.
 The final-gate-owner reminder prevents an equally costly duplicate local and CI
 gate while preserving one required owner.
 
+The vulnerability-age rule records the maintainer's risk preference. When
+evidence supports a governed not-affected assessment, waiting preserves the
+minimum dependency age instead of admitting fresh code without a reachable
+security benefit. Reachable advisories still use the security-fix admission
+path.
+
 ## Size budget
 
 The focused agents test caps canonical guidance at 5 KiB. The number is an

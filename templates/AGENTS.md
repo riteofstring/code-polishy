@@ -1,7 +1,7 @@
 ## Authority and communication
 
-- Run the installed `code-polishy` release pinned by `.code-polishy.lock.json`;
-  if absent from `PATH`, use the installation prefix's stable launcher.
+- Run `code-polishy` pinned by `.code-polishy.lock.json`; if absent from `PATH`,
+  use the installation prefix's stable launcher.
 - Before changing the repository, run `code-polishy docs read agent-workflows`
   and follow its version-matched request-capture and delivery rules.
 - During an upgrade, outgoing guidance governs until the exact incoming release
@@ -9,24 +9,22 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Be succinct. For routine updates and summaries, lead with the outcome in plain
-  language and stay under 100 words unless the caller requests detail or
-  action/safety requires it. Omit file references, metrics, implementation
-  details, and raw output unless requested or decision-relevant.
+- Keep routine updates under 100 words, lead with the outcome, and omit file
+  references, metrics, implementation detail, and raw output unless needed;
+  expand when action or safety requires it.
 
 ## Implementation
 
 - Preserve unrelated user work and avoid unrelated refactors. Fix the root cause
   with the smallest maintainable change.
-- Add backward compatibility, migrations, legacy support, or transitional code
-  only when the caller explicitly requests it.
-- Before changing governed source, retrieve `code-polishy design-context` for
+- Add compatibility, migrations, or transitional code only when explicitly
+  requested.
+- Before governed source changes, retrieve `code-polishy design-context` for
   the planned scope. Reuse it until scope, mappings, or documents change. Follow
   `agent-workflows` for missing rationale and design updates.
-- Honor `quality.allowComments`. When it is false, keep governed handwritten
-  source free of prose comments and docstrings. When it is true, add comments
-  only for facts the code cannot convey. Put non-local rationale in mapped
-  design documents.
+- Honor `quality.allowComments`: when false, omit prose comments and docstrings
+  from governed handwritten source; when true, comment only facts code cannot
+  convey. Put non-local rationale in mapped design documents.
 - Keep prompt, agent, task, rejection, and editing narration out of final
   artifacts unless that process is their documented subject.
 - Remove rejected behavior at its source. Keep no related guards, flags,
@@ -35,23 +33,26 @@
 
 ## Dependencies and tests
 
-- Pin direct dependencies and the package manager exactly. Use frozen lockfiles
-  for normal setup. For a dependency update, generate the candidate lockfile
-  without lifecycle scripts and run
+- Pin direct dependencies and package managers exactly; use frozen lockfiles.
+  For updates, generate candidate locks without lifecycle scripts and run
   `code-polishy dependency-review --base <merge-target>` before installation.
+- Before admitting a security fix under 30 days old, determine whether its
+  advisory affects reachable behavior. If not, retain the current version under
+  an exact approved assessment until the fix reaches 30 days; if affected, use
+  security-fix admission.
 - Keep every exception exact, visible, owned, justified, and expiring.
 - Give every module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
   pass-with-no-tests, and coverage-only tests; checked-in Gherkin must execute.
-- Run supplemental suites only when the caller explicitly requests them, a
-  checked-in event workflow invokes them, or the version-matched release
-  checklist selects them. Declarations, including
+- Run supplemental suites only when explicitly requested, invoked by a checked-in
+  event workflow, or selected by the version-matched release checklist.
+  Declarations, including
   `tests.requiredSupplementalKinds`, never authorize execution. Exact reruns
-  record receipts. On a stable candidate, use `test --supplemental --resume` to
-  run only missing, failed, expired, or invalidated suites. Run all only without
-  a trusted baseline, after shared infrastructure, toolchain, or selection
-  changes, or when impact is unbounded. Credentialed, destructive, and
-  live-provider probes require a named external approval gate.
+  record receipts. On stable candidates, use `test --supplemental --resume` for
+  missing, failed, expired, or invalidated suites. Run all only without trusted
+  evidence or after shared infrastructure, toolchain, selection, or unbounded-
+  impact changes. Credentialed, destructive, and live-provider probes require a
+  named external approval gate.
 
 ## Reviews and delivery
 

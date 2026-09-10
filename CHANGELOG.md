@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.24.12 - 2026-09-09
+
+- Publish installed release roots with traversal permissions so OCI images can
+  run through their declared non-root user.
+- Resolve pushed OCI indexes from their raw registry bytes, pull the exact
+  digest, and exercise the installed launcher before reporting success.
+- Prefer waiting for security fixes to reach the dependency-age threshold when
+  an exact approved assessment proves the advisory is not reachable.
+- Update js-yaml and smol-toml to their smallest releases fixing malformed-input
+  denial-of-service advisories.
+
 ## 0.24.11 - 2026-09-06
 
 - Treat semantically resolved TypedDict fields as structural schema members in

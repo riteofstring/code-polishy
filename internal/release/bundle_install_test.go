@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -29,6 +30,15 @@ func TestInstallLocalBundlePublishesVerifiedReleaseAndLauncher(t *testing.T) {
 	target := filepath.Join(prefix, "releases", manifest.CodePolishyVersion+"-"+manifest.ReleaseDigest)
 	if err := manifest.Verify(target); err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("installed release mode=%#o want=%#o", info.Mode().Perm(), os.FileMode(0o755))
+		}
 	}
 	launcher, err := os.ReadFile(filepath.Join(prefix, "bin", filepath.Base(filepath.FromSlash(BinaryPath))))
 	if err != nil {
