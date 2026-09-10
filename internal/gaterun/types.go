@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	Version            = 5
+	Version            = 6
 	DefaultStreamLimit = 1 << 20
 	MaximumStreamLimit = 8 << 20
 )
@@ -148,6 +148,7 @@ type CommandSpec struct {
 	SealedEnvironment   bool            `json:"sealed_environment"`
 	Artifacts           []ArtifactSpec  `json:"artifacts"`
 	SuiteIdentitySHA256 string          `json:"suite_identity_sha256,omitempty"`
+	ReportProtocol      string          `json:"report_protocol,omitempty"`
 }
 
 type ArtifactSpec struct {
@@ -227,6 +228,7 @@ type AttemptInput struct {
 	Duration        time.Duration
 	ResourceWait    time.Duration
 	Diagnostic      bool
+	ReportBearing   bool
 }
 
 type Attempt struct {
@@ -241,6 +243,7 @@ type Attempt struct {
 	StdoutTruncated          bool            `json:"stdout_truncated"`
 	StderrTruncated          bool            `json:"stderr_truncated"`
 	Diagnostic               bool            `json:"diagnostic"`
+	ReportBearing            bool            `json:"report_bearing,omitempty"`
 }
 
 type CommandOutcome struct {

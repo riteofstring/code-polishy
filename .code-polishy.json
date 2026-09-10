@@ -127,9 +127,12 @@
           "internal/engine/gate_run.go",
           "internal/engine/test_evidence.go",
           "internal/gaterun/run.go",
+          "internal/gaterun/types.go",
           "internal/gaterun/validation.go",
           "internal/policy/load.go",
           "internal/policy/model.go",
+          "internal/runner/runner.go",
+          "internal/supplychain/osv.go",
           "cmd/code-polishy/main.go",
           "cmd/code-polishy/report.go",
           "internal/testing/testing.go"

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -31,6 +32,105 @@ func TestMergeGateAcceptsPassingFocusedRetryAndRetainsBothAttempts(t *testing.T)
 		outcome.Attempts[1].Status != gaterun.Passed || outcome.Attempts[1].Diagnostic || outcome.ReceiptPath == "" {
 		t.Fatalf("focused outcome = %+v", outcome)
 	}
+}
+
+func TestMergeGatePublishesAssessedOSVReportExit(t *testing.T) {
+	root, report, err := runOSVReportExitMergeGate(t, true)
+	if err != nil || HasFindings(report) || len(report.Assessed) != 1 || report.GateRunPolicy == nil || report.GateRunPolicy.Status != "passed" {
+		t.Fatalf("merge gate report = %+v, error = %v", report, err)
+	}
+	outcome := loadPublishedOSVOutcome(t, root, report)
+	if outcome.Status != gaterun.Passed || len(outcome.Attempts) != 1 || outcome.Attempts[0].ExitStatus != 1 || !outcome.Attempts[0].ReportBearing {
+		t.Fatalf("OSV command outcome = %+v", outcome)
+	}
+}
+
+func TestMergeGateLetsPolicyRejectUnassessedOSVReportExit(t *testing.T) {
+	root, report, err := runOSVReportExitMergeGate(t, false)
+	if err != nil || len(report.Findings) != 1 || report.Findings[0].Check != "supplyChain.osvVulnerability" || report.GateRunPolicy == nil || report.GateRunPolicy.Status != "failed" {
+		t.Fatalf("merge gate report = %+v, error = %v", report, err)
+	}
+	outcome := loadPublishedOSVOutcome(t, root, report)
+	if outcome.Status != gaterun.Passed || len(outcome.Attempts) != 1 || outcome.Attempts[0].ExitStatus != 1 || !outcome.Attempts[0].ReportBearing {
+		t.Fatalf("OSV command outcome = %+v", outcome)
+	}
+}
+
+func runOSVReportExitMergeGate(t *testing.T, assessed bool) (string, Report, error) {
+	t.Helper()
+	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	configurationPath := filepath.Join(root, policy.ConfigFilename)
+	configuration, err := os.ReadFile(configurationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, policy.ConfigFilename, string(configuration)+"\n", 0o600)
+	commitEngineCandidate(t, root, "change policy")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	policyEngine.Repository.Config.ActivePolicyModules = []policy.ActivePolicyModule{{Name: "osv", Root: "."}}
+	if assessed {
+		policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments = []policy.VulnerabilityAssessment{{
+			ID: "assessed-osv", Ecosystem: "npm", Advisory: "GHSA-abcd-1234-5678", Package: "example", AffectedVersion: "1.2.3",
+			Scope: "content/data.json", Severity: "high", Status: "not-affected", Basis: "unreachable",
+			Reason: "the affected code path is unreachable", Impact: "the vulnerable capability is not shipped",
+			Evidence: "https://example.test/evidence", Tracking: "https://example.test/tracking", Owner: "content",
+			ApprovedBy: "security", Approval: "https://example.test/approval", Reviewed: policy.Date{Time: today},
+			Expires: policy.Date{Time: today.AddDate(0, 0, 7)},
+		}}
+	}
+	policyEngine.Runner = assessedOSVGateRunner{}
+	report, err := policyEngine.MergeGate(t.Context(), "main")
+	return root, report, err
+}
+
+func loadPublishedOSVOutcome(t *testing.T, root string, report Report) gaterun.CommandOutcome {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(report.GateRunPolicy.ReportPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateReport := gaterun.Report{}
+	if err := json.Unmarshal(data, &gateReport); err != nil {
+		t.Fatal(err)
+	}
+	published, err := gaterun.LoadReport(root, gateReport.Identity)
+	if err != nil {
+		t.Fatalf("load published gate report: %v", err)
+	}
+	outcome, found := gateCommandOutcome(published.Commands, "osv-scan-root")
+	if !found {
+		t.Fatal("published gate report omitted OSV command outcome")
+	}
+	return outcome
+}
+
+func gateCommandOutcome(outcomes []gaterun.CommandOutcome, name string) (gaterun.CommandOutcome, bool) {
+	for _, outcome := range outcomes {
+		if outcome.Name == name {
+			return outcome, true
+		}
+	}
+	return gaterun.CommandOutcome{}, false
+}
+
+type assessedOSVGateRunner struct{}
+
+func (assessedOSVGateRunner) Run(context.Context, string, policy.Command) error {
+	return nil
+}
+
+func (assessedOSVGateRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+	if command.ReportProtocol != policy.OSVVulnerabilityReportProtocol {
+		return runner.Result{ExitStatus: 0}, runner.Output{}, nil
+	}
+	payload := []byte(`{"results":[{"source":{"path":"content/data.json","type":"lockfile"},"packages":[{"package":{"name":"example","version":"1.2.3","ecosystem":"npm"},"groups":[{"ids":["GHSA-abcd-1234-5678"],"max_severity":"high"}]}]}]}`)
+	return runner.Result{ExitStatus: 1, FailureCategory: runner.FailureCommandExit}, runner.Output{Stdout: payload}, errors.New("OSV-Scanner found vulnerabilities")
 }
 
 func runIntermittentMergeGate(t *testing.T) (string, Report, *intermittentGateRunner) {

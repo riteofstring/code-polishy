@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
@@ -112,14 +113,14 @@ func (run *Run) prepareAttempt(index int, input AttemptInput) (CommandOutcome, C
 	if entry.Reused {
 		return CommandOutcome{}, CommandRef{}, fmt.Errorf("%w: reused command %d cannot record an attempt", ErrInvalidInput, index)
 	}
-	if err := validateAttemptInput(input); err != nil {
+	reference, err := run.identity.Command(index)
+	if err != nil {
+		return CommandOutcome{}, CommandRef{}, err
+	}
+	if err := validateAttemptInput(reference.Spec, input); err != nil {
 		return CommandOutcome{}, CommandRef{}, err
 	}
 	if err := validateDiagnosticInput(entry, input); err != nil {
-		return CommandOutcome{}, CommandRef{}, err
-	}
-	reference, err := run.identity.Command(index)
-	if err != nil {
 		return CommandOutcome{}, CommandRef{}, err
 	}
 	return entry, reference, nil
@@ -481,23 +482,31 @@ func (run *Run) commandOutcome(index int) (CommandOutcome, error) {
 	}, nil
 }
 
-func validateAttemptInput(input AttemptInput) error {
+func validateAttemptInput(command CommandSpec, input AttemptInput) error {
 	if input.Duration < 0 || input.ResourceWait < 0 {
 		return fmt.Errorf("%w: command duration is invalid", ErrInvalidInput)
 	}
 	switch input.Status {
 	case Passed:
-		if input.ExitStatus != 0 || input.FailureCategory != "" {
+		if !validPassedAttempt(command, input.ExitStatus, input.FailureCategory, input.Diagnostic, input.ReportBearing) {
 			return fmt.Errorf("%w: passed command outcome is invalid", ErrInvalidInput)
 		}
 	case Failed:
-		if !validFailureCategory(input.FailureCategory) {
+		if !validFailureCategory(input.FailureCategory) || input.ReportBearing {
 			return fmt.Errorf("%w: failed command category is invalid", ErrInvalidInput)
 		}
 	default:
 		return fmt.Errorf("%w: command status is invalid", ErrInvalidInput)
 	}
 	return nil
+}
+
+func validPassedAttempt(command CommandSpec, exitStatus int, failure FailureCategory, diagnostic, reportBearing bool) bool {
+	if !reportBearing {
+		return exitStatus == 0 && failure == ""
+	}
+	return !diagnostic && exitStatus == 1 && failure == "" && command.Category == SupplyChain &&
+		command.ReportProtocol == policy.OSVVulnerabilityReportProtocol
 }
 
 func validFailureCategory(category FailureCategory) bool {
@@ -528,7 +537,7 @@ func (run *Run) validatedAttempt(reference CommandRef, number int, input Attempt
 		Number: number, Status: input.Status, FailureCategory: input.FailureCategory, ExitStatus: input.ExitStatus,
 		DurationMilliseconds: input.Duration.Milliseconds(), ResourceWaitMilliseconds: input.ResourceWait.Milliseconds(),
 		LogPath: display, LogSHA256: result.SHA256, StdoutTruncated: document.StdoutTruncated, StderrTruncated: document.StderrTruncated,
-		Diagnostic: input.Diagnostic,
+		Diagnostic: input.Diagnostic, ReportBearing: input.ReportBearing,
 	}, nil
 }
 

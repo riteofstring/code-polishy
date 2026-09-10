@@ -577,6 +577,19 @@ func (commandRunner *mergeGatePlannedRunner) RunWithOutput(ctx context.Context, 
 	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture output for %q", command.Name)
 }
 
+func (commandRunner *mergeGatePlannedRunner) RunWithReportOutput(ctx context.Context, root string, command policy.Command, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
+	if err := commandRunner.start(root, command); err != nil {
+		return runner.Result{ExitStatus: -1}, runner.Output{}, err
+	}
+	if observed, ok := commandRunner.delegate.(runner.ReportOutputRunner); ok {
+		return observed.RunWithReportOutput(ctx, root, command, accept)
+	}
+	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
+		return observed.RunWithOutput(ctx, root, command)
+	}
+	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture report output for %q", command.Name)
+}
+
 func (commandRunner *mergeGatePlannedRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	if err := commandRunner.start(root, command); err != nil {
 		return runner.Result{ExitStatus: -1}, runner.Output{}, err
@@ -623,7 +636,8 @@ func samePolicyCommand(expected, actual policy.Command) bool {
 
 func samePolicyCommandIdentity(expected, actual policy.Command) bool {
 	return expected.Name == actual.Name && expected.Cwd == actual.Cwd && expected.TimeoutSeconds == actual.TimeoutSeconds &&
-		expected.Managed == actual.Managed && expected.PassFiles == actual.PassFiles && expected.SealedEnvironment == actual.SealedEnvironment
+		expected.Managed == actual.Managed && expected.PassFiles == actual.PassFiles && expected.SealedEnvironment == actual.SealedEnvironment &&
+		expected.ReportProtocol == actual.ReportProtocol
 }
 
 func samePolicyCommandCollections(expected, actual policy.Command) bool {

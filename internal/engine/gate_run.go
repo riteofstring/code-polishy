@@ -312,7 +312,7 @@ func gateRunCommandSpec(planned MergeGateExecutionCommand, receipts *testReceipt
 		Environment: append([]string{}, command.Environment...), ExclusiveResources: append([]string{}, command.ExclusiveResources...),
 		TimeoutSeconds: command.TimeoutSeconds, Managed: command.Managed, PassFiles: command.PassFiles,
 		PassFilePaths: append([]string{}, command.PassFilePaths...), SealedEnvironment: command.SealedEnvironment,
-		Artifacts: gateRunArtifactSpecs(command.TestArtifacts),
+		Artifacts: gateRunArtifactSpecs(command.TestArtifacts), ReportProtocol: command.ReportProtocol,
 	}
 	if receipts != nil {
 		if identity, found := receipts.identities[command.Name]; found {

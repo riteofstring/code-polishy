@@ -30,6 +30,13 @@ type OutputRunner interface {
 	RunWithOutput(context.Context, string, policy.Command) (Result, Output, error)
 }
 
+type ReportOutcomeAcceptor func(Result, Output, error) bool
+
+type ReportOutputRunner interface {
+	Runner
+	RunWithReportOutput(context.Context, string, policy.Command, ReportOutcomeAcceptor) (Result, Output, error)
+}
+
 type StructuredRunner interface {
 	Runner
 	RunStructured(context.Context, string, policy.Command) (Result, Output, error)

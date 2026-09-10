@@ -367,7 +367,7 @@ func validateOutcome(identity Identity, outcome CommandOutcome) error {
 	if outcome.Reused {
 		return validateReusedOutcome(reference, outcome)
 	}
-	planned, found, err := validatedPlannedAttempt(outcome.Attempts)
+	planned, found, err := validatedPlannedAttempt(reference.Spec, outcome.Attempts)
 	if err != nil {
 		return err
 	}
@@ -377,11 +377,11 @@ func validateOutcome(identity Identity, outcome CommandOutcome) error {
 	return validateOutcomeReceipt(reference, outcome)
 }
 
-func validatedPlannedAttempt(attempts []Attempt) (Attempt, bool, error) {
+func validatedPlannedAttempt(command CommandSpec, attempts []Attempt) (Attempt, bool, error) {
 	var planned Attempt
 	found := false
 	for index, attempt := range attempts {
-		if err := validateAttempt(attempt, index+1); err != nil {
+		if err := validateAttempt(command, attempt, index+1); err != nil {
 			return Attempt{}, false, err
 		}
 		if attempt.Diagnostic {
@@ -431,11 +431,11 @@ func validateOutcomeReceipt(reference CommandRef, outcome CommandOutcome) error 
 	return nil
 }
 
-func validateAttempt(attempt Attempt, expectedNumber int) error {
+func validateAttempt(command CommandSpec, attempt Attempt, expectedNumber int) error {
 	if !validAttemptHeader(attempt, expectedNumber) {
 		return fmt.Errorf("%w: command attempt is invalid", ErrInvalidArtifact)
 	}
-	return validateAttemptStatus(attempt)
+	return validateAttemptStatus(command, attempt)
 }
 
 func validAttemptHeader(attempt Attempt, expectedNumber int) bool {
@@ -443,11 +443,11 @@ func validAttemptHeader(attempt Attempt, expectedNumber int) bool {
 		attempt.ResourceWaitMilliseconds >= 0 && validArtifactDisplayPath(attempt.LogPath) && validSHA256(attempt.LogSHA256)
 }
 
-func validateAttemptStatus(attempt Attempt) error {
-	if attempt.Status == Passed && (attempt.ExitStatus != 0 || attempt.FailureCategory != "") {
+func validateAttemptStatus(command CommandSpec, attempt Attempt) error {
+	if attempt.Status == Passed && !validPassedAttempt(command, attempt.ExitStatus, attempt.FailureCategory, attempt.Diagnostic, attempt.ReportBearing) {
 		return fmt.Errorf("%w: passed command attempt is invalid", ErrInvalidArtifact)
 	}
-	if attempt.Status == Failed && !validFailureCategory(attempt.FailureCategory) {
+	if attempt.Status == Failed && (!validFailureCategory(attempt.FailureCategory) || attempt.ReportBearing) {
 		return fmt.Errorf("%w: failed command attempt is invalid", ErrInvalidArtifact)
 	}
 	return nil
@@ -644,7 +644,7 @@ func validateStoredExecutedOutcome(run *Run, reference CommandRef, outcome Comma
 	if reference.Spec.Category != OrdinaryTest || outcome.Status != Passed {
 		return nil
 	}
-	last, found, err := validatedPlannedAttempt(outcome.Attempts)
+	last, found, err := validatedPlannedAttempt(reference.Spec, outcome.Attempts)
 	if err != nil || !found {
 		return fmt.Errorf("%w: passed ordinary test has no planned attempt", ErrInvalidArtifact)
 	}
@@ -702,7 +702,7 @@ func validateReusedReceiptProvenance(run *Run, reference CommandRef, receipt Rec
 	if err := validateStoredExecutedOutcome(sourceRun, reference, sourceOutcome); err != nil {
 		return err
 	}
-	return validateReusedSourceLog(sourceOutcome, receipt)
+	return validateReusedSourceLog(reference, sourceOutcome, receipt)
 }
 
 func reusedReceiptSource(run *Run, receipt Receipt) (artifactDirectory, Report, error) {
@@ -731,8 +731,8 @@ func sourceExecutionRun(run *Run, directory artifactDirectory, report Report) *R
 	}
 }
 
-func validateReusedSourceLog(outcome CommandOutcome, receipt Receipt) error {
-	attempt, found, err := validatedPlannedAttempt(outcome.Attempts)
+func validateReusedSourceLog(reference CommandRef, outcome CommandOutcome, receipt Receipt) error {
+	attempt, found, err := validatedPlannedAttempt(reference.Spec, outcome.Attempts)
 	if err != nil || !found || attempt.LogSHA256 != receipt.LogSHA256 {
 		return fmt.Errorf("%w: reused command receipt does not match its source log", ErrStaleArtifact)
 	}

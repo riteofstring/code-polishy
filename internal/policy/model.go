@@ -323,7 +323,10 @@ type Command struct {
 	TestArtifacts         []TestArtifact `json:"-"`
 	TestArtifactSuite     string         `json:"-"`
 	TestArtifactDirectory string         `json:"-"`
+	ReportProtocol        string         `json:"-"`
 }
+
+const OSVVulnerabilityReportProtocol = "osv-vulnerability-json/v1"
 
 type PackAdapter struct {
 	PackName        string

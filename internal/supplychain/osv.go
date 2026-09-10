@@ -30,7 +30,7 @@ func osvCommands(repo repository.Repository) ([]policy.Command, error) {
 func osvCommand(repo repository.Repository, name, root string) policy.Command {
 	return policy.Command{
 		Name: name, Argv: []string{repo.PolicyTool("osv-scanner"), "scan", "source", "--all-vulns", "--format", "json", "--verbosity", "error"}, Cwd: root,
-		Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800,
+		Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800, ReportProtocol: policy.OSVVulnerabilityReportProtocol,
 	}
 }
 
@@ -114,7 +114,7 @@ func compactStrings(values []string) []string {
 
 func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) []policy.Finding {
 	root := scan.Root
-	output, runErr := runCommandWithOutput(ctx, repo, scan.Command, commandRunner)
+	output, runErr := runOSVCommandWithOutput(ctx, repo, scan, commandRunner)
 	findings, parseErr := parseOSVScanReport(repo, scan, output.Stdout)
 	if parseErr != nil {
 		message := fmt.Sprintf("parse OSV-Scanner JSON: %v", parseErr)
@@ -136,6 +136,32 @@ func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, 
 		return []policy.Finding{{Check: "policy.securityScanner", Path: root, Subject: "osv-scanner", Message: message}}
 	}
 	return findings
+}
+
+func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) (runner.Output, error) {
+	if observed, ok := commandRunner.(runner.ReportOutputRunner); ok {
+		_, output, err := observed.RunWithReportOutput(ctx, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
+			return acceptedOSVReportExit(ctx, repo, scan, result, output, runErr)
+		})
+		return output, err
+	}
+	return runCommandWithOutput(ctx, repo, scan.Command, commandRunner)
+}
+
+func acceptedOSVReportExit(ctx context.Context, repo repository.Repository, scan osvScan, result runner.Result, output runner.Output, runErr error) bool {
+	if ctx.Err() != nil || runErr == nil || result.ExitStatus != 1 || runner.FailureCategoryFor(ctx, result, runErr) != runner.FailureCommandExit {
+		return false
+	}
+	findings, err := parseOSVScanReport(repo, scan, output.Stdout)
+	if err != nil || len(findings) == 0 {
+		return false
+	}
+	for _, finding := range findings {
+		if finding.Check != "supplyChain.osvVulnerability" || finding.Vulnerability == nil {
+			return false
+		}
+	}
+	return true
 }
 
 type osvReport struct {

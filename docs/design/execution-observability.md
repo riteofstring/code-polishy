@@ -42,3 +42,12 @@ test-command exit; infrastructure and artifact failures stay diagnostic.
 Baseline replays remain diagnostic and cannot satisfy the candidate. The gate
 runner, rather than the report renderer, authorizes the configured retry command
 and writes the receipt for the resulting combined outcome.
+
+Some scanners use a nonzero exit to report findings rather than an operational
+failure. The gate records such an attempt as report-bearing only when the
+planned command declares a recognized protocol and its protocol-specific parser
+accepts a complete, nonempty finding report. The original exit status remains
+in evidence, while malformed, empty, timed-out, canceled, and operational
+results remain failed commands. OSV-Scanner's exit status 1 is the first such
+protocol; vulnerability assessment policy, not process status, decides whether
+its accepted report permits the gate to pass.

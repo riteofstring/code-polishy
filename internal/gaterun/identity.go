@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 func NewIdentity(input IdentityInput) (Identity, error) {
@@ -220,6 +222,9 @@ func validateCommand(command CommandSpec) error {
 		}
 	} else if command.SuiteIdentitySHA256 != "" {
 		return fmt.Errorf("non-test command has a suite receipt identity")
+	}
+	if command.ReportProtocol != "" && (command.Category != SupplyChain || command.ReportProtocol != policy.OSVVulnerabilityReportProtocol) {
+		return fmt.Errorf("command report protocol is invalid")
 	}
 	return validateArtifactSpecs(command.Artifacts)
 }

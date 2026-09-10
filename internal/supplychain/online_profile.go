@@ -135,7 +135,7 @@ func sameOnlineCommand(left, right policy.Command) bool {
 
 func sameOnlineCommandIdentity(left, right policy.Command) bool {
 	return left.Name == right.Name && left.Cwd == right.Cwd && left.TimeoutSeconds == right.TimeoutSeconds &&
-		left.Managed == right.Managed && left.PassFiles == right.PassFiles
+		left.Managed == right.Managed && left.PassFiles == right.PassFiles && left.ReportProtocol == right.ReportProtocol
 }
 
 func sameOnlineCommandCollections(left, right policy.Command) bool {

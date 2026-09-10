@@ -198,6 +198,60 @@ func TestOnlyOrdinaryTestsCanProvideReusableReceipts(t *testing.T) {
 	}
 }
 
+func TestReportBearingSupplyChainAttemptPreservesExitStatus(t *testing.T) {
+	command := testCommand(SupplyChain, "osv-scan-root")
+	command.ReportProtocol = policy.OSVVulnerabilityReportProtocol
+	identity := testIdentity(t, []CommandSpec{command})
+	run := startRun(t, t.TempDir(), identity)
+	log, err := run.OpenCommandLog(0, LogOptions{StreamLimit: 256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := log.Stdout().Write([]byte(`{"results":[{"packages":[{"vulnerabilities":[{"id":"CVE-2026-1000"}]}]}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	logResult, err := log.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := run.RecordAttempt(0, AttemptInput{Status: Passed, ExitStatus: 1, ReportBearing: true}, logResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.Status != Passed || len(outcome.Attempts) != 1 || outcome.Attempts[0].ExitStatus != 1 || !outcome.Attempts[0].ReportBearing {
+		t.Fatalf("report-bearing outcome = %+v", outcome)
+	}
+	if _, err := run.Finalize(FinalizeOptions{Status: RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: identity.BehaviorReview}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadReport(run.repositoryRoot, identity)
+	if err != nil || loaded.Commands[0].Attempts[0].ExitStatus != 1 || !loaded.Commands[0].Attempts[0].ReportBearing {
+		t.Fatalf("loaded report-bearing outcome = %+v, error = %v", loaded.Commands, err)
+	}
+}
+
+func TestReportBearingAttemptRequiresExactProtocolOutcome(t *testing.T) {
+	command := testCommand(SupplyChain, "osv-scan-root")
+	command.ReportProtocol = policy.OSVVulnerabilityReportProtocol
+	tests := map[string]AttemptInput{
+		"wrong exit":  {Status: Passed, ExitStatus: 2, ReportBearing: true},
+		"diagnostic":  {Status: Passed, ExitStatus: 1, Diagnostic: true, ReportBearing: true},
+		"failed":      {Status: Failed, FailureCategory: CommandExit, ExitStatus: 1, ReportBearing: true},
+		"no protocol": {Status: Passed, ExitStatus: 1, ReportBearing: true},
+	}
+	for name, input := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := command
+			if name == "no protocol" {
+				candidate.ReportProtocol = ""
+			}
+			if err := validateAttemptInput(candidate, input); err == nil {
+				t.Fatal("invalid report-bearing attempt was accepted")
+			}
+		})
+	}
+}
+
 func TestDiagnosticAttemptDoesNotChangePlannedOutcomeOrReceipt(t *testing.T) {
 	identity := testIdentity(t, []CommandSpec{testCommand(OrdinaryTest, "unit")})
 	run := startRun(t, t.TempDir(), identity)

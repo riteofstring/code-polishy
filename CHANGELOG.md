@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.15 - 2026-09-10
+
+- Record OSV-Scanner exit status 1 as report-bearing gate evidence only for a
+  valid, nonempty vulnerability report, preserving the exit status while
+  vulnerability assessments decide the gate result.
+- Keep malformed, empty, timed-out, canceled, and operational scanner results
+  as failed commands.
+
 ## 0.24.14 - 2026-09-10
 
 - Retain task intent only when configured or explicitly requested behavior
