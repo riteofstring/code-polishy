@@ -45,11 +45,13 @@ changes a target lock.
 
 5. Select the publication scope before starting builds. For a GHCR-only release,
    build only the `linux-x64` publication directory on a native Linux x86-64
-   executor; do not build the other native hosts or a release index. An amd64
-   container or virtual machine emulated on an Arm host is not a native
-   executor. For a complete native release, build one publication directory on
-   every supported host from that exact commit. Install pinned policy tools
-   first. On Linux and macOS:
+   executor by default; do not build the other native hosts or a release index.
+   An amd64 container or virtual machine emulated on an Arm host is not native
+   evidence. The maintainer may instead explicitly select the documented
+   Docker Desktop fallback for a GHCR-only publication, accepting its slower
+   execution and narrower evidence. For a complete native release, build one
+   publication directory on every supported host from that exact commit.
+   Install pinned policy tools first. On Linux and macOS:
 
    ```sh
    ./scripts/build-release.sh --output /absolute/path/to/publication
@@ -103,9 +105,11 @@ changes a target lock.
    installed target contracts exactly once; use its exact fixture selector only
    for a bounded retry. The complete harness deliberately invokes the stable
    launcher many times, and each invocation verifies the installed release.
-   Never run it through QEMU, Rosetta, Docker Desktop architecture emulation, or
-   a macOS bind mount. If no native executor is available, stop before tagging
-   or publishing instead of substituting local emulation.
+   Do not count QEMU, Rosetta, Docker Desktop architecture emulation, or a macOS
+   bind mount as native execution. Without a native executor, stop before
+   tagging or publishing unless the maintainer explicitly selected the
+   GHCR-only Docker Desktop fallback below. That fallback omits this fresh
+   native archive-install contract and must report that limitation.
 
 8. Create the annotated tag and rerun preflight:
 
@@ -135,20 +139,58 @@ Use this path when the requested release artifact is only the public Linux x64
 image at `ghcr.io/riteofstring/code-polishy`. It does not require macOS,
 Windows, Linux arm64, or a five-host release index.
 
-Run the entire archive build, fresh-install contract, and publication sequence
-on a native Linux x86-64 runner or VM. An amd64 Docker container on an Apple
-Silicon or other Arm host does not qualify: it runs the installed-contract
-matrix through architecture emulation, and a macOS bind mount makes its repeated
-release verification slower still. `uname -m` inside an emulated container is
-not proof of native execution; confirm the runner or VM host architecture before
-starting. If the process list contains `qemu-x86_64` or Rosetta while exercising
-the release, stop and move the work to a native executor.
+The default path runs the entire archive build, fresh-install contract, and
+publication sequence on a native Linux x86-64 runner or VM. An amd64 Docker
+container on an Apple Silicon or other Arm host is not native evidence:
+`uname -m` inside it does not prove the host architecture, and a macOS bind
+mount makes repeated release verification slower still. If the process list
+contains `qemu-x86_64` or Rosetta while exercising the release, do not record
+that execution as native acceptance.
 
 Do not invoke `scripts/build-oci-image.sh` directly on macOS: it intentionally
 requires Linux and GNU `sha256sum`. Buildx may assemble the final OCI image, but
 Buildx architecture support does not turn an emulated container into acceptable
 native release-verification evidence. Do not reconstruct the repository's
 Buildx command by hand.
+
+### Explicit Docker Desktop fallback
+
+The maintainer may explicitly select the established Apple Silicon Docker
+Desktop fallback for a GHCR-only release. Once selected, the absence of a native
+publisher is not a blocker and is not a reason to propose new CI infrastructure.
+This path is deliberately narrower than native publication: it builds the
+Linux x64 archive and image under AMD64 emulation, omits the fresh native
+archive-install contract in step 7, and must not be described as native release
+evidence. Expect it to be substantially slower than a native runner.
+
+Reuse the provisioned components that produced the previous successful image;
+do not rediscover or recreate them during a release. On the maintainer's current
+workstation these are the `code-polishy-v02412` `docker-container` Buildx
+builder and the `local/code-polishy-oci-client:v0.24.11` Linux AMD64 client.
+Before starting, inspect both, require the builder's digest-pinned BuildKit
+image, confirm the target GHCR tag is absent, and verify the public annotated
+source tag. Use a new temporary clean clone of that tag and a new absent
+publication directory.
+
+Populate the clone's Linux tool cache only from an exact digest-pinned prior
+Code Polishy image after confirming the candidate did not change any tool pin
+or bundle lock. Give the emulated client only the temporary clone, publication
+directory, Docker socket, copied Buildx configuration, and a temporary Docker
+configuration. Read the existing GHCR credential through Docker Desktop's
+credential helper, pass it over standard input, never print it, and remove the
+temporary Docker configuration on exit. Inside that one client invocation:
+
+1. verify the exact commit, annotated tag, clean tree, Linux AMD64 environment,
+   existing builder, and release preflight;
+2. run `scripts/build.sh`, then `scripts/build-release.sh` for `linux-x64`; and
+3. run `scripts/build-oci-image.sh --push` unchanged so SBOM/provenance
+   attestations, exact registry digest resolution, digest pull, and the non-root
+   launcher smoke test remain mandatory.
+
+Run this sequence once. Retain the temporary publication until the public
+digest is verified, then report both the digest and the omitted native
+fresh-install evidence. A failure stops the publication; do not overwrite the
+tag, switch to `latest`, or improvise a different Buildx command.
 
 Before building, select an already provisioned Buildx builder and inspect it:
 
@@ -217,12 +259,12 @@ rmdir "$anonymous_config"
 
 Stop at the first failed prerequisite instead of retrying the build:
 
-| Symptom                                      | Resolution                                                              |
-| -------------------------------------------- | ----------------------------------------------------------------------- |
-| Host is Arm or a release process uses QEMU   | Stop before building; schedule the run on native Linux x86-64.          |
-| Script prints usage immediately on macOS     | Move the publication to Linux x86-64.                                   |
-| Buildx reports unsupported attestations      | Select an admitted `docker-container` builder.                          |
-| GHCR returns denied or unauthorized          | Refresh the maintainer credential with package-write access.            |
-| Publication output already exists            | Choose a new absent output directory; never overwrite release evidence. |
-| Anonymous pull returns unauthorized          | Change the GHCR package visibility to Public.                           |
-| The final version or digest smoke test fails | Fix the release and publish a new patch version; never move the tag.    |
+| Symptom                                      | Resolution                                                                              |
+| -------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Host is Arm or a release process uses QEMU   | Use native Linux, or the explicitly selected fallback without claiming native evidence. |
+| Script prints usage immediately on macOS     | Use native Linux, or run the established fallback's Linux client.                       |
+| Buildx reports unsupported attestations      | Select an admitted `docker-container` builder.                                          |
+| GHCR returns denied or unauthorized          | Refresh the maintainer credential with package-write access.                            |
+| Publication output already exists            | Choose a new absent output directory; never overwrite release evidence.                 |
+| Anonymous pull returns unauthorized          | Change the GHCR package visibility to Public.                                           |
+| The final version or digest smoke test fails | Fix the release and publish a new patch version; never move the tag.                    |
