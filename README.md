@@ -85,7 +85,7 @@ code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 # Enforce the policy before merge
 code-polishy merge-gate --base origin/main
 
-# After a failed merge gate, resume its matching passed ordinary tests
+# After a failed merge gate, reuse matching tests or safely rerun the full gate
 code-polishy merge-gate --base origin/main --resume
 
 # Move exact reusable suite evidence through a trusted CI artifact boundary

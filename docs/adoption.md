@@ -802,8 +802,10 @@ reuse successful suites only when the suite explicitly declares
 read-only execution view was enforced. Suites that omit the flag execute for
 every candidate and never write reusable receipts. All non-test phases run.
 `merge-gate --base REF --resume` additionally resumes eligible ordinary suites
-from the same otherwise-identical failed gate. `test --supplemental --resume`
-applies exact reuse to a selected supplemental retry.
+from the same failed gate identity. When an environment repair produces no
+matching run, it executes the complete gate; malformed matching evidence still
+fails closed. `test --supplemental --resume` applies exact reuse to a selected
+supplemental retry.
 
 CI can move receipts through its trusted artifact boundary:
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.16 - 2026-09-10
+
+- Make task-start default to a bounded human summary while preserving the
+  complete task-start/v2 packet behind explicit `--format json` output.
+- Let merge-gate resume execute the complete gate when no matching failed-run
+  artifact exists, while rejecting damaged matching evidence and reusing only
+  validated ordinary-suite receipts.
+
 ## 0.24.15 - 2026-09-10
 
 - Record OSV-Scanner exit status 1 as report-bearing gate evidence only for a

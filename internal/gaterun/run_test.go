@@ -41,6 +41,18 @@ func TestRunWritesBoundedArtifactsAndStrictReport(t *testing.T) {
 	assertBoundedLog(t, log)
 }
 
+func TestLoadReportIfPresentDistinguishesAbsentRunFromIncompleteEvidence(t *testing.T) {
+	root := t.TempDir()
+	identity := testIdentity(t, []CommandSpec{testCommand(Check, "quality")})
+	if report, present, err := LoadReportIfPresent(root, identity); err != nil || present || report.ExecutionID != "" {
+		t.Fatalf("absent report = %+v, present=%t, error=%v", report, present, err)
+	}
+	startRun(t, root, identity)
+	if _, present, err := LoadReportIfPresent(root, identity); !present || !errors.Is(err, ErrMissingArtifact) {
+		t.Fatalf("incomplete report present=%t, error=%v", present, err)
+	}
+}
+
 func assertBoundedOutcome(t *testing.T, outcome CommandOutcome, reportPath string) {
 	t.Helper()
 	if len(outcome.Attempts) != 1 || !outcome.Attempts[0].StdoutTruncated || !outcome.Attempts[0].StderrTruncated || outcome.ReceiptPath == "" ||

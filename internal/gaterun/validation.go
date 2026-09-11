@@ -3,6 +3,7 @@ package gaterun
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	pathpkg "path"
 	"reflect"
@@ -25,6 +26,28 @@ func LoadReport(repositoryRoot string, expected Identity) (Report, error) {
 		return Report{}, err
 	}
 	return cloneReport(loaded.report), nil
+}
+
+func LoadReportIfPresent(repositoryRoot string, expected Identity) (Report, bool, error) {
+	if err := validateIdentity(expected); err != nil {
+		return Report{}, false, err
+	}
+	root, runDirectory, err := existingRunDirectory(repositoryRoot, expected)
+	if errors.Is(err, ErrMissingArtifact) {
+		return Report{}, false, nil
+	}
+	if err != nil {
+		return Report{}, false, err
+	}
+	pointer, err := loadLatestReportPointer(runDirectory)
+	if err != nil {
+		return Report{}, true, err
+	}
+	loaded, err := loadPointedReport(root, runDirectory, pointer, expected)
+	if err != nil {
+		return Report{}, true, err
+	}
+	return cloneReport(loaded.report), true, nil
 }
 
 func LoadReusableReceipt(repositoryRoot string, identity Identity, index int) (ReusableReceipt, error) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +54,42 @@ func TestMergeGateLetsPolicyRejectUnassessedOSVReportExit(t *testing.T) {
 	outcome := loadPublishedOSVOutcome(t, root, report)
 	if outcome.Status != gaterun.Passed || len(outcome.Attempts) != 1 || outcome.Attempts[0].ExitStatus != 1 || !outcome.Attempts[0].ReportBearing {
 		t.Fatalf("OSV command outcome = %+v", outcome)
+	}
+}
+
+func TestMergeGateResumeRerunsAllPhasesWhenRepairedEnvironmentHasNoMatchingRun(t *testing.T) {
+	root := contentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "content/data.json", "{\"changed\":true}\n", 0o600)
+	commitEngineCandidate(t, root, "change content")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range policyEngine.Repository.Config.Checks {
+		if policyEngine.Repository.Config.Checks[index].Name == "content-check" {
+			policyEngine.Repository.Config.Checks[index].Environment = []string{"RESUME_PREREQUISITE"}
+		}
+	}
+	t.Setenv("RESUME_PREREQUISITE", "missing")
+	failedRunner := &failingEngineRunner{failure: "content-check"}
+	policyEngine.Runner = failedRunner
+	failed, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil || failed.GateRunPolicy == nil || failed.GateRunPolicy.Status != "failed" || slices.Contains(failedRunner.commands, "focused") {
+		t.Fatalf("pre-suite failure = %+v, commands=%v, error=%v", failed, failedRunner.commands, err)
+	}
+	t.Setenv("RESUME_PREREQUISITE", "installed")
+	resumedRunner := &recordingEngineRunner{}
+	policyEngine.Runner = resumedRunner
+	resumed, err := policyEngine.MergeGateWithOptions(t.Context(), "main", MergeGateOptions{Resume: true})
+	if err != nil || HasFindings(resumed) || resumed.GateRunPolicy == nil || resumed.GateRunPolicy.Status != "passed" || len(resumed.GateRunPolicy.ReusedPhases) != 0 {
+		t.Fatalf("resumed report = %+v, error=%v", resumed, err)
+	}
+	for _, command := range []string{"content-check", "focused", "content-build", "offline-supply"} {
+		if !slices.Contains(resumedRunner.commands, command) {
+			t.Fatalf("resume skipped %q while rerunning the repaired plan: %v", command, resumedRunner.commands)
+		}
 	}
 }
 

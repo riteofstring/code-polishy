@@ -354,9 +354,11 @@ reusable suite receipts whose sealed execution view was enforced and whose
 complete release, platform, toolchain, command, configuration, environment,
 ownership, and file inputs still match; behavior proofs, checks, builds,
 supply-chain work, artifact security, and non-reusable suites remain fresh.
-Explicit merge resume also accepts successful reusable ordinary suites from an
-otherwise identical failed report. A reused suite receives a receipt in the
-current execution with validated provenance.
+Explicit merge resume also accepts successful reusable ordinary suites from a
+failed report with the same identity. With no matching run it executes the
+complete gate, while incomplete or invalid matching evidence fails closed. A
+reused suite receives a receipt in the current execution with validated
+provenance.
 
 ## Fail-closed planning
 

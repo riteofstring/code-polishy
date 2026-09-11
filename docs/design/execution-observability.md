@@ -43,6 +43,13 @@ Baseline replays remain diagnostic and cannot satisfy the candidate. The gate
 runner, rather than the report renderer, authorizes the configured retry command
 and writes the receipt for the resulting combined outcome.
 
+Failed-run resume is an optimization over complete gate execution, not a
+precondition for recovery. A valid failed report with the exact current gate
+identity contributes only eligible ordinary-suite receipts. When no run exists
+for that identity, the gate executes every phase. Once an exact run directory
+exists, missing or invalid report evidence is an integrity failure and cannot
+be reclassified as absence.
+
 Some scanners use a nonzero exit to report findings rather than an operational
 failure. The gate records such an attempt as report-bearing only when the
 planned command declares a recognized protocol and its protocol-specific parser

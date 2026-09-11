@@ -255,7 +255,9 @@ execute.
 selected supplemental retry. Ordinary direct `test` commands execute normally
 and record eligible passes for later gates or supplemental retries.
 `merge-gate --resume` is narrower: it resumes successful ordinary suites from
-the same otherwise-identical failed gate report while all other phases rerun.
+the same failed gate identity while all other phases rerun. If no matching run
+exists, it executes the complete gate instead of failing on a nonexistent
+suite artifact. Existing incomplete or damaged evidence still fails closed.
 
 CI can move reusable evidence through one bounded bundle:
 
@@ -597,7 +599,10 @@ test-suite commands from a prior failed merge-gate report with the same gate
 identity. Checks, builds, supply-chain commands, artifact-security commands,
 behavior proof replays, failed commands, and commands without valid receipts
 run again. Resume does not reduce scope, and final clean-candidate validation
-still applies.
+still applies. If a repaired environment has a different identity and no exact
+run directory exists, resume transparently executes the complete gate. An exact
+run directory with a missing, incomplete, malformed, or mismatched report is
+not treated as absent and remains an operational error.
 
 Every reused suite gets a new receipt inside the current execution. That
 receipt carries validated provenance back to the original executed suite, so a

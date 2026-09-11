@@ -22,11 +22,13 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 
 Use one file or directory operand with `--files PATH` instead of `--module NAME`
 when that identifies the task scope. `task-start` returns current design context
-and operational handoffs. Its `intent.captured` and `intent.willBeUsed` fields
-state whether selected behavior review retained the request. Optional tasks
-create no intent journal and schedule no review-status action. If configured
-policy selects review, rerun the unchanged task-start command with
-`--intent-file -` and supply the exact request on standard input before editing.
+and operational handoffs in a bounded human summary. Use `--format json` only
+when automation needs the complete `task-start/v2` packet and configured guard
+catalog. Its intent status states whether selected behavior review retained the
+request. Optional tasks create no intent journal and schedule no review-status
+action. If configured policy selects review, rerun the unchanged task-start
+command with `--intent-file -` and supply the exact request on standard input
+before editing.
 Do not recapture a request already captured by task-start. The first command
 does not replace selected reviews or event-required verification. Read-only
 questions require no capture or tests. For delivery, follow the status and
@@ -203,10 +205,13 @@ command, configuration, environment, ownership, and file-input identities still
 match. All non-test phases, behavior-proof replays, failed commands, and
 non-reusable suites execute.
 
-Use `code-polishy merge-gate --base <merge-target> --resume` only to retry an
-otherwise-identical failed merge gate. It can additionally resume successful
-ordinary suites from that failed report. For an explicitly selected
-supplemental retry, use `code-polishy test --supplemental --resume`.
+Use `code-polishy merge-gate --base <merge-target> --resume` after repairing a
+failed gate without changing the candidate. It reuses eligible successful
+ordinary suites when an exact failed report exists. If an environment repair
+changes the gate identity and no matching report exists, it safely executes the
+complete gate. Incomplete or damaged matching evidence remains an error. For an
+explicitly selected supplemental retry, use
+`code-polishy test --supplemental --resume`.
 
 CI may export current unexpired local receipts and import one bundle whose
 SHA-256 arrives through a trusted CI boundary:

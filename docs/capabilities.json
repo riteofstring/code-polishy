@@ -234,7 +234,7 @@
     {
       "name": "task-start",
       "kind": "command",
-      "description": "Validate task context and capture the exact request only when selected review will use it.",
+      "description": "Report bounded task context and capture the exact request only when selected review will use it.",
       "aliases": ["task preparation"],
       "paths": [],
       "modules": [],

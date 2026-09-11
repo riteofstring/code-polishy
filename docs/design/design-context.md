@@ -9,6 +9,13 @@ and coverage information whether it starts a task or performs a separate lookup.
 It composes that context with behavior-review selection, while request custody
 and cleanup follow the separately mapped behavior-review intent design.
 
+The interactive task-start view is bounded independently of the complete
+engine packet. It exposes selection and mapping counts, selected document and
+handoff identities, review status, and next actions without rendering complete
+path inventories, document contents, or guard definitions. Explicit JSON output
+preserves the exact packet for machine consumers. Both views derive from the
+same packet; the CLI performs no separate selection or mapping.
+
 Module and source mappings are additive. A source-specific decision can explain
 a local exception or boundary without replacing the module's wider constraints.
 A shared document may name exact source paths in several modules when the

@@ -127,9 +127,12 @@ func reusableGateReceipts(root string, gate gaterun.GateKind, identity gaterun.I
 	if gate != gaterun.MergeGate {
 		return nil, fmt.Errorf("only merge-gate supports --resume")
 	}
-	prior, err := gaterun.LoadReport(root, identity)
+	prior, present, err := gaterun.LoadReportIfPresent(root, identity)
 	if err != nil {
 		return nil, fmt.Errorf("resume exact merge-gate run: %w", err)
+	}
+	if !present {
+		return map[int]gaterun.ReusableReceipt{}, nil
 	}
 	if prior.Status != gaterun.RunFailed {
 		return nil, fmt.Errorf("resume exact merge-gate run: prior run status is %s, want failed", prior.Status)

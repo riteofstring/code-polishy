@@ -10,61 +10,74 @@ import (
 )
 
 func handleTaskStart(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	request, err := parseTaskStartOptions(arguments)
+	options, err := parseTaskStartOptions(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	if request.IntentPath == "-" {
-		request.IntentPath = ""
-		request.Intent = os.Stdin
+	if options.request.IntentPath == "-" {
+		options.request.IntentPath = ""
+		options.request.Intent = os.Stdin
 	}
-	data, err := policyEngine.TaskStart(ctx, request)
+	data, err := policyEngine.TaskStart(ctx, options.request)
 	if err != nil {
 		return commandResult{}, err
 	}
-	return commandResult{quiet: true, messages: []string{strings.TrimSuffix(string(data), "\n")}}, nil
+	message, err := renderTaskStart(data, options.format)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{quiet: true, messages: []string{message}}, nil
 }
 
-func parseTaskStartOptions(arguments []string) (engine.TaskStartRequest, error) {
-	request := engine.TaskStartRequest{Context: engine.ContextRequest{Workflow: "task-start"}}
+type taskStartOptions struct {
+	request engine.TaskStartRequest
+	format  string
+}
+
+func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
+	options := taskStartOptions{
+		request: engine.TaskStartRequest{Context: engine.ContextRequest{Workflow: "task-start"}},
+		format:  "human",
+	}
 	seen := map[string]bool{}
 	for len(arguments) > 0 {
 		name, _, _ := strings.Cut(arguments[0], "=")
 		value, consumed, _, err := namedOptionValue(arguments, name)
 		if err != nil {
-			return request, err
+			return options, err
 		}
 		if seen[name] && name != "--feature" && name != "--situation" {
-			return request, errorsDuplicateOption("task-start", name)
+			return options, errorsDuplicateOption("task-start", name)
 		}
 		seen[name] = true
-		if err := applyTaskStartOption(&request, name, value); err != nil {
-			return request, err
+		if err := applyTaskStartOption(&options, name, value); err != nil {
+			return options, err
 		}
 		arguments = arguments[consumed:]
 	}
 	if seen["--files"] == seen["--module"] {
-		return request, fmt.Errorf("task-start requires exactly one --files PATH or --module NAME")
+		return options, fmt.Errorf("task-start requires exactly one --files PATH or --module NAME")
 	}
-	return request, nil
+	return options, nil
 }
 
-func applyTaskStartOption(request *engine.TaskStartRequest, name, value string) error {
+func applyTaskStartOption(options *taskStartOptions, name, value string) error {
 	switch name {
 	case "--intent-file":
-		request.IntentPath = value
+		options.request.IntentPath = value
 	case "--files":
-		request.Context.Mode, request.Context.Files = "files", []string{value}
+		options.request.Context.Mode, options.request.Context.Files = "files", []string{value}
 	case "--module":
-		request.Context.Mode, request.Context.Modules = "modules", []string{value}
+		options.request.Context.Mode, options.request.Context.Modules = "modules", []string{value}
 	case "--feature":
-		request.Features = append(request.Features, value)
+		options.request.Features = append(options.request.Features, value)
 	case "--situation":
-		request.Context.Situations = append(request.Context.Situations, value)
+		options.request.Context.Situations = append(options.request.Context.Situations, value)
 	case "--format":
-		if value != "json" {
-			return fmt.Errorf("task-start emits one JSON packet; --format must be json")
+		if value != "human" && value != "json" {
+			return fmt.Errorf("task-start --format must be human or json")
 		}
+		options.format = value
 	default:
 		return fmt.Errorf("unknown task-start option %q", name)
 	}

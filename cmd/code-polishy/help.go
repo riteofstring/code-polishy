@@ -47,14 +47,15 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "task-start",
 		summary: "Validate task context and capture intent only when behavior review is selected.",
-		syntax:  []string{"code-polishy task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format json]"},
+		syntax:  []string{"code-polishy task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
 		selectors: []string{
 			"Choose exactly one contained file, directory, or declared module; change-aware and repository-wide selectors are not accepted.",
 			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
 			"Intent is required only when configured policy or an explicit feature selects behavior review. Use --intent-file - for bounded UTF-8 standard input.",
-			"Do not supply intent when review is optional; the task-start/v2 packet reports captured and willBeUsed separately.",
+			"Do not supply intent when review is optional; output reports captured and willBeUsed separately.",
+			"Human output is the bounded default. Use --format json for the complete task-start/v2 packet and configured guard catalog.",
 		},
-		sideEffects: []string{"Emits one task-start/v2 JSON document. It atomically appends the intent journal only when selected review will consume that intent, and runs no tests, reviews, package operations, or repository commands."},
+		sideEffects: []string{"Emits a bounded human summary by default or one complete task-start/v2 JSON document with --format json. It atomically appends the intent journal only when selected review will consume that intent, and runs no tests, reviews, package operations, or repository commands."},
 		exits:       []string{"0 packet produced and any selected intent captured", "2 invalid usage, unavailable context, or operational failure"},
 		examples:    []string{"code-polishy task-start --module application", "code-polishy task-start --intent-file - --module application --feature checkout", "code-polishy task-start --files frontend --situation deployment"},
 	},
@@ -278,7 +279,7 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"Exactly one --base REF is required.",
 			"An exact already-passed identity executes no commands; new identities may reuse only complete matching suite receipts.",
-			"--resume explicitly reuses only eligible successful ordinary test suites from a content-matching failed merge gate; it does not reduce gate scope.",
+			"--resume reuses eligible successful ordinary test suites from a matching failed merge gate. Without a matching run it executes the complete gate; damaged matching evidence is an error.",
 		},
 		sideEffects: []string{"Reads exact prior evidence; when work is required, runs merge policy and writes managed logs and a JSON run report below .code-polishy-reports/merge-gate/."},
 		exits:       []string{"0 gate passed", "1 policy findings or failed gate command", "2 invalid usage or operational failure"},

@@ -86,7 +86,6 @@ func TestTaskStartInvalidInputsCreateNoJournalOrArtifacts(t *testing.T) {
 		"missing source":           {"--files", "absent.go"},
 		"unknown feature":          {"--files", "value.go", "--feature", "purchase"},
 		"selected missing handoff": {"--files", "value.go", "--situation", "authentication"},
-		"unknown format":           {"--files", "value.go", "--format", "human"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root, policyRoot, intent := newTaskStartCLIRepository(t)
@@ -125,6 +124,42 @@ func TestTaskStartOptionalSelectionCreatesNoIntentJournalOrReviewActions(t *test
 	status, _, _ = captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "value.go", "--situation", "authentication"))
 	if status != 2 {
 		t.Fatalf("invalid later task start status=%d", status)
+	}
+}
+
+func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "value.go"}
+	status, stdout, stderr := captureRunOutput(t, arguments)
+	for _, expected := range []string{
+		"TASK START: task-start/v2",
+		"INTENT: captured=false willBeUsed=false",
+		"DESIGN DOCUMENT: docs/design/current.md",
+		"CONFIGURED GUARDS:",
+		"NEXT final-gate:",
+	} {
+		if !strings.Contains(stdout, expected) {
+			t.Fatalf("human task start omitted %q: %s", expected, stdout)
+		}
+	}
+	if status != 0 || stderr != "" || len(stdout) > 16<<10 || strings.Contains(stdout, `"configuredGuards"`) || strings.Contains(stdout, "absent/**") {
+		t.Fatalf("human task start was not bounded: status=%d bytes=%d stdout=%q stderr=%q", status, len(stdout), stdout, stderr)
+	}
+	status, explicit, stderr := captureRunOutput(t, append(arguments, "--format", "human"))
+	if status != 0 || stderr != "" || explicit != stdout {
+		t.Fatalf("explicit human output differs: status=%d stdout=%q stderr=%q", status, explicit, stderr)
+	}
+}
+
+func TestTaskStartRejectsUnknownOutputFormatBeforeWritingArtifacts(t *testing.T) {
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "value.go", "--format", "yaml"}
+	status, stdout, stderr := captureRunOutput(t, arguments)
+	if status != 2 || stdout != "" || !strings.Contains(stderr, "--format must be human or json") {
+		t.Fatalf("unknown format: status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".code-polishy-reports")); !os.IsNotExist(err) {
+		t.Fatalf("unknown format created report state: %v", err)
 	}
 }
 
@@ -239,7 +274,7 @@ func newTaskStartCLIRepository(t *testing.T) (string, string, string) {
 }
 
 func taskStartCLIArguments(root, policyRoot, intent string) []string {
-	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start"}
+	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--format", "json"}
 	if intent != "" {
 		arguments = append(arguments, "--intent-file", intent)
 	}

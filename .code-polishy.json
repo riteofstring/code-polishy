@@ -78,7 +78,8 @@
           "internal/engine/design_context.go",
           "internal/engine/task_start.go",
           "internal/engine/task_start_actions.go",
-          "cmd/code-polishy/design_context.go"
+          "cmd/code-polishy/design_context.go",
+          "cmd/code-polishy/task_start_output.go"
         ]
       },
       {

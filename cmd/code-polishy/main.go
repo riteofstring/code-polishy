@@ -23,7 +23,7 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 Commands:
   version
   capabilities [--query TEXT] [--format human|json]
-  task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME] [--situation NAME]
+  task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
