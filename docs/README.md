@@ -33,6 +33,8 @@ and aliases. Search is local, bounded, and deterministic.
   boundaries, promotion, and artifacts.
 - [Artifact Security](artifact-security.md) documents shared container scanning,
   producer contracts, OpenVEX, and optional behavior-review evidence custody.
+- [Repository Size](repository-size.md) explains workspace and governed-content
+  footprint reports, Git-base comparisons, and agent interpretation.
 
 ## Policy reference
 
@@ -55,6 +57,8 @@ and aliases. Search is local, bounded, and deterministic.
   update the template.
 - [Behavior Review Intent Custody](design/behavior-review-intent.md) explains
   conditional request capture, stdin transport, and explicit evidence cleanup.
+- [Repository Size Analysis](design/repository-size-analysis.md) defines safe,
+  bounded footprint measurement and its human/agent interpretation boundary.
 - [Policy Engine Architecture](policy-engine-architecture.md) maps the runtime
   ownership boundaries and execution model.
 - [Source Comment Policy Design](design/source-comment-policy.md) explains the

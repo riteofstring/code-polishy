@@ -59,6 +59,9 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	}
 	coalesceReportOutcomes(&report)
 	report.AnalysisContext = reportArray(report.AnalysisContext)
+	if report.RepositorySize != nil {
+		normalizeRepositorySize(report.RepositorySize)
+	}
 	if report.Execution != nil {
 		report.Execution.Phases = reportArray(report.Execution.Phases)
 		report.Execution.Commands = reportArray(report.Execution.Commands)
@@ -80,6 +83,23 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	report.Notes = reportArray(report.Notes)
 	report.Summary = summarizeReport(report)
 	return report
+}
+
+func normalizeRepositorySize(analysis *repository.SizeAnalysis) {
+	analysis.ExcludedPaths = reportArray(analysis.ExcludedPaths)
+	analysis.Workspace.Categories = reportArray(analysis.Workspace.Categories)
+	analysis.Workspace.TopLevel = reportArray(analysis.Workspace.TopLevel)
+	analysis.Workspace.LargestFiles = reportArray(analysis.Workspace.LargestFiles)
+	analysis.Governed.Categories = reportArray(analysis.Governed.Categories)
+	analysis.Governed.Modules = reportArray(analysis.Governed.Modules)
+	analysis.Governed.Languages = reportArray(analysis.Governed.Languages)
+	analysis.Governed.LargestFiles = reportArray(analysis.Governed.LargestFiles)
+	if analysis.Comparison != nil {
+		analysis.Comparison.Categories = reportArray(analysis.Comparison.Categories)
+		analysis.Comparison.Modules = reportArray(analysis.Comparison.Modules)
+		analysis.Comparison.Languages = reportArray(analysis.Comparison.Languages)
+		analysis.Comparison.LargestChanges = reportArray(analysis.Comparison.LargestChanges)
+	}
 }
 
 func normalizeGitEvidence(receipts []supplychain.GitEvidenceReceipt) []supplychain.GitEvidenceReceipt {

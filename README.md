@@ -18,6 +18,8 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Stops agents from tangling parts of your codebase together.
 - Flags giant files and hard-to-follow functions before they become expensive
   to change.
+- Shows how much space the repository uses and which categories, modules, and
+  files account for its growth.
 - Makes "done" include the tests, builds, and project checks your repo requires.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
@@ -78,6 +80,9 @@ code-polishy test --changed
 
 # Review dependency risk before accepting an update
 code-polishy dependency-review --base origin/main
+
+# Explain repository footprint and growth without sending file contents
+code-polishy size --base origin/main
 
 # Accept one completed task on a long-lived branch
 code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT

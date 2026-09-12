@@ -580,6 +580,16 @@ func (repo Repository) computeLanguages(path string) []string {
 }
 
 func (repo Repository) builtInLanguage(path string) string {
+	if language := builtInExtensionLanguage(path); language != "" {
+		return language
+	}
+	if repo.hasShellShebang(path) {
+		return "shell"
+	}
+	return ""
+}
+
+func builtInExtensionLanguage(path string) string {
 	extension := strings.ToLower(filepath.Ext(path))
 	languages := map[string]string{
 		".go": "go", ".ts": "typescript", ".tsx": "typescript", ".js": "typescript",
@@ -590,13 +600,7 @@ func (repo Repository) builtInLanguage(path string) string {
 		".swift": "swift", ".c": "native", ".h": "native", ".cc": "native", ".cpp": "native",
 		".cxx": "native", ".hpp": "native", ".proto": "protobuf", ".sql": "sql", ".dart": "dart",
 	}
-	if language := languages[extension]; language != "" {
-		return language
-	}
-	if repo.hasShellShebang(path) {
-		return "shell"
-	}
-	return ""
+	return languages[extension]
 }
 
 func (repo Repository) IsExecutableSource(path string) bool {

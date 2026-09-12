@@ -13,6 +13,7 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 | Task                                   | First command                                                             |
 | -------------------------------------- | ------------------------------------------------------------------------- |
 | Read-only capability question          | `code-polishy capabilities --query "QUERY"`                               |
+| Repository footprint question          | `code-polishy size [--base MERGE_TARGET]`                                 |
 | Ordinary implementation                | `code-polishy task-start --module NAME`                                   |
 | Explicit behavior-sensitive change     | `code-polishy task-start --intent-file - --module NAME --feature FEATURE` |
 | Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`               |
@@ -39,6 +40,12 @@ exact declared alias. See [Capability Discovery](capabilities.md).
 Ordinary interactive work may use the caller's current checkout. The primary
 agent owns task decomposition, subagent delegation, integration, and
 verification.
+
+For a repository-size question, use `code-polishy size`. Add `--base` when the
+question concerns growth or a candidate change. Treat its composition and delta
+as evidence; project context determines whether the result is reasonable. The
+command neither sends repository facts to an AI provider nor includes file
+contents in its report.
 
 Use `code-polishy task-session` when the caller requests isolation or when an
 unattended bounded task benefits from a disposable worktree. Select every

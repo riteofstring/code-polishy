@@ -35,6 +35,7 @@
     },
     "sourceDependencyGraph": { "$ref": "#/$defs/sourceDependencyGraph" },
     "repositoryContext": { "$ref": "#/$defs/repositoryContext" },
+    "repositorySize": { "$ref": "#/$defs/repositorySize" },
     "architectureReview": { "$ref": "#/$defs/architectureReview" },
     "architecturePreparation": {
       "type": "object",
@@ -321,6 +322,184 @@
           "maxItems": 64,
           "items": { "$ref": "#/$defs/operationalHandoff" }
         }
+      }
+    },
+    "repositorySize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace", "governed", "excludedPaths"],
+      "properties": {
+        "workspace": { "$ref": "#/$defs/sizeWorkspace" },
+        "governed": { "$ref": "#/$defs/sizeGoverned" },
+        "excludedPaths": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "comparison": { "$ref": "#/$defs/sizeComparison" }
+      }
+    },
+    "sizeWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "bytes", "categories", "topLevel", "largestFiles"],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "categories": { "$ref": "#/$defs/sizeGroups" },
+        "topLevel": { "$ref": "#/$defs/sizeGroups" },
+        "largestFiles": { "$ref": "#/$defs/sizeFiles" }
+      }
+    },
+    "sizeGoverned": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "bytes",
+        "categories",
+        "modules",
+        "languages",
+        "largestFiles"
+      ],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "categories": { "$ref": "#/$defs/sizeGroups" },
+        "modules": { "$ref": "#/$defs/sizeGroups" },
+        "languages": { "$ref": "#/$defs/sizeGroups" },
+        "largestFiles": { "$ref": "#/$defs/sizeFiles" }
+      }
+    },
+    "sizeGroups": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/sizeGroup" }
+    },
+    "sizeGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "files", "bytes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "files": { "type": "integer", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sizeFiles": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/sizeFile" }
+    },
+    "sizeFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "bytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sizeTotal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "bytes"],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sizeComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestedBase",
+        "mergeBase",
+        "base",
+        "current",
+        "deltaFiles",
+        "deltaBytes",
+        "addedFiles",
+        "removedFiles",
+        "resizedFiles",
+        "addedBytes",
+        "removedBytes",
+        "resizedBytes",
+        "categories",
+        "modules",
+        "languages",
+        "largestChanges"
+      ],
+      "properties": {
+        "requestedBase": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "mergeBase": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 64,
+          "pattern": "^[A-Fa-f0-9]+$"
+        },
+        "base": { "$ref": "#/$defs/sizeTotal" },
+        "current": { "$ref": "#/$defs/sizeTotal" },
+        "deltaFiles": { "type": "integer" },
+        "deltaBytes": { "type": "integer" },
+        "addedFiles": { "type": "integer", "minimum": 0 },
+        "removedFiles": { "type": "integer", "minimum": 0 },
+        "resizedFiles": { "type": "integer", "minimum": 0 },
+        "addedBytes": { "type": "integer", "minimum": 0 },
+        "removedBytes": { "type": "integer", "minimum": 0 },
+        "resizedBytes": { "type": "integer" },
+        "categories": { "$ref": "#/$defs/sizeGroupDeltas" },
+        "modules": { "$ref": "#/$defs/sizeGroupDeltas" },
+        "languages": { "$ref": "#/$defs/sizeGroupDeltas" },
+        "largestChanges": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/sizeChange" }
+        }
+      }
+    },
+    "sizeGroupDeltas": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/sizeGroupDelta" }
+    },
+    "sizeGroupDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "baseFiles",
+        "currentFiles",
+        "deltaFiles",
+        "baseBytes",
+        "currentBytes",
+        "deltaBytes"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "baseFiles": { "type": "integer", "minimum": 0 },
+        "currentFiles": { "type": "integer", "minimum": 0 },
+        "deltaFiles": { "type": "integer" },
+        "baseBytes": { "type": "integer", "minimum": 0 },
+        "currentBytes": { "type": "integer", "minimum": 0 },
+        "deltaBytes": { "type": "integer" }
+      }
+    },
+    "sizeChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "state", "baseBytes", "currentBytes", "deltaBytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "state": { "enum": ["added", "removed", "resized"] },
+        "baseBytes": { "type": "integer", "minimum": 0 },
+        "currentBytes": { "type": "integer", "minimum": 0 },
+        "deltaBytes": { "type": "integer" }
       }
     },
     "contextDocument": {

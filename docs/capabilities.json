@@ -222,6 +222,16 @@
       "workflows": ["docs/installation.md"]
     },
     {
+      "name": "size",
+      "kind": "command",
+      "description": "Measure workspace and governed repository footprint and compare growth from a Git base.",
+      "aliases": ["repository footprint", "repository growth"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/repository-size.md", "docs/agent-workflows.md"]
+    },
+    {
       "name": "supply-chain",
       "kind": "command",
       "description": "Inspect dependency versions, licenses, release age, and vulnerabilities.",

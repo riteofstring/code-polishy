@@ -54,6 +54,7 @@ Commands:
   dependency-review --base REF
   artifact-security
   doctor [--strict]
+  size [--base REF]
   design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...]) [--situation NAME...]
   format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
@@ -383,6 +384,7 @@ func commandHandlers() map[string]commandHandler {
 		"supply-chain":        handleSupplyChain,
 		"dependency-review":   handleDependencyReview,
 		"artifact-security":   handleArtifactSecurity,
+		"size":                handleSize,
 		"design-context":      handleDesignContext,
 	}
 }
@@ -531,6 +533,35 @@ func handleArtifactSecurity(ctx context.Context, policyEngine *engine.Engine, ar
 		return commandResult{}, commandInputError(fmt.Errorf("artifact-security does not accept options"))
 	}
 	return commandResult{report: policyEngine.ArtifactSecurity(ctx)}, nil
+}
+
+func handleSize(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
+	base, err := parseSizeBaseOption(arguments)
+	if err != nil {
+		return commandResult{}, commandInputError(err)
+	}
+	report, err := policyEngine.Size(base)
+	return commandResult{report: report}, err
+}
+
+func parseSizeBaseOption(arguments []string) (string, error) {
+	baseOptions := 0
+	for _, argument := range arguments {
+		if argument == "--base" || strings.HasPrefix(argument, "--base=") {
+			baseOptions++
+		}
+	}
+	if baseOptions > 1 {
+		return "", errors.New("size accepts --base REF at most once")
+	}
+	base, err := parseBaseOption("size", arguments)
+	if err != nil {
+		return "", err
+	}
+	if baseOptions == 1 && base == "" {
+		return "", errors.New("size --base requires a non-empty Git reference")
+	}
+	return base, nil
 }
 
 func firstCommandIndex(arguments []string) int {

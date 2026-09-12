@@ -138,6 +138,15 @@
           "cmd/code-polishy/report.go",
           "internal/testing/testing.go"
         ]
+      },
+      {
+        "path": "docs/design/repository-size-analysis.md",
+        "sourcePaths": [
+          "internal/repository/size.go",
+          "internal/engine/repository_size.go",
+          "cmd/code-polishy/help.go",
+          "cmd/code-polishy/output.go"
+        ]
       }
     ]
   },

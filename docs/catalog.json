@@ -223,6 +223,22 @@
       "public": true
     },
     {
+      "id": "repository-size",
+      "path": "docs/repository-size.md",
+      "title": "Repository Size",
+      "summary": "Measure workspace and governed footprint, explain major consumers, and compare growth from a Git base.",
+      "aliases": ["project-size", "repository-footprint"],
+      "public": true
+    },
+    {
+      "id": "repository-size-design",
+      "path": "docs/design/repository-size-analysis.md",
+      "title": "Repository Size Analysis",
+      "summary": "Understand bounded footprint measurement, Git comparison, privacy, and interpretation boundaries.",
+      "aliases": ["size-analysis-design"],
+      "public": true
+    },
+    {
       "id": "security",
       "path": "docs/policies/security.md",
       "title": "Security Policy",

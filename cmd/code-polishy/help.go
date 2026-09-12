@@ -514,6 +514,19 @@ var commandHelpPages = []commandHelpPage{
 		exits:       []string{"0 paths listed", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy list-files --all"},
 	},
+	{
+		name:    "size",
+		summary: "Measure repository footprint and produce bounded evidence for human or agent interpretation.",
+		syntax:  []string{"code-polishy size [--base REF]"},
+		selectors: []string{
+			"Without --base, measures the current workspace and governed content.",
+			"--base compares current governed content with the merge base of one Git reference.",
+			"The report describes composition and growth; it does not assign a universal reasonable-size score.",
+		},
+		sideEffects: []string{"Reads repository configuration, file metadata, and optional Git-tree metadata without following symbolic links during measurement; file contents are not included in the report."},
+		exits:       []string{"0 analysis completed", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy size", "code-polishy size --base origin/main --format json"},
+	},
 }
 
 func commandHelpFor(command string) (commandHelpPage, bool) {
