@@ -16,6 +16,12 @@ path inventories, document contents, or guard definitions. Explicit JSON output
 preserves the exact packet for machine consumers. Both views derive from the
 same packet; the CLI performs no separate selection or mapping.
 
+Task-start owns an ordinary task boundary, not a merge decision. Its next
+actions end with event-selected verification, commit, and delivery; neither the
+human nor JSON view schedules a merge gate. The configured final-gate owner
+remains a packet fact for a separately established genuine merge or release
+checkpoint, whose workflow supplies the trusted merge target.
+
 Module and source mappings are additive. A source-specific decision can explain
 a local exception or boundary without replacing the module's wider constraints.
 A shared document may name exact source paths in several modules when the

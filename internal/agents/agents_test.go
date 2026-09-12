@@ -273,6 +273,7 @@ func TestInstallAndSyncCarryExecutionBoundaries(t *testing.T) {
 		[]byte("`tests.requiredSupplementalKinds`, never authorize execution"),
 		[]byte("test --supplemental --resume"),
 		[]byte("verification.finalGateOwner"),
+		[]byte("commits, and delivery do not select it"),
 	}
 	for _, boundary := range boundaries {
 		if !bytes.Contains(canonical, boundary) {

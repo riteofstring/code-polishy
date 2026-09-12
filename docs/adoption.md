@@ -873,9 +873,10 @@ A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the guidance from `templates/AGENTS.md`: routine focused or
 changed tests during source work; `test --changed --base TASK_BASE` for a
 task-bound comparison; `checkpoint-gate --base PREVIOUS_CHECKPOINT` after each
-completed committed task on a long-lived branch; documentation formatting
+completed committed source task on a long-lived branch; documentation formatting
 without application tests for ordinary Markdown; then one
-`merge-gate --base MERGE_TARGET` for the final candidate. A checkpoint gate
+`merge-gate --base MERGE_TARGET` at a separately established genuine merge or
+release checkpoint. A checkpoint gate
 runs changed-scope verification and records the accepted HEAD. A merge gate
 selects and executes documentation, recommended, or full ordinary verification
 without making the selection a human approval prompt. Its test reminder keeps

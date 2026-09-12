@@ -38,7 +38,7 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 	printTaskStartContext(&output, packet.RepositoryContext)
 	fmt.Fprintf(&output, "CONFIGURED GUARDS: %d; use `code-polishy capabilities --format json` for the complete catalog.\n", len(packet.ConfiguredGuards))
 	fmt.Fprintln(&output, "WORKFLOW DOCUMENTS:", boundedTaskStartValues(packet.WorkflowDocuments))
-	fmt.Fprintln(&output, "FINAL GATE OWNER:", packet.FinalGateOwner)
+	fmt.Fprintln(&output, "MERGE CHECKPOINT GATE OWNER (inactive for ordinary task delivery):", packet.FinalGateOwner)
 	for _, action := range packet.NextActions {
 		fmt.Fprintf(&output, "NEXT %s: %s", action.Name, action.Description)
 		if len(action.Argv) > 0 {

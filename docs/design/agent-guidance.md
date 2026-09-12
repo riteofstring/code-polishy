@@ -58,9 +58,13 @@ an aid, not proof of compliance.
    correctness-critical.
 3. Remove superseded and redundant wording in the same change. Review deletions
    as seriously as additions.
-4. Update `templates/AGENTS.md` and the root `AGENTS.md` together and keep them
-   byte-identical. During release development, do not use the prior locked
-   release's `agents sync` command to author the next release's template.
+4. During ordinary development, update `templates/AGENTS.md` and the root
+   `AGENTS.md` together and keep them byte-identical. During release development,
+   change only the template while the root remains governed by the outgoing
+   lock. After the incoming release's `lock` command performs the atomic
+   cutover, run that release's `agents sync` and commit the root update with the
+   self-hosting lock. Never use the outgoing release's sync command to author
+   the incoming template.
 5. Format both files and run the focused `internal/agents` tests. Keep tests
    focused on durable behavior rather than complete prose snapshots.
 6. Record a user-visible contract change in the changelog.
@@ -70,8 +74,10 @@ prevents repeated expensive hardening without weakening evidence. Reuse exact
 receipts and rerun only missing, failed, expired, or invalidated suites. A full
 run is needed only without a trusted baseline, after shared mutation
 infrastructure, toolchain, or selection changes, or when impact is unbounded.
-The final-gate-owner reminder prevents an equally costly duplicate local and CI
-gate while preserving one required owner.
+The merge-checkpoint boundary prevents ordinary task completion, commits, and
+delivery from being mistaken for permission to run a branch-wide gate. At a
+genuine merge or release checkpoint, the final-gate-owner reminder still
+prevents duplicate local and CI execution while preserving one required owner.
 
 The vulnerability-age rule records the maintainer's risk preference. When
 evidence supports a governed not-affected assessment, waiting preserves the

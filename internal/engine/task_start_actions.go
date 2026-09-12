@@ -1,7 +1,5 @@
 package engine
 
-import "github.com/riteofstring/code-polishy/internal/policy"
-
 func taskStartActions(packet TaskStartPacket) []TaskStartAction {
 	actions := []TaskStartAction{
 		{Name: "read-workflow", Description: "Read the locked release's workflow before implementation.", Argv: []string{"code-polishy", "docs", "read", "agent-workflows"}},
@@ -22,12 +20,11 @@ func taskStartActions(packet TaskStartPacket) []TaskStartAction {
 	if packet.Intent.WillBeUsed {
 		actions = append(actions,
 			TaskStartAction{Name: "review-status", Description: "Inspect required behavior review for the completed candidate.", Argv: []string{"code-polishy", "behavior-review", "status", "--base", packet.TaskBase}},
-			TaskStartAction{Name: "complete-reviews", Description: "Complete every selected architecture and behavior review before final delivery."},
+			TaskStartAction{Name: "complete-reviews", Description: "Complete every selected architecture and behavior review before delivering the task."},
 		)
 	}
-	gate := "Resolve the merge target and run one base-aware merge gate for the final candidate."
-	if packet.FinalGateOwner == policy.FinalGateOwnerCI {
-		gate = "Resolve the merge target and use the checked-in CI workflow for the final merge gate; do not duplicate it locally without an explicit request."
-	}
-	return append(actions, TaskStartAction{Name: "final-gate", Description: gate})
+	return append(actions, TaskStartAction{
+		Name:        "deliver",
+		Description: "Deliver after the event-selected verification and commit. Ordinary task completion and a requested commit do not select a merge gate; run one only at a separately established genuine merge or release checkpoint.",
+	})
 }

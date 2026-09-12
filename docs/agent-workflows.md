@@ -19,7 +19,7 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 | Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`               |
 | Dependency change                      | `code-polishy docs read supply-chain`                                     |
 | Release or upgrade                     | `code-polishy docs read release-checklist`                                |
-| Final delivery                         | `code-polishy merge-gate --base MERGE_TARGET`                             |
+| Genuine merge or release checkpoint    | `code-polishy merge-gate --base MERGE_TARGET`                             |
 
 Use one file or directory operand with `--files PATH` instead of `--module NAME`
 when that identifies the task scope. `task-start` returns current design context
@@ -32,10 +32,12 @@ command with `--intent-file -` and supply the exact request on standard input
 before editing.
 Do not recapture a request already captured by task-start. The first command
 does not replace selected reviews or event-required verification. Read-only
-questions require no capture or tests. For delivery, follow the status and
-the configured final-gate owner. Capability queries identify candidates only;
-explicit feature operands require the caller's intended canonical name or
-exact declared alias. See [Capability Discovery](capabilities.md).
+questions require no capture or tests. Ordinary task completion, a requested
+commit, and delivery do not select a merge gate. At a separately established
+merge or release checkpoint, follow the configured final-gate owner. Capability
+queries identify candidates only; explicit feature operands require the caller's
+intended canonical name or exact declared alias. See [Capability
+Discovery](capabilities.md).
 
 Ordinary interactive work may use the caller's current checkout. The primary
 agent owns task decomposition, subagent delegation, integration, and
@@ -146,13 +148,13 @@ Choose verification from the event that actually changed risk:
 | Manually resolved source conflict                         | One affected exact test                           |
 | Coherent runnable source change                           | One affected exact test                           |
 | Completed source task with no final gate next             | `test --changed --base TASK_BASE`                 |
-| Final candidate                                           | One base-aware merge gate, owned locally or by CI |
+| Genuine merge or release candidate                        | One base-aware merge gate, owned locally or by CI |
 | Stable release candidate                                  | Only explicitly selected supplemental suites      |
 
-Use the first applicable row. Making a progress commit does not itself select
-tests, a review, or a checkpoint gate. A conflict resolution is a new change
-only for the files edited to resolve it; a prose-only conflict stays
-documentation-only.
+Use the first applicable row. Ordinary task completion, a requested commit, and
+delivery do not themselves select tests, a review, or a checkpoint gate. A
+conflict resolution is a new change only for the files edited to resolve it; a
+prose-only conflict stays documentation-only.
 Do not run `test --changed` immediately before a final merge gate over the same
 candidate because the gate already selects changed-impact tests.
 
@@ -319,8 +321,9 @@ policy engine:
    packet's result path, then run `code-polishy behavior-review finalize` to
    write the receipt. Any final-state finding blocks finalization.
 7. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
-   completed task on a long-lived branch, or
-   `code-polishy merge-gate --base <merge-target>` for the final candidate.
+   completed source task on a long-lived branch, or
+   `code-polishy merge-gate --base <merge-target>` at a separately established
+   genuine merge checkpoint.
    Either gate validates the receipt and independently reruns every cited
    proof. The checkpoint gate then runs changed-scope checks and focused tests
    and records the accepted HEAD; the merge gate runs its selected

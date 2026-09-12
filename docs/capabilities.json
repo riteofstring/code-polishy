@@ -184,7 +184,7 @@
     {
       "name": "merge-gate",
       "kind": "command",
-      "description": "Verify the final candidate against its trusted merge target.",
+      "description": "Verify a genuine merge or release candidate against its trusted merge target.",
       "aliases": ["final verification"],
       "paths": [],
       "modules": [],

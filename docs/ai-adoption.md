@@ -468,10 +468,11 @@ The resulting guidance should make these execution boundaries clear:
 - after each completed committed task on a long-lived branch, agents run
   `checkpoint-gate --base <previous-checkpoint>`; conversational and read-only
   requests do not create checkpoints, and an unchanged invocation is a no-op;
-- agents resolve a trusted merge target and run `merge-gate --base <merge-target>`
-  so Code Polishy selects documentation, recommended, or full execution without
-  a user choice, and they do not immediately precede it with `test --changed`
-  for the same candidate;
+- at a separately established genuine merge or release checkpoint, agents
+  resolve a trusted merge target and run `merge-gate --base <merge-target>` so
+  Code Polishy selects documentation, recommended, or full execution without a
+  user choice, and they do not immediately precede it with `test --changed` for
+  the same candidate;
 - non-documentation candidates use a review subagent with no inherited
   conversation, red/green proofs, and a receipt before either checkpoint or
   merge gate; both gates independently rerun cited proofs, and the primary agent

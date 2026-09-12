@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.18 - 2026-09-11
+
+- Keep task-start scoped to ordinary task delivery and prevent requested commits
+  or handoffs from selecting a branch-wide merge gate.
+- Reserve merge-gate guidance for separately established genuine merge or
+  release checkpoints while preserving the configured final-gate owner.
+
 ## 0.24.17 - 2026-09-11
 
 - Add repository size analysis that separates workspace and governed content,

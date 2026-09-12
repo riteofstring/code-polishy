@@ -72,11 +72,10 @@
   gate will not immediately follow. Resolve the merge base from an explicit
   target, checked-in guidance, `origin/HEAD`, then `origin/main` or
   `origin/master`.
-- Honor `verification.finalGateOwner`. Use `code-polishy merge-gate --base REF`
-  once, locally or in its checked-in CI workflow. Duplicate only when the caller
-  requests independent evidence.
-  An exact passed identity executes nothing. Resume only an unchanged failed
-  candidate. Summarize the result in plain language.
+- Run `code-polishy merge-gate --base REF` only at a genuine merge or release
+  checkpoint through `verification.finalGateOwner`. Ordinary task completion,
+  commits, and delivery do not select it. Duplicate only on request; an exact
+  pass executes nothing, and only an unchanged failed candidate may resume.
 - Commit task-owned progress at milestones, roughly every 1–2 hours of active
   editing on long tasks. Checkpoints may be unfinished or failing; record what
   remains and verification status. Do not wait for gates or API cutovers.

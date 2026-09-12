@@ -102,20 +102,21 @@ artifact-affecting corrections with the component command.
 
 The default output is a bounded human summary. It reports intent custody and
 review selection, selection and mapping counts, selected document and handoff
-identities, the configured guard count, workflow references, final-gate owner,
-and ordered next actions. Large path inventories, document contents, and the
-complete guard catalog do not flood an interactive task start.
+identities, the configured guard count, workflow references, the merge-checkpoint
+gate owner, and ordered next actions. Large path inventories, document contents,
+and the complete guard catalog do not flood an interactive task start.
 
 Use `--format json` when automation needs the complete `task-start/v2` packet,
 which remains bounded to 16 MiB. It contains the task base, locked release and
 catalog identity, any capture identity and canonical features, requested and
 expanded selection, current design documents, selected operational handoffs,
 workflow references, configured guards and verification requirements,
-final-gate owner, and ordered next actions. Optional tasks omit review-status
-actions. Guard entries preserve capability discovery's availability and
-enforcement facts; listing a guard does not execute or activate it. Document
-selection uses the same context resolver, with `task-start` as its actual
-workflow situation.
+final-gate owner, and ordered next actions. Task-start ends at ordinary task
+delivery and never selects a merge gate; that requires a separately established
+genuine merge or release checkpoint. Optional tasks omit review-status actions.
+Guard entries preserve capability discovery's availability and enforcement
+facts; listing a guard does not execute or activate it. Document selection uses
+the same context resolver, with `task-start` as its actual workflow situation.
 
 Invalid selection, unknown feature operands, unavailable catalog evidence,
 invalid selected documents, missing or unused intent, and oversized packets
