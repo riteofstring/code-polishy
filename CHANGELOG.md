@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.17 - 2026-09-11
+
+- Add repository size analysis that separates workspace and governed content,
+  attributes size by category, module, and language, and compares candidate
+  growth with a Git merge base.
+
 ## 0.24.16 - 2026-09-10
 
 - Make task-start default to a bounded human summary while preserving the
