@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.19 - 2026-09-13
+
+- Include Doctor-time Python ownership analysis in merge-gate execution plans so
+  unmapped tests produce actionable ownership findings instead of operational
+  command-plan failures.
+- Name attempted and expected commands plus changed identity-field categories
+  when an execution-plan mismatch still occurs.
+- Retire the temporary Go and x/mod release-age assessments after their exact
+  security-fixed releases reached the ordinary admission age.
+
 ## 0.24.18 - 2026-09-11
 
 - Keep task-start scoped to ordinary task delivery and prevent requested commits

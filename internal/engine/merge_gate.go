@@ -297,6 +297,12 @@ func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan
 		return MergeGateExecutionPlan{}, err
 	}
 	plan.Tests = tests
+	if files, inventoryErr := engine.Repository.AllFiles(); inventoryErr == nil {
+		selected := testpolicy.OwnershipImportSelection(engine.Repository, files)
+		if len(selected) > 0 {
+			plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, architecture.PythonGraphCommands(engine.Repository, selected))...)
+		}
+	}
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, plannedPolicyCheckCommands(engine.Repository, checkSelection, "gate"))...)
 	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(plan.Tests.Suites)...)
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Build, quality.CommandsForProfiles(engine.Repository, checkSelection, "build"))...)
@@ -607,8 +613,12 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 	if commandRunner.err != nil {
 		return commandRunner.err
 	}
-	if (root != commandRunner.root && root != commandRunner.viewRoot) || commandRunner.next >= len(commandRunner.expected) {
-		commandRunner.err = fmt.Errorf("merge gate started a command outside its execution plan at position %d", commandRunner.next+1)
+	if commandRunner.next >= len(commandRunner.expected) {
+		commandRunner.err = fmt.Errorf("merge gate started unplanned command %q after its %d-command execution plan", command.Name, len(commandRunner.expected))
+		return commandRunner.err
+	}
+	if root != commandRunner.root && root != commandRunner.viewRoot {
+		commandRunner.err = fmt.Errorf("merge gate command %q has an unplanned working directory at position %d", command.Name, commandRunner.next+1)
 		return commandRunner.err
 	}
 	if samePolicyCommand(commandRunner.expected[commandRunner.next].Command, command) {
@@ -623,8 +633,36 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 			}
 		}
 	}
-	commandRunner.err = fmt.Errorf("merge gate started a command outside its execution plan at position %d", commandRunner.next+1)
+	expected := commandRunner.expected[commandRunner.next].Command
+	commandRunner.err = fmt.Errorf(
+		"merge gate started command %q outside its execution plan at position %d (expected %q; changed fields: %v)",
+		command.Name, commandRunner.next+1, expected.Name, changedPolicyCommandFields(expected, command),
+	)
 	return commandRunner.err
+}
+
+func changedPolicyCommandFields(expected, actual policy.Command) []string {
+	fields := []string{}
+	if !samePolicyCommandIdentity(expected, actual) {
+		fields = append(fields, "metadata")
+	}
+	if !slices.Equal(expected.Argv, actual.Argv) {
+		fields = append(fields, "arguments")
+	}
+	if !slices.Equal(expected.Provides, actual.Provides) {
+		fields = append(fields, "capabilities")
+	}
+	if !slices.Equal(expected.Paths, actual.Paths) || !slices.Equal(expected.Modules, actual.Modules) ||
+		!slices.Equal(expected.RunOn, actual.RunOn) || !slices.Equal(expected.PassFilePaths, actual.PassFilePaths) {
+		fields = append(fields, "selection")
+	}
+	if !slices.Equal(expected.Environment, actual.Environment) || !slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) {
+		fields = append(fields, "environment")
+	}
+	if !slices.Equal(expected.TestArtifacts, actual.TestArtifacts) {
+		fields = append(fields, "artifacts")
+	}
+	return fields
 }
 
 func samePolicyCommand(expected, actual policy.Command) bool {
