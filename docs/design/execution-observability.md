@@ -58,3 +58,15 @@ in evidence, while malformed, empty, timed-out, canceled, and operational
 results remain failed commands. OSV-Scanner's exit status 1 is the first such
 protocol; vulnerability assessment policy, not process status, decides whether
 its accepted report permits the gate to pass.
+
+Contained asset links have a read-only identity shared by formatting snapshots
+and provider context. It binds link text, canonical target, and bounded target-file
+hashes. Targets must contain owned image, media, font, or PDF assets; escaping,
+broken, cyclic, nested-link, control, and executable targets fail verification.
+Inventory retains link entries without traversing them. Formatting protects the
+link and its target identity. Before any native, bundled, or provider formatter
+is selected, every symbolic link is removed from both its file and candidate
+inputs while remaining in the protected outcome inventory. Ordinary content reads
+and all provider edit targets retain the strict regular-file boundary, including
+every parent component; a link cannot become an authorized write route. No new
+asset-link configuration is required.

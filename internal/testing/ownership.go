@@ -2,6 +2,7 @@ package testing
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -37,19 +38,14 @@ func testOwnerCoverageMessage(repo repository.Repository, path string, owner pol
 	if _, exists := repo.Config.ModuleByName[owner.Module]; !exists {
 		return fmt.Sprintf("test ownership names unknown production module %q", owner.Module)
 	}
-	for _, suite := range repo.Config.Tests.Suites {
-		if suite.Name != owner.FocusedSuite {
-			continue
-		}
-		if !policy.IsPrimaryTestSuite(suite, owner.Module) {
-			return "primary focused suite must be quick, owned by this production module, and run in focused, recommended, and full"
-		}
-		if !policy.MatchesAny(path, suite.Paths) {
-			return "primary focused suite execution paths do not include this owned test"
-		}
-		return ""
+	suite, err := policy.TestOwnershipExecutionSuite(repo.Config.Tests.Suites, owner)
+	if err != nil {
+		return err.Error()
 	}
-	return fmt.Sprintf("test ownership names unknown focused suite %q", owner.FocusedSuite)
+	if !policy.MatchesAny(path, suite.Paths) {
+		return fmt.Sprintf("suite %q execution paths do not include this owned test", suite.Name)
+	}
+	return ""
 }
 
 func ownershipPatternFindings(repo repository.Repository, files []string) []policy.Finding {
@@ -83,7 +79,7 @@ func testOwnershipFinding(path, subject, message string) policy.Finding {
 	return policy.Finding{
 		Check: "policy.testOwnership", Path: path, Subject: subject, Message: message,
 		Remediation: policy.FindingRemediation{
-			Summary:     "Declare exactly one production module and primary quick focused suite for each test. Choose ownership from the behavior the test verifies, not merely its directory.",
+			Summary:     "Declare exactly one production module and its quick focused suite for each test. Name a separate full-profile executionSuite when it runs the test. Choose ownership from the behavior the test verifies, not merely its directory.",
 			NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "doctor"}, Cwd: "."},
 		},
 	}
@@ -101,4 +97,37 @@ func compatibleOwnerSuite(config policy.Config, module, path string) string {
 		return ""
 	}
 	return names[0]
+}
+
+func focusedTestOwnershipFindings(repo repository.Repository, files []string) []policy.Finding {
+	coverage := map[string]bool{}
+	for _, owner := range repo.Config.Tests.Ownership {
+		if owner.ExecutionSuite != "" && owner.ExecutionSuite != owner.FocusedSuite {
+			coverage[owner.FocusedSuite] = false
+		}
+	}
+	for _, path := range files {
+		recordFocusedTestOwnership(repo, path, coverage)
+	}
+	findings := []policy.Finding{}
+	for _, name := range slices.Sorted(maps.Keys(coverage)) {
+		if !coverage[name] {
+			findings = append(findings, testOwnershipFinding(policy.ConfigFilename, name, "focused suite has no owned executable test in its execution paths; separate execution cannot replace quick boundary coverage"))
+		}
+	}
+	return findings
+}
+
+func recordFocusedTestOwnership(repo repository.Repository, path string, coverage map[string]bool) {
+	owners := repo.TestOwnerships(path)
+	if len(owners) != 1 {
+		return
+	}
+	owner := owners[0]
+	if owner.ExecutionSuite != "" && owner.ExecutionSuite != owner.FocusedSuite {
+		return
+	}
+	if testOwnerCoverageMessage(repo, path, owner) == "" {
+		coverage[owner.FocusedSuite] = true
+	}
 }

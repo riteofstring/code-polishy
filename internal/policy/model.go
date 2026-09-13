@@ -78,6 +78,7 @@ type Config struct {
 
 	JavaScriptLintScopes []JavaScriptLintScope `json:"-"`
 	PackManifests        []PackDependencyRule  `json:"-"`
+	UnavailablePacks     []string              `json:"-"`
 }
 
 type PackSelection struct {
@@ -335,6 +336,13 @@ type PackAdapter struct {
 	PackRoot        string
 	ProtocolVersion int
 	Capability      string
+	Languages       []LanguageRule
+	Runtime         *PackRuntime
+}
+
+type PackRuntime struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 type Testing struct {
@@ -346,9 +354,10 @@ type Testing struct {
 }
 
 type TestOwnership struct {
-	Paths        []string `json:"paths"`
-	Module       string   `json:"module"`
-	FocusedSuite string   `json:"focusedSuite"`
+	Paths          []string `json:"paths"`
+	Module         string   `json:"module"`
+	FocusedSuite   string   `json:"focusedSuite"`
+	ExecutionSuite string   `json:"executionSuite,omitempty"`
 }
 
 type TestSuite struct {

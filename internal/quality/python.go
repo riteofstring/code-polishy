@@ -397,12 +397,15 @@ func pythonQualityProjectCommandsForProfile(repo repository.Repository, project 
 		{kind: pythonRuffComplexityQualityKind, command: pythonRuffComplexityCommand(repo, project, suffix, modules, paths, ruffOptions)},
 		{kind: pythonRuffTargetQualityKind, command: pythonRuffTargetCommand(repo, project, suffix, modules, paths, ruffOptions)},
 	}
-	if includeVulture {
+	if includeVulture && len(repo.NativeAnalysisFiles(project.Files, "dead-code", "")) > 0 {
 		vulture, vultureErr := pythonVultureCommandForSources(repo, project, sources)
 		if vultureErr != nil {
 			return nil, "", vultureErr
 		}
 		commands = append(commands, pythonQualityCommand{kind: pythonVultureQualityKind, command: vulture})
+	}
+	if len(repo.NativeAnalysisFiles(sources, "typecheck", "")) == 0 {
+		return commands, "", nil
 	}
 	if len(project.Requirements) == 0 {
 		commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, "")})

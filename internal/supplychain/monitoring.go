@@ -45,11 +45,7 @@ func securityWorkflowPaths(files []string) []string {
 
 func hasWeeklySecurityWorkflow(repo repository.Repository, workflows []string) bool {
 	for _, path := range workflows {
-		data, err := repo.Read(path)
-		if err != nil {
-			continue
-		}
-		facts, parseErr := workflowfacts.Parse(path, data)
+		facts, parseErr := workflowfacts.Read(path, repo.Read)
 		if parseErr == nil && workflowFactsRunWeeklySecurity(facts) {
 			return true
 		}
@@ -88,7 +84,7 @@ func hasSecurityMonitoringProvider(commands []policy.Command) bool {
 }
 
 func workflowRunsWeeklySecurity(contents string) bool {
-	facts, err := workflowfacts.Parse("workflow.yml", []byte(contents))
+	facts, err := workflowfacts.Parse("workflow.yml", []byte(contents), nil)
 	return err == nil && workflowFactsRunWeeklySecurity(facts)
 }
 

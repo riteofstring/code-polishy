@@ -103,9 +103,24 @@ func pythonSelection(repo repository.Repository, selected, allFiles []string) py
 	}
 	sourcesByProject, contextFindings := pythonProjectSelection(repo, projects, selectedByProject)
 	findings = append(findings, contextFindings...)
+	findings = append(findings, nativePythonGraphProjects(repo, sourcesByProject)...)
 	return pythonSelectionPlan{
 		findings: findings, owners: owners, projects: projects, sourcesByProject: sourcesByProject, selectedByProject: selectedByProject,
 	}
+}
+
+func nativePythonGraphProjects(repo repository.Repository, sourcesByProject map[string][]string) []policy.Finding {
+	findings := []policy.Finding{}
+	for manifest, paths := range sourcesByProject {
+		native, err := repo.NativeUnit(paths, "architecture")
+		if err != nil {
+			findings = append(findings, pythonImportCoverage(manifest, err.Error()))
+		}
+		if !native || err != nil {
+			delete(sourcesByProject, manifest)
+		}
+	}
+	return findings
 }
 
 func pythonPlanManifests(plan pythonSelectionPlan) []string {
@@ -139,7 +154,7 @@ func pythonSources(repo repository.Repository, selected []string) []string {
 		}
 	}
 	for _, source := range candidates {
-		if repo.Language(source) != "python" || seen[source] {
+		if repo.Language(source) != "python" || seen[source] || !repo.NativeAnalysis(source, "architecture") {
 			continue
 		}
 		seen[source] = true

@@ -73,7 +73,7 @@ try {
 
   $ManifestPath = Join-Path $BootstrapRoot 'release-manifest.json'
   $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
-  if ($Manifest.codePolishyVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or
+  if ($Manifest.codePolishyVersion -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$' -or
       $Manifest.releaseDigest -notmatch '^[0-9a-f]{64}$') {
     throw 'The installed release reported no exact identity.'
   }

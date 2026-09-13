@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 
@@ -33,6 +35,7 @@ type MergeGateExecutionPlan struct {
 }
 
 type MergeGateExecutionCommand struct {
+	Root     string
 	Category gaterun.CommandCategory
 	Kind     string
 	Scope    string
@@ -300,7 +303,7 @@ func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan
 	if files, inventoryErr := engine.Repository.AllFiles(); inventoryErr == nil {
 		selected := testpolicy.OwnershipImportSelection(engine.Repository, files)
 		if len(selected) > 0 {
-			plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, architecture.PythonGraphCommands(engine.Repository, selected))...)
+			plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, plannedArchitectureCommands(engine.Repository, selected))...)
 		}
 	}
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, plannedPolicyCheckCommands(engine.Repository, checkSelection, "gate"))...)
@@ -311,7 +314,12 @@ func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan
 
 func plannedPolicyCheckCommands(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
 	commands := quality.CheckCommands(repo, selection, profile)
-	return append(commands, architecture.PythonGraphCommands(repo, selection.Files)...)
+	return append(commands, plannedArchitectureCommands(repo.WithAnalysisProfile(profile), selection.Files)...)
+}
+
+func plannedArchitectureCommands(repo repository.Repository, files []string) []policy.Command {
+	commands := architecture.ProviderCommands(repo, files)
+	return append(commands, architecture.PythonGraphCommands(repo, files)...)
 }
 
 func (engine *Engine) mergeGateTestRequest(plan MergeGateExecutionPlan) (repository.Selection, testpolicy.Request, error) {
@@ -351,7 +359,11 @@ func mergeGateCheckCommands(category gaterun.CommandCategory, commands []policy.
 		if len(command.Modules) == 1 {
 			scope = "module"
 		}
-		result = append(result, MergeGateExecutionCommand{Category: category, Kind: "check", Scope: scope, Cost: "standard", Command: command})
+		root := ""
+		if command.Adapter != nil {
+			root = command.Adapter.PackRoot
+		}
+		result = append(result, MergeGateExecutionCommand{Root: root, Category: category, Kind: "check", Scope: scope, Cost: "standard", Command: command})
 	}
 	return result
 }
@@ -617,8 +629,13 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 		commandRunner.err = fmt.Errorf("merge gate started unplanned command %q after its %d-command execution plan", command.Name, len(commandRunner.expected))
 		return commandRunner.err
 	}
-	if root != commandRunner.root && root != commandRunner.viewRoot {
-		commandRunner.err = fmt.Errorf("merge gate command %q has an unplanned working directory at position %d", command.Name, commandRunner.next+1)
+	expected := commandRunner.expected[commandRunner.next]
+	expectedRoot := expected.Root
+	if expectedRoot == "" {
+		expectedRoot = commandRunner.root
+	}
+	if root != expectedRoot && !(expected.Root == "" && root == commandRunner.viewRoot) {
+		commandRunner.err = fmt.Errorf("merge gate command %q has an unplanned working root at position %d", command.Name, commandRunner.next+1)
 		return commandRunner.err
 	}
 	if samePolicyCommand(commandRunner.expected[commandRunner.next].Command, command) {
@@ -633,43 +650,38 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 			}
 		}
 	}
-	expected := commandRunner.expected[commandRunner.next].Command
-	commandRunner.err = fmt.Errorf(
-		"merge gate started command %q outside its execution plan at position %d (expected %q; changed fields: %v)",
-		command.Name, commandRunner.next+1, expected.Name, changedPolicyCommandFields(expected, command),
-	)
+	commandRunner.err = unplannedCommand("merge gate", "execution", commandRunner.next, expected.Command, command)
 	return commandRunner.err
 }
 
-func changedPolicyCommandFields(expected, actual policy.Command) []string {
+func unplannedCommand(label, plan string, index int, expected, actual policy.Command) error {
 	fields := []string{}
-	if !samePolicyCommandIdentity(expected, actual) {
-		fields = append(fields, "metadata")
+	for _, field := range []struct {
+		name string
+		same bool
+	}{
+		{"metadata", samePolicyCommandIdentity(expected, actual)},
+		{"arguments", slices.Equal(expected.Argv, actual.Argv)},
+		{"capabilities", slices.Equal(expected.Provides, actual.Provides)},
+		{"environment", slices.Equal(expected.Environment, actual.Environment)},
+		{"selection", slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
+			slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths)},
+		{"artifacts", slices.Equal(expected.TestArtifacts, actual.TestArtifacts)},
+		{"request", bytes.Equal(expected.Stdin, actual.Stdin)},
+		{"adapter", reflect.DeepEqual(expected.Adapter, actual.Adapter)},
+	} {
+		if !field.same {
+			fields = append(fields, field.name)
+		}
 	}
-	if !slices.Equal(expected.Argv, actual.Argv) {
-		fields = append(fields, "arguments")
-	}
-	if !slices.Equal(expected.Provides, actual.Provides) {
-		fields = append(fields, "capabilities")
-	}
-	if !slices.Equal(expected.Paths, actual.Paths) || !slices.Equal(expected.Modules, actual.Modules) ||
-		!slices.Equal(expected.RunOn, actual.RunOn) || !slices.Equal(expected.PassFilePaths, actual.PassFilePaths) {
-		fields = append(fields, "selection")
-	}
-	if !slices.Equal(expected.Environment, actual.Environment) || !slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) {
-		fields = append(fields, "environment")
-	}
-	if !slices.Equal(expected.TestArtifacts, actual.TestArtifacts) {
-		fields = append(fields, "artifacts")
-	}
-	return fields
+	return fmt.Errorf("%s started command %q outside its %s plan at position %d (expected %q; changed fields: %v)", label, actual.Name, plan, index+1, expected.Name, fields)
 }
 
 func samePolicyCommand(expected, actual policy.Command) bool {
-	if artifactsecurity.MatchesPlannedCommand(expected, actual) {
+	if expected.Adapter == nil && actual.Adapter == nil && bytes.Equal(expected.Stdin, actual.Stdin) && artifactsecurity.MatchesPlannedCommand(expected, actual) {
 		return true
 	}
-	return samePolicyCommandIdentity(expected, actual) && samePolicyCommandCollections(expected, actual)
+	return samePolicyCommandIdentity(expected, actual) && samePolicyCommandCollections(expected, actual) && bytes.Equal(expected.Stdin, actual.Stdin) && reflect.DeepEqual(expected.Adapter, actual.Adapter)
 }
 
 func samePolicyCommandIdentity(expected, actual policy.Command) bool {

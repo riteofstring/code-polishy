@@ -9,6 +9,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/javascript"
+	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
@@ -176,6 +177,10 @@ func javascriptGraphEdges(
 		}
 		target, local := nodes[fact.Resolved]
 		if !local {
+			if repo.AnalysisOwner(fact.Resolved, "architecture", "").Pack != "" {
+				part.imports = append(part.imports, pack.ImportFact{Path: fact.Path, Line: fact.Line, Column: fact.Column, Specifier: fact.Specifier, Resolved: fact.Resolved, Package: fact.Package, Kind: string(fact.Kind)})
+				continue
+			}
 			if javascriptMissingGraphTarget(repo, governed, fact) {
 				part.findings = append(part.findings, importCoverageFinding(fact.Path,
 					fmt.Sprintf("line %d import %q resolves outside the canonical executable graph", fact.Line, fact.Specifier)))
@@ -193,8 +198,10 @@ func javascriptGraphEdges(
 }
 
 func javascriptMissingGraphTarget(repo repository.Repository, governed map[string]bool, fact javascript.ImportFact) bool {
-	return governed[fact.Resolved] && repo.IsExecutableSource(fact.Resolved) ||
-		!installedPackage(fact.Resolved) && javascriptLocalSpecifier(fact.Specifier)
+	if governed[fact.Resolved] {
+		return repo.IsExecutableSource(fact.Resolved)
+	}
+	return !installedPackage(fact.Resolved) && javascriptLocalSpecifier(fact.Specifier)
 }
 
 func javascriptLocalSpecifier(specifier string) bool {

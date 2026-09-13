@@ -41,6 +41,11 @@ those quality checks need cross-file semantics. They run only for explicit
 complete selections and merge gates; focused checks defer that global
 conclusion.
 
+Manifest, lock, and declared data selections first resolve to their Python
+consumers. Native ownership filtering applies to those resolved sources so a
+metadata change retains its contract checks and provider-owned source does not
+acquire native project prerequisites.
+
 `METADATA`, `RECORD`, and an applicable Git `direct_url.json` establish current
 installation consistency. They do not authenticate the installer or prove
 that a locally rewritten source and record match a published artifact.

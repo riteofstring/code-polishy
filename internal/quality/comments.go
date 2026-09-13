@@ -62,7 +62,7 @@ func sourceCommentFindings(repo repository.Repository, files []string) []policy.
 func strictSourceCommentFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range sourceCommentPaths(files) {
-		if repo.IsGenerated(path) {
+		if sourceCommentsHandledElsewhere(repo, path) {
 			continue
 		}
 		language := sourceCommentLanguage(repo, path)
@@ -100,7 +100,7 @@ func sourceCommentCoverageFindings(repo repository.Repository, files []string) [
 	}
 	findings := []policy.Finding{}
 	for _, path := range sourceCommentPaths(files) {
-		if repo.IsGenerated(path) {
+		if sourceCommentsHandledElsewhere(repo, path) {
 			continue
 		}
 		language := sourceCommentLanguage(repo, path)
@@ -637,4 +637,8 @@ func nextLine(data []byte, index int) int {
 		index++
 	}
 	return index
+}
+
+func sourceCommentsHandledElsewhere(repo repository.Repository, path string) bool {
+	return repo.IsGenerated(path) || repo.AnalysisOwner(path, "lint", "").Pack != ""
 }

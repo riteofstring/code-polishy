@@ -1,11 +1,32 @@
 package engine
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
+
+func TestCIFinalGateOwnerUsesDeclaredRunnerLabels(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := ".github/workflows/ci.yml"
+	writeEngineFile(t, root, path, "on: push\njobs:\n  verify:\n    runs-on: builder-linux-arm64\n    steps:\n      - run: code-polishy merge-gate --base main\n", 0o600)
+	configuration := ".github/actionlint.yaml"
+	writeEngineFile(t, root, configuration, "self-hosted-runner:\n  labels: [builder-linux-arm64]\n", 0o600)
+	repo := repository.Repository{Root: root, Config: policy.Config{Verification: policy.Verification{FinalGateOwner: policy.FinalGateOwnerCI}}}
+	if findings := finalGateOwnerFindings(repo, []string{path}); len(findings) != 0 {
+		t.Fatalf("declared runner concealed the final gate: %+v", findings)
+	}
+	if err := os.Remove(filepath.Join(root, configuration)); err != nil {
+		t.Fatal(err)
+	}
+	if findings := finalGateOwnerFindings(repo, []string{path}); len(findings) != 1 {
+		t.Fatalf("undeclared runner proved gate coverage: %+v", findings)
+	}
+}
 
 func TestCIFinalGateOwnerRequiresLiteralCheckedInWorkflowCommand(t *testing.T) {
 	t.Parallel()

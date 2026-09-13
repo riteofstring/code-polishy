@@ -13,11 +13,44 @@
     "generated": ["internal/engine/testdata/**", "schema/sarif*.json"],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
-      "tools/javascript/runner.mjs"
+      "tools/javascript/runner.mjs",
+      "providers/javascript/run.mjs",
+      "providers/javascript/build.mjs"
     ]
   },
   "documentation": {
     "design": [
+      {
+        "path": "docs/design/provider-scope.md",
+        "sourcePaths": [
+          "internal/repository/providers.go",
+          "internal/repository/generated_javascript.go",
+          "internal/quality/javascript.go",
+          "internal/quality/quality.go",
+          "internal/architecture/providers.go"
+        ]
+      },
+      {
+        "path": "docs/design/test-ownership.md",
+        "sourcePaths": [
+          "internal/policy/test_ownership.go",
+          "internal/policy/model.go",
+          "internal/testing/ownership.go",
+          "internal/testing/ownership_diagnostics.go",
+          "internal/testing/testing.go"
+        ]
+      },
+      {
+        "path": "docs/design/workflow-facts.md",
+        "module": "workflow"
+      },
+      {
+        "path": "docs/design/javascript-import-assets.md",
+        "sourcePaths": [
+          "tools/javascript/imports.mjs",
+          "internal/architecture/javascript_graph.go"
+        ]
+      },
       {
         "path": "docs/design/git-evidence-policy.md",
         "sourcePaths": [
@@ -131,12 +164,10 @@
           "internal/gaterun/types.go",
           "internal/gaterun/validation.go",
           "internal/policy/load.go",
-          "internal/policy/model.go",
           "internal/runner/runner.go",
           "internal/supplychain/osv.go",
           "cmd/code-polishy/main.go",
-          "cmd/code-polishy/report.go",
-          "internal/testing/testing.go"
+          "cmd/code-polishy/report.go"
         ]
       },
       {
@@ -147,11 +178,23 @@
           "cmd/code-polishy/help.go",
           "cmd/code-polishy/output.go"
         ]
+      },
+      {
+        "path": "docs/design/analysis-providers.md",
+        "module": "pack"
+      },
+      {
+        "path": "docs/design/javascript-provider.md",
+        "module": "javascript-provider"
       }
     ]
   },
   "verification": {
     "finalGateOwner": "local",
+    "behaviorReview": {
+      "defaultRequiredAt": "merge",
+      "features": []
+    },
     "mergeGate": {
       "recommendedModules": [
         "policy",
@@ -178,7 +221,8 @@
         "engine",
         "cli",
         "launcher",
-        "tooling"
+        "tooling",
+        "javascript-provider"
       ]
     }
   },
@@ -275,7 +319,8 @@
         "policy",
         "pythonfacts",
         "repository",
-        "runner"
+        "runner",
+        "pack"
       ]
     },
     {
@@ -312,7 +357,7 @@
     {
       "name": "pack",
       "paths": ["internal/pack/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["policy", "repository", "runner", "release"]
     },
     {
       "name": "portability",
@@ -380,6 +425,11 @@
         "templates/policy-exception.md",
         "tools/**"
       ]
+    },
+    {
+      "name": "javascript-provider",
+      "paths": ["providers/javascript/**"],
+      "dependsOn": ["tooling"]
     }
   ],
   "checks": [
@@ -430,6 +480,13 @@
       "argv": ["./scripts/check-python-facts-lock.sh"],
       "modules": ["pythonfacts"],
       "runOn": ["supply-chain"]
+    },
+    {
+      "name": "javascript-provider-build",
+      "provides": ["build"],
+      "argv": ["./scripts/build-javascript-provider.sh"],
+      "modules": ["javascript-provider"],
+      "runOn": ["build"]
     }
   ],
   "tests": {
@@ -759,30 +816,6 @@
         "argv": ["./scripts/test-javascript-project.sh"],
         "runOn": ["focused", "recommended", "full"],
         "modules": ["tooling"]
-      },
-      {
-        "name": "language-pack-contract",
-        "kind": "contract",
-        "scope": "repository",
-        "cost": "quick",
-        "paths": [
-          "cmd/code-polishy/**",
-          "internal/pack/**",
-          "scripts/go.sh",
-          "tools/fixtures/language-pack/**"
-        ],
-        "argv": [
-          "./scripts/go.sh",
-          "run",
-          "./cmd/code-polishy",
-          "--policy-root",
-          ".",
-          "pack",
-          "verify",
-          "--source",
-          "tools/fixtures/language-pack"
-        ],
-        "runOn": ["focused", "recommended", "full"]
       },
       {
         "name": "repository-full",
@@ -1216,7 +1249,10 @@
         "modules": ["tooling"],
         "paths": [
           "scripts/test-installed-release.sh",
-          "scripts/test-installed-release-contract.sh"
+          "scripts/test-installed-release-contract.sh",
+          "cmd/code-polishy/**",
+          "internal/pack/**",
+          "tools/fixtures/language-pack/**"
         ],
         "argv": ["./scripts/test-installed-release-contract.sh"]
       },
@@ -1234,6 +1270,20 @@
         ],
         "argv": ["./scripts/test-build-oci-image.sh"],
         "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "javascript-provider-boundary",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["javascript-provider"],
+        "argv": ["./scripts/test-javascript-provider.sh"],
+        "paths": [
+          "providers/javascript/**",
+          "tools/javascript/policy.mjs",
+          "scripts/test-javascript-provider.sh"
+        ],
+        "runOn": ["focused", "recommended", "full"]
       }
     ],
     "paths": [
@@ -1246,7 +1296,8 @@
       "scripts/test-javascript-project.sh",
       "scripts/test-installed-release.sh",
       "scripts/test-installed-release-contract.sh",
-      "scripts/test-build-oci-image.sh"
+      "scripts/test-build-oci-image.sh",
+      "scripts/test-javascript-provider.sh"
     ],
     "ownership": [
       {
@@ -1426,6 +1477,14 @@
         "paths": ["scripts/test-build-oci-image.sh"],
         "module": "tooling",
         "focusedSuite": "oci-image-contract"
+      },
+      {
+        "paths": [
+          "providers/javascript/provider.test.mjs",
+          "scripts/test-javascript-provider.sh"
+        ],
+        "module": "javascript-provider",
+        "focusedSuite": "javascript-provider-boundary"
       }
     ]
   },
@@ -1528,18 +1587,33 @@
         "owner": "code-polishy-maintainer",
         "reviewed": "2026-09-09",
         "expires": "2026-09-25"
+      },
+      {
+        "id": "provider-js-yaml-security-fix",
+        "ecosystem": "pnpm",
+        "package": "js-yaml",
+        "version": "4.3.2",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/nodeca/js-yaml/security/advisories/GHSA-2883-xcg3-v3hh",
+        "reason": "Version 4.3.2 fixes CPU exhaustion through empty YAML merge sources in the provider's ESLint and Knip dependency graph. Native audit and OSV remain required.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-09",
+        "expires": "2026-09-25"
+      },
+      {
+        "id": "provider-fast-uri-security-fix",
+        "ecosystem": "pnpm",
+        "package": "fast-uri",
+        "version": "3.1.7",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "category": "security-fix",
+        "evidence": "https://github.com/advisories/GHSA-f65p-4m7j-42xc",
+        "reason": "The provider type checker transitively requires fast-uri through Ajv. Version 3.1.7 fixes the remaining URI-normalization advisories affecting the aged 3.1.5 candidate; native audit and OSV remain required.",
+        "owner": "code-polishy-maintainer",
+        "reviewed": "2026-09-07",
+        "expires": "2026-10-02"
       }
     ]
-  },
-  "exceptions": [
-    {
-      "id": "declarative-suite-inventory-size",
-      "check": "quality.fileLength",
-      "path": ".code-polishy.json",
-      "subject": "1517",
-      "reason": "The outgoing 0.24.2 self-hosting lock still applies a line budget to this required control file. This exact-count exception remains necessary for its release gate until the separate lock upgrade; 0.24.6 removes JSON line budgets. Schema, ownership, command, and coverage checks remain mandatory.",
-      "owner": "code-polishy-maintainer",
-      "expires": "2026-10-05"
-    }
-  ]
+  }
 }

@@ -184,7 +184,7 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	})
 	architectureAnalysis := architecture.Analysis{}
 	engine.executionPhase(ctx, "architecture", func(phaseContext context.Context) {
-		architectureAnalysis = architecture.AnalyzeWithRunner(phaseContext, engine.Repository, selection.Files, engine.Runner)
+		architectureAnalysis = architecture.AnalyzeWithRunner(phaseContext, engine.Repository.WithAnalysisProfile(profile), selection.Files, engine.Runner)
 		findings = append(findings, architectureAnalysis.Findings...)
 		findings = engine.enrichTestOwnership(findings, architectureAnalysis.TestImports)
 	})

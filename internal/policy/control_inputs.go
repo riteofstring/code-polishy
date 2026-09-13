@@ -5,6 +5,7 @@ import "strings"
 var sensitiveControlPatterns = []string{
 	".code-polishy.json", ".code-polishy.lock.json",
 	".github/workflows/**", ".gitlab-ci.yaml", ".gitlab-ci.yml",
+	".github/actionlint.yaml", ".github/actionlint.yml",
 	"**/Dockerfile*", "**/Containerfile*",
 	"**/go.mod", "**/go.sum", "**/go.work", "**/go.work.sum",
 	"**/package.json", "**/package-lock.json", "**/npm-shrinkwrap.json", "**/pnpm-lock.yaml", "**/pnpm-workspace.yaml", "**/pnpm-workspace.yml", "**/bun.lockb",

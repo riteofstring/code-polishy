@@ -16,7 +16,7 @@ import (
 
 const maximumPackBytes = 128 << 20
 const maximumPackFileBytes = 16 << 20
-const maximumPackFiles = 10000
+const maximumPackFiles = 20000
 
 type Identity struct {
 	Name    string

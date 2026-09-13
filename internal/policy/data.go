@@ -23,7 +23,7 @@ func validateDataPaths(config *Config) error {
 
 func validateDataPattern(config *Config, index int, pattern string) error {
 	label := fmt.Sprintf("scope.data[%d]", index)
-	if dataPatternIsExecutableSource(pattern) {
+	if dataPatternIsExecutableSource(pattern) && !literalDataModulePattern(pattern) {
 		return fmt.Errorf("%s must not match executable source", label)
 	}
 	if language, overlaps := dataLanguageOverlap(config.Scope.Languages, pattern); overlaps {
@@ -33,7 +33,7 @@ func validateDataPattern(config *Config, index int, pattern string) error {
 		return fmt.Errorf("%s must not match policy-sensitive control input pattern %q", label, control)
 	}
 	if !dataPatternHasSupportedExtension(pattern) {
-		return fmt.Errorf("%s must match only .json, .jsonc, .yaml, or .yml files", label)
+		return fmt.Errorf("%s must match only .json, .jsonc, .yaml, .yml, or literal .js/.mjs data modules", label)
 	}
 	if overlapsScope(pattern, config.Scope.Exclude) || overlapsScope(pattern, DefaultExcludes) {
 		return fmt.Errorf("%s must not overlap scope.exclude", label)
@@ -46,6 +46,9 @@ func validateDataPattern(config *Config, index int, pattern string) error {
 
 func dataLanguageOverlap(rules []LanguageRule, pattern string) (string, bool) {
 	for _, rule := range rules {
+		if rule.Name == "typescript" && literalDataModulePattern(pattern) {
+			continue
+		}
 		for _, source := range rule.Paths {
 			if PatternsOverlap(pattern, source) {
 				return rule.Name, true
@@ -100,6 +103,11 @@ func dataPatternIsExecutableSource(pattern string) bool {
 
 func dataPatternHasSupportedExtension(pattern string) bool {
 	pattern = strings.ToLower(pattern)
-	return strings.HasSuffix(pattern, ".json") || strings.HasSuffix(pattern, ".jsonc") ||
+	return literalDataModulePattern(pattern) || strings.HasSuffix(pattern, ".json") || strings.HasSuffix(pattern, ".jsonc") ||
 		strings.HasSuffix(pattern, ".yaml") || strings.HasSuffix(pattern, ".yml")
+}
+
+func literalDataModulePattern(pattern string) bool {
+	pattern = strings.ToLower(pattern)
+	return strings.HasSuffix(pattern, ".js") || strings.HasSuffix(pattern, ".mjs")
 }

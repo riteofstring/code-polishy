@@ -8,7 +8,9 @@ on whichever release a global command happens to resolve.
 
 The focused installed-release contract builds the current committed source
 into a temporary installation and obtains a lock from that installation. It
-then runs the first-adoption fixture through the real launcher. This keeps the
+then verifies the SQLite language-pack conformance cases and runs the
+first-adoption fixture through the real launcher. Pack runtime verification
+uses the installed release's manifest and pinned Node binary. This keeps the
 quick boundary meaningful on clean CI hosts where no prior installation
 exists, and prevents a stale developer installation from testing different
 production code. The test requires a clean committed source because the

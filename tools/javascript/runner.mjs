@@ -1,3 +1,4 @@
+import { FORMAT_OPTIONS, TYPECHECK_OPTIONS, lintRules } from "./policy.mjs";
 import { writeFileSync } from "node:fs";
 import {
   basename,
@@ -18,6 +19,7 @@ import jsxAccessibility from "eslint-plugin-jsx-a11y";
 import yaml from "js-yaml";
 
 import { audit } from "./audit.mjs";
+import { parseLiteralDataModule } from "./data-modules.mjs";
 import { deadcode, requireWorkspaces } from "./deadcode.mjs";
 import { imports } from "./imports.mjs";
 import { gitlab } from "./gitlab.mjs";
@@ -77,43 +79,6 @@ const MAXIMUM_PROJECT_FILES = 20000;
 
 const MAXIMUM_GITLAB_GOVERNED_PATHS = 20000;
 
-const FORMAT_OPTIONS = {
-  arrowParens: "always",
-  bracketSameLine: false,
-  bracketSpacing: true,
-  embeddedLanguageFormatting: "auto",
-  endOfLine: "lf",
-  htmlWhitespaceSensitivity: "css",
-  jsxSingleQuote: false,
-  objectWrap: "preserve",
-  printWidth: 80,
-  proseWrap: "preserve",
-  quoteProps: "as-needed",
-  semi: true,
-  singleAttributePerLine: false,
-  singleQuote: false,
-  tabWidth: 2,
-  trailingComma: "all",
-  useTabs: false,
-};
-
-const REACT_HOOKS_RULES = [
-  "react-hooks/rules-of-hooks",
-  "react-hooks/exhaustive-deps",
-];
-const JSX_ACCESSIBILITY_RULES = [
-  "jsx-a11y/alt-text",
-  "jsx-a11y/anchor-has-content",
-  "jsx-a11y/anchor-is-valid",
-  "jsx-a11y/aria-props",
-  "jsx-a11y/aria-role",
-  "jsx-a11y/click-events-have-key-events",
-  "jsx-a11y/interactive-supports-focus",
-  "jsx-a11y/label-has-associated-control",
-  "jsx-a11y/no-static-element-interactions",
-  "jsx-a11y/tabindex-no-positive",
-];
-
 const LINT_LANGUAGES = {
   ".cjs": { sourceType: "commonjs", jsx: false, typescript: false },
   ".js": { sourceType: "module", jsx: true, typescript: false },
@@ -123,15 +88,6 @@ const LINT_LANGUAGES = {
   ".mts": { sourceType: "module", jsx: false, typescript: true },
   ".ts": { sourceType: "module", jsx: false, typescript: true },
   ".tsx": { sourceType: "module", jsx: true, typescript: true },
-};
-
-const TYPECHECK_OPTIONS = {
-  noEmit: true,
-  noCheck: false,
-  emitDeclarationOnly: false,
-  composite: false,
-  incremental: false,
-  tsBuildInfoFile: undefined,
 };
 
 async function format(request, write) {
@@ -187,31 +143,39 @@ function parse(request) {
       continue;
     }
     try {
-      switch (extname(path).toLowerCase()) {
-        case ".json":
-          JSON.parse(source);
-          break;
-        case ".jsonc":
-          parseJsonc(path, source);
-          break;
-        case ".yaml":
-        case ".yml":
-          yaml.loadAll(source, undefined, {
-            filename: path,
-            schema: yaml.JSON_SCHEMA,
-          });
-          break;
-        default:
-          throw new Error(
-            "the policy-owned data parser does not support this file extension",
-          );
-      }
+      parseData(path, source);
       covered.push(path);
     } catch (error) {
       unsupportedPaths.push(unsupported(path, error.message));
     }
   }
   return { covered, unsupported: unsupportedPaths };
+}
+
+function parseData(path, source) {
+  switch (extname(path).toLowerCase()) {
+    case ".js":
+    case ".mjs":
+      parseLiteralDataModule(path, source);
+      break;
+    case ".json":
+      JSON.parse(source);
+      break;
+    case ".jsonc":
+      parseJsonc(path, source);
+      break;
+    case ".yaml":
+    case ".yml":
+      yaml.loadAll(source, undefined, {
+        filename: path,
+        schema: yaml.JSON_SCHEMA,
+      });
+      break;
+    default:
+      throw new Error(
+        "the policy-owned data parser does not support this file extension",
+      );
+  }
 }
 
 function parseJsonc(path, source) {
@@ -225,22 +189,6 @@ function parseJsonc(path, source) {
       " ",
     ),
   );
-}
-
-function lintRules(request) {
-  const rules = {
-    complexity: ["error", request.limits.complexity],
-    "max-depth": ["error", request.limits.depth],
-    "max-params": ["error", request.limits.parameters],
-  };
-  const activated = [
-    ...(request.activation.reactHooks ? REACT_HOOKS_RULES : []),
-    ...(request.activation.jsxAccessibility ? JSX_ACCESSIBILITY_RULES : []),
-  ];
-  for (const rule of activated) {
-    rules[rule] = "error";
-  }
-  return rules;
 }
 
 function lintConfiguration({

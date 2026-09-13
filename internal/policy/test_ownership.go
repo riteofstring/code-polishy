@@ -19,15 +19,8 @@ func validateTestOwnership(config *Config) error {
 		if _, exists := config.ModuleByName[ownership.Module]; !exists {
 			return fmt.Errorf("%s.module references unknown production module %q", label, ownership.Module)
 		}
-		suite, err := referencedSuite(config.Tests.Suites, ownership.FocusedSuite, label+".focusedSuite")
-		if err != nil {
-			return err
-		}
-		if !IsPrimaryTestSuite(suite, ownership.Module) {
-			return fmt.Errorf("%s.focusedSuite must name a quick module-scoped suite for %q in focused, recommended, and full", label, ownership.Module)
-		}
-		if len(suite.Paths) == 0 {
-			return fmt.Errorf("%s.focusedSuite %q requires explicit execution paths covering its owned tests", label, suite.Name)
+		if _, err := TestOwnershipExecutionSuite(config.Tests.Suites, ownership); err != nil {
+			return fmt.Errorf("%s: %w", label, err)
 		}
 		for _, pattern := range ownership.Paths {
 			if len(patterns) >= 4096 {
@@ -47,6 +40,43 @@ func IsPrimaryTestSuite(suite TestSuite, module string) bool {
 		slices.Equal(suite.Modules, []string{module}) &&
 		slices.Contains(suite.RunOn, "focused") && slices.Contains(suite.RunOn, "recommended") &&
 		slices.Contains(suite.RunOn, "full") && !slices.Contains(suite.RunOn, "supplemental")
+}
+
+func TestOwnershipExecutionSuite(suites []TestSuite, ownership TestOwnership) (TestSuite, error) {
+	focused, err := testOwnershipFocusedSuite(suites, ownership)
+	if err != nil || ownership.ExecutionSuite == "" {
+		return focused, err
+	}
+	execution, err := referencedSuite(suites, ownership.ExecutionSuite, "executionSuite")
+	if err != nil {
+		return TestSuite{}, err
+	}
+	if !isTestExecutionSuite(execution, ownership.Module) {
+		return TestSuite{}, fmt.Errorf("executionSuite must name a full-profile suite for module %q or repository scope, without supplemental execution", ownership.Module)
+	}
+	if len(execution.Paths) == 0 {
+		return TestSuite{}, fmt.Errorf("executionSuite %q requires explicit execution paths covering its owned tests", execution.Name)
+	}
+	return execution, nil
+}
+
+func testOwnershipFocusedSuite(suites []TestSuite, ownership TestOwnership) (TestSuite, error) {
+	focused, err := referencedSuite(suites, ownership.FocusedSuite, "focusedSuite")
+	if err != nil {
+		return TestSuite{}, err
+	}
+	if !IsPrimaryTestSuite(focused, ownership.Module) {
+		return TestSuite{}, fmt.Errorf("focusedSuite must name a quick module-scoped suite for %q in focused, recommended, and full", ownership.Module)
+	}
+	if len(focused.Paths) == 0 {
+		return TestSuite{}, fmt.Errorf("focusedSuite %q requires explicit execution paths", focused.Name)
+	}
+	return focused, nil
+}
+
+func isTestExecutionSuite(suite TestSuite, module string) bool {
+	return slices.Contains(suite.RunOn, "full") && !slices.Contains(suite.RunOn, "supplemental") &&
+		(suite.Scope == "repository" || suite.Scope == "module" && slices.Equal(suite.Modules, []string{module}))
 }
 
 func nonOverlappingTestPattern(pattern string, previous []string, label string) error {

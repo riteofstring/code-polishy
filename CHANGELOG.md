@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.25.0 - 2026-09-13
+
+- Add capability-scoped analysis providers through pack manifest version 2 and
+  protocol version 3, with exact runtime identity, input evidence, explicit
+  coverage, and separate diagnostic and write authority.
+- Add an optional, separately built JavaScript and TypeScript provider with
+  formatting, linting, type checking, function metrics, unused-code analysis,
+  architecture facts, and Astro source mapping.
+- Preserve native analysis outside explicit provider claims, generated-source
+  package context, contained read-only assets, and protected literal JavaScript
+  data while rejecting incomplete coverage and unsafe writes.
+- Separate quick-suite ownership from integration-test execution, honor declared
+  workflow runner labels, and retain provider execution in gate identities and
+  managed reports.
+- Require full-candidate behavior and final-state review at non-documentation
+  merge checkpoints.
+- Make the optional provider's frozen build reproducible from a clean checkout
+  and exercise its symlink-free packaged artifact in the quick boundary suite.
+- Bind discovered asset-link topology into provider evidence and keep nested
+  package framework context distinct when packages inherit one configuration.
+
+## 0.25.0-beta.5 - 2026-09-09
+
+- Replace the prerelease provider protocol with version 3, carrying effective
+  package ownership, lint policy, analysis units, and separate diagnostic/write
+  scopes. The optional JavaScript provider remains opt-in.
+- Restore dependent type errors, package-wide unused-code findings, focused
+  architecture dependency closures, nested package roots, alternate TypeScript
+  configuration names, and literal entry-point semantics.
+- Preserve native diagnostics outside unavailable pack claims, bound provider
+  source facts and text, and reject invalid UTF-8 before formatting writes.
+- Resolve generated-source package imports and nested TypeScript configuration
+  aliases during unused-code analysis while preserving physical relative imports.
+- Respect effective generated-source module formats and conditional exports in
+  provider type checking and architecture analysis.
+- Update js-yaml to 4.3.2 in both JavaScript tool graphs to fix CPU exhaustion
+  through empty YAML merge sources (GHSA-2883-xcg3-v3hh).
+
+## 0.25.0-beta.4 - 2026-09-08
+
+- Allow owned integration tests and imported helpers to declare their full-profile
+  execution suite while retaining their module's quick boundary suite.
+- Reject separate test execution that leaves the referenced quick suite without
+  owned test source.
+
+## 0.25.0-beta.3 - 2026-09-08
+
+- Prepare provider commands consistently for execution and gate evidence, retaining
+  exact runtime, request, working-root, and operation-selection checks.
+- Preserve contained asset-directory links during formatting and provider reads;
+  reject linked write targets.
+- Protect explicitly declared literal JavaScript data modules without evaluating
+  or rewriting them.
+- Keep external browser-script boundaries visible while analyzing local code;
+  retain strict JavaScript checks within the nearest compilation unit.
+- Restrict the optional JS/TS provider format profile to formatting.
+
+## 0.25.0-beta.2 - 2026-09-07
+
+- Retain TypeScript import-equals and framework script-source dependencies in
+  provider analysis, including unused-code reachability and original locations.
+- Resolve contained image, media, font, and PDF assets while retaining missing
+  file findings and incomplete coverage for unsupported executable formats.
+- Evaluate provider function metrics once in the core and use the same policy
+  decisions for conformance fixtures.
+- Document the shared native and provider JS/TS checks for unreachable code,
+  duplicate conditions and cases, constant binary expressions, unsafe finally
+  blocks, invalid typeof comparisons, and incorrect NaN comparisons.
+
+## 0.25.0-beta.1 - 2026-09-07
+
+- Allow exactly selected analysis providers to replace native capabilities through
+  pack protocol v2, with verified runtime identity, original-source facts,
+  complete coverage accounting, and core-owned policy checks.
+- Add a separately built JS/TS provider with framework adapters, including Astro
+  analysis from existing project metadata; keep framework tool dependencies
+  outside the core release.
+- Respect declared self-hosted runner labels and resolve contained stylesheet
+  imports while retaining dependency boundaries and missing-file findings.
+- Support exact prerelease versions in local release installation and preflight
+  checks.
+
 ## 0.24.19 - 2026-09-13
 
 - Include Doctor-time Python ownership analysis in merge-gate execution plans so

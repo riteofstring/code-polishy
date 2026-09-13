@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -149,13 +150,13 @@ func TestProtocolRejectsFakeSuccessExtraJSONAndEscapingFindings(t *testing.T) {
 		name string
 		data string
 	}{
-		{"fake success", `{"protocolVersion":1,"status":"pass"}`},
-		{"extra response", `{"protocolVersion":1,"status":"pass","evidence":["lint ran"]}{}`},
-		{"escaping finding", `{"protocolVersion":1,"status":"findings","findings":[{"capability":"lint","path":"../secret","subject":"bad","message":"bad"}]}`},
+		{"fake success", `{"protocolVersion":3,"status":"pass"}`},
+		{"extra response", `{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}{}`},
+		{"escaping finding", `{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"../secret","subject":"bad","message":"bad"}]}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := parseResponse([]byte(test.data), Request{Capability: "lint", Files: []string{"src/main.fixture"}}); err == nil {
+			if _, err := parseResponse([]byte(test.data), Request{Capability: "lint", Files: []string{"src/main.fixture"}, DiagnosticFiles: []string{"src/main.fixture"}, WriteFiles: []string{"src/main.fixture"}}); err == nil {
 				t.Fatal("invalid response passed")
 			}
 		})
@@ -216,7 +217,7 @@ func TestPackRequestsKeepGeneratedExecutableSourceAndProtectDeclaredData(t *test
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			request := requestFor(repo, selection, policy.Command{Paths: test.paths, Adapter: adapter(test.capability)}, test.profile)
-			if !slices.Equal(request.Files, test.want) {
+			if !slices.Equal(request.Files, sortedUnique(test.want)) {
 				t.Fatalf("files = %v, want %v", request.Files, test.want)
 			}
 		})
@@ -258,9 +259,10 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	boundary := &responseRunner{responses: [][]byte{[]byte(`{"protocolVersion":1,"status":"findings","findings":[{"capability":"lint","path":"src/main.fixture","line":2,"subject":"bad","message":"bad source"}]}`)}}
-	findings := RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
-	if len(findings) != 1 || findings[0].Check != "pack.lint" || findings[0].Line != 2 || findings[0].Subject != "bad" {
+	boundary := &responseRunner{responses: [][]byte{[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","line":1,"column":1,"subject":"bad","message":"bad source"}]}`)}}
+	result := RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
+	findings := result.Findings
+	if len(findings) != 1 || findings[0].Check != "pack.fixture-language.invalid-source" || findings[0].Line != 1 || findings[0].Subject != "bad" {
 		t.Fatalf("unexpected findings: %+v", findings)
 	}
 	boundary.mutate = func() {
@@ -268,8 +270,9 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 		_ = os.Chmod(adapter, 0o755)
 		_ = os.WriteFile(adapter, []byte("changed"), 0o755)
 	}
-	boundary.responses = [][]byte{[]byte(`{"protocolVersion":1,"status":"pass","evidence":["lint ran"]}`)}
-	findings = RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
+	boundary.responses = [][]byte{[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`)}
+	result = RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
+	findings = result.Findings
 	if len(findings) != 1 || !strings.Contains(findings[0].Message, "changed during execution") {
 		t.Fatalf("concurrent tampering was not visible: %+v", findings)
 	}
@@ -278,13 +281,37 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 	source := writePackSource(t)
 	boundary := &responseRunner{responses: [][]byte{
-		[]byte(`{"protocolVersion":1,"status":"pass","evidence":["lint ran"]}`),
-		[]byte(`{"protocolVersion":1,"status":"findings","findings":[{"capability":"lint","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
+		[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
+		[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
 	}}
-	result, err := VerifySource(context.Background(), source, boundary)
+	result, err := VerifySource(context.Background(), source, source, boundary)
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
 		t.Fatalf("fixture verification failed: %+v %v", result, err)
 	}
+}
+
+func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
+	source := writePackSource(t)
+	writeTestFile(t, source, "fixtures/pass/package.json", "{}\n", 0o644)
+	writeTestFile(t, source, "fixtures/fail/package.json", "{}\n", 0o644)
+	writeTestFile(t, source, ".gitignore", "fixtures/\n", 0o644)
+	if output, err := exec.Command("git", "-C", source, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("initialize source checkout: %s %v", output, err)
+	}
+	boundary := &responseRunner{responses: [][]byte{
+		[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
+		[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
+	}}
+	result, err := VerifySource(context.Background(), source, source, boundary)
+	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
+		t.Fatalf("fixture verification failed: %+v %v", result, err)
+	}
+	for _, request := range boundary.requests {
+		if !slices.ContainsFunc(request.Context, func(input InputFile) bool { return input.Path == "package.json" }) {
+			t.Fatalf("fixture metadata disappeared inside a Git checkout: %+v", request.Context)
+		}
+	}
+
 }
 
 type responseRunner struct {
@@ -310,6 +337,12 @@ func (boundary *responseRunner) RunStructured(_ context.Context, _ string, comma
 		boundary.mutate = nil
 	}
 	response := boundary.responses[0]
+	var value map[string]any
+	if err := json.Unmarshal(response, &value); err != nil {
+		return runner.Result{}, runner.Output{}, err
+	}
+	value["inputs"] = request.Context
+	response, _ = json.Marshal(value)
 	boundary.responses = boundary.responses[1:]
 	return runner.Result{}, runner.Output{Stdout: response}, nil
 }
@@ -334,7 +367,7 @@ func testManifest(t *testing.T) []byte {
 		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}},
 		Fixtures: []Fixture{
 			{Name: "lint-pass", Command: "adapter", Capability: "lint", Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},
-			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings"},
+			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings", ExpectedRules: []string{"invalid-source"}},
 		},
 	}
 	data, err := json.Marshal(manifest)
@@ -352,5 +385,38 @@ func writeTestFile(t *testing.T, root, relative, content string, mode os.FileMod
 	}
 	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUnavailablePackRetainsOnlyAuthenticatedClaims(t *testing.T) {
+	source, store := writePackSource(t), t.TempDir()
+	t.Cleanup(func() { makeWritable(store) })
+	identity, installed, err := Install(source, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := []policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}
+	makeWritable(installed)
+	if err := os.WriteFile(filepath.Join(installed, "bin/adapter"), []byte("changed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolution := Resolve(selected, store)
+	if len(resolution.Findings) != 1 || len(resolution.Commands) == 0 {
+		t.Fatalf("failed pack lost authenticated claims: %+v", resolution)
+	}
+	config := policy.Config{}
+	Apply(&config, resolution)
+	repo := repository.Repository{Config: config}
+	if owner := repo.AnalysisOwner("src/main.fixture", "lint", "check"); owner.Native || !strings.Contains(owner.Problem, "unavailable") {
+		t.Fatalf("failed claim became analyzable: %+v", owner)
+	}
+	if !repo.NativeAnalysis("main.py", "lint") {
+		t.Fatal("unrelated Python was suppressed")
+	}
+	if err := os.WriteFile(filepath.Join(installed, ManifestFilename), []byte("forged"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if forged := Resolve(selected, store); len(forged.Findings) != 1 || len(forged.Commands) != 0 {
+		t.Fatalf("unauthenticated manifest established claims: %+v", forged)
 	}
 }

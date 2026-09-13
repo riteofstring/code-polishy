@@ -33,7 +33,7 @@ func newGoGraphScope(repo repository.Repository, selected, allFiles []string, mo
 	sortProjectRoots(scope.roots)
 	sortProjectRoots(scope.workspaces)
 	for _, path := range allFiles {
-		if repo.Language(path) == "go" {
+		if repo.Language(path) == "go" && repo.NativeAnalysis(path, "architecture") {
 			manifest := scope.manifest(path)
 			scope.files[manifest] = append(scope.files[manifest], path)
 		}
@@ -67,7 +67,7 @@ func (scope *goGraphScope) selectPath(path string) {
 		scope.includeWorkspace(path)
 	case filepath.Base(path) == "go.mod":
 		scope.includeManifest(path)
-	case scope.repo.Language(path) == "go":
+	case scope.repo.Language(path) == "go" && scope.repo.NativeAnalysis(path, "architecture"):
 		manifest := scope.manifest(path)
 		if manifest == "" {
 			scope.queue = append(scope.queue, path)

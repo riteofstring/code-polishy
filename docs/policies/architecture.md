@@ -209,10 +209,13 @@ external packages. That makes foundational domain modules independent by
 construction.
 
 Tests declare their production boundary independently through exactly one
-`tests.ownership` entry naming a `module` and its primary quick `focusedSuite`.
+`tests.ownership` entry naming a `module` and that module's quick `focusedSuite`.
 Production module paths do not infer test ownership. `tests.paths` adds
-unconventional test paths, and the named suite must explicitly include its
-owned tests. Test imports are omitted from the production graph: a test may
+unconventional test paths. When the test runs elsewhere, `executionSuite` names
+its full-profile suite with the same module owner or repository scope; otherwise
+the focused suite executes it. The executing suite must explicitly include
+the owned tests and imported helpers. Test imports are omitted from the
+production graph: a test may
 exercise collaborators or span modules without authorizing its production
 owner to depend on them.
 

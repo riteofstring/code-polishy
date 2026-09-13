@@ -91,8 +91,8 @@ func TestTestOwnershipCoverageRejectsInvalidExecutionAndSourceAssignments(t *tes
 		}, "stale"},
 		{"production", func(repo *repository.Repository) { repo.Config.Tests.Ownership[0].Paths = []string{"domain/value.go"} }, "cannot classify"},
 		{"uncovered", func(repo *repository.Repository) { repo.Config.Tests.Suites[0].Paths = []string{"elsewhere/**"} }, "do not include"},
-		{"wrong module", func(repo *repository.Repository) { repo.Config.Tests.Suites[0].Modules = []string{"api"} }, "primary focused suite"},
-		{"repository suite", func(repo *repository.Repository) { repo.Config.Tests.Suites[0].Scope = "repository" }, "primary focused suite"},
+		{"wrong module", func(repo *repository.Repository) { repo.Config.Tests.Suites[0].Modules = []string{"api"} }, "quick module-scoped suite"},
+		{"repository suite", func(repo *repository.Repository) { repo.Config.Tests.Suites[0].Scope = "repository" }, "quick module-scoped suite"},
 		{"overlap", func(repo *repository.Repository) {
 			repo.Config.Tests.Ownership = append(repo.Config.Tests.Ownership, repo.Config.Tests.Ownership[0])
 		}, "multiple ownership"},

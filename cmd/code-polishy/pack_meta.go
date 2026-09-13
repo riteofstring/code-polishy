@@ -18,7 +18,7 @@ func handlePackMeta(invocation invocation) int {
 	case "install":
 		return installPack(arguments)
 	case "verify":
-		return verifyPack(arguments)
+		return verifyPack(arguments, invocation.policyRoot)
 	case "root":
 		return printPackRoot(arguments)
 	default:
@@ -43,12 +43,12 @@ func installPack(arguments []string) int {
 	return 0
 }
 
-func verifyPack(arguments []string) int {
+func verifyPack(arguments []string, policyRoot string) int {
 	source, err := packSourceOption("pack verify", arguments)
 	if err != nil {
 		return commandUsageError("pack", err.Error())
 	}
-	result, err := pack.VerifySource(context.Background(), source, pack.DefaultRunner())
+	result, err := pack.VerifySource(context.Background(), source, policyRoot, pack.DefaultRunner())
 	if err != nil {
 		return operationalError(err)
 	}
