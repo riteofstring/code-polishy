@@ -227,18 +227,23 @@ function projectInputs(analysis, project) {
     checkJs: true,
   };
   const unit = analysis.unit(project.paths[0]);
-  const members = new Set(
-    unit.members.map((path) => join(analysis.root, path)),
-  );
-  const configured = parsed?.fileNames?.filter((path) => members.has(path));
+  const configured = configuredUnitMembers(analysis, unit, parsed);
   const inherited = [...analysis.classifications.values()]
     .filter(
       (file) =>
         file.sourcePackage && file.unit === unit.id && analysis.owns(file.path),
     )
     .map((file) => join(analysis.root, file.path));
-  const files = [...new Set([...(configured ?? [...members]), ...inherited])];
+  const files = [...new Set([...configured, ...inherited])];
   return { options, files };
+}
+
+function configuredUnitMembers(analysis, unit, parsed) {
+  const members = new Set(
+    unit.members.map((path) => join(analysis.root, path)),
+  );
+  if (!parsed) return [...members];
+  return parsed.fileNames.filter((path) => members.has(path));
 }
 
 function bindGeneratedResolution(analysis, host) {

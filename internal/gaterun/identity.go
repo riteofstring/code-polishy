@@ -222,6 +222,16 @@ func validateCommand(command CommandSpec) error {
 	if err := validateCommandCollections(command); err != nil {
 		return err
 	}
+	if err := validateCommandSuiteIdentity(command); err != nil {
+		return err
+	}
+	if command.ReportProtocol != "" && (command.Category != SupplyChain || command.ReportProtocol != policy.OSVVulnerabilityReportProtocol) {
+		return fmt.Errorf("command report protocol is invalid")
+	}
+	return validateArtifactSpecs(command.Artifacts)
+}
+
+func validateCommandSuiteIdentity(command CommandSpec) error {
 	if command.Category == OrdinaryTest {
 		if command.SuiteIdentitySHA256 != "" && !validSHA256(command.SuiteIdentitySHA256) {
 			return fmt.Errorf("ordinary test suite receipt identity is invalid")
@@ -229,10 +239,7 @@ func validateCommand(command CommandSpec) error {
 	} else if command.SuiteIdentitySHA256 != "" {
 		return fmt.Errorf("non-test command has a suite receipt identity")
 	}
-	if command.ReportProtocol != "" && (command.Category != SupplyChain || command.ReportProtocol != policy.OSVVulnerabilityReportProtocol) {
-		return fmt.Errorf("command report protocol is invalid")
-	}
-	return validateArtifactSpecs(command.Artifacts)
+	return nil
 }
 
 func validateArtifactSpecs(artifacts []ArtifactSpec) error {
