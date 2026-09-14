@@ -191,10 +191,6 @@
   },
   "verification": {
     "finalGateOwner": "local",
-    "behaviorReview": {
-      "defaultRequiredAt": "merge",
-      "features": []
-    },
     "mergeGate": {
       "recommendedModules": [
         "policy",

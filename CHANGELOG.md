@@ -14,8 +14,6 @@
 - Separate quick-suite ownership from integration-test execution, honor declared
   workflow runner labels, and retain provider execution in gate identities and
   managed reports.
-- Require full-candidate behavior and final-state review at non-documentation
-  merge checkpoints.
 - Make the optional provider's frozen build reproducible from a clean checkout
   and exercise its symlink-free packaged artifact in the quick boundary suite.
 - Bind discovered asset-link topology into provider evidence and keep nested
