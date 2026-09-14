@@ -1,8 +1,8 @@
 # Installable First-Party Language Packs
 
-Status: proposed implementation plan; planning branch `beta-language-packs`
+Status: proposed implementation plan; baseline `v0.25.0` on `main`
 
-## Outcome and branch boundary
+## Outcome and implementation boundary
 
 Move all existing Go, Python, JavaScript and TypeScript, and Bash/POSIX shell
 functionality into independently installed official language packs. Preserve
@@ -10,17 +10,19 @@ observable behavior, including policy activation, project discovery, failure
 handling, generated-source protection, dependency evidence, and installed-release
 operation. Moving only formatter and linter commands does not complete a language.
 
-The work starts on `beta-language-packs`, branched from `beta` at
-`854604a33e32421b3d3b25a60d888042a0751c43`. Keep normal beta maintenance on `beta`.
-This plan changes no runtime ownership, pack selection, or release default.
-Implementation is a separate stage after the inventory and test framework below.
+The planning work originated on `beta-language-packs`, branched from `beta` at
+`854604a33e32421b3d3b25a60d888042a0751c43`, and was incorporated into `main`
+after the v0.25.0 release without changing runtime ownership, pack selection, or
+release defaults. That branch is historical planning provenance, not the active
+implementation branch. Begin implementation from the then-current `main` after
+the inventory and test framework below are ready.
 
-Use small, reviewable milestones on this branch. Preserve the original reference
-when incorporating later beta fixes; give each behavior-changing fix its own
-fixture and record any deliberate reference update. Do not merge a partial
-language extraction into beta or advertise parity while required cases are
-uncovered. Public language cutovers must be coherent even when intermediate
-branch commits are incomplete.
+Use small, reviewable milestones on the implementation branch. Preserve the
+original reference when incorporating later `main` fixes; give each
+behavior-changing fix its own fixture and record any deliberate reference
+update. Do not merge a partial language extraction into `main` or advertise
+parity while required cases are uncovered. Public language cutovers must be
+coherent even when intermediate branch commits are incomplete.
 
 The first deliverable is an executable behavior inventory and a differential
 runner. No native implementation is removed before that runner proves the
@@ -29,13 +31,12 @@ not a claim that finite tests prove every possible program equivalent.
 
 ## Starting point and related work
 
-The branch starts with native implementations for all four language groups and
-an optional JavaScript/TypeScript provider. The current manifest version is 2
-and the analysis protocol is 3. The optional provider already supports useful
-Astro mapping, JavaScript type checking, jsconfig, TypeScript aliases, asset
-resolution, and manifest/framework entries. Preserve these alongside native
-behavior; the provider is not yet a complete replacement for the native language
-boundary.
+The v0.25.0 baseline has native implementations for all four language groups and
+an optional JavaScript/TypeScript provider. Its manifest version is 2 and its
+analysis protocol is 3. The optional provider already supports useful Astro
+mapping, JavaScript type checking, jsconfig, TypeScript aliases, asset resolution,
+and manifest/framework entries. Preserve these alongside native behavior; the
+provider is not yet a complete replacement for the native language boundary.
 
 The [analysis ownership design](../design/provider-scope.md) is the current
 scope contract. In particular, read context, required coverage, reportable
@@ -46,7 +47,7 @@ The [discovery and capabilities plan](universal-language-pack-capabilities.md)
 provides the future protocol direction. Implement only the discovery, execution,
 and evidence contracts needed to preserve these four languages. Cargo, Gradle,
 Bundler, and CMake prototypes are separate future work and do not block this
-migration. Any necessary prerelease protocol replacement is one clean cutover;
+migration. Any necessary future protocol replacement is one clean cutover;
 there is no dual-protocol translation layer.
 
 ## Product boundary
@@ -153,11 +154,12 @@ their existing behavior or imply new unsupported language coverage.
 
 ### Freeze reproducible references
 
-Preserve the branch-base native implementation as an immutable reference build,
-with source commit, executable/artifact digests, exact tool and dependency pins,
-platform, command environment, and policy identity. The governing installed
-release lock is workflow authority; it is not automatically the correct behavior
-reference for the newer source tree.
+Preserve the tagged v0.25.0 native implementation at
+`a800e66ef3ac5fc57c9d103dc84688aaa68ef4e8` as the initial immutable reference
+build, with executable/artifact digests, exact tool and dependency pins, platform,
+command environment, and policy identity. The governing installed release lock
+is workflow authority; it is not automatically the correct behavior reference
+for a newer implementation tree.
 
 Use three expectation lanes:
 
@@ -169,7 +171,7 @@ Use three expectation lanes:
 
 The original main revision `a57aaa6fc70959699c8f8e6c0f0975dd05e0922d`
 is historical evidence for disputed native parity, not a blanket replacement for
-the repaired beta reference. Never refresh expected results simply to match the
+the tagged v0.25.0 reference. Never refresh expected results simply to match the
 candidate. Each intentional difference names the behavior, reason, affected
 fixtures, old/new outcomes, and a maintainer decision before public cutover.
 Keep dependency/tool upgrades separate from extraction where possible so their
@@ -253,7 +255,8 @@ not turn focused checks into repository-wide work.
 
 ### Mandatory provider regression corpus
 
-Carry forward the repaired beta regressions as named, direct assertions:
+Carry forward the regressions repaired in the v0.25.0 baseline as named, direct
+assertions:
 
 - `a.ts` changes and an unchanged importing `b.ts` receives the type error.
 - A removed entry or metadata-only change reports newly unreachable unchanged
@@ -500,10 +503,11 @@ The [Verification and Testing Policy](../policies/verification.md) remains the
 owner of test scheduling, artifacts, receipts, and gate reuse.
 
 Checkpoint task-owned progress at meaningful milestones. For completed code work
-on this long-lived branch, use the locked workflow's checkpoint gate against the
-previous checkpoint. At a real merge into beta, use one final gate owned by the
-configured local or CI authority, with beta as the explicit merge target. Do not
-run duplicate full gates solely because the same candidate moves between stages.
+on the implementation branch, use the locked workflow's checkpoint gate against
+the previous checkpoint. At a real merge into `main`, use one final gate owned by
+the configured local or CI authority, with `main` as the explicit merge target.
+Do not run duplicate full gates solely because the same candidate moves between
+stages.
 
 Bind reports to reference and candidate commits/artifacts, fixture and ledger
 digests, toolchains, platform, and protocol. Reuse evidence only when its complete

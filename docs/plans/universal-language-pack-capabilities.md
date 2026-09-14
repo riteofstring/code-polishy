@@ -1,15 +1,16 @@
 # Language-Pack Discovery and Universal Capabilities
 
-Status: proposed; companion protocol direction for the language-pack migration
+Status: proposed; companion protocol direction based on v0.25.0
 
-## Relationship to the beta migration
+## Relationship to the first-party migration
 
 The [first-party migration plan](installable-first-party-language-packs.md)
-owns the `beta-language-packs` branch, complete feature inventory, equivalence
-runner, and extraction sequence for shell, Python, JavaScript/TypeScript, and Go.
-Its test framework lands before native implementations are removed.
+owns the complete feature inventory, equivalence runner, and extraction sequence
+for shell, Python, JavaScript/TypeScript, and Go. The planning documents were
+incorporated into `main` after v0.25.0; implementation begins on a separate branch,
+and its test framework lands before native implementations are removed.
 
-The current implementation uses manifest version 2 and protocol version 3.
+The v0.25.0 baseline uses manifest version 2 and protocol version 3.
 This document describes a future contract, not the current wire schema. Preserve
 protocol v3's effective generated-source context, per-capability ownership,
 unit-wide diagnostic authority, focused architecture closure, and restricted
@@ -255,11 +256,12 @@ or another transport until prototypes measure the tradeoffs.
 
 ### Phase 0: Prove the required discovery models
 
-For the beta migration, use the four existing language inventories and shared
-conformance fixtures from the first-party migration plan. Identify capability
-gaps before extraction, including dependency/build adapters, test and portability
-facts, policy activation, and toolchain distribution. Prove each actual project
-model with small, nested, focused, generated-source, and large-unit fixtures.
+For the first-party migration, use the four existing language inventories and
+shared conformance fixtures from the first-party migration plan. Identify
+capability gaps before extraction, including dependency/build adapters, test and
+portability facts, policy activation, and toolchain distribution. Prove each
+actual project model with small, nested, focused, generated-source, and large-unit
+fixtures.
 
 For future expansion beyond those languages, build disposable adapters for four
 deliberately different systems:

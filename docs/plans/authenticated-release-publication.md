@@ -4,9 +4,11 @@ Status: blocked
 
 Target release: unassigned
 
-This work is explicitly not part of v0.23.0 or v0.24.0. Assigning it to a
-release requires a later, explicit planning decision and must not alter the
-existing v0.24 plan implicitly.
+Blocker evidence last validated: 2026-09-04
+
+This work was not part of v0.25.0. Assigning it to a release requires a later,
+explicit planning decision and must not retroactively alter the v0.25.0 release
+or publication contract.
 
 ## Outcome
 
@@ -22,11 +24,11 @@ independently authenticated compatible provenance at its build boundary.
 
 ## Starting point
 
-v0.23.0 produces complete deterministic CycloneDX SBOMs and in-toto provenance
-metadata using official models. That metadata binds release inputs and digests
-reproducibly but does not authenticate a builder or publisher. It remains useful
-input to this plan and must never be accepted as a substitute for the evidence
-defined here.
+The deterministic CycloneDX SBOMs and in-toto provenance metadata introduced in
+v0.23.0 remain part of the v0.25.0 baseline. That metadata binds release inputs
+and digests reproducibly but does not authenticate a builder or publisher. It
+remains useful input to this plan and must never be accepted as a substitute for
+the evidence defined here.
 
 ## Publication boundary
 
@@ -92,7 +94,10 @@ verification.
 
 ## Current blocker record
 
-This record is current through 2026-09-04.
+This record was last validated on 2026-09-04. Its findings remain blocking until
+a current exact dependency review demonstrates admissible replacements.
+Revalidate action and Go module inventories, release ages, and vulnerabilities
+before implementation; a newer version number alone does not resolve the record.
 
 The newest age-admissible `actions/attest` release is v4.2.2, published
 2026-08-04 at commit `1e69f48acb82d1966a394da916b4c1698aa569d6`.
