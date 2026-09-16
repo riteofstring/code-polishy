@@ -910,3 +910,13 @@ React Hooks rules run on authored source. Bundling and minification change
 function boundaries and names, so applying authored-component rules to emitted
 vendor code is not reliable. The source package's authored React code continues
 to receive Hooks checks.
+
+Semantic lint evaluates each generated JavaScript file as one complete unit; it
+cannot infer which byte ranges a bundler copied from pinned dependencies. When
+a reproducible bundle reports a semantic-lint finding in verified upstream code,
+keep the bundle governed and retain its source, producer-drift, and applicable
+runtime tests. Record the accepted upstream diagnostic with an ordinary exact,
+expiring exception keyed to `quality.lint`, the bundle path, and the reported
+rule subject. Do not disable the rule for all generated output, and remove the
+exception when the dependency or producer stops emitting the construct. See
+the [Exception Policy](exceptions.md).
