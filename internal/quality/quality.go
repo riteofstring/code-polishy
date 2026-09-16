@@ -217,7 +217,7 @@ func prepareCommand(repo repository.Repository, command policy.Command, selectio
 		return command, true
 	}
 	selected := selectedCommandPaths(repo, command, selection.Files, profiles...)
-	if len(selected) == 0 && len(command.PassFilePaths) > 0 && commandApplies(repo, command, selection) {
+	if len(selected) == 0 && !slices.Contains(profiles, "format") && len(command.PassFilePaths) > 0 && commandApplies(repo, command, selection) {
 		selected = commandFileArguments(command.Cwd, commandEligiblePaths(repo, command, command.PassFilePaths, profiles...))
 	}
 	if len(selected) == 0 {

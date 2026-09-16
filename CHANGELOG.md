@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.25.1 - 2026-09-16
+
+- Keep local formatting writes confined to selected writable files, preventing
+  analysis expansion and project-command fallback from rewriting clean source.
+
 ## 0.25.0 - 2026-09-13
 
 - Add capability-scoped analysis providers through pack manifest version 2 and

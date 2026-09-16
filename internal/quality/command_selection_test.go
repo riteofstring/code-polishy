@@ -14,7 +14,7 @@ func TestCommandPathsConstrainSharedModuleAndProjectExpansion(t *testing.T) {
 	repo.Config.Modules = []policy.Module{{Name: "application", Paths: []string{"**"}}}
 	repo.Config.Checks = []policy.Command{{
 		Name: "project-format", Provides: []string{"format"}, Modules: []string{"application"},
-		Paths: []string{"src/app.py", "src/second.py", "pyproject.toml"}, RunOn: []string{"check"},
+		Paths: []string{"src/app.py", "src/second.py", "pyproject.toml"}, RunOn: []string{"check", "format"},
 		Argv: []string{"formatter", "--check"}, PassFiles: true, PassFilePaths: []string{"src/app.py", "src/second.py"},
 	}}
 	for _, testCase := range []struct {
@@ -43,6 +43,14 @@ func TestCommandPathsConstrainSharedModuleAndProjectExpansion(t *testing.T) {
 				t.Fatalf("selected command = %+v, want arguments %v", commandRunner.commands, testCase.argv)
 			}
 		})
+	}
+	commandRunner := &recordingQualityRunner{}
+	selection := repository.Selection{Files: []string{"pyproject.toml"}, Candidate: repository.CandidateDelta{AddedOrModified: []string{"pyproject.toml"}}}
+	if findings := RunCommands(t.Context(), repo, selection, commandRunner, "format"); len(findings) != 0 {
+		t.Fatalf("format command execution failed: %+v", findings)
+	}
+	if len(commandRunner.commands) != 0 {
+		t.Fatalf("format command expanded to unselected project files: %+v", commandRunner.commands)
 	}
 }
 

@@ -44,6 +44,30 @@ func TestFormatProtectsGeneratedOutputAndReportsActualHandwrittenRewrites(t *tes
 	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, encoded)
 }
 
+func TestFormatGitChangesDoesNotWriteAnalysisExpansion(t *testing.T) {
+	t.Parallel()
+	policyEngine, _, _ := generatedFormatEngine(t)
+	selected := "app/selected.ts"
+	unrelated := "app/campaign_deployment_factory.ts"
+	original := "export const value={  answer:42}\n"
+	writeEngineFile(t, policyEngine.Repository.Root, selected, "export const selected = 1;\n", 0o600)
+	writeEngineFile(t, policyEngine.Repository.Root, unrelated, original, 0o600)
+	selection := repository.Selection{
+		Candidate: repository.CandidateDelta{AddedOrModified: []string{selected}, Deleted: []string{"app/removed.ts"}},
+		Files:     []string{selected, unrelated},
+		All:       true,
+		Requested: repository.RequestedSelection{Mode: "git-changes", Expanded: []string{selected, "app/removed.ts"}},
+	}
+	report := policyEngine.Format(t.Context(), selection)
+	if HasFindings(report) || report.Formatting == nil || report.Formatting.Rewritten != 0 || report.Formatting.Unchanged != 1 || len(report.Formatting.Files) != 1 || report.Formatting.Files[0].Path != selected {
+		t.Fatalf("format result = %+v, findings = %+v", report.Formatting, report.Findings)
+	}
+	data, err := os.ReadFile(filepath.Join(policyEngine.Repository.Root, unrelated))
+	if err != nil || string(data) != original {
+		t.Fatalf("analysis expansion changed unrelated source: %q, %v", data, err)
+	}
+}
+
 func TestGeneratedOnlyFormatRequiresOwnershipAndNoFormatterInstallation(t *testing.T) {
 	t.Parallel()
 	policyEngine, generated, _ := generatedFormatEngine(t)

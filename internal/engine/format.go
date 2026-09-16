@@ -25,6 +25,7 @@ type FormatFile struct {
 }
 
 func (engine *Engine) Format(ctx context.Context, selection repository.Selection) Report {
+	writeSelection := formatWriteSelection(selection)
 	files := []string{}
 	inventory := repository.GenerationInventory{}
 	var err error
@@ -38,8 +39,8 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 		return engine.formatFailure(selection, "repository", err)
 	}
 	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
-	findings = append(findings, quality.DataSyntaxFindings(ctx, engine.Repository, selection.Files)...)
-	if engine.Repository.HasGeneratedExecutable(selection.Files) {
+	findings = append(findings, quality.DataSyntaxFindings(ctx, engine.Repository, writeSelection.Files)...)
+	if engine.Repository.HasGeneratedExecutable(writeSelection.Files) {
 		findings = append(findings, inventory.Findings...)
 	}
 	if len(findings) != 0 {
@@ -47,18 +48,18 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 	}
 	before := map[string]string{}
 	engine.executionPhase(ctx, "format-input-snapshot", func(context.Context) {
-		before, err = engine.formatSnapshot(selection.Files)
+		before, err = engine.formatSnapshot(writeSelection.Files)
 	})
 	if err != nil {
 		return engine.formatFailure(selection, "inputs", err)
 	}
 	engine.executionPhase(ctx, "formatters", func(phaseContext context.Context) {
-		findings = quality.Format(phaseContext, engine.Repository, selection, engine.Runner)
+		findings = quality.Format(phaseContext, engine.Repository, writeSelection, engine.Runner)
 	})
 	outcome := FormatOutcome{}
 	protectionFindings := []policy.Finding{}
 	engine.executionPhase(ctx, "format-output-verification", func(context.Context) {
-		outcome, protectionFindings = engine.formatOutcome(selection.Files, before, inventory)
+		outcome, protectionFindings = engine.formatOutcome(writeSelection.Files, before, inventory)
 	})
 	findings = append(findings, protectionFindings...)
 	report := Report{}
@@ -67,6 +68,16 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 		report.Formatting = &outcome
 	})
 	return report
+}
+
+func formatWriteSelection(selection repository.Selection) repository.Selection {
+	if selection.Requested.Mode != "git-changes" && selection.Requested.Mode != "staged" {
+		return selection
+	}
+	selection.Files = slices.Clone(selection.Candidate.AddedOrModified)
+	selection.Candidate.Deleted = nil
+	selection.All = false
+	return selection
 }
 
 func (engine *Engine) formatFailure(selection repository.Selection, subject string, err error) Report {
