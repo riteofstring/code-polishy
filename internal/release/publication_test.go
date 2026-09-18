@@ -81,6 +81,31 @@ func TestReleaseSBOMEnumeratesShippedEcosystemGraphsOnce(t *testing.T) {
 	assertReleaseSBOMDependencies(t, *document.Dependencies)
 }
 
+func TestReleaseSBOMAcceptsHoistedJavaScriptPackagePaths(t *testing.T) {
+	t.Parallel()
+	packageMap := `{"packages":{".":{"url":"..","dependencies":{"@typescript-eslint/types":"@typescript-eslint/types"}},"@typescript-eslint/types":{"url":"./@typescript-eslint/types","dependencies":{"@typescript-eslint/types":"@typescript-eslint/types"}}}}`
+	root, manifest := installedRelease(t, map[string]string{
+		BinaryPath: "placeholder", LauncherBinaryPath: "launcher",
+		".tools/javascript/bundle/node_modules/.package-map.json":                     packageMap,
+		".tools/javascript/bundle/node_modules/@typescript-eslint/types/package.json": `{"name":"@typescript-eslint/types","version":"8.64.0"}`,
+		"tools/javascript_bundle_inventory.txt":                                       "@typescript-eslint/types@8.64.0\tMIT\n",
+	}, nil)
+	data, err := renderReleaseSBOM(manifest, root, "release.zip", exampleDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := &cdx.BOM{}
+	if err := cdx.NewBOMDecoder(bytes.NewReader(data), cdx.BOMFileFormatJSON).Decode(document); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range *document.Components {
+		if component.BOMRef == "pkg:npm/%40typescript-eslint/types@8.64.0" {
+			return
+		}
+	}
+	t.Fatal("SBOM omitted the hoisted JavaScript package")
+}
+
 func assertReleaseSBOMComponents(t *testing.T, components []cdx.Component) {
 	t.Helper()
 	seen := map[string]bool{}

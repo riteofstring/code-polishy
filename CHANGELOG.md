@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.27.3 - 2026-09-18
+
+- Publish the complete native archive set and canonical release index from
+  annotated version tags without repeating ordinary CI test suites.
+- Generate release SBOMs from pnpm's isolated and hoisted package maps, fixing
+  Windows publication when package keys are installation paths.
+- Streamline the README's setup and repository-wrapper guidance.
+
 ## 0.27.2 - 2026-09-18
 
 - Record the content-addressed receipt path and digest in fresh reusable-suite

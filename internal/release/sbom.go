@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	runtimeinfo "runtime/debug"
 	"slices"
@@ -31,6 +32,8 @@ type javascriptPackageMapEntry struct {
 	URL          string            `json:"url"`
 	Dependencies map[string]string `json:"dependencies"`
 }
+
+const maximumJavaScriptPackageManifestBytes = 1 << 20
 
 func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDigest string) ([]byte, error) {
 	rootRef := "pkg:generic/code-polishy@" + manifest.CodePolishyVersion
@@ -112,18 +115,23 @@ func (inventory *releaseSBOMInventory) addJavaScript(root, rootRef string) error
 	if err != nil {
 		return err
 	}
+	packageRoot, err := os.OpenRoot(filepath.Join(root, ".tools", "javascript", "bundle", "node_modules"))
+	if err != nil {
+		return fmt.Errorf("open sealed JavaScript package root: %w", err)
+	}
+	defer packageRoot.Close()
 	licenses, err := javascriptInventoryLicenses(filepath.Join(root, "tools", "javascript_bundle_inventory.txt"))
 	if err != nil {
 		return err
 	}
-	refs, err := inventory.addJavaScriptComponents(packageMap.Packages, licenses, rootRef)
+	refs, names, err := inventory.addJavaScriptComponents(packageRoot, packageMap.Packages, licenses, rootRef)
 	if err != nil {
 		return err
 	}
 	if len(licenses) != len(refs)-1 {
 		return errors.New("sealed JavaScript package map and release inventory disagree")
 	}
-	return inventory.addJavaScriptEdges(packageMap.Packages, refs)
+	return inventory.addJavaScriptEdges(packageMap.Packages, refs, names)
 }
 
 func readJavaScriptPackageMap(root string) (javascriptPackageMap, error) {
@@ -148,44 +156,73 @@ func readJavaScriptPackageMap(root string) (javascriptPackageMap, error) {
 	return packageMap, nil
 }
 
-func (inventory *releaseSBOMInventory) addJavaScriptComponents(packages map[string]javascriptPackageMapEntry, licenses map[string]string, rootRef string) (map[string]string, error) {
+func (inventory *releaseSBOMInventory) addJavaScriptComponents(packageRoot *os.Root, packages map[string]javascriptPackageMapEntry, licenses map[string]string, rootRef string) (map[string]string, map[string]string, error) {
 	refs := map[string]string{".": rootRef}
+	names := map[string]string{}
 	for key, entry := range packages {
 		if key == "." {
 			continue
 		}
-		ref, err := inventory.addJavaScriptComponent(key, entry, licenses)
+		ref, name, err := inventory.addJavaScriptComponent(packageRoot, key, entry, licenses)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		refs[key] = ref
+		names[key] = name
 	}
-	return refs, nil
+	return refs, names, nil
 }
 
-func (inventory *releaseSBOMInventory) addJavaScriptComponent(key string, entry javascriptPackageMapEntry, licenses map[string]string) (string, error) {
-	name, version, err := javascriptPackageIdentity(key)
+func (inventory *releaseSBOMInventory) addJavaScriptComponent(packageRoot *os.Root, key string, entry javascriptPackageMapEntry, licenses map[string]string) (string, string, error) {
+	name, version, err := javascriptPackageEntryIdentity(packageRoot, key, entry)
 	if err != nil || entry.URL == "" || len(entry.Dependencies) > 10000 {
-		return "", fmt.Errorf("sealed JavaScript package %q has invalid identity or facts", key)
+		return "", "", fmt.Errorf("sealed JavaScript package %q has invalid identity or facts", key)
 	}
 	license, found := licenses[name+"@"+version]
 	if !found {
-		return "", fmt.Errorf("sealed JavaScript package %s@%s has no release inventory license", name, version)
+		return "", "", fmt.Errorf("sealed JavaScript package %s@%s has no release inventory license", name, version)
 	}
 	ref := npmPURL(name, version)
 	properties := []cdx.Property{{Name: "code-polishy:license-expression", Value: license}}
 	inventory.add(cdx.Component{Type: cdx.ComponentTypeLibrary, BOMRef: ref, PackageURL: ref, Name: name, Version: version, Properties: &properties})
-	return ref, nil
+	return ref, name, nil
 }
 
-func (inventory *releaseSBOMInventory) addJavaScriptEdges(packages map[string]javascriptPackageMapEntry, refs map[string]string) error {
+func javascriptPackageEntryIdentity(packageRoot *os.Root, key string, entry javascriptPackageMapEntry) (string, string, error) {
+	name, version, err := javascriptPackageIdentity(key)
+	if err == nil {
+		return name, version, nil
+	}
+	if entry.URL != "./"+key || !capabilityRelativePath(key) {
+		return "", "", errors.New("package key is neither an exact identity nor a contained package path")
+	}
+	manifestPath := path.Join(key, "package.json")
+	data, err := readCapabilityFile(packageRoot, manifestPath, maximumJavaScriptPackageManifestBytes)
+	if err != nil || validateUniqueJSON(data) != nil {
+		return "", "", errors.New("package path has no valid manifest")
+	}
+	var manifest struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return "", "", err
+	}
+	name, version, err = javascriptPackageIdentity(manifest.Name + "@" + manifest.Version)
+	if err != nil || name != manifest.Name || version != manifest.Version {
+		return "", "", errors.New("package manifest has no exact identity")
+	}
+	return name, version, nil
+}
+
+func (inventory *releaseSBOMInventory) addJavaScriptEdges(packages map[string]javascriptPackageMapEntry, refs, names map[string]string) error {
 	for key, entry := range packages {
 		source := refs[key]
 		if source == "" {
 			return fmt.Errorf("sealed JavaScript package map omitted %q", key)
 		}
 		for dependencyName, targetKey := range entry.Dependencies {
-			target, err := javascriptDependencyTarget(key, dependencyName, targetKey, refs)
+			target, err := javascriptDependencyTarget(key, dependencyName, targetKey, refs, names)
 			if err != nil {
 				return err
 			}
@@ -197,16 +234,13 @@ func (inventory *releaseSBOMInventory) addJavaScriptEdges(packages map[string]ja
 	return nil
 }
 
-func javascriptDependencyTarget(sourceKey, dependencyName, targetKey string, refs map[string]string) (string, error) {
+func javascriptDependencyTarget(sourceKey, dependencyName, targetKey string, refs, names map[string]string) (string, error) {
 	target := refs[targetKey]
 	if target == "" {
 		return "", fmt.Errorf("sealed JavaScript package %q names absent dependency %q", sourceKey, targetKey)
 	}
-	if targetKey != "." {
-		name, _, _ := javascriptPackageIdentity(targetKey)
-		if name != dependencyName {
-			return "", fmt.Errorf("sealed JavaScript package %q misidentifies dependency %q", sourceKey, dependencyName)
-		}
+	if targetKey != "." && names[targetKey] != dependencyName {
+		return "", fmt.Errorf("sealed JavaScript package %q misidentifies dependency %q", sourceKey, dependencyName)
 	}
 	return target, nil
 }
