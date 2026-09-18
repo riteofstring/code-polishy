@@ -35,62 +35,52 @@ result.](./code-polishy-architecture.svg)
 
 ## Set it up
 
-Setup starts with one prompt to a coding agent:
+### New repository
+
+Give a coding agent one prompt:
 
 ```text
 Set up Code Polishy in this repository. Follow
 https://github.com/riteofstring/code-polishy.
 ```
 
-Each repo keeps its current Code Polishy version until you choose to upgrade.
-A new setup uses the latest stable version tag. Ask for a tag such as `v1.2.3`
-when you need a specific version.
+A new setup uses the latest stable release unless you name a tag such as
+`v1.2.3`. Initial adoption requires Git.
 
-Initial adoption from source requires Git. A normal public adoption records the
-release's checksum-pinned publication index, so a developer setting up an
-already adopted clone downloads its native archive instead of cloning or
-building Code Polishy. Allow about 1 GB of disk space. Windows x64 works without
-WSL or Git Bash.
+### Existing repository
 
-See the [agent setup guide](docs/ai-adoption.md) or the
-[manual setup guide](docs/installation.md) for the full process.
-
-After adoption, a developer cloning the repository needs one setup command:
+After cloning a repository that already uses Code Polishy, install its locked
+release:
 
 ```sh
 ./code-polishyw setup
 ```
 
-PowerShell uses `.\code-polishyw.ps1 setup`. The small checked-in wrapper reads
-the repository lock, reuses or downloads and verifies that exact release in the
-shared user store, and does not contain the Code Polishy toolchain itself.
+PowerShell uses `.\code-polishyw.ps1 setup`. The wrapper downloads and verifies
+the exact native release recorded by the repository, so no Code Polishy clone or
+build is needed. Allow about 1 GB of disk space. Windows x64 works without WSL
+or Git Bash.
 
-Upgrades are separate from ordinary setup. `upgrade plan` previews capability
-and diagnostic changes from either a pinned publication or an exact clean local
-checkout; `upgrade apply` switches the lock and managed guidance. Neither
-command fixes application source or runs a merge gate.
+Each repository stays on its locked release until you upgrade it. `upgrade plan`
+previews capability and diagnostic changes; `upgrade apply` updates the lock and
+managed guidance. Neither command changes application source or runs a merge
+gate.
+
+See the [agent setup guide](docs/ai-adoption.md) or the
+[manual setup guide](docs/installation.md) for the full process.
 
 ## How agents use it
 
-A coding agent reads the workflow bundled with the repo's locked release, starts
-a scoped task, checks the change, and runs the final gate at a merge checkpoint:
+A coding agent uses the repository wrapper for version-matched guidance and
+checks:
 
-```sh
-# Read the version-matched workflow
-./code-polishyw docs read agent-workflows
-
-# Start a scoped task
-./code-polishyw task-start --module MODULE
-
-# Check the code you changed
-./code-polishyw test --changed
-
-# Review dependency risk before accepting an update
-./code-polishyw dependency-review --base origin/main
-
-# Enforce the policy at a merge checkpoint
-./code-polishyw merge-gate --base origin/main
-```
+| Task                                 | Command                                                |
+| ------------------------------------ | ------------------------------------------------------ |
+| Read the workflow                    | `./code-polishyw docs read agent-workflows`            |
+| Start scoped work                    | `./code-polishyw task-start --module MODULE`           |
+| Check changed code                   | `./code-polishyw test --changed`                       |
+| Review dependency risk               | `./code-polishyw dependency-review --base origin/main` |
+| Enforce policy at a merge checkpoint | `./code-polishyw merge-gate --base origin/main`        |
 
 The locked [agent workflow](docs/agent-workflows.md) covers long-lived branch
 checkpoints, behavior review, failed-gate recovery, and CI evidence transfer.
