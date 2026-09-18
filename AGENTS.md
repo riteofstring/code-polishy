@@ -1,8 +1,8 @@
 ## Authority and communication
 
-- Run `code-polishy` pinned by `.code-polishy.lock.json`; if absent from `PATH`,
-  use the installation prefix's stable launcher.
-- Before changing the repository, run `code-polishy docs read agent-workflows`
+- Run pinned Code Polishy through `./code-polishyw` (PowerShell:
+  `.\code-polishyw.ps1`); run its `setup` command if the release is not installed.
+- Before changing the repository, run `./code-polishyw docs read agent-workflows`
   and follow its version-matched request-capture and delivery rules.
 - During an upgrade, outgoing guidance governs until the exact incoming release
   atomically rewrites the lock; that cutover activates incoming guidance.
