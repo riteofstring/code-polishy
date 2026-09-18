@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.26.0 - 2026-09-18
+
 - Add managed repository wrappers that bootstrap the exact locked release with
   one setup command, remain offline for ordinary dispatch, and require staged
   source installations to satisfy the target lock before publication.
