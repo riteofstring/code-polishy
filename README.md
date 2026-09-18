@@ -35,52 +35,40 @@ result.](./code-polishy-architecture.svg)
 
 ## Set it up
 
-### New repository
-
-Give a coding agent one prompt:
+Setup starts with one prompt to a coding agent:
 
 ```text
 Set up Code Polishy in this repository. Follow
 https://github.com/riteofstring/code-polishy.
 ```
 
-A new setup uses the latest stable release unless you name a tag such as
-`v1.2.3`. Initial adoption requires Git.
+New setups use the latest stable release unless you name a tag such as
+`v1.2.3`. Each repository stays on its locked release until you upgrade it.
 
-### Existing repository
-
-After cloning a repository that already uses Code Polishy, install its locked
-release:
+After cloning a repository that already uses Code Polishy, install that release:
 
 ```sh
 ./code-polishyw setup
 ```
 
-PowerShell uses `.\code-polishyw.ps1 setup`. The wrapper downloads and verifies
-the exact native release recorded by the repository, so no Code Polishy clone or
-build is needed. Allow about 1 GB of disk space. Windows x64 works without WSL
-or Git Bash.
-
-Each repository stays on its locked release until you upgrade it. `upgrade plan`
-previews capability and diagnostic changes; `upgrade apply` updates the lock and
-managed guidance. Neither command changes application source or runs a merge
-gate.
+PowerShell uses `.\code-polishyw.ps1 setup`. Initial adoption requires Git.
+Allow about 1 GB of disk space. Windows x64 works without WSL or Git Bash.
 
 See the [agent setup guide](docs/ai-adoption.md) or the
 [manual setup guide](docs/installation.md) for the full process.
 
 ## How agents use it
 
-A coding agent uses the repository wrapper for version-matched guidance and
-checks:
+A coding agent uses the repository wrapper to read the locked workflow, start a
+scoped task, check the change, and run the final gate at a merge checkpoint:
 
-| Task                                 | Command                                                |
-| ------------------------------------ | ------------------------------------------------------ |
-| Read the workflow                    | `./code-polishyw docs read agent-workflows`            |
-| Start scoped work                    | `./code-polishyw task-start --module MODULE`           |
-| Check changed code                   | `./code-polishyw test --changed`                       |
-| Review dependency risk               | `./code-polishyw dependency-review --base origin/main` |
-| Enforce policy at a merge checkpoint | `./code-polishyw merge-gate --base origin/main`        |
+```sh
+./code-polishyw docs read agent-workflows
+./code-polishyw task-start --module MODULE
+./code-polishyw test --changed
+./code-polishyw dependency-review --base origin/main
+./code-polishyw merge-gate --base origin/main
+```
 
 The locked [agent workflow](docs/agent-workflows.md) covers long-lived branch
 checkpoints, behavior review, failed-gate recovery, and CI evidence transfer.
