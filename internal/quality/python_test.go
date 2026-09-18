@@ -120,21 +120,21 @@ func TestPythonQualitySharesInTreeBackendSourceRootsWithManagedTools(t *testing.
 	repo.Config.Modules[0].Paths = append(repo.Config.Modules[0].Paths, "packages/**")
 	writeQualityFile(t, repo.Root, "pyproject.toml", `[build-system]
 requires = []
-build-backend = "setta_build_backend"
-backend-path = ["packages/setta-runtime"]
+build-backend = "sample_build_backend"
+backend-path = ["packages/sample-runtime"]
 
 [project]
-name = "setta"
+name = "sample"
 requires-python = ">=3.12"
 dependencies = []
 `)
-	writeQualityFile(t, repo.Root, "packages/setta-runtime/setta_build_backend.py", "def build_wheel():\n    return 'setta.whl'\n")
-	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/runtime.py", "value = 1\n")
-	writeQualityFile(t, repo.Root, "packages/setta-runtime/tests/test_runtime.py", "from setta import runtime\n")
+	writeQualityFile(t, repo.Root, "packages/sample-runtime/sample_build_backend.py", "def build_wheel():\n    return 'sample.whl'\n")
+	writeQualityFile(t, repo.Root, "packages/sample-runtime/src/sample/runtime.py", "value = 1\n")
+	writeQualityFile(t, repo.Root, "packages/sample-runtime/tests/test_runtime.py", "from sample import runtime\n")
 	selected := []string{
-		"packages/setta-runtime/setta_build_backend.py",
-		"packages/setta-runtime/src/setta/runtime.py",
-		"packages/setta-runtime/tests/test_runtime.py",
+		"packages/sample-runtime/sample_build_backend.py",
+		"packages/sample-runtime/src/sample/runtime.py",
+		"packages/sample-runtime/tests/test_runtime.py",
 	}
 	plan := pythonQualityPlanFor(repo, selected)
 	if len(plan.findings) != 0 || len(plan.projects) != 1 {
@@ -143,19 +143,19 @@ dependencies = []
 	commands := plan.projects[0].commands
 	ty := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-ty-typecheck-root")
 	joinedTy := strings.Join(ty.Argv, "\x00")
-	for _, path := range []string{"packages/setta-runtime", "packages/setta-runtime/src"} {
+	for _, path := range []string{"packages/sample-runtime", "packages/sample-runtime/src"} {
 		if !strings.Contains(joinedTy, "--extra-search-path\x00"+path) {
 			t.Fatalf("ty command lacks source root %q: %+v", path, ty)
 		}
 	}
 	ruff := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-ruff-baseline-root")
-	if !strings.Contains(strings.Join(ruff.Argv, "\x00"), `src = [".", "packages/setta-runtime", "packages/setta-runtime/src"]`) {
+	if !strings.Contains(strings.Join(ruff.Argv, "\x00"), `src = [".", "packages/sample-runtime", "packages/sample-runtime/src"]`) {
 		t.Fatalf("Ruff command = %+v", ruff)
 	}
 	vulture := pythonQualityRequiredCommand(t, pythonQualityCommandValues(commands), "policy-vulture-dead-code-root")
 	request, err := pythonVultureInputRequest(vulture.Stdin)
 	if err != nil || len(request.Backends) != 1 ||
-		request.Backends[0].Module != "setta_build_backend" {
+		request.Backends[0].Module != "sample_build_backend" {
 		t.Fatalf("Vulture request = %+v, error = %v", request, err)
 	}
 }
@@ -164,11 +164,11 @@ func TestPythonQualityReportsUnsupportedLayoutOnceAndStopsDependentTools(t *test
 	t.Parallel()
 	repo := pythonQualityRepository(t)
 	repo.Config.Modules[0].Paths = append(repo.Config.Modules[0].Paths, "packages/**")
-	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"setta\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
-	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/first.py", "value = 1\n")
-	writeQualityFile(t, repo.Root, "packages/setta-runtime/src/setta/second.py", "value = 2\n")
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"sample\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeQualityFile(t, repo.Root, "packages/sample-runtime/src/sample/first.py", "value = 1\n")
+	writeQualityFile(t, repo.Root, "packages/sample-runtime/src/sample/second.py", "value = 2\n")
 	plan := pythonQualityPlanFor(repo, []string{
-		"packages/setta-runtime/src/setta/first.py", "packages/setta-runtime/src/setta/second.py",
+		"packages/sample-runtime/src/sample/first.py", "packages/sample-runtime/src/sample/second.py",
 	})
 	if len(plan.projects) != 0 || len(plan.findings) != 1 || plan.findings[0].Check != "policy.pythonProject" ||
 		!strings.Contains(plan.findings[0].Message, "Python project layout is unsupported") {

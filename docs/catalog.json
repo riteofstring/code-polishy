@@ -18,14 +18,6 @@
       "public": true
     },
     {
-      "id": "adoption-command-history",
-      "path": "docs/history/adoption-command-evidence.md",
-      "title": "Recorded adoption command evidence",
-      "summary": "Historical command observations behind adoption regressions; not current workflow or setup instructions.",
-      "aliases": [],
-      "public": true
-    },
-    {
       "id": "agent-guidance-design",
       "path": "docs/design/agent-guidance.md",
       "title": "Canonical Agent Guidance Design",

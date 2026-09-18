@@ -137,28 +137,28 @@ func TestPythonArchitectureRunsAnIsolatedPolicyGraphAndReportsForbiddenEdges(t *
 func TestPythonArchitectureUsesInTreeBackendAndNestedSrcRoots(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "runtime", Paths: []string{"packages/**"}}})
-	repo.Config.Tests.Ownership = []policy.TestOwnership{{Paths: []string{"packages/setta-runtime/tests/test_runtime.py"}, Module: "runtime", FocusedSuite: "runtime-unit"}}
+	repo.Config.Tests.Ownership = []policy.TestOwnership{{Paths: []string{"packages/sample-runtime/tests/test_runtime.py"}, Module: "runtime", FocusedSuite: "runtime-unit"}}
 	writeArchitectureFile(t, repo.Root, "pyproject.toml", `[build-system]
 requires = []
-build-backend = "setta_build_backend"
-backend-path = ["packages/setta-runtime"]
+build-backend = "sample_build_backend"
+backend-path = ["packages/sample-runtime"]
 
 [project]
-name = "setta"
+name = "sample"
 requires-python = ">=3.12"
 dependencies = []
 `)
-	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/setta_build_backend.py", "def build_wheel():\n    return 'setta.whl'\n")
-	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/runtime.py", "value = 1\n")
-	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/tests/test_runtime.py", "from setta import runtime\n")
+	writeArchitectureFile(t, repo.Root, "packages/sample-runtime/sample_build_backend.py", "def build_wheel():\n    return 'sample.whl'\n")
+	writeArchitectureFile(t, repo.Root, "packages/sample-runtime/src/sample/runtime.py", "value = 1\n")
+	writeArchitectureFile(t, repo.Root, "packages/sample-runtime/tests/test_runtime.py", "from sample import runtime\n")
 	graphRunner := &pythonGraphRunner{outputs: map[string]string{
-		".": `{"packages/setta-runtime/tests/test_runtime.py":["packages/setta-runtime/src/setta/runtime.py"]}`,
+		".": `{"packages/sample-runtime/tests/test_runtime.py":["packages/sample-runtime/src/sample/runtime.py"]}`,
 	}}
-	findings := CheckWithRunner(t.Context(), repo, []string{"packages/setta-runtime/tests/test_runtime.py"}, graphRunner)
+	findings := CheckWithRunner(t.Context(), repo, []string{"packages/sample-runtime/tests/test_runtime.py"}, graphRunner)
 	if len(findings) != 0 || len(graphRunner.commands) != 2 {
 		t.Fatalf("commands = %+v, findings = %+v", graphRunner.commands, findings)
 	}
-	if !strings.Contains(strings.Join(graphRunner.commands[0].Argv, "\x00"), `src = [".", "packages/setta-runtime", "packages/setta-runtime/src"]`) {
+	if !strings.Contains(strings.Join(graphRunner.commands[0].Argv, "\x00"), `src = [".", "packages/sample-runtime", "packages/sample-runtime/src"]`) {
 		t.Fatalf("graph command = %+v", graphRunner.commands[0])
 	}
 }
@@ -420,12 +420,12 @@ func TestPythonComputedImportsProduceOrdinaryModuleEdges(t *testing.T) {
 func TestPythonArchitectureReportsUnsupportedLayoutOnceAndStopsGraphAnalysis(t *testing.T) {
 	t.Parallel()
 	repo := pythonArchitectureRepository(t, []policy.Module{{Name: "application", Paths: []string{"packages/**"}}})
-	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"setta\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
-	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/first.py", "value = 1\n")
-	writeArchitectureFile(t, repo.Root, "packages/setta-runtime/src/setta/second.py", "value = 2\n")
+	writeArchitectureFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"sample\"\nrequires-python = \"==3.12.*\"\ndependencies = []\n")
+	writeArchitectureFile(t, repo.Root, "packages/sample-runtime/src/sample/first.py", "value = 1\n")
+	writeArchitectureFile(t, repo.Root, "packages/sample-runtime/src/sample/second.py", "value = 2\n")
 	graphRunner := &pythonGraphRunner{}
 	findings := CheckWithRunner(t.Context(), repo, []string{
-		"packages/setta-runtime/src/setta/first.py", "packages/setta-runtime/src/setta/second.py",
+		"packages/sample-runtime/src/sample/first.py", "packages/sample-runtime/src/sample/second.py",
 	}, graphRunner)
 	if len(graphRunner.commands) != 0 || len(findings) != 1 || findings[0].Check != "policy.pythonProject" ||
 		!strings.Contains(findings[0].Message, "Python project layout is unsupported") {
