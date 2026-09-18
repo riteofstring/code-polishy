@@ -158,11 +158,12 @@ func (commandRunner *gateArtifactRunner) ReuseSuite(suite policy.TestSuite, atte
 	return execution, true, nil
 }
 
-func (commandRunner *gateArtifactRunner) RecordSuite(execution testpolicy.SuiteExecution) error {
+func (commandRunner *gateArtifactRunner) RecordSuite(execution testpolicy.SuiteExecution) (testpolicy.RecordedReceipt, error) {
 	if commandRunner.receipts == nil {
-		return nil
+		return testpolicy.RecordedReceipt{}, nil
 	}
-	return commandRunner.receipts.RecordSuite(execution)
+	_, err := commandRunner.receipts.RecordSuite(execution)
+	return testpolicy.RecordedReceipt{}, err
 }
 
 func (commandRunner *gateArtifactRunner) ReceiptNotes() []string {

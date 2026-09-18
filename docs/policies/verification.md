@@ -282,6 +282,10 @@ execute.
 `test --supplemental --resume` gives the same exact reuse to an explicitly
 selected supplemental retry. Ordinary direct `test` commands execute normally
 and record eligible passes for later gates or supplemental retries.
+When a fresh pass records reusable evidence, its `testCommands` entry names the
+content-addressed receipt and SHA-256. The enclosing
+`.code-polishy-reports/test/.../report.json` is the command report, not the
+reusable receipt.
 `merge-gate --resume` is narrower: it resumes successful ordinary suites from
 the same failed gate identity while all other phases rerun. If no matching run
 exists, it executes the complete gate instead of failing on a nonexistent

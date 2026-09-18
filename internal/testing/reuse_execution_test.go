@@ -32,7 +32,8 @@ func TestRunRecordsFreshPassingSuite(t *testing.T) {
 	t.Parallel()
 	commandRunner := &reuseFixtureRunner{}
 	result := RunWithEvidence(t.Context(), repository.Repository{Root: t.TempDir()}, commandRunner, Plan{Suites: []policy.TestSuite{reusableSuiteFixture()}}, nil)
-	if len(result.Findings) != 0 || commandRunner.runs != 1 || commandRunner.recorded != 1 {
+	if len(result.Findings) != 0 || commandRunner.runs != 1 || commandRunner.recorded != 1 ||
+		result.Executions[0].ReceiptPath != ".code-polishy-reports/test-receipts/recorded.json" || result.Executions[0].ReceiptSHA256 != "digest" {
 		t.Fatalf("result = %+v, runner = %+v", result, commandRunner)
 	}
 }
@@ -75,9 +76,9 @@ func (commandRunner *reuseFixtureRunner) ReuseSuite(suite policy.TestSuite, atte
 	}, true, nil
 }
 
-func (commandRunner *reuseFixtureRunner) RecordSuite(execution SuiteExecution) error {
+func (commandRunner *reuseFixtureRunner) RecordSuite(execution SuiteExecution) (RecordedReceipt, error) {
 	commandRunner.recorded++
-	return nil
+	return RecordedReceipt{Path: ".code-polishy-reports/test-receipts/recorded.json", SHA256: "digest"}, nil
 }
 
 func (commandRunner *reuseFixtureRunner) PrepareSuiteView(policy.TestSuite) (string, func() error, error) {

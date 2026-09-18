@@ -416,7 +416,7 @@ it requires in `.code-polishy.lock.json`:
 ```json
 {
   "lockVersion": 2,
-  "codePolishyVersion": "0.27.1",
+  "codePolishyVersion": "0.27.2",
   "releaseDigest": "…",
   "features": ["javascript-bundle"],
   "publication": {
@@ -425,7 +425,7 @@ it requires in `.code-polishy.lock.json`:
     "archives": [
       {
         "host": "darwin-arm64",
-        "url": "https://example.invalid/code-polishy-0.27.1-darwin-arm64.zip",
+        "url": "https://example.invalid/code-polishy-0.27.2-darwin-arm64.zip",
         "sha256": "…",
         "size": 123
       }

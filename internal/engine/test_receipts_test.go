@@ -213,6 +213,40 @@ func TestExactSuitePassComposesWithSupplementalResume(t *testing.T) {
 	}
 }
 
+func TestExactSuitePassComposesWithMergeGate(t *testing.T) {
+	root := reusableContentRepository(t, nil)
+	installBehaviorReviewTestGuidance(t, root)
+	initializeEngineGitRepository(t, root)
+	writeEngineFile(t, root, "content/data.json", "{\"candidate\":true}\n", 0o600)
+	commitEngineCandidate(t, root, "candidate")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	examples := policyEngine.Repository.Config.Tests.Suites[0]
+	examples.Name = "examples-unit"
+	examples.Argv = []string{"go", "test", "./examples/..."}
+	examples.Reusable = false
+	policyEngine.Repository.Config.Tests.Suites = append(policyEngine.Repository.Config.Tests.Suites, examples)
+	commandRunner := &recordingEngineRunner{}
+	policyEngine.Runner = commandRunner
+	policyEngine.Output = io.Discard
+	first, err := policyEngine.Test(t.Context(), testpolicy.Request{Suites: []string{"focused"}})
+	if err != nil || len(first.Findings) != 0 || len(first.TestCommands) != 1 ||
+		first.TestCommands[0].ReceiptPath == "" || first.TestCommands[0].ReceiptSHA256 == "" {
+		t.Fatalf("exact report = %+v, commands = %v, error = %v", first, commandRunner.commands, err)
+	}
+	commandRunner.commands = nil
+	second, err := policyEngine.MergeGate(t.Context(), "main")
+	if err != nil || len(second.Findings) != 0 || second.GateRunPolicy == nil || second.GateRunPolicy.Status != "passed" {
+		t.Fatalf("merge report = %+v, commands = %v, error = %v", second, commandRunner.commands, err)
+	}
+	if !slices.Equal(commandRunner.commands, []string{"content-check", "examples-unit", "content-build", "offline-supply"}) ||
+		!slices.Contains(second.GateRunPolicy.ReusedPhases, "focused") {
+		t.Fatalf("exact suite receipt was not reused: commands = %v, policy = %+v", commandRunner.commands, second.GateRunPolicy)
+	}
+}
+
 func TestMergeGateReturnsAlreadyPassedForExactSuccessfulIdentity(t *testing.T) {
 	root := reusableContentRepository(t, nil)
 	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")

@@ -65,7 +65,12 @@ type SuiteExecution struct {
 
 type SuiteReuseController interface {
 	ReuseSuite(policy.TestSuite, int) (SuiteExecution, bool, error)
-	RecordSuite(SuiteExecution) error
+	RecordSuite(SuiteExecution) (RecordedReceipt, error)
+}
+
+type RecordedReceipt struct {
+	Path   string
+	SHA256 string
 }
 
 type SuiteExecutionViewController interface {
@@ -519,9 +524,13 @@ func finishSuiteExecution(execution *SuiteExecution, cleanupErr error, reuse Sui
 		execution.FailureMessage = errors.Join(errorFromMessage(execution.FailureMessage), cleanupErr).Error()
 	}
 	if execution.Suite.Reusable && !execution.Failed() && reuse != nil {
-		if err := reuse.RecordSuite(*execution); err != nil {
+		receipt, err := reuse.RecordSuite(*execution)
+		if err != nil {
 			execution.FailureCategory = runner.FailureOperational
 			execution.FailureMessage = err.Error()
+		} else {
+			execution.ReceiptPath = receipt.Path
+			execution.ReceiptSHA256 = receipt.SHA256
 		}
 	}
 }

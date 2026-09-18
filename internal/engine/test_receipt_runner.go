@@ -133,23 +133,23 @@ func (controller *testReceiptController) ReuseSuite(suite policy.TestSuite, atte
 	}, true, nil
 }
 
-func (controller *testReceiptController) RecordSuite(execution testpolicy.SuiteExecution) error {
+func (controller *testReceiptController) RecordSuite(execution testpolicy.SuiteExecution) (testpolicy.RecordedReceipt, error) {
 	if controller == nil || execution.Failed() || execution.Reused || execution.Attempt != 1 {
-		return nil
+		return testpolicy.RecordedReceipt{}, nil
 	}
 	identity, eligible := controller.identities[execution.Suite.Name]
 	if !eligible {
-		return nil
+		return testpolicy.RecordedReceipt{}, nil
 	}
 	receipt, err := testreceipt.RecordPassed(controller.root, identity, execution.Result.ExecutionDuration, execution.Artifacts)
 	if err != nil {
 		controller.reasons[execution.Suite.Name] = fmt.Sprintf("the passing result could not be cached: %v", err)
-		return nil
+		return testpolicy.RecordedReceipt{}, nil
 	}
 	if controller.verbose {
 		fmt.Fprintf(controller.output, "TEST RECEIPT suite=%q path=%q sha256=%q\n", execution.Suite.Name, receipt.Path, receipt.Receipt.SHA256)
 	}
-	return nil
+	return testpolicy.RecordedReceipt{Path: receipt.Path, SHA256: receipt.Receipt.SHA256}, nil
 }
 
 func (controller *testReceiptController) Notes() []string {
@@ -184,7 +184,7 @@ func (commandRunner *testReceiptRunner) ReuseSuite(suite policy.TestSuite, attem
 	return commandRunner.controller.ReuseSuite(suite, attempt)
 }
 
-func (commandRunner *testReceiptRunner) RecordSuite(execution testpolicy.SuiteExecution) error {
+func (commandRunner *testReceiptRunner) RecordSuite(execution testpolicy.SuiteExecution) (testpolicy.RecordedReceipt, error) {
 	return commandRunner.controller.RecordSuite(execution)
 }
 

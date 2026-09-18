@@ -537,11 +537,11 @@ func (commandRunner *mergeGatePlannedRunner) ReuseSuite(suite policy.TestSuite, 
 	return execution, true, nil
 }
 
-func (commandRunner *mergeGatePlannedRunner) RecordSuite(execution testpolicy.SuiteExecution) error {
+func (commandRunner *mergeGatePlannedRunner) RecordSuite(execution testpolicy.SuiteExecution) (testpolicy.RecordedReceipt, error) {
 	if controller, ok := commandRunner.delegate.(testpolicy.SuiteReuseController); ok {
 		return controller.RecordSuite(execution)
 	}
-	return nil
+	return testpolicy.RecordedReceipt{}, nil
 }
 
 func (commandRunner *mergeGatePlannedRunner) ReceiptNotes() []string {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.27.2 - 2026-09-18
+
+- Record the content-addressed receipt path and digest in fresh reusable-suite
+  test evidence so later merge-gate reuse can be verified from the test report.
+- Preserve exact-suite reuse and subsequent suite and build ordering with
+  dedicated regression coverage.
+- Remove obsolete consumer-specific adoption history and fixture names.
+
 ## 0.27.1 - 2026-09-18
 
 - Add two-phase upgrade planning for exact clean local source checkouts, with
