@@ -4,8 +4,10 @@ A Code Polishy release is one reviewed commit, one annotated `v<VERSION>` tag,
 and one shared internal release identity across every artifact published for
 that version. Publication may contain only the Linux x64 OCI image or the
 complete native archive set. Tags and published digests are immutable. A
-maintainer performs every operation that creates a tag, pushes, publishes, or
-changes a target lock.
+maintainer performs every tag push and target lock change. Pushing an annotated
+version tag explicitly authorizes the checked-in release workflow to publish
+that tag's native archives; manual dispatch authorizes the same operation for
+an existing tag.
 
 1. Bring the candidate to release shape as one reviewed commit. `VERSION` must
    contain a strict `MAJOR.MINOR.PATCH` version, optionally followed by a SemVer
@@ -44,37 +46,60 @@ changes a target lock.
    and either an absent tag or an annotated tag pointing directly at the
    candidate.
 
-5. Select the publication scope before starting builds. For a GHCR-only release,
-   build only the `linux-x64` publication directory on a native Linux x86-64
-   executor by default; do not build the other native hosts or a release index.
-   An amd64 container or virtual machine emulated on an Arm host is not native
-   evidence. The maintainer may instead explicitly select the documented
-   Docker Desktop fallback for a GHCR-only publication, accepting its slower
-   execution and narrower evidence. For a complete native release, build one
-   publication directory on every supported host from that exact commit.
-   Install pinned policy tools first. On Linux and macOS:
+5. Create the annotated tag and rerun preflight:
+
+   ```sh
+   git tag -a v<VERSION> -m "Code Polishy <VERSION>" <candidate-commit-id>
+   ./scripts/release-preflight.sh <candidate-commit-id>
+   ```
+
+   Push `main` and the tag without rewriting history. The version-tag push
+   starts `.github/workflows/release.yml`; the workflow verifies that the tag is
+   annotated, points directly at the candidate, and matches `VERSION`. Use its
+   manual dispatch only to publish an existing annotated tag, such as a tag
+   created before the workflow existed. Never move a failed or published tag;
+   every correction gets a new patch version.
+
+6. The release workflow builds `darwin-arm64`, `darwin-x64`, `linux-arm64`,
+   `linux-x64`, and `windows-x64` in parallel on matching GitHub-hosted runners.
+   Each job installs the pinned toolchain and runs the platform's existing
+   release builder:
 
    ```sh
    ./scripts/build-release.sh --output /absolute/path/to/publication
    ```
 
-   On Windows x64:
-
    ```powershell
    .\scripts\build-release.ps1 -Output C:\release\code-polishy.zip -PublicationDirectory C:\release\publication
    ```
 
-   Retain each archive, `.sha256`, internal manifest, CycloneDX SBOM,
-   deterministic in-toto/SLSA provenance metadata, and `.release.json`
-   descriptor. This metadata is reproducible digest binding, not authenticated
-   builder or publisher evidence. A complete native release requires
-   `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, and `windows-x64`.
+   The release workflow does not repeat the ordinary gate, unit suites,
+   source-install contracts, or supplemental suites already owned by normal
+   CI. Each host only verifies the generated manifest, installs its archive into
+   a fresh prefix through the recorded SHA-256, and checks the installed
+   version. The retained publication contains the archive, checksum, internal
+   manifest, CycloneDX SBOM, deterministic in-toto/SLSA metadata, and release
+   descriptor.
 
-6. For a complete native release, combine the five descriptors with
-   `release-manifest index`, using one repeated `--artifact-descriptor` per
-   host. Record the SHA-256 printed for the canonical index so it can be
-   published beside the index URL. Skip the index for a GHCR-only release.
-   Build a Linux OCI image only from its verified publication directory:
+7. After every host succeeds, the publish job restores the five publication
+   directories and reuses the verified Linux x64 archive's engine to combine
+   their descriptors into `code-polishy-release-index.json`. It records the
+   canonical index SHA-256, creates an index checksum sidecar, and requires the
+   complete 32-file publication.
+
+   The job creates a draft GitHub Release through GitHub's API, uploads the
+   publication, and makes the release public only after every upload succeeds.
+   A failed upload removes the draft; an existing release is never overwritten.
+   The workflow uses neither `gh` nor GHCR. The release notes publish the source
+   revision and index SHA-256 needed by adoption and upgrade commands.
+
+8. GHCR publication is separate and optional. For a GHCR-only release, build
+   only the `linux-x64` publication directory on a native Linux x86-64 executor
+   by default; do not build the other native hosts or a release index. An amd64
+   container or virtual machine emulated on an Arm host is not native evidence.
+   A maintainer may instead explicitly select the documented Docker Desktop
+   fallback below, accepting its slower execution and narrower evidence. Build
+   a Linux OCI image only from its verified publication directory:
 
    ```sh
    ./scripts/build-oci-image.sh \
@@ -87,43 +112,6 @@ changes a target lock.
    launcher as the image's declared non-root user. Retain that digest and the
    Buildx SBOM/provenance attestations. Tags aid discovery; examples and
    consumers must use `image@sha256:...`.
-
-7. Exercise one fresh archive installation for every native host in the
-   selected publication scope with the descriptor's archive SHA-256. Build the
-   archive and exercise it on the same native host architecture, with the
-   publication, installed prefix, and disposable fixtures on that executor's
-   native filesystem:
-
-   ```sh
-   code-polishy install-bundle \
-     --source /absolute/path/code-polishy-<version>-<host>.zip \
-     --sha256 <archive-sha256> \
-     --prefix /absolute/path/to/fresh-prefix
-   ```
-
-   Run representative sequential commands through the installed launcher and
-   verify the release manifest afterward. Run
-   `./scripts/test-installed-release.sh --prefix PREFIX --lock LOCK` for the
-   installed target contracts exactly once; use its exact fixture selector only
-   for a bounded retry. The complete harness deliberately invokes the stable
-   launcher many times, and each invocation verifies the installed release.
-   Do not count QEMU, Rosetta, Docker Desktop architecture emulation, or a macOS
-   bind mount as native execution. Without a native executor, stop before
-   tagging or publishing unless the maintainer explicitly selected the
-   GHCR-only Docker Desktop fallback below. That fallback omits this fresh
-   native archive-install contract and must report that limitation.
-
-8. Create the annotated tag and rerun preflight:
-
-   ```sh
-   git tag -a v<VERSION> -m "Code Polishy <VERSION>" <candidate-commit-id>
-   ./scripts/release-preflight.sh <candidate-commit-id>
-   ```
-
-   Push `main` and the tag without rewriting history. Publish only the selected
-   verified host directories, optional release index, and digest-pinned OCI
-   images against that tag. Protect release tags against deletion or update;
-   every correction gets a new patch version.
 
 9. Move each consuming repository with a publication-backed
    `upgrade plan --index URL --sha256 DIGEST`, inspect its capability and
@@ -141,8 +129,8 @@ changes a target lock.
    exact installed release so its first committed lock already supports native
    archive setup on every host.
 
-Credentialed registry publication, repository release creation, tag changes,
-and target lock changes remain explicit maintainer actions. The source is
+Credentialed registry publication, tag changes, release-workflow dispatch, and
+target lock changes remain explicit maintainer actions. The source is
 Apache-2.0 licensed.
 
 ## GHCR-only Linux x64 runbook
