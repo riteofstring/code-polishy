@@ -25,6 +25,41 @@ private development. The same exact-source rules apply, and the agent never
 substitutes another repository or revision. Published tags are immutable: never
 move or reuse one after consumers can select it.
 
+## Repository wrapper
+
+Adoption installs a small POSIX wrapper and PowerShell wrapper in the target
+repository. A developer can prepare a fresh clone without finding an installer
+or changing `PATH`:
+
+```sh
+./code-polishyw setup
+```
+
+```powershell
+.\code-polishyw.ps1 setup
+```
+
+The wrapper reads `.code-polishy.lock.json`. If that exact release already
+exists in the default shared user prefix, setup verifies and reuses it without
+network access. Otherwise setup requires Git, clones the exact `v<version>` tag
+from the canonical Code Polishy repository, verifies its annotated tag, clean
+commit, and `VERSION`, installs its pinned policy tools, and builds the release.
+The staged release must verify and satisfy the target lock before the installer
+can publish it or update the stable launcher.
+
+Private mirrors and local test repositories can be selected for that invocation
+without changing the target:
+
+```sh
+./code-polishyw setup --source <repository-url-or-path>
+```
+
+After setup, use `./code-polishyw <command>` or
+`.\code-polishyw.ps1 <command>`. Ordinary dispatch verifies the exact installed
+release through the stable launcher and performs no clone, download, build,
+fallback selection, or `PATH` mutation. The wrappers contain only bootstrap and
+dispatch logic; the complete release remains in the shared user store.
+
 ## Native source installers
 
 Source acquisition stays outside the installers. They never select a version,
@@ -46,6 +81,11 @@ From a verified checkout on Windows x64, in PowerShell:
 .\tools\install-policy-tools.ps1
 .\scripts\install.ps1
 ```
+
+`./scripts/install.sh --require-repository <target>` and
+`.\scripts\install.ps1 -RequireRepository <target>` add a pre-publication
+constraint for wrapper-driven installation. The completed staged release and
+all its bytes must satisfy that target's exact lock before installation begins.
 
 Windows requires Git and PowerShell but does not need WSL or Git Bash. The
 PowerShell installer locally builds the same deterministic native ZIP format,
@@ -215,6 +255,7 @@ One release identity has one self-contained policy root per supported host:
   documentation catalog;
 - the configuration schema, templates, canonical guidance, pinned tool versions,
   and native workflow contracts the engine reads at runtime;
+- the canonical repository wrapper templates installed during adoption;
 - the bundle's dependency and license inventory;
 - the launcher, which the installer also copies to `<prefix>/bin/code-polishy`;
   the default Unix installer links `~/.local/bin/code-polishy` to that stable

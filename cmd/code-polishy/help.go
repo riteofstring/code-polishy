@@ -106,14 +106,14 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "agents",
-		summary: "Install, synchronize, or verify generated AI-agent guidance and report-artifact hygiene.",
+		summary: "Install, synchronize, or verify managed adoption files.",
 		syntax:  []string{"code-polishy agents <install|sync|check>"},
 		selectors: []string{
-			"install creates guidance files and the report-artifact ignore rule.",
-			"sync refreshes generated guidance and repairs the ignore rule.",
+			"install creates guidance, repository wrappers, and the report-artifact ignore rule.",
+			"sync refreshes generated guidance and managed wrappers and repairs the ignore rule.",
 			"check verifies that all managed adoption surfaces are current.",
 		},
-		sideEffects: []string{"install and sync transactionally write guidance files and the root .gitignore report-artifact rule; check only reads them."},
+		sideEffects: []string{"install and sync transactionally write guidance files, repository wrappers, and the root .gitignore report-artifact rule; check only reads them."},
 		exits:       []string{"0 adoption surfaces installed, synchronized, or current", "1 check found a stale adoption surface", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy agents sync", "code-polishy agents check"},
 	},
@@ -147,6 +147,7 @@ var commandHelpPages = []commandHelpPage{
 		syntax: []string{
 			"code-polishy release-manifest write --root PATH --source-revision COMMIT",
 			"code-polishy release-manifest verify --root PATH",
+			"code-polishy release-manifest satisfies-lock --root PATH",
 			"code-polishy release-manifest materialize --source PATH --destination PATH",
 			"code-polishy release-manifest archive --root PATH --output PATH",
 			"code-polishy release-manifest publish --archive PATH --destination PATH",
@@ -156,6 +157,7 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"write records a manifest for a staged or installed release root.",
 			"verify validates the existing manifest at --root.",
+			"satisfies-lock validates --root and requires it to satisfy the selected repository lock.",
 			"materialize copies a closed source tree to a new dereferenced destination.",
 			"archive creates one checksum-stable ZIP from a verified release root.",
 			"publish creates the archive checksum, manifest, SBOM, deterministic provenance metadata, and descriptor atomically.",
@@ -163,7 +165,7 @@ var commandHelpPages = []commandHelpPage{
 			"oci-context installs one Linux archive through the bundle verifier into a new image context.",
 			"This command accepts no global --config option.",
 		},
-		sideEffects: []string{"write, materialize, archive, publish, index, and oci-context create their named outputs; verify only reads."},
+		sideEffects: []string{"write, materialize, archive, publish, index, and oci-context create their named outputs; verify and satisfies-lock only read."},
 		exits:       []string{"0 requested release operation completed", "2 invalid usage or release validation failure"},
 		examples:    []string{"code-polishy release-manifest verify --root ./dist/code-polishy"},
 	},

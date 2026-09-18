@@ -62,3 +62,37 @@ func TestDynamicControlInputsMustBeDistinctContainedPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalBootstrapWrappersAreControlArtifacts(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	policyRoot := t.TempDir()
+	wrappers := map[string]string{
+		"code-polishyw":     "#!/usr/bin/env bash\nCODE_POLISHY_MANAGED_WRAPPER=1\nexit 0\n",
+		"code-polishyw.ps1": "$CodePolishyManagedWrapper = $true\nexit 0\n",
+	}
+	for path, contents := range wrappers {
+		writeFile(t, root, path, contents)
+		writeFile(t, policyRoot, "templates/"+path, contents)
+	}
+	repo := Repository{Root: root, PolicyRoot: policyRoot}
+	for path := range wrappers {
+		if !repo.IsControlInput(path) {
+			t.Errorf("%s is not a control input", path)
+		}
+		if repo.IsExecutableSource(path) {
+			t.Errorf("canonical %s is executable project source", path)
+		}
+		if repo.Language(path) != "" {
+			t.Errorf("canonical %s has a project language", path)
+		}
+	}
+	writeFile(t, root, "code-polishyw", wrappers["code-polishyw"]+"printf changed\\n\n")
+	if !repo.IsExecutableSource("code-polishyw") {
+		t.Fatal("modified wrapper is not executable project source")
+	}
+	writeFile(t, root, "nested/code-polishyw", wrappers["code-polishyw"])
+	if repo.IsControlInput("nested/code-polishyw") || !repo.IsExecutableSource("nested/code-polishyw") {
+		t.Fatal("nested lookalike was classified as a managed control artifact")
+	}
+}

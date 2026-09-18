@@ -28,11 +28,12 @@ prefix="${default_prefix}"
 requested_command_root=""
 requested_path_profile=""
 publication_dir=""
+required_repository=""
 add_to_path=false
 build_only=false
 
 usage() {
-  echo "usage: install.sh [--prefix DIR] [--command-dir DIR] [--add-to-path [--path-profile FILE]] [--publication-dir DIR --build-only]" >&2
+  echo "usage: install.sh [--prefix DIR] [--command-dir DIR] [--require-repository DIR] [--add-to-path [--path-profile FILE]] [--publication-dir DIR --build-only]" >&2
   exit 2
 }
 
@@ -75,6 +76,17 @@ while (($#)); do
       requested_command_root="$(require_path_argument --command-dir "${1#*=}")"
       shift
       ;;
+    --require-repository)
+      if (($# < 2)); then
+        usage
+      fi
+      required_repository="$(require_path_argument --require-repository "$2")"
+      shift 2
+      ;;
+    --require-repository=*)
+      required_repository="$(require_path_argument --require-repository "${1#*=}")"
+      shift
+      ;;
     --add-to-path)
       add_to_path=true
       shift
@@ -114,6 +126,10 @@ if [[ -n "${requested_path_profile}" && "${add_to_path}" != true ]]; then
 fi
 if [[ "${build_only}" == true && -z "${publication_dir}" ]]; then
   echo "--build-only requires --publication-dir" >&2
+  exit 2
+fi
+if [[ -n "${required_repository}" && ! -f "${required_repository}/.code-polishy.lock.json" ]]; then
+  echo "--require-repository must name a repository with .code-polishy.lock.json" >&2
   exit 2
 fi
 if [[ -n "${publication_dir}" && -e "${publication_dir}" ]]; then
@@ -592,8 +608,6 @@ done
 
 staging_root="${prefix}/releases"
 staging="${staging_root}/.staging-$$"
-# Where a release that no longer matches its own manifest waits while its
-# replacement takes the installed name.
 superseded="${staging_root}/.superseded-$$"
 launcher_staging="${launcher_root}/.code-polishy-$$"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-install.XXXXXX")"
@@ -744,6 +758,11 @@ done
 
 release_digest="$("${release_manifest}" write "${staging}" "${source_revision}")"
 "${release_manifest}" verify "${staging}"
+
+if [[ -n "${required_repository}" ]]; then
+  "${staging}/bin/code-polishy" --policy-root "${staging}" --repo-root "${required_repository}" \
+    release-manifest satisfies-lock --root "${staging}"
+fi
 
 if [[ ! "${release_digest}" =~ ^[0-9a-f]{64}$ ]]; then
   echo "The staged release recorded no usable release digest." >&2

@@ -409,3 +409,34 @@ func TestRequireLockedReleaseGovernsOnlyInstalledReleases(t *testing.T) {
 		t.Fatalf("the source runner was refused: %v", err)
 	}
 }
+
+func TestVerifyLockedReleaseRequiresVerifiedBytesAndTheExactRepositoryLock(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	directory, manifest := exampleRelease(t)
+	lock := LockFor(manifest)
+	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), lock)
+
+	verified, err := VerifyLockedRelease(repoRoot, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verified.ReleaseDigest != manifest.ReleaseDigest {
+		t.Fatalf("verified release = %+v", verified)
+	}
+
+	other := lock
+	other.ReleaseDigest = otherDigest
+	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), other)
+	if _, err := VerifyLockedRelease(repoRoot, directory); err == nil || !strings.Contains(err.Error(), otherDigest) {
+		t.Fatalf("another locked release was accepted: %v", err)
+	}
+
+	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), lock)
+	if err := os.WriteFile(filepath.Join(directory, BinaryPath), []byte("changed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyLockedRelease(repoRoot, directory); err == nil || !strings.Contains(err.Error(), "not the file") {
+		t.Fatalf("modified release bytes were accepted: %v", err)
+	}
+}

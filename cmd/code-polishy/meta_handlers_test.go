@@ -132,6 +132,15 @@ func TestReleaseManifestMaterializeValidatesEveryModeSpecificField(t *testing.T)
 	}
 }
 
+func TestReleaseManifestSatisfiesLockValidatesEveryModeSpecificField(t *testing.T) {
+	if got := satisfiesLockReleaseManifest(t.TempDir(), releaseManifestOptions{}); got != 2 {
+		t.Fatalf("missing root status = %d", got)
+	}
+	if got := satisfiesLockReleaseManifest(t.TempDir(), releaseManifestOptions{root: "root", source: "source"}); got != 2 {
+		t.Fatalf("cross-mode field status = %d", got)
+	}
+}
+
 func TestReleaseManifestMetaRejectsAmbiguousInvocations(t *testing.T) {
 	tests := []invocation{
 		{configPath: "custom.json", arguments: []string{"verify"}},

@@ -20,6 +20,7 @@ git_log="${fixture_root}/git-invocations.txt"
 gh_marker="${fixture_root}/gh-invoked"
 release_list="${fixture_root}/releases.txt"
 launcher_binary="${fixture_root}/code-polishy-launcher"
+engine_binary="${fixture_root}/code-polishy-engine"
 real_git="$(command -v git)"
 
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
@@ -238,6 +239,8 @@ EOF
   write_file "${source_root}/templates/CLAUDE.md" <<'EOF'
 @AGENTS.md
 EOF
+  copy_file "${policy_root}/templates/code-polishyw" "${source_root}/templates/code-polishyw"
+  copy_file "${policy_root}/templates/code-polishyw.ps1" "${source_root}/templates/code-polishyw.ps1"
   write_file "${source_root}/templates/behavior-review.md" <<'EOF'
 # Behavior review instructions
 EOF
@@ -253,18 +256,28 @@ exit 0
 EOF
   chmod +x "${source_root}/tools/shellcheck.sh"
 
+  write_file "${source_root}/scripts/code-polishy-stub.sh" <<EOF
+#!/usr/bin/env bash
+for argument in "\$@"; do
+  if [[ "\${argument}" == "satisfies-lock" ]]; then
+    exec "${engine_binary}" "\$@"
+  fi
+done
+script_directory=\$(cd \$(dirname "\${BASH_SOURCE[0]}") && pwd -P)
+build_mark=\$(<"\${script_directory}/code-polishy-mark")
+printf 'code-polishy %s %s\n' "\${build_mark}" "\$*"
+EOF
+  chmod +x "${source_root}/scripts/code-polishy-stub.sh"
+
   write_file "${source_root}/scripts/build.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 output_dir="\${1:?build.sh requires an output directory}"
 mkdir -p "\${output_dir}"
-printf '#!/usr/bin/env bash\nprintf "code-polishy %s %%s\\\\n" "\$*"\n' \
-  "\${CODE_POLISHY_TEST_BUILD_MARK:-first}" >"\${output_dir}/code-polishy"
+cp "${source_root}/scripts/code-polishy-stub.sh" "\${output_dir}/code-polishy"
+printf '%s\n' "\${CODE_POLISHY_TEST_BUILD_MARK:-first}" >"\${output_dir}/code-polishy-mark"
 chmod +x "\${output_dir}/code-polishy"
 cp "${launcher_binary}" "\${output_dir}/code-polishy-launcher"
-# The staged tree now holds binaries, so an installation that ends here ends
-# after staging has begun. These markers end it the two ways it can end: a step
-# that fails, and a signal from outside.
 if [[ -e "\${CODE_POLISHY_TEST_BUILD_FAILS:-/nonexistent}" ]]; then
   echo "stub build failure" >&2
   exit 1
@@ -274,6 +287,10 @@ if [[ -e "\${CODE_POLISHY_TEST_INTERRUPT:-/nonexistent}" ]]; then
 fi
 EOF
   chmod +x "${source_root}/scripts/build.sh"
+  if ! bash -n "${source_root}/scripts/build.sh"; then
+    nl -ba "${source_root}/scripts/build.sh" >&2
+    fail "the generated build fixture is not valid shell"
+  fi
 
 
   write_file "${source_root}/tools/javascript/package.json" <<'EOF'
@@ -437,6 +454,8 @@ EOF
 
 (cd "${policy_root}" && "${policy_root}/scripts/go.sh" build -trimpath \
   -o "${launcher_binary}" ./cmd/code-polishy-launcher)
+(cd "${policy_root}" && "${policy_root}/scripts/go.sh" build -trimpath \
+  -o "${engine_binary}" ./cmd/code-polishy)
 
 build_source_checkout
 build_command_shims
@@ -499,6 +518,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   docs/installation.md docs/agent-workflows.md docs/catalog.json docs/capabilities.json schema/code-polishy.schema.json \
   schema/code-polishy-report.schema.json schema/sarif-schema-2.1.0.json \
   templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
+  templates/code-polishyw templates/code-polishyw.ps1 \
   artifact-security/scanner-policy.json \
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
@@ -540,6 +560,26 @@ cmp -s "${source_root}/templates/behavior-review.md" \
   fail "the release did not keep the bundle's links as links"
 "${release}/scripts/release-manifest.sh" verify "${release}" ||
   fail "a freshly installed release does not verify"
+
+required_target="${fixture_root}/required-target"
+mkdir -p "${required_target}"
+write_target_lock "${required_target}" "${manifest}"
+install_release --require-repository "${required_target}" >"${fixture_root}/required-install.log"
+grep -Fq 'Verified Code Polishy 9.9.9' "${fixture_root}/required-install.log" ||
+  fail "the target-constrained installer did not verify the staged release"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "target-constrained reinstall added another release"
+unmatched_digest="0000000000000000000000000000000000000000000000000000000000000000"
+sed "s/\"releaseDigest\": \".*\"/\"releaseDigest\": \"${unmatched_digest}\"/" \
+  "${required_target}/.code-polishy.lock.json" >"${fixture_root}/unmatched-lock.json"
+cp "${fixture_root}/unmatched-lock.json" "${required_target}/.code-polishy.lock.json"
+if install_release --require-repository "${required_target}" >"${fixture_root}/required-mismatch.log" 2>&1; then
+  fail "the target-constrained installer published a release the lock did not name"
+fi
+grep -Fq "${unmatched_digest}" "${fixture_root}/required-mismatch.log" ||
+  fail "the target-constrained installer did not identify the unmatched digest"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a rejected target-constrained install changed the release store"
 
 
 if [[ -e "${gh_marker}" ]]; then

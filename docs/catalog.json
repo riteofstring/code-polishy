@@ -95,6 +95,14 @@
       "public": true
     },
     {
+      "id": "bootstrap-wrapper",
+      "path": "docs/design/bootstrap-wrapper.md",
+      "title": "Repository Bootstrap Wrapper",
+      "summary": "Understand one-command setup, offline dispatch, adoption ownership, and the wrapper trust boundary.",
+      "aliases": ["code-polishyw", "wrapper"],
+      "public": true
+    },
+    {
       "id": "capabilities",
       "path": "docs/capabilities.md",
       "title": "Repository Capability Discovery",

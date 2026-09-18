@@ -566,7 +566,7 @@ func (repo Repository) Languages(path string) []string {
 }
 
 func (repo Repository) computeLanguages(path string) []string {
-	if repo.IsData(path) {
+	if repo.IsData(path) || repo.isManagedBootstrapWrapper(path) {
 		return nil
 	}
 	if language := repo.builtInLanguage(path); language != "" {
@@ -617,6 +617,9 @@ func (repo Repository) IsExecutableSource(path string) bool {
 }
 
 func (repo Repository) computeIsExecutableSource(path string) bool {
+	if repo.isManagedBootstrapWrapper(path) {
+		return false
+	}
 	extension := strings.ToLower(filepath.Ext(path))
 	return len(repo.Languages(path)) > 0 || extension == ".ps1" || extension == ".psm1"
 }

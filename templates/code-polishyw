@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+CODE_POLISHY_MANAGED_WRAPPER=1
+: "${CODE_POLISHY_MANAGED_WRAPPER}"
+set -euo pipefail
+
+fail() {
+  printf 'code-polishyw: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  printf '%s\n' 'Usage:'
+  printf '%s\n' '  ./code-polishyw setup [--source URL]'
+  printf '%s\n' '  ./code-polishyw COMMAND [ARG...]'
+}
+
+script_directory=$(unset CDPATH; cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+repository_root=$script_directory
+lock_path="${repository_root}/.code-polishy.lock.json"
+
+[[ -f "$lock_path" && ! -L "$lock_path" ]] || fail '.code-polishy.lock.json must be a regular non-symbolic-link file'
+lock_size=$(wc -c < "$lock_path")
+((lock_size > 0 && lock_size <= 16384)) || fail '.code-polishy.lock.json exceeds the wrapper input limit'
+
+lock_key_count() {
+  awk -v token="\"$1\"" '
+    {
+      remaining = $0
+      while ((position = index(remaining, token)) != 0) {
+        count++
+        remaining = substr(remaining, position + length(token))
+      }
+    }
+    END { print count + 0 }
+  ' "$lock_path"
+}
+
+lock_string() {
+  sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$lock_path"
+}
+
+lock_number() {
+  sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$lock_path"
+}
+
+for required_key in lockVersion codePolishyVersion releaseDigest; do
+  [[ $(lock_key_count "$required_key") == 1 ]] || fail ".code-polishy.lock.json must contain exactly one ${required_key} field"
+done
+
+lock_version=$(lock_number lockVersion)
+version=$(lock_string codePolishyVersion)
+digest=$(lock_string releaseDigest)
+prerelease_identifier='(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+version_pattern="^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-${prerelease_identifier}(\\.${prerelease_identifier})*)?$"
+[[ "$lock_version" == 1 ]] || fail '.code-polishy.lock.json uses an unsupported lockVersion'
+[[ "$version" =~ $version_pattern ]] || fail '.code-polishy.lock.json has an invalid codePolishyVersion'
+[[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail '.code-polishy.lock.json has an invalid releaseDigest'
+
+[[ -n "${HOME:-}" ]] || fail 'HOME is required to locate the shared Code Polishy installation'
+install_prefix="${HOME}/.local/share/code-polishy"
+release_root="${install_prefix}/releases/${version}-${digest}"
+launcher="${install_prefix}/bin/code-polishy"
+
+installed_release_is_ready() {
+  [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]] &&
+    "$launcher" --repo-root "$repository_root" version >/dev/null 2>&1
+}
+
+if (($# == 0)); then
+  usage >&2
+  exit 2
+fi
+
+if [[ "$1" != setup ]]; then
+  installed_release_is_ready || fail 'the locked release is not installed; run ./code-polishyw setup'
+  exec "$launcher" --repo-root "$repository_root" "$@"
+fi
+
+shift
+source_url='https://github.com/riteofstring/code-polishy.git'
+while (($# > 0)); do
+  case "$1" in
+    --source)
+      (($# >= 2)) || fail '--source requires a URL or path'
+      source_url=$2
+      shift 2
+      ;;
+    --source=*)
+      source_url=${1#--source=}
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown setup option: $1"
+      ;;
+  esac
+done
+
+[[ -n "$source_url" && "$source_url" != *$'\n'* && "$source_url" != *$'\r'* ]] || fail '--source must be a non-empty single-line URL or path'
+
+if installed_release_is_ready; then
+  printf 'Code Polishy %s is already ready for this repository.\n' "$version"
+  exit 0
+fi
+
+for required_command in git mktemp; do
+  command -v "$required_command" >/dev/null 2>&1 || fail "${required_command} is required for setup"
+done
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/code-polishyw.XXXXXXXX")
+cleanup() {
+  rm -rf -- "$scratch"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+checkout="${scratch}/source"
+tag="v${version}"
+git clone --quiet --depth 1 --single-branch --branch "$tag" -- "$source_url" "$checkout" || fail 'could not clone the exact locked Code Polishy tag'
+
+origin=$(git -C "$checkout" remote get-url origin)
+[[ "$origin" == "$source_url" ]] || fail 'the source checkout origin does not match the explicit source'
+[[ -z $(git -C "$checkout" status --porcelain=v1 --untracked-files=all) ]] || fail 'the source checkout is not clean'
+
+head_commit=$(git -C "$checkout" rev-parse --verify HEAD)
+tag_ref="refs/tags/${tag}"
+[[ $(git -C "$checkout" cat-file -t "$tag_ref") == tag ]] || fail 'the locked source tag is not annotated'
+tag_target=$(git -C "$checkout" cat-file -p "$tag_ref" | awk '$1 == "object" { value = $2; count++ } END { if (count != 1) exit 1; print value }')
+tag_kind=$(git -C "$checkout" cat-file -p "$tag_ref" | awk '$1 == "type" { value = $2; count++ } END { if (count != 1) exit 1; print value }')
+peeled_commit=$(git -C "$checkout" rev-parse --verify "${tag_ref}^{}")
+[[ "$tag_kind" == commit && "$tag_target" == "$head_commit" && "$peeled_commit" == "$head_commit" ]] || fail 'the locked annotated tag does not point directly to the checked-out commit'
+
+version_path="${checkout}/VERSION"
+[[ -f "$version_path" && ! -L "$version_path" ]] || fail 'the source checkout has no regular VERSION file'
+[[ $(<"$version_path") == "$version" ]] || fail 'the source checkout VERSION does not match the repository lock'
+[[ -x "${checkout}/tools/install-policy-tools.sh" ]] || fail 'the source checkout has no executable policy-tool installer'
+[[ -x "${checkout}/scripts/install.sh" ]] || fail 'the source checkout has no executable release installer'
+
+(
+  cd "$checkout"
+  ./tools/install-policy-tools.sh
+  ./scripts/install.sh --prefix "$install_prefix" --require-repository "$repository_root"
+)
+
+installed_release_is_ready || fail 'installation completed without making the exact locked release available'
+printf 'Code Polishy %s is ready for this repository.\n' "$version"

@@ -590,12 +590,21 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
 func writeBehaviorReviewCLICanonicalGuidance(t *testing.T, root string) {
 	t.Helper()
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
-	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
+	for _, name := range []string{"AGENTS.md", "CLAUDE.md", "code-polishyw", "code-polishyw.ps1"} {
 		contents, err := os.ReadFile(filepath.Join(policyRoot, "templates", name))
 		if err != nil {
 			t.Fatal(err)
 		}
 		writeBehaviorReviewCLIFile(t, root, name, string(contents))
+		if name == "code-polishyw" || name == "code-polishyw.ps1" {
+			mode := os.FileMode(0o644)
+			if name == "code-polishyw" {
+				mode = 0o755
+			}
+			if err := os.Chmod(filepath.Join(root, name), mode); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	writeBehaviorReviewCLIFile(t, root, ".gitignore", "/.code-polishy-reports/\n/.code-polishy-artifacts/\n")
 }

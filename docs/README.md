@@ -55,6 +55,9 @@ and aliases. Search is local, bounded, and deterministic.
 - [Canonical Agent Guidance Design](design/agent-guidance.md) defines what
   belongs in managed `AGENTS.md`, where longer rationale lives, and how to
   update the template.
+- [Repository Bootstrap Wrapper](design/bootstrap-wrapper.md) defines the
+  one-command onboarding path, source trust boundary, and managed adoption
+  ownership.
 - [Behavior Review Intent Custody](design/behavior-review-intent.md) explains
   conditional request capture, stdin transport, and explicit evidence cleanup.
 - [Repository Size Analysis](design/repository-size-analysis.md) defines safe,

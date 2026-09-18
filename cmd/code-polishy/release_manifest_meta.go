@@ -52,6 +52,8 @@ func handleReleaseManifestMeta(invocation invocation) int {
 		return writeReleaseManifest(options)
 	case "verify":
 		return verifyReleaseManifest(options)
+	case "satisfies-lock":
+		return satisfiesLockReleaseManifest(invocation.repoRoot, options)
 	case "materialize":
 		return materializeReleaseManifest(options)
 	default:
@@ -70,7 +72,7 @@ func handleReleasePublicationMeta(mode string, options releaseManifestOptions) i
 	case "oci-context":
 		return ociContextReleaseManifest(options)
 	default:
-		return commandUsageError("release-manifest", "release-manifest requires write, verify, materialize, archive, publish, index, or oci-context")
+		return commandUsageError("release-manifest", "release-manifest requires write, verify, satisfies-lock, materialize, archive, publish, index, or oci-context")
 	}
 }
 
@@ -119,6 +121,18 @@ func verifyReleaseManifest(options releaseManifestOptions) int {
 		return operationalError(err)
 	}
 	fmt.Printf("Verified Code Polishy %s for %s (%s)\n", manifest.CodePolishyVersion, manifest.Host, manifest.ReleaseDigest)
+	return 0
+}
+
+func satisfiesLockReleaseManifest(repoRoot string, options releaseManifestOptions) int {
+	if options.root == "" || !releaseManifestOptionsEmpty(options, "root") {
+		return commandUsageError("release-manifest", "release-manifest satisfies-lock requires only --root PATH")
+	}
+	manifest, err := release.VerifyLockedRelease(repoRoot, options.root)
+	if err != nil {
+		return operationalError(err)
+	}
+	fmt.Printf("Verified Code Polishy %s %s against %s\n", manifest.CodePolishyVersion, manifest.ReleaseDigest, release.LockFilename)
 	return 0
 }
 

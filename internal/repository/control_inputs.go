@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 
@@ -33,6 +36,27 @@ func (repo Repository) IsControlInput(path string) bool {
 
 func (repo Repository) computeIsControlInput(path string) bool {
 	return policy.IsSensitiveControlInput(path) || repo.isDynamicControlInput(path)
+}
+
+func (repo Repository) isManagedBootstrapWrapper(path string) bool {
+	if repo.PolicyRoot == "" {
+		return false
+	}
+	template := ""
+	switch normalizePolicyInputPath(path) {
+	case "code-polishyw":
+		template = "code-polishyw"
+	case "code-polishyw.ps1":
+		template = "code-polishyw.ps1"
+	default:
+		return false
+	}
+	wrapperBytes, err := os.ReadFile(filepath.Join(repo.Root, template))
+	if err != nil {
+		return false
+	}
+	templateBytes, err := os.ReadFile(filepath.Join(repo.PolicyRoot, "templates", template))
+	return err == nil && bytes.Equal(wrapperBytes, templateBytes)
 }
 
 func (repo Repository) isDynamicControlInput(path string) bool {

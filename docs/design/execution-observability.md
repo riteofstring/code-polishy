@@ -7,6 +7,12 @@ Language, generated/data/test status, executable status, and module ownership
 are computed once per path for that immutable configuration. Returned slices
 are copied so a caller cannot change cached authority.
 
+Root bootstrap wrappers are policy-sensitive inputs. When their bytes match the
+active release's canonical templates, repository facts classify them as managed
+control artifacts rather than project source. Drift removes that classification.
+This preserves global policy selection without inventing application-module
+ownership for release-managed onboarding files.
+
 Glob matching uses a bounded process cache of compiled, anchored expressions.
 This preserves the segment-aware `*`, `**`, `**/`, and `?` grammar while
 avoiding compilation for every path-to-pattern comparison. The cache contains

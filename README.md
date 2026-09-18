@@ -52,6 +52,16 @@ or Git Bash.
 See the [agent setup guide](docs/ai-adoption.md) or the
 [manual setup guide](docs/installation.md) for the full process.
 
+After adoption, a developer cloning the repository needs one setup command:
+
+```sh
+./code-polishyw setup
+```
+
+PowerShell uses `.\code-polishyw.ps1 setup`. The small checked-in wrapper reads
+the repository lock, reuses or installs that exact release in the shared user
+store, and does not contain the Code Polishy toolchain itself.
+
 ## How agents use it
 
 A coding agent reads the workflow bundled with the repo's locked release, starts
@@ -59,19 +69,19 @@ a scoped task, checks the change, and runs the final gate at a merge checkpoint:
 
 ```sh
 # Read the version-matched workflow
-code-polishy docs read agent-workflows
+./code-polishyw docs read agent-workflows
 
 # Start a scoped task
-code-polishy task-start --module MODULE
+./code-polishyw task-start --module MODULE
 
 # Check the code you changed
-code-polishy test --changed
+./code-polishyw test --changed
 
 # Review dependency risk before accepting an update
-code-polishy dependency-review --base origin/main
+./code-polishyw dependency-review --base origin/main
 
 # Enforce the policy at a merge checkpoint
-code-polishy merge-gate --base origin/main
+./code-polishyw merge-gate --base origin/main
 ```
 
 The locked [agent workflow](docs/agent-workflows.md) covers long-lived branch

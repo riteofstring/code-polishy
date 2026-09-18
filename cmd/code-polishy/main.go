@@ -28,7 +28,7 @@ Commands:
   pack <install|verify|root>
   agents <install|sync|check>
   lock
-  release-manifest <write|verify|materialize|archive|publish|index|oci-context> [options]
+  release-manifest <write|verify|satisfies-lock|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
   check [--git-changes|--staged|--all|--files PATH...|--module NAME...|--name NAME...]

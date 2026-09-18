@@ -1,5 +1,6 @@
 param(
   [string]$Prefix = '',
+  [string]$RequireRepository = '',
   [switch]$AddToUserPath
 )
 
@@ -18,6 +19,15 @@ if (-not $Prefix) {
   $Prefix = Join-Path $CallerRoot $Prefix
 }
 $Prefix = [System.IO.Path]::GetFullPath($Prefix)
+if ($RequireRepository) {
+  if (-not [System.IO.Path]::IsPathRooted($RequireRepository)) {
+    $RequireRepository = Join-Path $CallerRoot $RequireRepository
+  }
+  $RequireRepository = [System.IO.Path]::GetFullPath($RequireRepository)
+  if (-not (Test-Path -LiteralPath (Join-Path $RequireRepository '.code-polishy.lock.json') -PathType Leaf)) {
+    throw '-RequireRepository must name a repository with .code-polishy.lock.json.'
+  }
+}
 if ($AddToUserPath -and $Prefix.Contains(';')) {
   throw '-AddToUserPath cannot store an installation prefix containing a semicolon.'
 }
@@ -67,6 +77,10 @@ try {
   $Bootstrap = Join-Path $BootstrapRoot 'bin\code-polishy.exe'
   if (-not (Test-Path -LiteralPath $Bootstrap -PathType Leaf)) {
     throw 'The local native release contains no installer bootstrap.'
+  }
+  if ($RequireRepository) {
+    & $Bootstrap --policy-root $BootstrapRoot --repo-root $RequireRepository release-manifest satisfies-lock --root $BootstrapRoot
+    if ($LASTEXITCODE -ne 0) { throw 'The local native release does not satisfy the required repository.' }
   }
   & $Bootstrap install-bundle --source $Bundle --sha256 $BundleDigest --prefix $Prefix
   if ($LASTEXITCODE -ne 0) { throw 'Installing the local native release failed.' }

@@ -58,6 +58,11 @@ cp <code-polishy-checkout>/templates/minimal/.code-polishy.json .code-polishy.js
 repository checks in. Never vendor the engine or copy individual checker files;
 that creates divergent policy forks.
 
+After `code-polishy agents install` adds the managed repository wrappers, a new
+developer uses `./code-polishyw setup` or `.\code-polishyw.ps1 setup` to reuse
+or install the exact locked release. Subsequent commands go through the same
+wrapper and do not require a global `PATH` entry.
+
 ## 3. Declare project capabilities
 
 `project.kind` is descriptive and open-ended. `project.capabilities` activates

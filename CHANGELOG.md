@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add managed repository wrappers that bootstrap the exact locked release with
+  one setup command, remain offline for ordinary dispatch, and require staged
+  source installations to satisfy the target lock before publication.
+
 ## 0.25.1 - 2026-09-16
 
 - Keep local formatting writes confined to selected writable files, preventing

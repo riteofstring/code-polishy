@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Sourced by test-installed-release.sh after its fixture helpers are defined.
-
 declare output release
 
 fixture_pass() {

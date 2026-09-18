@@ -286,6 +286,30 @@ func RequireLockedRelease(repoRoot, policyRoot string) error {
 	return manifest.Satisfies(lock)
 }
 
+func VerifyLockedRelease(repoRoot, releaseRoot string) (Manifest, error) {
+	manifest, present, err := ReadManifest(releaseRoot)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if !present {
+		return Manifest{}, fmt.Errorf("%s has no %s", releaseRoot, ManifestFilename)
+	}
+	if err := manifest.Verify(releaseRoot); err != nil {
+		return Manifest{}, err
+	}
+	lock, present, err := ReadLock(repoRoot)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if !present {
+		return Manifest{}, fmt.Errorf("%s has no %s", repoRoot, LockFilename)
+	}
+	if err := manifest.Satisfies(lock); err != nil {
+		return Manifest{}, err
+	}
+	return manifest, nil
+}
+
 func decodeExactly(data []byte, source string, document any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()

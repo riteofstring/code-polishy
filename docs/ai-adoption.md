@@ -228,6 +228,17 @@ On Windows x64, in PowerShell:
 .\scripts\install.ps1
 ```
 
+When the target already has a lock, constrain the source installer before it
+can publish the staged release:
+
+```sh
+./scripts/install.sh --require-repository <absolute-target-root>
+```
+
+```powershell
+.\scripts\install.ps1 -RequireRepository <absolute-target-root>
+```
+
 The tool installer acquires only the exactly pinned policy tools through the
 checked-in checksum-verifying installers. It may use unauthenticated HTTPS
 artifact downloads; it must not use a GitHub API, token, or ambient substitute.
@@ -238,8 +249,9 @@ either command fails, report the exact failure rather than weakening pins or
 using another tool.
 
 For an existing target lock, the installed release digest must equal the lock.
-If installing its version tag produces another digest, leave the target lock
-unchanged and report the identity mismatch.
+The constrained installer checks this before changing the release store or
+stable launcher. If installing the version tag produces another digest, leave
+the target lock unchanged and report the identity mismatch.
 
 For a target without a lock, run `lock` from the exact release path selected
 above. Each installer prints this path. On Linux or macOS:
@@ -443,11 +455,15 @@ the command preserves its bytes and changes neither guidance file; resolve that
 explicit conflict before retrying. The same validated transaction appends the
 exact `/.code-polishy-reports/` and `/.code-polishy-artifacts/` rules to the
 repository's root `.gitignore` when needed while preserving existing project
-rules, line endings, and file mode.
+rules, line endings, and file mode. The same transaction installs
+`code-polishyw` and `code-polishyw.ps1`. Those wrappers let a developer run one
+setup command after cloning, then dispatch the exact locked release without
+depending on `PATH`. A wrapper already carrying the managed marker is repaired;
+an unrelated existing wrapper is preserved as an explicit conflict.
 Use `agents sync` after later Code Polishy upgrades; it requires an existing
 file, replaces the entire stale `AGENTS.md`, upgrades the exact former managed
 Claude redirect to the import, and repairs missing report or artifact ignore
-rules.
+rules and stale managed wrappers.
 `agents check` and `doctor --strict` reject a missing rule. Do not hand-copy or
 duplicate the canonical policy text.
 

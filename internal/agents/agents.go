@@ -50,7 +50,15 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	wrapperTargets, err := readWrapperTargets(repoRoot)
+	if err != nil {
+		return "", err
+	}
 	agentsMutation, writesAgents, agentsMessage, err := planInstallAgents(agentsTarget, guidance.agents)
+	if err != nil {
+		return "", err
+	}
+	wrapperMutations, wrapperMessage, err := planWrappers(wrapperTargets, guidance.wrappers, "installed canonical Code Polishy wrappers")
 	if err != nil {
 		return "", err
 	}
@@ -63,20 +71,16 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 		return "", err
 	}
 	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
-	mutations := make([]mutation, 0, 3)
-	if writesAgents {
-		mutations = append(mutations, agentsMutation)
-	}
-	if writesClaude {
-		mutations = append(mutations, claudeMutation)
-	}
-	if writesIgnore {
-		mutations = append(mutations, ignoreMutation)
-	}
+	mutations := adoptionMutations(
+		optionalMutation{agentsMutation, writesAgents},
+		optionalMutation{claudeMutation, writesClaude},
+		wrapperMutations,
+		optionalMutation{ignoreMutation, writesIgnore},
+	)
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage + "; " + ignoreMessage, nil
+	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage, nil
 }
 
 func Sync(repoRoot, policyRoot string) (string, error) {
@@ -88,7 +92,15 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	wrapperTargets, err := readWrapperTargets(repoRoot)
+	if err != nil {
+		return "", err
+	}
 	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	wrapperMutations, wrapperMessage, err := planWrappers(wrapperTargets, guidance.wrappers, "synchronized canonical Code Polishy wrappers")
 	if err != nil {
 		return "", err
 	}
@@ -105,20 +117,16 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 		return "", err
 	}
 	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
-	mutations := make([]mutation, 0, 3)
-	if writesAgents {
-		mutations = append(mutations, agentsMutation)
-	}
-	if writesClaude {
-		mutations = append(mutations, claudeMutation)
-	}
-	if writesIgnore {
-		mutations = append(mutations, ignoreMutation)
-	}
+	mutations := adoptionMutations(
+		optionalMutation{agentsMutation, writesAgents},
+		optionalMutation{claudeMutation, writesClaude},
+		wrapperMutations,
+		optionalMutation{ignoreMutation, writesIgnore},
+	)
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage + "; " + ignoreMessage, nil
+	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage, nil
 }
 
 func Check(repoRoot, policyRoot string) Status {
@@ -132,15 +140,24 @@ func Check(repoRoot, policyRoot string) Status {
 	agentsTarget, agentsErr := readTarget(filepath.Join(repoRoot, agentsTargetFilename), agentsTargetFilename)
 	claudeTarget, claudeErr := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
 	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
+	wrapperTargets, wrapperErrors := checkWrapperTargets(repoRoot)
 	agentsStatus := checkAgents(agentsTarget, agentsErr, guidance.agents)
 	claudeStatus := checkClaude(claudeTarget, claudeErr, guidance.claude)
 	ignoreCurrent, ignoreMatchErr := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
 	ignoreStatus := checkReportIgnore(ignoreTarget, ignoreErr, ignoreCurrent, ignoreMatchErr)
-	statuses := []checkStatus{agentsStatus, claudeStatus, ignoreStatus}
-	if agentsStatus.current && claudeStatus.current && ignoreStatus.current {
+	statuses := []checkStatus{agentsStatus, claudeStatus}
+	for index, template := range guidance.wrappers {
+		statuses = append(statuses, checkWrapper(wrapperTargets[index], wrapperErrors[index], template))
+	}
+	statuses = append(statuses, ignoreStatus)
+	allCurrent := true
+	for _, status := range statuses {
+		allCurrent = allCurrent && status.current
+	}
+	if allCurrent {
 		return Status{Current: true, Message: joinStatusMessages(statuses)}
 	}
-	issues := make([]Issue, 0, 3)
+	issues := make([]Issue, 0, len(statuses))
 	for _, status := range statuses {
 		if !status.current {
 			issues = append(issues, status.issue)
@@ -154,8 +171,9 @@ func Check(repoRoot, policyRoot string) Status {
 }
 
 type canonicalGuidance struct {
-	agents []byte
-	claude []byte
+	agents   []byte
+	claude   []byte
+	wrappers []wrapperTemplate
 }
 
 func canonical(policyRoot string) (canonicalGuidance, error) {
@@ -175,9 +193,14 @@ func canonical(policyRoot string) (canonicalGuidance, error) {
 	if !bytes.Equal(claudeTemplate, []byte(claudeImport)) {
 		return canonicalGuidance{}, errors.New("canonical CLAUDE.md must contain exactly the required one-line import")
 	}
+	wrappers, err := canonicalWrappers(policyRoot)
+	if err != nil {
+		return canonicalGuidance{}, err
+	}
 	return canonicalGuidance{
-		agents: append([]byte{}, agentsTemplate...),
-		claude: append([]byte{}, claudeTemplate...),
+		agents:   append([]byte{}, agentsTemplate...),
+		claude:   append([]byte{}, claudeTemplate...),
+		wrappers: wrappers,
 	}, nil
 }
 
@@ -226,6 +249,25 @@ type mutation struct {
 	contents []byte
 	mode     os.FileMode
 	previous targetState
+}
+
+type optionalMutation struct {
+	mutation mutation
+	write    bool
+}
+
+func adoptionMutations(agents, claude optionalMutation, wrappers []mutation, ignore optionalMutation) []mutation {
+	mutations := make([]mutation, 0, 5)
+	for _, planned := range []optionalMutation{agents, claude} {
+		if planned.write {
+			mutations = append(mutations, planned.mutation)
+		}
+	}
+	mutations = append(mutations, wrappers...)
+	if ignore.write {
+		mutations = append(mutations, ignore.mutation)
+	}
+	return mutations
 }
 
 func planInstallAgents(existing targetState, template []byte) (mutation, bool, string, error) {

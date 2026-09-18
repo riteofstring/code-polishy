@@ -2,12 +2,13 @@
 
 ## Decision
 
-Comments are allowed by default. A repository explicitly selects the strict
-boundary with `quality.allowComments: false`. In that mode, governed handwritten
-source carries executable behavior and machine-consumed annotations, not prose
-comments or docstrings. Code, types, schemas, and tests remain the local
-authority for behavior and data shape. Current non-local rationale lives in a
-mapped design document.
+Comments are allowed by default. This repository explicitly selects the strict
+boundary with `quality.allowComments: false` because its governed source is
+maintained through AI workflows and durable rationale is mapped into design
+documents. In that mode, governed handwritten source carries executable
+behavior and machine-consumed annotations, not prose comments or docstrings.
+Code, types, schemas, and tests remain the local authority for behavior and data
+shape. Current non-local rationale lives in a mapped design document.
 
 ## Why this boundary exists
 

@@ -15,6 +15,9 @@ const (
 	expectedLegacyClaudeRedirect = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 	installedIgnoreMessage       = "installed .gitignore report-artifact rule"
 	currentIgnoreMessage         = ".gitignore report-artifact rule is already current"
+	installedWrappersMessage     = "installed canonical Code Polishy wrappers"
+	currentWrappersMessage       = "Code Polishy wrappers are already current"
+	synchronizedWrappersMessage  = "synchronized canonical Code Polishy wrappers"
 	expectedArtifactIgnores      = reportsIgnorePattern + "\n" + testArtifactsIgnorePattern + "\n"
 )
 
@@ -27,11 +30,12 @@ func TestInstallCreatesMissingCanonicalFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "installed canonical AGENTS.md; installed canonical CLAUDE.md import; "+installedIgnoreMessage {
+	if message != "installed canonical AGENTS.md; installed canonical CLAUDE.md import; "+installedWrappersMessage+"; "+installedIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
 	assertFile(t, filepath.Join(repoRoot, agentsTargetFilename), []byte(canonicalAgentsText), 0o644)
 	assertFile(t, filepath.Join(repoRoot, claudeTargetFilename), []byte(expectedClaudeImport), 0o644)
+	assertCanonicalWrappers(t, repoRoot, policyRoot)
 	assertFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o644)
 }
 
@@ -45,6 +49,7 @@ func TestInstallAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
 	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
+	writeCanonicalWrappers(t, repoRoot, policyRoot)
 
 	message, err := install(repoRoot, policyRoot, func(_, _ string) error {
 		return errors.New("idempotent install attempted a replacement")
@@ -52,7 +57,7 @@ func TestInstallAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentWrappersMessage+"; "+currentIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
@@ -71,7 +76,7 @@ func TestInstallAddsMissingClaudeForExactCanonicalAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; installed canonical CLAUDE.md import; "+installedIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; installed canonical CLAUDE.md import; "+installedWrappersMessage+"; "+installedIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
@@ -98,7 +103,7 @@ func TestSyncUpgradesTheExactLegacyClaudeRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; updated canonical CLAUDE.md import; "+currentIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; updated canonical CLAUDE.md import; "+synchronizedWrappersMessage+"; "+currentIgnoreMessage {
 		t.Fatalf("sync message = %q", message)
 	}
 	assertFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
@@ -119,7 +124,7 @@ func TestInstallAppendsReportIgnoreRuleWithoutReplacingProjectRules(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+installedIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+installedWrappersMessage+"; "+installedIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
 	assertFile(t, ignorePath, []byte("dist/\r\n.env\r\n"+reportsIgnorePattern+"\r\n"+testArtifactsIgnorePattern+"\r\n"), 0o640)
@@ -244,7 +249,7 @@ func TestSyncReplacesTheEntireStaleAgentsFileAndPreservesItsMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "synchronized AGENTS.md canonical guidance; installed canonical CLAUDE.md import; "+installedIgnoreMessage {
+	if message != "synchronized AGENTS.md canonical guidance; installed canonical CLAUDE.md import; "+synchronizedWrappersMessage+"; "+installedIgnoreMessage {
 		t.Fatalf("sync message = %q", message)
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o640)
@@ -319,6 +324,7 @@ func TestSyncAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	writeFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
 	writeFile(t, claudePath, []byte(expectedClaudeImport), 0o640)
 	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
+	writeCanonicalWrappers(t, repoRoot, policyRoot)
 
 	message, err := sync(repoRoot, policyRoot, func(_, _ string) error {
 		return errors.New("idempotent sync attempted a replacement")
@@ -326,7 +332,7 @@ func TestSyncAcceptsExactCanonicalFilesWithoutReplacingThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentWrappersMessage+"; "+currentIgnoreMessage {
 		t.Fatalf("sync message = %q", message)
 	}
 	assertFile(t, agentsPath, []byte(canonicalAgentsText), 0o600)
@@ -346,20 +352,21 @@ func TestInstallSyncAndCheckAcceptWholeFileCRLFCanonicalGuidance(t *testing.T) {
 	writeFile(t, agentsPath, crlfAgents, 0o600)
 	writeFile(t, claudePath, crlfClaude, 0o640)
 	writeFile(t, ignorePath, []byte(reportsIgnorePattern+"\r\n"+testArtifactsIgnorePattern+"\r\n"), 0o640)
+	writeCanonicalWrappers(t, repoRoot, policyRoot)
 	replace := func(_, _ string) error { return errors.New("canonical CRLF guidance attempted a replacement") }
 
 	message, err := install(repoRoot, policyRoot, replace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentWrappersMessage+"; "+currentIgnoreMessage {
 		t.Fatalf("install message = %q", message)
 	}
 	message, err = sync(repoRoot, policyRoot, replace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentIgnoreMessage {
+	if message != "AGENTS.md canonical guidance is already current; CLAUDE.md import is already current; "+currentWrappersMessage+"; "+currentIgnoreMessage {
 		t.Fatalf("sync message = %q", message)
 	}
 	status := Check(repoRoot, policyRoot)
@@ -401,6 +408,7 @@ func TestCheckComparesTheEntireCanonicalAgentsFile(t *testing.T) {
 	t.Parallel()
 	policyRoot := policyFixture(t, canonicalAgentsText)
 	repoRoot := t.TempDir()
+	writeCanonicalWrappers(t, repoRoot, policyRoot)
 
 	status := Check(repoRoot, policyRoot)
 	if status.Current || !strings.Contains(status.Message, "AGENTS.md is missing") || !strings.Contains(status.Message, "CLAUDE.md is missing") {
@@ -545,5 +553,29 @@ func policyFixture(t *testing.T, agents string) string {
 	}
 	claudePath := filepath.Join(root, filepath.FromSlash(claudeTemplateRelativePath))
 	writeFile(t, claudePath, []byte(expectedClaudeImport), 0o600)
+	writeFile(t, filepath.Join(root, filepath.FromSlash(posixWrapperTemplateRelativePath)), []byte("#!/usr/bin/env bash\nCODE_POLISHY_MANAGED_WRAPPER=1\nprintf 'fixture\\n'\n"), 0o700)
+	writeFile(t, filepath.Join(root, filepath.FromSlash(powerShellWrapperTemplateRelativePath)), []byte("$CodePolishyManagedWrapper = $true\nWrite-Output 'fixture'\n"), 0o600)
 	return root
+}
+
+func writeCanonicalWrappers(t *testing.T, repoRoot, policyRoot string) {
+	t.Helper()
+	templates, err := canonicalWrappers(policyRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, template := range templates {
+		writeFile(t, filepath.Join(repoRoot, template.path), template.contents, template.mode)
+	}
+}
+
+func assertCanonicalWrappers(t *testing.T, repoRoot, policyRoot string) {
+	t.Helper()
+	templates, err := canonicalWrappers(policyRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, template := range templates {
+		assertFile(t, filepath.Join(repoRoot, template.path), template.contents, template.mode)
+	}
 }

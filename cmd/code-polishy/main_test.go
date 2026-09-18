@@ -814,6 +814,26 @@ func TestInstalledReleaseCanVerifyAReleaseTreeWithoutATargetLock(t *testing.T) {
 	}
 }
 
+func TestReleaseManifestSatisfiesTheSelectedRepositoryLock(t *testing.T) {
+	repoRoot := t.TempDir()
+	installed := installedRelease(t, strings.Repeat("a", 40))
+	manifest, present, err := release.ReadManifest(installed)
+	if err != nil || !present {
+		t.Fatalf("read manifest: present=%v err=%v", present, err)
+	}
+	if err := release.WriteLock(repoRoot, release.LockFor(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	status := run([]string{
+		"--repo-root", repoRoot,
+		"--policy-root", installed,
+		"release-manifest", "satisfies-lock", "--root", installed,
+	})
+	if status != 0 {
+		t.Fatalf("release lock verification status=%d", status)
+	}
+}
+
 func TestInstalledReleaseGovernsOnlyTheRepositoryThatLocksIt(t *testing.T) {
 	repoRoot := t.TempDir()
 	installed := installedRelease(t, strings.Repeat("a", 40))

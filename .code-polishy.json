@@ -18,6 +18,9 @@
       "providers/javascript/build.mjs"
     ]
   },
+  "quality": {
+    "allowComments": false
+  },
   "documentation": {
     "design": [
       {
@@ -63,6 +66,19 @@
       {
         "path": "docs/design/agent-guidance.md",
         "module": "agents"
+      },
+      {
+        "path": "docs/design/bootstrap-wrapper.md",
+        "sourcePaths": [
+          "templates/code-polishyw",
+          "templates/code-polishyw.ps1",
+          "internal/agents/wrappers.go",
+          "internal/policy/control_inputs.go",
+          "internal/release/release.go",
+          "cmd/code-polishy/release_manifest_meta.go",
+          "scripts/install.sh",
+          "scripts/install.ps1"
+        ]
       },
       {
         "path": "docs/design/python-contract-evidence.md",
@@ -283,7 +299,13 @@
     },
     {
       "name": "agents",
-      "paths": ["AGENTS.md", "internal/agents/**", "templates/AGENTS.md"]
+      "paths": [
+        "AGENTS.md",
+        "internal/agents/**",
+        "templates/AGENTS.md",
+        "templates/code-polishyw",
+        "templates/code-polishyw.ps1"
+      ]
     },
     {
       "name": "release",
