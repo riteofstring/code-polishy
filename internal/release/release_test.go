@@ -132,7 +132,7 @@ func writeLockFixture(t *testing.T, path string, lock Lock) {
 func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 	t.Parallel()
 	rendered := string(RenderLock(Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
 	}))
 	formatted := "{\n" +
@@ -150,11 +150,11 @@ func TestWriteLockAtomicallyReplacesAnExistingLock(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
 	old := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.8",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.8",
 		ReleaseDigest: otherDigest, Features: []string{"javascript-bundle"},
 	}
 	want := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
 	}
 	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), old)
@@ -176,7 +176,8 @@ func TestParseLockRejectsWhatItCannotActOnExactly(t *testing.T) {
 	usable := `"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `"`
 	cases := map[string]string{
 		"an unknown field":     `{` + usable + `,"features":["javascript-bundle"],"registry":"https://example.invalid"}`,
-		"another lock version": `{"lockVersion":2,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `","features":["javascript-bundle"]}`,
+		"another lock version": `{"lockVersion":3,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `","features":["javascript-bundle"]}`,
+		"unbound version two":  `{"lockVersion":2,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `","features":["javascript-bundle"]}`,
 		"a short digest":       `{"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"abc","features":["javascript-bundle"]}`,
 		"no required feature":  `{` + usable + `,"features":[]}`,
 		"a repeated feature":   `{` + usable + `,"features":["javascript-bundle","javascript-bundle"]}`,
@@ -184,6 +185,7 @@ func TestParseLockRejectsWhatItCannotActOnExactly(t *testing.T) {
 		"a version that is a path": `{"lockVersion":1,"codePolishyVersion":"../9.9.9","releaseDigest":"` +
 			exampleDigest + `","features":["javascript-bundle"]}`,
 		"a second document": `{` + usable + `,"features":["javascript-bundle"]} {}`,
+		"an oversized lock": strings.Repeat(" ", MaximumLockBytes+1),
 	}
 	for name, document := range cases {
 		if _, err := parseLock([]byte(document), "lock.json"); err == nil {
@@ -209,7 +211,7 @@ func TestReadLockSeparatesAbsentFromUnusable(t *testing.T) {
 func TestDirectoryNamesOneReleaseAndNothingElse(t *testing.T) {
 	t.Parallel()
 	lock := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
 	}
 	directory := Directory("/prefix", lock)
@@ -328,7 +330,7 @@ func TestSatisfiesRequiresTheExactLockedRelease(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
 	lock := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
 	}
 	if err := manifest.Satisfies(lock); err != nil {
@@ -364,7 +366,7 @@ func TestSatisfiesRefusesAReleaseThatIsNotWhatItRecords(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
 	lock := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
 	}
 	claimed := manifest
@@ -390,7 +392,7 @@ func TestRequireLockedReleaseGovernsOnlyInstalledReleases(t *testing.T) {
 
 	lockPath := filepath.Join(repoRoot, LockFilename)
 	lock := Lock{
-		LockVersion: LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
 	}
 	writeLockFixture(t, lockPath, lock)

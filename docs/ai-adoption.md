@@ -146,6 +146,13 @@ Use `git ls-remote --tags --refs "<code-polishy-repository-url>"` for remote
 tag discovery. Do not infer a release from GitHub page ordering, a branch name,
 or a GitHub API response.
 
+For a public published release, also obtain its exact HTTPS publication-index
+URL and separately published SHA-256. The index must name the selected version
+and source revision. Do not derive authority from an unpinned index, a mutable
+release page, or an archive URL alone. A private, offline, local-candidate, or
+otherwise unpublished adoption can proceed without an index and must report
+that fresh-clone wrapper setup will require an explicit local source checkout.
+
 For a repository source, create a unique temporary directory outside the
 target and make a shallow, single-branch clone of the selected tag:
 
@@ -254,17 +261,23 @@ stable launcher. If installing the version tag produces another digest, leave
 the target lock unchanged and report the identity mismatch.
 
 For a target without a lock, run `lock` from the exact release path selected
-above. Each installer prints this path. On Linux or macOS:
+above. Each installer prints this path. For a public published release on Linux
+or macOS:
 
 ```sh
-"${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" lock
+"${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" \
+  lock --index <publication-index-url> --sha256 <publication-index-sha256>
 ```
 
 On Windows:
 
 ```powershell
-& "$env:LOCALAPPDATA\CodePolishy\releases\<version>-<releaseDigest>\bin\code-polishy.exe" lock
+& "$env:LOCALAPPDATA\CodePolishy\releases\<version>-<releaseDigest>\bin\code-polishy.exe" `
+  lock --index <publication-index-url> --sha256 <publication-index-sha256>
 ```
+
+For a deliberately unpublished source release, omit both publication options.
+Never supply only one.
 
 After the lock exists, use `code-polishy` when it resolves to the installed
 launcher. If the bare command is unavailable, use a caller-specified prefix or
@@ -498,7 +511,8 @@ The resulting guidance should make these execution boundaries clear:
   event, or the stable-candidate release checklist selects it; only
   credentialed, destructive, production-mutating, and live-provider probes
   remain external approval gates;
-- policy upgrades rerun the complete ordinary gate.
+- policy upgrade planning and lock cutover do not select a gate; run ordinary
+  verification separately when the surrounding task or delivery requires it.
 
 ## 8. Integrate CI without inventing credentials
 
@@ -610,25 +624,33 @@ When asked to upgrade Code Polishy, the AI agent should:
 
 1. read the outgoing locked instructions and preserve the working tree; those
    instructions govern until the lock cutover;
-2. honor an exact version requested by the caller or resolve the highest stable
-   annotated version tag from the authoritative repository; never upgrade from
-   floating `main`;
-3. clone and verify that exact tag as described above, then reuse or install its
-   exact native release;
-4. read every intervening `CHANGELOG.md` entry;
-5. run `lock` from that exact release as the sole incoming pre-cutover command;
-   it atomically replaces `.code-polishy.lock.json` and transfers authority to
-   the incoming release;
-6. read the incoming `agent-workflows` guide and capture the caller's exact
+2. obtain the exact HTTPS publication-index URL and its separately published
+   SHA-256; never select floating `main`, a mutable channel, or an unpinned
+   index;
+3. run `upgrade plan --index URL --sha256 DIGEST` through a release that
+   implements the upgrade protocol. For the first transition from an older
+   release, install the index's exact current-host archive with the existing
+   local bundle workflow, then invoke that installed incoming binary directly;
+4. inspect its authenticated capability delta and its added, removed, and
+   changed diagnostics. Planning may install the immutable candidate and write
+   managed evidence, but it must not change the target lock or application
+   source;
+5. read every intervening `CHANGELOG.md` entry. Fix newly exposed issues and
+   create a new plan when appropriate, or retain them and use the explicit
+   `--accept-new-findings` acknowledgment;
+6. run `upgrade apply --plan PATH` through the same incoming binary. It
+   revalidates both diagnostic snapshots and transactionally synchronizes
+   managed guidance and wrappers before replacing the lock last;
+7. read the incoming `agent-workflows` guide and capture the caller's exact
    request when it requires capture, then update target configuration directly
    for changed requirements;
-7. run strict doctor, inspect the test plan, and run the ordinary gate;
-8. report supplemental hardening as `NOT RUN` unless the caller explicitly
+8. run only the checks selected by the surrounding source task or delivery
+   workflow. The upgrade itself requires neither issue cleanup nor a full gate;
+9. report supplemental hardening as `NOT RUN` unless the caller explicitly
    requests it, a checked-in workflow explicitly invokes it for that upgrade
    event, or the stable-candidate release checklist selects its one final run;
    report a selected hardening result separately from external gates;
-9. commit the new lock and required target changes together unless the caller
-   explicitly requests an uncommitted handoff;
-10. delete the temporary source clone; and
+10. commit the new lock and required target changes together unless the caller
+    explicitly requests an uncommitted handoff;
 11. never let CI or an application install choose a release the lock does not
     name.

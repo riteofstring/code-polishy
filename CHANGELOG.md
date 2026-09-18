@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.27.0 - 2026-09-18
+
+- Replace wrapper clone-and-build bootstrap with bounded, checksum-pinned native
+  archive setup while retaining explicit local-source recovery for private and
+  legacy locks.
+- Let public adoption write publication-backed locks immediately, keeping fresh
+  clones on one-command setup without embedding Code Polishy or its toolchain.
+- Add two-phase upgrade planning and apply with authenticated capability deltas,
+  outgoing-versus-incoming diagnostics, stale-evidence rejection, and explicit
+  acceptance of new findings without source cleanup or a merge gate.
+- Synchronize managed guidance and wrappers transactionally during upgrades and
+  replace the repository lock last at the authority cutover.
+- Print the canonical publication-index SHA-256 and require one release digest
+  across all host artifacts.
+
 ## 0.26.0 - 2026-09-18
 
 - Add managed repository wrappers that bootstrap the exact locked release with

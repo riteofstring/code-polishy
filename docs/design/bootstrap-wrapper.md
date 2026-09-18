@@ -8,13 +8,18 @@ dispatch logic, not a Code Polishy release or its toolchain. The wrapper reads
 the repository lock and delegates ordinary commands to the exact release in
 the shared per-user installation prefix.
 
-`setup` is the only action allowed to acquire anything. When the locked release
-is absent, it clones the selected Code Polishy source at the exact version tag,
-requires an annotated tag that points directly to the clean checkout, verifies
-`VERSION`, installs the pinned policy tools, and invokes the source installer.
-The canonical public repository is the default. `--source` is an explicit,
-ephemeral override for private mirrors or local testing and is never recorded
-in the target repository.
+`setup` is the only wrapper action allowed to acquire anything. A version-two
+lock contains one HTTPS archive URL, checksum, and size for every supported
+host. Those values are derived from an exact checksum-pinned publication index
+by initial adoption or the upgrade planner. The wrapper selects the current host, downloads the
+archive, verifies its checksum, and uses the archive's own engine to perform the
+bounded bundle installation. It does not clone Code Polishy, install a language
+toolchain, or build a release.
+
+`--source PATH` is an explicit recovery path for a local Code Polishy checkout.
+The source installer still proves that the built release satisfies the target
+lock. Version-one locks have no archive authority and therefore require this
+explicit source path; they never silently regain the old clone-and-build path.
 
 ## Trust boundary
 
@@ -30,7 +35,9 @@ Normal wrapper dispatch never clones, downloads, builds, changes `PATH`, or
 selects a fallback release. If the exact installed release cannot be verified
 through the stable launcher, it fails with the explicit setup command. Shared
 storage lets repositories with the same lock reuse one installation while
-different locked releases coexist.
+different locked releases coexist. A repository-reviewed archive checksum
+authenticates bytes relative to that repository's lock; it does not establish
+builder identity or replace the separately planned provenance work.
 
 ## Adoption ownership
 
@@ -49,8 +56,32 @@ normal executable-source coverage in addition to the adoption-status finding.
 
 ## Publication boundary
 
-Source bootstrap is the initial portable path because the release lock already
-contains everything needed to verify a locally built release. Direct archive
-download remains a separate optimization. It requires an authenticated,
-versioned publication index that binds each supported host archive to the
-locked release before the wrapper can safely choose and download one.
+The publication index is canonical, bounded, versioned, and checksum-pinned by
+the adoption or upgrade request. Every descriptor must name one version, source revision,
+and release digest across the complete supported host set. The planner resolves
+archive names relative to the HTTPS index URL and copies those exact URLs,
+checksums, and sizes into the next repository lock. Setup trusts only that
+reviewed lock and the installed manifest verification; mutable release-page
+metadata never participates in selection.
+
+Initial adoption can pass the index URL and checksum to `lock`. That operation
+requires the executing installed release to match the index and records the
+same version-two publication authority without redownloading an archive. A
+source-only or private adoption can omit the index and deliberately receive a
+legacy lock whose wrapper requires an explicit local source checkout.
+
+## Upgrade boundary
+
+Upgrade is deliberately two phase. `upgrade plan` verifies the index, installs
+the current-host candidate without changing repository authority, authenticates
+the capability delta, and runs the outgoing and incoming engines against the
+same repository. Its durable record identifies added, removed, and changed
+diagnostics so a policy bump cannot disguise application cleanup as a simple
+version edit.
+
+`upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
+diagnostic snapshot. New error diagnostics require an explicit acceptance or a
+new plan after cleanup. Apply stages canonical guidance, both wrappers, ignore
+rules, and the incoming lock as one rollback-capable transaction; the lock is
+renamed last. That rename is the guidance cutover. Upgrade never edits governed
+application source.

@@ -36,6 +36,25 @@ func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testin
 	}
 }
 
+func TestLockPreservesPublicationMetadataForTheCurrentRelease(t *testing.T) {
+	t.Parallel()
+	repo, _, nextRoot, _, _ := capabilityUpgradeFixture(t)
+	manifest, present, err := ReadManifest(nextRoot)
+	if err != nil || !present {
+		t.Fatalf("read manifest: present=%v error=%v", present, err)
+	}
+	published := indexedLockFixture(manifest.CodePolishyVersion, manifest.ReleaseDigest)
+	published.Features = append([]string{}, manifest.Features...)
+	if err := WriteLock(repo, published); err != nil {
+		t.Fatal(err)
+	}
+	result, err := WriteReleaseLock(repo, nextRoot)
+	if err != nil || result.Changed || !sameCapabilityLock(result.Lock, published) {
+		t.Fatalf("current published lock = %+v, error = %v", result, err)
+	}
+	assertCapabilityUpgradeLock(t, repo, published)
+}
+
 func assertCapabilityUpgradeChanges(t *testing.T, delta CapabilityDelta, old Lock) {
 	t.Helper()
 	if delta.Availability != "available" || delta.Outgoing == nil || !sameCapabilityLock(*delta.Outgoing, old) || delta.Incoming.CodePolishyVersion != "9.9.9" {

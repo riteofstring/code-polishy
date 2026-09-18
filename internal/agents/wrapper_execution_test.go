@@ -1,12 +1,16 @@
 package agents
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/riteofstring/code-polishy/internal/release"
 )
 
 const wrapperTestVersion = "9.9.9"
@@ -62,16 +66,66 @@ func TestPOSIXWrapperBootstrapsTheExactTaggedSourceAndDispatchesOffline(t *testi
 	}
 }
 
-func TestPOSIXWrapperRejectsALightweightSourceTag(t *testing.T) {
+func TestPOSIXWrapperRequiresAnExplicitSourceForALegacyLock(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX wrapper contract")
 	}
 	policyRoot := repositoryPolicyRoot(t)
-	sourceRoot := wrapperSourceFixture(t, false)
 	repoRoot := wrapperTargetFixture(t, policyRoot)
-	stdout, stderr, err := runPOSIXWrapper(repoRoot, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "setup", "--source", sourceRoot)
-	if err == nil || !strings.Contains(stderr, "tag is not annotated") {
-		t.Fatalf("lightweight tag result: err=%v stdout=%q stderr=%q", err, stdout, stderr)
+	stdout, stderr, err := runPOSIXWrapper(repoRoot, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "setup")
+	if err == nil || !strings.Contains(stderr, "legacy lock requires setup --source PATH") {
+		t.Fatalf("legacy setup result: err=%v stdout=%q stderr=%q", err, stdout, stderr)
+	}
+}
+
+func TestPOSIXWrapperInstallsThePinnedHostArchiveWithoutGit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX wrapper contract")
+	}
+	policyRoot := repositoryPolicyRoot(t)
+	archive := filepath.Join(t.TempDir(), "release.zip")
+	archiveBytes := []byte("pinned release archive")
+	writeFile(t, archive, archiveBytes, 0o600)
+	digest := sha256.Sum256(archiveBytes)
+	repoRoot := wrapperArchiveTargetFixture(t, policyRoot, hex.EncodeToString(digest[:]), int64(len(archiveBytes)))
+	home := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "wrapper.log")
+	commands := t.TempDir()
+	writeFile(t, filepath.Join(commands, "curl"), []byte(`#!/usr/bin/env bash
+set -euo pipefail
+output=""
+while (($#)); do
+  if [[ "$1" == --output ]]; then output=$2; shift 2; else shift; fi
+done
+cp "${CODE_POLISHY_WRAPPER_TEST_ARCHIVE:?}" "$output"
+`), 0o755)
+	writeFile(t, filepath.Join(commands, "unzip"), []byte(`#!/usr/bin/env bash
+set -euo pipefail
+cat <<'BOOTSTRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+prefix=""
+while (($#)); do
+  if [[ "$1" == --prefix ]]; then prefix=$2; shift 2; else shift; fi
+done
+mkdir -p "$prefix/releases/9.9.9-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "$prefix/bin"
+cat >"$prefix/bin/code-polishy" <<'LAUNCHER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${CODE_POLISHY_WRAPPER_TEST_LOG:?}"
+if [[ "$*" == *" version" ]]; then printf 'code-polishy 9.9.9\n'; fi
+LAUNCHER
+chmod +x "$prefix/bin/code-polishy"
+BOOTSTRAP
+`), 0o755)
+	t.Setenv("CODE_POLISHY_WRAPPER_TEST_ARCHIVE", archive)
+	path := commands + string(os.PathListSeparator) + os.Getenv("PATH")
+	stdout, stderr, err := runPOSIXWrapper(repoRoot, home, logPath, path, "setup")
+	if err != nil || !strings.Contains(stdout, "Code Polishy 9.9.9 is ready") {
+		t.Fatalf("archive setup failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(readTestFile(t, logPath), "git") {
+		t.Fatal("archive setup invoked Git")
 	}
 }
 
@@ -174,6 +228,32 @@ func wrapperTargetFixture(t *testing.T, policyRoot string) string {
 	writeFile(t, filepath.Join(root, posixWrapperTargetFilename), template, 0o755)
 	lock := "{\n  \"lockVersion\": 1,\n  \"codePolishyVersion\": \"" + wrapperTestVersion + "\",\n  \"releaseDigest\": \"" + wrapperTestDigest + "\",\n  \"features\": [\"javascript-bundle\"]\n}\n"
 	writeFile(t, filepath.Join(root, ".code-polishy.lock.json"), []byte(lock), 0o600)
+	return root
+}
+
+func wrapperArchiveTargetFixture(t *testing.T, policyRoot, archiveSHA string, archiveSize int64) string {
+	t.Helper()
+	root := t.TempDir()
+	template, err := os.ReadFile(filepath.Join(policyRoot, filepath.FromSlash(posixWrapperTemplateRelativePath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, posixWrapperTargetFilename), template, 0o755)
+	archives := []release.LockedArchive{}
+	for _, host := range []string{"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"} {
+		archives = append(archives, release.LockedArchive{
+			Host: host, URL: "https://example.invalid/code-polishy-" + wrapperTestVersion + "-" + host + ".zip",
+			SHA256: archiveSHA, Size: archiveSize,
+		})
+	}
+	lock := release.Lock{
+		LockVersion: release.LockVersion, CodePolishyVersion: wrapperTestVersion,
+		ReleaseDigest: wrapperTestDigest, Features: []string{"javascript-bundle"},
+		Publication: &release.LockPublication{
+			IndexURL: "https://example.invalid/release-index.json", IndexSHA256: wrapperTestDigest, Archives: archives,
+		},
+	}
+	writeFile(t, filepath.Join(root, release.LockFilename), release.RenderLock(lock), 0o600)
 	return root
 }
 

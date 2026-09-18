@@ -178,7 +178,12 @@ func indexReleaseManifest(options releaseManifestOptions) int {
 	if err != nil {
 		return operationalError(err)
 	}
+	digest, err := release.PublicationIndexSHA256(index)
+	if err != nil {
+		return operationalError(err)
+	}
 	fmt.Printf("Indexed Code Polishy %s for %d hosts at %s\n", index.CodePolishyVersion, len(index.Artifacts), options.output)
+	fmt.Printf("Publication index SHA-256: %s\n", digest)
 	return 0
 }
 

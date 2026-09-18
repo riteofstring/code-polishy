@@ -55,6 +55,17 @@ type PublicationIndex struct {
 	Artifacts          []PublicationArtifact `json:"artifacts"`
 }
 
+func PublicationIndexSHA256(index PublicationIndex) (string, error) {
+	data, err := renderJSON(index)
+	if err != nil {
+		return "", err
+	}
+	if _, err := ParsePublicationIndex(data, "release index"); err != nil {
+		return "", err
+	}
+	return digestBytes(data), nil
+}
+
 func WriteArchive(releaseRoot, output string) (string, error) {
 	root, manifest, err := verifiedReleaseRoot(releaseRoot)
 	if err != nil {
@@ -333,12 +344,13 @@ func readPublicationArtifact(descriptor string) (PublicationArtifact, error) {
 func validatePublicationSet(artifacts []PublicationArtifact) (string, string, error) {
 	version := artifacts[0].CodePolishyVersion
 	revision := artifacts[0].SourceRevision
+	releaseDigest := artifacts[0].Manifest.ReleaseDigest
 	for index, artifact := range artifacts {
 		if artifact.Host != supportedReleaseHosts[index] {
 			return "", "", fmt.Errorf("release index host %d is %s, expected %s", index+1, artifact.Host, supportedReleaseHosts[index])
 		}
-		if artifact.CodePolishyVersion != version || artifact.SourceRevision != revision {
-			return "", "", errors.New("release index descriptors do not name one version and source revision")
+		if artifact.CodePolishyVersion != version || artifact.SourceRevision != revision || artifact.Manifest.ReleaseDigest != releaseDigest {
+			return "", "", errors.New("release index descriptors do not name one version, source revision, and release digest")
 		}
 	}
 	return version, revision, nil
@@ -551,6 +563,16 @@ func validatePublicationArtifact(artifact PublicationArtifact) error {
 		!revisionPattern.MatchString(artifact.SourceRevision) || !slices.Contains(supportedReleaseHosts, artifact.Host) {
 		return errors.New("release publication descriptor has an invalid identity")
 	}
+	if err := validatePublicationFiles(artifact); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(artifact.Manifest.ReleaseDigest) || !digestPattern.MatchString(artifact.Manifest.ContentDigest) {
+		return errors.New("release publication descriptor has an invalid manifest identity")
+	}
+	return nil
+}
+
+func validatePublicationFiles(artifact PublicationArtifact) error {
 	base := "code-polishy-" + artifact.CodePolishyVersion + "-" + artifact.Host
 	files := []struct {
 		file PublishedFile
@@ -566,8 +588,8 @@ func validatePublicationArtifact(artifact PublicationArtifact) error {
 			return fmt.Errorf("release publication descriptor has an invalid file %q", candidate.file.Name)
 		}
 	}
-	if !digestPattern.MatchString(artifact.Manifest.ReleaseDigest) || !digestPattern.MatchString(artifact.Manifest.ContentDigest) {
-		return errors.New("release publication descriptor has an invalid manifest identity")
+	if artifact.Archive.Size > maximumReleaseBundleBytes {
+		return errors.New("release publication descriptor contains an oversized archive")
 	}
 	return nil
 }

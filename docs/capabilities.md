@@ -42,12 +42,11 @@ their instructions. See [Agent Workflows](agent-workflows.md) and
 
 ## Inspect an upgrade
 
-The exact incoming installed release's `lock` command prepares a capability
-comparison before atomically replacing the repository lock. Its bounded output
-shows added, removed, and changed canonical commands, their release versions,
-and workflow documents. Metadata ordering alone does not count as a change.
-At most eight changes and two documents per entry appear in the terminal;
-the machine document retains every change.
+`upgrade plan` prepares a capability comparison without replacing the
+repository lock. Its bounded output shows added, removed, and changed canonical
+commands, their release versions, and workflow documents. Metadata ordering
+alone does not count as a change. At most eight changes and two documents per
+entry appear in the terminal; the machine document retains every change.
 
 The comparison uses the incoming catalog and the exact outgoing release from
 the same installation prefix. Both catalogs must authenticate against their
@@ -67,12 +66,13 @@ These local records authenticate catalog content against captured release
 digests; they do not authenticate who performed the upgrade or establish a
 trusted upgrade history independently of the repository's local state.
 
-The current lock selects its prepared record. Record publication failure leaves
-the outgoing lock active, concurrent writers cannot replace each other's
-records, and repeating `lock` for the same release preserves its original
-comparison. Discovery is read-only: a missing or damaged record reports an
-unavailable delta, and does not reconstruct or repair upgrade history. Retain
-the managed record when moving a repository that needs later upgrade inspection.
+The incoming planned lock selects its prepared record; after apply it becomes
+the current record. Publication failure leaves the outgoing lock active,
+concurrent writers cannot replace each other's records, and repeating `lock`
+for the same published release preserves its publication metadata. Discovery is
+read-only: a missing or damaged record reports an unavailable delta, and does
+not reconstruct or repair upgrade history. Retain the managed record when
+moving a repository that needs later upgrade inspection.
 
 ## Start a task
 

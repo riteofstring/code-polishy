@@ -27,7 +27,8 @@ Commands:
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
-  lock
+  lock [--index URL --sha256 DIGEST]
+  upgrade <plan|apply> [options]
   release-manifest <write|verify|satisfies-lock|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
@@ -189,6 +190,8 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 		return handleAgentsMeta(invocation), true
 	case "lock":
 		return handleLockMeta(invocation), true
+	case "upgrade":
+		return handleUpgradeMeta(invocation), true
 	case "install-bundle":
 
 		return handleInstallBundleMeta(invocation), true
@@ -300,7 +303,7 @@ func handleAgentsMeta(invocation invocation) int {
 }
 
 func requireLockedRelease(invocation invocation) (int, bool) {
-	exempt := []string{"lock", "install-bundle", "release-manifest", "version", "docs", "pack", "--version", "help", "--help", "-h"}
+	exempt := []string{"lock", "upgrade", "install-bundle", "release-manifest", "version", "docs", "pack", "--version", "help", "--help", "-h"}
 	if slices.Contains(exempt, invocation.command) {
 		return 0, true
 	}

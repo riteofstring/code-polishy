@@ -254,6 +254,14 @@ func TestPublicationIndexRequiresEveryHostFromOneSource(t *testing.T) {
 	if len(index.Artifacts) != len(supportedReleaseHosts) {
 		t.Fatalf("artifacts = %d", len(index.Artifacts))
 	}
+	digest, err := PublicationIndexSHA256(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil || digest != digestBytes(data) {
+		t.Fatalf("publication index digest = %s, error = %v", digest, err)
+	}
 	for position, artifact := range index.Artifacts {
 		if artifact.Host != supportedReleaseHosts[position] {
 			t.Fatalf("host %d = %s", position, artifact.Host)

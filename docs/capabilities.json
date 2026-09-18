@@ -174,8 +174,8 @@
     {
       "name": "lock",
       "kind": "command",
-      "description": "Atomically select an exact installed release.",
-      "aliases": ["upgrade lock"],
+      "description": "Atomically select an exact installed release and optionally pin its published native archives.",
+      "aliases": ["release lock", "published adoption"],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],
@@ -304,6 +304,16 @@
       "modules": [],
       "enforcement": ["explicit"],
       "workflows": ["docs/agent-workflows.md"]
+    },
+    {
+      "name": "upgrade",
+      "kind": "command",
+      "description": "Plan and apply a publication-backed release change without editing application source or running a gate.",
+      "aliases": ["policy upgrade"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md", "docs/ai-adoption.md"]
     },
     {
       "name": "verify",

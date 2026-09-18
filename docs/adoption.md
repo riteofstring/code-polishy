@@ -50,9 +50,16 @@ see [Installation](installation.md). From the target repository, require the
 exact release it will run and start from the minimal configuration:
 
 ```sh
-"${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" lock
+"${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" \
+  lock --index <publication-index-url> --sha256 <publication-index-sha256>
 cp <code-polishy-checkout>/templates/minimal/.code-polishy.json .code-polishy.json
 ```
+
+The publication-backed form is the normal public adoption path. It verifies
+that the index names the executing installed release and records exact native
+archives so every later clone has one-command setup. A private, offline, or
+unpublished source adoption may run `lock` without options; that deliberate
+legacy lock requires developers to provide a local checkout to wrapper setup.
 
 `.code-polishy.lock.json` and `.code-polishy.json` are the only policy files the
 repository checks in. Never vendor the engine or copy individual checker files;
@@ -60,8 +67,10 @@ that creates divergent policy forks.
 
 After `code-polishy agents install` adds the managed repository wrappers, a new
 developer uses `./code-polishyw setup` or `.\code-polishyw.ps1 setup` to reuse
-or install the exact locked release. Subsequent commands go through the same
-wrapper and do not require a global `PATH` entry.
+or download and verify the exact host archive recorded by a version-two lock.
+Subsequent commands go through the same wrapper and do not require a global
+`PATH` entry. A legacy version-one lock requires an explicit local source
+checkout until the repository applies a publication-backed upgrade.
 
 ## 3. Declare project capabilities
 
@@ -900,16 +909,15 @@ commands always mean their complete declared profile, not a best-effort subset.
 ## 13. Upgrade intentionally
 
 The [AI-Agent Setup and Adoption upgrade procedure](ai-adoption.md#upgrades) is
-the authority for both agent-driven and manual upgrades. Select and verify one
-exact annotated version tag, install that release, read the intervening
-`CHANGELOG.md` entries, rewrite `.code-polishy.lock.json` from the exact release,
-adapt the target configuration, and run the required ordinary verification. A
-lock upgrade leaves supplemental hardening `NOT RUN` unless the caller, an
-event-specific checked-in workflow, or the stable-candidate release checklist
-selects it. Never install from floating `main` or let a check select a release the lock does not
-name.
+the authority for both agent-driven and manual upgrades. Pin the exact canonical
+publication index URL and SHA-256, then use `upgrade plan` to install and compare
+the candidate before `upgrade apply` changes authority. The plan exposes
+capability and diagnostic changes, including cleanup a new policy would demand.
+Apply never edits that source and may acknowledge new findings explicitly.
+Neither phase selects an ordinary or supplemental gate; verification remains a
+separate task or delivery decision. Never install from floating `main` or let a
+check select a release the lock does not name.
 
-The outgoing lock and guidance retain authority through candidate verification.
-The exact incoming release's `lock` command is the sole pre-cutover mutation;
-it atomically replaces the lock, after which incoming guidance governs all
-configuration, verification, and delivery work.
+The outgoing lock and guidance retain authority through planning. Apply stages
+incoming guidance and wrappers with the lock, rolls back the group on failure,
+and renames the lock last. That final replacement activates incoming guidance.

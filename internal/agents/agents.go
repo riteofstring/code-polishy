@@ -87,6 +87,10 @@ func Sync(repoRoot, policyRoot string) (string, error) {
 	return sync(repoRoot, policyRoot, os.Rename)
 }
 
+func SyncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte) (string, error) {
+	return syncWithLock(repoRoot, policyRoot, expectedLock, incomingLock, os.Rename)
+}
+
 func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	guidance, err := canonical(policyRoot)
 	if err != nil {
@@ -127,6 +131,68 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 		return "", err
 	}
 	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage, nil
+}
+
+func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte, replace replacement) (string, error) {
+	guidance, err := canonical(policyRoot)
+	if err != nil {
+		return "", err
+	}
+	wrapperTargets, err := readWrapperTargets(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	lockMutation, err := planUpgradeLock(repoRoot, expectedLock, incomingLock)
+	if err != nil {
+		return "", err
+	}
+	wrapperMutations, wrapperMessage, err := planWrappers(wrapperTargets, guidance.wrappers, "synchronized canonical Code Polishy wrappers")
+	if err != nil {
+		return "", err
+	}
+	agentsMutation, writesAgents, agentsMessage, err := planSyncAgents(agentsTarget, guidance.agents)
+	if err != nil {
+		return "", err
+	}
+	claudeMutation, writesClaude, claudeMessage, err := planClaude(claudeTarget, guidance.claude)
+	if err != nil {
+		return "", err
+	}
+	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
+	if err != nil {
+		return "", err
+	}
+	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
+	mutations := adoptionMutations(
+		optionalMutation{agentsMutation, writesAgents},
+		optionalMutation{claudeMutation, writesClaude},
+		wrapperMutations,
+		optionalMutation{ignoreMutation, writesIgnore},
+	)
+	mutations = append(mutations, lockMutation)
+	if err := commitMutations(repoRoot, mutations, replace); err != nil {
+		return "", err
+	}
+	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage + "; updated repository lock", nil
+}
+
+func planUpgradeLock(repoRoot string, expected, incoming []byte) (mutation, error) {
+	path := ".code-polishy.lock.json"
+	target, err := readTarget(filepath.Join(repoRoot, path), path)
+	if err != nil {
+		return mutation{}, err
+	}
+	if !target.exists || !bytes.Equal(target.contents, expected) {
+		return mutation{}, errors.New("repository lock changed after upgrade planning")
+	}
+	if len(incoming) == 0 || bytes.Equal(incoming, expected) {
+		return mutation{}, errors.New("incoming repository lock must be distinct and nonempty")
+	}
+	return mutation{path: path, contents: append([]byte{}, incoming...), mode: target.mode, previous: target}, nil
 }
 
 func Check(repoRoot, policyRoot string) Status {

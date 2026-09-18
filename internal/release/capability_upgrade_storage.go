@@ -52,6 +52,17 @@ func openCapabilityUpgradeDirectory(root *os.Root, name string, create bool) (*o
 }
 
 func writeCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, incoming Lock) (LockUpgradeResult, error) {
+	result, err := prepareCapabilityUpgrade(repoRoot, incomingRoot, root, incoming)
+	if err != nil || !result.Changed {
+		return result, err
+	}
+	if err := WriteLock(repoRoot, incoming); err != nil {
+		return LockUpgradeResult{}, err
+	}
+	return result, nil
+}
+
+func prepareCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, incoming Lock) (LockUpgradeResult, error) {
 	outgoing, present, err := ReadLock(repoRoot)
 	if err != nil {
 		return LockUpgradeResult{}, err
@@ -68,9 +79,6 @@ func writeCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, incomi
 		return LockUpgradeResult{}, err
 	}
 	if err := validateCapabilityUpgradeCutover(repoRoot, incomingRoot, previous, incoming); err != nil {
-		return LockUpgradeResult{}, err
-	}
-	if err := WriteLock(repoRoot, incoming); err != nil {
 		return LockUpgradeResult{}, err
 	}
 	return LockUpgradeResult{Lock: incoming, Changed: true, Delta: record.Delta}, nil

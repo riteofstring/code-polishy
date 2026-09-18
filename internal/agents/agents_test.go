@@ -492,6 +492,59 @@ func TestSyncRollsBackGuidanceWhenTheGitignoreReplacementFails(t *testing.T) {
 	assertNoTemporaryFiles(t, repoRoot)
 }
 
+func TestSyncWithLockCommitsTheAuthorityCutoverLast(t *testing.T) {
+	t.Parallel()
+	policyRoot := policyFixture(t, canonicalAgentsText)
+	repoRoot := t.TempDir()
+	expectedLock := []byte("outgoing lock\n")
+	incomingLock := []byte("incoming lock\n")
+	writeFile(t, filepath.Join(repoRoot, agentsTargetFilename), []byte("stale guidance\n"), 0o640)
+	writeFile(t, filepath.Join(repoRoot, ".code-polishy.lock.json"), expectedLock, 0o600)
+	targets := []string{}
+	_, err := syncWithLock(repoRoot, policyRoot, expectedLock, incomingLock, func(oldPath, newPath string) error {
+		targets = append(targets, filepath.Base(newPath))
+		return os.Rename(oldPath, newPath)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) == 0 || targets[len(targets)-1] != ".code-polishy.lock.json" {
+		t.Fatalf("replacement order = %v", targets)
+	}
+	assertFile(t, filepath.Join(repoRoot, ".code-polishy.lock.json"), incomingLock, 0o600)
+	if status := Check(repoRoot, policyRoot); !status.Current {
+		t.Fatalf("adoption files are not current: %+v", status)
+	}
+}
+
+func TestSyncWithLockRollsBackWhenTheAuthorityCutoverFails(t *testing.T) {
+	t.Parallel()
+	policyRoot := policyFixture(t, canonicalAgentsText)
+	repoRoot := t.TempDir()
+	expectedLock := []byte("outgoing lock\n")
+	incomingLock := []byte("incoming lock\n")
+	staleAgents := []byte("stale guidance\n")
+	writeFile(t, filepath.Join(repoRoot, agentsTargetFilename), staleAgents, 0o640)
+	lockPath := filepath.Join(repoRoot, ".code-polishy.lock.json")
+	writeFile(t, lockPath, expectedLock, 0o600)
+	_, err := syncWithLock(repoRoot, policyRoot, expectedLock, incomingLock, func(oldPath, newPath string) error {
+		if newPath == lockPath {
+			return errors.New("injected lock replacement failure")
+		}
+		return os.Rename(oldPath, newPath)
+	})
+	if err == nil || !strings.Contains(err.Error(), "injected lock replacement failure") {
+		t.Fatalf("lock replacement error = %v", err)
+	}
+	assertFile(t, filepath.Join(repoRoot, agentsTargetFilename), staleAgents, 0o640)
+	assertFile(t, lockPath, expectedLock, 0o600)
+	assertMissing(t, filepath.Join(repoRoot, claudeTargetFilename))
+	assertMissing(t, filepath.Join(repoRoot, posixWrapperTargetFilename))
+	assertMissing(t, filepath.Join(repoRoot, powerShellWrapperTargetFilename))
+	assertMissing(t, filepath.Join(repoRoot, ignoreTargetFilename))
+	assertNoTemporaryFiles(t, repoRoot)
+}
+
 func assertFile(t *testing.T, path string, want []byte, wantMode os.FileMode) {
 	t.Helper()
 	got, err := os.ReadFile(path)

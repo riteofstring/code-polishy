@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/release"
@@ -9,17 +13,42 @@ import (
 
 const maximumCapabilityDeltaLines = 8
 
+type lockOptions struct {
+	indexURL    string
+	indexSHA256 string
+}
+
 func handleLockMeta(invocation invocation) int {
-	if len(invocation.arguments) != 0 {
-		return commandUsageError("lock", "lock does not accept options")
+	options, err := parseLockOptions(invocation.arguments)
+	if err != nil {
+		return commandUsageError("lock", err.Error())
 	}
-	result, err := release.WriteReleaseLock(invocation.repoRoot, invocation.policyRoot)
+	var result release.LockUpgradeResult
+	if options.indexURL == "" {
+		result, err = release.WriteReleaseLock(invocation.repoRoot, invocation.policyRoot)
+	} else {
+		result, err = release.WritePublishedReleaseLock(context.Background(), invocation.repoRoot, invocation.policyRoot, options.indexURL, options.indexSHA256)
+	}
 	if err != nil {
 		return operationalError(err)
 	}
 	fmt.Printf("PASS %s requires Code Polishy %s %s\n", release.LockFilename, result.Lock.CodePolishyVersion, result.Lock.ReleaseDigest)
 	fmt.Println(capabilityDeltaHuman(result.Delta))
 	return 0
+}
+
+func parseLockOptions(arguments []string) (lockOptions, error) {
+	flags := flag.NewFlagSet("lock", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	indexURL := flags.String("index", "", "release publication index URL")
+	indexSHA256 := flags.String("sha256", "", "release publication index SHA-256")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 {
+		return lockOptions{}, errors.New("lock accepts no options or requires both --index URL and --sha256 DIGEST")
+	}
+	if (*indexURL == "") != (*indexSHA256 == "") {
+		return lockOptions{}, errors.New("lock accepts no options or requires both --index URL and --sha256 DIGEST")
+	}
+	return lockOptions{indexURL: *indexURL, indexSHA256: *indexSHA256}, nil
 }
 
 func capabilityDeltaHuman(delta release.CapabilityDelta) string {

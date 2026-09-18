@@ -778,7 +778,7 @@ func TestLockWritesTheLockRequiringTheRunningRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the manifest: %v", err)
 	}
-	if written.LockVersion != release.LockVersion ||
+	if written.LockVersion != release.LegacyLockVersion ||
 		written.CodePolishyVersion != manifest.CodePolishyVersion ||
 		written.ReleaseDigest != manifest.ReleaseDigest ||
 		!slices.Equal(written.Features, manifest.Features) {
@@ -852,6 +852,11 @@ func TestInstalledReleaseGovernsOnlyTheRepositoryThatLocksIt(t *testing.T) {
 		repoRoot: repoRoot, policyRoot: installed, command: "lock",
 	}); !governed || status != 0 {
 		t.Fatalf("lock could not run before a lock exists: status=%d governed=%v", status, governed)
+	}
+	if status, governed := requireLockedRelease(invocation{
+		repoRoot: repoRoot, policyRoot: installed, command: "upgrade",
+	}); !governed || status != 0 {
+		t.Fatalf("upgrade could not prepare an incoming release: status=%d governed=%v", status, governed)
 	}
 	if status, governed := requireLockedRelease(invocation{
 		repoRoot: repoRoot, policyRoot: installed, command: "install-bundle",

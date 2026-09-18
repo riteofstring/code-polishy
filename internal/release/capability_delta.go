@@ -117,8 +117,7 @@ func sameCapabilityDefinition(before, after CapabilityDefinition) bool {
 }
 
 func sameCapabilityLock(left, right Lock) bool {
-	return left.LockVersion == right.LockVersion && left.CodePolishyVersion == right.CodePolishyVersion &&
-		left.ReleaseDigest == right.ReleaseDigest && slices.Equal(left.Features, right.Features)
+	return bytes.Equal(RenderLock(left), RenderLock(right))
 }
 
 func capabilityDeltaUnavailable(outgoing *Lock, incoming Lock, reason string) CapabilityDelta {

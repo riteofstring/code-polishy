@@ -66,7 +66,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
 	lock := release.Lock{
-		LockVersion: release.LockVersion, CodePolishyVersion: "9.9.9",
+		LockVersion: release.LegacyLockVersion, CodePolishyVersion: "9.9.9",
 		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
 	}
 	directory := installed.releaseRoot(lock)
@@ -127,7 +127,7 @@ func (installed store) installHistorical(t *testing.T, version int, revision, en
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
 	lock := release.Lock{
-		LockVersion: release.LockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
+		LockVersion: release.LegacyLockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
 		ReleaseDigest: manifest.ReleaseDigest, Features: manifest.Features,
 	}
 	directory := installed.releaseRoot(lock)

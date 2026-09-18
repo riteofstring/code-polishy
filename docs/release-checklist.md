@@ -72,8 +72,9 @@ changes a target lock.
 
 6. For a complete native release, combine the five descriptors with
    `release-manifest index`, using one repeated `--artifact-descriptor` per
-   host. Skip the index for a GHCR-only release. Build a Linux OCI image only
-   from its verified publication directory:
+   host. Record the SHA-256 printed for the canonical index so it can be
+   published beside the index URL. Skip the index for a GHCR-only release.
+   Build a Linux OCI image only from its verified publication directory:
 
    ```sh
    ./scripts/build-oci-image.sh \
@@ -124,11 +125,18 @@ changes a target lock.
    images against that tag. Protect release tags against deletion or update;
    every correction gets a new patch version.
 
-9. Move each consuming repository to the installed release with that release's
-   `lock` command. The outgoing lock and guidance govern until the atomic lock
-   replacement; incoming guidance governs afterward. Updating this repository's
-   self-hosting lock is a separate follow-up commit because the release digest
-   names the source commit that produced it.
+9. Move each consuming repository with `upgrade plan --index URL --sha256
+DIGEST`, inspect its capability and diagnostic delta, then use `upgrade apply
+--plan PATH`. An explicit `--accept-new-findings` permits the lock cutover
+   without source cleanup. Upgrade does not run a gate. The outgoing lock and
+   guidance govern until apply replaces the lock last; incoming guidance governs
+   afterward. Updating this repository's self-hosting lock is a separate
+   follow-up commit because the release digest names the source commit that
+   produced it.
+
+   For a new public adoption, use `lock --index URL --sha256 DIGEST` from the
+   exact installed release so its first committed lock already supports native
+   archive setup on every host.
 
 Credentialed registry publication, repository release creation, tag changes,
 and target lock changes remain explicit maintainer actions. The source is

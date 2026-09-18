@@ -46,8 +46,11 @@ Each repo keeps its current Code Polishy version until you choose to upgrade.
 A new setup uses the latest stable version tag. Ask for a tag such as `v1.2.3`
 when you need a specific version.
 
-Git is required. Allow about 1 GB of disk space. Windows x64 works without WSL
-or Git Bash.
+Initial adoption from source requires Git. A normal public adoption records the
+release's checksum-pinned publication index, so a developer setting up an
+already adopted clone downloads its native archive instead of cloning or
+building Code Polishy. Allow about 1 GB of disk space. Windows x64 works without
+WSL or Git Bash.
 
 See the [agent setup guide](docs/ai-adoption.md) or the
 [manual setup guide](docs/installation.md) for the full process.
@@ -59,8 +62,12 @@ After adoption, a developer cloning the repository needs one setup command:
 ```
 
 PowerShell uses `.\code-polishyw.ps1 setup`. The small checked-in wrapper reads
-the repository lock, reuses or installs that exact release in the shared user
-store, and does not contain the Code Polishy toolchain itself.
+the repository lock, reuses or downloads and verifies that exact release in the
+shared user store, and does not contain the Code Polishy toolchain itself.
+
+Upgrades are separate from ordinary setup. `upgrade plan` previews capability
+and diagnostic changes; `upgrade apply` switches the lock and managed guidance.
+Neither command fixes application source or runs a merge gate.
 
 ## How agents use it
 

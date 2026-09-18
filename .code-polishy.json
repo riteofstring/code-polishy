@@ -72,9 +72,14 @@
         "sourcePaths": [
           "templates/code-polishyw",
           "templates/code-polishyw.ps1",
+          "internal/agents/agents.go",
           "internal/agents/wrappers.go",
           "internal/policy/control_inputs.go",
+          "internal/release/indexed_release.go",
           "internal/release/release.go",
+          "internal/release/upgrade_plan.go",
+          "cmd/code-polishy/lock_meta.go",
+          "cmd/code-polishy/upgrade_meta.go",
           "cmd/code-polishy/release_manifest_meta.go",
           "scripts/install.sh",
           "scripts/install.ps1"

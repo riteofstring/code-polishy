@@ -2,14 +2,77 @@ package release
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"unicode"
 	"unicode/utf8"
 )
 
 func WriteReleaseLock(repoRoot, incomingRoot string) (LockUpgradeResult, error) {
+	manifest, err := installedManifestForLock(incomingRoot)
+	if err != nil {
+		return LockUpgradeResult{}, err
+	}
+	if current, present, readErr := ReadLock(repoRoot); readErr != nil {
+		return LockUpgradeResult{}, readErr
+	} else if present && manifest.Satisfies(current) == nil {
+		return LockUpgradeResult{Lock: current, Delta: ReadCapabilityUpgrade(repoRoot, current)}, nil
+	}
+	incoming := LockFor(manifest)
+	if err := manifest.Satisfies(incoming); err != nil {
+		return LockUpgradeResult{}, err
+	}
+	return writeReleaseLock(repoRoot, incomingRoot, incoming)
+}
+
+func WritePublishedReleaseLock(ctx context.Context, repoRoot, incomingRoot, indexURL, indexSHA256 string) (LockUpgradeResult, error) {
+	return writePublishedReleaseLock(ctx, releaseHTTPClient(), repoRoot, incomingRoot, indexURL, indexSHA256)
+}
+
+func writePublishedReleaseLock(ctx context.Context, client *http.Client, repoRoot, incomingRoot, indexURL, indexSHA256 string) (LockUpgradeResult, error) {
+	manifest, err := installedManifestForLock(incomingRoot)
+	if err != nil {
+		return LockUpgradeResult{}, err
+	}
+	if err := manifest.Verify(incomingRoot); err != nil {
+		return LockUpgradeResult{}, err
+	}
+	incoming, err := resolvePublishedLock(ctx, client, indexURL, indexSHA256, manifest)
+	if err != nil {
+		return LockUpgradeResult{}, err
+	}
+	return writeReleaseLock(repoRoot, incomingRoot, incoming)
+}
+
+func installedManifestForLock(incomingRoot string) (Manifest, error) {
+	manifest, installed, err := ReadManifest(incomingRoot)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if !installed {
+		return Manifest{}, fmt.Errorf("a source checkout cannot satisfy a target release lock")
+	}
+	return manifest, nil
+}
+
+func writeReleaseLock(repoRoot, incomingRoot string, incoming Lock) (LockUpgradeResult, error) {
+	root, err := openCapabilityUpgradeRoot(repoRoot, true)
+	if err != nil {
+		return LockUpgradeResult{}, err
+	}
+	defer root.Close()
+	unlock, err := acquireCapabilityUpgradeLock(root)
+	if err != nil {
+		return LockUpgradeResult{}, err
+	}
+	defer unlock()
+	return writeCapabilityUpgrade(repoRoot, incomingRoot, root, incoming)
+}
+
+func PrepareCapabilityUpgrade(repoRoot, incomingRoot string, incoming Lock) (LockUpgradeResult, error) {
 	manifest, installed, err := ReadManifest(incomingRoot)
 	if err != nil {
 		return LockUpgradeResult{}, err
@@ -17,7 +80,6 @@ func WriteReleaseLock(repoRoot, incomingRoot string) (LockUpgradeResult, error) 
 	if !installed {
 		return LockUpgradeResult{}, fmt.Errorf("a source checkout cannot satisfy a target release lock")
 	}
-	incoming := LockFor(manifest)
 	if err := manifest.Satisfies(incoming); err != nil {
 		return LockUpgradeResult{}, err
 	}
@@ -31,7 +93,7 @@ func WriteReleaseLock(repoRoot, incomingRoot string) (LockUpgradeResult, error) 
 		return LockUpgradeResult{}, err
 	}
 	defer unlock()
-	return writeCapabilityUpgrade(repoRoot, incomingRoot, root, incoming)
+	return prepareCapabilityUpgrade(repoRoot, incomingRoot, root, incoming)
 }
 
 func captureCapabilityUpgrade(incomingRoot string, outgoing *Lock, incoming Lock) capabilityUpgradeRecord {

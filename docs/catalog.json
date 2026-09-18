@@ -98,7 +98,7 @@
       "id": "bootstrap-wrapper",
       "path": "docs/design/bootstrap-wrapper.md",
       "title": "Repository Bootstrap Wrapper",
-      "summary": "Understand one-command setup, offline dispatch, adoption ownership, and the wrapper trust boundary.",
+      "summary": "Understand archive setup, offline dispatch, two-phase upgrades, adoption ownership, and the wrapper trust boundary.",
       "aliases": ["code-polishyw", "wrapper"],
       "public": true
     },
@@ -186,7 +186,7 @@
       "id": "installation",
       "path": "docs/installation.md",
       "title": "Installation",
-      "summary": "Install source, archive, or OCI releases and understand manifests, launchers, and repository locks.",
+      "summary": "Install source, archive, or OCI releases and manage publication-backed repository locks.",
       "aliases": ["install"],
       "public": true
     },

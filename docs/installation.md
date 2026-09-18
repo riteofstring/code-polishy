@@ -20,6 +20,12 @@ a temporary shallow clone of that tag. The clone must prove that the selected
 ref is annotated, points directly at `HEAD`, and matches `VERSION`. The default
 branch supplies current instructions; it is never an installable release.
 
+For a public published release, adoption also pins the canonical publication
+index URL and its separately published SHA-256 when it writes the repository
+lock. This records the exact native archive for every host without embedding a
+release in the target repository. Private, offline, and unpublished source
+adoptions can deliberately omit publication metadata.
+
 A private repository URL or clean local checkout may be supplied explicitly for
 private development. The same exact-source rules apply, and the agent never
 substitutes another repository or revision. Published tags are immutable: never
@@ -41,18 +47,21 @@ or changing `PATH`:
 
 The wrapper reads `.code-polishy.lock.json`. If that exact release already
 exists in the default shared user prefix, setup verifies and reuses it without
-network access. Otherwise setup requires Git, clones the exact `v<version>` tag
-from the canonical Code Polishy repository, verifies its annotated tag, clean
-commit, and `VERSION`, installs its pinned policy tools, and builds the release.
-The staged release must verify and satisfy the target lock before the installer
-can publish it or update the stable launcher.
+network access. A version-two lock otherwise supplies the exact HTTPS URL,
+SHA-256, and size for every supported host. Setup selects this host, downloads
+and checks that archive, and invokes the archive's engine to perform the bounded
+bundle installation. It does not need Git, a language toolchain, or a local
+build.
 
-Private mirrors and local test repositories can be selected for that invocation
-without changing the target:
+Version-one locks predate archive metadata. An explicit clean local checkout is
+their recovery path and is also available for private or offline development:
 
 ```sh
-./code-polishyw setup --source <repository-url-or-path>
+./code-polishyw setup --source <local-code-polishy-checkout>
 ```
+
+The source installer must still prove that its result satisfies the target
+lock. The wrapper never silently clones or falls back to source.
 
 After setup, use `./code-polishyw <command>` or
 `.\code-polishyw.ps1 <command>`. Ordinary dispatch verifies the exact installed
@@ -156,7 +165,10 @@ code-polishy release-manifest index \
 ```
 
 The index is written only when every descriptor and sidecar validates, all five
-hosts appear exactly once, and every host names one version and source commit.
+hosts appear exactly once, and every host names one version, source commit, and
+release digest. The command prints the SHA-256 of the exact canonical index;
+publish that digest beside its HTTPS URL for repository adoption and upgrade
+planning.
 Downloading and digest custody belong to the caller or CI. Given already
 acquired bytes and their trusted SHA-256, installation remains local:
 
@@ -398,32 +410,63 @@ keeps the installed bytes rather than replacing them.
 
 ## The target lock
 
-A target repository names the release it requires in `.code-polishy.lock.json`:
+A published target repository names the release and complete native archive set
+it requires in `.code-polishy.lock.json`:
 
 ```json
 {
-  "lockVersion": 1,
-  "codePolishyVersion": "0.6.0",
+  "lockVersion": 2,
+  "codePolishyVersion": "0.27.0",
   "releaseDigest": "…",
-  "features": ["javascript-bundle"]
+  "features": ["javascript-bundle"],
+  "publication": {
+    "indexUrl": "https://example.invalid/code-polishy-release-index.json",
+    "indexSha256": "…",
+    "archives": [
+      {
+        "host": "darwin-arm64",
+        "url": "https://example.invalid/code-polishy-0.27.0-darwin-arm64.zip",
+        "sha256": "…",
+        "size": 123
+      }
+    ]
+  }
 }
 ```
 
-That is the whole file. It carries no path, credential, URL, channel, fallback
-version, or platform-specific digest, so the same lock selects the same release
-on every supported host.
+The real `archives` value contains five structured entries rather than the
+single example entry above. It carries no credential, channel, or
+fallback version. The publication-index digest and copied archive digests are
+reviewed repository authority, so the same lock selects one release across all
+supported hosts. This authenticates acquired bytes relative to the lock; it is
+not authenticated builder provenance.
 
-Writing the lock is an explicit atomic operation, and only the release being
-required performs it. The outgoing lock and guidance govern until this command
-replaces the file; the incoming release governs afterward. Run `lock` from that
-release, in the target repository:
+For normal public adoption, `lock --index URL --sha256 DIGEST` verifies that the
+index describes the executing installed release and writes this version-two
+lock without redownloading an archive. `lock` without publication options
+deliberately creates a version-one source-install lock for private, offline, or
+unpublished use, and preserves an existing version-two lock for the same
+release. Convert an older lock, or move to a later publication, with the
+two-phase upgrade:
 
 ```sh
-"${HOME}/.local/share/code-polishy/releases/<version>-<releaseDigest>/bin/code-polishy" lock
+code-polishy upgrade plan --index <https-index-url> --sha256 <index-sha256>
+code-polishy upgrade apply --plan <reported-plan-path>
 ```
 
-The installer prints that command when it finishes. Afterwards the target runs
-`code-polishy`, and no other command rewrites the lock.
+Planning verifies the index, installs the host candidate, authenticates the
+capability delta, and compares outgoing and incoming diagnostics without
+changing repository authority. Applying revalidates that evidence and replaces
+managed guidance, wrappers, ignore rules, and the lock in one rollback-capable
+transaction with the lock last. New errors can be acknowledged without fixing
+them by adding `--accept-new-findings`. Neither phase edits application source,
+runs tests, or runs a merge gate.
+
+When the outgoing release predates `upgrade`, first install the pinned
+current-host candidate with the existing local bundle workflow, then invoke
+both phases through that incoming release binary directly. The outgoing lock
+and guidance still govern until apply replaces the lock; the incoming release
+governs afterward.
 
 ## Selecting a release
 
@@ -444,15 +487,16 @@ bundle beside it, so checking the engine binary alone would not be checking what
 runs, and verifying at installation time cannot answer what a release is made of
 now.
 
-There is no channel, version range, newest-wins rule, fallback release, or
-download. A target that names a release this host does not have is told the
-digest it requires and to install it locally; it is never given a different one.
+There is no channel, version range, newest-wins rule, or fallback release.
+Ordinary launch never downloads. A target that names a release this host does
+not have is told to run its repository wrapper setup; it is never given a
+different release.
 `--policy-root` is refused, because the lock decides which release runs.
 
 Running a release binary directly does not get around the lock: an installed
 release refuses to govern a repository whose lock names another release, or a
-repository with no lock at all. The exceptions are `lock`, which writes the
-missing lock, and `version` and `help`, which report what the executable is.
+repository with no lock at all. The exceptions are bounded bootstrap and
+upgrade commands plus read-only version, help, and packaged documentation.
 
 An installed release is not a supported development environment, and the source
 runner in this repository's `bin/` is not a supported target installation. It is

@@ -23,9 +23,11 @@ const (
 	LockFilename = policy.LockFilename
 
 	ManifestFilename = "release-manifest.json"
+	MaximumLockBytes = 32 << 10
 
-	LockVersion     = 1
-	ManifestVersion = 6
+	LegacyLockVersion = 1
+	LockVersion       = 2
+	ManifestVersion   = 6
 
 	releasesDirectory = "releases"
 )
@@ -61,10 +63,24 @@ var supportedReleaseHosts = []string{
 }
 
 type Lock struct {
-	LockVersion        int      `json:"lockVersion"`
-	CodePolishyVersion string   `json:"codePolishyVersion"`
-	ReleaseDigest      string   `json:"releaseDigest"`
-	Features           []string `json:"features"`
+	LockVersion        int              `json:"lockVersion"`
+	CodePolishyVersion string           `json:"codePolishyVersion"`
+	ReleaseDigest      string           `json:"releaseDigest"`
+	Features           []string         `json:"features"`
+	Publication        *LockPublication `json:"publication,omitempty"`
+}
+
+type LockPublication struct {
+	IndexURL    string          `json:"indexUrl"`
+	IndexSHA256 string          `json:"indexSha256"`
+	Archives    []LockedArchive `json:"archives"`
+}
+
+type LockedArchive struct {
+	Host   string `json:"host"`
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 type Manifest struct {
@@ -123,12 +139,15 @@ func parseLock(data []byte, source string) (Lock, error) {
 	if source == "" {
 		source = LockFilename
 	}
+	if len(data) == 0 || len(data) > MaximumLockBytes {
+		return Lock{}, fmt.Errorf("%s exceeds the release-lock byte bound", source)
+	}
 	var lock Lock
 	if err := decodeExactly(data, source, &lock); err != nil {
 		return Lock{}, err
 	}
-	if lock.LockVersion != LockVersion {
-		return Lock{}, fmt.Errorf("%s records lock version %d; this Code Polishy reads lock version %d", source, lock.LockVersion, LockVersion)
+	if lock.LockVersion != LegacyLockVersion && lock.LockVersion != LockVersion {
+		return Lock{}, fmt.Errorf("%s records unsupported lock version %d", source, lock.LockVersion)
 	}
 	if !versionPattern.MatchString(lock.CodePolishyVersion) {
 		return Lock{}, fmt.Errorf("%s records the unusable Code Polishy version %q", source, lock.CodePolishyVersion)
@@ -139,15 +158,65 @@ func parseLock(data []byte, source string) (Lock, error) {
 	if err := validateFeatures(lock.Features); err != nil {
 		return Lock{}, fmt.Errorf("%s %w", source, err)
 	}
+	if err := validateLockPublication(lock); err != nil {
+		return Lock{}, fmt.Errorf("%s %w", source, err)
+	}
 	return lock, nil
+}
+
+func validateLockPublication(lock Lock) error {
+	if lock.LockVersion == LegacyLockVersion {
+		return validateLegacyLockPublication(lock.Publication)
+	}
+	return validatePublishedLock(lock.Publication)
+}
+
+func validateLegacyLockPublication(publication *LockPublication) error {
+	if publication != nil {
+		return errors.New("a version-one lock cannot contain publication metadata")
+	}
+	return nil
+}
+
+func validatePublishedLock(publication *LockPublication) error {
+	if publication == nil || !digestPattern.MatchString(publication.IndexSHA256) {
+		return errors.New("a version-two lock requires an exact publication index")
+	}
+	if _, err := parseReleaseHTTPSURL(publication.IndexURL); err != nil {
+		return fmt.Errorf("records an unusable publication index URL: %w", err)
+	}
+	if len(publication.Archives) != len(supportedReleaseHosts) {
+		return fmt.Errorf("must record exactly %d release archives", len(supportedReleaseHosts))
+	}
+	for index, archive := range publication.Archives {
+		if err := validateLockedArchive(archive, supportedReleaseHosts[index]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateLockedArchive(archive LockedArchive, expectedHost string) error {
+	if archive.Host != expectedHost || !digestPattern.MatchString(archive.SHA256) || archive.Size <= 0 || archive.Size > maximumReleaseBundleBytes {
+		return fmt.Errorf("records invalid archive metadata for host %q", archive.Host)
+	}
+	if _, err := parseReleaseHTTPSURL(archive.URL); err != nil {
+		return fmt.Errorf("records an unusable archive URL for host %q: %w", archive.Host, err)
+	}
+	return nil
 }
 
 func ReadLock(repoRoot string) (Lock, bool, error) {
 	source := filepath.Join(repoRoot, LockFilename)
-	data, err := os.ReadFile(source)
+	file, err := os.Open(source)
 	if errors.Is(err, os.ErrNotExist) {
 		return Lock{}, false, nil
 	}
+	if err != nil {
+		return Lock{}, false, fmt.Errorf("read %s: %w", source, err)
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, MaximumLockBytes+1))
+	err = errors.Join(readErr, file.Close())
 	if err != nil {
 		return Lock{}, false, fmt.Errorf("read %s: %w", source, err)
 	}
@@ -157,7 +226,7 @@ func ReadLock(repoRoot string) (Lock, bool, error) {
 
 func LockFor(manifest Manifest) Lock {
 	return Lock{
-		LockVersion:        LockVersion,
+		LockVersion:        LegacyLockVersion,
 		CodePolishyVersion: manifest.CodePolishyVersion,
 		ReleaseDigest:      manifest.ReleaseDigest,
 		Features:           slices.Clone(manifest.Features),
@@ -173,8 +242,29 @@ func RenderLock(lock Lock) []byte {
 	fmt.Fprintf(rendered, "{\n  \"lockVersion\": %d,\n", lock.LockVersion)
 	fmt.Fprintf(rendered, "  \"codePolishyVersion\": %q,\n", lock.CodePolishyVersion)
 	fmt.Fprintf(rendered, "  \"releaseDigest\": %q,\n", lock.ReleaseDigest)
-	fmt.Fprintf(rendered, "  \"features\": [%s]\n}\n", strings.Join(features, ", "))
+	if lock.Publication == nil {
+		fmt.Fprintf(rendered, "  \"features\": [%s]\n}\n", strings.Join(features, ", "))
+		return []byte(rendered.String())
+	}
+	fmt.Fprintf(rendered, "  \"features\": [%s],\n", strings.Join(features, ", "))
+	fmt.Fprintf(rendered, "  \"publication\": {\n    \"indexUrl\": %s,\n    \"indexSha256\": %q,\n    \"archives\": [\n", jsonString(lock.Publication.IndexURL), lock.Publication.IndexSHA256)
+	for index, archive := range lock.Publication.Archives {
+		separator := ","
+		if index == len(lock.Publication.Archives)-1 {
+			separator = ""
+		}
+		fmt.Fprintf(rendered, "      {\"host\": %q, \"url\": %s, \"sha256\": %q, \"size\": %d}%s\n", archive.Host, jsonString(archive.URL), archive.SHA256, archive.Size, separator)
+	}
+	fmt.Fprint(rendered, "    ]\n  }\n}\n")
 	return []byte(rendered.String())
+}
+
+func jsonString(value string) string {
+	var rendered bytes.Buffer
+	encoder := json.NewEncoder(&rendered)
+	encoder.SetEscapeHTML(false)
+	_ = encoder.Encode(value)
+	return strings.TrimSuffix(rendered.String(), "\n")
 }
 
 func parseManifest(data []byte, source string) (Manifest, error) {

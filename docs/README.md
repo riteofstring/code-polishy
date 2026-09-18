@@ -18,8 +18,8 @@ and aliases. Search is local, bounded, and deterministic.
 
 ## Start here
 
-- [Installation](installation.md) explains exact-tag source installation,
-  portable archives, OCI execution, manifests, and target locks.
+- [Installation](installation.md) explains archive bootstrap, exact-source
+  recovery, two-phase upgrades, OCI execution, manifests, and target locks.
 - [AI-Agent Setup and Adoption](ai-adoption.md) is the authoritative procedural
   runbook for setup and upgrades performed by a coding agent.
 - [Adopting Code Polishy](adoption.md) is the detailed project-modeling
