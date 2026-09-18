@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/release"
@@ -31,6 +32,7 @@ func TestUpgradeMetaRejectsIncompleteCommandsWithoutOpeningTheRepository(t *test
 		nil,
 		{"plan"},
 		{"plan", "--index", "https://example.invalid/index.json"},
+		{"plan", "--source", "/tmp/source", "--index", "https://example.invalid/index.json", "--sha256", strings.Repeat("a", 64)},
 		{"apply"},
 		{"apply", "--accept-new-findings"},
 		{"unknown"},
@@ -38,6 +40,29 @@ func TestUpgradeMetaRejectsIncompleteCommandsWithoutOpeningTheRepository(t *test
 	for _, arguments := range tests {
 		if status := handleUpgradeMeta(invocation{arguments: arguments}); status != 2 {
 			t.Fatalf("arguments=%v status=%d", arguments, status)
+		}
+	}
+}
+
+func TestUpgradePlanOptionsSelectOneCandidateSource(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	indexed, err := parseUpgradePlanOptions([]string{"--index", "https://example.invalid/index.json", "--sha256", digest, "--prefix", "/tmp/prefix"})
+	if err != nil || indexed.indexURL == "" || indexed.indexSHA256 != digest || indexed.source != "" || indexed.prefix != "/tmp/prefix" {
+		t.Fatalf("indexed options=%+v error=%v", indexed, err)
+	}
+	source, err := parseUpgradePlanOptions([]string{"--source", "../code-polishy"})
+	if err != nil || source.source != "../code-polishy" || source.indexURL != "" || source.indexSHA256 != "" {
+		t.Fatalf("source options=%+v error=%v", source, err)
+	}
+	for _, arguments := range [][]string{
+		{},
+		{"--source", "../code-polishy", "--sha256", digest},
+		{"--index", "https://example.invalid/index.json"},
+		{"--sha256", digest},
+		{"--source", "../code-polishy", "--index", "https://example.invalid/index.json", "--sha256", digest},
+	} {
+		if _, err := parseUpgradePlanOptions(arguments); err == nil {
+			t.Fatalf("arguments %v were accepted", arguments)
 		}
 	}
 }

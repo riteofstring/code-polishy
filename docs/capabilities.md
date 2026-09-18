@@ -48,6 +48,12 @@ commands, their release versions, and workflow documents. Metadata ordering
 alone does not count as a change. At most eight changes and two documents per
 entry appear in the terminal; the machine document retains every change.
 
+The candidate may come from a checksum-pinned publication index or an exact
+clean local source checkout. Both paths install and verify one immutable
+current-host release before comparison. The source path records a version-one
+incoming lock and uses the same diagnostic preview and transactional apply path;
+it does not claim publication metadata for other hosts.
+
 The comparison uses the incoming catalog and the exact outgoing release from
 the same installation prefix. Both catalogs must authenticate against their
 release locks. First adoption, an older release without authenticated catalog

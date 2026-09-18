@@ -56,7 +56,7 @@ func (output *boundedUpgradeOutput) String() string {
 }
 
 type upgradePlanOptions struct {
-	indexURL, indexSHA256, prefix string
+	indexURL, indexSHA256, source, prefix string
 }
 
 type upgradeApplyOptions struct {
@@ -117,11 +117,17 @@ func parseUpgradePlanOptions(arguments []string) (upgradePlanOptions, error) {
 	flags.SetOutput(io.Discard)
 	indexURL := flags.String("index", "", "release publication index URL")
 	indexSHA256 := flags.String("sha256", "", "release publication index SHA-256")
+	source := flags.String("source", "", "clean local Code Polishy checkout")
 	prefix := flags.String("prefix", "", "shared installation prefix")
-	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *indexURL == "" || *indexSHA256 == "" {
-		return upgradePlanOptions{}, errors.New("upgrade plan requires --index URL and --sha256 DIGEST; --prefix PATH is optional")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 {
+		return upgradePlanOptions{}, errors.New("upgrade plan requires either --source PATH or --index URL and --sha256 DIGEST; --prefix PATH is optional")
 	}
-	return upgradePlanOptions{*indexURL, *indexSHA256, *prefix}, nil
+	sourceSelected := *source != ""
+	indexSelected := *indexURL != "" || *indexSHA256 != ""
+	if sourceSelected == indexSelected || indexSelected && (*indexURL == "" || *indexSHA256 == "") {
+		return upgradePlanOptions{}, errors.New("upgrade plan requires either --source PATH or --index URL and --sha256 DIGEST; --prefix PATH is optional")
+	}
+	return upgradePlanOptions{indexURL: *indexURL, indexSHA256: *indexSHA256, source: *source, prefix: *prefix}, nil
 }
 
 func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgradePlanningResult, error) {
@@ -133,14 +139,14 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
-	incoming, err := release.InstallIndexedRelease(context.Background(), options.indexURL, options.indexSHA256, installPrefix)
+	incoming, incomingRoot, err := installUpgradeCandidate(context.Background(), options, installPrefix)
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
-	if bytes.Equal(release.RenderLock(outgoing), release.RenderLock(incoming.Lock)) {
-		return upgradePlanningResult{}, errors.New("the publication index resolves to the repository's current release")
+	if bytes.Equal(release.RenderLock(outgoing), release.RenderLock(incoming)) {
+		return upgradePlanningResult{}, errors.New("the upgrade candidate resolves to the repository's current release")
 	}
-	capability, err := release.PrepareCapabilityUpgrade(invocation.repoRoot, incoming.Root, incoming.Lock)
+	capability, err := release.PrepareCapabilityUpgrade(invocation.repoRoot, incomingRoot, incoming)
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
@@ -152,14 +158,14 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
-	incomingSnapshot, incomingSnapshotData, err := runUpgradeDiagnostics(invocation, incoming.Root, incoming.Lock, true)
+	incomingSnapshot, incomingSnapshotData, err := runUpgradeDiagnostics(invocation, incomingRoot, incoming, true)
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
 	delta := compareUpgradeDiagnostics(outgoingSnapshot.Diagnostics, incomingSnapshot.Diagnostics)
 	plan := release.UpgradePlan{
 		Protocol: release.UpgradePlanProtocol, Outgoing: outgoing,
-		OutgoingLockSHA256: release.LockBytesSHA256(outgoingBytes), Incoming: incoming.Lock,
+		OutgoingLockSHA256: release.LockBytesSHA256(outgoingBytes), Incoming: incoming,
 		InstallPrefix: installPrefix, CapabilityDelta: capability.Delta, DiagnosticDelta: delta,
 		OutgoingDiagnosticsSHA256: release.LockBytesSHA256(outgoingSnapshotData),
 		IncomingDiagnosticsSHA256: release.LockBytesSHA256(incomingSnapshotData),
@@ -168,7 +174,16 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
-	return upgradePlanningResult{outgoing, incoming.Lock, capability.Delta, delta, path, incoming.Root}, nil
+	return upgradePlanningResult{outgoing, incoming, capability.Delta, delta, path, incomingRoot}, nil
+}
+
+func installUpgradeCandidate(ctx context.Context, options upgradePlanOptions, prefix string) (release.Lock, string, error) {
+	if options.source != "" {
+		candidate, err := release.InstallSourceRelease(ctx, options.source, prefix)
+		return candidate.Lock, candidate.Root, err
+	}
+	candidate, err := release.InstallIndexedRelease(ctx, options.indexURL, options.indexSHA256, prefix)
+	return candidate.Lock, candidate.Root, err
 }
 
 func applyUpgrade(invocation invocation, arguments []string) int {

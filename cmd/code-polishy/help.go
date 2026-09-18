@@ -134,16 +134,18 @@ var commandHelpPages = []commandHelpPage{
 		summary: "Plan and apply a verified Code Polishy release upgrade.",
 		syntax: []string{
 			"code-polishy upgrade plan --index URL --sha256 DIGEST [--prefix PATH]",
+			"code-polishy upgrade plan --source PATH [--prefix PATH]",
 			"code-polishy upgrade apply --plan PATH [--accept-new-findings]",
 		},
 		selectors: []string{
-			"plan verifies a checksum-pinned publication index, installs the current-host candidate, and records capability and diagnostic deltas.",
+			"plan accepts either a checksum-pinned publication index or an exact clean local source checkout, installs the current-host candidate, and records capability and diagnostic deltas.",
+			"--source produces a source-backed version-one lock for private, offline, or unpublished releases.",
 			"apply requires the exact managed plan and revalidates both diagnostic snapshots before changing repository authority.",
 			"--accept-new-findings acknowledges added or changed error diagnostics without fixing them.",
 		},
 		sideEffects: []string{"plan installs one immutable shared release and writes managed upgrade evidence; apply transactionally synchronizes managed adoption files and replaces the repository lock last. Neither action runs a merge gate or edits application source."},
 		exits:       []string{"0 plan recorded or upgrade applied", "2 invalid usage, stale evidence, unacknowledged findings, or operational failure"},
-		examples:    []string{"code-polishy upgrade plan --index https://example.invalid/code-polishy-release-index.json --sha256 DIGEST", "code-polishy upgrade apply --plan .code-polishy-reports/capability-upgrades/DIGEST/plan.json"},
+		examples:    []string{"code-polishy upgrade plan --index https://example.invalid/code-polishy-release-index.json --sha256 DIGEST", "code-polishy upgrade plan --source ../code-polishy", "code-polishy upgrade apply --plan .code-polishy-reports/capability-upgrades/DIGEST/plan.json"},
 	},
 	{
 		name:    "install-bundle",

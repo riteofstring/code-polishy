@@ -308,7 +308,7 @@
     {
       "name": "upgrade",
       "kind": "command",
-      "description": "Plan and apply a publication-backed release change without editing application source or running a gate.",
+      "description": "Plan and apply a publication-backed or local-source release change without editing application source or running a gate.",
       "aliases": ["policy upgrade"],
       "paths": [],
       "modules": [],

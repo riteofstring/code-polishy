@@ -909,14 +909,16 @@ commands always mean their complete declared profile, not a best-effort subset.
 ## 13. Upgrade intentionally
 
 The [AI-Agent Setup and Adoption upgrade procedure](ai-adoption.md#upgrades) is
-the authority for both agent-driven and manual upgrades. Pin the exact canonical
-publication index URL and SHA-256, then use `upgrade plan` to install and compare
-the candidate before `upgrade apply` changes authority. The plan exposes
-capability and diagnostic changes, including cleanup a new policy would demand.
-Apply never edits that source and may acknowledge new findings explicitly.
-Neither phase selects an ordinary or supplemental gate; verification remains a
-separate task or delivery decision. Never install from floating `main` or let a
-check select a release the lock does not name.
+the authority for both agent-driven and manual upgrades. For a published
+release, pin the exact canonical publication index URL and SHA-256. For a
+private, offline, or unpublished release, select an exact clean local checkout.
+Use the matching `upgrade plan` form to install and compare the candidate before
+`upgrade apply` changes authority. Both forms expose capability and diagnostic
+changes, including cleanup a new policy would demand, and use the same
+transactional apply. Apply never edits application source and may acknowledge
+new findings explicitly. Neither phase selects an ordinary or supplemental
+gate; verification remains a separate task or delivery decision. Never install
+from floating `main` or let a check select a release the lock does not name.
 
 The outgoing lock and guidance retain authority through planning. Apply stages
 incoming guidance and wrappers with the lock, rolls back the group on failure,

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.27.1 - 2026-09-18
+
+- Add two-phase upgrade planning for exact clean local source checkouts, with
+  the same capability and diagnostic preview, stale-evidence checks, and
+  transactional lock-last apply used by published releases.
+- Keep private and unpublished upgrades source-backed without inventing archive
+  authority, while removing the separate install, lock, and agent-sync cutover.
+
 ## 0.27.0 - 2026-09-18
 
 - Replace wrapper clone-and-build bootstrap with bounded, checksum-pinned native

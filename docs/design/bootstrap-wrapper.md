@@ -16,10 +16,11 @@ archive, verifies its checksum, and uses the archive's own engine to perform the
 bounded bundle installation. It does not clone Code Polishy, install a language
 toolchain, or build a release.
 
-`--source PATH` is an explicit recovery path for a local Code Polishy checkout.
-The source installer still proves that the built release satisfies the target
-lock. Version-one locks have no archive authority and therefore require this
-explicit source path; they never silently regain the old clone-and-build path.
+Wrapper `setup --source PATH` is an explicit recovery path for a local Code
+Polishy checkout. The source installer still proves that the built release
+satisfies the target lock. Version-one locks have no archive authority and
+therefore require this explicit source path; they never silently regain the old
+clone-and-build path.
 
 ## Trust boundary
 
@@ -72,14 +73,18 @@ legacy lock whose wrapper requires an explicit local source checkout.
 
 ## Upgrade boundary
 
-Upgrade is deliberately two phase. `upgrade plan` verifies the index, installs
-the current-host candidate without changing repository authority, authenticates
-the capability delta, and runs the outgoing and incoming engines against the
-same repository. Its durable record identifies added, removed, and changed
-diagnostics so a policy bump cannot disguise application cleanup as a simple
-version edit.
+Upgrade is deliberately two phase. `upgrade plan` accepts either a verified
+publication index or an exact clean local source checkout. It installs the
+current-host candidate without changing repository authority, authenticates the
+capability delta, and runs the outgoing and incoming engines against the same
+repository. A source candidate is bound to the checkout's unchanged commit and
+installed manifest and produces a version-one lock; it does not invent archive
+authority for hosts that were not published. The durable plan identifies added,
+removed, and changed diagnostics so a policy bump cannot disguise application
+cleanup as a simple version edit.
 
-`upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
+`upgrade apply` uses the same path for publication-backed and source-backed
+plans. It revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a
 new plan after cleanup. Apply stages canonical guidance, both wrappers, ignore
 rules, and the incoming lock as one rollback-capable transaction; the lock is

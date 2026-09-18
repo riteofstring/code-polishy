@@ -624,13 +624,15 @@ When asked to upgrade Code Polishy, the AI agent should:
 
 1. read the outgoing locked instructions and preserve the working tree; those
    instructions govern until the lock cutover;
-2. obtain the exact HTTPS publication-index URL and its separately published
-   SHA-256; never select floating `main`, a mutable channel, or an unpinned
-   index;
-3. run `upgrade plan --index URL --sha256 DIGEST` through a release that
-   implements the upgrade protocol. For the first transition from an older
-   release, install the index's exact current-host archive with the existing
-   local bundle workflow, then invoke that installed incoming binary directly;
+2. select one exact candidate authority: for a published release, obtain the
+   HTTPS publication-index URL and its separately published SHA-256; for a
+   private, offline, or unpublished release, use an exact clean local checkout;
+   never select floating `main`, a mutable channel, or an unpinned index;
+3. run either `upgrade plan --index URL --sha256 DIGEST` or
+   `upgrade plan --source PATH` through a release that implements the upgrade
+   protocol. For the first transition from an older release, install the exact
+   current-host candidate with the existing bundle or source workflow, then
+   invoke that installed incoming binary directly;
 4. inspect its authenticated capability delta and its added, removed, and
    changed diagnostics. Planning may install the immutable candidate and write
    managed evidence, but it must not change the target lock or application
@@ -638,9 +640,9 @@ When asked to upgrade Code Polishy, the AI agent should:
 5. read every intervening `CHANGELOG.md` entry. Fix newly exposed issues and
    create a new plan when appropriate, or retain them and use the explicit
    `--accept-new-findings` acknowledgment;
-6. run `upgrade apply --plan PATH` through the same incoming binary. It
-   revalidates both diagnostic snapshots and transactionally synchronizes
-   managed guidance and wrappers before replacing the lock last;
+6. use the incoming binary to run the reported `upgrade apply --plan PATH`
+   command; it revalidates both diagnostic snapshots and transactionally
+   synchronizes managed guidance and wrappers before replacing the lock last;
 7. read the incoming `agent-workflows` guide and capture the caller's exact
    request when it requires capture, then update target configuration directly
    for changed requirements;

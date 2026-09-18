@@ -172,8 +172,8 @@ func validateUpgradePlanLocks(plan UpgradePlan) error {
 	if _, err := parseLock(RenderLock(plan.Incoming), "incoming upgrade lock"); err != nil {
 		return err
 	}
-	if plan.Incoming.LockVersion != LockVersion || plan.Incoming.Publication == nil || sameCapabilityLock(plan.Outgoing, plan.Incoming) {
-		return errors.New("upgrade plan does not identify a distinct published release")
+	if sameCapabilityLock(plan.Outgoing, plan.Incoming) {
+		return errors.New("upgrade plan does not identify a distinct verified release")
 	}
 	return nil
 }

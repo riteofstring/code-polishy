@@ -416,7 +416,7 @@ it requires in `.code-polishy.lock.json`:
 ```json
 {
   "lockVersion": 2,
-  "codePolishyVersion": "0.27.0",
+  "codePolishyVersion": "0.27.1",
   "releaseDigest": "…",
   "features": ["javascript-bundle"],
   "publication": {
@@ -425,7 +425,7 @@ it requires in `.code-polishy.lock.json`:
     "archives": [
       {
         "host": "darwin-arm64",
-        "url": "https://example.invalid/code-polishy-0.27.0-darwin-arm64.zip",
+        "url": "https://example.invalid/code-polishy-0.27.1-darwin-arm64.zip",
         "sha256": "…",
         "size": 123
       }
@@ -454,13 +454,23 @@ code-polishy upgrade plan --index <https-index-url> --sha256 <index-sha256>
 code-polishy upgrade apply --plan <reported-plan-path>
 ```
 
-Planning verifies the index, installs the host candidate, authenticates the
+For a private, offline, or unpublished release, plan from its exact clean local
+checkout instead:
+
+```sh
+code-polishy upgrade plan --source <local-code-polishy-checkout>
+code-polishy upgrade apply --plan <reported-plan-path>
+```
+
+Planning verifies the selected index or binds the unchanged source commit to its
+verified installed manifest, installs the host candidate, authenticates the
 capability delta, and compares outgoing and incoming diagnostics without
-changing repository authority. Applying revalidates that evidence and replaces
-managed guidance, wrappers, ignore rules, and the lock in one rollback-capable
-transaction with the lock last. New errors can be acknowledged without fixing
-them by adding `--accept-new-findings`. Neither phase edits application source,
-runs tests, or runs a merge gate.
+changing repository authority. A source plan records a version-one lock, so
+fresh-clone setup still requires `setup --source`. Applying either kind of plan
+revalidates its evidence and replaces managed guidance, wrappers, ignore rules,
+and the lock in one rollback-capable transaction with the lock last. New errors
+can be acknowledged without fixing them by adding `--accept-new-findings`.
+Neither phase edits application source, runs tests, or runs a merge gate.
 
 When the outgoing release predates `upgrade`, first install the pinned
 current-host candidate with the existing local bundle workflow, then invoke

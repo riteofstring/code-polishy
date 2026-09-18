@@ -66,8 +66,9 @@ the repository lock, reuses or downloads and verifies that exact release in the
 shared user store, and does not contain the Code Polishy toolchain itself.
 
 Upgrades are separate from ordinary setup. `upgrade plan` previews capability
-and diagnostic changes; `upgrade apply` switches the lock and managed guidance.
-Neither command fixes application source or runs a merge gate.
+and diagnostic changes from either a pinned publication or an exact clean local
+checkout; `upgrade apply` switches the lock and managed guidance. Neither
+command fixes application source or runs a merge gate.
 
 ## How agents use it
 
