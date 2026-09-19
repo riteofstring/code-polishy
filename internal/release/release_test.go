@@ -145,11 +145,36 @@ func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 		"    \"indexUrl\": \"https://example.invalid/release-index.json\",\n" +
 		"    \"indexSha256\": \"" + otherDigest + "\",\n" +
 		"    \"archives\": [\n" +
-		"      {\"host\": \"darwin-arm64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-arm64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
-		"      {\"host\": \"darwin-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
-		"      {\"host\": \"linux-arm64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-arm64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
-		"      {\"host\": \"linux-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
-		"      {\"host\": \"windows-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-windows-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1}\n" +
+		"      {\n" +
+		"        \"host\": \"darwin-arm64\",\n" +
+		"        \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-arm64.zip\",\n" +
+		"        \"sha256\": \"" + exampleDigest + "\",\n" +
+		"        \"size\": 1\n" +
+		"      },\n" +
+		"      {\n" +
+		"        \"host\": \"darwin-x64\",\n" +
+		"        \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-x64.zip\",\n" +
+		"        \"sha256\": \"" + exampleDigest + "\",\n" +
+		"        \"size\": 1\n" +
+		"      },\n" +
+		"      {\n" +
+		"        \"host\": \"linux-arm64\",\n" +
+		"        \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-arm64.zip\",\n" +
+		"        \"sha256\": \"" + exampleDigest + "\",\n" +
+		"        \"size\": 1\n" +
+		"      },\n" +
+		"      {\n" +
+		"        \"host\": \"linux-x64\",\n" +
+		"        \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-x64.zip\",\n" +
+		"        \"sha256\": \"" + exampleDigest + "\",\n" +
+		"        \"size\": 1\n" +
+		"      },\n" +
+		"      {\n" +
+		"        \"host\": \"windows-x64\",\n" +
+		"        \"url\": \"https://example.invalid/code-polishy-9.9.9-windows-x64.zip\",\n" +
+		"        \"sha256\": \"" + exampleDigest + "\",\n" +
+		"        \"size\": 1\n" +
+		"      }\n" +
 		"    ]\n" +
 		"  }\n" +
 		"}\n"

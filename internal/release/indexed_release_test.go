@@ -60,12 +60,25 @@ func TestInstallIndexedReleaseDownloadsAndLocksTheExactHostArchive(t *testing.T)
 	if err := installed.Manifest.Verify(installed.Root); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteLock(t.TempDir(), installed.Lock); err != nil {
+	repoRoot := t.TempDir()
+	if err := WriteLock(repoRoot, installed.Lock); err != nil {
 		t.Fatal(err)
 	}
-	rendered := string(RenderLock(installed.Lock))
-	if !strings.Contains(rendered, `{"host": "`+host+`", "url": "`+server.URL+`/`+artifact.Archive.Name+`"`) {
-		t.Fatalf("rendered lock does not expose the exact host archive on one line: %s", rendered)
+	written, present, err := ReadLock(repoRoot)
+	if err != nil || !present || written.Publication == nil {
+		t.Fatalf("written lock: present=%v err=%v lock=%+v", present, err, written)
+	}
+	var lockedArchive LockedArchive
+	for _, candidate := range written.Publication.Archives {
+		if candidate.Host == host {
+			lockedArchive = candidate
+			break
+		}
+	}
+	if lockedArchive.URL != server.URL+"/"+artifact.Archive.Name ||
+		lockedArchive.SHA256 != archiveSHA ||
+		lockedArchive.Size != int64(len(archiveData)) {
+		t.Fatalf("locked host archive = %+v", lockedArchive)
 	}
 }
 

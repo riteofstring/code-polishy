@@ -63,11 +63,18 @@ else
     Linux-x86_64) host=linux-x64 ;;
     *) fail 'there is no Code Polishy release for this host' ;;
   esac
-  archive_line=$(grep -F "\"host\": \"$host\"" "$lock" || true)
-  (($(printf '%s\n' "$archive_line" | sed '/^$/d' | wc -l) == 1)) || fail 'the lock does not contain one archive for this host'
-  archive_url=$(printf '%s\n' "$archive_line" | sed -n 's/.*"url": "\([^"]*\)".*/\1/p')
-  archive_sha=$(printf '%s\n' "$archive_line" | sed -n 's/.*"sha256": "\([0-9a-f]*\)".*/\1/p')
-  archive_size=$(printf '%s\n' "$archive_line" | sed -n 's/.*"size": \([0-9][0-9]*\).*/\1/p')
+  archive_matches=$(grep -F "\"host\": \"$host\"" "$lock" || true)
+  (($(printf '%s\n' "$archive_matches" | sed '/^$/d' | wc -l) == 1)) || fail 'the lock does not contain one archive for this host'
+  archive_block=$(awk -v target="\"host\": \"$host\"" '
+    index($0, target) { capture = 1 }
+    capture {
+      print
+      if ($0 ~ /}[,]?[[:space:]]*$/) exit
+    }
+  ' "$lock")
+  archive_url=$(printf '%s\n' "$archive_block" | sed -n 's/.*"url": "\([^"]*\)".*/\1/p')
+  archive_sha=$(printf '%s\n' "$archive_block" | sed -n 's/.*"sha256": "\([0-9a-f]*\)".*/\1/p')
+  archive_size=$(printf '%s\n' "$archive_block" | sed -n 's/.*"size": \([0-9][0-9]*\).*/\1/p')
   url_pattern='^https://[^[:space:]"\\]+$'
   [[ "$archive_url" =~ $url_pattern && "$archive_sha" =~ ^[0-9a-f]{64}$ && "$archive_size" =~ ^[1-9][0-9]{0,9}$ ]] || fail 'the lock contains invalid archive metadata'
   ((archive_size <= 4294967296)) || fail 'the lock contains an oversized archive'

@@ -237,7 +237,10 @@ func RenderLock(lock Lock) []byte {
 		if index == len(lock.Publication.Archives)-1 {
 			separator = ""
 		}
-		fmt.Fprintf(rendered, "      {\"host\": %q, \"url\": %s, \"sha256\": %q, \"size\": %d}%s\n", archive.Host, jsonString(archive.URL), archive.SHA256, archive.Size, separator)
+		fmt.Fprintf(rendered, "      {\n        \"host\": %q,\n", archive.Host)
+		fmt.Fprintf(rendered, "        \"url\": %s,\n", jsonString(archive.URL))
+		fmt.Fprintf(rendered, "        \"sha256\": %q,\n", archive.SHA256)
+		fmt.Fprintf(rendered, "        \"size\": %d\n      }%s\n", archive.Size, separator)
 	}
 	fmt.Fprint(rendered, "    ]\n  }\n}\n")
 	return []byte(rendered.String())
