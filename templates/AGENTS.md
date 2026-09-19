@@ -1,7 +1,7 @@
 ## Authority and communication
 
 - Run pinned Code Polishy through `./code-polishyw` (PowerShell:
-  `.\code-polishyw.ps1`); run its `setup` command if the release is not installed.
+  `.\code-polishyw.ps1`); use `setup` if the release is absent.
 - Before changing the repository, run `./code-polishyw docs read agent-workflows`
   and follow its version-matched request-capture and delivery rules.
 - During an upgrade, outgoing guidance governs until the exact incoming release
@@ -9,14 +9,17 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Keep routine updates under 100 words, lead with the outcome, and omit file
-  references, metrics, implementation detail, and raw output unless needed;
-  expand when action or safety requires it.
+- Keep routine updates under 100 words. Lead with outcomes; omit file references,
+  metrics, implementation detail, and raw output unless action or safety needs them.
 
 ## Implementation
 
-- Preserve unrelated user work and avoid unrelated refactors. Fix the root cause
-  with the smallest maintainable change.
+- Preserve unrelated user work, avoid unrelated refactors, and make the smallest
+  maintainable root-cause fix.
+- Add a digest only to authenticate bytes across a trust boundary, name immutable
+  content, or bind reusable evidence. Do not hash local files as change detectors,
+  mirror an authoritative digest, or rehash bytes produced and consumed in one
+  trusted operation; reuse an existing digest and identify its consumer.
 - Add compatibility, migrations, or transitional code only when explicitly
   requested.
 - Before governed source changes, retrieve `code-polishy design-context` for
@@ -27,9 +30,9 @@
   convey. Put non-local rationale in mapped design documents.
 - Keep prompt, agent, task, rejection, and editing narration out of final
   artifacts unless that process is their documented subject.
-- Remove rejected behavior at its source. Keep no related guards, flags,
-  fallbacks, tests, names, configuration, or compatibility paths unless the
-  final requirement needs them.
+- Remove rejected behavior at its source, including related guards, flags,
+  fallbacks, tests, names, configuration, and compatibility paths the final
+  requirement does not need.
 
 ## Dependencies and tests
 
@@ -40,7 +43,7 @@
   advisory affects reachable behavior. If not, retain the current version under
   an exact approved assessment until the fix reaches 30 days; if affected, use
   security-fix admission.
-- Keep every exception exact, visible, owned, justified, and expiring.
+- Keep exceptions exact, visible, owned, justified, and expiring.
 - Give every module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
   pass-with-no-tests, and coverage-only tests; checked-in Gherkin must execute.
@@ -56,7 +59,7 @@
 
 ## Reviews and delivery
 
-- Agent review cannot replace policy checks or workflow-required human approval.
+- Agent review cannot replace policy checks or required human approval.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
   isolation.

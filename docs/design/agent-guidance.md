@@ -85,6 +85,12 @@ minimum dependency age instead of admitting fresh code without a reachable
 security benefit. Reachable advisories still use the security-fix admission
 path.
 
+Digest guidance addresses a recurring agent failure observed across repositories.
+A digest earns its cost when a named consumer uses it for authentication,
+immutable identity, or evidence binding. Hashes that only mirror mutable local
+state or repeat a digest already produced within one trusted operation create
+maintenance and runtime cost without adding authority.
+
 ## Size budget
 
 The focused agents test caps canonical guidance at 5 KiB. The number is an
