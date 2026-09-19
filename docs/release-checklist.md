@@ -16,11 +16,12 @@ an existing tag.
    plans and obsolete docs. Use focused checks while editing; do not run a full
    gate against a changing worktree.
 
-2. Stop changing the candidate and complete its one ordinary final gate. Honor
-   `verification.finalGateOwner`: run locally for `local`, or retain the native
-   CI result for `ci`. Ubuntu, macOS, and Windows must pass for the same commit.
-   An exact already-passed gate executes no commands, and new gate identities
-   may reuse only suite receipts whose complete inputs still match.
+2. Stop changing the candidate, push that exact commit to `main`, and complete
+   its one ordinary final gate. Honor `verification.finalGateOwner`: run locally
+   for `local`, or retain the native CI result for `ci`. Ubuntu, macOS, and
+   Windows must pass for the same commit. An exact already-passed gate executes
+   no commands, and new gate identities may reuse only suite receipts whose
+   complete inputs still match.
 
 3. Mutation testing is optional for releases. Run it only when explicitly
    requested by the caller or invoked by a checked-in event workflow; the
@@ -35,30 +36,26 @@ an existing tag.
    Tagging, installation, lock updates, and push preparation do not invalidate
    unchanged evidence.
 
-4. From the clean exact candidate, run the read-only preflight with Git's
-   lowercase full commit object ID:
+4. From the clean exact candidate after ordinary CI passes, run the read-only
+   release preparation command:
 
    ```sh
-   ./scripts/release-preflight.sh <candidate-commit-id>
+   ./scripts/prepare-release-tag.sh
    ```
 
    It verifies the current commit, clean worktree, version, changelog heading,
-   and either an absent tag or an annotated tag pointing directly at the
-   candidate.
+   configured `main` upstream, exact pushed candidate, and absence of the
+   version tag both locally and remotely. It performs no mutation and prints
+   the candidate-specific maintainer commands only after every check passes.
 
-5. Create the annotated tag and rerun preflight:
-
-   ```sh
-   git tag -a v<VERSION> -m "Code Polishy <VERSION>" <candidate-commit-id>
-   ./scripts/release-preflight.sh <candidate-commit-id>
-   ```
-
-   Push `main` and the tag without rewriting history. The version-tag push
-   starts `.github/workflows/release.yml`; the workflow verifies that the tag is
-   annotated, points directly at the candidate, and matches `VERSION`. Use its
-   manual dispatch only to publish an existing annotated tag, such as a tag
-   created before the workflow existed. Never move a failed or published tag;
-   every correction gets a new patch version.
+5. Run only the commands printed by release preparation. They create the
+   annotated tag, rerun the exact-candidate preflight, and push only that tag.
+   Do not construct or provide release-tag commands before preparation passes.
+   The version-tag push starts `.github/workflows/release.yml`; the workflow
+   verifies that the tag is annotated, points directly at the candidate, and
+   matches `VERSION`. Use its manual dispatch only to publish an existing
+   annotated tag, such as a tag created before the workflow existed. Never move
+   a failed or published tag; every correction gets a new patch version.
 
 6. The release workflow builds `darwin-arm64`, `darwin-x64`, `linux-arm64`,
    `linux-x64`, and `windows-x64` in parallel on matching GitHub-hosted runners.

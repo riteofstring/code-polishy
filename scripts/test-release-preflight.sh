@@ -17,6 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 source_root="${fixture_root}/checkout"
+remote_root="${fixture_root}/remote.git"
 shim_bin="${fixture_root}/shim"
 git_log="${fixture_root}/git-invocations.txt"
 output="${fixture_root}/output.txt"
@@ -43,11 +44,13 @@ write_file() {
 
 
 build_source_checkout() {
-  rm -rf "${source_root}"
+  rm -rf "${source_root}" "${remote_root}"
   mkdir -p "${source_root}/scripts"
+  cp "${policy_root}/scripts/prepare-release-tag.sh" "${source_root}/scripts/prepare-release-tag.sh"
   cp "${policy_root}/scripts/release-preflight.sh" "${source_root}/scripts/release-preflight.sh"
   cp "${policy_root}/scripts/release-version.sh" "${source_root}/scripts/release-version.sh"
-  chmod +x "${source_root}/scripts/release-preflight.sh" \
+  chmod +x "${source_root}/scripts/prepare-release-tag.sh" \
+    "${source_root}/scripts/release-preflight.sh" \
     "${source_root}/scripts/release-version.sh"
   printf '9.9.9\n' >"${source_root}/VERSION"
   write_file "${source_root}/CHANGELOG.md" <<'EOF'
@@ -64,6 +67,10 @@ EOF
   "${real_git}" -C "${source_root}" config user.name "Preflight Test"
   "${real_git}" -C "${source_root}" config core.autocrlf false
   commit_checkout "disposable candidate"
+  "${real_git}" -C "${source_root}" branch -M main
+  "${real_git}" init --bare --quiet "${remote_root}"
+  "${real_git}" -C "${source_root}" remote add origin "${remote_root}"
+  "${real_git}" -C "${source_root}" push --quiet --set-upstream origin main
 }
 
 commit_checkout() {
@@ -102,6 +109,17 @@ run_preflight() {
   return "${status}"
 }
 
+run_prepare() {
+  local before after status=0
+  before="$(repository_state)"
+  PATH="${shim_bin}:${PATH}" "${source_root}/scripts/prepare-release-tag.sh" "$@" \
+    >"${output}" 2>&1 || status=$?
+  after="$(repository_state)"
+  [[ "${before}" == "${after}" ]] ||
+    fail "release preparation changed repository state: ${*:-<no arguments>}"
+  return "${status}"
+}
+
 expect_pass() {
   local description="$1"
   shift
@@ -116,6 +134,16 @@ expect_fail() {
   shift 2
   if run_preflight "$@"; then
     fail "${description}: the preflight passed: $(head -10 "${output}")"
+  fi
+  grep -qF "${needle}" "${output}" ||
+    fail "${description} was refused without \`${needle}\`: $(head -10 "${output}")"
+}
+
+expect_prepare_fail() {
+  local description="$1" needle="$2"
+  shift 2
+  if run_prepare "$@"; then
+    fail "${description}: release preparation passed: $(head -10 "${output}")"
   fi
   grep -qF "${needle}" "${output}" ||
     fail "${description} was refused without \`${needle}\`: $(head -10 "${output}")"
@@ -300,5 +328,92 @@ while read -r invocation; do
     *) fail "the preflight ran an unexpected git command: git ${invocation}" ;;
   esac
 done <"${git_log}"
+
+
+
+: >"${git_log}"
+build_source_checkout
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+"${real_git}" -C "${source_root}" tag -a unrelated -m "Unrelated local tag" "${candidate}"
+run_prepare ||
+  fail "a clean pushed candidate was not ready to tag: $(head -10 "${output}")"
+grep -qF "Code Polishy 9.9.9 is ready to tag at ${candidate}." "${output}" ||
+  fail "release preparation did not identify the exact ready candidate"
+if "${real_git}" -C "${source_root}" show-ref --verify --quiet refs/tags/v9.9.9; then
+  fail "release preparation created the tag instead of leaving publication to the maintainer"
+fi
+prepared_tag_command="$(tail -n 3 "${output}" | sed -n '1p')"
+prepared_preflight_command="$(tail -n 3 "${output}" | sed -n '2p')"
+prepared_push_command="$(tail -n 3 "${output}" | sed -n '3p')"
+[[ -n "${prepared_tag_command}" && -n "${prepared_preflight_command}" && -n "${prepared_push_command}" ]] ||
+  fail "release preparation did not provide three maintainer commands"
+(
+  cd "${source_root}"
+  PATH="${shim_bin}:${PATH}" bash -c "${prepared_tag_command}"
+) >/dev/null 2>&1 || fail "the prepared tag command failed"
+[[ "$("${real_git}" -C "${source_root}" cat-file -t refs/tags/v9.9.9)" == "tag" ]] ||
+  fail "the prepared tag command did not create an annotated tag"
+[[ "$("${real_git}" -C "${source_root}" for-each-ref --format='%(object)' refs/tags/v9.9.9)" == "${candidate}" ]] ||
+  fail "the prepared tag command did not point directly at the candidate"
+if [[ -n "$("${real_git}" -C "${source_root}" ls-remote --refs origin refs/tags/v9.9.9)" ]]; then
+  fail "the prepared tag command published the tag before post-tag preflight"
+fi
+printf 'drift\n' >"${source_root}/post-tag-drift.txt"
+post_tag_status=0
+(
+  cd "${source_root}"
+  PATH="${shim_bin}:${PATH}" bash -c "${prepared_preflight_command}"
+) >/dev/null 2>&1 || post_tag_status=$?
+[[ "${post_tag_status}" -ne 0 ]] ||
+  fail "the prepared post-tag check accepted candidate drift"
+rm "${source_root}/post-tag-drift.txt"
+(
+  cd "${source_root}"
+  PATH="${shim_bin}:${PATH}" bash -c "${prepared_preflight_command}"
+) >/dev/null 2>&1 || fail "the prepared post-tag check rejected the exact candidate"
+(
+  cd "${source_root}"
+  PATH="${shim_bin}:${PATH}" bash -c "${prepared_push_command}"
+) >/dev/null 2>&1 || fail "the prepared tag push failed"
+[[ -n "$("${real_git}" -C "${source_root}" ls-remote --refs origin refs/tags/v9.9.9)" ]] ||
+  fail "the prepared push did not publish the release tag"
+if [[ -n "$("${real_git}" -C "${source_root}" ls-remote --refs origin refs/tags/unrelated)" ]]; then
+  fail "the prepared push published an unrelated local tag"
+fi
+
+usage_status=0
+run_prepare unexpected || usage_status=$?
+[[ "${usage_status}" == "2" ]] ||
+  fail "release preparation accepted an unexpected argument"
+grep -q "usage: prepare-release-tag.sh" "${output}" ||
+  fail "release preparation did not report its argument-free usage"
+
+build_source_checkout
+printf 'unpushed\n' >"${source_root}/unpushed.txt"
+commit_checkout "disposable unpushed candidate"
+expect_prepare_fail "an unpushed candidate" \
+  "is not the commit published at origin/refs/heads/main"
+if grep -qF "git tag -a" "${output}"; then
+  fail "an unpushed candidate was given a tag command before every check passed"
+fi
+
+build_source_checkout
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+"${real_git}" -C "${source_root}" tag -a v9.9.9 -m "Code Polishy 9.9.9" "${candidate}"
+expect_prepare_fail "an existing local release tag" \
+  "The release tag v9.9.9 already exists in this checkout."
+
+build_source_checkout
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+"${real_git}" -C "${source_root}" tag -a v9.9.9 -m "Code Polishy 9.9.9" "${candidate}"
+"${real_git}" -C "${source_root}" push --quiet origin refs/tags/v9.9.9
+"${real_git}" -C "${source_root}" tag -d v9.9.9 >/dev/null
+expect_prepare_fail "an existing remote release tag" \
+  "The release tag v9.9.9 already exists on origin."
+if grep -qF "git tag -a" "${output}"; then
+  fail "an existing remote tag was given a replacement-tag command"
+fi
+
+[[ -s "${git_log}" ]] || fail "release preparation never inspected repository state"
 
 printf 'release preflight tests passed\n'

@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-## 0.27.6 - 2026-09-19
+## 0.27.7 - 2026-09-19
+
+- Make release preparation verify the clean pushed candidate and absent local
+  and remote tag before presenting maintainer tagging commands.
 
 - Seed the native Windows acceptance repository with a publication-backed v2
   lock fixture instead of invoking removed optionless lock creation.

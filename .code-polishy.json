@@ -767,6 +767,7 @@
         "paths": [
           "CHANGELOG.md",
           "VERSION",
+          "scripts/prepare-release-tag.sh",
           "scripts/release-preflight.sh",
           "scripts/release-version.sh",
           "scripts/test-release-preflight.sh"
