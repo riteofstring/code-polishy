@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.6 - 2026-09-19
+
 - Seed the native Windows acceptance repository with a publication-backed v2
   lock fixture instead of invoking removed optionless lock creation.
 - Emit formatter-compatible v2 lock files and let POSIX setup consume their
