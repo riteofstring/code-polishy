@@ -36,6 +36,42 @@ func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testin
 	}
 }
 
+func TestNormalizeCapabilityUpgradeRecordPreservesLegacyRendererEvidence(t *testing.T) {
+	t.Parallel()
+	repo, _, nextRoot, old, next := capabilityUpgradeFixture(t)
+	record := captureCapabilityUpgrade(nextRoot, &old, next)
+	legacyIdentity := strings.Repeat("d", 64)
+	record.Delta.ArtifactPath = CapabilityUpgradeDirectory + "/" + legacyIdentity + "/delta.json"
+	data, err := renderCapabilityUpgradeRecord(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(repo, filepath.FromSlash(record.Delta.ArtifactPath))
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	altered := record.Delta
+	altered.Reason = "Invented planning result."
+	if err := NormalizeCapabilityUpgradeRecord(repo, altered); err == nil {
+		t.Fatal("capability record accepted a different planned delta")
+	}
+	if err := NormalizeCapabilityUpgradeRecord(repo, record.Delta); err != nil {
+		t.Fatal(err)
+	}
+	want := record.Delta
+	want.ArtifactPath = capabilityUpgradePath(next)
+	if err := NormalizeCapabilityUpgradeRecord(repo, want); err != nil {
+		t.Fatalf("normalized record was not reusable: %v", err)
+	}
+	got := ReadCapabilityUpgrade(repo, next)
+	if !bytes.Equal(render(t, got), render(t, want)) {
+		t.Fatalf("normalized delta = %+v, want %+v", got, want)
+	}
+}
+
 func TestLockPreservesPublicationMetadataForTheCurrentRelease(t *testing.T) {
 	t.Parallel()
 	repo, _, nextRoot, _, published := capabilityUpgradeFixture(t)

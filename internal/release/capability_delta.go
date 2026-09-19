@@ -3,6 +3,7 @@ package release
 import (
 	"bytes"
 	"encoding/json"
+	"path"
 	"slices"
 	"strings"
 )
@@ -55,7 +56,20 @@ func capabilityUpgradePath(incoming Lock) string {
 }
 
 func capabilityUpgradeRelativePath(incoming Lock) string {
-	return capabilityContentSHA256(RenderLock(incoming)) + "/delta.json"
+	return incoming.ReleaseDigest + "/delta.json"
+}
+
+func managedCapabilityUpgradeRelativePath(artifactPath, filename string) (string, bool) {
+	prefix := CapabilityUpgradeDirectory + "/"
+	if !strings.HasPrefix(artifactPath, prefix) {
+		return "", false
+	}
+	relative := strings.TrimPrefix(artifactPath, prefix)
+	directory := path.Dir(relative)
+	if !digestPattern.MatchString(directory) || relative != directory+"/"+filename {
+		return "", false
+	}
+	return relative, true
 }
 
 func compareCapabilityCatalogs(before, after AuthenticatedCapabilityCatalog) CapabilityDelta {

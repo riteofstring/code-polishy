@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -90,12 +91,12 @@ func WriteUpgradePlan(repoRoot string, plan UpgradePlan) (string, error) {
 	return CapabilityUpgradeDirectory + "/" + relative, nil
 }
 
-func ReadUpgradePlan(repoRoot, path string) (UpgradePlan, error) {
+func ReadUpgradePlan(repoRoot, planPath string) (UpgradePlan, error) {
 	prefix := CapabilityUpgradeDirectory + "/"
-	if !strings.HasPrefix(path, prefix) {
+	if !strings.HasPrefix(planPath, prefix) {
 		return UpgradePlan{}, errors.New("upgrade plan must be a managed repository-relative path")
 	}
-	relative := strings.TrimPrefix(path, prefix)
+	relative := strings.TrimPrefix(planPath, prefix)
 	root, err := openCapabilityUpgradeRoot(repoRoot, false)
 	if err != nil {
 		return UpgradePlan{}, err
@@ -109,8 +110,11 @@ func ReadUpgradePlan(repoRoot, path string) (UpgradePlan, error) {
 	if err != nil {
 		return UpgradePlan{}, err
 	}
-	if relative != upgradePlanRelativePath(plan.Incoming) {
-		return UpgradePlan{}, errors.New("upgrade plan path does not match its incoming lock")
+	deltaRelative, deltaPathValid := managedCapabilityUpgradeRelativePath(plan.CapabilityDelta.ArtifactPath, "delta.json")
+	planDirectory := path.Dir(relative)
+	if !digestPattern.MatchString(planDirectory) || relative != planDirectory+"/plan.json" ||
+		!deltaPathValid || path.Dir(deltaRelative) != planDirectory {
+		return UpgradePlan{}, errors.New("upgrade plan and capability record paths do not match")
 	}
 	return plan, nil
 }
@@ -179,6 +183,12 @@ func validateUpgradePlanLocks(plan UpgradePlan) error {
 }
 
 func validateUpgradePlanEvidence(plan UpgradePlan) error {
+	if err := validateCapabilityDeltaShape(plan.CapabilityDelta); err != nil {
+		return err
+	}
+	if _, valid := managedCapabilityUpgradeRelativePath(plan.CapabilityDelta.ArtifactPath, "delta.json"); !valid {
+		return errors.New("upgrade plan capability record path is invalid")
+	}
 	if !sameCapabilityLock(plan.CapabilityDelta.Incoming, plan.Incoming) ||
 		plan.CapabilityDelta.Outgoing == nil || !sameCapabilityLock(*plan.CapabilityDelta.Outgoing, plan.Outgoing) {
 		return errors.New("upgrade plan capability delta does not match its locks")
@@ -202,7 +212,7 @@ func compareUpgradeDiagnostic(left, right UpgradeDiagnostic) int {
 }
 
 func upgradePlanRelativePath(incoming Lock) string {
-	return capabilityContentSHA256(RenderLock(incoming)) + "/plan.json"
+	return incoming.ReleaseDigest + "/plan.json"
 }
 
 func publishUpgradePlanData(directory *os.Root, data []byte) error {

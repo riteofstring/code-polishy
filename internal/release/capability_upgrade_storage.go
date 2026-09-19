@@ -3,6 +3,7 @@ package release
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -132,6 +133,42 @@ func storeCapabilityUpgrade(root *os.Root, record capabilityUpgradeRecord) error
 	}
 	_, err = parseCapabilityUpgradeRecord(published, record.Delta.Incoming)
 	return err
+}
+
+func NormalizeCapabilityUpgradeRecord(repoRoot string, expected CapabilityDelta) error {
+	relative, valid := managedCapabilityUpgradeRelativePath(expected.ArtifactPath, "delta.json")
+	if !valid {
+		return fmt.Errorf("upgrade plan capability record path is invalid")
+	}
+	root, err := openCapabilityUpgradeRoot(repoRoot, false)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	unlock, err := acquireCapabilityUpgradeLock(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	data, err := readCapabilityFile(root, relative, MaximumCapabilityUpgradeBytes)
+	if err != nil {
+		return err
+	}
+	record, err := parseCapabilityUpgradeRecordAt(data, expected.Incoming, expected.ArtifactPath)
+	if err != nil {
+		return err
+	}
+	actualDelta, _ := json.Marshal(record.Delta)
+	expectedDelta, _ := json.Marshal(expected)
+	if !bytes.Equal(actualDelta, expectedDelta) {
+		return fmt.Errorf("upgrade plan capability delta does not match its authenticated record")
+	}
+	canonicalPath := capabilityUpgradePath(expected.Incoming)
+	if record.Delta.ArtifactPath == canonicalPath {
+		return nil
+	}
+	record.Delta.ArtifactPath = canonicalPath
+	return storeCapabilityUpgrade(root, record)
 }
 
 func publishCapabilityUpgradeData(directory *os.Root, data []byte) error {

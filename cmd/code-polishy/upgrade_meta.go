@@ -194,6 +194,9 @@ func applyUpgrade(invocation invocation, arguments []string) int {
 	if upgradeDeltaHasNewErrors(plan.DiagnosticDelta) && !options.acceptNewFindings {
 		return operationalError(errors.New("incoming release adds or changes error diagnostics; fix them, create a new plan, or pass --accept-new-findings"))
 	}
+	if err := release.NormalizeCapabilityUpgradeRecord(invocation.repoRoot, plan.CapabilityDelta); err != nil {
+		return operationalError(fmt.Errorf("normalize capability upgrade record: %w", err))
+	}
 	message, err := agents.SyncWithLock(invocation.repoRoot, incomingRoot, currentBytes, release.RenderLock(plan.Incoming))
 	if err != nil {
 		return operationalError(err)

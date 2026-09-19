@@ -144,6 +144,10 @@ func ReadCapabilityUpgrade(repoRoot string, incoming Lock) CapabilityDelta {
 }
 
 func parseCapabilityUpgradeRecord(data []byte, incoming Lock) (capabilityUpgradeRecord, error) {
+	return parseCapabilityUpgradeRecordAt(data, incoming, capabilityUpgradePath(incoming))
+}
+
+func parseCapabilityUpgradeRecordAt(data []byte, incoming Lock, artifactPath string) (capabilityUpgradeRecord, error) {
 	var record capabilityUpgradeRecord
 	if len(data) == 0 || len(data) > MaximumCapabilityUpgradeBytes {
 		return record, fmt.Errorf("capability upgrade record exceeds its byte bound")
@@ -155,7 +159,8 @@ func parseCapabilityUpgradeRecord(data []byte, incoming Lock) (capabilityUpgrade
 	if err != nil || !bytes.Equal(canonical, data) || record.Protocol != "capability-upgrade-record/v1" {
 		return record, fmt.Errorf("capability upgrade record is not a canonical versioned document")
 	}
-	if !sameCapabilityLock(record.Delta.Incoming, incoming) || record.Delta.ArtifactPath != capabilityUpgradePath(incoming) {
+	if _, valid := managedCapabilityUpgradeRelativePath(artifactPath, "delta.json"); !valid ||
+		!sameCapabilityLock(record.Delta.Incoming, incoming) || record.Delta.ArtifactPath != artifactPath {
 		return record, fmt.Errorf("capability upgrade record belongs to another lock")
 	}
 	if err := validateCapabilityUpgradeRecord(record); err != nil {
@@ -223,6 +228,7 @@ func validateCapabilityDeltaResult(record capabilityUpgradeRecord, before, after
 		return fmt.Errorf("capability delta requires both authenticated release catalogs")
 	}
 	expected := compareCapabilityCatalogs(before, after)
+	expected.ArtifactPath = delta.ArtifactPath
 	actual, _ := json.Marshal(delta)
 	canonical, _ := json.Marshal(expected)
 	if !bytes.Equal(actual, canonical) {

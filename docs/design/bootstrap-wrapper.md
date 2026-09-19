@@ -93,3 +93,9 @@ new plan after cleanup. Apply stages canonical guidance, both wrappers, ignore
 rules, and the incoming lock as one rollback-capable transaction; the lock is
 renamed last. That rename is the guidance cutover. Upgrade never edits governed
 application source.
+
+Upgrade artifacts use the incoming release digest as their stable directory
+identity rather than hashing rendered lock bytes. Apply accepts an older plan
+only when its plan and capability-record paths share one bounded digest
+directory, authenticates that record against the plan, and republishes it under
+the stable identity before cutover.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.27.8 - 2026-09-19
+
+- Make cross-version upgrades independent of lock-file formatting by keying
+  plans and capability evidence to the release identity and normalizing
+  authenticated legacy evidence before cutover.
+
 ## 0.27.7 - 2026-09-19
 
 - Make release preparation verify the clean pushed candidate and absent local
