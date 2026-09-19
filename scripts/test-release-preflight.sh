@@ -21,6 +21,8 @@ remote_root="${fixture_root}/remote.git"
 shim_bin="${fixture_root}/shim"
 git_log="${fixture_root}/git-invocations.txt"
 output="${fixture_root}/output.txt"
+remote_started="${fixture_root}/remote-started"
+remote_continue="${fixture_root}/remote-continue"
 real_git="$(command -v git)"
 
 
@@ -85,6 +87,12 @@ build_command_shims() {
   cat >"${shim_bin}/git" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${git_log}"
+if [[ "\${PREPARE_TEST_BLOCK_REMOTE:-}" == "1" && " \$* " == *" ls-remote "* ]]; then
+  : >"\${PREPARE_TEST_REMOTE_STARTED}"
+  while [[ ! -e "\${PREPARE_TEST_REMOTE_CONTINUE}" ]]; do
+    sleep 0.01
+  done
+fi
 exec "${real_git}" "\$@"
 EOF
   chmod +x "${shim_bin}/git"
@@ -335,8 +343,47 @@ done <"${git_log}"
 build_source_checkout
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 "${real_git}" -C "${source_root}" tag -a unrelated -m "Unrelated local tag" "${candidate}"
-run_prepare ||
+before="$(repository_state)"
+rm -f "${remote_started}" "${remote_continue}"
+PREPARE_TEST_BLOCK_REMOTE=1 \
+  PREPARE_TEST_REMOTE_STARTED="${remote_started}" \
+  PREPARE_TEST_REMOTE_CONTINUE="${remote_continue}" \
+  PATH="${shim_bin}:${PATH}" \
+  "${source_root}/scripts/prepare-release-tag.sh" >"${output}" 2>&1 &
+prepare_pid="$!"
+remote_waiting=false
+for _ in {1..500}; do
+  if [[ -e "${remote_started}" ]]; then
+    remote_waiting=true
+    break
+  fi
+  sleep 0.01
+done
+if [[ "${remote_waiting}" != true ]]; then
+  touch "${remote_continue}"
+  wait "${prepare_pid}" || true
+  fail "release preparation did not reach its remote inspection: $(head -10 "${output}")"
+fi
+for stage in '[1/3]' '[2/3]' '[3/3]'; do
+  if ! grep -qF "${stage}" "${output}"; then
+    touch "${remote_continue}"
+    wait "${prepare_pid}" || true
+    fail "release preparation reached the remote without reporting ${stage} progress"
+  fi
+done
+if grep -qF "git tag -a" "${output}"; then
+  touch "${remote_continue}"
+  wait "${prepare_pid}" || true
+  fail "release preparation exposed tag commands before remote inspection completed"
+fi
+touch "${remote_continue}"
+prepare_status=0
+wait "${prepare_pid}" || prepare_status=$?
+[[ "${prepare_status}" == "0" ]] ||
   fail "a clean pushed candidate was not ready to tag: $(head -10 "${output}")"
+after="$(repository_state)"
+[[ "${before}" == "${after}" ]] ||
+  fail "release preparation changed repository state"
 grep -qF "Code Polishy 9.9.9 is ready to tag at ${candidate}." "${output}" ||
   fail "release preparation did not identify the exact ready candidate"
 if "${real_git}" -C "${source_root}" show-ref --verify --quiet refs/tags/v9.9.9; then
