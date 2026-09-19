@@ -28,14 +28,17 @@ prefix="${HOME}/.local/share/code-polishy"
 release_root="${prefix}/releases/${version}-${digest}"
 launcher="${prefix}/bin/code-polishy"
 
+available() {
+  [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]]
+}
+
 ready() {
-  [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]] &&
-    "$launcher" --repo-root "$repo" version >/dev/null 2>&1
+  available && "$launcher" --repo-root "$repo" version >/dev/null 2>&1
 }
 
 (($# > 0)) || { usage >&2; exit 2; }
 if [[ "$1" != setup ]]; then
-  ready || fail 'the locked release is not installed; run ./code-polishyw setup'
+  available || fail 'the locked release is not installed; run ./code-polishyw setup'
   exec "$launcher" --repo-root "$repo" "$@"
 fi
 shift
@@ -63,11 +66,18 @@ else
     Linux-x86_64) host=linux-x64 ;;
     *) fail 'there is no Code Polishy release for this host' ;;
   esac
-  archive_line=$(grep -F "\"host\": \"$host\"" "$lock" || true)
-  (($(printf '%s\n' "$archive_line" | sed '/^$/d' | wc -l) == 1)) || fail 'the lock does not contain one archive for this host'
-  archive_url=$(printf '%s\n' "$archive_line" | sed -n 's/.*"url": "\([^"]*\)".*/\1/p')
-  archive_sha=$(printf '%s\n' "$archive_line" | sed -n 's/.*"sha256": "\([0-9a-f]*\)".*/\1/p')
-  archive_size=$(printf '%s\n' "$archive_line" | sed -n 's/.*"size": \([0-9][0-9]*\).*/\1/p')
+  archive_matches=$(grep -F "\"host\": \"$host\"" "$lock" || true)
+  (($(printf '%s\n' "$archive_matches" | sed '/^$/d' | wc -l) == 1)) || fail 'the lock does not contain one archive for this host'
+  archive_block=$(awk -v target="\"host\": \"$host\"" '
+    index($0, target) { capture = 1 }
+    capture {
+      print
+      if ($0 ~ /}[,]?[[:space:]]*$/) exit
+    }
+  ' "$lock")
+  archive_url=$(printf '%s\n' "$archive_block" | sed -n 's/.*"url": "\([^"]*\)".*/\1/p')
+  archive_sha=$(printf '%s\n' "$archive_block" | sed -n 's/.*"sha256": "\([0-9a-f]*\)".*/\1/p')
+  archive_size=$(printf '%s\n' "$archive_block" | sed -n 's/.*"size": \([0-9][0-9]*\).*/\1/p')
   url_pattern='^https://[^[:space:]"\\]+$'
   [[ "$archive_url" =~ $url_pattern && "$archive_sha" =~ ^[0-9a-f]{64}$ && "$archive_size" =~ ^[1-9][0-9]{0,9}$ ]] || fail 'the lock contains invalid archive metadata'
   ((archive_size <= 4294967296)) || fail 'the lock contains an oversized archive'

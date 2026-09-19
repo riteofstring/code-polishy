@@ -1,7 +1,7 @@
 ## Authority and communication
 
 - Run pinned Code Polishy through `./code-polishyw` (PowerShell:
-  `.\code-polishyw.ps1`); run its `setup` command if the release is not installed.
+  `.\code-polishyw.ps1`); use `setup` if the release is absent.
 - Before changing the repository, run `./code-polishyw docs read agent-workflows`
   and follow its version-matched request-capture and delivery rules.
 - During an upgrade, outgoing guidance governs until the exact incoming release
@@ -9,14 +9,16 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Keep routine updates under 100 words, lead with the outcome, and omit file
-  references, metrics, implementation detail, and raw output unless needed;
-  expand when action or safety requires it.
+- Keep updates under 100 words and outcome-first. Omit file, metric,
+  implementation, and raw-output detail unless action or safety needs it.
 
 ## Implementation
 
-- Preserve unrelated user work and avoid unrelated refactors. Fix the root cause
-  with the smallest maintainable change.
+- Preserve unrelated work and avoid unrelated refactors; make the smallest
+  maintainable root-cause fix.
+- Hash only for trust-boundary authentication, immutable identity, or reusable
+  evidence. Never hash local state for change detection, mirror an authoritative
+  digest, or rehash within one trusted operation.
 - Add compatibility, migrations, or transitional code only when explicitly
   requested.
 - Before governed source changes, retrieve `code-polishy design-context` for
@@ -27,36 +29,35 @@
   convey. Put non-local rationale in mapped design documents.
 - Keep prompt, agent, task, rejection, and editing narration out of final
   artifacts unless that process is their documented subject.
-- Remove rejected behavior at its source. Keep no related guards, flags,
-  fallbacks, tests, names, configuration, or compatibility paths unless the
-  final requirement needs them.
+- Remove rejected behavior and its guards, flags, fallbacks, tests, names,
+  configuration, and compatibility paths unless final requirements need them.
 
 ## Dependencies and tests
 
-- Pin direct dependencies and package managers exactly; use frozen lockfiles.
-  For updates, generate candidate locks without lifecycle scripts and run
+- Pin dependencies and package managers exactly; use frozen locks. Generate
+  update locks without scripts. Run
   `code-polishy dependency-review --base <merge-target>` before installation.
+  Then install frozen with scripts off, run `code-polishy supply-chain --offline`,
+  and test.
 - Before admitting a security fix under 30 days old, determine whether its
   advisory affects reachable behavior. If not, retain the current version under
   an exact approved assessment until the fix reaches 30 days; if affected, use
   security-fix admission.
-- Keep every exception exact, visible, owned, justified, and expiring.
+- Keep exceptions exact, visible, owned, justified, and expiring.
 - Give every module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
   pass-with-no-tests, and coverage-only tests; checked-in Gherkin must execute.
-- Run supplemental suites only when explicitly requested, invoked by a checked-in
-  event workflow, or selected by the version-matched release checklist.
-  Declarations, including
-  `tests.requiredSupplementalKinds`, never authorize execution. Exact reruns
-  record receipts. On stable candidates, use `test --supplemental --resume` for
-  missing, failed, expired, or invalidated suites. Run all only without trusted
-  evidence or after shared infrastructure, toolchain, selection, or unbounded-
-  impact changes. Credentialed, destructive, and live-provider probes require a
-  named external approval gate.
+- Run supplemental suites only when requested, triggered by a checked-in event,
+  or selected by the release checklist. Declarations, including
+  `tests.requiredSupplementalKinds`, never authorize execution. Reuse receipts
+  with `test --supplemental --resume`; run all only without trusted evidence or
+  after shared infrastructure, toolchain, selection, or unbounded-impact
+  changes. Credentialed, destructive, or live-provider probes need named
+  external approval.
 
 ## Reviews and delivery
 
-- Agent review cannot replace policy checks or workflow-required human approval.
+- Agent review cannot replace policy checks or required human approval.
 - Use the caller's checkout for ordinary interactive work. Use
   `code-polishy task-session` for unattended work or explicitly requested
   isolation.
