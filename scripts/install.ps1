@@ -68,9 +68,11 @@ $Scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("code-polishy-install-" 
 New-Item -ItemType Directory -Path $Scratch | Out-Null
 try {
   $Bundle = Join-Path $Scratch 'code-polishy-windows-x64.zip'
-  & (Join-Path $PSScriptRoot 'build-release.ps1') -Output $Bundle -SourceRevision $SourceRevision
+  & (Join-Path $PSScriptRoot 'build-release.ps1') -Output $Bundle -SourceRevision $SourceRevision | Tee-Object -Variable BuildOutput
   if ($LASTEXITCODE -ne 0) { throw 'Building the local native release failed.' }
-  $BundleDigest = (Get-FileHash -Algorithm SHA256 $Bundle).Hash.ToLowerInvariant()
+  $ArchiveDigestLines = @(@($BuildOutput) | Where-Object { $_ -is [string] -and $_ -cmatch '^archiveSHA256=[0-9a-f]{64}$' })
+  if ($ArchiveDigestLines.Count -ne 1) { throw 'The local native release did not report one exact archive digest.' }
+  $BundleDigest = $ArchiveDigestLines[0].Substring('archiveSHA256='.Length)
 
   $BootstrapRoot = Join-Path $Scratch 'bootstrap'
   Expand-Archive -LiteralPath $Bundle -DestinationPath $BootstrapRoot

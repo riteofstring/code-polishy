@@ -57,7 +57,8 @@ func TestPOSIXWrapperBootstrapsTheExactTaggedSourceAndDispatchesOffline(t *testi
 	if err != nil {
 		t.Fatalf("offline dispatch failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 	}
-	if got := readTestFile(t, logPath); !strings.Contains(got, "--repo-root "+physicalRepo+" check --all") {
+	got := strings.TrimSpace(readTestFile(t, logPath))
+	if got != "--repo-root "+physicalRepo+" check --all" {
 		t.Fatalf("dispatch log = %q", got)
 	}
 	stdout, stderr, err = runPOSIXWrapper(repoRoot, home, logPath, path, "setup", "--source", filepath.Join(t.TempDir(), "missing"))

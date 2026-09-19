@@ -168,10 +168,6 @@ func TestPublicationRecordsAndInstallsTheVerifiedTree(t *testing.T) {
 	if err := json.Unmarshal(data, &recorded); err != nil || recorded.Archive != artifact.Archive {
 		t.Fatalf("descriptor = %+v, error = %v", recorded, err)
 	}
-	checksum, err := os.ReadFile(filepath.Join(publication, artifact.Archive.Name+".sha256"))
-	if err != nil || string(checksum) != artifact.Archive.SHA256+"  "+artifact.Archive.Name+"\n" {
-		t.Fatalf("checksum = %q, error = %v", checksum, err)
-	}
 	prefix := filepath.Join(t.TempDir(), "prefix")
 	installed, err := InstallLocalBundle(filepath.Join(publication, artifact.Archive.Name), artifact.Archive.SHA256, prefix)
 	if err != nil {
@@ -209,7 +205,7 @@ func publicationFixture(t *testing.T, includeLink bool) (string, PublicationArti
 	return publication, artifact, manifest
 }
 
-func TestPublicationRejectsTamperedSidecarsAndNonLinuxOCIContext(t *testing.T) {
+func TestPublicationRejectsTamperedEvidenceAndNonLinuxOCIContext(t *testing.T) {
 	root, manifest := installedRelease(t, map[string]string{BinaryPath: "engine", LauncherBinaryPath: "launcher"}, nil)
 	archive := filepath.Join(t.TempDir(), "release.zip")
 	if _, err := WriteArchive(root, archive); err != nil {

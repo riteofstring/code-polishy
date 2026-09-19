@@ -43,8 +43,6 @@ type scannerPolicy struct {
 	Version                 int      `json:"version"`
 	TrivyVersion            string   `json:"trivyVersion"`
 	SourceImage             string   `json:"sourceImage"`
-	DockerfileSHA256        string   `json:"dockerfileSha256"`
-	OpenVEXSHA256           string   `json:"openVexSha256"`
 	DatabaseRepository      string   `json:"databaseRepository"`
 	DatabaseSchemaVersion   int      `json:"databaseSchemaVersion"`
 	DatabaseMaximumAgeHours int      `json:"databaseMaximumAgeHours"`
@@ -97,9 +95,7 @@ type scanOutput struct {
 }
 
 type scannerPolicyEvidence struct {
-	versionText    string
-	dockerfileHash string
-	openVEXHash    string
+	versionText string
 }
 
 func loadScannerPolicy(policyRoot string) (scannerPolicy, error) {
@@ -140,17 +136,10 @@ func loadScannerPolicyEvidence(policyRoot string) (scannerPolicyEvidence, error)
 		return scannerPolicyEvidence{}, err
 	}
 	dockerfile := filepath.Join(policyRoot, filepath.FromSlash(scannerDockerfilePath))
-	dockerfileHash, err := hashRegularFile(dockerfile, 64*1024)
-	if err != nil {
+	if _, err := readBoundedRegularFile(dockerfile, 64*1024); err != nil {
 		return scannerPolicyEvidence{}, err
 	}
-	openVEXHash, err := hashRegularFile(filepath.Join(policyRoot, "artifact-security", "scanner.openvex.json"), 64*1024)
-	if err != nil {
-		return scannerPolicyEvidence{}, err
-	}
-	return scannerPolicyEvidence{
-		versionText: strings.TrimSpace(string(versionBytes)), dockerfileHash: dockerfileHash, openVEXHash: openVEXHash,
-	}, nil
+	return scannerPolicyEvidence{versionText: strings.TrimSpace(string(versionBytes))}, nil
 }
 
 func (configured scannerPolicy) validateFields(evidence scannerPolicyEvidence) error {
@@ -161,14 +150,11 @@ func (configured scannerPolicy) validateFields(evidence scannerPolicyEvidence) e
 }
 
 func (configured scannerPolicy) validateProvenanceFields(evidence scannerPolicyEvidence) error {
-	if configured.Version != 1 {
-		return errors.New("artifact scanner policy version must be 1")
+	if configured.Version != 2 {
+		return errors.New("artifact scanner policy version must be 2")
 	}
 	if evidence.versionText != configured.TrivyVersion {
 		return errors.New("artifact scanner policy and version pin do not agree")
-	}
-	if configured.DockerfileSHA256 != evidence.dockerfileHash || configured.OpenVEXSHA256 != evidence.openVEXHash {
-		return errors.New("artifact scanner policy, version pin, and runtime Dockerfile do not agree")
 	}
 	const imagePrefix = "docker.io/aquasec/trivy@sha256:"
 	if !strings.HasPrefix(configured.SourceImage, imagePrefix) {

@@ -77,15 +77,14 @@ an existing tag.
    source-install contracts, or supplemental suites already owned by normal
    CI. Each host only verifies the generated manifest, installs its archive into
    a fresh prefix through the recorded SHA-256, and checks the installed
-   version. The retained publication contains the archive, checksum, internal
-   manifest, CycloneDX SBOM, deterministic in-toto/SLSA metadata, and release
-   descriptor.
+   version. The retained publication contains the archive, internal manifest,
+   CycloneDX SBOM, deterministic in-toto/SLSA metadata, and release descriptor.
 
 7. After every host succeeds, the publish job restores the five publication
    directories and reuses the verified Linux x64 archive's engine to combine
    their descriptors into `code-polishy-release-index.json`. It records the
    canonical index SHA-256, creates an index checksum sidecar, and requires the
-   complete 32-file publication.
+   complete 27-file publication.
 
    The job creates a draft GitHub Release through GitHub's API, uploads the
    publication, and makes the release public only after every upload succeeds.

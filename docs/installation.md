@@ -129,14 +129,14 @@ expiring assessment.
 
 ## Portable archives
 
-Each supported host publishes one deterministic ZIP and adjacent checksum,
-internal manifest, CycloneDX 1.6 SBOM, deterministic in-toto/SLSA provenance
-metadata, and machine-readable release descriptor. This local metadata binds
-inputs and outputs but does not authenticate a builder or publisher. The five
-hosts are `darwin-arm64`, `darwin-x64`,
+Each supported host publishes one deterministic ZIP, internal manifest,
+CycloneDX 1.6 SBOM, deterministic in-toto/SLSA provenance metadata, and
+machine-readable release descriptor. This local metadata binds inputs and
+outputs but does not authenticate a builder or publisher. The five hosts are
+`darwin-arm64`, `darwin-x64`,
 `linux-arm64`, `linux-x64`, and `windows-x64`. The descriptor binds every
-sidecar, the archive SHA-256, host-specific content digest, shared release
-digest, version, and source revision.
+accompanying metadata file, the archive SHA-256, host-specific content digest,
+shared release digest, version, and source revision.
 
 From a clean Linux or macOS release checkout with tools already installed:
 

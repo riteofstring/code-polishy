@@ -32,12 +32,13 @@ committed. A source checkout cannot silently replace the lock with what it
 built.
 
 Normal wrapper dispatch never clones, downloads, builds, changes `PATH`, or
-selects a fallback release. If the exact installed release cannot be verified
-through the stable launcher, it fails with the explicit setup command. Shared
-storage lets repositories with the same lock reuse one installation while
-different locked releases coexist. A repository-reviewed archive checksum
-authenticates bytes relative to that repository's lock; it does not establish
-builder identity or replace the separately planned provenance work.
+selects a fallback release. The wrapper checks that the exact release directory
+and stable launcher are present, then delegates once; the stable launcher
+verifies the installed release before executing the command. Shared storage lets
+repositories with the same lock reuse one installation while different locked
+releases coexist. A repository-reviewed archive checksum authenticates bytes
+relative to that repository's lock; it does not establish builder identity or
+replace the separately planned provenance work.
 
 ## Adoption ownership
 

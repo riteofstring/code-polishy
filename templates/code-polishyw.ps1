@@ -70,16 +70,21 @@ $Prefix = Join-Path $env:LOCALAPPDATA 'CodePolishy'
 $ReleaseRoot = Join-Path (Join-Path $Prefix 'releases') "$Version-$Digest"
 $Launcher = Join-Path (Join-Path $Prefix 'bin') 'code-polishy.exe'
 
-function Test-Ready {
+function Test-Available {
   if (-not (Test-Path -LiteralPath $ReleaseRoot -PathType Container) -or -not (Test-Path -LiteralPath $Launcher -PathType Leaf)) { return $false }
   if (((Get-Item -LiteralPath $ReleaseRoot -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or ((Get-Item -LiteralPath $Launcher -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
+  return $true
+}
+
+function Test-Ready {
+  if (-not (Test-Available)) { return $false }
   & $Launcher --repo-root $Repository version *> $null
   return $LASTEXITCODE -eq 0
 }
 
 if ($Arguments.Count -eq 0) { [Console]::Error.WriteLine((Show-Usage | Out-String).TrimEnd()); exit 2 }
 if ($Arguments[0] -cne 'setup') {
-  if (-not (Test-Ready)) { Fail 'the locked release is not installed; run .\code-polishyw.ps1 setup' }
+  if (-not (Test-Available)) { Fail 'the locked release is not installed; run .\code-polishyw.ps1 setup' }
   & $Launcher --repo-root $Repository @Arguments
   exit $LASTEXITCODE
 }

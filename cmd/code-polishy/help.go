@@ -176,7 +176,7 @@ var commandHelpPages = []commandHelpPage{
 			"satisfies-lock validates --root and requires it to satisfy the selected repository lock.",
 			"materialize copies a closed source tree to a new dereferenced destination.",
 			"archive creates one checksum-stable ZIP from a verified release root.",
-			"publish creates the archive checksum, manifest, SBOM, deterministic provenance metadata, and descriptor atomically.",
+			"publish creates the manifest, SBOM, deterministic provenance metadata, and descriptor atomically.",
 			"index combines every supported host descriptor into one verified release index.",
 			"oci-context installs one Linux archive through the bundle verifier into a new image context.",
 			"This command accepts no global --config option.",

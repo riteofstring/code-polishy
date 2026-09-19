@@ -262,7 +262,6 @@ func writePublicationDirectory(archive, parent, final string, payload publicatio
 		return err
 	}
 	files := map[string][]byte{
-		payload.artifact.Archive.Name + ".sha256":   []byte(payload.artifact.Archive.SHA256 + "  " + payload.artifact.Archive.Name + "\n"),
 		payload.artifact.Manifest.Name:              payload.manifestBytes,
 		payload.artifact.SBOM.Name:                  payload.sbomBytes,
 		payload.artifact.DeterministicMetadata.Name: payload.deterministicMetadataBytes,

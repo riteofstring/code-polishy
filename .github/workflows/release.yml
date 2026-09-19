@@ -142,14 +142,25 @@ jobs:
           publication_dir="${RUNNER_TEMP}/publication/${RELEASE_HOST}"
           ./scripts/build-release.sh --output "${publication_dir}"
           archive="${publication_dir}/code-polishy-${RELEASE_VERSION}-${RELEASE_HOST}.zip"
-          checksum_file="${archive}.sha256"
           descriptor="${publication_dir}/code-polishy-${RELEASE_VERSION}-${RELEASE_HOST}.release.json"
           test -f "${archive}"
-          test -f "${checksum_file}"
           test -f "${descriptor}"
-          archive_sha="$(awk 'NR == 1 { print $1 }' "${checksum_file}")"
+          archive_sha="$(
+            python3 - "${descriptor}" "$(basename "${archive}")" <<'PY'
+          import json
+          import re
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as source:
+              descriptor = json.load(source)
+          archive = descriptor.get("archive", {})
+          if archive.get("name") != sys.argv[2] or not re.fullmatch(r"[0-9a-f]{64}", archive.get("sha256", "")):
+              raise SystemExit("The release descriptor has invalid archive metadata.")
+          print(archive["sha256"])
+          PY
+          )"
           if [[ ! "${archive_sha}" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "The release archive has no exact SHA-256 sidecar." >&2
+            echo "The release descriptor has no exact archive SHA-256." >&2
             exit 1
           fi
           inspection="${RUNNER_TEMP}/release-inspection"
@@ -190,16 +201,16 @@ jobs:
           $rawArchive = Join-Path $env:RUNNER_TEMP 'code-polishy-release.zip'
           .\scripts\build-release.ps1 -Output $rawArchive -PublicationDirectory $publicationDir
           $archive = Join-Path $publicationDir "code-polishy-$env:RELEASE_VERSION-$env:RELEASE_HOST.zip"
-          $checksumFile = "$archive.sha256"
           $descriptor = Join-Path $publicationDir "code-polishy-$env:RELEASE_VERSION-$env:RELEASE_HOST.release.json"
-          foreach ($releaseFile in @($archive, $checksumFile, $descriptor)) {
+          foreach ($releaseFile in @($archive, $descriptor)) {
             if (-not (Test-Path -LiteralPath $releaseFile -PathType Leaf)) {
               throw "The release output is missing $releaseFile."
             }
           }
-          $archiveSha = ((Get-Content -LiteralPath $checksumFile -Raw).Trim() -split '\s+')[0]
-          if ($archiveSha -notmatch '^[0-9a-f]{64}$') {
-            throw 'The release archive has no exact SHA-256 sidecar.'
+          $releaseDescriptor = Get-Content -LiteralPath $descriptor -Raw | ConvertFrom-Json
+          $archiveSha = [string]$releaseDescriptor.archive.sha256
+          if ([string]$releaseDescriptor.archive.name -cne [System.IO.Path]::GetFileName($archive) -or $archiveSha -cnotmatch '^[0-9a-f]{64}$') {
+            throw 'The release descriptor has invalid archive metadata.'
           }
           $inspection = Join-Path $env:RUNNER_TEMP 'release-inspection'
           $installation = Join-Path $env:RUNNER_TEMP 'release-installation'
@@ -272,8 +283,8 @@ jobs:
           fi
           printf '%s  %s\n' "${index_sha}" "$(basename "${index_path}")" >"${index_path}.sha256"
           asset_count="$(find "${release_root}" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
-          if [[ "${asset_count}" -ne 32 ]]; then
-            echo "The complete publication must contain 32 assets, found ${asset_count}." >&2
+          if [[ "${asset_count}" -ne 27 ]]; then
+            echo "The complete publication must contain 27 assets, found ${asset_count}." >&2
             exit 1
           fi
 

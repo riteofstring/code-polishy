@@ -6,6 +6,9 @@
   lock fixture instead of invoking removed optionless lock creation.
 - Emit formatter-compatible v2 lock files and let POSIX setup consume their
   multiline archive records.
+- Avoid duplicate installed-release verification, reuse the archive digest
+  already produced by Windows builds, and remove checksum mirrors for
+  repository-owned scanner files and publication descriptors.
 
 ## 0.27.5 - 2026-09-19
 

@@ -28,14 +28,17 @@ prefix="${HOME}/.local/share/code-polishy"
 release_root="${prefix}/releases/${version}-${digest}"
 launcher="${prefix}/bin/code-polishy"
 
+available() {
+  [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]]
+}
+
 ready() {
-  [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]] &&
-    "$launcher" --repo-root "$repo" version >/dev/null 2>&1
+  available && "$launcher" --repo-root "$repo" version >/dev/null 2>&1
 }
 
 (($# > 0)) || { usage >&2; exit 2; }
 if [[ "$1" != setup ]]; then
-  ready || fail 'the locked release is not installed; run ./code-polishyw setup'
+  available || fail 'the locked release is not installed; run ./code-polishyw setup'
   exec "$launcher" --repo-root "$repo" "$@"
 fi
 shift
