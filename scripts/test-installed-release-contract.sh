@@ -15,7 +15,28 @@ if [[ "${#releases[@]}" -ne 1 || ! -x "${releases[0]}" ]]; then
   echo "The temporary installation must contain one exact release binary." >&2
   exit 1
 fi
-"${releases[0]}" --repo-root "${fixture_root}/target" lock
+manifest="$(dirname "$(dirname "${releases[0]}")")/release-manifest.json"
+version="$(awk -F'"' '/"codePolishyVersion"/ { print $4; exit }' "${manifest}")"
+release_digest="$(awk -F'"' '/"releaseDigest"/ { print $4; exit }' "${manifest}")"
+cat >"${fixture_root}/target/.code-polishy.lock.json" <<EOF
+{
+  "lockVersion": 2,
+  "codePolishyVersion": "${version}",
+  "releaseDigest": "${release_digest}",
+  "features": ["javascript-bundle"],
+  "publication": {
+    "indexUrl": "https://example.invalid/release-index.json",
+    "indexSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "archives": [
+      {"host": "darwin-arm64", "url": "https://example.invalid/code-polishy-${version}-darwin-arm64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "darwin-x64", "url": "https://example.invalid/code-polishy-${version}-darwin-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "linux-arm64", "url": "https://example.invalid/code-polishy-${version}-linux-arm64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "linux-x64", "url": "https://example.invalid/code-polishy-${version}-linux-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "windows-x64", "url": "https://example.invalid/code-polishy-${version}-windows-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1}
+    ]
+  }
+}
+EOF
 "${fixture_root}/prefix/bin/code-polishy" --repo-root "${fixture_root}/target" \
   pack verify --source "${policy_root}/tools/fixtures/language-pack"
 "${policy_root}/scripts/test-installed-release.sh" \

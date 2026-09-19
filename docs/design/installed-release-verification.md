@@ -7,14 +7,16 @@ not mutate the developer's consuming repository to simulate adoption or rely
 on whichever release a global command happens to resolve.
 
 The focused installed-release contract builds the current committed source
-into a temporary installation and obtains a lock from that installation. It
-then verifies the SQLite language-pack conformance cases and runs the
-first-adoption fixture through the real launcher. Pack runtime verification
-uses the installed release's manifest and pinned Node binary. This keeps the
-quick boundary meaningful on clean CI hosts where no prior installation
-exists, and prevents a stale developer installation from testing different
-production code. The test requires a clean committed source because the
-installer binds its artifact to that source revision.
+into a temporary installation and derives a publication-shaped v2 lock fixture
+from that installation's verified manifest. The inert fixture URLs are never
+used for acquisition; publication-index resolution has its own release-module
+contract. The harness then verifies the SQLite language-pack conformance cases
+and runs the first-adoption fixture through the real launcher. Pack runtime
+verification uses the installed release's manifest and pinned Node binary. This
+keeps the quick boundary meaningful on clean CI hosts where no prior
+installation exists, and prevents a stale developer installation from testing
+different production code. The test requires a clean committed source because
+the installer binds its artifact to that source revision.
 
 The broader release harness accepts an explicit prefix and lock so final
 verification can exercise an already built native artifact without rebuilding
@@ -41,6 +43,11 @@ penalty. Release automation must fail fast or move to a native runner rather
 than treating emulation as a fallback. An exact completed native archive run is
 the release evidence and must not be repeated merely to obtain another copy of
 the same result.
+
+The digest-pinned OCI smoke test likewise writes an inert v2 lock for its
+temporary repository before invoking the image's stable launcher. It verifies
+the already installed release and never uses those fixture URLs to acquire
+bytes; the image digest and installed manifest remain the runtime evidence.
 
 Executable test entrypoints have explicit production ownership and primary
 focused suites. Sourced scenario helpers remain test-support code selected by

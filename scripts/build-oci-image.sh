@@ -154,8 +154,25 @@ if [[ "${push}" == true ]]; then
   digest_ref="${image_ref}@${image_digest}"
   docker pull --platform "${platform}" "${digest_ref}"
   runtime_version="$(docker run --rm --platform "${platform}" --workdir /tmp --entrypoint /bin/sh "${digest_ref}" -eu -c '
-release_root="/opt/code-polishy/releases/$1-$2"
-"${release_root}/bin/code-polishy" --policy-root "${release_root}" --repo-root /tmp lock >/dev/null
+cat >/tmp/.code-polishy.lock.json <<LOCK
+{
+  "lockVersion": 2,
+  "codePolishyVersion": "$1",
+  "releaseDigest": "$2",
+  "features": ["javascript-bundle"],
+  "publication": {
+    "indexUrl": "https://example.invalid/release-index.json",
+    "indexSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "archives": [
+      {"host": "darwin-arm64", "url": "https://example.invalid/code-polishy-$1-darwin-arm64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "darwin-x64", "url": "https://example.invalid/code-polishy-$1-darwin-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "linux-arm64", "url": "https://example.invalid/code-polishy-$1-linux-arm64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "linux-x64", "url": "https://example.invalid/code-polishy-$1-linux-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1},
+      {"host": "windows-x64", "url": "https://example.invalid/code-polishy-$1-windows-x64.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 1}
+    ]
+  }
+}
+LOCK
 exec /opt/code-polishy/bin/code-polishy --version
 ' code-polishy "${version}" "${release_digest}")"
   if [[ "${runtime_version}" != "code-polishy ${version}" ]]; then

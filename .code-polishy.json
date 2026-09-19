@@ -151,6 +151,7 @@
       {
         "path": "docs/design/installed-release-verification.md",
         "sourcePaths": [
+          "scripts/build-oci-image.sh",
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
           "scripts/test-installed-release-architecture.sh"
