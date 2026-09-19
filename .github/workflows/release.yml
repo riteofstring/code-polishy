@@ -258,17 +258,16 @@ jobs:
           unzip -q "${linux_archive}" -d "${engine_root}"
           engine="${engine_root}/bin/code-polishy"
           index_path="${release_root}/code-polishy-release-index.json"
-          index_sha="$(
-            "${engine}" --policy-root "${engine_root}" release-manifest index \
-              --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-darwin-arm64.release.json" \
-              --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-darwin-x64.release.json" \
-              --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-linux-arm64.release.json" \
-              --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.release.json" \
-              --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-windows-x64.release.json" \
-              --output "${index_path}"
-          )"
+          "${engine}" --policy-root "${engine_root}" release-manifest index \
+            --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-darwin-arm64.release.json" \
+            --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-darwin-x64.release.json" \
+            --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-linux-arm64.release.json" \
+            --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.release.json" \
+            --artifact-descriptor "${release_root}/code-polishy-${RELEASE_VERSION}-windows-x64.release.json" \
+            --output "${index_path}"
+          index_sha="$(sha256sum "${index_path}" | cut -d ' ' -f1)"
           if [[ ! "${index_sha}" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "The publication index did not report an exact SHA-256." >&2
+            echo "The publication index does not have an exact SHA-256." >&2
             exit 1
           fi
           printf '%s  %s\n' "${index_sha}" "$(basename "${index_path}")" >"${index_path}.sha256"

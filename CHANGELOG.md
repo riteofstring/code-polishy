@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.27.5 - 2026-09-19
+
+- Hash the written publication index directly instead of treating its
+  human-readable creation report as a bare digest.
+
 ## 0.27.4 - 2026-09-19
 
 - Keep outgoing self-host launchers module-owned while incoming source is
