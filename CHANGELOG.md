@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.27.4 - 2026-09-19
+
+- Keep outgoing self-host launchers module-owned while incoming source is
+  validated, without crossing the lock authority boundary before publication.
+
 ## 0.27.3 - 2026-09-18
 
 - Publish the complete native archive set and canonical release index from

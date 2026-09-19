@@ -54,6 +54,13 @@ not application source, so adoption does not distort the target's module model.
 A modified or conflicting copy loses that classification and remains subject to
 normal executable-source coverage in addition to the adoption-status finding.
 
+This repository can validate an incoming source build before that release is
+published and replaces its own lock. During that interval, the root wrappers
+deliberately remain canonical for the outgoing locked release and can differ
+from the incoming templates. They retain `agents` module ownership until the
+lock-last upgrade transaction replaces them, so incoming policy validation does
+not force an early authority cutover.
+
 ## Publication boundary
 
 The publication index is canonical, bounded, versioned, and checksum-pinned by

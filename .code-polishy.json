@@ -307,6 +307,8 @@
       "name": "agents",
       "paths": [
         "AGENTS.md",
+        "code-polishyw",
+        "code-polishyw.ps1",
         "internal/agents/**",
         "templates/AGENTS.md",
         "templates/code-polishyw",
