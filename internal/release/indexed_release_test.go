@@ -60,8 +60,13 @@ func TestInstallIndexedReleaseDownloadsAndLocksTheExactHostArchive(t *testing.T)
 	if err := installed.Manifest.Verify(installed.Root); err != nil {
 		t.Fatal(err)
 	}
+	assertWrittenHostArchive(t, installed.Lock, host, server.URL+"/"+artifact.Archive.Name, archiveSHA, int64(len(archiveData)))
+}
+
+func assertWrittenHostArchive(t *testing.T, lock Lock, host, archiveURL, archiveSHA string, archiveSize int64) {
+	t.Helper()
 	repoRoot := t.TempDir()
-	if err := WriteLock(repoRoot, installed.Lock); err != nil {
+	if err := WriteLock(repoRoot, lock); err != nil {
 		t.Fatal(err)
 	}
 	written, present, err := ReadLock(repoRoot)
@@ -75,9 +80,9 @@ func TestInstallIndexedReleaseDownloadsAndLocksTheExactHostArchive(t *testing.T)
 			break
 		}
 	}
-	if lockedArchive.URL != server.URL+"/"+artifact.Archive.Name ||
+	if lockedArchive.URL != archiveURL ||
 		lockedArchive.SHA256 != archiveSHA ||
-		lockedArchive.Size != int64(len(archiveData)) {
+		lockedArchive.Size != archiveSize {
 		t.Fatalf("locked host archive = %+v", lockedArchive)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
@@ -41,27 +42,8 @@ func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
 	}
 	seen := map[string]bool{}
 	for len(arguments) > 0 {
-		name, _, _ := strings.Cut(arguments[0], "=")
-		if name == "--files" && arguments[0] == "--files" {
-			files := designContextFiles(arguments[1:])
-			if len(files) == 0 {
-				return options, fmt.Errorf("--files needs at least one path")
-			}
-			seen[name] = true
-			options.request.Context.Mode = "files"
-			options.request.Context.Files = append(options.request.Context.Files, files...)
-			arguments = arguments[len(files)+1:]
-			continue
-		}
-		value, consumed, _, err := namedOptionValue(arguments, name)
+		consumed, err := parseTaskStartOption(&options, seen, arguments)
 		if err != nil {
-			return options, err
-		}
-		if seen[name] && name != "--files" && name != "--module" && name != "--feature" && name != "--situation" {
-			return options, errorsDuplicateOption("task-start", name)
-		}
-		seen[name] = true
-		if err := applyTaskStartOption(&options, name, value); err != nil {
 			return options, err
 		}
 		arguments = arguments[consumed:]
@@ -70,6 +52,33 @@ func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
 		return options, fmt.Errorf("task-start requires one or more --files PATH operands or --module NAME options")
 	}
 	return options, nil
+}
+
+func parseTaskStartOption(options *taskStartOptions, seen map[string]bool, arguments []string) (int, error) {
+	name, _, _ := strings.Cut(arguments[0], "=")
+	if name == "--files" && arguments[0] == "--files" {
+		return parseTaskStartFiles(options, seen, arguments)
+	}
+	value, consumed, _, err := namedOptionValue(arguments, name)
+	if err != nil {
+		return 0, err
+	}
+	if seen[name] && !slices.Contains([]string{"--files", "--module", "--feature", "--situation"}, name) {
+		return 0, errorsDuplicateOption("task-start", name)
+	}
+	seen[name] = true
+	return consumed, applyTaskStartOption(options, name, value)
+}
+
+func parseTaskStartFiles(options *taskStartOptions, seen map[string]bool, arguments []string) (int, error) {
+	files := designContextFiles(arguments[1:])
+	if len(files) == 0 {
+		return 0, fmt.Errorf("--files needs at least one path")
+	}
+	seen["--files"] = true
+	options.request.Context.Mode = "files"
+	options.request.Context.Files = append(options.request.Context.Files, files...)
+	return len(files) + 1, nil
 }
 
 func applyTaskStartOption(options *taskStartOptions, name, value string) error {
