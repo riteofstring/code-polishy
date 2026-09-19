@@ -8,7 +8,7 @@ dispatch logic, not a Code Polishy release or its toolchain. The wrapper reads
 the repository lock and delegates ordinary commands to the exact release in
 the shared per-user installation prefix.
 
-`setup` is the only wrapper action allowed to acquire anything. A version-two
+`setup` is the only wrapper action allowed to acquire anything. A v2
 lock contains one HTTPS archive URL, checksum, and size for every supported
 host. Those values are derived from an exact checksum-pinned publication index
 by initial adoption or the upgrade planner. The wrapper selects the current host, downloads the
@@ -18,9 +18,8 @@ toolchain, or build a release.
 
 Wrapper `setup --source PATH` is an explicit recovery path for a local Code
 Polishy checkout. The source installer still proves that the built release
-satisfies the target lock. Version-one locks have no archive authority and
-therefore require this explicit source path; they never silently regain the old
-clone-and-build path.
+satisfies the target v2 lock. It cannot create or replace repository authority,
+and the wrapper never silently falls back to source.
 
 ## Trust boundary
 
@@ -67,24 +66,20 @@ metadata never participates in selection.
 
 Initial adoption can pass the index URL and checksum to `lock`. That operation
 requires the executing installed release to match the index and records the
-same version-two publication authority without redownloading an archive. A
-source-only or private adoption can omit the index and deliberately receive a
-legacy lock whose wrapper requires an explicit local source checkout.
+same v2 publication authority without redownloading an archive. A
+publication index and checksum are mandatory; source-only adoption is not a
+repository lock mode.
 
 ## Upgrade boundary
 
-Upgrade is deliberately two phase. `upgrade plan` accepts either a verified
-publication index or an exact clean local source checkout. It installs the
-current-host candidate without changing repository authority, authenticates the
-capability delta, and runs the outgoing and incoming engines against the same
-repository. A source candidate is bound to the checkout's unchanged commit and
-installed manifest and produces a version-one lock; it does not invent archive
-authority for hosts that were not published. The durable plan identifies added,
-removed, and changed diagnostics so a policy bump cannot disguise application
-cleanup as a simple version edit.
+Upgrade is deliberately two phase. `upgrade plan` accepts a verified publication
+index, installs the current-host candidate without changing repository
+authority, authenticates the capability delta, and runs the outgoing and
+incoming engines against the same repository. The durable plan identifies
+added, removed, and changed diagnostics so a policy bump cannot disguise
+application cleanup as a simple version edit.
 
-`upgrade apply` uses the same path for publication-backed and source-backed
-plans. It revalidates the outgoing lock, installed candidate, and incoming
+`upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a
 new plan after cleanup. Apply stages canonical guidance, both wrappers, ignore
 rules, and the incoming lock as one rollback-capable transaction; the lock is

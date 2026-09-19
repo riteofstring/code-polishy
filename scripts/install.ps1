@@ -120,7 +120,7 @@ try {
     Write-Output 'Command discovery: code-polishy already resolves to the installed launcher.'
   }
   Write-Output 'Require this release in a target repository with:'
-  Write-Output "  & `"$ReleaseEngine`" lock"
+  Write-Output "  & `"$ReleaseEngine`" lock --index <https-index-url> --sha256 <index-sha256>"
 } finally {
   if (Test-Path -LiteralPath $Scratch) {
     Remove-Item -LiteralPath $Scratch -Recurse -Force

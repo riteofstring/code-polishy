@@ -66,15 +66,17 @@ func TestPOSIXWrapperBootstrapsTheExactTaggedSourceAndDispatchesOffline(t *testi
 	}
 }
 
-func TestPOSIXWrapperRequiresAnExplicitSourceForALegacyLock(t *testing.T) {
+func TestPOSIXWrapperRejectsAVersionOneLock(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX wrapper contract")
 	}
 	policyRoot := repositoryPolicyRoot(t)
 	repoRoot := wrapperTargetFixture(t, policyRoot)
-	stdout, stderr, err := runPOSIXWrapper(repoRoot, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "setup")
-	if err == nil || !strings.Contains(stderr, "legacy lock requires setup --source PATH") {
-		t.Fatalf("legacy setup result: err=%v stdout=%q stderr=%q", err, stdout, stderr)
+	lockPath := filepath.Join(repoRoot, release.LockFilename)
+	writeFile(t, lockPath, []byte(`{"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"`+wrapperTestDigest+`","features":["javascript-bundle"]}`), 0o600)
+	stdout, stderr, err := runPOSIXWrapper(repoRoot, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "setup", "--source", t.TempDir())
+	if err == nil || !strings.Contains(stderr, "unsupported lockVersion") {
+		t.Fatalf("version-one setup result: err=%v stdout=%q stderr=%q", err, stdout, stderr)
 	}
 }
 
@@ -136,7 +138,7 @@ func TestPOSIXWrapperRejectsAnAmbiguousLockBeforeCloning(t *testing.T) {
 	policyRoot := repositoryPolicyRoot(t)
 	repoRoot := wrapperTargetFixture(t, policyRoot)
 	lockPath := filepath.Join(repoRoot, ".code-polishy.lock.json")
-	writeFile(t, lockPath, []byte(`{"lockVersion":1,"codePolishyVersion":"9.9.9","codePolishyVersion":"9.9.8","releaseDigest":"`+wrapperTestDigest+`","features":["javascript-bundle"]}`), 0o600)
+	writeFile(t, lockPath, []byte(`{"lockVersion":2,"codePolishyVersion":"9.9.9","codePolishyVersion":"9.9.8","releaseDigest":"`+wrapperTestDigest+`","features":["javascript-bundle"]}`), 0o600)
 	stdout, stderr, err := runPOSIXWrapper(repoRoot, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "setup", "--source", filepath.Join(t.TempDir(), "missing"))
 	if err == nil || !strings.Contains(stderr, "exactly one codePolishyVersion") {
 		t.Fatalf("ambiguous lock result: err=%v stdout=%q stderr=%q", err, stdout, stderr)
@@ -220,15 +222,7 @@ printf 'install-prefix=%s\ninstall-repository=%s\n' "$prefix" "$repository" >>"$
 
 func wrapperTargetFixture(t *testing.T, policyRoot string) string {
 	t.Helper()
-	root := t.TempDir()
-	template, err := os.ReadFile(filepath.Join(policyRoot, filepath.FromSlash(posixWrapperTemplateRelativePath)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(root, posixWrapperTargetFilename), template, 0o755)
-	lock := "{\n  \"lockVersion\": 1,\n  \"codePolishyVersion\": \"" + wrapperTestVersion + "\",\n  \"releaseDigest\": \"" + wrapperTestDigest + "\",\n  \"features\": [\"javascript-bundle\"]\n}\n"
-	writeFile(t, filepath.Join(root, ".code-polishy.lock.json"), []byte(lock), 0o600)
-	return root
+	return wrapperArchiveTargetFixture(t, policyRoot, wrapperTestDigest, 1)
 }
 
 func wrapperArchiveTargetFixture(t *testing.T, policyRoot, archiveSHA string, archiveSize int64) string {

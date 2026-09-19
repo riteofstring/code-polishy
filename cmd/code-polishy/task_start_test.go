@@ -281,7 +281,7 @@ func newTaskStartCLIRepository(t *testing.T) (string, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := release.WriteLock(root, release.LockFor(manifest)); err != nil {
+	if err := release.WriteLock(root, publishedTestLock(manifest)); err != nil {
 		t.Fatal(err)
 	}
 	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename, release.LockFilename, "docs")

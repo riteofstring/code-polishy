@@ -24,7 +24,7 @@ func TestCapabilitiesCLIUsesExactLockedCatalogAndRepositoryDeclarations(t *testi
 		if err != nil || !present {
 			t.Fatalf("release fixture: %v", err)
 		}
-		if err := release.WriteLock(root, release.LockFor(manifest)); err != nil {
+		if err := release.WriteLock(root, publishedTestLock(manifest)); err != nil {
 			t.Fatal(err)
 		}
 		arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "capabilities"}
@@ -59,7 +59,7 @@ func TestCapabilitiesCLIQueriesRemainDeterministicAndCannotActivateReview(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := release.WriteLock(root, release.LockFor(manifest)); err != nil {
+	if err := release.WriteLock(root, publishedTestLock(manifest)); err != nil {
 		t.Fatal(err)
 	}
 	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "capabilities", "--query", "ＰＵＲＣＨＡＳＥ\u00a0COMPLETION", "--format=json"}
@@ -82,7 +82,7 @@ func TestCapabilitiesCLIReportsUnavailableCatalogWithoutAmbientFallback(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := release.WriteLock(root, release.LockFor(manifest)); err != nil {
+	if err := release.WriteLock(root, publishedTestLock(manifest)); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(policyRoot, release.CapabilityCatalogPath)); err != nil {

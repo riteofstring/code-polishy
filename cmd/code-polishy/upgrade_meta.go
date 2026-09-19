@@ -56,7 +56,7 @@ func (output *boundedUpgradeOutput) String() string {
 }
 
 type upgradePlanOptions struct {
-	indexURL, indexSHA256, source, prefix string
+	indexURL, indexSHA256, prefix string
 }
 
 type upgradeApplyOptions struct {
@@ -117,17 +117,14 @@ func parseUpgradePlanOptions(arguments []string) (upgradePlanOptions, error) {
 	flags.SetOutput(io.Discard)
 	indexURL := flags.String("index", "", "release publication index URL")
 	indexSHA256 := flags.String("sha256", "", "release publication index SHA-256")
-	source := flags.String("source", "", "clean local Code Polishy checkout")
 	prefix := flags.String("prefix", "", "shared installation prefix")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 {
-		return upgradePlanOptions{}, errors.New("upgrade plan requires either --source PATH or --index URL and --sha256 DIGEST; --prefix PATH is optional")
+		return upgradePlanOptions{}, errors.New("upgrade plan requires --index URL and --sha256 DIGEST; --prefix PATH is optional")
 	}
-	sourceSelected := *source != ""
-	indexSelected := *indexURL != "" || *indexSHA256 != ""
-	if sourceSelected == indexSelected || indexSelected && (*indexURL == "" || *indexSHA256 == "") {
-		return upgradePlanOptions{}, errors.New("upgrade plan requires either --source PATH or --index URL and --sha256 DIGEST; --prefix PATH is optional")
+	if *indexURL == "" || *indexSHA256 == "" {
+		return upgradePlanOptions{}, errors.New("upgrade plan requires --index URL and --sha256 DIGEST; --prefix PATH is optional")
 	}
-	return upgradePlanOptions{indexURL: *indexURL, indexSHA256: *indexSHA256, source: *source, prefix: *prefix}, nil
+	return upgradePlanOptions{indexURL: *indexURL, indexSHA256: *indexSHA256, prefix: *prefix}, nil
 }
 
 func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgradePlanningResult, error) {
@@ -178,10 +175,6 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 }
 
 func installUpgradeCandidate(ctx context.Context, options upgradePlanOptions, prefix string) (release.Lock, string, error) {
-	if options.source != "" {
-		candidate, err := release.InstallSourceRelease(ctx, options.source, prefix)
-		return candidate.Lock, candidate.Root, err
-	}
 	candidate, err := release.InstallIndexedRelease(ctx, options.indexURL, options.indexSHA256, prefix)
 	return candidate.Lock, candidate.Root, err
 }
@@ -530,7 +523,7 @@ func resolveUpgradePrefix(policyRoot, requested string) (string, error) {
 	if requested == "" {
 		if manifest, present, err := release.ReadManifest(policyRoot); err == nil && present {
 			candidate := filepath.Dir(filepath.Dir(policyRoot))
-			if filepath.Clean(release.Directory(candidate, release.LockFor(manifest))) == filepath.Clean(policyRoot) {
+			if filepath.Clean(release.DirectoryForManifest(candidate, manifest)) == filepath.Clean(policyRoot) {
 				requested = candidate
 			}
 		}

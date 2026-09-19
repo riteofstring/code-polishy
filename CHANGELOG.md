@@ -9,6 +9,8 @@
 - Generate release SBOMs from pnpm's isolated and hoisted package maps, fixing
   Windows publication when package keys are installation paths.
 - Streamline the README's setup and repository-wrapper guidance.
+- Require publication-backed v2 locks, remove v1 and source-backed lock
+  creation, and document direct AI-guided replacement for pre-v2 repositories.
 
 ## 0.27.2 - 2026-09-18
 

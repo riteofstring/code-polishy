@@ -25,9 +25,8 @@ const (
 	ManifestFilename = "release-manifest.json"
 	MaximumLockBytes = 32 << 10
 
-	LegacyLockVersion = 1
-	LockVersion       = 2
-	ManifestVersion   = 6
+	LockVersion     = 2
+	ManifestVersion = 6
 
 	releasesDirectory = "releases"
 )
@@ -135,6 +134,10 @@ func Directory(prefix string, lock Lock) string {
 	return filepath.Join(prefix, releasesDirectory, lock.CodePolishyVersion+"-"+lock.ReleaseDigest)
 }
 
+func DirectoryForManifest(prefix string, manifest Manifest) string {
+	return filepath.Join(prefix, releasesDirectory, manifest.CodePolishyVersion+"-"+manifest.ReleaseDigest)
+}
+
 func parseLock(data []byte, source string) (Lock, error) {
 	if source == "" {
 		source = LockFilename
@@ -146,7 +149,7 @@ func parseLock(data []byte, source string) (Lock, error) {
 	if err := decodeExactly(data, source, &lock); err != nil {
 		return Lock{}, err
 	}
-	if lock.LockVersion != LegacyLockVersion && lock.LockVersion != LockVersion {
+	if lock.LockVersion != LockVersion {
 		return Lock{}, fmt.Errorf("%s records unsupported lock version %d", source, lock.LockVersion)
 	}
 	if !versionPattern.MatchString(lock.CodePolishyVersion) {
@@ -165,22 +168,12 @@ func parseLock(data []byte, source string) (Lock, error) {
 }
 
 func validateLockPublication(lock Lock) error {
-	if lock.LockVersion == LegacyLockVersion {
-		return validateLegacyLockPublication(lock.Publication)
-	}
 	return validatePublishedLock(lock.Publication)
-}
-
-func validateLegacyLockPublication(publication *LockPublication) error {
-	if publication != nil {
-		return errors.New("a version-one lock cannot contain publication metadata")
-	}
-	return nil
 }
 
 func validatePublishedLock(publication *LockPublication) error {
 	if publication == nil || !digestPattern.MatchString(publication.IndexSHA256) {
-		return errors.New("a version-two lock requires an exact publication index")
+		return errors.New("a lock requires an exact publication index")
 	}
 	if _, err := parseReleaseHTTPSURL(publication.IndexURL); err != nil {
 		return fmt.Errorf("records an unusable publication index URL: %w", err)
@@ -222,15 +215,6 @@ func ReadLock(repoRoot string) (Lock, bool, error) {
 	}
 	lock, err := parseLock(data, source)
 	return lock, true, err
-}
-
-func LockFor(manifest Manifest) Lock {
-	return Lock{
-		LockVersion:        LegacyLockVersion,
-		CodePolishyVersion: manifest.CodePolishyVersion,
-		ReleaseDigest:      manifest.ReleaseDigest,
-		Features:           slices.Clone(manifest.Features),
-	}
 }
 
 func RenderLock(lock Lock) []byte {
@@ -369,7 +353,7 @@ func RequireLockedRelease(repoRoot, policyRoot string) error {
 	}
 	if !present {
 		return fmt.Errorf(
-			"%s has no %s; write one with `code-polishy lock` from the release it must require",
+			"%s has no %s; write one with `code-polishy lock --index URL --sha256 DIGEST` from the release it must require",
 			repoRoot, LockFilename,
 		)
 	}

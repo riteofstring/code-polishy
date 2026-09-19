@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -764,21 +765,57 @@ func installedRelease(t *testing.T, revision string) string {
 	return directory
 }
 
+func publishedTestLock(manifest release.Manifest) release.Lock {
+	hosts := []string{"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"}
+	archives := make([]release.LockedArchive, 0, len(hosts))
+	for _, host := range hosts {
+		archives = append(archives, release.LockedArchive{
+			Host: host, URL: "https://example.invalid/code-polishy-" + manifest.CodePolishyVersion + "-" + host + ".zip",
+			SHA256: strings.Repeat("a", 64), Size: 1,
+		})
+	}
+	return release.Lock{
+		LockVersion: release.LockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
+		ReleaseDigest: manifest.ReleaseDigest, Features: slices.Clone(manifest.Features),
+		Publication: &release.LockPublication{
+			IndexURL: "https://example.invalid/release-index.json", IndexSHA256: strings.Repeat("b", 64), Archives: archives,
+		},
+	}
+}
+
+func testPublishedLockWriter(expected release.Lock) func(context.Context, string, string, string, string) (release.LockUpgradeResult, error) {
+	return func(_ context.Context, repoRoot, incomingRoot, indexURL, indexSHA256 string) (release.LockUpgradeResult, error) {
+		if expected.Publication == nil || indexURL != expected.Publication.IndexURL || indexSHA256 != expected.Publication.IndexSHA256 {
+			return release.LockUpgradeResult{}, fmt.Errorf("unexpected publication identity")
+		}
+		result, err := release.PrepareCapabilityUpgrade(repoRoot, incomingRoot, expected)
+		if err != nil || !result.Changed {
+			return result, err
+		}
+		if err := release.WriteLock(repoRoot, expected); err != nil {
+			return release.LockUpgradeResult{}, err
+		}
+		return result, nil
+	}
+}
+
 func TestLockWritesTheLockRequiringTheRunningRelease(t *testing.T) {
 	repoRoot := t.TempDir()
 	installed := installedRelease(t, strings.Repeat("a", 40))
-	if status := handleLockMeta(invocation{repoRoot: repoRoot, policyRoot: installed}); status != 0 {
+	manifest, _, err := release.ReadManifest(installed)
+	if err != nil {
+		t.Fatalf("read the manifest: %v", err)
+	}
+	expected := publishedTestLock(manifest)
+	arguments := []string{"--index", expected.Publication.IndexURL, "--sha256", expected.Publication.IndexSHA256}
+	if status := handleLockMetaWithWriter(invocation{repoRoot: repoRoot, policyRoot: installed, arguments: arguments}, testPublishedLockWriter(expected)); status != 0 {
 		t.Fatalf("status = %d", status)
 	}
 	written, present, err := release.ReadLock(repoRoot)
 	if !present || err != nil {
 		t.Fatalf("present=%v err=%v", present, err)
 	}
-	manifest, _, err := release.ReadManifest(installed)
-	if err != nil {
-		t.Fatalf("read the manifest: %v", err)
-	}
-	if written.LockVersion != release.LegacyLockVersion ||
+	if written.LockVersion != release.LockVersion || written.Publication == nil ||
 		written.CodePolishyVersion != manifest.CodePolishyVersion ||
 		written.ReleaseDigest != manifest.ReleaseDigest ||
 		!slices.Equal(written.Features, manifest.Features) {
@@ -788,7 +825,14 @@ func TestLockWritesTheLockRequiringTheRunningRelease(t *testing.T) {
 
 func TestLockRefusesToRecordASourceCheckout(t *testing.T) {
 	repoRoot := t.TempDir()
-	if status := handleLockMeta(invocation{repoRoot: repoRoot, policyRoot: t.TempDir()}); status != 2 {
+	manifestRoot := installedRelease(t, strings.Repeat("a", 40))
+	manifest, _, err := release.ReadManifest(manifestRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := publishedTestLock(manifest)
+	arguments := []string{"--index", expected.Publication.IndexURL, "--sha256", expected.Publication.IndexSHA256}
+	if status := handleLockMetaWithWriter(invocation{repoRoot: repoRoot, policyRoot: t.TempDir(), arguments: arguments}, testPublishedLockWriter(expected)); status != 2 {
 		t.Fatalf("status = %d", status)
 	}
 	if _, present, _ := release.ReadLock(repoRoot); present {
@@ -821,7 +865,7 @@ func TestReleaseManifestSatisfiesTheSelectedRepositoryLock(t *testing.T) {
 	if err != nil || !present {
 		t.Fatalf("read manifest: present=%v err=%v", present, err)
 	}
-	if err := release.WriteLock(repoRoot, release.LockFor(manifest)); err != nil {
+	if err := release.WriteLock(repoRoot, publishedTestLock(manifest)); err != nil {
 		t.Fatal(err)
 	}
 	status := run([]string{
@@ -864,7 +908,13 @@ func TestInstalledReleaseGovernsOnlyTheRepositoryThatLocksIt(t *testing.T) {
 		t.Fatalf("the local release installer required a target lock: status=%d governed=%v", status, governed)
 	}
 
-	if status := handleLockMeta(invocation{repoRoot: repoRoot, policyRoot: installed}); status != 0 {
+	manifest, present, err := release.ReadManifest(installed)
+	if err != nil || !present {
+		t.Fatalf("read installed release: present=%v error=%v", present, err)
+	}
+	locked := publishedTestLock(manifest)
+	lockArguments := []string{"--index", locked.Publication.IndexURL, "--sha256", locked.Publication.IndexSHA256}
+	if status := handleLockMetaWithWriter(invocation{repoRoot: repoRoot, policyRoot: installed, arguments: lockArguments}, testPublishedLockWriter(locked)); status != 0 {
 		t.Fatalf("write the lock: status = %d", status)
 	}
 	if status, governed := requireLockedRelease(invocation{

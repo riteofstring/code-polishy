@@ -76,7 +76,7 @@ func verifyStagedBundle(staging string) (Manifest, Entry, error) {
 }
 
 func installStagedRelease(staging, canonicalPrefix string, manifest Manifest, launcherEntry Entry, keepStaging *bool) error {
-	target := Directory(canonicalPrefix, LockFor(manifest))
+	target := DirectoryForManifest(canonicalPrefix, manifest)
 	created, err := publishStagedRelease(staging, target, manifest, keepStaging)
 	if err != nil {
 		return err

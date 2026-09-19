@@ -20,11 +20,11 @@ a temporary shallow clone of that tag. The clone must prove that the selected
 ref is annotated, points directly at `HEAD`, and matches `VERSION`. The default
 branch supplies current instructions; it is never an installable release.
 
-For a public published release, adoption also pins the canonical publication
-index URL and its separately published SHA-256 when it writes the repository
-lock. This records the exact native archive for every host without embedding a
-release in the target repository. Private, offline, and unpublished source
-adoptions can deliberately omit publication metadata.
+Adoption pins the canonical publication-index URL and its separately published
+SHA-256 when it writes the repository lock. This records the exact native
+archive for every host without embedding a release in the target repository.
+An unpublished source checkout can build or recover an installation, but it
+cannot become repository lock authority.
 
 A private repository URL or clean local checkout may be supplied explicitly for
 private development. The same exact-source rules apply, and the agent never
@@ -47,14 +47,14 @@ or changing `PATH`:
 
 The wrapper reads `.code-polishy.lock.json`. If that exact release already
 exists in the default shared user prefix, setup verifies and reuses it without
-network access. A version-two lock otherwise supplies the exact HTTPS URL,
+network access. A v2 lock otherwise supplies the exact HTTPS URL,
 SHA-256, and size for every supported host. Setup selects this host, downloads
 and checks that archive, and invokes the archive's engine to perform the bounded
 bundle installation. It does not need Git, a language toolchain, or a local
 build.
 
-Version-one locks predate archive metadata. An explicit clean local checkout is
-their recovery path and is also available for private or offline development:
+An explicit clean local checkout is also available as a recovery path for the
+exact release already named by a v2 lock:
 
 ```sh
 ./code-polishyw setup --source <local-code-polishy-checkout>
@@ -441,42 +441,48 @@ reviewed repository authority, so the same lock selects one release across all
 supported hosts. This authenticates acquired bytes relative to the lock; it is
 not authenticated builder provenance.
 
-For normal public adoption, `lock --index URL --sha256 DIGEST` verifies that the
-index describes the executing installed release and writes this version-two
-lock without redownloading an archive. `lock` without publication options
-deliberately creates a version-one source-install lock for private, offline, or
-unpublished use, and preserves an existing version-two lock for the same
-release. Convert an older lock, or move to a later publication, with the
-two-phase upgrade:
+`lock --index URL --sha256 DIGEST` verifies that the index describes the
+executing installed release and writes this v2 lock without redownloading an
+archive. Every new lock requires publication metadata. Move between v2 releases
+with the two-phase upgrade:
 
 ```sh
 code-polishy upgrade plan --index <https-index-url> --sha256 <index-sha256>
 code-polishy upgrade apply --plan <reported-plan-path>
 ```
 
-For a private, offline, or unpublished release, plan from its exact clean local
-checkout instead:
+Planning verifies the selected index, installs the host candidate, authenticates
+the capability delta, and compares outgoing and incoming diagnostics without
+changing repository authority. Applying the plan revalidates its evidence and
+replaces managed guidance, wrappers, ignore rules, and the lock in one
+rollback-capable transaction with the lock last. New errors can be acknowledged
+without fixing them by adding `--accept-new-findings`. Neither phase edits
+application source, runs tests, or runs a merge gate.
+
+When the outgoing release has a v2 lock but predates `upgrade`, first install the
+pinned current-host candidate with the existing local bundle workflow, then
+invoke both phases through that incoming release binary directly. The outgoing
+lock and guidance still govern until apply replaces the lock; the incoming
+release governs afterward.
+
+### Replacing a pre-v2 lock
+
+Current releases do not parse or migrate v1 locks. For a repository still using
+one, an AI agent should preserve the working tree, install the exact published
+incoming release, and obtain its publication-index URL and SHA-256. It should
+then preserve the old lock through Git or a temporary file outside the
+repository, remove `.code-polishy.lock.json`, and invoke the incoming release
+directly:
 
 ```sh
-code-polishy upgrade plan --source <local-code-polishy-checkout>
-code-polishy upgrade apply --plan <reported-plan-path>
+<incoming-code-polishy> lock --index <https-index-url> --sha256 <index-sha256>
+<incoming-code-polishy> agents sync
 ```
 
-Planning verifies the selected index or binds the unchanged source commit to its
-verified installed manifest, installs the host candidate, authenticates the
-capability delta, and compares outgoing and incoming diagnostics without
-changing repository authority. A source plan records a version-one lock, so
-fresh-clone setup still requires `setup --source`. Applying either kind of plan
-revalidates its evidence and replaces managed guidance, wrappers, ignore rules,
-and the lock in one rollback-capable transaction with the lock last. New errors
-can be acknowledged without fixing them by adding `--accept-new-findings`.
-Neither phase edits application source, runs tests, or runs a merge gate.
-
-When the outgoing release predates `upgrade`, first install the pinned
-current-host candidate with the existing local bundle workflow, then invoke
-both phases through that incoming release binary directly. The outgoing lock
-and guidance still govern until apply replaces the lock; the incoming release
-governs afterward.
+The agent then reviews the intervening changelog and target configuration,
+performs the checks selected for the upgrade, and commits the v2 lock with the
+managed adoption updates. This is a deliberate authority replacement, not an
+automated migration; Git retains the rollback path.
 
 ## Selecting a release
 

@@ -842,4 +842,4 @@ else
   fi
 fi
 echo "Require this release in a target repository with:"
-echo "  ${destination}/bin/code-polishy lock"
+echo "  ${destination}/bin/code-polishy lock --index <https-index-url> --sha256 <index-sha256>"

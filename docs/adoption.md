@@ -55,11 +55,9 @@ exact release it will run and start from the minimal configuration:
 cp <code-polishy-checkout>/templates/minimal/.code-polishy.json .code-polishy.json
 ```
 
-The publication-backed form is the normal public adoption path. It verifies
-that the index names the executing installed release and records exact native
-archives so every later clone has one-command setup. A private, offline, or
-unpublished source adoption may run `lock` without options; that deliberate
-legacy lock requires developers to provide a local checkout to wrapper setup.
+The command verifies that the index names the executing installed release and
+records exact native archives so every later clone has one-command setup. Code
+Polishy does not create unpublished or source-backed repository locks.
 
 `.code-polishy.lock.json` and `.code-polishy.json` are the only policy files the
 repository checks in. Never vendor the engine or copy individual checker files;
@@ -67,10 +65,10 @@ that creates divergent policy forks.
 
 After `code-polishy agents install` adds the managed repository wrappers, a new
 developer uses `./code-polishyw setup` or `.\code-polishyw.ps1 setup` to reuse
-or download and verify the exact host archive recorded by a version-two lock.
+or download and verify the exact host archive recorded by the v2 lock.
 Subsequent commands go through the same wrapper and do not require a global
-`PATH` entry. A legacy version-one lock requires an explicit local source
-checkout until the repository applies a publication-backed upgrade.
+`PATH` entry. `setup --source PATH` may recover the exact release already named
+by the lock from a local checkout.
 
 ## 3. Declare project capabilities
 
@@ -909,16 +907,14 @@ commands always mean their complete declared profile, not a best-effort subset.
 ## 13. Upgrade intentionally
 
 The [AI-Agent Setup and Adoption upgrade procedure](ai-adoption.md#upgrades) is
-the authority for both agent-driven and manual upgrades. For a published
-release, pin the exact canonical publication index URL and SHA-256. For a
-private, offline, or unpublished release, select an exact clean local checkout.
-Use the matching `upgrade plan` form to install and compare the candidate before
-`upgrade apply` changes authority. Both forms expose capability and diagnostic
-changes, including cleanup a new policy would demand, and use the same
-transactional apply. Apply never edits application source and may acknowledge
-new findings explicitly. Neither phase selects an ordinary or supplemental
-gate; verification remains a separate task or delivery decision. Never install
-from floating `main` or let a check select a release the lock does not name.
+the authority for both agent-driven and manual upgrades. Pin the exact canonical
+publication index URL and SHA-256, then use `upgrade plan` to install and compare
+the candidate before `upgrade apply` changes authority. The plan exposes
+capability and diagnostic changes, including cleanup a new policy would demand.
+Apply never edits application source and may acknowledge new findings
+explicitly. Neither phase selects an ordinary or supplemental gate;
+verification remains a separate task or delivery decision. Never install from
+floating `main` or let a check select a release the lock does not name.
 
 The outgoing lock and guidance retain authority through planning. Apply stages
 incoming guidance and wrappers with the lock, rolls back the group on failure,

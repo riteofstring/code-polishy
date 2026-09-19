@@ -122,28 +122,36 @@ func render(t *testing.T, document any) []byte {
 
 func writeLockFixture(t *testing.T, path string, lock Lock) {
 	t.Helper()
-	document := struct {
-		LockVersion        int      `json:"lockVersion"`
-		CodePolishyVersion string   `json:"codePolishyVersion"`
-		ReleaseDigest      string   `json:"releaseDigest"`
-		Features           []string `json:"features"`
-	}{lock.LockVersion, lock.CodePolishyVersion, lock.ReleaseDigest, lock.Features}
-	if err := os.WriteFile(path, render(t, document), 0o644); err != nil {
+	if err := os.WriteFile(path, RenderLock(lock), 0o644); err != nil {
 		t.Fatalf("write the lock fixture: %v", err)
 	}
 }
 
+func indexedManifestLock(manifest Manifest) Lock {
+	lock := indexedLockFixture(manifest.CodePolishyVersion, manifest.ReleaseDigest)
+	lock.Features = slices.Clone(manifest.Features)
+	return lock
+}
+
 func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 	t.Parallel()
-	rendered := string(RenderLock(Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
-	}))
+	rendered := string(RenderLock(indexedLockFixture("9.9.9", exampleDigest)))
 	formatted := "{\n" +
-		"  \"lockVersion\": 1,\n" +
+		"  \"lockVersion\": 2,\n" +
 		"  \"codePolishyVersion\": \"9.9.9\",\n" +
 		"  \"releaseDigest\": \"" + exampleDigest + "\",\n" +
-		"  \"features\": [\"javascript-bundle\"]\n" +
+		"  \"features\": [\"javascript-bundle\"],\n" +
+		"  \"publication\": {\n" +
+		"    \"indexUrl\": \"https://example.invalid/release-index.json\",\n" +
+		"    \"indexSha256\": \"" + otherDigest + "\",\n" +
+		"    \"archives\": [\n" +
+		"      {\"host\": \"darwin-arm64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-arm64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
+		"      {\"host\": \"darwin-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-darwin-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
+		"      {\"host\": \"linux-arm64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-arm64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
+		"      {\"host\": \"linux-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-linux-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1},\n" +
+		"      {\"host\": \"windows-x64\", \"url\": \"https://example.invalid/code-polishy-9.9.9-windows-x64.zip\", \"sha256\": \"" + exampleDigest + "\", \"size\": 1}\n" +
+		"    ]\n" +
+		"  }\n" +
 		"}\n"
 	if rendered != formatted {
 		t.Fatalf("rendered = %q, and the sealed formatter prints %q", rendered, formatted)
@@ -153,14 +161,8 @@ func TestRenderLockWritesWhatTheSealedFormatterPrints(t *testing.T) {
 func TestWriteLockAtomicallyReplacesAnExistingLock(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
-	old := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.8",
-		ReleaseDigest: otherDigest, Features: []string{"javascript-bundle"},
-	}
-	want := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
-	}
+	old := indexedLockFixture("9.9.8", otherDigest)
+	want := indexedLockFixture("9.9.9", exampleDigest)
 	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), old)
 	if err := WriteLock(repoRoot, want); err != nil {
 		t.Fatal(err)
@@ -177,18 +179,19 @@ func TestWriteLockAtomicallyReplacesAnExistingLock(t *testing.T) {
 
 func TestParseLockRejectsWhatItCannotActOnExactly(t *testing.T) {
 	t.Parallel()
-	usable := `"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `"`
+	usable := string(RenderLock(indexedLockFixture("9.9.9", exampleDigest)))
 	cases := map[string]string{
-		"an unknown field":     `{` + usable + `,"features":["javascript-bundle"],"registry":"https://example.invalid"}`,
+		"an unknown field":     strings.Replace(usable, "{\n", "{\n  \"registry\": \"https://example.invalid\",\n", 1),
+		"version one":          strings.Replace(usable, `"lockVersion": 2`, `"lockVersion": 1`, 1),
 		"another lock version": `{"lockVersion":3,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `","features":["javascript-bundle"]}`,
 		"unbound version two":  `{"lockVersion":2,"codePolishyVersion":"9.9.9","releaseDigest":"` + exampleDigest + `","features":["javascript-bundle"]}`,
-		"a short digest":       `{"lockVersion":1,"codePolishyVersion":"9.9.9","releaseDigest":"abc","features":["javascript-bundle"]}`,
-		"no required feature":  `{` + usable + `,"features":[]}`,
-		"a repeated feature":   `{` + usable + `,"features":["javascript-bundle","javascript-bundle"]}`,
-		"unordered features":   `{` + usable + `,"features":["javascript-bundle","dead-code"]}`,
-		"a version that is a path": `{"lockVersion":1,"codePolishyVersion":"../9.9.9","releaseDigest":"` +
-			exampleDigest + `","features":["javascript-bundle"]}`,
-		"a second document": `{` + usable + `,"features":["javascript-bundle"]} {}`,
+		"a short digest":       strings.Replace(usable, exampleDigest, "abc", 1),
+		"no required feature":  strings.Replace(usable, `["javascript-bundle"]`, `[]`, 1),
+		"a repeated feature":   strings.Replace(usable, `["javascript-bundle"]`, `["javascript-bundle", "javascript-bundle"]`, 1),
+		"unordered features":   strings.Replace(usable, `["javascript-bundle"]`, `["javascript-bundle", "dead-code"]`, 1),
+		"a version that is a path": strings.Replace(usable, `"codePolishyVersion": "9.9.9"`,
+			`"codePolishyVersion": "../9.9.9"`, 1),
+		"a second document": usable + `{}`,
 		"an oversized lock": strings.Repeat(" ", MaximumLockBytes+1),
 	}
 	for name, document := range cases {
@@ -214,10 +217,7 @@ func TestReadLockSeparatesAbsentFromUnusable(t *testing.T) {
 
 func TestDirectoryNamesOneReleaseAndNothingElse(t *testing.T) {
 	t.Parallel()
-	lock := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: exampleDigest, Features: []string{"javascript-bundle"},
-	}
+	lock := indexedLockFixture("9.9.9", exampleDigest)
 	directory := Directory("/prefix", lock)
 	if directory != filepath.Join("/prefix", "releases", "9.9.9-"+exampleDigest) {
 		t.Fatalf("directory = %s", directory)
@@ -333,10 +333,7 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 func TestSatisfiesRequiresTheExactLockedRelease(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
-	lock := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
-	}
+	lock := indexedLockFixture("9.9.9", manifest.ReleaseDigest)
 	if err := manifest.Satisfies(lock); err != nil {
 		t.Fatalf("the exact release did not satisfy its lock: %v", err)
 	}
@@ -369,10 +366,7 @@ func TestSatisfiesRequiresTheExactLockedRelease(t *testing.T) {
 func TestSatisfiesRefusesAReleaseThatIsNotWhatItRecords(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
-	lock := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
-	}
+	lock := indexedLockFixture("9.9.9", manifest.ReleaseDigest)
 	claimed := manifest
 	claimed.SourceRevision = strings.Repeat("b", 40)
 	if err := claimed.Satisfies(lock); err == nil {
@@ -395,10 +389,7 @@ func TestRequireLockedReleaseGovernsOnlyInstalledReleases(t *testing.T) {
 	}
 
 	lockPath := filepath.Join(repoRoot, LockFilename)
-	lock := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
-	}
+	lock := indexedLockFixture("9.9.9", manifest.ReleaseDigest)
 	writeLockFixture(t, lockPath, lock)
 	if err := RequireLockedRelease(repoRoot, directory); err != nil {
 		t.Fatalf("the release the lock names was refused: %v", err)
@@ -420,7 +411,7 @@ func TestVerifyLockedReleaseRequiresVerifiedBytesAndTheExactRepositoryLock(t *te
 	t.Parallel()
 	repoRoot := t.TempDir()
 	directory, manifest := exampleRelease(t)
-	lock := LockFor(manifest)
+	lock := indexedLockFixture(manifest.CodePolishyVersion, manifest.ReleaseDigest)
 	writeLockFixture(t, filepath.Join(repoRoot, LockFilename), lock)
 
 	verified, err := VerifyLockedRelease(repoRoot, directory)

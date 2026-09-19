@@ -146,12 +146,12 @@ Use `git ls-remote --tags --refs "<code-polishy-repository-url>"` for remote
 tag discovery. Do not infer a release from GitHub page ordering, a branch name,
 or a GitHub API response.
 
-For a public published release, also obtain its exact HTTPS publication-index
-URL and separately published SHA-256. The index must name the selected version
-and source revision. Do not derive authority from an unpinned index, a mutable
-release page, or an archive URL alone. A private, offline, local-candidate, or
-otherwise unpublished adoption can proceed without an index and must report
-that fresh-clone wrapper setup will require an explicit local source checkout.
+Obtain the release's exact HTTPS publication-index URL and separately published
+SHA-256. The index must name the selected version and source revision. Do not
+derive authority from an unpinned index, a mutable release page, or an archive
+URL alone. A release without a publication index cannot become repository lock
+authority. A local checkout remains usable to recover the exact release already
+named by an existing v2 lock.
 
 For a repository source, create a unique temporary directory outside the
 target and make a shallow, single-branch clone of the selected tag:
@@ -276,8 +276,8 @@ On Windows:
   lock --index <publication-index-url> --sha256 <publication-index-sha256>
 ```
 
-For a deliberately unpublished source release, omit both publication options.
-Never supply only one.
+Both publication options are mandatory. If the release is unpublished, stop
+without creating a repository lock.
 
 After the lock exists, use `code-polishy` when it resolves to the installed
 launcher. If the bare command is unavailable, use a caller-specified prefix or
@@ -624,15 +624,14 @@ When asked to upgrade Code Polishy, the AI agent should:
 
 1. read the outgoing locked instructions and preserve the working tree; those
    instructions govern until the lock cutover;
-2. select one exact candidate authority: for a published release, obtain the
-   HTTPS publication-index URL and its separately published SHA-256; for a
-   private, offline, or unpublished release, use an exact clean local checkout;
-   never select floating `main`, a mutable channel, or an unpinned index;
-3. run either `upgrade plan --index URL --sha256 DIGEST` or
-   `upgrade plan --source PATH` through a release that implements the upgrade
-   protocol. For the first transition from an older release, install the exact
-   current-host candidate with the existing bundle or source workflow, then
-   invoke that installed incoming binary directly;
+2. obtain the published release's exact HTTPS publication-index URL and its
+   separately published SHA-256; never select floating `main`, a mutable
+   channel, an unpublished candidate, or an unpinned index;
+3. for an outgoing v2 lock, run
+   `upgrade plan --index URL --sha256 DIGEST` through a release that implements
+   the upgrade protocol. If the outgoing release predates that command, install
+   the exact current-host candidate first and invoke the installed incoming
+   binary directly;
 4. inspect its authenticated capability delta and its added, removed, and
    changed diagnostics. Planning may install the immutable candidate and write
    managed evidence, but it must not change the target lock or application
@@ -656,3 +655,19 @@ When asked to upgrade Code Polishy, the AI agent should:
     explicitly requests an uncommitted handoff;
 11. never let CI or an application install choose a release the lock does not
     name.
+
+For a pre-v2 lock, do not ask the incoming release to parse or migrate it.
+Preserve its bytes through Git or a temporary file outside the repository,
+install the exact published incoming release, remove
+`.code-polishy.lock.json`, and invoke the incoming binary directly:
+
+```sh
+<incoming-code-polishy> lock --index <https-index-url> --sha256 <index-sha256>
+<incoming-code-polishy> agents sync
+```
+
+Then read the intervening changelog and incoming workflow, update configuration
+for changed requirements, run the checks selected for the upgrade, and commit
+the replacement lock with its managed adoption updates. This path intentionally
+has no automated v1 migration or outgoing diagnostic comparison; Git retains
+the rollback path.

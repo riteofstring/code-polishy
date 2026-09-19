@@ -444,10 +444,21 @@ write_target_lock() {
   local manifest="$2"
   write_file "${target}/.code-polishy.lock.json" <<EOF
 {
-  "lockVersion": 1,
+  "lockVersion": 2,
   "codePolishyVersion": "$(manifest_field "${manifest}" codePolishyVersion)",
   "releaseDigest": "$(manifest_field "${manifest}" releaseDigest)",
-  "features": ["javascript-bundle"]
+  "features": ["javascript-bundle"],
+  "publication": {
+    "indexUrl": "https://example.invalid/release-index.json",
+    "indexSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "archives": [
+      {"host": "darwin-arm64", "url": "https://example.invalid/code-polishy-9.9.9-darwin-arm64.zip", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1},
+      {"host": "darwin-x64", "url": "https://example.invalid/code-polishy-9.9.9-darwin-x64.zip", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1},
+      {"host": "linux-arm64", "url": "https://example.invalid/code-polishy-9.9.9-linux-arm64.zip", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1},
+      {"host": "linux-x64", "url": "https://example.invalid/code-polishy-9.9.9-linux-x64.zip", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1},
+      {"host": "windows-x64", "url": "https://example.invalid/code-polishy-9.9.9-windows-x64.zip", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1}
+    ]
+  }
 }
 EOF
 }

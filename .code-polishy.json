@@ -77,7 +77,6 @@
           "internal/policy/control_inputs.go",
           "internal/release/indexed_release.go",
           "internal/release/release.go",
-          "internal/release/source_release.go",
           "internal/release/upgrade_plan.go",
           "cmd/code-polishy/lock_meta.go",
           "cmd/code-polishy/upgrade_meta.go",

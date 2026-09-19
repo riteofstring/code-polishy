@@ -27,7 +27,7 @@ Commands:
   docs <list|find|read>
   pack <install|verify|root>
   agents <install|sync|check>
-  lock [--index URL --sha256 DIGEST]
+  lock --index URL --sha256 DIGEST
   upgrade <plan|apply> [options]
   release-manifest <write|verify|satisfies-lock|materialize|archive|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]

@@ -32,7 +32,7 @@ func TestUpgradeMetaRejectsIncompleteCommandsWithoutOpeningTheRepository(t *test
 		nil,
 		{"plan"},
 		{"plan", "--index", "https://example.invalid/index.json"},
-		{"plan", "--source", "/tmp/source", "--index", "https://example.invalid/index.json", "--sha256", strings.Repeat("a", 64)},
+		{"plan", "--source", "/tmp/source"},
 		{"apply"},
 		{"apply", "--accept-new-findings"},
 		{"unknown"},
@@ -44,19 +44,15 @@ func TestUpgradeMetaRejectsIncompleteCommandsWithoutOpeningTheRepository(t *test
 	}
 }
 
-func TestUpgradePlanOptionsSelectOneCandidateSource(t *testing.T) {
+func TestUpgradePlanOptionsRequirePublishedCandidate(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	indexed, err := parseUpgradePlanOptions([]string{"--index", "https://example.invalid/index.json", "--sha256", digest, "--prefix", "/tmp/prefix"})
-	if err != nil || indexed.indexURL == "" || indexed.indexSHA256 != digest || indexed.source != "" || indexed.prefix != "/tmp/prefix" {
+	if err != nil || indexed.indexURL == "" || indexed.indexSHA256 != digest || indexed.prefix != "/tmp/prefix" {
 		t.Fatalf("indexed options=%+v error=%v", indexed, err)
-	}
-	source, err := parseUpgradePlanOptions([]string{"--source", "../code-polishy"})
-	if err != nil || source.source != "../code-polishy" || source.indexURL != "" || source.indexSHA256 != "" {
-		t.Fatalf("source options=%+v error=%v", source, err)
 	}
 	for _, arguments := range [][]string{
 		{},
-		{"--source", "../code-polishy", "--sha256", digest},
+		{"--source", "../code-polishy"},
 		{"--index", "https://example.invalid/index.json"},
 		{"--sha256", digest},
 		{"--source", "../code-polishy", "--index", "https://example.invalid/index.json", "--sha256", digest},

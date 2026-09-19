@@ -9,10 +9,7 @@ import (
 
 func TestUpgradePlanRoundTripsThroughManagedStorage(t *testing.T) {
 	repoRoot := t.TempDir()
-	outgoing := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.8",
-		ReleaseDigest: strings.Repeat("8", 64), Features: []string{"javascript-bundle"},
-	}
+	outgoing := indexedLockFixture("9.9.8", strings.Repeat("8", 64))
 	incoming := indexedLockFixture("9.9.9", strings.Repeat("9", 64))
 	delta := newCapabilityDelta(&outgoing, incoming)
 	delta.Reason = "The outgoing release capability catalog could not be authenticated; no changes were inferred."
@@ -43,36 +40,6 @@ func TestUpgradePlanRoundTripsThroughManagedStorage(t *testing.T) {
 	}
 	if _, err := ReadUpgradePlan(repoRoot, filepath.Join(repoRoot, path)); err == nil {
 		t.Fatal("absolute upgrade plan path was accepted")
-	}
-}
-
-func TestUpgradePlanAcceptsADistinctSourceBackedRelease(t *testing.T) {
-	repoRoot := t.TempDir()
-	outgoing := indexedLockFixture("9.9.8", strings.Repeat("8", 64))
-	incoming := Lock{
-		LockVersion: LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: strings.Repeat("9", 64), Features: []string{"javascript-bundle"},
-	}
-	delta := newCapabilityDelta(&outgoing, incoming)
-	delta.Reason = "The outgoing release capability catalog could not be authenticated; no changes were inferred."
-	plan := UpgradePlan{
-		Protocol: UpgradePlanProtocol, Outgoing: outgoing, OutgoingLockSHA256: strings.Repeat("a", 64),
-		Incoming: incoming, InstallPrefix: filepath.Join(repoRoot, "prefix"), CapabilityDelta: delta,
-		DiagnosticDelta: UpgradeDiagnosticDelta{
-			Added: []UpgradeDiagnostic{}, Removed: []UpgradeDiagnostic{}, Changed: []UpgradeDiagnosticChange{},
-		},
-		OutgoingDiagnosticsSHA256: strings.Repeat("b", 64), IncomingDiagnosticsSHA256: strings.Repeat("c", 64),
-	}
-	path, err := WriteUpgradePlan(repoRoot, plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	read, err := ReadUpgradePlan(repoRoot, path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if read.Incoming.LockVersion != LegacyLockVersion || read.Incoming.Publication != nil {
-		t.Fatalf("incoming lock = %+v", read.Incoming)
 	}
 }
 

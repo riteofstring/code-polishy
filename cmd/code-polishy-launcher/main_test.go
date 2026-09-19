@@ -65,10 +65,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	manifest.EntryCount = len(manifest.Entries)
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
-	lock := release.Lock{
-		LockVersion: release.LegacyLockVersion, CodePolishyVersion: "9.9.9",
-		ReleaseDigest: manifest.ReleaseDigest, Features: []string{"javascript-bundle"},
-	}
+	lock := launcherLockForManifest(manifest)
 	directory := installed.releaseRoot(lock)
 	writeFile(t, directory, release.BinaryPath, engine)
 	writeFile(t, directory, bundleFile, engine+" runner")
@@ -126,10 +123,7 @@ func (installed store) installHistorical(t *testing.T, version int, revision, en
 	manifest.EntryCount = len(manifest.Entries)
 	manifest.ContentDigest = release.EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
-	lock := release.Lock{
-		LockVersion: release.LegacyLockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
-		ReleaseDigest: manifest.ReleaseDigest, Features: manifest.Features,
-	}
+	lock := launcherLockForManifest(manifest)
 	directory := installed.releaseRoot(lock)
 	writeFile(t, directory, release.BinaryPath, engine)
 	writeFile(t, directory, bundleFile, engine+" runner")
@@ -177,6 +171,24 @@ func digestOf(content string) string {
 	return hex.EncodeToString(digest[:])
 }
 
+func launcherLockForManifest(manifest release.Manifest) release.Lock {
+	hosts := []string{"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"}
+	archives := make([]release.LockedArchive, 0, len(hosts))
+	for _, host := range hosts {
+		archives = append(archives, release.LockedArchive{
+			Host: host, URL: "https://example.invalid/code-polishy-" + manifest.CodePolishyVersion + "-" + host + ".zip",
+			SHA256: strings.Repeat("a", 64), Size: 1,
+		})
+	}
+	return release.Lock{
+		LockVersion: release.LockVersion, CodePolishyVersion: manifest.CodePolishyVersion,
+		ReleaseDigest: manifest.ReleaseDigest, Features: slices.Clone(manifest.Features),
+		Publication: &release.LockPublication{
+			IndexURL: "https://example.invalid/release-index.json", IndexSHA256: strings.Repeat("b", 64), Archives: archives,
+		},
+	}
+}
+
 func launcherIn(t *testing.T, installed store, repoRoot string, arguments ...string) (int, string, []string) {
 	t.Helper()
 	launcherPath := filepath.Join(installed.prefix, "bin", "code-polishy")
@@ -206,17 +218,7 @@ func repositoryWith(t *testing.T, lock *release.Lock) string {
 	t.Helper()
 	repoRoot := t.TempDir()
 	if lock != nil {
-		document := struct {
-			LockVersion        int      `json:"lockVersion"`
-			CodePolishyVersion string   `json:"codePolishyVersion"`
-			ReleaseDigest      string   `json:"releaseDigest"`
-			Features           []string `json:"features"`
-		}{lock.LockVersion, lock.CodePolishyVersion, lock.ReleaseDigest, lock.Features}
-		encoded, err := json.Marshal(document)
-		if err != nil {
-			t.Fatalf("encode the lock fixture: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(repoRoot, release.LockFilename), encoded, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(repoRoot, release.LockFilename), release.RenderLock(*lock), 0o644); err != nil {
 			t.Fatalf("write the lock: %v", err)
 		}
 	}

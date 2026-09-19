@@ -19,16 +19,15 @@ type lockOptions struct {
 }
 
 func handleLockMeta(invocation invocation) int {
+	return handleLockMetaWithWriter(invocation, release.WritePublishedReleaseLock)
+}
+
+func handleLockMetaWithWriter(invocation invocation, writer func(context.Context, string, string, string, string) (release.LockUpgradeResult, error)) int {
 	options, err := parseLockOptions(invocation.arguments)
 	if err != nil {
 		return commandUsageError("lock", err.Error())
 	}
-	var result release.LockUpgradeResult
-	if options.indexURL == "" {
-		result, err = release.WriteReleaseLock(invocation.repoRoot, invocation.policyRoot)
-	} else {
-		result, err = release.WritePublishedReleaseLock(context.Background(), invocation.repoRoot, invocation.policyRoot, options.indexURL, options.indexSHA256)
-	}
+	result, err := writer(context.Background(), invocation.repoRoot, invocation.policyRoot, options.indexURL, options.indexSHA256)
 	if err != nil {
 		return operationalError(err)
 	}
@@ -43,10 +42,10 @@ func parseLockOptions(arguments []string) (lockOptions, error) {
 	indexURL := flags.String("index", "", "release publication index URL")
 	indexSHA256 := flags.String("sha256", "", "release publication index SHA-256")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 {
-		return lockOptions{}, errors.New("lock accepts no options or requires both --index URL and --sha256 DIGEST")
+		return lockOptions{}, errors.New("lock requires --index URL and --sha256 DIGEST")
 	}
-	if (*indexURL == "") != (*indexSHA256 == "") {
-		return lockOptions{}, errors.New("lock accepts no options or requires both --index URL and --sha256 DIGEST")
+	if *indexURL == "" || *indexSHA256 == "" {
+		return lockOptions{}, errors.New("lock requires --index URL and --sha256 DIGEST")
 	}
 	return lockOptions{indexURL: *indexURL, indexSHA256: *indexSHA256}, nil
 }

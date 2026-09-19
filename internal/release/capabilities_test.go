@@ -24,7 +24,7 @@ func TestCapabilityCatalogBindsExactReleaseAndContent(t *testing.T) {
 		{firstRoot, first, "Check selected source."},
 		{secondRoot, second, "Check selected source and dependencies."},
 	} {
-		catalog, err := ReadCapabilityCatalog(selected.root, LockFor(selected.manifest))
+		catalog, err := ReadCapabilityCatalog(selected.root, indexedManifestLock(selected.manifest))
 		if err != nil || catalog.SHA256 != selected.manifest.CapabilityCatalogSHA256 || catalog.Release.ReleaseDigest != selected.manifest.ReleaseDigest {
 			t.Fatalf("catalog = %+v, error = %v", catalog, err)
 		}
@@ -32,10 +32,10 @@ func TestCapabilityCatalogBindsExactReleaseAndContent(t *testing.T) {
 			t.Fatalf("wrong release catalog: %+v", catalog.Catalog)
 		}
 	}
-	if _, err := ReadCapabilityCatalog(firstRoot, LockFor(second)); err == nil {
+	if _, err := ReadCapabilityCatalog(firstRoot, indexedManifestLock(second)); err == nil {
 		t.Fatal("accepted a catalog from another exact release")
 	}
-	if _, err := ReadCapabilityCatalog(t.TempDir(), LockFor(first)); err == nil {
+	if _, err := ReadCapabilityCatalog(t.TempDir(), indexedManifestLock(first)); err == nil {
 		t.Fatal("missing selected release fell back to an ambient catalog")
 	}
 }
@@ -43,7 +43,7 @@ func TestCapabilityCatalogBindsExactReleaseAndContent(t *testing.T) {
 func TestCapabilityCatalogRejectsRehashedContentUnderAnUnchangedLock(t *testing.T) {
 	t.Parallel()
 	root, manifest := installedRelease(t, map[string]string{BinaryPath: "engine"}, nil)
-	locked := LockFor(manifest)
+	locked := indexedManifestLock(manifest)
 	changed := []byte(strings.Replace(fixtureCapabilityCatalog, "Check selected source.", "Execute unapproved commands.", 1))
 	if err := os.WriteFile(filepath.Join(root, CapabilityCatalogPath), changed, 0o644); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestCapabilityCatalogRejectsUnsafeAndUnavailableInputs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := ReadCapabilityCatalog(root, LockFor(manifest)); err == nil {
+			if _, err := ReadCapabilityCatalog(root, indexedManifestLock(manifest)); err == nil {
 				t.Fatal("accepted unsafe or unavailable catalog input")
 			}
 		})

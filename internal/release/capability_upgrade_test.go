@@ -13,7 +13,7 @@ import (
 func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testing.T) {
 	t.Parallel()
 	repo, oldRoot, nextRoot, old, next := capabilityUpgradeFixture(t)
-	result, err := WriteReleaseLock(repo, nextRoot)
+	result, err := writeReleaseLock(repo, nextRoot, next)
 	if err != nil || !result.Changed || !sameCapabilityLock(result.Lock, next) {
 		t.Fatalf("upgrade = %+v, error = %v", result, err)
 	}
@@ -27,7 +27,7 @@ func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testin
 	if inspected := ReadCapabilityUpgrade(repo, next); !bytes.Equal(render(t, inspected), render(t, delta)) {
 		t.Fatalf("inspection after removal of old installation changed the delta: %+v", inspected)
 	}
-	repeated, err := WriteReleaseLock(repo, nextRoot)
+	repeated, err := writeReleaseLock(repo, nextRoot, next)
 	if err != nil || repeated.Changed || !bytes.Equal(render(t, repeated.Delta), render(t, delta)) {
 		t.Fatalf("repeated lock lost original upgrade: %+v, error = %v", repeated, err)
 	}
@@ -38,17 +38,11 @@ func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testin
 
 func TestLockPreservesPublicationMetadataForTheCurrentRelease(t *testing.T) {
 	t.Parallel()
-	repo, _, nextRoot, _, _ := capabilityUpgradeFixture(t)
-	manifest, present, err := ReadManifest(nextRoot)
-	if err != nil || !present {
-		t.Fatalf("read manifest: present=%v error=%v", present, err)
-	}
-	published := indexedLockFixture(manifest.CodePolishyVersion, manifest.ReleaseDigest)
-	published.Features = append([]string{}, manifest.Features...)
+	repo, _, nextRoot, _, published := capabilityUpgradeFixture(t)
 	if err := WriteLock(repo, published); err != nil {
 		t.Fatal(err)
 	}
-	result, err := WriteReleaseLock(repo, nextRoot)
+	result, err := writeReleaseLock(repo, nextRoot, published)
 	if err != nil || result.Changed || !sameCapabilityLock(result.Lock, published) {
 		t.Fatalf("current published lock = %+v, error = %v", result, err)
 	}
@@ -95,7 +89,7 @@ func TestCapabilityUpgradeDoesNotInferMissingReleaseMetadata(t *testing.T) {
 				}
 				manifest.ManifestVersion, manifest.CapabilityCatalogSHA256 = 5, ""
 				manifest.ReleaseDigest = manifest.Identity()
-				old := LockFor(manifest)
+				old := indexedManifestLock(manifest)
 				writeCapabilityManifest(t, oldRoot, manifest)
 				if err := os.Rename(oldRoot, Directory(filepath.Dir(filepath.Dir(oldRoot)), old)); err != nil {
 					t.Fatal(err)
@@ -104,7 +98,7 @@ func TestCapabilityUpgradeDoesNotInferMissingReleaseMetadata(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			result, err := WriteReleaseLock(repo, nextRoot)
+			result, err := writeReleaseLock(repo, nextRoot, next)
 			if err != nil || !result.Changed || result.Delta.Availability != "unavailable" || result.Delta.Reason == "" {
 				t.Fatalf("missing %s: %+v, error = %v", missing, result, err)
 			}
@@ -122,7 +116,7 @@ func TestCapabilityUpgradeDoesNotInferMissingReleaseMetadata(t *testing.T) {
 func TestCapabilityUpgradeRejectsAlteredEvidence(t *testing.T) {
 	t.Parallel()
 	repo, _, nextRoot, _, next := capabilityUpgradeFixture(t)
-	result, err := WriteReleaseLock(repo, nextRoot)
+	result, err := writeReleaseLock(repo, nextRoot, next)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +201,7 @@ func TestCapabilityUpgradePreservesLockWhenRecordCannotBePublished(t *testing.T)
 					t.Fatal(err)
 				}
 			}
-			if result, err := WriteReleaseLock(repo, nextRoot); err == nil || result.Changed {
+			if result, err := writeReleaseLock(repo, nextRoot, next); err == nil || result.Changed {
 				t.Fatalf("unpublishable upgrade succeeded: %+v, error = %v", result, err)
 			}
 			assertCapabilityUpgradeLock(t, repo, old)
@@ -227,13 +221,13 @@ func TestCapabilityUpgradeSerializesWritersWithoutAStaleDirectoryLock(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, upgradeErr := WriteReleaseLock(repo, nextRoot)
+	result, upgradeErr := writeReleaseLock(repo, nextRoot, next)
 	unlock()
 	if upgradeErr == nil || result.Changed || !strings.Contains(upgradeErr.Error(), "busy") {
 		t.Fatalf("concurrent writer acquired occupied lock: %+v, error = %v", result, upgradeErr)
 	}
 	assertCapabilityUpgradeLock(t, repo, old)
-	if _, err := WriteReleaseLock(repo, nextRoot); err != nil {
+	if _, err := writeReleaseLock(repo, nextRoot, next); err != nil {
 		t.Fatalf("closed writer left a stale lock: %v", err)
 	}
 	assertCapabilityUpgradeLock(t, repo, next)
@@ -262,13 +256,15 @@ func capabilityUpgradeFixture(t *testing.T) (string, string, string, Lock, Lock)
 	catalog.Capabilities = []CapabilityDefinition{check, added, stable}
 	nextRoot, next := installedRelease(t, map[string]string{BinaryPath: "new engine", CapabilityCatalogPath: string(render(t, catalog))}, nil)
 	prefix := t.TempDir()
-	oldRoot = relocateCapabilityRelease(t, prefix, oldRoot, LockFor(old))
-	nextRoot = relocateCapabilityRelease(t, prefix, nextRoot, LockFor(next))
+	oldLock := indexedManifestLock(old)
+	nextLock := indexedManifestLock(next)
+	oldRoot = relocateCapabilityRelease(t, prefix, oldRoot, oldLock)
+	nextRoot = relocateCapabilityRelease(t, prefix, nextRoot, nextLock)
 	repo := t.TempDir()
-	if err := WriteLock(repo, LockFor(old)); err != nil {
+	if err := WriteLock(repo, oldLock); err != nil {
 		t.Fatal(err)
 	}
-	return repo, oldRoot, nextRoot, LockFor(old), LockFor(next)
+	return repo, oldRoot, nextRoot, oldLock, nextLock
 }
 
 func relocateCapabilityRelease(t testing.TB, prefix, source string, locked Lock) string {

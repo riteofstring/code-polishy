@@ -11,23 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-func WriteReleaseLock(repoRoot, incomingRoot string) (LockUpgradeResult, error) {
-	manifest, err := installedManifestForLock(incomingRoot)
-	if err != nil {
-		return LockUpgradeResult{}, err
-	}
-	if current, present, readErr := ReadLock(repoRoot); readErr != nil {
-		return LockUpgradeResult{}, readErr
-	} else if present && manifest.Satisfies(current) == nil {
-		return LockUpgradeResult{Lock: current, Delta: ReadCapabilityUpgrade(repoRoot, current)}, nil
-	}
-	incoming := LockFor(manifest)
-	if err := manifest.Satisfies(incoming); err != nil {
-		return LockUpgradeResult{}, err
-	}
-	return writeReleaseLock(repoRoot, incomingRoot, incoming)
-}
-
 func WritePublishedReleaseLock(ctx context.Context, repoRoot, incomingRoot, indexURL, indexSHA256 string) (LockUpgradeResult, error) {
 	return writePublishedReleaseLock(ctx, releaseHTTPClient(), repoRoot, incomingRoot, indexURL, indexSHA256)
 }

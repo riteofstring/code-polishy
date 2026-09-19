@@ -181,7 +181,7 @@ func TestPublicationRecordsAndInstallsTheVerifiedTree(t *testing.T) {
 		t.Fatalf("installed release = %s", installed.ReleaseDigest)
 	}
 	if runtime.GOOS != "windows" {
-		target := Directory(prefix, LockFor(manifest))
+		target := DirectoryForManifest(prefix, manifest)
 		link, err := os.Readlink(filepath.Join(target, "share", "current"))
 		if err != nil || link != "payload" {
 			t.Fatalf("installed link = %q, error = %v", link, err)

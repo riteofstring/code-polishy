@@ -77,7 +77,7 @@ func TestShellManifestBindsTheNativeCatalogIdentity(t *testing.T) {
 	if err != nil || strings.TrimSpace(string(output)) != native.ReleaseDigest {
 		t.Fatalf("shell release identity differs from native: output=%s err=%v", output, err)
 	}
-	locked := Lock{LockVersion: LegacyLockVersion, CodePolishyVersion: native.CodePolishyVersion, ReleaseDigest: native.ReleaseDigest, Features: native.Features}
+	locked := indexedManifestLock(native)
 	catalog, err := ReadCapabilityCatalog(root, locked)
 	if err != nil || catalog.SHA256 != native.CapabilityCatalogSHA256 {
 		t.Fatalf("shell release catalog: %+v err=%v", catalog, err)

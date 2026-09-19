@@ -20,7 +20,7 @@ done
 lock_version=$(number lockVersion)
 version=$(value codePolishyVersion)
 digest=$(value releaseDigest)
-[[ "$lock_version" == 1 || "$lock_version" == 2 ]] || fail '.code-polishy.lock.json uses an unsupported lockVersion'
+[[ "$lock_version" == 2 ]] || fail '.code-polishy.lock.json uses an unsupported lockVersion'
 [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]] || fail '.code-polishy.lock.json has an invalid codePolishyVersion'
 [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail '.code-polishy.lock.json has an invalid releaseDigest'
 [[ -n "${HOME:-}" ]] || fail 'HOME is required to locate the shared Code Polishy installation'
@@ -56,7 +56,6 @@ if [[ -n "$source_root" ]]; then
   [[ -x "$source_root/tools/install-policy-tools.sh" && -x "$source_root/scripts/install.sh" ]] || fail 'the source checkout has no executable installers'
   (cd "$source_root" && ./tools/install-policy-tools.sh && ./scripts/install.sh --prefix "$prefix" --require-repository "$repo")
 else
-  [[ "$lock_version" == 2 ]] || fail 'this legacy lock requires setup --source PATH; upgrade it to enable archive setup'
   case "$(uname -s)-$(uname -m)" in
     Darwin-arm64) host=darwin-arm64 ;;
     Darwin-x86_64) host=darwin-x64 ;;

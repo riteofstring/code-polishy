@@ -115,15 +115,12 @@ an existing tag.
 
 9. Move each consuming repository with a publication-backed
    `upgrade plan --index URL --sha256 DIGEST`, inspect its capability and
-   diagnostic delta, then use `upgrade apply --plan PATH`. A private or
-   unpublished consumer may instead use `upgrade plan --source PATH`, producing
-   a source-backed version-one lock but retaining the same comparison and
-   transactional apply. An explicit `--accept-new-findings` permits the lock
-   cutover without source cleanup. Upgrade does not run a gate. The outgoing
-   lock and guidance govern until apply replaces the lock last; incoming
-   guidance governs afterward. Updating this repository's self-hosting lock is
-   a separate follow-up commit because the release digest names the source
-   commit that produced it.
+   diagnostic delta, then use `upgrade apply --plan PATH`. An explicit
+   `--accept-new-findings` permits the lock cutover without source cleanup.
+   Upgrade does not run a gate. The outgoing lock and guidance govern until
+   apply replaces the lock last; incoming guidance governs afterward. Updating
+   this repository's self-hosting lock is a separate follow-up commit because
+   the release digest names the source commit that produced it.
 
    For a new public adoption, use `lock --index URL --sha256 DIGEST` from the
    exact installed release so its first committed lock already supports native

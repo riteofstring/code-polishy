@@ -63,7 +63,7 @@ if ((($Lock.lockVersion -isnot [int]) -and ($Lock.lockVersion -isnot [long])) -o
 $LockVersion = [int]$Lock.lockVersion
 $Version = [string]$Lock.codePolishyVersion
 $Digest = [string]$Lock.releaseDigest
-if ($LockVersion -notin @(1, 2)) { Fail '.code-polishy.lock.json uses an unsupported lockVersion' }
+if ($LockVersion -ne 2) { Fail '.code-polishy.lock.json uses an unsupported lockVersion' }
 if ($Version -cnotmatch '^[0-9A-Za-z][0-9A-Za-z._+-]*$' -or $Digest -cnotmatch '^[0-9a-f]{64}$') { Fail '.code-polishy.lock.json has an invalid release identity' }
 if (-not $env:LOCALAPPDATA) { Fail 'LOCALAPPDATA is required to locate the shared Code Polishy installation' }
 $Prefix = Join-Path $env:LOCALAPPDATA 'CodePolishy'
@@ -114,7 +114,6 @@ if ($Source) {
   & $ReleaseInstaller -Prefix $Prefix -RequireRepository $Repository
   if ($LASTEXITCODE -ne 0) { Fail 'Code Polishy installation failed' }
 } else {
-  if ($LockVersion -ne 2) { Fail 'this legacy lock requires setup --source PATH; upgrade it to enable archive setup' }
   if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { Fail 'there is no Code Polishy release for this host' }
   $Archives = @($Lock.publication.archives | Where-Object { $_.host -ceq 'windows-x64' })
   if ($Archives.Count -ne 1) { Fail 'the lock does not contain one archive for this host' }

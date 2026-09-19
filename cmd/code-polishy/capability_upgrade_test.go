@@ -25,7 +25,10 @@ func TestLockPublishesTheDeltaReturnedByLaterCapabilityInspection(t *testing.T) 
 		t.Fatal(err)
 	}
 	arguments := []string{"--repo-root", repo, "--policy-root", nextRoot}
-	status, stdout, stderr := captureRunOutput(t, append(slices.Clone(arguments), "lock"))
+	lockArguments := []string{"--index", next.Publication.IndexURL, "--sha256", next.Publication.IndexSHA256}
+	status, stdout, stderr := captureOutput(t, func() int {
+		return handleLockMetaWithWriter(invocation{repoRoot: repo, policyRoot: nextRoot, arguments: lockArguments}, testPublishedLockWriter(next))
+	})
 	for _, text := range []string{"PASS .code-polishy.lock.json requires Code Polishy 9.9.9", "CAPABILITY DELTA: available (9.9.8 -> 9.9.9)", "CHANGED check:", "docs/agent-workflows.md", "UPGRADE RECORD:"} {
 		if status != 0 || stderr != "" || !strings.Contains(stdout, text) {
 			t.Fatalf("lock output omitted %q: status=%d stdout=%q stderr=%q", text, status, stdout, stderr)
@@ -66,7 +69,15 @@ func TestLockPublishesTheDeltaReturnedByLaterCapabilityInspection(t *testing.T) 
 func TestLockReportsUnavailableDeltaOnFirstAdoption(t *testing.T) {
 	repo := t.TempDir()
 	policyRoot := installedRelease(t, strings.Repeat("c", 40))
-	status, stdout, stderr := captureRunOutput(t, []string{"--repo-root", repo, "--policy-root", policyRoot, "lock"})
+	manifest, present, err := release.ReadManifest(policyRoot)
+	if err != nil || !present {
+		t.Fatalf("release fixture: present=%v error=%v", present, err)
+	}
+	locked := publishedTestLock(manifest)
+	status, stdout, stderr := captureOutput(t, func() int {
+		arguments := []string{"--index", locked.Publication.IndexURL, "--sha256", locked.Publication.IndexSHA256}
+		return handleLockMetaWithWriter(invocation{repoRoot: repo, policyRoot: policyRoot, arguments: arguments}, testPublishedLockWriter(locked))
+	})
 	if status != 0 || stderr != "" || !strings.Contains(stdout, "CAPABILITY DELTA: unavailable (none -> 9.9.9)") || !strings.Contains(stdout, "There was no outgoing release lock") {
 		t.Fatalf("first adoption delta: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
@@ -96,7 +107,7 @@ func relocateCapabilityCLIRelease(t testing.TB, prefix, source string) (string, 
 	if err != nil || !present {
 		t.Fatalf("release fixture: present=%v error=%v", present, err)
 	}
-	locked := release.LockFor(manifest)
+	locked := publishedTestLock(manifest)
 	destination := release.Directory(prefix, locked)
 	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 		t.Fatal(err)
