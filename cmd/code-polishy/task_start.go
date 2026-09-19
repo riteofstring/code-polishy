@@ -42,11 +42,22 @@ func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
 	seen := map[string]bool{}
 	for len(arguments) > 0 {
 		name, _, _ := strings.Cut(arguments[0], "=")
+		if name == "--files" && arguments[0] == "--files" {
+			files := designContextFiles(arguments[1:])
+			if len(files) == 0 {
+				return options, fmt.Errorf("--files needs at least one path")
+			}
+			seen[name] = true
+			options.request.Context.Mode = "files"
+			options.request.Context.Files = append(options.request.Context.Files, files...)
+			arguments = arguments[len(files)+1:]
+			continue
+		}
 		value, consumed, _, err := namedOptionValue(arguments, name)
 		if err != nil {
 			return options, err
 		}
-		if seen[name] && name != "--feature" && name != "--situation" {
+		if seen[name] && name != "--files" && name != "--module" && name != "--feature" && name != "--situation" {
 			return options, errorsDuplicateOption("task-start", name)
 		}
 		seen[name] = true
@@ -56,7 +67,7 @@ func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
 		arguments = arguments[consumed:]
 	}
 	if seen["--files"] == seen["--module"] {
-		return options, fmt.Errorf("task-start requires exactly one --files PATH or --module NAME")
+		return options, fmt.Errorf("task-start requires one or more --files PATH operands or --module NAME options")
 	}
 	return options, nil
 }
@@ -66,9 +77,11 @@ func applyTaskStartOption(options *taskStartOptions, name, value string) error {
 	case "--intent-file":
 		options.request.IntentPath = value
 	case "--files":
-		options.request.Context.Mode, options.request.Context.Files = "files", []string{value}
+		options.request.Context.Mode = "files"
+		options.request.Context.Files = append(options.request.Context.Files, value)
 	case "--module":
-		options.request.Context.Mode, options.request.Context.Modules = "modules", []string{value}
+		options.request.Context.Mode = "modules"
+		options.request.Context.Modules = append(options.request.Context.Modules, value)
 	case "--feature":
 		options.request.Features = append(options.request.Features, value)
 	case "--situation":

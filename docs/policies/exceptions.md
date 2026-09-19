@@ -13,8 +13,10 @@ Every exception must include:
 - an accountable owner;
 - an ISO expiry date.
 
-Expiry must be within 366 days of configuration. Shorter horizons are preferred
-for active migrations and newly released dependencies.
+Expiry must be within 366 days of configuration. Date-only review and expiry
+fields use UTC calendar days and remain valid through the named UTC date.
+Shorter horizons are preferred for active migrations and newly released
+dependencies.
 
 Example:
 
@@ -30,9 +32,9 @@ Example:
 }
 ```
 
-The gate prints every applied exception. On the day after expiry, the exception
-itself becomes a blocking `policy.exceptionExpired` finding, even if the originally
-matched file is not in the current change.
+The gate prints every applied exception. At the start of the following UTC day,
+the exception itself becomes a blocking `policy.exceptionExpired` finding, even
+if the originally matched file is not in the current change.
 
 ## Rules
 

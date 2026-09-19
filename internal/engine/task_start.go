@@ -134,10 +134,10 @@ func validateTaskStartSelection(request ContextRequest) error {
 	if request.Workflow != "" && request.Workflow != "task-start" {
 		return fmt.Errorf("task-start uses its own exact workflow context")
 	}
-	files := request.Mode == "files" && len(request.Files) == 1 && len(request.Modules) == 0
-	module := request.Mode == "modules" && len(request.Modules) == 1 && len(request.Files) == 0
+	files := request.Mode == "files" && len(request.Files) > 0 && len(request.Modules) == 0
+	module := request.Mode == "modules" && len(request.Modules) > 0 && len(request.Files) == 0
 	if !files && !module {
-		return fmt.Errorf("task-start requires one exact --files file/directory or --module name")
+		return fmt.Errorf("task-start requires one or more exact --files paths or --module names")
 	}
 	return nil
 }

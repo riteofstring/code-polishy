@@ -47,9 +47,9 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "task-start",
 		summary: "Validate task context and capture intent only when behavior review is selected.",
-		syntax:  []string{"code-polishy task-start (--files PATH | --module NAME) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
+		syntax:  []string{"code-polishy task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
 		selectors: []string{
-			"Choose exactly one contained file, directory, or declared module; change-aware and repository-wide selectors are not accepted.",
+			"Choose one or more contained files or directories, or repeat --module for every declared module in scope. File and module selectors cannot be mixed; change-aware and repository-wide selectors are not accepted.",
 			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
 			"Intent is required only when configured policy or an explicit feature selects behavior review. Use --intent-file - for bounded UTF-8 standard input.",
 			"Do not supply intent when review is optional; output reports captured and willBeUsed separately.",
@@ -57,7 +57,7 @@ var commandHelpPages = []commandHelpPage{
 		},
 		sideEffects: []string{"Emits a bounded human summary by default or one complete task-start/v2 JSON document with --format json. It atomically appends the intent journal only when selected review will consume that intent, and runs no tests, reviews, package operations, or repository commands."},
 		exits:       []string{"0 packet produced and any selected intent captured", "2 invalid usage, unavailable context, or operational failure"},
-		examples:    []string{"code-polishy task-start --module application", "code-polishy task-start --intent-file - --module application --feature checkout", "code-polishy task-start --files frontend --situation deployment"},
+		examples:    []string{"code-polishy task-start --module application", "code-polishy task-start --module application --module tooling", "code-polishy task-start --intent-file - --module application --feature checkout", "code-polishy task-start --files frontend scripts/release --situation deployment"},
 	},
 	{
 		name:    "version",

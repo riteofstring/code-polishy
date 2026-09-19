@@ -37,6 +37,21 @@ func TestConfiguredLicensePolicyDecidesEveryResolvedRelease(t *testing.T) {
 	}
 }
 
+func TestDependencyReviewStaticDefersInstalledLicenseEvidence(t *testing.T) {
+	t.Parallel()
+	repo := licenseRepository(t, []string{"MIT"},
+		`{"name":"example","version":"1.0.0","license":"MIT"}`,
+		`{"name":"example","version":"2.0.0","source":"registry","licenseMetadata":"required"}`)
+	complete := Static(t.Context(), repo, []string{"pnpm-lock.yaml"})
+	if coverage := findingsFor(complete, "supplyChain.licenseCoverage"); len(coverage) != 1 || coverage[0].Subject != "example@2.0.0" {
+		t.Fatalf("complete license evidence = %+v", complete)
+	}
+	preinstall := DependencyReviewStatic(t.Context(), repo, []string{"pnpm-lock.yaml"})
+	if len(findingsFor(preinstall, "supplyChain.licenseCoverage")) != 0 || len(findingsFor(preinstall, "supplyChain.dependencyLicense")) != 0 {
+		t.Fatalf("pre-install review used stale installed licenses: %+v", preinstall)
+	}
+}
+
 func TestUnreadableLicenseMetadataIsMissingCoverage(t *testing.T) {
 	t.Parallel()
 	repo := licenseRepository(t, []string{"MIT"}, ``,

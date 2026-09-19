@@ -80,12 +80,13 @@ moving a repository that needs later upgrade inspection.
 
 ## Start a task
 
-When the request is ready to implement, select one file, directory, or module
-scope. Ordinary optional-review work needs no intent input:
+When the request is ready to implement, select one or more file/directory
+operands or repeat `--module` for every module in scope. Do not mix selector
+kinds. Ordinary optional-review work needs no intent input:
 
 ```sh
 code-polishy task-start --files frontend
-code-polishy task-start --module application --situation deployment
+code-polishy task-start --module application --module tooling --situation deployment
 ```
 
 `task-start` projects that scope through configured merge/checkpoint review

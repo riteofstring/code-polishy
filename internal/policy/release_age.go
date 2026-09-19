@@ -67,7 +67,7 @@ func applyReleaseAgeFinding(finding Finding, assessments []ReleaseAgeAssessment,
 		if assessment.Expires.After(finding.ReleaseAge.Eligible.UTC().Truncate(24 * time.Hour)) {
 			application.issue = &Finding{
 				Check: "policy.releaseAgeAssessmentWindow", Path: ConfigFilename, Subject: assessment.ID,
-				Message: fmt.Sprintf("release-age assessment expires after %s, when the exact version reaches the hard minimum", finding.ReleaseAge.Eligible.Format("2006-01-02")),
+				Message: fmt.Sprintf("release-age assessment expires after %s UTC, when the exact version reaches the hard minimum", finding.ReleaseAge.Eligible.Format("2006-01-02")),
 			}
 			return application
 		}
@@ -81,7 +81,7 @@ func releaseAgeAssessmentStatus(assessment ReleaseAgeAssessment, currentDate tim
 	if assessment.Expires.Before(currentDate) {
 		return &Finding{
 			Check: "policy.releaseAgeAssessmentExpired", Path: ConfigFilename, Subject: assessment.ID,
-			Message: fmt.Sprintf("release-age assessment expired on %s", assessment.Expires.Format("2006-01-02")),
+			Message: fmt.Sprintf("release-age assessment expired after %s UTC", assessment.Expires.Format("2006-01-02")),
 		}
 	}
 	if enforceUnused && !used {

@@ -599,13 +599,21 @@ func (engine *Engine) verify(ctx context.Context, testsOnly, stopAfterFailure bo
 }
 
 func (engine *Engine) SupplyChain(ctx context.Context, offline bool) (Report, error) {
+	return engine.supplyChain(ctx, offline, true)
+}
+
+func (engine *Engine) supplyChain(ctx context.Context, offline, includeInstalledLicenses bool) (Report, error) {
 	files, err := engine.Repository.AllFiles()
 	if err != nil {
 		return Report{}, err
 	}
 	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
 	findings = append(findings, supplychain.CoverageFindings(engine.Repository, files)...)
-	findings = append(findings, supplychain.Static(ctx, engine.Repository, files)...)
+	static := supplychain.Static
+	if !includeInstalledLicenses {
+		static = supplychain.DependencyReviewStatic
+	}
+	findings = append(findings, static(ctx, engine.Repository, files)...)
 	selection := repository.Selection{Files: files, All: true}
 	mode := "online"
 	notes := []string{}
@@ -621,6 +629,9 @@ func (engine *Engine) SupplyChain(ctx context.Context, offline bool) (Report, er
 		notes = append(notes, onlineNotes...)
 	}
 	notes = append([]string{"completed " + mode + " supply-chain profile"}, notes...)
+	if !includeInstalledLicenses {
+		notes = append(notes, "installed dependency license evidence is deferred until the candidate tree is installed; run code-polishy supply-chain --offline after frozen script-disabled installation")
+	}
 	if offline {
 		return engine.finish(findings, notes), nil
 	}
@@ -638,7 +649,7 @@ func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report
 	if err != nil {
 		return Report{}, err
 	}
-	report, err := engine.SupplyChain(ctx, false)
+	report, err := engine.supplyChain(ctx, false, false)
 	if err != nil {
 		return report, err
 	}

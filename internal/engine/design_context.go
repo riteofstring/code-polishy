@@ -34,21 +34,25 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 		return Report{}, err
 	}
 	if findings := engine.Repository.SelectedDesignDocumentFindings(resolution.DocumentPaths()); len(findings) > 0 {
-		return engine.finish(findings, nil), nil
+		return engine.designContextReport(findings), nil
 	}
 	handoffs, findings, err := engine.Repository.OperationalHandoffs(repository.HandoffSelection{
 		Files: selection.Files, Modules: request.Modules, Situations: request.Situations, Workflow: request.Workflow,
 	})
 	if err != nil || len(findings) > 0 {
-		return engine.finish(findings, nil), err
+		return engine.designContextReport(findings), err
 	}
 	context, findings := engine.loadRepositoryContext(resolution, handoffs, situations)
-	report := engine.finish(findings, nil)
+	report := engine.designContextReport(findings)
 	report.RepositoryContext = context
 	if selection.Requested.Mode != "" {
 		report.RequestedSelection = &selection.Requested
 	}
 	return engine.normalizeReport(report), nil
+}
+
+func (engine *Engine) designContextReport(findings []policy.Finding) Report {
+	return engine.normalizeReport(Report{Findings: findings})
 }
 
 func (engine *Engine) contextSelection(request ContextRequest) (repository.Selection, repository.DesignResolution, error) {

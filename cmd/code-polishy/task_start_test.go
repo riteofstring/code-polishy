@@ -80,7 +80,6 @@ func TestTaskStartInvalidInputsCreateNoJournalOrArtifacts(t *testing.T) {
 	for name, tail := range map[string][]string{
 		"missing selection":        {},
 		"two selectors":            {"--files", "value.go", "--module", "application"},
-		"multiple files":           {"--files", "value.go", "README.md"},
 		"missing source":           {"--files", "absent.go"},
 		"unknown feature":          {"--files", "value.go", "--feature", "purchase"},
 		"selected missing handoff": {"--files", "value.go", "--situation", "authentication"},
@@ -95,6 +94,48 @@ func TestTaskStartInvalidInputsCreateNoJournalOrArtifacts(t *testing.T) {
 				t.Fatalf("invalid preflight created report state: %v", err)
 			}
 		})
+	}
+}
+
+func TestTaskStartCombinesMultipleDeclaredModules(t *testing.T) {
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	modules := config["modules"].([]any)
+	modules[0].(map[string]any)["paths"] = []string{"value.go", "guard.sh"}
+	config["modules"] = append(modules, map[string]any{"name": "tooling", "paths": []string{"tools/**"}})
+	design := config["documentation"].(map[string]any)["design"].([]any)
+	config["documentation"].(map[string]any)["design"] = append(design, map[string]any{
+		"path": "docs/design/tooling.md", "module": "tooling",
+	})
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
+	writeBehaviorReviewCLIFile(t, root, "tools/helper.go", "package helper\n")
+	writeBehaviorReviewCLIFile(t, root, "docs/design/tooling.md", "# Tooling\n\nKeep helper tooling separate.\n")
+	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename, "tools", "docs/design/tooling.md")
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "Add tooling module")
+	status, stdout, stderr := captureRunOutput(t, append(
+		taskStartCLIArguments(root, policyRoot, ""), "--module", "application", "--module", "tooling",
+	))
+	var packet engine.TaskStartPacket
+	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || stderr != "" {
+		t.Fatalf("multi-module task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)
+	}
+	if !slices.Equal(packet.RequestedSelection.Modules, []string{"application", "tooling"}) ||
+		!slices.Contains(packet.RequestedSelection.Expanded, "value.go") ||
+		!slices.Contains(packet.RequestedSelection.Expanded, "tools/helper.go") ||
+		len(packet.RepositoryContext.DesignDocuments) != 2 {
+		t.Fatalf("multi-module packet = %+v", packet)
 	}
 }
 

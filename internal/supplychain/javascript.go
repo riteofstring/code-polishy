@@ -76,7 +76,7 @@ func resolvedPNPMPackages(result javascript.PackageResult, scope string) []resol
 	return uniqueResolvedPackages(packages)
 }
 
-func pnpmProjectFindings(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
+func pnpmProjectFindings(ctx context.Context, repo repository.Repository, files []string, includeInstalledLicenses bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, directory := range pnpmProjectRoots(repo, files) {
 		lock := lockPath(directory)
@@ -88,7 +88,9 @@ func pnpmProjectFindings(ctx context.Context, repo repository.Repository, files 
 			continue
 		}
 		findings = append(findings, pnpmLockFindings(repo.Config, result, lock)...)
-		findings = append(findings, pnpmLicenseFindings(ctx, repo, result, directory, lock)...)
+		if includeInstalledLicenses {
+			findings = append(findings, pnpmLicenseFindings(ctx, repo, result, directory, lock)...)
+		}
 	}
 	return findings
 }

@@ -84,7 +84,7 @@ func dependencyOverrideGovernanceFinding(repo repository.Repository, files []str
 	if governance.Expires.Before(today) {
 		return policy.Finding{
 			Check: "policy.dependencyOverridePolicyExpired", Path: policy.ConfigFilename, Subject: governance.ID,
-			Message: fmt.Sprintf("dependency override policy expired on %s", governance.Expires.Format("2006-01-02")),
+			Message: fmt.Sprintf("dependency override policy expired after %s UTC", governance.Expires.Format("2006-01-02")),
 		}, true
 	}
 	if !slices.Contains(files, governance.Path) {

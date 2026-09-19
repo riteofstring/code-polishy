@@ -106,10 +106,10 @@ func TestPrintReportLabelsReleaseAgeAssessmentSeparately(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	report := engine.Report{ReleaseAges: []policy.AssessedReleaseAge{{
 		Finding:    policy.Finding{Check: "supplyChain.releaseAge", Path: "pnpm-lock.yaml", Subject: "electron@43.3.0"},
-		Assessment: policy.ReleaseAgeAssessment{ID: "electron-supported", Category: "supported-release"},
+		Assessment: policy.ReleaseAgeAssessment{ID: "electron-supported", Category: "supported-release", Expires: policy.Date{Time: time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)}},
 	}}}
 	printReportTo(stdout, stderr, report)
-	if !strings.Contains(stdout.String(), "AGE-EXCEPTION") || stderr.Len() != 0 {
+	if !strings.Contains(stdout.String(), "AGE-EXCEPTION") || !strings.Contains(stdout.String(), "expires 2026-09-30 UTC") || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -131,7 +131,7 @@ func TestPrintReportKeepsApprovedVulnerabilityVisible(t *testing.T) {
 	printReportTo(stdout, stderr, report)
 	if !strings.Contains(stdout.String(), "VULN-ACCEPTANCE") || !strings.Contains(stdout.String(), "high-not-affected") ||
 		!strings.Contains(stdout.String(), "observed high, ceiling high") || !strings.Contains(stdout.String(), "not-affected/unreachable") ||
-		!strings.Contains(stdout.String(), "approved by security") || !strings.Contains(stdout.String(), "expires 2026-09-01") || stderr.Len() != 0 {
+		!strings.Contains(stdout.String(), "approved by security") || !strings.Contains(stdout.String(), "expires 2026-09-01 UTC") || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }

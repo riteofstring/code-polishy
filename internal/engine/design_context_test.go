@@ -3,10 +3,35 @@ package engine
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
+
+func TestDesignContextIgnoresUnrelatedGlobalAssessmentStatus(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeEngineFile(t, root, "docs/design/application.md", "# Application\n", 0o600)
+	writeEngineFile(t, root, "src/model.go", "package sample\n", 0o600)
+	policyEngine := &Engine{Repository: repository.Repository{Root: root, Config: policy.Config{
+		Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}},
+		Documentation: policy.Documentation{Design: []policy.DesignDocument{{
+			Path: "docs/design/application.md", Module: "application",
+		}}},
+		SupplyChain: policy.SupplyChain{VulnerabilityAssessments: []policy.VulnerabilityAssessment{{
+			ID: "expired-unrelated", Expires: policy.Date{Time: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)},
+		}}},
+	}}}
+	global := policyEngine.finish(nil, nil)
+	if len(global.Findings) != 1 || global.Findings[0].Check != "policy.vulnerabilityAssessmentExpired" {
+		t.Fatalf("global assessment status = %+v", global.Findings)
+	}
+	report, err := policyEngine.DesignContext(ContextRequest{Modules: []string{"application"}})
+	if err != nil || len(report.Findings) != 0 || report.RepositoryContext == nil || len(report.RepositoryContext.DesignDocuments) != 1 {
+		t.Fatalf("selected context = %+v, err = %v", report, err)
+	}
+}
 
 func TestDesignContextReturnsBoundedCurrentDocuments(t *testing.T) {
 	t.Parallel()

@@ -21,8 +21,9 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 | Release or upgrade                     | `code-polishy docs read release-checklist`                                |
 | Genuine merge or release checkpoint    | `code-polishy merge-gate --base MERGE_TARGET`                             |
 
-Use one file or directory operand with `--files PATH` instead of `--module NAME`
-when that identifies the task scope. `task-start` returns current design context
+Use one or more file or directory operands with `--files PATH...`, or repeat
+`--module NAME` for every module in a cross-module task. Do not mix the two
+selector kinds. `task-start` returns current design context
 and operational handoffs in a bounded human summary. Use `--format json` only
 when automation needs the complete `task-start/v2` packet and configured guard
 catalog. Its intent status states whether selected behavior review retained the

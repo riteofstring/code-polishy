@@ -163,14 +163,14 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 			"VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, approved by %s, expires %s)\n",
 			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID,
 			observedSeverity, assessment.Assessment.Severity, assessment.Assessment.Status, assessment.Assessment.Basis, assessment.Assessment.ApprovedBy,
-			assessment.Assessment.Expires.Format("2006-01-02"),
+			assessment.Assessment.Expires.Format("2006-01-02")+" UTC",
 		)
 	}
 }
 
 func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedReleaseAge) {
 	for _, assessment := range assessed {
-		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s)\n", assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category)
+		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s, expires %s UTC)\n", assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category, assessment.Assessment.Expires.Format("2006-01-02"))
 	}
 }
 

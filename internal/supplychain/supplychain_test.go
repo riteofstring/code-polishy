@@ -223,6 +223,12 @@ func TestDependencyOverrideBlockRequiresExactGovernance(t *testing.T) {
 	if !supplyChecks(findings)["supplyChain.dependencyOverride"] {
 		t.Fatalf("changed override was accepted: %+v", findings)
 	}
+	repo.Config.SupplyChain.DependencyOverridePolicies[0].ContentSHA256 = digest
+	repo.Config.SupplyChain.DependencyOverridePolicies[0].Expires = policy.Date{Time: now.AddDate(0, 0, -1)}
+	governance := DependencyOverrideGovernanceFindings(repo, files)
+	if len(governance) != 1 || !strings.Contains(governance[0].Message, " UTC") {
+		t.Fatalf("expired governance did not name its UTC boundary: %+v", governance)
+	}
 }
 
 func TestNativeAuditAdvisoryBecomesExactTypedVulnerability(t *testing.T) {

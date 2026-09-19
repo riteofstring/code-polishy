@@ -55,12 +55,20 @@ type nodeAuditConfig struct {
 }
 
 func Static(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
+	return static(ctx, repo, files, true)
+}
+
+func DependencyReviewStatic(ctx context.Context, repo repository.Repository, files []string) []policy.Finding {
+	return static(ctx, repo, files, false)
+}
+
+func static(ctx context.Context, repo repository.Repository, files []string, includeInstalledLicenses bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, path := range files {
 		findings = append(findings, staticPathFindings(repo, path)...)
 	}
 	findings = append(findings, pnpmGovernanceFindings(ctx, repo, files)...)
-	findings = append(findings, pnpmProjectFindings(ctx, repo, files)...)
+	findings = append(findings, pnpmProjectFindings(ctx, repo, files, includeInstalledLicenses)...)
 	return uniqueFindings(findings)
 }
 

@@ -31,7 +31,7 @@ func ApplyExceptions(findings []Finding, exceptions []Exception, now time.Time) 
 	}
 	for _, exception := range exceptions {
 		if exception.Expires.Before(currentDate) {
-			kept = append(kept, Finding{Check: "policy.exceptionExpired", Path: ConfigFilename, Subject: exception.ID, Message: fmt.Sprintf("exception expired on %s", exception.Expires.Format("2006-01-02"))})
+			kept = append(kept, Finding{Check: "policy.exceptionExpired", Path: ConfigFilename, Subject: exception.ID, Message: fmt.Sprintf("exception expired after %s UTC", exception.Expires.Format("2006-01-02"))})
 		}
 	}
 	return kept, suppressed

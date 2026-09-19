@@ -308,6 +308,8 @@ adoption.
   exact release reaches the hard minimum. Standalone tools use ecosystem
   `artifact`, their configured name as the package, and their `versionFile` as
   the scope.
+- Date-only review and expiry fields use UTC calendar days and remain valid
+  through the named UTC date. Expiry findings name UTC explicitly.
 - Expired, changed, overlong, and unused release-age assessments fail the
   complete online profile. An unavailable metadata source remains a failure and
   defers the unused-assessment determination until observation is complete.
@@ -625,18 +627,22 @@ reaches the minimum on its own.
 ## Dependency updates
 
 1. Select the smallest official version that addresses the reason for change.
-2. Produce the candidate lockfile without running lifecycle scripts.
-3. Run `code-polishy dependency-review --base MERGE_TARGET` to inspect direct and
-   transitive changes, publication age, native audit, and OSV results.
+2. Update exact direct pins and produce only the owning candidate lockfile
+   without running lifecycle scripts.
+3. Run `code-polishy dependency-review --base MERGE_TARGET` before installation
+   to inspect direct and transitive changes, publication age, native audit, and
+   OSV results.
 4. Confirm provenance and upstream support from primary sources.
-5. Update exact direct pins and only the owning frozen lockfile.
-6. Inspect lifecycle allowlists and transitive changes.
-7. Run focused tests for affected modules.
-8. Resolve the trusted merge target and run
+5. Inspect lifecycle allowlists and transitive changes.
+6. Install the candidate tree from the frozen lock with lifecycle scripts
+   disabled.
+7. Run `code-polishy supply-chain --offline` so installed metadata proves the
+   candidate's license policy and local lock policy.
+8. Run focused tests for affected modules.
+9. Resolve the trusted merge target and run
    `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes
-   normally select its complete full gate without a user level-selection
-   question.
-9. Run the online supply-chain gate.
+   normally select its complete full gate, including online supply-chain work,
+   without a user level-selection question.
 10. Record any accepted finding with exact identity and severity, linked
     analysis and remediation, distinct owner and approver, approval record, and
     bounded expiry.
@@ -671,8 +677,11 @@ code-polishy dependency-review --base origin/main
 
 Dependency review compares the candidate manifests and complete supported lock
 graphs with the merge base, prints a stable direct/transitive change table, and
-runs the full online supply-chain profile against the candidate tree. It does
-not install dependencies or execute dependency lifecycle scripts.
+runs online candidate checks. It does not install dependencies or execute
+dependency lifecycle scripts, so it explicitly defers installed-package license
+evidence. After the frozen, script-disabled install, `supply-chain --offline`
+checks that candidate's installed license metadata without repeating online
+audits.
 
 Historical inputs are dependency inventory, not candidate admission evidence.
 The comparison accepts syntactically valid historical Git tags, branches,

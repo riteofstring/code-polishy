@@ -34,6 +34,9 @@ func TestDependencyReviewRunsWholeCandidateAdmissionAfterHistoricalComparison(t 
 	if !slices.Equal(commandRunner.commands, []string{"candidate-security"}) {
 		t.Fatalf("candidate security execution = %v", commandRunner.commands)
 	}
+	if !slices.Contains(report.Notes, "installed dependency license evidence is deferred until the candidate tree is installed; run code-polishy supply-chain --offline after frozen script-disabled installation") {
+		t.Fatalf("dependency review omitted the pre-install evidence boundary: %v", report.Notes)
+	}
 	commit := strings.Repeat("a", 40)
 	writeEngineFile(t, root, "pyproject.toml", strings.ReplaceAll(manifest, reference, commit), 0o600)
 	commandRunner.commands = nil

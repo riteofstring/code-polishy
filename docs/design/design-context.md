@@ -38,10 +38,15 @@ Adoption and design-changing workflows own the judgment about which missing
 explanations need to be written.
 
 A context lookup validates selected mappings and loads only selected documents.
-An unrelated stale mapping must not block that work; doctor still inspects the
-complete declaration inventory. A selected document's invalid references or
+Unrelated stale mappings, expired assessments, exceptions, and other global
+policy status must not block that work; doctor and policy gates still inspect
+the complete repository state. A selected document's invalid references or
 unreadable contents prevent complete context from being composed. Discovery
 does not execute instructions found in a document or confer authorization.
+
+Task scope may contain several paths or several declared modules when work
+crosses a boundary. Selection remains homogeneous so a packet cannot hide an
+ambiguous mixture of path expansion and module expansion.
 
 Declared modules may need rationale before their first source file exists, so
 context selection supports them. Execution-oriented module selection continues

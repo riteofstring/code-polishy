@@ -905,6 +905,25 @@ func TestExceptionRemainsValidThroughExpiryDate(t *testing.T) {
 	}
 }
 
+func TestDateOnlyPolicyExpiryUsesUTCDay(t *testing.T) {
+	t.Parallel()
+	expires := Date{Time: time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)}
+	localEveningAfterUTCMidnight := time.Date(2026, 8, 12, 18, 0, 0, 0, time.FixedZone("PDT", -7*60*60))
+	exception := Exception{ID: "expired", Check: "quality.fileLength", Path: "a.go", Subject: "1001", Expires: expires}
+	kept, suppressed := ApplyExceptions(nil, []Exception{exception}, localEveningAfterUTCMidnight)
+	if len(suppressed) != 0 || len(kept) != 1 || kept[0].Message != "exception expired after 2026-08-12 UTC" {
+		t.Fatalf("exception status = %+v, suppressed = %+v", kept, suppressed)
+	}
+	kept, _ = ApplyVulnerabilityAssessments(nil, []VulnerabilityAssessment{{ID: "expired", Expires: expires}}, localEveningAfterUTCMidnight, false)
+	if len(kept) != 1 || kept[0].Message != "vulnerability assessment expired after 2026-08-12 UTC" {
+		t.Fatalf("vulnerability status = %+v", kept)
+	}
+	kept, _ = ApplyReleaseAgeAssessments(nil, []ReleaseAgeAssessment{{ID: "expired", Expires: expires}}, localEveningAfterUTCMidnight, false)
+	if len(kept) != 1 || kept[0].Message != "release-age assessment expired after 2026-08-12 UTC" {
+		t.Fatalf("release-age status = %+v", kept)
+	}
+}
+
 func TestVulnerabilityAssessmentRequiresExactIdentityAndReportsUnused(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)

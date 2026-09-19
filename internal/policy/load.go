@@ -643,7 +643,7 @@ func validatePolicyModuleMode(override PolicyModuleOverride, label string, now t
 
 func validateDisabledPolicyModule(override PolicyModuleOverride, label string, now time.Time) error {
 	if override.Expires.Before(now) {
-		return fmt.Errorf("%s.expires has expired", label)
+		return fmt.Errorf("%s.expires has expired under UTC date semantics", label)
 	}
 	if override.Expires.After(now.AddDate(0, 0, MaximumExceptionDays)) {
 		return fmt.Errorf("%s.expires must be within %d days", label, MaximumExceptionDays)

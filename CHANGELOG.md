@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-## 0.27.6 - 2026-09-19
-
 - Seed the native Windows acceptance repository with a publication-backed v2
   lock fixture instead of invoking removed optionless lock creation.
 - Emit formatter-compatible v2 lock files and let POSIX setup consume their
@@ -13,6 +11,12 @@
   repository-owned scanner files and publication descriptors.
 - Tell agents to reserve digests for trust boundaries, immutable content, and
   reusable evidence instead of local change detection or redundant rehashing.
+- Keep task context discovery available when unrelated global policy records
+  expire, while preserving those failures in doctor and enforcement commands.
+- Allow one task-start packet to cover several paths or declared modules.
+- Separate pre-install dependency review from installed license evidence, with
+  an explicit frozen-install and offline verification handoff.
+- Make date-only exception and assessment expiry output explicit about UTC.
 
 ## 0.27.5 - 2026-09-19
 
