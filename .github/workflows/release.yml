@@ -1,4 +1,4 @@
-name: Publish native release
+name: Publish release
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -240,12 +240,60 @@ jobs:
           compression-level: 0
 
   publish:
-    name: Publish GitHub release
+    name: Publish release packages
     needs: [identify, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      packages: write
     steps:
+      - name: Check out exact release tag
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.identify.outputs.commit }}
+          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          authorization="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\r\n')"
+          printf '::add-mask::%s\n' "${authorization}"
+          git -c "http.extraheader=AUTHORIZATION: basic ${authorization}" \
+            fetch --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          unset authorization
+          resolved_commit="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          if [[ "${resolved_commit}" != "${RELEASE_COMMIT}" ]]; then
+            echo "${RELEASE_TAG} no longer resolves to ${RELEASE_COMMIT}." >&2
+            exit 1
+          fi
+          git checkout --detach "${RELEASE_COMMIT}"
+
+      - name: Require an unpublished GitHub release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          response_file="${RUNNER_TEMP}/github-release-presence.json"
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          existing_status="$(
+            curl --silent --show-error --output "${response_file}" --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_root}/releases/tags/${RELEASE_TAG}"
+          )"
+          if [[ "${existing_status}" == 200 ]]; then
+            echo "A GitHub Release already exists for ${RELEASE_TAG}; published releases are immutable." >&2
+            exit 1
+          fi
+          if [[ "${existing_status}" != 404 ]]; then
+            cat "${response_file}" >&2
+            exit 1
+          fi
+
       - name: Restore native publications
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -253,19 +301,21 @@ jobs:
           path: ${{ runner.temp }}/release
           merge-multiple: true
 
-      - name: Build publication index and publish release
+      - name: Prepare publication index and OCI input
+        id: publication
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_COMMIT: ${{ needs.identify.outputs.commit }}
-          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
           RELEASE_VERSION: ${{ needs.identify.outputs.version }}
         run: |
           set -euo pipefail
           release_root="${RUNNER_TEMP}/release"
           engine_root="${RUNNER_TEMP}/index-engine"
+          linux_publication="${RUNNER_TEMP}/linux-publication"
           linux_archive="${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.zip"
-          mkdir -p "${engine_root}"
+          linux_descriptor="${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.release.json"
+          mkdir -p "${engine_root}" "${linux_publication}"
+          ln "${linux_archive}" "${linux_publication}/$(basename "${linux_archive}")"
+          ln "${linux_descriptor}" "${linux_publication}/$(basename "${linux_descriptor}")"
           unzip -q "${linux_archive}" -d "${engine_root}"
           engine="${engine_root}/bin/code-polishy"
           index_path="${release_root}/code-polishy-release-index.json"
@@ -287,27 +337,80 @@ jobs:
             echo "The complete publication must contain 27 assets, found ${asset_count}." >&2
             exit 1
           fi
+          printf 'engine=%s\n' "${engine}" >>"${GITHUB_OUTPUT}"
+          printf 'index_sha=%s\n' "${index_sha}" >>"${GITHUB_OUTPUT}"
+          printf 'linux_publication=%s\n' "${linux_publication}" >>"${GITHUB_OUTPUT}"
+
+      - name: Publish GHCR image
+        id: oci
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
+          OCI_ENGINE: ${{ steps.publication.outputs.engine }}
+          OCI_PUBLICATION: ${{ steps.publication.outputs.linux_publication }}
+        run: |
+          set -euo pipefail
+          builder="code-polishy-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          builder_created=false
+          cleanup() {
+            status="$?"
+            trap - EXIT
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            if [[ "${builder_created}" == true ]]; then
+              docker buildx rm "${builder}" >/dev/null 2>&1 || true
+            fi
+            exit "${status}"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "${GITHUB_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          repository="${GITHUB_REPOSITORY,,}"
+          image_tag="ghcr.io/${repository}:${RELEASE_TAG}"
+          if docker buildx imagetools inspect "${image_tag}" >/dev/null 2>&1; then
+            echo "${image_tag} already exists; published image tags are immutable." >&2
+            exit 1
+          fi
+          docker buildx create \
+            --name "${builder}" \
+            --driver docker-container \
+            --driver-opt image=moby/buildkit@sha256:c457984bd29f04d6acc90c8d9e717afe3922ae14665f3187e0096976fe37b1c8 \
+            --use
+          builder_created=true
+          docker buildx inspect --bootstrap
+
+          output_file="${RUNNER_TEMP}/oci-publication-output.txt"
+          ./scripts/build-oci-image.sh \
+            --publication-dir "${OCI_PUBLICATION}" \
+            --image "${image_tag}" \
+            --engine "${OCI_ENGINE}" \
+            --push | tee "${output_file}"
+          image="$(sed -n 's/^image=//p' "${output_file}")"
+          if [[ "${image}" != "${image_tag}@sha256:"* ]] ||
+            [[ ! "${image#*@sha256:}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "The OCI publisher did not report one exact registry digest." >&2
+            exit 1
+          fi
+          printf 'image=%s\n' "${image}" >>"${GITHUB_OUTPUT}"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.identify.outputs.commit }}
+          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.identify.outputs.version }}
+          RELEASE_INDEX_SHA: ${{ steps.publication.outputs.index_sha }}
+          OCI_IMAGE: ${{ steps.oci.outputs.image }}
+        run: |
+          set -euo pipefail
+          release_root="${RUNNER_TEMP}/release"
+          index_sha="${RELEASE_INDEX_SHA}"
 
           api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
           response_file="${RUNNER_TEMP}/github-release-response.json"
-          existing_status="$(
-            curl --silent --show-error --output "${response_file}" --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer ${GITHUB_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              "${api_root}/releases/tags/${RELEASE_TAG}"
-          )"
-          if [[ "${existing_status}" == 200 ]]; then
-            echo "A GitHub Release already exists for ${RELEASE_TAG}; published releases are immutable." >&2
-            exit 1
-          fi
-          if [[ "${existing_status}" != 404 ]]; then
-            cat "${response_file}" >&2
-            exit 1
-          fi
 
           payload_file="${RUNNER_TEMP}/github-release-payload.json"
-          export RELEASE_INDEX_SHA="${index_sha}"
           python3 - "${payload_file}" <<'PY'
           import json
           import os
@@ -320,7 +423,8 @@ jobs:
               "body": (
                   f"Native archives for Code Polishy {os.environ['RELEASE_VERSION']}.\n\n"
                   f"Source revision: {os.environ['RELEASE_COMMIT']}\n"
-                  f"Publication index SHA-256: {os.environ['RELEASE_INDEX_SHA']}"
+                  f"Publication index SHA-256: {os.environ['RELEASE_INDEX_SHA']}\n"
+                  f"OCI image: {os.environ['OCI_IMAGE']}"
               ),
               "draft": True,
               "prerelease": "-" in os.environ["RELEASE_VERSION"],
@@ -406,4 +510,5 @@ jobs:
             exit 1
           fi
           release_published=true
-          printf 'Published %s with index SHA-256 %s.\n' "${RELEASE_TAG}" "${index_sha}"
+          printf 'Published %s with index SHA-256 %s and OCI image %s.\n' \
+            "${RELEASE_TAG}" "${index_sha}" "${OCI_IMAGE}"

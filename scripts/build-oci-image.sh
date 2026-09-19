@@ -5,11 +5,12 @@ policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 caller_root="$(pwd -P)"
 publication_dir=""
 image_ref=""
+engine=""
 output=""
 push=false
 
 usage() {
-  echo "usage: build-oci-image.sh --publication-dir DIR --image REF (--push | --output OCI-ARCHIVE)" >&2
+  echo "usage: build-oci-image.sh --publication-dir DIR --image REF [--engine PATH] (--push | --output OCI-ARCHIVE)" >&2
   exit 2
 }
 
@@ -39,6 +40,15 @@ while (($#)); do
       ;;
     --image=*)
       image_ref="${1#*=}"
+      shift
+      ;;
+    --engine)
+      if (($# < 2)); then usage; fi
+      engine="$(absolute_path "$2")"
+      shift 2
+      ;;
+    --engine=*)
+      engine="$(absolute_path "${1#*=}")"
       shift
       ;;
     --output)
@@ -85,9 +95,14 @@ if ((${#descriptors[@]} != 1)); then
   exit 1
 fi
 
-engine="${policy_root}/.tools/bin/code-polishy"
-if [[ ! -x "${engine}" ]]; then
-  "${policy_root}/scripts/build.sh"
+if [[ -z "${engine}" ]]; then
+  engine="${policy_root}/.tools/bin/code-polishy"
+  if [[ ! -x "${engine}" ]]; then
+    "${policy_root}/scripts/build.sh"
+  fi
+elif [[ ! -x "${engine}" ]]; then
+  echo "The OCI build engine is not executable: ${engine}" >&2
+  exit 1
 fi
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-oci-build.XXXXXX")"

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Publish the digest-pinned GHCR image from the version-tag release workflow by
+  reusing the already verified Linux x64 archive and release engine.
+
 ## 0.27.8 - 2026-09-19
 
 - Make cross-version upgrades independent of lock-file formatting by keying

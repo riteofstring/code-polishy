@@ -220,8 +220,9 @@ The equivalent GitHub Actions job sets
 the same command after checkout. A private or self-managed GitLab repository
 does not make this public image private; the runner needs only outbound GHCR
 access. Code Polishy needs no GitLab account, API token, monitoring provider,
-or machine-global runner installation. Maintainer publication instructions are
-in the [GHCR-only Linux x64 runbook](release-checklist.md#ghcr-only-linux-x64-runbook).
+or machine-global runner installation. The version-tag release workflow
+publishes the native archives and this image together; see the [Release
+Checklist](release-checklist.md).
 
 The Unix prefix defaults to `~/.local/share/code-polishy`; the Windows prefix
 defaults to `%LOCALAPPDATA%\CodePolishy`. Releases are installed under

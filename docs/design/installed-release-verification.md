@@ -48,6 +48,10 @@ The digest-pinned OCI smoke test likewise writes an inert v2 lock for its
 temporary repository before invoking the image's stable launcher. It verifies
 the already installed release and never uses those fixture URLs to acquire
 bytes; the image digest and installed manifest remain the runtime evidence.
+The version-tag workflow restores the already verified Linux x64 publication,
+reuses its extracted engine for both release-index and OCI-context creation,
+and runs the image smoke test after the registry assigns the immutable digest.
+It does not rebuild source or repeat the native archive contract for the image.
 
 Executable test entrypoints have explicit production ownership and primary
 focused suites. Sourced scenario helpers remain test-support code selected by

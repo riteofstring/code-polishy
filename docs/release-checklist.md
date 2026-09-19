@@ -2,12 +2,11 @@
 
 A Code Polishy release is one reviewed commit, one annotated `v<VERSION>` tag,
 and one shared internal release identity across every artifact published for
-that version. Publication may contain only the Linux x64 OCI image or the
-complete native archive set. Tags and published digests are immutable. A
-maintainer performs every tag push and target lock change. Pushing an annotated
-version tag explicitly authorizes the checked-in release workflow to publish
-that tag's native archives; manual dispatch authorizes the same operation for
-an existing tag.
+that version. Publication contains the complete native archive set and its Linux
+x64 OCI image. Tags and published digests are immutable. A maintainer performs
+every tag push and target lock change. Pushing an annotated version tag
+explicitly authorizes the checked-in release workflow to publish that release;
+manual dispatch authorizes the same operation for an existing tag.
 
 1. Bring the candidate to release shape as one reviewed commit. `VERSION` must
    contain a strict `MAJOR.MINOR.PATCH` version, optionally followed by a SemVer
@@ -83,31 +82,21 @@ an existing tag.
    canonical index SHA-256, creates an index checksum sidecar, and requires the
    complete 27-file publication.
 
-   The job creates a draft GitHub Release through GitHub's API, uploads the
-   publication, and makes the release public only after every upload succeeds.
-   A failed upload removes the draft; an existing release is never overwritten.
-   The workflow uses neither `gh` nor GHCR. The release notes publish the source
-   revision and index SHA-256 needed by adoption and upgrade commands.
+8. The same job gives Buildx an exact BuildKit image and the retained Linux x64
+   archive. It does not rebuild source, rerun the native archive contract, or
+   repeat ordinary CI. `scripts/build-oci-image.sh` publishes
+   `ghcr.io/riteofstring/code-polishy:v<VERSION>` with SBOM and provenance
+   attestations, resolves and pulls its registry digest, and exercises the
+   installed launcher as the declared non-root user. An existing image tag is
+   never overwritten.
 
-8. GHCR publication is separate and optional. For a GHCR-only release, build
-   only the `linux-x64` publication directory on a native Linux x86-64 executor
-   by default; do not build the other native hosts or a release index. An amd64
-   container or virtual machine emulated on an Arm host is not native evidence.
-   A maintainer may instead explicitly select the documented Docker Desktop
-   fallback below, accepting its slower execution and narrower evidence. Build
-   a Linux OCI image only from its verified publication directory:
-
-   ```sh
-   ./scripts/build-oci-image.sh \
-     --publication-dir /release/linux-x64 \
-     --image registry.example/code-polishy:v<VERSION> \
-     --push
-   ```
-
-   Push mode pulls the exact registry digest and exercises the installed
-   launcher as the image's declared non-root user. Retain that digest and the
-   Buildx SBOM/provenance attestations. Tags aid discovery; examples and
-   consumers must use `image@sha256:...`.
+   After the image passes, the job creates a draft GitHub Release through
+   GitHub's API, uploads the native publication, and makes the release public
+   only after every upload succeeds. A failed upload removes the draft; an
+   existing release is never overwritten. The workflow uses neither `gh` nor a
+   maintainer credential. Its repository-scoped token receives package-write
+   access only in the final publish job. Release notes publish the source
+   revision, index SHA-256, and digest-pinned OCI image.
 
 9. Move each consuming repository with a publication-backed
    `upgrade plan --index URL --sha256 DIGEST`, inspect its capability and
@@ -122,142 +111,6 @@ an existing tag.
    exact installed release so its first committed lock already supports native
    archive setup on every host.
 
-Credentialed registry publication, tag changes, release-workflow dispatch, and
-target lock changes remain explicit maintainer actions. The source is
-Apache-2.0 licensed.
-
-## GHCR-only Linux x64 runbook
-
-Use this path when the requested release artifact is only the public Linux x64
-image at `ghcr.io/riteofstring/code-polishy`. It does not require macOS,
-Windows, Linux arm64, or a five-host release index.
-
-The default path runs the entire archive build, fresh-install contract, and
-publication sequence on a native Linux x86-64 runner or VM. An amd64 Docker
-container on an Apple Silicon or other Arm host is not native evidence:
-`uname -m` inside it does not prove the host architecture, and a macOS bind
-mount makes repeated release verification slower still. If the process list
-contains `qemu-x86_64` or Rosetta while exercising the release, do not record
-that execution as native acceptance.
-
-Do not invoke `scripts/build-oci-image.sh` directly on macOS: it intentionally
-requires Linux and GNU `sha256sum`. Buildx may assemble the final OCI image, but
-Buildx architecture support does not turn an emulated container into acceptable
-native release-verification evidence. Do not reconstruct the repository's
-Buildx command by hand.
-
-### Explicit Docker Desktop fallback
-
-The maintainer may explicitly select the established Apple Silicon Docker
-Desktop fallback for a GHCR-only release. Once selected, the absence of a native
-publisher is not a blocker and is not a reason to propose new CI infrastructure.
-This path is deliberately narrower than native publication: it builds the
-Linux x64 archive and image under AMD64 emulation, omits the fresh native
-archive-install contract in step 7, and must not be described as native release
-evidence. Expect it to be substantially slower than a native runner.
-
-Reuse the provisioned components that produced the previous successful image;
-do not rediscover or recreate them during a release. On the maintainer's current
-workstation these are the `code-polishy-v02412` `docker-container` Buildx
-builder and the `local/code-polishy-oci-client:v0.24.11` Linux AMD64 client.
-Before starting, inspect both, require the builder's digest-pinned BuildKit
-image, confirm the target GHCR tag is absent, and verify the public annotated
-source tag. Use a new temporary clean clone of that tag and a new absent
-publication directory.
-
-Populate the clone's Linux tool cache only from an exact digest-pinned prior
-Code Polishy image after confirming the candidate did not change any tool pin
-or bundle lock. Give the emulated client only the temporary clone, publication
-directory, Docker socket, copied Buildx configuration, and a temporary Docker
-configuration. Read the existing GHCR credential through Docker Desktop's
-credential helper, pass it over standard input, never print it, and remove the
-temporary Docker configuration on exit. Inside that one client invocation:
-
-1. verify the exact commit, annotated tag, clean tree, Linux AMD64 environment,
-   existing builder, and release preflight;
-2. run `scripts/build.sh`, then `scripts/build-release.sh` for `linux-x64`; and
-3. run `scripts/build-oci-image.sh --push` unchanged so SBOM/provenance
-   attestations, exact registry digest resolution, digest pull, and the non-root
-   launcher smoke test remain mandatory.
-
-Run this sequence once. Retain the temporary publication until the public
-digest is verified, then report both the digest and the omitted native
-fresh-install evidence. A failure stops the publication; do not overwrite the
-tag, switch to `latest`, or improvise a different Buildx command.
-
-Before building, select an already provisioned Buildx builder and inspect it:
-
-```sh
-docker buildx use <approved-builder-name>
-docker buildx inspect --bootstrap
-```
-
-The reported driver must be `docker-container`. The default `docker` driver
-cannot preserve the required SBOM and provenance attestations. Provisioning the
-builder must use an exact BuildKit image admitted under the supply-chain policy;
-never pull an ambient mutable builder tag during a release.
-
-Authenticate Docker once as a maintainer with package-write access. Keep the
-credential outside the repository and command history:
-
-```sh
-printf '%s' "$GHCR_TOKEN" | \
-  docker login ghcr.io --username "$GHCR_USER" --password-stdin
-```
-
-From the clean tagged source commit, verify the tag and build only the Linux x64
-publication. Before the registry push, install that archive and complete step 7
-on the same native executor. Then let the repository script push and verify the
-image:
-
-```sh
-release_version="$(tr -d '[:space:]' < VERSION)"
-candidate_commit="$(git rev-parse HEAD)"
-test "$(git rev-parse "v${release_version}^{commit}")" = "$candidate_commit"
-./scripts/release-preflight.sh "$candidate_commit"
-
-publication_root="/absolute/path/code-polishy-${release_version}"
-./scripts/build-release.sh \
-  --output "${publication_root}/linux-x64"
-
-image_tag="ghcr.io/riteofstring/code-polishy:v${release_version}"
-./scripts/build-oci-image.sh \
-  --publication-dir "${publication_root}/linux-x64" \
-  --image "$image_tag" \
-  --push
-```
-
-The final `image=...@sha256:...` line is the consumer identity. The script
-creates a bounded context containing the verified release root, not the source
-checkout or unrelated local files. It emits attestations, resolves the raw
-registry index digest, pulls that exact digest, and exercises the launcher as
-the declared non-root user. Do not separately repeat those build or smoke-test
-steps, and do not publish `latest`.
-
-GHCR visibility is package-wide. On the first successful publication, open the
-package settings and change visibility to **Public**. This exposes every version
-in the package, so publish corrections under a new patch tag rather than moving
-or overwriting an existing tag.
-
-Confirm a public pull without reusing maintainer credentials. Set `digest_ref`
-to the exact final value reported by the script:
-
-```sh
-digest_ref="ghcr.io/riteofstring/code-polishy@sha256:<index-digest>"
-anonymous_config="$(mktemp -d)"
-docker --config "$anonymous_config" pull \
-  --platform linux/amd64 "$digest_ref"
-rmdir "$anonymous_config"
-```
-
-Stop at the first failed prerequisite instead of retrying the build:
-
-| Symptom                                      | Resolution                                                                              |
-| -------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Host is Arm or a release process uses QEMU   | Use native Linux, or the explicitly selected fallback without claiming native evidence. |
-| Script prints usage immediately on macOS     | Use native Linux, or run the established fallback's Linux client.                       |
-| Buildx reports unsupported attestations      | Select an admitted `docker-container` builder.                                          |
-| GHCR returns denied or unauthorized          | Refresh the maintainer credential with package-write access.                            |
-| Publication output already exists            | Choose a new absent output directory; never overwrite release evidence.                 |
-| Anonymous pull returns unauthorized          | Change the GHCR package visibility to Public.                                           |
-| The final version or digest smoke test fails | Fix the release and publish a new patch version; never move the tag.                    |
+Tag changes, release-workflow dispatch, and target lock changes remain explicit
+maintainer actions. A tag push or dispatch authorizes both GitHub and GHCR
+publication for that exact release. The source is Apache-2.0 licensed.

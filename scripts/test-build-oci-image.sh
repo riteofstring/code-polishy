@@ -12,12 +12,13 @@ fixture_root="${scratch}/fixture"
 publication="${scratch}/publication"
 shim_bin="${scratch}/bin"
 docker_log="${scratch}/docker.log"
+release_engine="${scratch}/release-engine"
 mkdir -p "${fixture_root}/scripts" "${fixture_root}/release" "${fixture_root}/.tools/bin" "${publication}" "${shim_bin}"
 cp "${policy_root}/scripts/build-oci-image.sh" "${fixture_root}/scripts/build-oci-image.sh"
 cp "${policy_root}/release/oci.Containerfile.template" "${fixture_root}/release/oci.Containerfile.template"
 printf '{}\n' >"${publication}/fixture.release.json"
 
-cat >"${fixture_root}/.tools/bin/code-polishy" <<'EOF'
+cat >"${release_engine}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 destination=""
@@ -36,6 +37,12 @@ CODE_POLISHY_RELEASE_DIGEST=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 CODE_POLISHY_BUNDLE_SHA256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 CODE_POLISHY_PLATFORM=linux/amd64
 ARGS
+EOF
+chmod +x "${release_engine}"
+
+cat >"${fixture_root}/.tools/bin/code-polishy" <<'EOF'
+#!/usr/bin/env bash
+exit 88
 EOF
 chmod +x "${fixture_root}/.tools/bin/code-polishy"
 
@@ -82,6 +89,7 @@ output="$(
     "${fixture_root}/scripts/build-oci-image.sh" \
     --publication-dir "${publication}" \
     --image registry.example/code-polishy:v9.9.9 \
+    --engine "${release_engine}" \
     --push
 )"
 
