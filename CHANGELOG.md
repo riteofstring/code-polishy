@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.27.6 - 2026-09-19
+
+- Seed the native Windows acceptance repository with a publication-backed v2
+  lock fixture instead of invoking removed optionless lock creation.
+
 ## 0.27.5 - 2026-09-19
 
 - Hash the written publication index directly instead of treating its

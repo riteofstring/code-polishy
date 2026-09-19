@@ -314,7 +314,28 @@ jobs:
           & git.exe -C $target init -b main
           & git.exe -C $target config user.name 'Code Polishy CI'
           & git.exe -C $target config user.email 'ci@example.invalid'
-          & $releaseEngine[0].FullName --repo-root $target lock
+          $releaseManifest = Get-Content -LiteralPath (Join-Path $releaseRoot 'release-manifest.json') -Raw | ConvertFrom-Json
+          $archiveDigest = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+          $archives = @('darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'windows-x64') | ForEach-Object {
+            [ordered]@{
+              host = $_
+              url = "https://example.invalid/code-polishy-$($releaseManifest.codePolishyVersion)-$($_).zip"
+              sha256 = $archiveDigest
+              size = 1
+            }
+          }
+          $lock = [ordered]@{
+            lockVersion = 2
+            codePolishyVersion = $releaseManifest.codePolishyVersion
+            releaseDigest = $releaseManifest.releaseDigest
+            features = @($releaseManifest.features)
+            publication = [ordered]@{
+              indexUrl = 'https://example.invalid/release-index.json'
+              indexSha256 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+              archives = @($archives)
+            }
+          }
+          $lock | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $target '.code-polishy.lock.json') -Encoding utf8NoBOM
           & $launcher --repo-root $target agents install
           if ($LASTEXITCODE -ne 0) { throw 'Installed canonical agent guidance failed.' }
 
