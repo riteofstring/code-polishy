@@ -185,23 +185,17 @@ publishing the release and stable launcher.
 
 ## Digest-pinned OCI execution
 
-Linux images are built from the verified publication archive instead of a
-second release tree. On the matching Linux architecture:
+The version-tag release workflow builds the Linux image from its already
+verified publication archive instead of creating a second release tree. It
+reuses the archive's engine to prepare the OCI context, while Buildx emits SBOM
+and provenance attestations. The workflow resolves and pulls the registry's
+exact image digest, then exercises the installed launcher as the image's
+declared user before reporting success.
 
-```sh
-./scripts/build-oci-image.sh \
-  --publication-dir /release/linux-x64 \
-  --image registry.example/code-polishy:v<VERSION> \
-  --push
-```
-
-Buildx emits SBOM and provenance attestations. Push mode resolves and pulls the
-registry's exact image digest, then exercises the installed launcher as the
-image's declared user before reporting success. Tags aid discovery only. Every
-workflow and invocation uses the reported
-`registry.example/code-polishy@sha256:...` identity. The image runs as non-root
-user 65532, starts in `/workspace`, keeps the stable launcher on `PATH`, and
-verifies its internal release on every command.
+Tags aid discovery only. Every workflow and invocation uses the reported
+`ghcr.io/riteofstring/code-polishy@sha256:...` identity. The image runs as
+non-root user 65532, starts in `/workspace`, keeps the stable launcher on
+`PATH`, and verifies its internal release on every command.
 
 A GitLab job may use the public canonical image directly. The package currently
 publishes Linux x86-64, and a public pull needs no GHCR credentials:
