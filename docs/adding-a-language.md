@@ -15,6 +15,8 @@ form one public contract; earlier prerelease protocols are rejected. Use
 `schema/code-polishy-pack-request-v3.schema.json` for requests, and
 `schema/code-polishy-pack-response-v3.schema.json` for responses. Executable
 request and response examples live under `tools/fixtures/language-pack/examples`.
+The complete `tools/fixtures/language-pack` proof pack ships with every release,
+so authors can run and modify the same verified example without a source checkout.
 Declare an exact version, supported platforms, languages and source
 patterns, dependency manifests, command paths, capabilities, execution profiles,
 timeouts, and permitted environment names.

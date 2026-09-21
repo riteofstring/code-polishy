@@ -15,7 +15,8 @@ if [[ "${#releases[@]}" -ne 1 || ! -x "${releases[0]}" ]]; then
   echo "The temporary installation must contain one exact release binary." >&2
   exit 1
 fi
-manifest="$(dirname "$(dirname "${releases[0]}")")/release-manifest.json"
+release_root="$(dirname "$(dirname "${releases[0]}")")"
+manifest="${release_root}/release-manifest.json"
 version="$(awk -F'"' '/"codePolishyVersion"/ { print $4; exit }' "${manifest}")"
 release_digest="$(awk -F'"' '/"releaseDigest"/ { print $4; exit }' "${manifest}")"
 cat >"${fixture_root}/target/.code-polishy.lock.json" <<EOF
@@ -38,7 +39,7 @@ cat >"${fixture_root}/target/.code-polishy.lock.json" <<EOF
 }
 EOF
 "${fixture_root}/prefix/bin/code-polishy" --repo-root "${fixture_root}/target" \
-  pack verify --source "${policy_root}/tools/fixtures/language-pack"
+  pack verify --source "${release_root}/tools/fixtures/language-pack"
 "${policy_root}/scripts/test-installed-release.sh" \
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \

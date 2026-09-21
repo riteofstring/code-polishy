@@ -318,6 +318,7 @@ release_contents=(
   "tools/vulture-version.txt"
   "tools/vulture_wheel_checksums.txt"
   "tools/javascript_bundle_inventory.txt"
+  "tools/fixtures/language-pack"
 )
 
 
