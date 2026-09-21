@@ -51,9 +51,9 @@ EOF
 catalog="${release_root}/tools/fixtures/code-polishy-pack-catalog-v1.json"
 catalog_sha256="$(sha256_file "${catalog}")"
 XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
-  pack catalog --catalog "${catalog}" --sha256 "${catalog_sha256}" --format json
+  --repo-root "${fixture_root}/target" pack catalog --catalog "${catalog}" --sha256 "${catalog_sha256}" --format json
 XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
-  pack install --official sqlite-syntax-proof@1.0.0 --catalog "${catalog}" --sha256 "${catalog_sha256}"
+  --repo-root "${fixture_root}/target" pack install --official sqlite-syntax-proof@1.0.0 --catalog "${catalog}" --sha256 "${catalog_sha256}"
 XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
   --repo-root "${fixture_root}/target" pack list --format json
 "${policy_root}/scripts/test-installed-release.sh" \
