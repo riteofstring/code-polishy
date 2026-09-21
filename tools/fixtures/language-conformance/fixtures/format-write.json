@@ -9,7 +9,7 @@
     {
       "path": ".code-polishy.json",
       "mode": "0644",
-      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
     },
     {
       "path": "src/main.go",

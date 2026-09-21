@@ -1,18 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
   "protocol": "language-conformance-fixture/v1",
-  "id": "go-discovery-quality",
-  "maturity": "planned",
-  "gap": "Split root, nested, workspace, build-tag, syntax, vet, staticcheck, complexity, comment, build, and type behavior into positive and seeded-defect executable cases. The go-gofmt-diagnostic fixture covers the seeded format-check case.",
-  "behaviorIds": [
-    "go.discovery.modules",
-    "go.discovery.workspaces",
-    "go.discovery.packages-build-constraints",
-    "go.quality.format-syntax",
-    "go.quality.vet-staticcheck",
-    "go.quality.complexity-comments",
-    "go.quality.build-type"
-  ],
+  "id": "go-gofmt-diagnostic",
+  "maturity": "active",
+  "behaviorIds": ["go.quality.format-syntax"],
   "files": [
     {
       "path": ".code-polishy.json",

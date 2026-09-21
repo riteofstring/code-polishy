@@ -136,6 +136,20 @@ func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
 		if identity.Branch != "fixture/main" || !slices.Contains(identity.Status, "M  src/main.go") || !slices.Contains(identity.Status, " D src/deleted.go") || !slices.Contains(identity.Status, "?? scratch.txt") {
 			t.Fatalf("Git identity = %+v", identity)
 		}
+		reportPath := filepath.Join(root, ".code-polishy-reports", "check", "run", "report.json")
+		if err := os.MkdirAll(filepath.Dir(reportPath), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(reportPath, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		identityWithReport, err := conformanceGitSnapshot(t.Context(), git.Path, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(identity, identityWithReport) {
+			t.Fatalf("managed report changed Git identity: before=%+v after=%+v", identity, identityWithReport)
+		}
 		stdout, stderr, err := runConformanceGit(t.Context(), git.Path, root, filepath.Join(filepath.Dir(root), "git-global.config"), "", "show", "HEAD:src/main.go")
 		if err != nil || string(stdout) != baseSource {
 			t.Fatalf("committed source stdout=%q stderr=%q err=%v", stdout, stderr, err)
@@ -144,6 +158,41 @@ func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
 	}
 	if !reflect.DeepEqual(identities[0], identities[1]) {
 		t.Fatalf("materialized Git identities differ: %+v", identities)
+	}
+}
+
+func TestConformanceCoverageAcceptsNativeGraphNodes(t *testing.T) {
+	report := conformanceTestReport("/repository", []map[string]any{conformanceTestFinding()}, []string{}, false)
+	report["sourceDependencyGraph"] = map[string]any{"nodes": []map[string]any{{"path": "src/main.go"}}}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failures := assertConformanceOutcome("reference", ConformanceExpectedOutcome{ExitStatus: 1, ReportStatus: "failed", RequiredRules: []string{"quality.seeded"}, RequiredCoverage: []string{"src/main.go"}}, ConformanceRunEvidence{ExitStatus: 1, Report: data})
+	if len(failures) != 0 {
+		t.Fatalf("native graph coverage failures = %v", failures)
+	}
+}
+
+func TestConformanceComparisonNormalizesOnlyBoundRoots(t *testing.T) {
+	referenceReport := conformanceTestReport("/reference-repository", []map[string]any{conformanceTestFinding()}, []string{"src/main.go"}, false)
+	candidateReport := conformanceTestReport("/candidate-repository", []map[string]any{conformanceTestFinding()}, []string{"src/main.go"}, false)
+	referenceReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/reference-policy/.tools/bin/tool"}}}
+	candidateReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/candidate-policy/.tools/bin/tool"}}}
+	referenceData, err := json.Marshal(referenceReport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateData, err := json.Marshal(candidateReport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	differences, err := compareConformanceRuns(
+		ConformanceRunEvidence{ExitStatus: 1, Report: referenceData}, "/reference-repository", "/reference-policy",
+		ConformanceRunEvidence{ExitStatus: 1, Report: candidateData}, "/candidate-repository", "/candidate-policy",
+	)
+	if err != nil || len(differences) != 0 {
+		t.Fatalf("normalized differences=%+v err=%v", differences, err)
 	}
 }
 
@@ -292,7 +341,7 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 19 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
+	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 20 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
 		t.Fatalf("inventory identity = behaviors:%d fixtures:%d base:%s", len(ledger.Behaviors), len(ledger.Fixtures), ledger.TaskBase)
 	}
 	for _, behavior := range ledger.Behaviors {
@@ -312,10 +361,18 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 			}
 		}
 	}
+	active := []string{}
 	for _, fixture := range ledger.Fixtures {
+		if fixture.Maturity == "active" {
+			active = append(active, fixture.ID)
+			continue
+		}
 		if fixture.Maturity != "planned" || fixture.Gap == "" {
 			t.Fatalf("fixture %s maturity = %s gap = %q", fixture.ID, fixture.Maturity, fixture.Gap)
 		}
+	}
+	if !slices.Equal(active, []string{"go-gofmt-diagnostic"}) {
+		t.Fatalf("active reference fixtures = %v", active)
 	}
 	mapped := []string{}
 	for _, behavior := range ledger.Behaviors {
@@ -415,7 +472,17 @@ func writeConformanceTestLedger(t *testing.T) string {
 
 func writeConformanceTestExecutable(t *testing.T, name string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "schema"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte("0.27.8\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "schema", "code-polishy.schema.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, name)
 	if err := os.WriteFile(path, []byte(name), 0o700); err != nil {
 		t.Fatal(err)
 	}

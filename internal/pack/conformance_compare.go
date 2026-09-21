@@ -14,12 +14,12 @@ import (
 const maximumConformanceDifferences = 128
 const maximumConformanceDifferenceBytes = 1024
 
-func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot string, candidate ConformanceRunEvidence, candidateRoot string) ([]ConformanceDifference, error) {
-	referenceValue, err := conformanceComparableValue(reference, referenceRoot)
+func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot, referencePolicyRoot string, candidate ConformanceRunEvidence, candidateRoot, candidatePolicyRoot string) ([]ConformanceDifference, error) {
+	referenceValue, err := conformanceComparableValue(reference, referenceRoot, referencePolicyRoot)
 	if err != nil {
 		return nil, fmt.Errorf("normalize reference: %w", err)
 	}
-	candidateValue, err := conformanceComparableValue(candidate, candidateRoot)
+	candidateValue, err := conformanceComparableValue(candidate, candidateRoot, candidatePolicyRoot)
 	if err != nil {
 		return nil, fmt.Errorf("normalize candidate: %w", err)
 	}
@@ -28,12 +28,12 @@ func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot stri
 	return differences, nil
 }
 
-func conformanceComparableValue(run ConformanceRunEvidence, root string) (any, error) {
+func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot string) (any, error) {
 	report, err := decodeConformanceValue(run.Report)
 	if err != nil {
 		return nil, err
 	}
-	report = normalizeConformanceValue(report, root, "")
+	report = normalizeConformanceValue(report, root, policyRoot, "")
 	before, err := encodeConformanceValue(run.Before)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func conformanceComparableValue(run ConformanceRunEvidence, root string) (any, e
 	return map[string]any{
 		"exitStatus": run.ExitStatus,
 		"report":     report,
-		"stderr":     normalizeConformanceString(run.Stderr, root),
+		"stderr":     normalizeConformanceString(run.Stderr, root, policyRoot),
 		"before":     before,
 		"after":      after,
 		"beforeGit":  beforeGit,
@@ -79,7 +79,7 @@ func encodeConformanceValue(value any) (any, error) {
 	return decodeConformanceValue(data)
 }
 
-func normalizeConformanceValue(value any, root, path string) any {
+func normalizeConformanceValue(value any, root, policyRoot, path string) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
@@ -88,13 +88,13 @@ func normalizeConformanceValue(value any, root, path string) any {
 			if dropConformanceField(path, key) {
 				continue
 			}
-			result[key] = normalizeConformanceValue(child, root, childPath)
+			result[key] = normalizeConformanceValue(child, root, policyRoot, childPath)
 		}
 		return result
 	case []any:
 		result := make([]any, 0, len(typed))
 		for index, child := range typed {
-			result = append(result, normalizeConformanceValue(child, root, path+"/"+strconv.Itoa(index)))
+			result = append(result, normalizeConformanceValue(child, root, policyRoot, path+"/"+strconv.Itoa(index)))
 		}
 		if sortConformanceArray(path) {
 			slices.SortFunc(result, func(left, right any) int {
@@ -105,7 +105,7 @@ func normalizeConformanceValue(value any, root, path string) any {
 		}
 		return result
 	case string:
-		return normalizeConformanceString(typed, root)
+		return normalizeConformanceString(typed, root, policyRoot)
 	default:
 		return value
 	}
@@ -147,15 +147,16 @@ func conformancePointerShape(path string) string {
 	return strings.Join(parts, "/")
 }
 
-func normalizeConformanceString(value, root string) string {
-	if root == "" {
-		return value
-	}
-	replacements := []string{root, filepath.ToSlash(root)}
+func normalizeConformanceString(value, root, policyRoot string) string {
 	result := value
-	for _, replacement := range replacements {
-		if replacement != "" {
-			result = strings.ReplaceAll(result, replacement, "$REPOSITORY_ROOT")
+	for _, item := range []struct {
+		value       string
+		replacement string
+	}{{root, "$REPOSITORY_ROOT"}, {policyRoot, "$POLICY_ROOT"}} {
+		for _, replacement := range []string{item.value, filepath.ToSlash(item.value)} {
+			if replacement != "" {
+				result = strings.ReplaceAll(result, replacement, item.replacement)
+			}
 		}
 	}
 	return result

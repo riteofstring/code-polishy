@@ -24,13 +24,13 @@ func conformanceGitTool(ctx context.Context) (ConformanceToolIdentity, error) {
 	if err != nil {
 		return ConformanceToolIdentity{}, err
 	}
-	identity, err := conformanceExecutableIdentity(name)
+	path, digest, err := conformanceExecutablePathAndDigest(name)
 	if err != nil {
 		return ConformanceToolIdentity{}, err
 	}
 	bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	stdout, _, err := runConformanceGit(bounded, identity.Path, "", "", "", "--version")
+	stdout, _, err := runConformanceGit(bounded, path, "", "", "", "--version")
 	if err != nil {
 		return ConformanceToolIdentity{}, err
 	}
@@ -38,7 +38,7 @@ func conformanceGitTool(ctx context.Context) (ConformanceToolIdentity, error) {
 	if version == "" || len(version) > 1024 || strings.ContainsAny(version, "\r\n") {
 		return ConformanceToolIdentity{}, errors.New("Git returned an invalid version identity")
 	}
-	return ConformanceToolIdentity{Path: identity.Path, SHA256: identity.SHA256, Version: version}, nil
+	return ConformanceToolIdentity{Path: path, SHA256: digest, Version: version}, nil
 }
 
 func materializeConformanceFixture(ctx context.Context, root string, fixture ConformanceFixture, gitExecutable string) error {
@@ -152,7 +152,11 @@ func conformanceGitSnapshot(ctx context.Context, gitExecutable, root string) (Co
 	if err != nil {
 		return ConformanceGitIdentity{}, err
 	}
-	statusOutput, err := run("status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no")
+	statusOutput, err := run(
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no", "--", ".",
+		":(exclude).code-polishy-reports", ":(exclude).code-polishy-reports/**",
+		":(exclude).code-polishy-artifacts", ":(exclude).code-polishy-artifacts/**",
+	)
 	if err != nil {
 		return ConformanceGitIdentity{}, err
 	}

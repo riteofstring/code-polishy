@@ -16,7 +16,7 @@
     {
       "path": ".code-polishy.json",
       "mode": "0644",
-      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"tooling\",\"paths\":[\"scripts/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"tooling\",\"paths\":[\"scripts/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
     },
     {
       "path": "scripts/example.sh",

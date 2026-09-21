@@ -43,8 +43,9 @@ type ConformanceEvidenceIdentity struct {
 }
 
 type ConformanceExecutableIdentity struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
+	Path       string `json:"path"`
+	PolicyRoot string `json:"policyRoot"`
+	SHA256     string `json:"sha256"`
 }
 
 type ConformanceEnvironmentIdentity struct {
@@ -170,7 +171,7 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 			report.Summary.Skipped++
 			continue
 		}
-		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, candidate.Path, git.Path, executor)
+		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, reference.PolicyRoot, candidate.Path, candidate.PolicyRoot, git.Path, executor)
 		if runErr != nil {
 			return ConformanceReport{}, fmt.Errorf("fixture %s: %w", fixture.ID, runErr)
 		}
@@ -210,37 +211,65 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 }
 
 func conformanceExecutableIdentity(name string) (ConformanceExecutableIdentity, error) {
+	canonical, digest, err := conformanceExecutablePathAndDigest(name)
+	if err != nil {
+		return ConformanceExecutableIdentity{}, err
+	}
+	policyRoot, err := conformancePolicyRoot(canonical)
+	if err != nil {
+		return ConformanceExecutableIdentity{}, err
+	}
+	return ConformanceExecutableIdentity{Path: canonical, PolicyRoot: policyRoot, SHA256: digest}, nil
+}
+
+func conformanceExecutablePathAndDigest(name string) (string, string, error) {
 	if strings.TrimSpace(name) == "" {
-		return ConformanceExecutableIdentity{}, errors.New("path is required")
+		return "", "", errors.New("path is required")
 	}
 	absolute, err := filepath.Abs(name)
 	if err != nil {
-		return ConformanceExecutableIdentity{}, err
+		return "", "", err
 	}
 	canonical, err := filepath.EvalSymlinks(absolute)
 	if err != nil {
-		return ConformanceExecutableIdentity{}, err
+		return "", "", err
 	}
 	file, err := os.Open(canonical)
 	if err != nil {
-		return ConformanceExecutableIdentity{}, err
+		return "", "", err
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return ConformanceExecutableIdentity{}, errors.New("path must resolve to an executable regular file")
+		return "", "", errors.New("path must resolve to an executable regular file")
 	}
 	digest := sha256.New()
 	if _, err := io.Copy(digest, io.LimitReader(file, 512<<20)); err != nil {
-		return ConformanceExecutableIdentity{}, err
+		return "", "", err
 	}
 	if info.Size() > 512<<20 {
-		return ConformanceExecutableIdentity{}, errors.New("executable exceeds 512 MiB")
+		return "", "", errors.New("executable exceeds 512 MiB")
 	}
-	return ConformanceExecutableIdentity{Path: canonical, SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
+	return canonical, hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, candidateExecutable, gitExecutable string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
+func conformancePolicyRoot(executable string) (string, error) {
+	current := filepath.Dir(executable)
+	for {
+		version, versionErr := os.Stat(filepath.Join(current, "VERSION"))
+		configuration, configurationErr := os.Stat(filepath.Join(current, "schema", "code-polishy.schema.json"))
+		if versionErr == nil && configurationErr == nil && version.Mode().IsRegular() && configuration.Mode().IsRegular() {
+			return current, nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", errors.New("executable is not contained by a Code Polishy policy root")
+		}
+		current = parent
+	}
+}
+
+func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, referencePolicyRoot, candidateExecutable, candidatePolicyRoot, gitExecutable string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
 	temporary, err := os.MkdirTemp("", "code-polishy-conformance-")
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
@@ -284,7 +313,7 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("candidate: %w", err)
 	}
-	differences, err := compareConformanceRuns(referenceRun, referenceRoot, candidateRun, candidateRoot)
+	differences, err := compareConformanceRuns(referenceRun, referenceRoot, referencePolicyRoot, candidateRun, candidateRoot, candidatePolicyRoot)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
@@ -310,7 +339,11 @@ func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, exe
 		return ConformanceRunEvidence{}, err
 	}
 	if len(execution.Stdout) == 0 || len(execution.Stdout) > 8<<20 {
-		return ConformanceRunEvidence{}, errors.New("CLI report is empty or exceeds 8 MiB")
+		stderr := string(execution.Stderr)
+		if len(stderr) > maximumConformanceDifferenceBytes {
+			stderr = stderr[:maximumConformanceDifferenceBytes] + "..."
+		}
+		return ConformanceRunEvidence{}, fmt.Errorf("CLI report is empty or exceeds 8 MiB (exit %d, stderr %q)", execution.ExitStatus, stderr)
 	}
 	if err := schema.NewValidator("https://code-polishy.dev/schema/code-polishy-report.schema.json").Validate(execution.Stdout); err != nil {
 		return ConformanceRunEvidence{}, fmt.Errorf("invalid CLI report: %w", err)
@@ -408,6 +441,11 @@ func assertConformanceOutcome(lane string, expected ConformanceExpectedOutcome, 
 		AnalysisContext []struct {
 			Paths []string `json:"paths"`
 		} `json:"analysisContext"`
+		SourceDependencyGraph struct {
+			Nodes []struct {
+				Path string `json:"path"`
+			} `json:"nodes"`
+		} `json:"sourceDependencyGraph"`
 	}{}
 	if err := json.Unmarshal(run.Report, &envelope); err != nil {
 		return append(failures, lane+" report could not be decoded after schema validation")
@@ -427,6 +465,9 @@ func assertConformanceOutcome(lane string, expected ConformanceExpectedOutcome, 
 	coverage := []string{}
 	for _, context := range envelope.AnalysisContext {
 		coverage = append(coverage, context.Paths...)
+	}
+	for _, node := range envelope.SourceDependencyGraph.Nodes {
+		coverage = append(coverage, node.Path)
 	}
 	for _, path := range expected.RequiredCoverage {
 		if !slices.Contains(coverage, path) {

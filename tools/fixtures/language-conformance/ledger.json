@@ -18,6 +18,7 @@
     }
   },
   "fixtures": [
+    "fixtures/go-gofmt-diagnostic.json",
     "fixtures/go-discovery-quality.json",
     "fixtures/go-architecture.json",
     "fixtures/go-dependencies.json",
@@ -169,7 +170,7 @@
       ],
       "futureOwner": "pack",
       "boundaryRationale": "The Go pack owns parsing and formatting; core grants write authority and applies edits.",
-      "fixtures": ["go-discovery-quality"],
+      "fixtures": ["go-discovery-quality", "go-gofmt-diagnostic"],
       "commands": ["check", "format"],
       "profiles": ["check", "format"],
       "modes": ["check", "write"],

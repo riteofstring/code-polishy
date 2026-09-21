@@ -17,7 +17,7 @@
     {
       "path": ".code-polishy.json",
       "mode": "0644",
-      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"generated\":[\"generated/**\"],\"data\":[\"data/**\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\",\"generated/**\"]},{\"name\":\"data\",\"paths\":[\"data/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"generated\":[\"generated/**\"],\"data\":[\"data/**\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\",\"generated/**\"]},{\"name\":\"data\",\"paths\":[\"data/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
     },
     { "path": "src/main.go", "mode": "0644", "content": "package main\n" },
     {
