@@ -5,9 +5,9 @@
     {
       "name": "sqlite-syntax-proof",
       "version": "1.0.0",
-      "digest": "ab900e841bf2e2726a4bffd79a43c00c442bf10d67738db197c745e787bd0b46",
+      "digest": "c1fbd7f59ec1a62e9314b5d0e0d56e0e7492f9a31450c36f38355e202ab548fd",
       "artifactUrl": "file:language-pack",
-      "artifactBytes": 7237,
+      "artifactBytes": 7512,
       "manifestVersion": 3,
       "protocolVersion": 4,
       "engineVersion": "0.27.8",
@@ -27,7 +27,7 @@
         "sourceRevision": "fe79e30318e7775b2af175c9a2f677981abfffeb",
         "builder": "code-polishy",
         "attestationUrl": "file:language-pack-provenance.json",
-        "attestationSha256": "c7c56e0421ad099b6369970a02cfc9c7fff24190a7825eb573d4891e45c2413a"
+        "attestationSha256": "ecdb7d9e01bd0343f802421796fe3c2d49c275cba5884e6ac40c4ae52ddaf41c"
       }
     }
   ]

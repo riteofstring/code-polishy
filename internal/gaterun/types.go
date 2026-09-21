@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	Version            = 6
+	Version            = 7
 	DefaultStreamLimit = 1 << 20
 	MaximumStreamLimit = 8 << 20
 )
@@ -129,29 +129,30 @@ type EnvironmentFingerprint struct {
 }
 
 type CommandSpec struct {
-	Root                string          `json:"root,omitempty"`
-	InputSHA256         string          `json:"input_sha256,omitempty"`
-	InputDerivation     string          `json:"input_derivation,omitempty"`
-	Category            CommandCategory `json:"category"`
-	Scope               string          `json:"scope"`
-	Cost                string          `json:"cost"`
-	Name                string          `json:"name"`
-	Provides            []string        `json:"provides"`
-	Argv                []string        `json:"argv"`
-	Cwd                 string          `json:"cwd"`
-	Paths               []string        `json:"paths"`
-	Modules             []string        `json:"modules"`
-	RunOn               []string        `json:"run_on"`
-	Environment         []string        `json:"environment"`
-	ExclusiveResources  []string        `json:"exclusive_resources"`
-	TimeoutSeconds      int             `json:"timeout_seconds"`
-	Managed             bool            `json:"managed"`
-	PassFiles           bool            `json:"pass_files"`
-	PassFilePaths       []string        `json:"pass_file_paths"`
-	SealedEnvironment   bool            `json:"sealed_environment"`
-	Artifacts           []ArtifactSpec  `json:"artifacts"`
-	SuiteIdentitySHA256 string          `json:"suite_identity_sha256,omitempty"`
-	ReportProtocol      string          `json:"report_protocol,omitempty"`
+	Root                 string          `json:"root,omitempty"`
+	InputSHA256          string          `json:"input_sha256,omitempty"`
+	InputDerivation      string          `json:"input_derivation,omitempty"`
+	Category             CommandCategory `json:"category"`
+	Scope                string          `json:"scope"`
+	Cost                 string          `json:"cost"`
+	Name                 string          `json:"name"`
+	Provides             []string        `json:"provides"`
+	Argv                 []string        `json:"argv"`
+	Cwd                  string          `json:"cwd"`
+	Paths                []string        `json:"paths"`
+	Modules              []string        `json:"modules"`
+	RunOn                []string        `json:"run_on"`
+	Environment          []string        `json:"environment"`
+	EnvironmentOverrides []string        `json:"environment_overrides"`
+	ExclusiveResources   []string        `json:"exclusive_resources"`
+	TimeoutSeconds       int             `json:"timeout_seconds"`
+	Managed              bool            `json:"managed"`
+	PassFiles            bool            `json:"pass_files"`
+	PassFilePaths        []string        `json:"pass_file_paths"`
+	SealedEnvironment    bool            `json:"sealed_environment"`
+	Artifacts            []ArtifactSpec  `json:"artifacts"`
+	SuiteIdentitySHA256  string          `json:"suite_identity_sha256,omitempty"`
+	ReportProtocol       string          `json:"report_protocol,omitempty"`
 }
 
 type ArtifactSpec struct {

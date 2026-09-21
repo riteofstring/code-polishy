@@ -2,7 +2,7 @@
 
 This small protocol v4 pack proves that the same core engine can run an analyzer
 for a language it does not implement. Its extensionless Node adapter asks the
-policy-owned runtime's SQLite parser to prepare comment-free SELECT statements
+policy-owned toolchain's SQLite parser to prepare comment-free SELECT statements
 in an in-memory database, without executing them. The two fixtures distinguish
 valid SQL from a real syntax error. Other SQL constructs remain unsupported.
 

@@ -122,6 +122,14 @@
       }
     ]
   },
+  "tools": [
+    {
+      "id": "node",
+      "name": "node",
+      "version": "24.18.0",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
   "complete": true,
   "pack": {
     "name": "example",

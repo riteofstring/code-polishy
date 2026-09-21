@@ -38,6 +38,17 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"missing discovery mode", func(value map[string]any) {
 			delete(value["languages"].([]any)[0].(map[string]any), "discoveryMode")
 		}, "discoveryMode"},
+		{"missing language detector", func(value map[string]any) {
+			delete(value["languages"].([]any)[0].(map[string]any), "sourcePatterns")
+		}, "sourcePatterns or shebangs"},
+		{"invalid shebang", func(value map[string]any) {
+			value["languages"].([]any)[0].(map[string]any)["shebangs"] = []any{"#! /usr/bin/fixture"}
+		}, "canonical shebang"},
+		{"ambiguous shebang", func(value map[string]any) {
+			language := value["languages"].([]any)[0].(map[string]any)
+			language["shebangs"] = []any{"#!/usr/bin/env"}
+			value["languages"] = append(value["languages"].([]any), map[string]any{"id": "other", "shebangs": []any{"#!/usr/bin/env fixture"}, "discoveryMode": "file-scoped"})
+		}, "owned by both"},
 		{"file-scoped metadata", func(value map[string]any) {
 			value["languages"].([]any)[0].(map[string]any)["metadataPatterns"] = []any{"package.json"}
 		}, "metadataPatterns"},
@@ -50,9 +61,22 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"missing execution", func(value map[string]any) {
 			delete(value["commands"].([]any)[0].(map[string]any), "execution")
 		}, "execution.type"},
-		{"self-contained runtime", func(value map[string]any) {
-			value["commands"].([]any)[0].(map[string]any)["runtime"] = map[string]any{"name": "node", "version": "24.18.0"}
-		}, "omitted"},
+		{"self-contained tools", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)["tools"] = []any{map[string]any{"id": "node", "name": "node", "version": "24.18.0", "launcher": true}}
+		}, "empty"},
+		{"host toolchain without tools", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)["type"] = "host-toolchain"
+		}, "at least one exact host tool identity"},
+		{"multiple launchers", func(value map[string]any) {
+			execution := value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)
+			execution["type"] = "host-toolchain"
+			execution["tools"] = []any{map[string]any{"id": "python", "name": "python", "version": "3.13.11", "launcher": true}, map[string]any{"id": "shellcheck", "name": "shellcheck", "version": "0.11.0", "launcher": true}}
+		}, "at most one launcher"},
+		{"colliding tool environment", func(value map[string]any) {
+			execution := value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)
+			execution["type"] = "host-toolchain"
+			execution["tools"] = []any{map[string]any{"id": "fixture-tool", "name": "python", "version": "3.13.11"}, map[string]any{"id": "fixture.tool", "name": "shellcheck", "version": "0.11.0"}}
+		}, "unique lowercase identifier"},
 		{"network authority", func(value map[string]any) {
 			value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)["network"] = "ambient"
 		}, "none"},
@@ -70,6 +94,46 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 				t.Fatalf("expected %q, received %v", test.want, err)
 			}
 		})
+	}
+}
+
+func TestManifestOwnedShebangAndTestRulesDriveRepositoryClassification(t *testing.T) {
+	manifest, err := ParseManifest(testManifest(t), "manifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Languages[0].SourcePatterns = nil
+	manifest.Languages[0].Shebangs = []string{"#!/usr/bin/env fixture"}
+	manifest.Languages[0].TestPatterns = []string{"verification/**"}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack.schema.json").Validate(encoded); err != nil {
+		t.Fatalf("shebang-only manifest schema: %v", err)
+	}
+	manifest, err = ParseManifest(encoded, "manifest")
+	if err != nil {
+		t.Fatalf("shebang-only manifest decoder: %v", err)
+	}
+	resolution := Resolution{}
+	compileManifest("/packs/fixture", policy.PackSelection{Name: manifest.Name, Version: manifest.Version, Digest: strings.Repeat("a", 64)}, manifest, &resolution)
+	config := policy.Config{}
+	Apply(&config, resolution)
+	root := t.TempDir()
+	writeTestFile(t, root, "verification/tool", "#!/usr/bin/env fixture\n", 0o755)
+	repo, err := repository.Open(root, root, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if language := repo.Language("verification/tool"); language != "fixture" {
+		t.Fatalf("language = %q, want fixture", language)
+	}
+	if !repo.IsTest("verification/tool") {
+		t.Fatal("manifest-owned test pattern did not classify source")
+	}
+	if len(resolution.Commands) != 1 || !repo.CommandOwnsPath(resolution.Commands[0], "verification/tool") {
+		t.Fatal("shebang-only source was not owned by its pack command")
 	}
 }
 

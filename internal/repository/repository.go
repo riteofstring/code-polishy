@@ -441,7 +441,13 @@ func (repo Repository) IsTest(path string) bool {
 }
 
 func (repo Repository) computeIsTest(path string) bool {
-	return policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Tests.Paths)
+	if policy.IsTestPath(path) || policy.MatchesAny(path, repo.Config.Tests.Paths) {
+		return true
+	}
+	language := repo.Language(path)
+	return slices.ContainsFunc(repo.Config.PackTestPatterns, func(rule policy.LanguageRule) bool {
+		return rule.Name == language && policy.MatchesAny(path, rule.Paths)
+	})
 }
 
 func (repo Repository) IsDevelopment(path string) bool {
@@ -584,7 +590,37 @@ func (repo Repository) computeDeclaredLanguages(path string) []string {
 			languages = append(languages, rule.Name)
 		}
 	}
-	return languages
+	if shebang := repo.sourceShebang(path); shebang != "" {
+		for _, detector := range repo.Config.PackLanguageDetectors {
+			if slices.ContainsFunc(detector.Shebangs, func(prefix string) bool { return shebang == prefix || strings.HasPrefix(shebang, prefix+" ") }) {
+				languages = append(languages, detector.Language)
+			}
+		}
+	}
+	slices.Sort(languages)
+	return slices.Compact(languages)
+}
+
+func (repo Repository) sourceShebang(path string) string {
+	resolved, err := repo.Resolve(path)
+	if err != nil {
+		return ""
+	}
+	file, err := os.Open(resolved)
+	if err != nil {
+		return ""
+	}
+	prefix := make([]byte, 512)
+	count, readErr := file.Read(prefix)
+	closeErr := file.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) || closeErr != nil {
+		return ""
+	}
+	first := string(bytes.SplitN(prefix[:count], []byte("\n"), 2)[0])
+	if !strings.HasPrefix(first, "#!") {
+		return ""
+	}
+	return strings.TrimSuffix(first, "\r")
 }
 
 func (repo Repository) builtInLanguage(path string) string {
@@ -844,21 +880,7 @@ func normalizePolicyInputPath(path string) string {
 }
 
 func (repo Repository) hasShellShebang(path string) bool {
-	resolved, err := repo.Resolve(path)
-	if err != nil {
-		return false
-	}
-	file, err := os.Open(resolved)
-	if err != nil {
-		return false
-	}
-	prefix := make([]byte, 512)
-	count, readErr := file.Read(prefix)
-	closeErr := file.Close()
-	if readErr != nil && !errors.Is(readErr, io.EOF) || closeErr != nil {
-		return false
-	}
-	first := string(bytes.SplitN(prefix[:count], []byte("\n"), 2)[0])
+	first := repo.sourceShebang(path)
 	return strings.HasPrefix(first, "#!") && (strings.Contains(first, "/sh") || strings.Contains(first, "/bash") || strings.Contains(first, " sh") || strings.Contains(first, " bash"))
 }
 

@@ -78,11 +78,11 @@ func (verifier fixtureVerifier) run(fixture Fixture) error {
 	command := resolution.Commands[commandIndex]
 	request.Provider = command.Name
 	request.Profile = declared.Profiles[0]
-	prepared, identity, err := runtimeCommand(repo, command, declared.Runtime)
+	prepared, identities, err := toolchainCommand(repo, command, declared.Execution.Tools)
 	if err != nil {
 		return err
 	}
-	request.Runtime = identity
+	request.Tools = identities
 	inputs := verifier.fixtureInputs(fixture)
 	if hasProjectDiscovery(command.Adapter) {
 		request, _, err = discoveryRequestPaths(verifier.ctx, repo, prepared, verifier.runner, request, inputs)
@@ -100,7 +100,7 @@ func (verifier fixtureVerifier) run(fixture Fixture) error {
 	if err != nil {
 		return err
 	}
-	if err := verifyRuntimeIdentity(repo, command, identity, declared.Runtime); err != nil {
+	if err := verifyToolchainIdentity(repo, command, identities, declared.Execution.Tools); err != nil {
 		return err
 	}
 	return verifyFixtureResult(repo, fixture, request, response)
@@ -111,7 +111,7 @@ func (verifier fixtureVerifier) request(projectRoot string, fixture Fixture) Req
 	if fixture.Capability == "format" {
 		operation = "format"
 	}
-	return Request{ProtocolVersion: ProtocolVersion, Operation: operation, Capability: fixture.Capability, ProjectRoot: projectRoot, Files: slices.Clone(fixture.Files), Modules: []RequestModule{}, Mode: "check", Profile: "verify", Complete: true, Pack: policy.PackSelection{Name: verifier.tree.Manifest.Name, Version: verifier.tree.Manifest.Version, Digest: verifier.tree.Receipt.Digest}}
+	return Request{Tools: []ToolIdentity{}, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: fixture.Capability, ProjectRoot: projectRoot, Files: slices.Clone(fixture.Files), Modules: []RequestModule{}, Mode: "check", Profile: "verify", Complete: true, Pack: policy.PackSelection{Name: verifier.tree.Manifest.Name, Version: verifier.tree.Manifest.Version, Digest: verifier.tree.Receipt.Digest}}
 }
 
 func verifyFixtureResult(repo repository.Repository, fixture Fixture, request Request, response Response) error {

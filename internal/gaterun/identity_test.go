@@ -39,6 +39,9 @@ func TestIdentityDigestBindsCommandAndEnvironmentInputs(t *testing.T) {
 		{name: "provider root", mutate: func(value *IdentityInput) { value.Commands[0].Root = "/sealed/pack" }},
 		{name: "provider request", mutate: func(value *IdentityInput) { value.Commands[0].InputSHA256 = ContentSHA256([]byte("request")) }},
 		{name: "provider request derivation", mutate: func(value *IdentityInput) { value.Commands[0].InputDerivation = "validated-pack-discovery-v1" }},
+		{name: "command environment override", mutate: func(value *IdentityInput) {
+			value.Commands[0].EnvironmentOverrides = []string{"CODE_POLISHY_TOOL_NODE=/release/node"}
+		}},
 		{name: "category", mutate: func(value *IdentityInput) { value.Commands[0].Category = Check }},
 		{name: "behavior review task selection", mutate: func(value *IdentityInput) {
 			value.BehaviorReview = requiredBehaviorReview("task-request")
@@ -66,6 +69,21 @@ func TestIdentityDigestBindsCommandAndEnvironmentInputs(t *testing.T) {
 				t.Fatalf("%s did not change the identity digest", test.name)
 			}
 		})
+	}
+}
+
+func TestIdentityRejectsInvalidCommandEnvironmentOverrides(t *testing.T) {
+	for _, overrides := range [][]string{
+		{"missing-assignment"},
+		{"1INVALID=value"},
+		{"TOOL=one", "TOOL=two"},
+		{"TOOL=invalid\x00value"},
+	} {
+		input := testIdentityInput([]CommandSpec{testCommand(OrdinaryTest, "unit")})
+		input.Commands[0].EnvironmentOverrides = overrides
+		if _, err := NewIdentity(input); err == nil {
+			t.Fatalf("NewIdentity accepted environment overrides %q", overrides)
+		}
 	}
 }
 

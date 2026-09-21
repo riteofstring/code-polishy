@@ -76,9 +76,11 @@ type Config struct {
 	ModuleByName        map[string]int       `json:"-"`
 	ActivePolicyModules []ActivePolicyModule `json:"-"`
 
-	JavaScriptLintScopes []JavaScriptLintScope `json:"-"`
-	PackManifests        []PackDependencyRule  `json:"-"`
-	UnavailablePacks     []string              `json:"-"`
+	JavaScriptLintScopes  []JavaScriptLintScope  `json:"-"`
+	PackManifests         []PackDependencyRule   `json:"-"`
+	PackLanguageDetectors []PackLanguageDetector `json:"-"`
+	PackTestPatterns      []LanguageRule         `json:"-"`
+	UnavailablePacks      []string               `json:"-"`
 }
 
 type PackSelection struct {
@@ -91,6 +93,11 @@ type PackDependencyRule struct {
 	Pack     string
 	Language string
 	Paths    []string
+}
+
+type PackLanguageDetector struct {
+	Language string
+	Shebangs []string
 }
 
 type Verification struct {
@@ -339,7 +346,7 @@ type PackAdapter struct {
 	Capability      string
 	Languages       []LanguageRule
 	Discovery       []PackDiscovery
-	Runtime         *PackRuntime
+	Tools           []PackTool
 }
 
 type PackDiscovery struct {
@@ -349,9 +356,11 @@ type PackDiscovery struct {
 	DependencyPatterns []string
 }
 
-type PackRuntime struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+type PackTool struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Launcher bool   `json:"launcher,omitempty"`
 }
 
 type Testing struct {

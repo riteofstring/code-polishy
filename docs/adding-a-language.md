@@ -9,7 +9,7 @@ framework does not require its own pack or a second project configuration fragme
 ## Pack contract
 
 A local pack contains `code-polishy-pack.json`, `README.md`, contained adapter
-entries, pinned tools, and conformance projects. Manifest version 3 and protocol
+entries, declared tools, and conformance projects. Manifest version 3 and protocol
 version 4 form one breaking contract; version 2 manifests and protocol 3 messages
 are rejected rather than translated. Use
 `schema/code-polishy-pack.schema.json` for the manifest,
@@ -19,23 +19,30 @@ request and response examples live under `tools/fixtures/language-pack/examples`
 The complete `tools/fixtures/language-pack` proof pack ships with every release,
 so authors can run and modify the same verified example without a source checkout.
 Declare an exact pack version, the one exact `engineVersion` that may load it,
-supported platforms, languages and source patterns, one discovery mode,
-dependency and metadata patterns, command languages,
+supported platforms, languages with source patterns and/or exact shebang prefixes,
+optional language-specific test patterns, one discovery mode, dependency and
+metadata patterns, command languages,
 capabilities, execution profiles and type, timeouts, network authority, and
 permitted environment names. `file-scoped` discovery accepts no metadata patterns;
 `static` and `evaluated` discovery require explicit metadata patterns.
 
 Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 `architecture`, `build`, `dependency-policy`, `lock-sync`, `release-age`, or
-`security`. An optional runtime reference requests an exact policy-owned tool:
+`security`. A host toolchain names every exact policy-owned tool it needs and
+marks at most one as the adapter launcher:
 
 ```json
 {
   "name": "analyze",
   "argv": ["bin/analyze.mjs"],
   "languages": ["typescript"],
-  "execution": { "type": "host-toolchain", "network": "none" },
-  "runtime": { "name": "node", "version": "24.18.0" },
+  "execution": {
+    "type": "host-toolchain",
+    "network": "none",
+    "tools": [
+      { "id": "node", "name": "node", "version": "24.18.0", "launcher": true }
+    ]
+  },
   "capabilities": ["lint"],
   "profiles": ["check", "gate"],
   "timeoutSeconds": 60
@@ -43,12 +50,13 @@ Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 ```
 
 Every command declares `self-contained` or `host-toolchain` execution and currently
-declares `network: none`. A self-contained command omits `runtime`; a host-toolchain
-command requires one exact runtime identity. Node is the first supported runtime
-reference. Its executable and SHA-256 identity come from the verified engine
-installation's governed tool inventory. An ambient executable, target package,
-version range, or missing runtime cannot substitute. Native contained executable
-adapters can omit the runtime reference.
+declares `network: none`. A self-contained command omits `tools`; a host-toolchain
+command requires one or more exact tool identities. Tool executables and SHA-256
+identities come from the verified engine installation's governed inventory. The
+engine exposes each path as `CODE_POLISHY_TOOL_<ID>` and prepends the one declared
+launcher to the adapter command. An ambient executable, target package, version
+range, or missing tool cannot substitute. Native contained executable adapters
+use self-contained execution.
 
 Each command/capability pair requires a passing fixture and a real seeded defect
 producing `findings` with `expectedRules` after core policy evaluation. Function
@@ -63,7 +71,7 @@ language using a real parser; it deliberately supplies lint only.
 ## Requests and responses
 
 The engine sends bounded JSON requests on standard input. Every request carries
-the exact pack/runtime identity, operation, capability, project root, repository
+the exact pack/toolchain identity, operation, capability, project root, repository
 selection, mode, profile, modules, effective policy, governed inventory, and hashed
 read context. Inventory entries expose generic path, language, module, context,
 provider ownership, and source/metadata/dependency/asset/test/generated/data/

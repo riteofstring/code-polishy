@@ -12,7 +12,7 @@ import (
 func governedInventory(repo repository.Repository, command policy.Command, paths []string, profile string) []InventoryEntry {
 	entries := make([]InventoryEntry, 0, len(paths))
 	for _, file := range sortedUnique(paths) {
-		language, source := adapterLanguage(command.Adapter, file)
+		language, source := adapterLanguage(repo, command.Adapter, file)
 		metadata, dependency := adapterMetadata(command.Adapter, file)
 		_, asset, assetErr := repo.AssetLinkIdentity(file)
 		asset = asset && assetErr == nil
@@ -40,12 +40,12 @@ func governedInventory(repo repository.Repository, command policy.Command, paths
 	return entries
 }
 
-func adapterLanguage(adapter *policy.PackAdapter, file string) (string, bool) {
+func adapterLanguage(repo repository.Repository, adapter *policy.PackAdapter, file string) (string, bool) {
 	if adapter == nil {
 		return "", false
 	}
 	for _, language := range adapter.Languages {
-		if policy.MatchesAny(file, language.Paths) {
+		if policy.MatchesAny(file, language.Paths) || len(language.Paths) == 0 && repo.Language(file) == language.Name {
 			return language.Name, true
 		}
 	}

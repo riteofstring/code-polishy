@@ -80,7 +80,9 @@ func (repo Repository) CommandOwnsPath(command policy.Command, path string) bool
 		return false
 	}
 	if command.Adapter != nil && len(command.Adapter.Languages) > 0 && slices.Contains([]string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, command.Adapter.Capability) {
-		if !slices.ContainsFunc(command.Adapter.Languages, func(language policy.LanguageRule) bool { return policy.MatchesAny(path, language.Paths) }) {
+		if !slices.ContainsFunc(command.Adapter.Languages, func(language policy.LanguageRule) bool {
+			return policy.MatchesAny(path, language.Paths) || len(language.Paths) == 0 && repo.Language(path) == language.Name
+		}) {
 			return false
 		}
 	}

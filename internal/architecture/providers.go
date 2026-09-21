@@ -135,7 +135,7 @@ func providerFactInput(command policy.Command, result pack.Result, nodes []sourc
 		destination *string
 		value       any
 	}{
-		{&input.PartitionsSHA256, nodes}, {&input.ResolutionSHA256, result.Response.Facts.Imports}, {&provider.InputsSHA256, result.Response.Inputs}, {&provider.PolicySHA256, result.Request.Policy},
+		{&input.PartitionsSHA256, nodes}, {&input.ResolutionSHA256, result.Response.Facts.Imports}, {&provider.InputsSHA256, result.Response.Inputs}, {&provider.PolicySHA256, result.Request.Policy}, {&provider.RuntimeSHA256, result.Request.Tools},
 	} {
 		data, err := json.Marshal(item.value)
 		if err != nil {
@@ -143,9 +143,6 @@ func providerFactInput(command policy.Command, result pack.Result, nodes []sourc
 		}
 		digest := sha256.Sum256(data)
 		*item.destination = hex.EncodeToString(digest[:])
-	}
-	if result.Request.Runtime != nil {
-		provider.RuntimeSHA256 = result.Request.Runtime.SHA256
 	}
 	input.Provider = provider
 	return input, nil

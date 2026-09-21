@@ -7,8 +7,10 @@ import { discover } from "./discovery.mjs";
 function validateRequest(request) {
   if (
     request.protocolVersion !== 4 ||
-    request.runtime?.name !== "node" ||
-    request.runtime.version !== process.versions.node
+    request.tools?.length !== 1 ||
+    request.tools[0].id !== "node" ||
+    request.tools[0].name !== "node" ||
+    request.tools[0].version !== process.versions.node
   )
     throw new Error("request requires the exact policy-owned Node runtime");
   validateScope(request);

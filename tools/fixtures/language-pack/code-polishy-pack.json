@@ -23,11 +23,15 @@
       "timeoutSeconds": 30,
       "execution": {
         "type": "host-toolchain",
-        "network": "none"
-      },
-      "runtime": {
-        "name": "node",
-        "version": "24.18.0"
+        "network": "none",
+        "tools": [
+          {
+            "id": "node",
+            "name": "node",
+            "version": "24.18.0",
+            "launcher": true
+          }
+        ]
       }
     }
   ],

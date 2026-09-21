@@ -102,6 +102,19 @@
         "sourcePatterns": {
           "$ref": "#/$defs/paths"
         },
+        "testPatterns": {
+          "$ref": "#/$defs/paths"
+        },
+        "shebangs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128,
+            "pattern": "^#!\\S(?:[^\\r\\n]*\\S)?$"
+          }
+        },
         "dependencyManifests": {
           "$ref": "#/$defs/paths"
         },
@@ -112,40 +125,21 @@
           "$ref": "#/$defs/paths"
         }
       },
-      "allOf": [
+      "anyOf": [
         {
-          "if": {
-            "properties": {
-              "id": {
-                "not": {
-                  "enum": [
-                    "dart",
-                    "go",
-                    "jvm",
-                    "native",
-                    "php",
-                    "protobuf",
-                    "python",
-                    "ruby",
-                    "rust",
-                    "shell",
-                    "sql",
-                    "swift",
-                    "typescript"
-                  ]
-                }
-              }
-            }
-          },
-          "then": {
-            "required": ["sourcePatterns"],
-            "properties": {
-              "sourcePatterns": {
-                "minItems": 1
-              }
-            }
+          "required": ["sourcePatterns"],
+          "properties": {
+            "sourcePatterns": { "minItems": 1 }
           }
         },
+        {
+          "required": ["shebangs"],
+          "properties": {
+            "shebangs": { "minItems": 1 }
+          }
+        }
+      ],
+      "allOf": [
         {
           "if": {
             "properties": {
@@ -259,19 +253,17 @@
           "required": ["type", "network"],
           "properties": {
             "type": { "enum": ["self-contained", "host-toolchain"] },
-            "network": { "const": "none" }
-          }
-        },
-        "runtime": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["name", "version"],
-          "properties": {
-            "name": {
-              "$ref": "#/$defs/identifier"
-            },
-            "version": {
-              "$ref": "#/$defs/semanticVersion"
+            "network": { "const": "none" },
+            "tools": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/tool" },
+              "contains": {
+                "required": ["launcher"],
+                "properties": { "launcher": { "const": true } }
+              },
+              "minContains": 0,
+              "maxContains": 1
             }
           }
         }
@@ -285,10 +277,34 @@
               }
             }
           },
-          "then": { "required": ["runtime"] },
-          "else": { "not": { "required": ["runtime"] } }
+          "then": {
+            "properties": {
+              "execution": {
+                "required": ["tools"],
+                "properties": { "tools": { "minItems": 1 } }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "execution": {
+                "properties": { "tools": { "maxItems": 0 } }
+              }
+            }
+          }
         }
       ]
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": { "$ref": "#/$defs/semanticVersion" },
+        "launcher": { "type": "boolean" }
+      }
     },
     "fixture": {
       "type": "object",

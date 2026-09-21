@@ -13,7 +13,10 @@ command cannot establish structured source-analysis coverage.
 Pack manifest version 3 and protocol version 4 form one breaking contract.
 Version 2 manifests and protocol 3 messages are rejected without decoding or
 translation. Every language declares file-scoped, static, or evaluated discovery;
-every command names its exact languages and declares self-contained or host-toolchain
+source recognition comes only from its declared source patterns and canonical
+shebang prefixes, and optional test patterns extend core test scheduling for that
+language. Built-in language names do not acquire implicit patterns. Every command
+names its exact languages and declares self-contained or host-toolchain
 execution with explicit network authority. A response
 accounts for every requested file exactly once as analyzed or unsupported, retains
 a stable namespaced rule identifier, and returns facts needed for core decisions.
@@ -109,11 +112,13 @@ step translates old manifests, merges implicit pins, invokes native fallback for
 a missing replacement claim, or makes the outgoing engine understand the new
 protocol.
 
-A runtime declaration requests an exact policy-owned tool version. The first
-runtime implementation resolves Node from a verified installed release, checks
-the binary against that release's manifest, and binds its digest into the analysis.
-It never resolves a runtime from the target project or ambient PATH. Providers
-carry their own pinned dependencies in the integrity-checked installed pack tree.
+A host toolchain declaration requests one or more exact policy-owned tool versions
+and marks at most one as the adapter launcher. Core resolves every executable from
+a verified installed release, checks its bytes against that release's manifest,
+binds the ordered identities into analysis, and exposes each path through a
+tool-ID-specific environment variable. It never resolves a tool from the target
+project or ambient PATH. Providers carry their own pinned dependencies in the
+integrity-checked installed pack tree.
 
 The core interprets source-comment and function facts. JavaScript machine
 directives use the existing policy grammar. Unsupported directive grammars do not
@@ -126,7 +131,7 @@ remaining exempt from handwritten style limits.
 Providers contribute imports to the common source graph. The core derives node
 ownership and classification and retains dependency-direction and cycle checks.
 Graph input records bind the installed provider, declared languages, protocol,
-effective policy, inputs, runtime, facts, and resolution. Native Python evidence
+effective policy, inputs, toolchain, facts, and resolution. Native Python evidence
 continues to require its existing project and analyzer contract. New graph
 languages require provider evidence; merely naming a language does not validate it.
 
@@ -154,7 +159,7 @@ Their schema accepts declared language and ecosystem identifiers and binds pack
 facts to their version 3 protocol and exact provider identity. Native Python fact
 variants retain their existing protocol contracts.
 
-Provider planning and execution share preparation of the exact runtime command,
+Provider planning and execution share preparation of the exact toolchain command,
 pack root, profile, capability, selected files, and serialized request. Empty
 selections produce no invocation. Architecture operations appear at their actual
 execution phase, including test-ownership discovery. Persisted gate identities

@@ -82,6 +82,14 @@ function prepare() {
           "**/*.mts",
           "**/*.astro",
         ],
+        testPatterns: [
+          "tests/**",
+          "**/tests/**",
+          "__tests__/**",
+          "**/__tests__/**",
+          "**/*.test.*",
+          "**/*.spec.*",
+        ],
       },
     ],
     commands: [
@@ -92,8 +100,18 @@ function prepare() {
         capabilities: ["format"],
         profiles: ["check", "gate", "format"],
         timeoutSeconds: 600,
-        execution: { type: "host-toolchain", network: "none" },
-        runtime: { name: "node", version: metadata.engines.node },
+        execution: {
+          type: "host-toolchain",
+          network: "none",
+          tools: [
+            {
+              id: "node",
+              name: "node",
+              version: metadata.engines.node,
+              launcher: true,
+            },
+          ],
+        },
       },
       {
         name: "analyze",
@@ -108,8 +126,18 @@ function prepare() {
         ],
         profiles: ["check", "gate"],
         timeoutSeconds: 600,
-        execution: { type: "host-toolchain", network: "none" },
-        runtime: { name: "node", version: metadata.engines.node },
+        execution: {
+          type: "host-toolchain",
+          network: "none",
+          tools: [
+            {
+              id: "node",
+              name: "node",
+              version: metadata.engines.node,
+              launcher: true,
+            },
+          ],
+        },
       },
     ],
     fixtures,

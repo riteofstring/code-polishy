@@ -64,11 +64,14 @@ function requestFor(root, files, capability) {
         development: false,
       })),
     },
-    runtime: {
-      name: "node",
-      version: process.versions.node,
-      sha256: "0".repeat(64),
-    },
+    tools: [
+      {
+        id: "node",
+        name: "node",
+        version: process.versions.node,
+        sha256: "0".repeat(64),
+      },
+    ],
     mode: "check",
     profile: "check",
     modules: [],

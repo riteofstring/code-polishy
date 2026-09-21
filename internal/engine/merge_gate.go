@@ -694,7 +694,7 @@ func unplannedCommand(label, plan string, index int, expected, actual policy.Com
 		{"metadata", samePolicyCommandIdentity(expected, actual)},
 		{"arguments", slices.Equal(expected.Argv, actual.Argv)},
 		{"capabilities", slices.Equal(expected.Provides, actual.Provides)},
-		{"environment", slices.Equal(expected.Environment, actual.Environment)},
+		{"environment", slices.Equal(expected.Environment, actual.Environment) && slices.Equal(expected.EnvironmentOverrides, actual.EnvironmentOverrides)},
 		{"selection", slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
 			slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths)},
 		{"artifacts", slices.Equal(expected.TestArtifacts, actual.TestArtifacts)},
@@ -732,6 +732,7 @@ func samePolicyCommandCollections(expected, actual policy.Command) bool {
 	return slices.Equal(expected.Argv, actual.Argv) && slices.Equal(expected.Provides, actual.Provides) &&
 		slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
 		slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.Environment, actual.Environment) &&
+		slices.Equal(expected.EnvironmentOverrides, actual.EnvironmentOverrides) &&
 		slices.Equal(expected.ExclusiveResources, actual.ExclusiveResources) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths) &&
 		slices.Equal(expected.TestArtifacts, actual.TestArtifacts)
 }

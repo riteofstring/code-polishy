@@ -34,7 +34,7 @@ type Request struct {
 	OutputDirectory string               `json:"outputDirectory,omitempty"`
 	Context         []InputFile          `json:"context"`
 	Policy          PolicyInput          `json:"policy"`
-	Runtime         *RuntimeIdentity     `json:"runtime,omitempty"`
+	Tools           []ToolIdentity       `json:"tools"`
 	Complete        bool                 `json:"complete"`
 	Pack            policy.PackSelection `json:"pack"`
 }
@@ -159,11 +159,11 @@ func runRequest(ctx context.Context, repo repository.Repository, command policy.
 	if len(request.Files) > maximumInventoryEntries || len(request.Modules) > 1000 {
 		return failedResult(adapter, errors.New("adapter request exceeds its file or module count limit"))
 	}
-	prepared, identity, err := runtimeCommand(repo, command, adapter.Runtime)
+	prepared, identities, err := toolchainCommand(repo, command, adapter.Tools)
 	if err != nil {
 		return failedResult(adapter, err)
 	}
-	request.Runtime = identity
+	request.Tools = identities
 	if hasProjectDiscovery(adapter) {
 		request, _, err = discoveryRequest(ctx, repo, prepared, commandRunner, request)
 		if err != nil {
@@ -370,7 +370,7 @@ func verifyExecution(repo repository.Repository, command policy.Command, request
 	if err := verifyAdapter(command); err != nil {
 		return fmt.Errorf("adapter changed during execution: %w", err)
 	}
-	if err := verifyRuntimeIdentity(repo, command, request.Runtime, command.Adapter.Runtime); err != nil {
+	if err := verifyToolchainIdentity(repo, command, request.Tools, command.Adapter.Tools); err != nil {
 		return err
 	}
 	if err := verifyAnalysisInputs(repo, request, response); err != nil {
@@ -379,16 +379,13 @@ func verifyExecution(repo repository.Repository, command policy.Command, request
 	return applyEdits(repo, request, response)
 }
 
-func verifyRuntimeIdentity(repo repository.Repository, command policy.Command, identity *RuntimeIdentity, requested *policy.PackRuntime) error {
-	if identity == nil {
-		return nil
-	}
-	_, current, err := runtimeCommand(repo, command, requested)
+func verifyToolchainIdentity(repo repository.Repository, command policy.Command, identities []ToolIdentity, requested []policy.PackTool) error {
+	_, current, err := toolchainCommand(repo, command, requested)
 	if err != nil {
 		return err
 	}
-	if current == nil || *current != *identity {
-		return errors.New("runtime changed during provider execution")
+	if !slices.Equal(current, identities) {
+		return errors.New("toolchain changed during provider execution")
 	}
 	return nil
 }
@@ -447,7 +444,7 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 			mode = "write"
 		}
 	}
-	return Request{Provider: command.Name, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Selection: SelectionInput{Paths: selectionPaths(selection), Deleted: sortedUnique(selection.Candidate.Deleted), Complete: selection.All}, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
+	return Request{Provider: command.Name, Tools: []ToolIdentity{}, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Selection: SelectionInput{Paths: selectionPaths(selection), Deleted: sortedUnique(selection.Candidate.Deleted), Complete: selection.All}, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
 }
 
 func packCommandSelects(repo repository.Repository, command policy.Command, selected string) bool {
@@ -500,7 +497,7 @@ func verifyAdapter(command policy.Command) error {
 	}
 	executable := path.Clean(strings.ReplaceAll(command.Argv[0], "\\", "/"))
 	for _, entry := range receipt.Files {
-		if entry.Path == executable && (entry.Executable || command.Adapter.Runtime != nil) {
+		if entry.Path == executable && (entry.Executable || slices.ContainsFunc(command.Adapter.Tools, func(tool policy.PackTool) bool { return tool.Launcher })) {
 			return nil
 		}
 	}

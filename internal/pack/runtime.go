@@ -14,11 +14,13 @@ import (
 )
 
 type Resolution struct {
-	Commands  []policy.Command
-	Languages []policy.LanguageRule
-	Manifests []policy.PackDependencyRule
-	Findings  []policy.Finding
-	Notes     []string
+	Commands          []policy.Command
+	Languages         []policy.LanguageRule
+	LanguageDetectors []policy.PackLanguageDetector
+	TestPatterns      []policy.LanguageRule
+	Manifests         []policy.PackDependencyRule
+	Findings          []policy.Finding
+	Notes             []string
 }
 
 func Unavailable(selected []policy.PackSelection, err error) Resolution {
@@ -76,6 +78,8 @@ func Apply(config *policy.Config, resolution Resolution) {
 		config.UnavailablePacks = append(config.UnavailablePacks, finding.Subject)
 	}
 	config.Scope.Languages = append(config.Scope.Languages, resolution.Languages...)
+	config.PackLanguageDetectors = append(config.PackLanguageDetectors, resolution.LanguageDetectors...)
+	config.PackTestPatterns = append(config.PackTestPatterns, resolution.TestPatterns...)
 	config.PackManifests = append(config.PackManifests, resolution.Manifests...)
 	config.Checks = append(config.Checks, resolution.Commands...)
 }
@@ -85,10 +89,14 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 	manifestPatterns := map[string][]string{}
 	for _, language := range manifest.Languages {
 		source := slices.Clone(language.SourcePatterns)
-		if len(source) == 0 {
-			source = builtInPatterns(language.ID)
-		} else {
+		if len(source) > 0 {
 			resolution.Languages = append(resolution.Languages, policy.LanguageRule{Name: language.ID, Paths: source})
+		}
+		if len(language.Shebangs) > 0 {
+			resolution.LanguageDetectors = append(resolution.LanguageDetectors, policy.PackLanguageDetector{Language: language.ID, Shebangs: slices.Clone(language.Shebangs)})
+		}
+		if len(language.TestPatterns) > 0 {
+			resolution.TestPatterns = append(resolution.TestPatterns, policy.LanguageRule{Name: language.ID, Paths: slices.Clone(language.TestPatterns)})
 		}
 		languagePatterns[language.ID] = source
 		manifestPatterns[language.ID] = append(manifestPatterns[language.ID], language.DependencyManifests...)
@@ -118,7 +126,7 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Runtime: declared.Runtime},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Tools: slices.Clone(declared.Execution.Tools)},
 			})
 		}
 	}
@@ -141,11 +149,7 @@ func manifestLanguageRules(manifest Manifest, selected []string) []policy.Langua
 		if !slices.Contains(selected, language.ID) {
 			continue
 		}
-		patterns := slices.Clone(language.SourcePatterns)
-		if len(patterns) == 0 {
-			patterns = builtInPatterns(language.ID)
-		}
-		languages = append(languages, policy.LanguageRule{Name: language.ID, Paths: patterns})
+		languages = append(languages, policy.LanguageRule{Name: language.ID, Paths: slices.Clone(language.SourcePatterns)})
 	}
 	return languages
 }
@@ -249,18 +253,6 @@ func intersects(left, right []string) bool {
 func unavailableFinding(selection policy.PackSelection, err error) policy.Finding {
 	message := fmt.Sprintf("required pack %s %s %s is unavailable: %v; install it with code-polishy pack install --source PATH", selection.Name, selection.Version, selection.Digest, err)
 	return policy.Finding{Check: "policy.packUnavailable", Path: policy.ConfigFilename, Subject: selection.Name, Message: message}
-}
-
-func builtInPatterns(language string) []string {
-	patterns := map[string][]string{
-		"dart": {"**/*.dart"}, "go": {"**/*.go"}, "jvm": {"**/*.java", "**/*.kt", "**/*.kts"},
-		"native": {"**/*.c", "**/*.cc", "**/*.cpp", "**/*.cxx", "**/*.h", "**/*.hpp"},
-		"php":    {"**/*.php"}, "protobuf": {"**/*.proto"}, "python": {"**/*.py", "**/*.pyi"},
-		"ruby": {"**/*.rb"}, "rust": {"**/*.rs"}, "shell": {"**/*.sh", "**/*.bash"},
-		"sql": {"**/*.sql"}, "swift": {"**/*.swift"},
-		"typescript": {"**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.vue", "**/*.svelte", "**/*.astro"},
-	}
-	return slices.Clone(patterns[language])
 }
 
 func sortedUnique(values []string) []string {

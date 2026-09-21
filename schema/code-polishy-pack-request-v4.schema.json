@@ -21,6 +21,7 @@
     "profile",
     "context",
     "policy",
+    "tools",
     "complete",
     "pack"
   ],
@@ -61,7 +62,11 @@
       "items": { "$ref": "#/$defs/input" }
     },
     "policy": { "$ref": "#/$defs/policy" },
-    "runtime": { "$ref": "#/$defs/runtime" },
+    "tools": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/tool" }
+    },
     "complete": { "type": "boolean" },
     "pack": { "$ref": "#/$defs/pack" }
   },
@@ -69,6 +74,10 @@
     "identifier": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
     },
     "nonempty": {
       "type": "string",
@@ -259,13 +268,14 @@
         }
       }
     },
-    "runtime": {
+    "tool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "version", "sha256"],
+      "required": ["id", "name", "version", "sha256"],
       "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
         "name": { "$ref": "#/$defs/identifier" },
-        "version": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semanticVersion" },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     },
@@ -275,7 +285,7 @@
       "required": ["name", "version", "digest"],
       "properties": {
         "name": { "$ref": "#/$defs/identifier" },
-        "version": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semanticVersion" },
         "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     }

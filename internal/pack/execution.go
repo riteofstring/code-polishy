@@ -18,11 +18,11 @@ func PlannedExecutions(repo repository.Repository, selection repository.Selectio
 	if len(request.Files) == 0 && !AdapterSelected(repo, selection, command, profile) {
 		return nil, false, nil
 	}
-	prepared, identity, err := runtimeCommand(repo, command, command.Adapter.Runtime)
+	prepared, identities, err := toolchainCommand(repo, command, command.Adapter.Tools)
 	if err != nil {
 		return nil, true, err
 	}
-	request.Runtime = identity
+	request.Tools = identities
 	if hasProjectDiscovery(command.Adapter) {
 		paths, inventoryErr := repo.AllFiles()
 		if inventoryErr != nil {
@@ -55,13 +55,13 @@ func prepareExecution(repo repository.Repository, command policy.Command, reques
 	if err := prepareInputs(repo, &request, command); err != nil {
 		return policy.Command{}, request, err
 	}
-	if request.Runtime == nil {
-		prepared, identity, err := runtimeCommand(repo, command, command.Adapter.Runtime)
+	if request.Tools == nil {
+		prepared, identities, err := toolchainCommand(repo, command, command.Adapter.Tools)
 		if err != nil {
 			return policy.Command{}, request, err
 		}
 		command = prepared
-		request.Runtime = identity
+		request.Tools = identities
 	}
 	prepared, err := commandForRequest(command, request)
 	return prepared, request, err

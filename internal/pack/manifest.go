@@ -25,6 +25,7 @@ const (
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 var semanticVersionPattern = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 var environmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var shebangPattern = regexp.MustCompile(`^#!\S(?:[^\r\n]*\S)?$`)
 var packCapabilities = []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture", "build", "dependency-policy", "lock-sync", "release-age", "security"}
 var packDiscoveryModes = []string{"file-scoped", "static", "evaluated"}
 var packExecutionTypes = []string{"self-contained", "host-toolchain"}
@@ -45,27 +46,29 @@ type Manifest struct {
 type Language struct {
 	ID                  string   `json:"id"`
 	SourcePatterns      []string `json:"sourcePatterns,omitempty"`
+	TestPatterns        []string `json:"testPatterns,omitempty"`
+	Shebangs            []string `json:"shebangs,omitempty"`
 	DependencyManifests []string `json:"dependencyManifests,omitempty"`
 	DiscoveryMode       string   `json:"discoveryMode"`
 	MetadataPatterns    []string `json:"metadataPatterns,omitempty"`
 }
 
 type Command struct {
-	Name           string              `json:"name"`
-	Argv           []string            `json:"argv"`
-	Languages      []string            `json:"languages"`
-	Capabilities   []string            `json:"capabilities"`
-	Profiles       []string            `json:"profiles"`
-	TimeoutSeconds int                 `json:"timeoutSeconds"`
-	Environment    []string            `json:"environment,omitempty"`
-	Paths          []string            `json:"paths,omitempty"`
-	Execution      CommandExecution    `json:"execution"`
-	Runtime        *policy.PackRuntime `json:"runtime,omitempty"`
+	Name           string           `json:"name"`
+	Argv           []string         `json:"argv"`
+	Languages      []string         `json:"languages"`
+	Capabilities   []string         `json:"capabilities"`
+	Profiles       []string         `json:"profiles"`
+	TimeoutSeconds int              `json:"timeoutSeconds"`
+	Environment    []string         `json:"environment,omitempty"`
+	Paths          []string         `json:"paths,omitempty"`
+	Execution      CommandExecution `json:"execution"`
 }
 
 type CommandExecution struct {
-	Type    string `json:"type"`
-	Network string `json:"network"`
+	Type    string            `json:"type"`
+	Network string            `json:"network"`
+	Tools   []policy.PackTool `json:"tools,omitempty"`
 }
 
 type Fixture struct {
@@ -154,13 +157,16 @@ func validatePlatforms(platforms []string) error {
 func validateLanguages(languages []Language) error {
 	seen := map[string]bool{}
 	sourceOwners := map[string]string{}
+	shebangOwners := map[string]string{}
 	manifestOwners := map[string]string{}
-	builtIn := []string{"dart", "go", "jvm", "native", "php", "protobuf", "python", "ruby", "rust", "shell", "sql", "swift", "typescript"}
 	for index, language := range languages {
-		if err := validateLanguage(language, index, seen, builtIn); err != nil {
+		if err := validateLanguage(language, index, seen); err != nil {
 			return err
 		}
 		if err := recordPatternOwners(sourceOwners, language.SourcePatterns, language.ID, "source"); err != nil {
+			return err
+		}
+		if err := recordShebangOwners(shebangOwners, language.Shebangs, language.ID); err != nil {
 			return err
 		}
 		if err := recordPatternOwners(manifestOwners, language.DependencyManifests, language.ID, "dependency manifest"); err != nil {
@@ -170,13 +176,13 @@ func validateLanguages(languages []Language) error {
 	return nil
 }
 
-func validateLanguage(language Language, index int, seen map[string]bool, builtIn []string) error {
+func validateLanguage(language Language, index int, seen map[string]bool) error {
 	if !identifierPattern.MatchString(language.ID) || seen[language.ID] {
 		return fmt.Errorf("languages[%d].id is invalid or duplicated", index)
 	}
 	seen[language.ID] = true
-	if len(language.SourcePatterns) == 0 && !slices.Contains(builtIn, language.ID) {
-		return fmt.Errorf("custom language %q requires sourcePatterns", language.ID)
+	if len(language.SourcePatterns) == 0 && len(language.Shebangs) == 0 {
+		return fmt.Errorf("languages[%d] requires sourcePatterns or shebangs", index)
 	}
 	if !slices.Contains(packDiscoveryModes, language.DiscoveryMode) {
 		return expected(fmt.Sprintf("languages[%d].discoveryMode", index), "file-scoped, static, or evaluated")
@@ -190,10 +196,40 @@ func validateLanguage(language Language, index int, seen map[string]bool, builtI
 	if err := validatePatterns(language.SourcePatterns, fmt.Sprintf("languages[%d].sourcePatterns", index)); err != nil {
 		return err
 	}
+	if err := validatePatterns(language.TestPatterns, fmt.Sprintf("languages[%d].testPatterns", index)); err != nil {
+		return err
+	}
+	if err := validateShebangs(language.Shebangs, fmt.Sprintf("languages[%d].shebangs", index)); err != nil {
+		return err
+	}
 	if err := validatePatterns(language.DependencyManifests, fmt.Sprintf("languages[%d].dependencyManifests", index)); err != nil {
 		return err
 	}
 	return validatePatterns(language.MetadataPatterns, fmt.Sprintf("languages[%d].metadataPatterns", index))
+}
+
+func validateShebangs(shebangs []string, label string) error {
+	if err := validateUnique(shebangs, label); err != nil {
+		return err
+	}
+	for _, shebang := range shebangs {
+		if len(shebang) > 128 || !shebangPattern.MatchString(shebang) || strings.ContainsRune(shebang, 0) {
+			return expected(label, "unique canonical shebang prefixes of at most 128 bytes")
+		}
+	}
+	return nil
+}
+
+func recordShebangOwners(owners map[string]string, shebangs []string, language string) error {
+	for _, shebang := range shebangs {
+		for owned, owner := range owners {
+			if shebang == owned || strings.HasPrefix(shebang, owned+" ") || strings.HasPrefix(owned, shebang+" ") {
+				return fmt.Errorf("shebang prefix %q is owned by both %s and %s", shebang, owner, language)
+			}
+		}
+		owners[shebang] = language
+	}
+	return nil
 }
 
 func recordPatternOwners(owners map[string]string, patterns []string, language, kind string) error {
@@ -258,16 +294,13 @@ func validateCommandExecution(command Command, label string) error {
 	if command.Execution.Network != "none" {
 		return expected(label+".execution.network", "none")
 	}
-	if command.Execution.Type == "self-contained" && command.Runtime != nil {
-		return expected(label+".runtime", "omitted for self-contained execution")
+	if command.Execution.Type == "self-contained" && len(command.Execution.Tools) != 0 {
+		return expected(label+".execution.tools", "empty for self-contained execution")
 	}
-	if command.Execution.Type == "host-toolchain" && command.Runtime == nil {
-		return expected(label+".runtime", "an exact host toolchain identity")
+	if command.Execution.Type == "host-toolchain" && len(command.Execution.Tools) == 0 {
+		return expected(label+".execution.tools", "at least one exact host tool identity")
 	}
-	if !validRuntimeDeclaration(command.Runtime) {
-		return expected(label+".runtime", "a tool name and exact semantic version")
-	}
-	return nil
+	return validateToolDeclarations(command.Execution.Tools, label+".execution.tools")
 }
 
 func validateCommandArgv(argv []string, label string) error {
@@ -442,6 +475,32 @@ func CurrentPlatform() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
 }
 
-func validRuntimeDeclaration(runtime *policy.PackRuntime) bool {
-	return runtime == nil || identifierPattern.MatchString(runtime.Name) && semanticVersionPattern.MatchString(runtime.Version)
+func validateToolDeclarations(tools []policy.PackTool, label string) error {
+	identities := map[string]bool{}
+	names := map[string]bool{}
+	environmentNames := map[string]bool{}
+	launchers := 0
+	for index, tool := range tools {
+		item := fmt.Sprintf("%s[%d]", label, index)
+		environmentName := toolEnvironmentName(tool.ID)
+		if !identifierPattern.MatchString(tool.ID) || identities[tool.ID] || environmentNames[environmentName] {
+			return expected(item+".id", "a unique lowercase identifier")
+		}
+		if !identifierPattern.MatchString(tool.Name) || names[tool.Name] {
+			return expected(item+".name", "a unique lowercase tool name")
+		}
+		if !semanticVersionPattern.MatchString(tool.Version) {
+			return expected(item+".version", "an exact semantic version")
+		}
+		identities[tool.ID] = true
+		names[tool.Name] = true
+		environmentNames[environmentName] = true
+		if tool.Launcher {
+			launchers++
+		}
+	}
+	if launchers > 1 {
+		return expected(label, "at most one launcher")
+	}
+	return nil
 }

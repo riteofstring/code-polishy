@@ -268,6 +268,7 @@ func validateCommandCollections(command CommandSpec) error {
 	for _, values := range [][]string{
 		command.Provides, command.Argv, command.Paths, command.Modules, command.RunOn,
 		command.Environment, command.ExclusiveResources, command.PassFilePaths,
+		command.EnvironmentOverrides,
 	} {
 		if !validStrings(values) {
 			return fmt.Errorf("command collection is invalid")
@@ -276,7 +277,22 @@ func validateCommandCollections(command CommandSpec) error {
 	if hasDuplicate(command.Environment) {
 		return fmt.Errorf("command environment is duplicated")
 	}
+	if !validEnvironmentOverrides(command.EnvironmentOverrides) {
+		return fmt.Errorf("command environment overrides are invalid")
+	}
 	return nil
+}
+
+func validEnvironmentOverrides(values []string) bool {
+	names := map[string]bool{}
+	for _, value := range values {
+		name, assigned, found := strings.Cut(value, "=")
+		if !found || !validEnvironmentName(name) || strings.ContainsRune(assigned, 0) || names[name] {
+			return false
+		}
+		names[name] = true
+	}
+	return true
 }
 
 func validateEnvironmentFingerprints(commands []CommandSpec, fingerprints []EnvironmentFingerprint) error {
@@ -424,6 +440,7 @@ func cloneCommand(command CommandSpec) CommandSpec {
 	command.Modules = cloneStrings(command.Modules)
 	command.RunOn = cloneStrings(command.RunOn)
 	command.Environment = cloneStrings(command.Environment)
+	command.EnvironmentOverrides = cloneStrings(command.EnvironmentOverrides)
 	command.ExclusiveResources = cloneStrings(command.ExclusiveResources)
 	command.PassFilePaths = cloneStrings(command.PassFilePaths)
 	command.Artifacts = append([]ArtifactSpec{}, command.Artifacts...)

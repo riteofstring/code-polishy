@@ -313,7 +313,8 @@ func gateRunCommandSpec(planned MergeGateExecutionCommand, receipts *testReceipt
 		Provides: append([]string{}, command.Provides...), Argv: append([]string{}, command.Argv...), Cwd: command.Cwd,
 		Paths: append([]string{}, command.Paths...), Modules: append([]string{}, command.Modules...), RunOn: append([]string{}, command.RunOn...),
 		Environment: append([]string{}, command.Environment...), ExclusiveResources: append([]string{}, command.ExclusiveResources...),
-		TimeoutSeconds: command.TimeoutSeconds, Managed: command.Managed, PassFiles: command.PassFiles,
+		EnvironmentOverrides: append([]string{}, command.EnvironmentOverrides...),
+		TimeoutSeconds:       command.TimeoutSeconds, Managed: command.Managed, PassFiles: command.PassFiles,
 		PassFilePaths: append([]string{}, command.PassFilePaths...), SealedEnvironment: command.SealedEnvironment,
 		Artifacts: gateRunArtifactSpecs(command.TestArtifacts), ReportProtocol: command.ReportProtocol,
 	}

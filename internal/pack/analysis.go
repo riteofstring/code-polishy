@@ -40,7 +40,8 @@ type SourceInput struct {
 	Development bool     `json:"development"`
 }
 
-type RuntimeIdentity struct {
+type ToolIdentity struct {
+	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	SHA256  string `json:"sha256"`
