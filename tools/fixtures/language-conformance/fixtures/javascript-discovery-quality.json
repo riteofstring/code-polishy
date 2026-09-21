@@ -29,6 +29,11 @@
       "content": "export function render( value ){return value}\n"
     }
   ],
+  "git": {
+    "branch": "main",
+    "commitTimestamp": "2000-01-01T00:00:00Z",
+    "changes": []
+  },
   "arguments": ["check", "--all", "--format", "json"],
   "timeoutSeconds": 900,
   "platforms": [

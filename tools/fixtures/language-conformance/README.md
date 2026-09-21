@@ -20,3 +20,10 @@ The command emits one schema-validated JSON report. Exit status `0` means every
 active case matched and every behavior is ready; `1` means a semantic mismatch
 or an explicitly unfinished inventory case; `2` means the run was invalid or
 could not execute.
+
+Every fixture declares a branch, canonical UTC commit timestamp, and explicit
+staged or unstaged modified, deleted, and untracked paths. The runner creates
+two repositories with the same commit and working state, records the exact Git
+binary and version, and rejects commands that change HEAD, the branch, or the
+index. Filesystem and Git evidence are compared independently so an index-only
+mutation cannot pass as behavioral parity.

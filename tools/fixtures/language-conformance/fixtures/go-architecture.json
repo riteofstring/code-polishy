@@ -30,6 +30,11 @@
       "content": "package storage\n"
     }
   ],
+  "git": {
+    "branch": "main",
+    "commitTimestamp": "2000-01-01T00:00:00Z",
+    "changes": []
+  },
   "arguments": ["architecture", "--all", "--format", "json"],
   "timeoutSeconds": 900,
   "platforms": [

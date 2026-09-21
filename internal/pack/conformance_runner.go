@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -26,13 +27,14 @@ type ConformanceOptions struct {
 }
 
 type ConformanceReport struct {
-	Schema    string                        `json:"$schema"`
-	Protocol  string                        `json:"protocol"`
-	Ledger    ConformanceEvidenceIdentity   `json:"ledger"`
-	Reference ConformanceExecutableIdentity `json:"reference"`
-	Candidate ConformanceExecutableIdentity `json:"candidate"`
-	Fixtures  []ConformanceFixtureEvidence  `json:"fixtures"`
-	Summary   ConformanceReportSummary      `json:"summary"`
+	Schema      string                         `json:"$schema"`
+	Protocol    string                         `json:"protocol"`
+	Ledger      ConformanceEvidenceIdentity    `json:"ledger"`
+	Reference   ConformanceExecutableIdentity  `json:"reference"`
+	Candidate   ConformanceExecutableIdentity  `json:"candidate"`
+	Environment ConformanceEnvironmentIdentity `json:"environment"`
+	Fixtures    []ConformanceFixtureEvidence   `json:"fixtures"`
+	Summary     ConformanceReportSummary       `json:"summary"`
 }
 
 type ConformanceEvidenceIdentity struct {
@@ -43,6 +45,17 @@ type ConformanceEvidenceIdentity struct {
 type ConformanceExecutableIdentity struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
+}
+
+type ConformanceEnvironmentIdentity struct {
+	Platform string                  `json:"platform"`
+	Git      ConformanceToolIdentity `json:"git"`
+}
+
+type ConformanceToolIdentity struct {
+	Path    string `json:"path"`
+	SHA256  string `json:"sha256"`
+	Version string `json:"version"`
 }
 
 type ConformanceFixtureEvidence struct {
@@ -62,6 +75,15 @@ type ConformanceRunEvidence struct {
 	Stderr     string                    `json:"stderr,omitempty"`
 	Before     []ConformanceFileIdentity `json:"before"`
 	After      []ConformanceFileIdentity `json:"after"`
+	BeforeGit  ConformanceGitIdentity    `json:"beforeGit"`
+	AfterGit   ConformanceGitIdentity    `json:"afterGit"`
+}
+
+type ConformanceGitIdentity struct {
+	Head            string   `json:"head"`
+	Branch          string   `json:"branch"`
+	IndexDiffSHA256 string   `json:"indexDiffSha256"`
+	Status          []string `json:"status"`
 }
 
 type ConformanceFileIdentity struct {
@@ -122,14 +144,19 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 	if err != nil {
 		return ConformanceReport{}, fmt.Errorf("candidate executable: %w", err)
 	}
+	git, err := conformanceGitTool(ctx)
+	if err != nil {
+		return ConformanceReport{}, fmt.Errorf("Git tool: %w", err)
+	}
 	report := ConformanceReport{
-		Schema:    ConformanceReportSchema,
-		Protocol:  ConformanceReportProtocol,
-		Ledger:    ConformanceEvidenceIdentity{Path: filepath.ToSlash(ledger.Path), SHA256: ledger.SHA256},
-		Reference: reference,
-		Candidate: candidate,
-		Fixtures:  []ConformanceFixtureEvidence{},
-		Summary:   ConformanceReportSummary{Status: "passed"},
+		Schema:      ConformanceReportSchema,
+		Protocol:    ConformanceReportProtocol,
+		Ledger:      ConformanceEvidenceIdentity{Path: filepath.ToSlash(ledger.Path), SHA256: ledger.SHA256},
+		Reference:   reference,
+		Candidate:   candidate,
+		Environment: ConformanceEnvironmentIdentity{Platform: CurrentPlatform(), Git: git},
+		Fixtures:    []ConformanceFixtureEvidence{},
+		Summary:     ConformanceReportSummary{Status: "passed"},
 	}
 	for _, fixture := range ledger.Fixtures {
 		if fixture.Maturity == "planned" {
@@ -143,7 +170,7 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 			report.Summary.Skipped++
 			continue
 		}
-		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, candidate.Path, executor)
+		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, candidate.Path, git.Path, executor)
 		if runErr != nil {
 			return ConformanceReport{}, fmt.Errorf("fixture %s: %w", fixture.ID, runErr)
 		}
@@ -213,7 +240,7 @@ func conformanceExecutableIdentity(name string) (ConformanceExecutableIdentity, 
 	return ConformanceExecutableIdentity{Path: canonical, SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
 }
 
-func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, candidateExecutable string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
+func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, candidateExecutable, gitExecutable string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
 	temporary, err := os.MkdirTemp("", "code-polishy-conformance-")
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
@@ -221,10 +248,10 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	defer os.RemoveAll(temporary)
 	referenceRoot := filepath.Join(temporary, "reference")
 	candidateRoot := filepath.Join(temporary, "candidate")
-	if err := materializeConformanceFixture(referenceRoot, fixture); err != nil {
+	if err := materializeConformanceFixture(ctx, referenceRoot, fixture, gitExecutable); err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
-	if err := materializeConformanceFixture(candidateRoot, fixture); err != nil {
+	if err := materializeConformanceFixture(ctx, candidateRoot, fixture, gitExecutable); err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
 	referenceBefore, err := conformanceSnapshot(referenceRoot)
@@ -238,11 +265,22 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if !slices.Equal(referenceBefore, candidateBefore) {
 		return ConformanceFixtureEvidence{}, errors.New("materialized repositories are not identical")
 	}
-	referenceRun, err := executeConformanceLane(ctx, fixture, referenceExecutable, referenceRoot, referenceBefore, executor)
+	referenceBeforeGit, err := conformanceGitSnapshot(ctx, gitExecutable, referenceRoot)
+	if err != nil {
+		return ConformanceFixtureEvidence{}, err
+	}
+	candidateBeforeGit, err := conformanceGitSnapshot(ctx, gitExecutable, candidateRoot)
+	if err != nil {
+		return ConformanceFixtureEvidence{}, err
+	}
+	if !reflect.DeepEqual(referenceBeforeGit, candidateBeforeGit) {
+		return ConformanceFixtureEvidence{}, errors.New("materialized Git repositories are not identical")
+	}
+	referenceRun, err := executeConformanceLane(ctx, fixture, referenceExecutable, gitExecutable, referenceRoot, referenceBefore, referenceBeforeGit, executor)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("reference: %w", err)
 	}
-	candidateRun, err := executeConformanceLane(ctx, fixture, candidateExecutable, candidateRoot, candidateBefore, executor)
+	candidateRun, err := executeConformanceLane(ctx, fixture, candidateExecutable, gitExecutable, candidateRoot, candidateBefore, candidateBeforeGit, executor)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("candidate: %w", err)
 	}
@@ -266,34 +304,7 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	return evidence, nil
 }
 
-func materializeConformanceFixture(root string, fixture ConformanceFixture) error {
-	if err := os.Mkdir(root, 0o700); err != nil {
-		return err
-	}
-	for _, file := range fixture.Files {
-		data, err := conformanceFixtureBytes(file)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(root, filepath.FromSlash(file.Path))
-		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-			return err
-		}
-		mode := fs.FileMode(0o644)
-		if file.Mode == "0755" {
-			mode = 0o755
-		}
-		if err := os.WriteFile(target, data, mode); err != nil {
-			return err
-		}
-		if err := os.Chmod(target, mode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, executable, root string, before []ConformanceFileIdentity, executor conformanceExecutor) (ConformanceRunEvidence, error) {
+func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, executable, gitExecutable, root string, before []ConformanceFileIdentity, beforeGit ConformanceGitIdentity, executor conformanceExecutor) (ConformanceRunEvidence, error) {
 	execution, err := executor.Run(ctx, executable, root, slices.Clone(fixture.Arguments), fixture.TimeoutSeconds)
 	if err != nil {
 		return ConformanceRunEvidence{}, err
@@ -308,12 +319,18 @@ func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, exe
 	if err != nil {
 		return ConformanceRunEvidence{}, err
 	}
+	afterGit, err := conformanceGitSnapshot(ctx, gitExecutable, root)
+	if err != nil {
+		return ConformanceRunEvidence{}, err
+	}
 	return ConformanceRunEvidence{
 		ExitStatus: execution.ExitStatus,
 		Report:     append(json.RawMessage(nil), execution.Stdout...),
 		Stderr:     string(execution.Stderr),
 		Before:     before,
 		After:      after,
+		BeforeGit:  beforeGit,
+		AfterGit:   afterGit,
 	}, nil
 }
 
@@ -345,7 +362,7 @@ func conformanceSnapshot(root string) ([]ConformanceFileIdentity, error) {
 		}
 		relative = filepath.ToSlash(relative)
 		if entry.IsDir() {
-			if relative == ".code-polishy-reports" || relative == ".code-polishy-artifacts" {
+			if relative == ".git" || relative == ".code-polishy-reports" || relative == ".code-polishy-artifacts" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -375,6 +392,9 @@ func conformanceSnapshot(root string) ([]ConformanceFileIdentity, error) {
 
 func assertConformanceOutcome(lane string, expected ConformanceExpectedOutcome, run ConformanceRunEvidence) []string {
 	failures := []string{}
+	if run.AfterGit.Head != run.BeforeGit.Head || run.AfterGit.Branch != run.BeforeGit.Branch || run.AfterGit.IndexDiffSHA256 != run.BeforeGit.IndexDiffSHA256 {
+		failures = append(failures, lane+" Git: command changed HEAD, branch, or index")
+	}
 	if run.ExitStatus != expected.ExitStatus {
 		failures = append(failures, fmt.Sprintf("%s exitStatus: expected %d, received %d", lane, expected.ExitStatus, run.ExitStatus))
 	}

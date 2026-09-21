@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/riteofstring/code-polishy/schema"
 )
@@ -84,6 +85,7 @@ type ConformanceFixture struct {
 	Gap            string                     `json:"gap,omitempty"`
 	BehaviorIDs    []string                   `json:"behaviorIds"`
 	Files          []ConformanceFixtureFile   `json:"files"`
+	Git            ConformanceFixtureGit      `json:"git"`
 	Arguments      []string                   `json:"arguments"`
 	TimeoutSeconds int                        `json:"timeoutSeconds"`
 	Platforms      []string                   `json:"platforms"`
@@ -93,6 +95,21 @@ type ConformanceFixture struct {
 type ConformanceFixtureFile struct {
 	Path          string  `json:"path"`
 	Mode          string  `json:"mode"`
+	Content       *string `json:"content,omitempty"`
+	ContentBase64 *string `json:"contentBase64,omitempty"`
+}
+
+type ConformanceFixtureGit struct {
+	Branch          string                 `json:"branch"`
+	CommitTimestamp string                 `json:"commitTimestamp"`
+	Changes         []ConformanceGitChange `json:"changes"`
+}
+
+type ConformanceGitChange struct {
+	Path          string  `json:"path"`
+	State         string  `json:"state"`
+	Staged        bool    `json:"staged"`
+	Mode          string  `json:"mode,omitempty"`
 	Content       *string `json:"content,omitempty"`
 	ContentBase64 *string `json:"contentBase64,omitempty"`
 }
@@ -382,13 +399,16 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 		return expected(label+".files", fmt.Sprintf("1 to %d items", maximumConformanceFiles))
 	}
 	paths := map[string]bool{}
+	portablePaths := map[string]bool{}
 	total := 0
 	for fileIndex, file := range fixture.Files {
 		fileLabel := indexed(label+".files", fileIndex)
-		if err := exactRelativePath(file.Path); err != nil || paths[file.Path] {
+		portablePath := strings.ToLower(file.Path)
+		if err := validateConformancePath(file.Path); err != nil || paths[file.Path] || portablePaths[portablePath] {
 			return expected(fileLabel+".path", "a unique exact contained relative path")
 		}
 		paths[file.Path] = true
+		portablePaths[portablePath] = true
 		if !slices.Contains([]string{"0644", "0755"}, file.Mode) {
 			return expected(fileLabel+".mode", "0644 or 0755")
 		}
@@ -400,6 +420,14 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 		if total > maximumConformanceFixtureBytes {
 			return expected(label+".files", fmt.Sprintf("at most %d decoded bytes", maximumConformanceFixtureBytes))
 		}
+	}
+	gitBytes, err := validateConformanceGit(fixture.Git, label+".git", paths, portablePaths)
+	if err != nil {
+		return err
+	}
+	total += gitBytes
+	if total > maximumConformanceFixtureBytes {
+		return expected(label+".files", fmt.Sprintf("at most %d decoded bytes including Git changes", maximumConformanceFixtureBytes))
 	}
 	if len(fixture.Arguments) == 0 || len(fixture.Arguments) > 128 {
 		return expected(label+".arguments", "1 to 128 items")
@@ -421,6 +449,96 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 	return validateConformanceExpected(fixture.Expected, label+".expected", paths)
 }
 
+func validateConformanceGit(git ConformanceFixtureGit, label string, paths, portablePaths map[string]bool) (int, error) {
+	if !validConformanceBranch(git.Branch) {
+		return 0, expected(label+".branch", "an exact safe branch name")
+	}
+	timestamp, err := time.Parse(time.RFC3339, git.CommitTimestamp)
+	if err != nil || timestamp.Location() != time.UTC || timestamp.Format(time.RFC3339) != git.CommitTimestamp {
+		return 0, expected(label+".commitTimestamp", "a canonical UTC RFC 3339 timestamp")
+	}
+	if len(git.Changes) > maximumConformanceFiles {
+		return 0, expected(label+".changes", fmt.Sprintf("at most %d items", maximumConformanceFiles))
+	}
+	seen := map[string]bool{}
+	total := 0
+	for index, change := range git.Changes {
+		changeLabel := indexed(label+".changes", index)
+		portablePath := strings.ToLower(change.Path)
+		if err := validateConformancePath(change.Path); err != nil || seen[portablePath] {
+			return 0, expected(changeLabel+".path", "a unique exact contained relative path")
+		}
+		seen[portablePath] = true
+		exists := paths[change.Path] && portablePaths[portablePath]
+		switch change.State {
+		case "modified":
+			if !exists {
+				return 0, expected(changeLabel+".path", "an existing fixture file for a modified change")
+			}
+		case "untracked":
+			if portablePaths[portablePath] {
+				return 0, expected(changeLabel+".path", "a path absent from the committed fixture files")
+			}
+		case "deleted":
+			if !exists {
+				return 0, expected(changeLabel+".path", "an existing fixture file for a deleted change")
+			}
+			if change.Mode != "" || change.Content != nil || change.ContentBase64 != nil {
+				return 0, expected(changeLabel, "no mode or content for a deleted change")
+			}
+			continue
+		default:
+			return 0, expected(changeLabel+".state", "modified, untracked, or deleted")
+		}
+		if !slices.Contains([]string{"0644", "0755"}, change.Mode) {
+			return 0, expected(changeLabel+".mode", "0644 or 0755")
+		}
+		data, byteErr := conformanceGitChangeBytes(change)
+		if byteErr != nil {
+			return 0, fmt.Errorf("%s: %w", changeLabel, byteErr)
+		}
+		total += len(data)
+	}
+	return total, nil
+}
+
+func validConformanceBranch(value string) bool {
+	if value == "" || value == "@" || len(value) > 255 || strings.HasPrefix(value, ".") || strings.HasPrefix(value, "/") || strings.HasSuffix(value, ".") || strings.HasSuffix(value, "/") || strings.HasSuffix(value, ".lock") {
+		return false
+	}
+	if strings.Contains(value, "..") || strings.Contains(value, "//") || strings.Contains(value, "@{") {
+		return false
+	}
+	for _, character := range value {
+		if character <= 0x20 || character == 0x7f || strings.ContainsRune("~^:?*[\\", character) {
+			return false
+		}
+	}
+	for _, component := range strings.Split(value, "/") {
+		if strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
+func validateConformancePath(value string) error {
+	if err := exactRelativePath(value); err != nil {
+		return err
+	}
+	for _, component := range strings.Split(value, "/") {
+		if strings.EqualFold(component, ".git") {
+			return errors.New("path targets reserved Git metadata")
+		}
+	}
+	for _, character := range value {
+		if character <= 0x1f || character == 0x7f {
+			return errors.New("path contains a control character")
+		}
+	}
+	return nil
+}
+
 func conformanceFixtureBytes(file ConformanceFixtureFile) ([]byte, error) {
 	if (file.Content == nil) == (file.ContentBase64 == nil) {
 		return nil, errors.New("expected exactly one of content or contentBase64")
@@ -436,6 +554,10 @@ func conformanceFixtureBytes(file ConformanceFixtureFile) ([]byte, error) {
 		return nil, errors.New("expected canonical base64 content")
 	}
 	return data, nil
+}
+
+func conformanceGitChangeBytes(change ConformanceGitChange) ([]byte, error) {
+	return conformanceFixtureBytes(ConformanceFixtureFile{Path: change.Path, Mode: change.Mode, Content: change.Content, ContentBase64: change.ContentBase64})
 }
 
 func conformanceRequestsJSON(arguments []string) bool {

@@ -42,12 +42,22 @@ func conformanceComparableValue(run ConformanceRunEvidence, root string) (any, e
 	if err != nil {
 		return nil, err
 	}
+	beforeGit, err := encodeConformanceValue(run.BeforeGit)
+	if err != nil {
+		return nil, err
+	}
+	afterGit, err := encodeConformanceValue(run.AfterGit)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"exitStatus": run.ExitStatus,
 		"report":     report,
 		"stderr":     normalizeConformanceString(run.Stderr, root),
 		"before":     before,
 		"after":      after,
+		"beforeGit":  beforeGit,
+		"afterGit":   afterGit,
 	}, nil
 }
 

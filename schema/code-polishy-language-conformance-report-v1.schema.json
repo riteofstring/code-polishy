@@ -10,6 +10,7 @@
     "ledger",
     "reference",
     "candidate",
+    "environment",
     "fixtures",
     "summary"
   ],
@@ -21,6 +22,7 @@
     "ledger": { "$ref": "#/$defs/evidenceIdentity" },
     "reference": { "$ref": "#/$defs/executableIdentity" },
     "candidate": { "$ref": "#/$defs/executableIdentity" },
+    "environment": { "$ref": "#/$defs/environmentIdentity" },
     "fixtures": {
       "type": "array",
       "items": { "$ref": "#/$defs/fixtureEvidence" }
@@ -50,6 +52,25 @@
         "sha256": { "$ref": "#/$defs/digest" }
       }
     },
+    "toolIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "version"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 1024 }
+      }
+    },
+    "environmentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "git"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "git": { "$ref": "#/$defs/toolIdentity" }
+      }
+    },
     "fileIdentity": {
       "type": "object",
       "additionalProperties": false,
@@ -60,10 +81,35 @@
         "sha256": { "$ref": "#/$defs/digest" }
       }
     },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "branch", "indexDiffSha256", "status"],
+      "properties": {
+        "head": {
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+        },
+        "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "indexDiffSha256": { "$ref": "#/$defs/digest" },
+        "status": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      }
+    },
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["exitStatus", "report", "before", "after"],
+      "required": [
+        "exitStatus",
+        "report",
+        "before",
+        "after",
+        "beforeGit",
+        "afterGit"
+      ],
       "properties": {
         "exitStatus": { "type": "integer" },
         "report": {
@@ -77,7 +123,9 @@
         "after": {
           "type": "array",
           "items": { "$ref": "#/$defs/fileIdentity" }
-        }
+        },
+        "beforeGit": { "$ref": "#/$defs/gitIdentity" },
+        "afterGit": { "$ref": "#/$defs/gitIdentity" }
       }
     },
     "difference": {

@@ -10,6 +10,7 @@
     "maturity",
     "behaviorIds",
     "files",
+    "git",
     "arguments",
     "timeoutSeconds",
     "platforms",
@@ -28,6 +29,7 @@
       "maxItems": 10000,
       "items": { "$ref": "#/$defs/file" }
     },
+    "git": { "$ref": "#/$defs/git" },
     "arguments": {
       "type": "array",
       "minItems": 1,
@@ -90,6 +92,71 @@
       "oneOf": [
         { "required": ["content"], "not": { "required": ["contentBase64"] } },
         { "required": ["contentBase64"], "not": { "required": ["content"] } }
+      ]
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "commitTimestamp", "changes"],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "commitTimestamp": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "changes": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/gitChange" }
+        }
+      }
+    },
+    "gitChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "state", "staged"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "state": { "enum": ["modified", "untracked", "deleted"] },
+        "staged": { "type": "boolean" },
+        "mode": { "enum": ["0644", "0755"] },
+        "content": { "type": "string" },
+        "contentBase64": { "type": "string", "contentEncoding": "base64" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "state": { "const": "deleted" } },
+            "required": ["state"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["mode"] },
+                { "required": ["content"] },
+                { "required": ["contentBase64"] }
+              ]
+            }
+          },
+          "else": {
+            "required": ["mode"],
+            "oneOf": [
+              {
+                "required": ["content"],
+                "not": { "required": ["contentBase64"] }
+              },
+              {
+                "required": ["contentBase64"],
+                "not": { "required": ["content"] }
+              }
+            ]
+          }
+        }
       ]
     },
     "expectedFile": {

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -31,6 +34,13 @@ func (executor conformanceTestExecutor) Run(_ context.Context, executable, root 
 			if err := os.WriteFile(filepath.Join(root, "src", "main.go"), []byte("changed\n"), 0o644); err != nil {
 				return conformanceExecution{}, err
 			}
+		case "index":
+			if err := os.WriteFile(filepath.Join(root, "src", "main.go"), []byte("staged\n"), 0o644); err != nil {
+				return conformanceExecution{}, err
+			}
+			if output, err := exec.Command("git", "-C", root, "add", "--", "src/main.go").CombinedOutput(); err != nil {
+				return conformanceExecution{}, fmt.Errorf("stage mutation: %w: %s", err, output)
+			}
 		}
 	}
 	report, err := json.Marshal(conformanceTestReport(root, findings, coverage, candidate))
@@ -54,6 +64,7 @@ func TestConformanceRunnerProvesReproducibilityAndDetectsSemanticLoss(t *testing
 		{name: "diagnostic loss", mutation: "diagnostic", paths: []string{"/report/findings/0"}, failure: "required rule quality.seeded was absent"},
 		{name: "coverage loss", mutation: "coverage", paths: []string{"/report/analysisContext/0/paths/0"}, failure: "required path src/main.go was absent"},
 		{name: "write safety", mutation: "write", paths: []string{"/after/1/sha256"}, failure: "protected[src/main.go]: file identity changed"},
+		{name: "index safety", mutation: "index", paths: []string{"/afterGit/indexDiffSha256"}, failure: "Git: command changed HEAD, branch, or index"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			executor := conformanceTestExecutor{reference: reference, candidate: candidate, mutation: test.mutation}
@@ -81,6 +92,79 @@ func TestConformanceRunnerProvesReproducibilityAndDetectsSemanticLoss(t *testing
 			}
 			if !slices.ContainsFunc(evidence.AssertionFailures, func(failure string) bool { return strings.Contains(failure, test.failure) }) {
 				t.Fatalf("missing assertion %q: %v", test.failure, evidence.AssertionFailures)
+			}
+		})
+	}
+}
+
+func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
+	configuration := "{\"version\":4}\n"
+	baseSource := "package sample\n"
+	deletedSource := "package deleted\n"
+	modifiedSource := "package sample\n\nconst Changed = true\n"
+	untrackedSource := "scratch\n"
+	fixture := ConformanceFixture{
+		Files: []ConformanceFixtureFile{
+			{Path: ".code-polishy.json", Mode: "0644", Content: &configuration},
+			{Path: "src/deleted.go", Mode: "0644", Content: &deletedSource},
+			{Path: "src/main.go", Mode: "0644", Content: &baseSource},
+		},
+		Git: ConformanceFixtureGit{
+			Branch:          "fixture/main",
+			CommitTimestamp: "2001-02-03T04:05:06Z",
+			Changes: []ConformanceGitChange{
+				{Path: "src/main.go", State: "modified", Staged: true, Mode: "0644", Content: &modifiedSource},
+				{Path: "scratch.txt", State: "untracked", Staged: false, Mode: "0644", Content: &untrackedSource},
+				{Path: "src/deleted.go", State: "deleted", Staged: false},
+			},
+		},
+	}
+	git, err := conformanceGitTool(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	identities := []ConformanceGitIdentity{}
+	for range 2 {
+		root := filepath.Join(t.TempDir(), "repository")
+		if err := materializeConformanceFixture(t.Context(), root, fixture, git.Path); err != nil {
+			t.Fatal(err)
+		}
+		identity, err := conformanceGitSnapshot(t.Context(), git.Path, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if identity.Branch != "fixture/main" || !slices.Contains(identity.Status, "M  src/main.go") || !slices.Contains(identity.Status, " D src/deleted.go") || !slices.Contains(identity.Status, "?? scratch.txt") {
+			t.Fatalf("Git identity = %+v", identity)
+		}
+		stdout, stderr, err := runConformanceGit(t.Context(), git.Path, root, filepath.Join(filepath.Dir(root), "git-global.config"), "", "show", "HEAD:src/main.go")
+		if err != nil || string(stdout) != baseSource {
+			t.Fatalf("committed source stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		}
+		identities = append(identities, identity)
+	}
+	if !reflect.DeepEqual(identities[0], identities[1]) {
+		t.Fatalf("materialized Git identities differ: %+v", identities)
+	}
+}
+
+func TestConformanceGitValidationIdentifiesUnsafeFields(t *testing.T) {
+	content := "changed\n"
+	files := map[string]bool{"src/main.go": true}
+	portable := map[string]bool{"src/main.go": true}
+	valid := ConformanceFixtureGit{Branch: "main", CommitTimestamp: "2000-01-01T00:00:00Z", Changes: []ConformanceGitChange{}}
+	for _, test := range []struct {
+		name string
+		git  ConformanceFixtureGit
+		path string
+	}{
+		{name: "branch", git: ConformanceFixtureGit{Branch: "main.lock", CommitTimestamp: valid.CommitTimestamp}, path: "fixture.git.branch"},
+		{name: "timestamp", git: ConformanceFixtureGit{Branch: valid.Branch, CommitTimestamp: "2000-01-01T00:00:00+00:00"}, path: "fixture.git.commitTimestamp"},
+		{name: "metadata", git: ConformanceFixtureGit{Branch: valid.Branch, CommitTimestamp: valid.CommitTimestamp, Changes: []ConformanceGitChange{{Path: ".git/config", State: "untracked", Mode: "0644", Content: &content}}}, path: "fixture.git.changes[0].path"},
+		{name: "missing base", git: ConformanceFixtureGit{Branch: valid.Branch, CommitTimestamp: valid.CommitTimestamp, Changes: []ConformanceGitChange{{Path: "missing.go", State: "modified", Mode: "0644", Content: &content}}}, path: "fixture.git.changes[0].path"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := validateConformanceGit(test.git, "fixture.git", files, portable); err == nil || !strings.Contains(err.Error(), test.path) {
+				t.Fatalf("error = %v", err)
 			}
 		})
 	}
@@ -265,6 +349,7 @@ func writeConformanceTestLedger(t *testing.T) string {
 		Maturity:       "active",
 		BehaviorIDs:    []string{"go.lint.seeded"},
 		Files:          []ConformanceFixtureFile{{Path: ".code-polishy.json", Mode: "0644", Content: &configuration}, {Path: "src/main.go", Mode: "0644", Content: &source}},
+		Git:            ConformanceFixtureGit{Branch: "main", CommitTimestamp: "2000-01-01T00:00:00Z", Changes: []ConformanceGitChange{}},
 		Arguments:      []string{"check", "--all", "--format", "json"},
 		TimeoutSeconds: 30,
 		Platforms:      []string{CurrentPlatform()},
