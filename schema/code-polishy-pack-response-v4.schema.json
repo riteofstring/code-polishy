@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-response-v3.schema.json",
-  "title": "Code Polishy language pack response protocol v3",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-response-v4.schema.json",
+  "title": "Code Polishy language pack response protocol v4",
   "type": "object",
   "additionalProperties": false,
   "required": ["protocolVersion", "status"],
   "properties": {
-    "protocolVersion": { "const": 3 },
+    "protocolVersion": { "const": 4 },
     "status": {
       "enum": ["pass", "findings", "incomplete", "operational-failure"]
     },

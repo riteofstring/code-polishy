@@ -18,8 +18,8 @@ import (
 const (
 	ManifestFilename = "code-polishy-pack.json"
 	ReceiptFilename  = "installation-receipt.json"
-	ManifestVersion  = 2
-	ProtocolVersion  = 3
+	ManifestVersion  = 3
+	ProtocolVersion  = 4
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
@@ -42,17 +42,26 @@ type Language struct {
 	ID                  string   `json:"id"`
 	SourcePatterns      []string `json:"sourcePatterns,omitempty"`
 	DependencyManifests []string `json:"dependencyManifests,omitempty"`
+	DiscoveryMode       string   `json:"discoveryMode"`
+	MetadataPatterns    []string `json:"metadataPatterns,omitempty"`
 }
 
 type Command struct {
 	Name           string              `json:"name"`
 	Argv           []string            `json:"argv"`
+	Languages      []string            `json:"languages"`
 	Capabilities   []string            `json:"capabilities"`
 	Profiles       []string            `json:"profiles"`
 	TimeoutSeconds int                 `json:"timeoutSeconds"`
 	Environment    []string            `json:"environment,omitempty"`
 	Paths          []string            `json:"paths,omitempty"`
+	Execution      CommandExecution    `json:"execution"`
 	Runtime        *policy.PackRuntime `json:"runtime,omitempty"`
+}
+
+type CommandExecution struct {
+	Type    string `json:"type"`
+	Network string `json:"network"`
 }
 
 type Fixture struct {
@@ -98,7 +107,7 @@ func validateManifest(manifest Manifest) error {
 	if err := validateLanguages(manifest.Languages); err != nil {
 		return err
 	}
-	if err := validateCommands(manifest.Commands); err != nil {
+	if err := validateCommands(manifest.Commands, manifest.Languages); err != nil {
 		return err
 	}
 	return validateFixtures(manifest.Commands, manifest.Fixtures)
@@ -158,10 +167,22 @@ func validateLanguage(language Language, index int, seen map[string]bool, builtI
 	if len(language.SourcePatterns) == 0 && !slices.Contains(builtIn, language.ID) {
 		return fmt.Errorf("custom language %q requires sourcePatterns", language.ID)
 	}
+	if !slices.Contains([]string{"file-scoped", "static", "evaluated"}, language.DiscoveryMode) {
+		return expected(fmt.Sprintf("languages[%d].discoveryMode", index), "file-scoped, static, or evaluated")
+	}
+	if language.DiscoveryMode == "file-scoped" && len(language.MetadataPatterns) != 0 {
+		return expected(fmt.Sprintf("languages[%d].metadataPatterns", index), "empty for file-scoped discovery")
+	}
+	if language.DiscoveryMode != "file-scoped" && len(language.MetadataPatterns) == 0 {
+		return expected(fmt.Sprintf("languages[%d].metadataPatterns", index), "at least one pattern for static or evaluated discovery")
+	}
 	if err := validatePatterns(language.SourcePatterns, fmt.Sprintf("languages[%d].sourcePatterns", index)); err != nil {
 		return err
 	}
-	return validatePatterns(language.DependencyManifests, fmt.Sprintf("languages[%d].dependencyManifests", index))
+	if err := validatePatterns(language.DependencyManifests, fmt.Sprintf("languages[%d].dependencyManifests", index)); err != nil {
+		return err
+	}
+	return validatePatterns(language.MetadataPatterns, fmt.Sprintf("languages[%d].metadataPatterns", index))
 }
 
 func recordPatternOwners(owners map[string]string, patterns []string, language, kind string) error {
@@ -174,25 +195,32 @@ func recordPatternOwners(owners map[string]string, patterns []string, language, 
 	return nil
 }
 
-func validateCommands(commands []Command) error {
+func validateCommands(commands []Command, languages []Language) error {
 	seen := map[string]bool{}
+	knownLanguages := make([]string, 0, len(languages))
+	for _, language := range languages {
+		knownLanguages = append(knownLanguages, language.ID)
+	}
 	capabilities := []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture", "build", "dependency-policy", "lock-sync", "release-age", "security"}
 	profiles := []string{"check", "gate", "format", "build", "supply-chain", "supply-chain-online", "security"}
 	for index, command := range commands {
-		if err := validateCommand(command, index, seen, capabilities, profiles); err != nil {
+		if err := validateCommand(command, index, seen, knownLanguages, capabilities, profiles); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateCommand(command Command, index int, seen map[string]bool, capabilities, profiles []string) error {
+func validateCommand(command Command, index int, seen map[string]bool, languages, capabilities, profiles []string) error {
 	label := fmt.Sprintf("commands[%d]", index)
 	if !identifierPattern.MatchString(command.Name) || seen[command.Name] {
 		return fmt.Errorf("%s.name is invalid or duplicated", label)
 	}
 	seen[command.Name] = true
 	if err := validateCommandArgv(command.Argv, label); err != nil {
+		return err
+	}
+	if err := validateAllowed(command.Languages, languages, label+".languages"); err != nil {
 		return err
 	}
 	if err := validateAllowed(command.Capabilities, capabilities, label+".capabilities"); err != nil {
@@ -207,10 +235,29 @@ func validateCommand(command Command, index int, seen map[string]bool, capabilit
 	if err := validatePatterns(command.Paths, label+".paths"); err != nil {
 		return err
 	}
-	if !validRuntimeDeclaration(command.Runtime) {
-		return fmt.Errorf("%s.runtime requires a tool name and exact semantic version", label)
+	if err := validateCommandExecution(command, label); err != nil {
+		return err
 	}
 	return validateCommandEnvironment(command.Environment, label)
+}
+
+func validateCommandExecution(command Command, label string) error {
+	if !slices.Contains([]string{"self-contained", "host-toolchain"}, command.Execution.Type) {
+		return expected(label+".execution.type", "self-contained or host-toolchain")
+	}
+	if command.Execution.Network != "none" {
+		return expected(label+".execution.network", "none")
+	}
+	if command.Execution.Type == "self-contained" && command.Runtime != nil {
+		return expected(label+".runtime", "omitted for self-contained execution")
+	}
+	if command.Execution.Type == "host-toolchain" && command.Runtime == nil {
+		return expected(label+".runtime", "an exact host toolchain identity")
+	}
+	if !validRuntimeDeclaration(command.Runtime) {
+		return expected(label+".runtime", "a tool name and exact semantic version")
+	}
+	return nil
 }
 
 func validateCommandArgv(argv []string, label string) error {

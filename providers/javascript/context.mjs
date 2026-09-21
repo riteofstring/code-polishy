@@ -26,7 +26,7 @@ class Analysis {
       request.policy.files.map((file) => [file.path, file]),
     );
     this.response = {
-      protocolVersion: 3,
+      protocolVersion: 4,
       status: "pass",
       evidence: [
         `${request.capability} completed using the installed JS/TS provider`,

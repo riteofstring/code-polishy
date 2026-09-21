@@ -14,7 +14,7 @@
   ],
   "diagnosticFiles": ["src/main.ts"],
   "writeFiles": [],
-  "protocolVersion": 3,
+  "protocolVersion": 4,
   "operation": "check",
   "capability": "lint",
   "projectRoot": "/example/project",

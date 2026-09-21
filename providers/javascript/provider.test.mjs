@@ -31,7 +31,7 @@ function requestFor(root, files, capability) {
       };
     });
   const request = {
-    protocolVersion: 3,
+    protocolVersion: 4,
     projectRoot: root,
     operation: "check",
     capability,

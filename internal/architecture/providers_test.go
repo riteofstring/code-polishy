@@ -85,7 +85,7 @@ func providerGraphRepository(t *testing.T, language string) repository.Repositor
 	writeArchitectureFile(t, source, "bin/analyze", "fixture analyzer entry\n")
 	writeArchitectureFile(t, source, "fixtures/pass/main.fixture", "valid\n")
 	writeArchitectureFile(t, source, "fixtures/fail/main.fixture", "invalid\n")
-	manifest := fmt.Sprintf(`{"manifestVersion":2,"protocolVersion":3,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"]}],"commands":[{"name":"analyze","argv":["bin/analyze"],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language)
+	manifest := fmt.Sprintf(`{"manifestVersion":3,"protocolVersion":4,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"],"discoveryMode":"file-scoped"}],"commands":[{"name":"analyze","argv":["bin/analyze"],"languages":[%q],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10,"execution":{"type":"self-contained","network":"none"}}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language, language)
 	writeArchitectureFile(t, source, pack.ManifestFilename, manifest)
 	identity, _, err := pack.Install(source, store)
 	if err != nil {
@@ -122,7 +122,7 @@ func (boundary providerGraphRunner) RunStructured(_ context.Context, _ string, c
 	}
 	digest := sha256.Sum256(data)
 	inputs := append(slices.Clone(request.Context), pack.InputFile{Path: "native/value.go", SHA256: hex.EncodeToString(digest[:])})
-	response := pack.Response{ProtocolVersion: 3, Status: "pass", Evidence: []string{"fixture parser completed"}, Inputs: inputs, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
+	response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", Evidence: []string{"fixture parser completed"}, Inputs: inputs, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
 	data, err = json.Marshal(response)
 	return runner.Result{}, runner.Output{Stdout: data}, err
 }

@@ -14,8 +14,8 @@ func TestProviderOwnershipUsesPathsCapabilitiesAndProfiles(t *testing.T) {
 	if owner := repo.AnalysisOwner("src/main.ts", "lint", "check"); owner.Pack != "compiler" || owner.Native {
 		t.Fatalf("explicit owner did not replace native lint: %+v", owner)
 	}
-	if !repo.AnalysisOwner("src/main.ts", "typecheck", "check").Native {
-		t.Fatal("unclaimed type checking was removed")
+	if owner := repo.AnalysisOwner("src/main.ts", "typecheck", "check"); owner.Native || !strings.Contains(owner.Problem, "has no typecheck operation") {
+		t.Fatalf("partial pack claim fell back to native type checking: %+v", owner)
 	}
 	if owner := repo.AnalysisOwner("src/main.ts", "lint", "gate"); owner.Pack != "compiler" {
 		t.Fatalf("gate did not include check profile: %+v", owner)
@@ -61,7 +61,7 @@ func TestUnavailablePackBlocksOnlyItsDeclaredClaims(t *testing.T) {
 			t.Fatalf("unrelated %s lost native lint", file)
 		}
 	}
-	if !repo.NativeAnalysis("frontend/a.ts", "typecheck") {
-		t.Fatal("unclaimed capability was suppressed")
+	if owner := repo.AnalysisOwner("frontend/a.ts", "typecheck", "check"); owner.Native || !strings.Contains(owner.Problem, "has no typecheck operation") {
+		t.Fatalf("unavailable partial pack fell back for an unclaimed capability: %+v", owner)
 	}
 }

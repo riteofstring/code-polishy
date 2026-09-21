@@ -76,7 +76,7 @@ func Apply(config *policy.Config, resolution Resolution) {
 }
 
 func compileManifest(root string, selection policy.PackSelection, manifest Manifest, resolution *Resolution) {
-	patterns := []string{}
+	languagePatterns := map[string][]string{}
 	manifestPatterns := map[string][]string{}
 	for _, language := range manifest.Languages {
 		source := slices.Clone(language.SourcePatterns)
@@ -85,20 +85,23 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 		} else {
 			resolution.Languages = append(resolution.Languages, policy.LanguageRule{Name: language.ID, Paths: source})
 		}
-		patterns = append(patterns, source...)
+		languagePatterns[language.ID] = source
 		manifestPatterns[language.ID] = append(manifestPatterns[language.ID], language.DependencyManifests...)
 		if len(language.DependencyManifests) > 0 {
 			resolution.Manifests = append(resolution.Manifests, policy.PackDependencyRule{Pack: selection.Name, Language: language.ID, Paths: slices.Clone(language.DependencyManifests)})
 		}
 	}
-	patterns = sortedUnique(patterns)
 	for _, declared := range manifest.Commands {
 		for _, capability := range declared.Capabilities {
-			paths := slices.Clone(patterns)
+			paths := []string{}
+			for _, language := range declared.Languages {
+				paths = append(paths, languagePatterns[language]...)
+			}
+			paths = sortedUnique(paths)
 			if slices.Contains([]string{"dependency-policy", "lock-sync", "release-age", "security"}, capability) {
 				paths = nil
-				for _, values := range manifestPatterns {
-					paths = append(paths, values...)
+				for _, language := range declared.Languages {
+					paths = append(paths, manifestPatterns[language]...)
 				}
 				paths = sortedUnique(paths)
 			}
@@ -110,15 +113,18 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest), Runtime: declared.Runtime},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Runtime: declared.Runtime},
 			})
 		}
 	}
 }
 
-func manifestLanguageRules(manifest Manifest) []policy.LanguageRule {
-	languages := make([]policy.LanguageRule, 0, len(manifest.Languages))
+func manifestLanguageRules(manifest Manifest, selected []string) []policy.LanguageRule {
+	languages := make([]policy.LanguageRule, 0, len(selected))
 	for _, language := range manifest.Languages {
+		if !slices.Contains(selected, language.ID) {
+			continue
+		}
 		patterns := slices.Clone(language.SourcePatterns)
 		if len(patterns) == 0 {
 			patterns = builtInPatterns(language.ID)

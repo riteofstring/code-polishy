@@ -982,7 +982,7 @@
           "required": ["provider"],
           "properties": {
             "analyzer": { "const": "pack" },
-            "protocol": { "const": "code-polishy-pack/v3" }
+            "protocol": { "const": "code-polishy-pack/v4" }
           }
         }
       ],
@@ -1004,7 +1004,7 @@
           "enum": [
             "python-facts/v3",
             "ruff-graph-facts/v2",
-            "code-polishy-pack/v3"
+            "code-polishy-pack/v4"
           ]
         },
         "project": {

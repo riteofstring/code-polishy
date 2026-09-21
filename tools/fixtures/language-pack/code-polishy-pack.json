@@ -1,23 +1,29 @@
 {
   "$schema": "../../../schema/code-polishy-pack.schema.json",
-  "manifestVersion": 2,
+  "manifestVersion": 3,
   "name": "sqlite-syntax-proof",
   "version": "1.0.0",
-  "protocolVersion": 3,
+  "protocolVersion": 4,
   "platforms": ["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"],
   "languages": [
     {
       "id": "sql",
-      "sourcePatterns": ["**/*.fixture"]
+      "sourcePatterns": ["**/*.fixture"],
+      "discoveryMode": "file-scoped"
     }
   ],
   "commands": [
     {
       "name": "adapter",
       "argv": ["bin/adapter"],
+      "languages": ["sql"],
       "capabilities": ["lint"],
       "profiles": ["check", "gate"],
       "timeoutSeconds": 30,
+      "execution": {
+        "type": "host-toolchain",
+        "network": "none"
+      },
       "runtime": {
         "name": "node",
         "version": "24.18.0"

@@ -44,10 +44,31 @@ func (repo Repository) AnalysisOwner(path, capability, profile string) AnalysisO
 	if claimed {
 		return AnalysisOwner{Problem: fmt.Sprintf("the selected provider has no %s operation for profile %s", capability, profile)}
 	}
+	packOwners := repo.selectedPackLanguageOwners(path)
+	if len(packOwners) > 1 {
+		return AnalysisOwner{Problem: fmt.Sprintf("selected language packs %s ambiguously own %s", strings.Join(packOwners, " and "), path)}
+	}
+	if len(packOwners) == 1 {
+		return AnalysisOwner{Problem: fmt.Sprintf("selected language pack %s has no %s operation for %s", packOwners[0], capability, path)}
+	}
 	if repo.NativeCapability(path, capability) {
 		return AnalysisOwner{Name: "native:" + repo.Language(path), Native: true}
 	}
 	return AnalysisOwner{Problem: fmt.Sprintf("no provider analyzes %s for %s", capability, path)}
+}
+
+func (repo Repository) selectedPackLanguageOwners(path string) []string {
+	owners := []string{}
+	for _, command := range repo.Config.Checks {
+		if command.Adapter == nil || slices.Contains(owners, command.Adapter.PackName) {
+			continue
+		}
+		if repo.CommandOwnsPath(command, path) {
+			owners = append(owners, command.Adapter.PackName)
+		}
+	}
+	slices.Sort(owners)
+	return owners
 }
 
 func analysisProfileMatches(profiles []string, requested string) bool {

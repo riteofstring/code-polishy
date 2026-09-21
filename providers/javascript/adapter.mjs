@@ -5,7 +5,7 @@ import { deadcode } from "./deadcode.mjs";
 
 function validateRequest(request) {
   if (
-    request.protocolVersion !== 3 ||
+    request.protocolVersion !== 4 ||
     request.runtime?.name !== "node" ||
     request.runtime.version !== process.versions.node
   )

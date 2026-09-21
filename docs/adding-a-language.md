@@ -9,17 +9,20 @@ framework does not require its own pack or a second project configuration fragme
 ## Pack contract
 
 A local pack contains `code-polishy-pack.json`, `README.md`, contained adapter
-entries, pinned tools, and conformance projects. Manifest version 2 and protocol version 3
-form one public contract; earlier prerelease protocols are rejected. Use
+entries, pinned tools, and conformance projects. Manifest version 3 and protocol
+version 4 form one breaking contract; version 2 manifests and protocol 3 messages
+are rejected rather than translated. Use
 `schema/code-polishy-pack.schema.json` for the manifest,
-`schema/code-polishy-pack-request-v3.schema.json` for requests, and
-`schema/code-polishy-pack-response-v3.schema.json` for responses. Executable
+`schema/code-polishy-pack-request-v4.schema.json` for requests, and
+`schema/code-polishy-pack-response-v4.schema.json` for responses. Executable
 request and response examples live under `tools/fixtures/language-pack/examples`.
 The complete `tools/fixtures/language-pack` proof pack ships with every release,
 so authors can run and modify the same verified example without a source checkout.
-Declare an exact version, supported platforms, languages and source
-patterns, dependency manifests, command paths, capabilities, execution profiles,
-timeouts, and permitted environment names.
+Declare an exact version, supported platforms, languages and source patterns,
+one discovery mode, dependency and metadata patterns, command languages,
+capabilities, execution profiles and type, timeouts, network authority, and
+permitted environment names. `file-scoped` discovery accepts no metadata patterns;
+`static` and `evaluated` discovery require explicit metadata patterns.
 
 Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 `architecture`, `build`, `dependency-policy`, `lock-sync`, `release-age`, or
@@ -29,6 +32,8 @@ Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 {
   "name": "analyze",
   "argv": ["bin/analyze.mjs"],
+  "languages": ["typescript"],
+  "execution": { "type": "host-toolchain", "network": "none" },
   "runtime": { "name": "node", "version": "24.18.0" },
   "capabilities": ["lint"],
   "profiles": ["check", "gate"],
@@ -36,7 +41,10 @@ Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 }
 ```
 
-Node is the first supported runtime reference. Its executable and SHA-256 identity
+Every command declares `self-contained` or `host-toolchain` execution and currently
+declares `network: none`. A self-contained command omits `runtime`; a host-toolchain
+command requires one exact runtime identity. Node is the first supported runtime
+reference. Its executable and SHA-256 identity
 come from the verified engine installation. An ambient executable, target package,
 version range, or missing runtime cannot substitute. Native contained executable
 adapters can omit the runtime reference.
@@ -69,7 +77,7 @@ using contained repository-relative paths and SHA-256 digests. The engine verifi
 identities after execution, including import targets. Changed inputs invalidate
 analysis.
 
-Return exactly one JSON response with `protocolVersion: 3` and one status:
+Return exactly one JSON response with `protocolVersion: 4` and one status:
 
 - `pass`: nonempty evidence, no findings, complete coverage.
 - `findings`: at least one finding and explicit coverage.
@@ -107,12 +115,15 @@ collection index with its expected constraint, for example
 
 ## Ownership, verification, and installation
 
-An explicitly selected pack owns each matching path/capability/profile it claims,
-replacing the corresponding native route. Competing claims fail. Missing or failed
+An explicitly selected pack owns the complete language boundary within its declared
+command paths. Its matching command owns a capability/profile, while an omitted
+capability fails closed instead of returning to native analysis. Competing claims
+fail. Missing or failed
 selected packs remain repository errors. Authenticated retained claims block
-native fallback for their exact paths and capabilities. A missing pack without a
-trusted manifest cannot disable unrelated analyzers. Unclaimed native syntax
-retains its existing analyzer. Whole-program checks must own coherent compilation units;
+native fallback for their exact language boundary. A missing pack without a
+trusted manifest cannot disable unrelated analyzers. Source outside every selected
+pack boundary retains its current route until the coordinated native-removal
+release. Whole-program checks must own coherent compilation units;
 partial handoffs cannot imply whole-project coverage. Ordinary configured commands
 still run, but their successful exit does not establish structured source coverage.
 Architecture providers run through the architecture command so graph policy is

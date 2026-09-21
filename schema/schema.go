@@ -32,11 +32,11 @@ var CodePolishyBehaviorReview []byte
 //go:embed code-polishy-pack.schema.json
 var CodePolishyPack []byte
 
-//go:embed code-polishy-pack-request-v3.schema.json
-var CodePolishyPackRequestV3 []byte
+//go:embed code-polishy-pack-request-v4.schema.json
+var CodePolishyPackRequestV4 []byte
 
-//go:embed code-polishy-pack-response-v3.schema.json
-var CodePolishyPackResponseV3 []byte
+//go:embed code-polishy-pack-response-v4.schema.json
+var CodePolishyPackResponseV4 []byte
 
 //go:embed code-polishy-language-conformance-ledger-v1.schema.json
 var CodePolishyLanguageConformanceLedgerV1 []byte

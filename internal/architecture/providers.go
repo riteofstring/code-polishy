@@ -119,7 +119,7 @@ func providerResultGraph(repo repository.Repository, command policy.Command, res
 }
 
 func providerFactInput(command policy.Command, result pack.Result, nodes []sourcegraph.Node) (sourcegraph.FactInput, error) {
-	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v3", Project: "pack/" + command.Adapter.PackName + "/" + command.Name, Root: ".", Paths: slices.Clone(result.Response.Coverage.Analyzed), FactsSHA256: result.Digest}
+	input := sourcegraph.FactInput{Analyzer: "pack", Protocol: "code-polishy-pack/v4", Project: "pack/" + command.Adapter.PackName + "/" + command.Name, Root: ".", Paths: slices.Clone(result.Response.Coverage.Analyzed), FactsSHA256: result.Digest}
 	input.Root = nodes[0].Root
 	rootDigest := sha256.Sum256([]byte(input.Root))
 	input.Project += "/" + hex.EncodeToString(rootDigest[:])

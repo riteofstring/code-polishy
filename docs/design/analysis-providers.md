@@ -2,14 +2,19 @@
 
 Code Polishy resolves analysis ownership from the composed configuration, exact
 installed pack manifests, selected paths, capability, and execution profile.
-Language classification alone never establishes analyzer coverage. Explicit pack
-claims replace native work for that capability. Conflicting or unavailable claims
-cannot enable a native fallback. Unclaimed native syntax retains its existing
-analyzers. Configured project commands retain their execution profiles; a build
+Language classification alone never establishes analyzer coverage. A selected pack
+claims a language boundary within its command paths; each matching command supplies
+one capability and profile inside that boundary. Missing, conflicting, or unavailable
+capabilities fail closed and cannot enable a native fallback. Source outside every
+selected pack boundary retains its existing route until the coordinated native-removal
+cutover. Configured project commands retain their execution profiles; a build
 command cannot establish structured source-analysis coverage.
 
-Pack manifest version 2 and protocol version 3 form one public contract.
-Earlier prerelease protocols are rejected. A response
+Pack manifest version 3 and protocol version 4 form one breaking contract.
+Version 2 manifests and protocol 3 messages are rejected without decoding or
+translation. Every language declares file-scoped, static, or evaluated discovery;
+every command names its exact languages and declares self-contained or host-toolchain
+execution with explicit network authority. A response
 accounts for every requested file exactly once as analyzed or unsupported, retains
 a stable namespaced rule identifier, and returns facts needed for core decisions.
 Unsupported work blocks a required capability. An operational failure establishes

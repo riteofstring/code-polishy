@@ -544,8 +544,8 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
   tools/fixtures/language-pack/code-polishy-pack.json \
   tools/fixtures/language-pack/bin/adapter \
-  tools/fixtures/language-pack/examples/request-v3.json \
-  tools/fixtures/language-pack/examples/response-v3.json \
+  tools/fixtures/language-pack/examples/request-v4.json \
+  tools/fixtures/language-pack/examples/response-v4.json \
   ".tools/javascript/${platform_tag}/node/bin/node" \
   ".tools/javascript/${platform_tag}/pnpm/bin/pnpm.cjs" \
   ".tools/python/${platform_tag}/python" \

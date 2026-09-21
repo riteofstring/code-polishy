@@ -30,10 +30,29 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		want string
 	}{
 		{"unknown field", func(value map[string]any) { value["unknown"] = true }, "unknown field"},
+		{"legacy manifest", func(value map[string]any) { value["manifestVersion"] = float64(2) }, "manifestVersion"},
+		{"legacy protocol", func(value map[string]any) { value["protocolVersion"] = float64(3) }, "protocolVersion"},
+		{"missing discovery mode", func(value map[string]any) {
+			delete(value["languages"].([]any)[0].(map[string]any), "discoveryMode")
+		}, "discoveryMode"},
+		{"file-scoped metadata", func(value map[string]any) {
+			value["languages"].([]any)[0].(map[string]any)["metadataPatterns"] = []any{"package.json"}
+		}, "metadataPatterns"},
 		{"unsafe executable", func(value map[string]any) {
 			value["commands"].([]any)[0].(map[string]any)["argv"] = []any{"../adapter"}
 		}, "contained relative path"},
-		{"unsupported protocol", func(value map[string]any) { value["protocolVersion"] = float64(2) }, "protocolVersion"},
+		{"unknown command language", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["languages"] = []any{"other"}
+		}, "languages"},
+		{"missing execution", func(value map[string]any) {
+			delete(value["commands"].([]any)[0].(map[string]any), "execution")
+		}, "execution.type"},
+		{"self-contained runtime", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["runtime"] = map[string]any{"name": "node", "version": "24.18.0"}
+		}, "omitted"},
+		{"network authority", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["execution"].(map[string]any)["network"] = "ambient"
+		}, "none"},
 		{"missing failing fixture", func(value map[string]any) { value["fixtures"] = value["fixtures"].([]any)[:1] }, "deliberately failing"},
 	}
 	for _, test := range tests {
@@ -63,11 +82,11 @@ func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
 	if _, err := ParseManifest(manifestData, ManifestFilename); err != nil {
 		t.Fatalf("manifest decoder: %v", err)
 	}
-	requestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-v3.json"))
+	requestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-v4.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	requestValidator := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-request-v3.schema.json")
+	requestValidator := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-request-v4.schema.json")
 	if err := requestValidator.Validate(requestData); err != nil {
 		t.Fatalf("request schema: %v", err)
 	}
@@ -84,11 +103,11 @@ func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
 	if err := requestValidator.Validate(encodedRequest); err != nil {
 		t.Fatalf("production request encoder: %v", err)
 	}
-	responseData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "response-v3.json"))
+	responseData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "response-v4.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-response-v3.schema.json").Validate(responseData); err != nil {
+	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-response-v4.schema.json").Validate(responseData); err != nil {
 		t.Fatalf("response schema: %v", err)
 	}
 	response, err := decodeResponse(responseData)
@@ -201,9 +220,9 @@ func TestProtocolRejectsFakeSuccessExtraJSONAndEscapingFindings(t *testing.T) {
 		name string
 		data string
 	}{
-		{"fake success", `{"protocolVersion":3,"status":"pass"}`},
-		{"extra response", `{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}{}`},
-		{"escaping finding", `{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"../secret","subject":"bad","message":"bad"}]}`},
+		{"fake success", `{"protocolVersion":4,"status":"pass"}`},
+		{"extra response", `{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}{}`},
+		{"escaping finding", `{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"../secret","subject":"bad","message":"bad"}]}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -310,7 +329,7 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	boundary := &responseRunner{responses: [][]byte{[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","line":1,"column":1,"subject":"bad","message":"bad source"}]}`)}}
+	boundary := &responseRunner{responses: [][]byte{[]byte(`{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","line":1,"column":1,"subject":"bad","message":"bad source"}]}`)}}
 	result := RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
 	findings := result.Findings
 	if len(findings) != 1 || findings[0].Check != "pack.fixture-language.invalid-source" || findings[0].Line != 1 || findings[0].Subject != "bad" {
@@ -321,7 +340,7 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 		_ = os.Chmod(adapter, 0o755)
 		_ = os.WriteFile(adapter, []byte("changed"), 0o755)
 	}
-	boundary.responses = [][]byte{[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`)}
+	boundary.responses = [][]byte{[]byte(`{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`)}
 	result = RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
 	findings = result.Findings
 	if len(findings) != 1 || !strings.Contains(findings[0].Message, "changed during execution") {
@@ -332,8 +351,8 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 	source := writePackSource(t)
 	boundary := &responseRunner{responses: [][]byte{
-		[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
-		[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
+		[]byte(`{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
+		[]byte(`{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
 	}}
 	result, err := VerifySource(context.Background(), source, source, boundary)
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
@@ -350,8 +369,8 @@ func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
 		t.Fatalf("initialize source checkout: %s %v", output, err)
 	}
 	boundary := &responseRunner{responses: [][]byte{
-		[]byte(`{"protocolVersion":3,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
-		[]byte(`{"protocolVersion":3,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
+		[]byte(`{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
+		[]byte(`{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
 	}}
 	result, err := VerifySource(context.Background(), source, source, boundary)
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
@@ -414,8 +433,8 @@ func testManifest(t *testing.T) []byte {
 	manifest := Manifest{
 		Schema: "../../schema/code-polishy-pack.schema.json", ManifestVersion: ManifestVersion,
 		Name: "fixture-language", Version: "1.0.0", ProtocolVersion: ProtocolVersion, Platforms: []string{CurrentPlatform()},
-		Languages: []Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}}},
-		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}},
+		Languages: []Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}},
+		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: CommandExecution{Type: "self-contained", Network: "none"}}},
 		Fixtures: []Fixture{
 			{Name: "lint-pass", Command: "adapter", Capability: "lint", Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},
 			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings", ExpectedRules: []string{"invalid-source"}},

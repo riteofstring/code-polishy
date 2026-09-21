@@ -44,8 +44,8 @@ function prepare() {
     readFileSync(join(source, "package.json"), "utf8"),
   );
   const manifest = {
-    manifestVersion: 2,
-    protocolVersion: 3,
+    manifestVersion: 3,
+    protocolVersion: 4,
     name: "javascript",
     version: metadata.version,
     platforms: [
@@ -58,6 +58,14 @@ function prepare() {
     languages: [
       {
         id: "typescript",
+        discoveryMode: "static",
+        metadataPatterns: [
+          "**/package.json",
+          "**/pnpm-workspace.yaml",
+          "**/jsconfig.json",
+          "**/tsconfig*.json",
+          "**/astro.config.*",
+        ],
         sourcePatterns: [
           "**/*.js",
           "**/*.jsx",
@@ -75,14 +83,17 @@ function prepare() {
       {
         name: "format",
         argv: ["providers/javascript/run.mjs"],
+        languages: ["typescript"],
         capabilities: ["format"],
         profiles: ["check", "gate", "format"],
         timeoutSeconds: 600,
+        execution: { type: "host-toolchain", network: "none" },
         runtime: { name: "node", version: metadata.engines.node },
       },
       {
         name: "analyze",
         argv: ["providers/javascript/run.mjs"],
+        languages: ["typescript"],
         capabilities: [
           "lint",
           "typecheck",
@@ -92,6 +103,7 @@ function prepare() {
         ],
         profiles: ["check", "gate"],
         timeoutSeconds: 600,
+        execution: { type: "host-toolchain", network: "none" },
         runtime: { name: "node", version: metadata.engines.node },
       },
     ],

@@ -15,6 +15,6 @@ try {
   process.stdout.write(`${JSON.stringify(await analyze(JSON.parse(input)))}\n`);
 } catch (error) {
   process.stdout.write(
-    `${JSON.stringify({ protocolVersion: 3, status: "operational-failure", failure: boundedText(error.message, 4096) })}\n`,
+    `${JSON.stringify({ protocolVersion: 4, status: "operational-failure", failure: boundedText(error.message, 4096) })}\n`,
   );
 }

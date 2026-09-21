@@ -58,8 +58,8 @@ func packIntegrationSource(t *testing.T) string {
 	root := t.TempDir()
 	manifest := pack.Manifest{
 		ManifestVersion: pack.ManifestVersion, Name: "fixture-language", Version: "1.0.0", ProtocolVersion: pack.ProtocolVersion, Platforms: []string{pack.CurrentPlatform()},
-		Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}}},
-		Commands:  []pack.Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30}},
+		Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}},
+		Commands:  []pack.Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: pack.CommandExecution{Type: "self-contained", Network: "none"}}},
 		Fixtures: []pack.Fixture{
 			{Name: "lint-pass", Command: "adapter", Capability: "lint", Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},
 			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings", ExpectedRules: []string{"invalid-source"}},
