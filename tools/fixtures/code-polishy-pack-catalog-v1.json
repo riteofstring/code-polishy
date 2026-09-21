@@ -24,10 +24,10 @@
       "dependencies": [],
       "licenses": ["MIT"],
       "provenance": {
-        "sourceRevision": "8f5c69115848a5a6aed8f1d53f161ea1cc4bac91",
+        "sourceRevision": "fe79e30318e7775b2af175c9a2f677981abfffeb",
         "builder": "code-polishy",
         "attestationUrl": "file:language-pack-provenance.json",
-        "attestationSha256": "f070117fe62ee6568e33335ff21774c3b5530d20922ea77c0ced9030e468539a"
+        "attestationSha256": "7995d8bf91c3ad125cda65d9f5bcdd82d5b2b8c1936f3a0adca15cdfe8f7f431"
       }
     }
   ]
