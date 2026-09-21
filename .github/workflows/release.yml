@@ -10,8 +10,13 @@ on:
         description: Existing annotated version tag to publish
         required: true
         type: string
+      artifact_run_id:
+        description: Failed tag-publish run whose native artifacts should be reused
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -70,6 +75,7 @@ jobs:
   build:
     name: Build ${{ matrix.host }}
     needs: identify
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
     strategy:
       fail-fast: false
       matrix:
@@ -242,8 +248,16 @@ jobs:
   publish:
     name: Publish release packages
     needs: [identify, build]
+    if: >-
+      always() &&
+      needs.identify.result == 'success' &&
+      (needs.build.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.artifact_run_id != '' &&
+        needs.build.result == 'skipped'))
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
       packages: write
     steps:
@@ -294,12 +308,103 @@ jobs:
             exit 1
           fi
 
+      - name: Verify recovery artifact run
+        if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != ''
+        shell: bash
+        env:
+          ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.identify.outputs.commit }}
+          RELEASE_TAG: ${{ needs.identify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${ARTIFACT_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "The recovery artifact run ID must be a positive integer." >&2
+            exit 1
+          fi
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          run_file="${RUNNER_TEMP}/recovery-run.json"
+          artifacts_file="${RUNNER_TEMP}/recovery-artifacts.json"
+          for request in \
+            "${api_root}/actions/runs/${ARTIFACT_RUN_ID}|${run_file}" \
+            "${api_root}/actions/runs/${ARTIFACT_RUN_ID}/artifacts?per_page=100|${artifacts_file}"; do
+            url="${request%%|*}"
+            destination="${request#*|}"
+            curl --fail --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "${destination}" \
+              "${url}"
+          done
+          python3 - \
+            "${run_file}" "${artifacts_file}" "${ARTIFACT_RUN_ID}" \
+            "${RELEASE_COMMIT}" "${RELEASE_TAG}" <<'PY'
+          import json
+          import re
+          import sys
+
+          run_path, artifacts_path, run_id, release_commit, release_tag = sys.argv[1:]
+          with open(run_path, encoding="utf-8") as source:
+              run = json.load(source)
+          with open(artifacts_path, encoding="utf-8") as source:
+              artifact_document = json.load(source)
+
+          expected_run = int(run_id)
+          if (
+              run.get("id") != expected_run
+              or run.get("path") != ".github/workflows/release.yml"
+              or run.get("event") != "push"
+              or run.get("head_branch") != release_tag
+              or run.get("head_sha") != release_commit
+              or run.get("status") != "completed"
+              or run.get("conclusion") != "failure"
+          ):
+              raise SystemExit("The recovery run is not the failed tag publication for this release.")
+
+          expected_names = {
+              "native-release-darwin-arm64",
+              "native-release-darwin-x64",
+              "native-release-linux-arm64",
+              "native-release-linux-x64",
+              "native-release-windows-x64",
+          }
+          artifacts = artifact_document.get("artifacts")
+          if not isinstance(artifacts, list) or artifact_document.get("total_count") != len(expected_names):
+              raise SystemExit("The recovery run does not contain exactly five native artifacts.")
+          if {artifact.get("name") for artifact in artifacts} != expected_names:
+              raise SystemExit("The recovery run has an unexpected native artifact inventory.")
+          for artifact in artifacts:
+              workflow_run = artifact.get("workflow_run") or {}
+              if (
+                  artifact.get("expired") is not False
+                  or not isinstance(artifact.get("size_in_bytes"), int)
+                  or artifact["size_in_bytes"] <= 0
+                  or not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("digest", ""))
+                  or workflow_run.get("id") != expected_run
+                  or workflow_run.get("head_sha") != release_commit
+              ):
+                  raise SystemExit(f"The recovery artifact {artifact.get('name')!r} is invalid or stale.")
+          PY
+
       - name: Restore native publications
+        if: github.event_name != 'workflow_dispatch' || inputs.artifact_run_id == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: native-release-*
           path: ${{ runner.temp }}/release
           merge-multiple: true
+
+      - name: Restore native publications from recovery run
+        if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: native-release-*
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
 
       - name: Prepare publication index and OCI input
         id: publication
@@ -311,11 +416,18 @@ jobs:
           release_root="${RUNNER_TEMP}/release"
           engine_root="${RUNNER_TEMP}/index-engine"
           linux_publication="${RUNNER_TEMP}/linux-publication"
-          linux_archive="${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.zip"
-          linux_descriptor="${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64.release.json"
+          linux_base="${release_root}/code-polishy-${RELEASE_VERSION}-linux-x64"
+          linux_archive="${linux_base}.zip"
+          linux_descriptor="${linux_base}.release.json"
           mkdir -p "${engine_root}" "${linux_publication}"
-          ln "${linux_archive}" "${linux_publication}/$(basename "${linux_archive}")"
-          ln "${linux_descriptor}" "${linux_publication}/$(basename "${linux_descriptor}")"
+          for publication_file in \
+            "${linux_archive}" \
+            "${linux_base}.release-manifest.json" \
+            "${linux_base}.sbom.cdx.json" \
+            "${linux_base}.build-metadata.intoto.json" \
+            "${linux_descriptor}"; do
+            ln "${publication_file}" "${linux_publication}/$(basename "${publication_file}")"
+          done
           unzip -q "${linux_archive}" -d "${engine_root}"
           engine="${engine_root}/bin/code-polishy"
           index_path="${release_root}/code-polishy-release-index.json"
