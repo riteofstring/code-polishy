@@ -55,7 +55,11 @@ XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
 XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
   --repo-root "${fixture_root}/target" pack install --official sqlite-syntax-proof@1.0.0 --catalog "${catalog}" --sha256 "${catalog_sha256}"
 XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
+  --repo-root "${fixture_root}/target" pack update sqlite-syntax-proof --to 1.0.0 --catalog "${catalog}" --sha256 "${catalog_sha256}"
+XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
   --repo-root "${fixture_root}/target" pack list --format json
+XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
+  --repo-root "${fixture_root}/target" pack remove sqlite-syntax-proof@1.0.0
 "${policy_root}/scripts/test-installed-release.sh" \
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \
