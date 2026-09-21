@@ -3,6 +3,6 @@
   "name": "sqlite-syntax-proof",
   "version": "1.0.0",
   "digest": "c1fbd7f59ec1a62e9314b5d0e0d56e0e7492f9a31450c36f38355e202ab548fd",
-  "sourceRevision": "fe79e30318e7775b2af175c9a2f677981abfffeb",
+  "sourceRevision": "c2f96a12cb848d0397c31587c254a638a6570e85",
   "builder": "code-polishy"
 }
