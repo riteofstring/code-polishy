@@ -1,6 +1,6 @@
 # JavaScript and TypeScript analysis provider
 
-This optional protocol v3 pack adds framework-aware analysis to Code Polishy.
+This optional protocol v4 pack adds framework-aware analysis to Code Polishy.
 Its JS/TS provider includes an Astro adapter and retains ordinary JavaScript,
 TypeScript, JSX, and TSX support. Framework parsing and tooling stay in this
 separately installed artifact. The core release does not include its dependencies.
@@ -22,6 +22,8 @@ Select the printed exact name, version, and digest in the target's existing
 `packs` list. The Code Polishy engine must supply the exact Node runtime named by the
 manifest. Keep the ordinary engine lock and project dependency installation.
 No separate framework fragment or project check script is needed.
+The manifest also binds one exact Code Polishy engine release; an engine upgrade
+requires an explicit pack cutover rather than compatibility fallback.
 
 The pack owns its parser, lint configuration, compiler services, and dependencies.
 Existing package manifests, TypeScript configurations, and installed dependency

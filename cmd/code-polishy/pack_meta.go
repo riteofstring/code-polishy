@@ -12,14 +12,22 @@ import (
 
 func handlePackMeta(invocation invocation) int {
 	if len(invocation.arguments) == 0 {
-		return commandUsageError("pack", "pack requires install, verify, conformance, or root")
+		return commandUsageError("pack", "pack requires catalog, install, update, remove, verify, list, conformance, or root")
 	}
 	action, arguments := invocation.arguments[0], invocation.arguments[1:]
 	switch action {
+	case "catalog":
+		return showPackCatalog(arguments)
 	case "install":
-		return installPack(arguments)
+		return installPack(invocation, arguments)
+	case "update":
+		return updatePack(invocation, arguments)
+	case "remove":
+		return removePack(arguments)
 	case "verify":
 		return verifyPack(arguments, invocation.policyRoot)
+	case "list":
+		return listPacks(invocation, arguments)
 	case "conformance":
 		return runPackConformance(arguments)
 	case "root":
@@ -29,29 +37,16 @@ func handlePackMeta(invocation invocation) int {
 	}
 }
 
-func installPack(arguments []string) int {
-	source, err := packSourceOption("pack install", arguments)
-	if err != nil {
-		return commandUsageError("pack", err.Error())
-	}
-	dataRoot, err := pack.UserDataRoot()
-	if err != nil {
-		return operationalError(err)
-	}
-	identity, _, err := pack.Install(source, dataRoot)
-	if err != nil {
-		return operationalError(err)
-	}
-	fmt.Printf("PASS installed pack %s %s %s\n", identity.Name, identity.Version, identity.Digest)
-	return 0
-}
-
 func verifyPack(arguments []string, policyRoot string) int {
 	source, err := packSourceOption("pack verify", arguments)
 	if err != nil {
 		return commandUsageError("pack", err.Error())
 	}
-	result, err := pack.VerifySource(context.Background(), source, policyRoot, pack.DefaultRunner())
+	engineVersion, err := readPolicyVersion(policyRoot)
+	if err != nil {
+		return operationalError(err)
+	}
+	result, err := pack.VerifySource(context.Background(), source, policyRoot, engineVersion, pack.DefaultRunner())
 	if err != nil {
 		return operationalError(err)
 	}

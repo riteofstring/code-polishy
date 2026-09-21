@@ -65,6 +65,25 @@ retains its exact claims and blocks their native fallback. A wholly missing pack
 has no trusted claim inventory: it cannot suppress unrelated native analysis or
 make the failing run pass.
 
+Official local installation starts from a bounded catalog authenticated by an
+exact caller-supplied SHA-256 digest. Catalog version 1 binds each entry's exact
+tree identity and byte size, one exact engine version and protocol, platforms,
+discovery and execution modes, capabilities, tools, dependencies, licenses, and
+provenance attestation. Local catalog URLs are contained `file:` paths; catalog,
+artifact, and attestation links or escapes are rejected. Installation reads and
+validates the complete artifact before atomically publishing the same in-memory
+bytes to the immutable content-addressed store. It executes no pack code and
+performs no network access.
+
+Installation and repository selection remain separate. `pack update` installs
+one explicit candidate and reports its authority and inventory without changing
+policy. `pack remove` deletes only one unambiguous exact identity and never edits
+a repository. `pack list` and `doctor --strict` use the same state model to report
+installed, selected, missing, incompatible, and corrupt identities. Engine locks
+continue to select only the engine; pack lifecycle commands never rewrite them or
+pack pins. These boundaries are the local lifecycle foundation for the later
+explicit, rollback-capable repository migration transaction.
+
 A runtime declaration requests an exact policy-owned tool version. The first
 runtime implementation resolves Node from a verified installed release, checks
 the binary against that release's manifest, and binds its digest into the analysis.

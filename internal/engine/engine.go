@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,6 +30,7 @@ import (
 
 type Engine struct {
 	Repository           repository.Repository
+	Version              string
 	Runner               runner.Runner
 	Output               io.Writer
 	Verbose              bool
@@ -43,6 +45,16 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	engineVersion := ""
+	versionData, versionErr := os.ReadFile(filepath.Join(policyRoot, "VERSION"))
+	if versionErr == nil {
+		engineVersion = strings.TrimSpace(string(versionData))
+		if !pack.ValidEngineVersion(engineVersion) {
+			return nil, errors.New("policy VERSION must contain one exact version")
+		}
+	} else if len(config.Packs) > 0 {
+		return nil, fmt.Errorf("read policy version: %w", versionErr)
+	}
 	repo, err := repository.Open(repoRoot, policyRoot, config)
 	if err != nil {
 		return nil, err
@@ -53,7 +65,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 		return nil, err
 	}
 	dataRoot, dataRootErr := pack.UserDataRoot()
-	packResolution := pack.Resolve(config.Packs, dataRoot)
+	packResolution := pack.Resolve(config.Packs, dataRoot, engineVersion)
 	if dataRootErr != nil && len(config.Packs) > 0 {
 		packResolution = pack.Unavailable(config.Packs, dataRootErr)
 	}
@@ -74,7 +86,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	pathEntries := repo.CommandEnvironment().PathEntries
 	commandRunner := runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr, PathEntries: pathEntries}
 	return &Engine{
-		Repository: repo, Runner: commandRunner, Output: os.Stdout,
+		Repository: repo, Version: engineVersion, Runner: commandRunner, Output: os.Stdout,
 		PolicyModuleFindings: append(append(moduleResolution.Findings, packResolution.Findings...), gitLabInspection.Findings...),
 		PolicyModuleNotes:    append(policymodule.Notes(moduleResolution.Active), packResolution.Notes...),
 		PackDataRoot:         dataRoot,
@@ -114,7 +126,7 @@ func (engine *Engine) SelectBase(base string) (repository.Selection, error) {
 	return engine.Repository.SelectBase(base)
 }
 
-func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
+func (engine *Engine) Doctor(ctx context.Context, strict ...bool) (Report, error) {
 	files, err := engine.Repository.AllFiles()
 	if err != nil {
 		return Report{}, err
@@ -157,6 +169,19 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	javascriptFindings, javascriptNotes := quality.JavaScriptBundleStatus(engine.Repository, files)
 	findings = append(findings, javascriptFindings...)
 	notes := []string{fmt.Sprintf("inventory: %d governed files across %d modules", len(files), len(engine.Repository.Config.Modules))}
+	if len(strict) > 0 && strict[0] && engine.PackDataRoot != "" {
+		statuses, err := pack.List(engine.PackDataRoot, engine.Repository.Config.Packs, engine.Version)
+		if err != nil {
+			return Report{}, err
+		}
+		for _, status := range statuses {
+			note := fmt.Sprintf("pack %s@%s %s: %s", status.Name, status.Version, status.Digest, status.State)
+			if status.Reason != "" {
+				note += " (" + status.Reason + ")"
+			}
+			notes = append(notes, note)
+		}
+	}
 	if discovery := engine.Repository.CommandDiscoveryNote(); discovery != "" {
 		notes = append(notes, discovery)
 	}

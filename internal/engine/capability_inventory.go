@@ -104,7 +104,7 @@ func (engine *Engine) markCapabilityApplicability(entry *CapabilityEntry, files 
 }
 
 func (engine *Engine) addPackCapabilities(inventory *CapabilityInventory, files []string) {
-	resolution := pack.Resolve(engine.Repository.Config.Packs, engine.PackDataRoot)
+	resolution := pack.Resolve(engine.Repository.Config.Packs, engine.PackDataRoot, engine.Version)
 	for _, selected := range engine.Repository.Config.Packs {
 		entry := configuredCapability("language-pack", selected.Name, "Selected language pack "+selected.Name+".", "")
 		entry.Source = CapabilitySource{Kind: "installed-pack", Name: selected.Name, Path: pack.ManifestFilename, Version: selected.Version, SHA256: selected.Digest}

@@ -118,8 +118,9 @@ func TestPlannedPackExecutionRejectsIdentityChanges(t *testing.T) {
 func providerPlanRepository(t *testing.T) repository.Repository {
 	t.Helper()
 	source := t.TempDir()
+	engineVersion := packIntegrationEngineVersion(t)
 	capabilities := []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}
-	manifest := pack.Manifest{ManifestVersion: pack.ManifestVersion, ProtocolVersion: pack.ProtocolVersion, Name: "fixture-language", Version: "1.0.0", Platforms: []string{pack.CurrentPlatform()}, Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}}, Commands: []pack.Command{{Name: "analyze", Argv: []string{"adapter"}, Languages: []string{"fixture"}, Capabilities: capabilities, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: pack.CommandExecution{Type: "self-contained", Network: "none"}}}}
+	manifest := pack.Manifest{ManifestVersion: pack.ManifestVersion, ProtocolVersion: pack.ProtocolVersion, Name: "fixture-language", Version: "1.0.0", EngineVersion: engineVersion, Platforms: []string{pack.CurrentPlatform()}, Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}}, Commands: []pack.Command{{Name: "analyze", Argv: []string{"adapter"}, Languages: []string{"fixture"}, Capabilities: capabilities, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: pack.CommandExecution{Type: "self-contained", Network: "none"}}}}
 	for _, capability := range capabilities {
 		for _, status := range []string{"pass", "findings"} {
 			fixture := pack.Fixture{Name: capability + "-" + status, Command: "analyze", Capability: capability, Project: "fixtures/" + status, Files: []string{"main.fixture"}, ExpectedStatus: status}
@@ -146,12 +147,12 @@ func providerPlanRepository(t *testing.T) repository.Repository {
 			return nil
 		})
 	})
-	identity, _, err := pack.Install(source, store)
+	identity, _, err := pack.Install(source, store, engineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 	config := policy.Config{Quality: policy.EffectiveQuality(policy.Quality{}), Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}}, ModuleByName: map[string]int{"application": 0}}
-	pack.Apply(&config, pack.Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, store))
+	pack.Apply(&config, pack.Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, store, engineVersion))
 	root := t.TempDir()
 	writeEngineFile(t, root, "src/main.fixture", "fixture\n", 0o600)
 	repo, err := repository.Open(root, enginePolicyRoot(t), config)

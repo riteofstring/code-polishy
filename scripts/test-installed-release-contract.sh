@@ -8,6 +8,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 "${policy_root}/scripts/install.sh" --prefix "${fixture_root}/prefix"
 mkdir "${fixture_root}/target"
 releases=("${fixture_root}"/prefix/releases/*/bin/code-polishy)
@@ -40,6 +48,14 @@ cat >"${fixture_root}/target/.code-polishy.lock.json" <<EOF
 EOF
 "${fixture_root}/prefix/bin/code-polishy" --repo-root "${fixture_root}/target" \
   pack verify --source "${release_root}/tools/fixtures/language-pack"
+catalog="${release_root}/tools/fixtures/code-polishy-pack-catalog-v1.json"
+catalog_sha256="$(sha256_file "${catalog}")"
+XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
+  pack catalog --catalog "${catalog}" --sha256 "${catalog_sha256}" --format json
+XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
+  pack install --official sqlite-syntax-proof@1.0.0 --catalog "${catalog}" --sha256 "${catalog_sha256}"
+XDG_DATA_HOME="${fixture_root}/data" "${fixture_root}/prefix/bin/code-polishy" \
+  --repo-root "${fixture_root}/target" pack list --format json
 "${policy_root}/scripts/test-installed-release.sh" \
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \

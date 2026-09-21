@@ -19,6 +19,8 @@ import (
 	"github.com/riteofstring/code-polishy/schema"
 )
 
+const testEngineVersion = "0.25.0"
+
 func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 	valid := testManifest(t)
 	if _, err := ParseManifest(valid, "manifest"); err != nil {
@@ -32,6 +34,7 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"unknown field", func(value map[string]any) { value["unknown"] = true }, "unknown field"},
 		{"legacy manifest", func(value map[string]any) { value["manifestVersion"] = float64(2) }, "manifestVersion"},
 		{"legacy protocol", func(value map[string]any) { value["protocolVersion"] = float64(3) }, "protocolVersion"},
+		{"missing engine version", func(value map[string]any) { delete(value, "engineVersion") }, "engineVersion"},
 		{"missing discovery mode", func(value map[string]any) {
 			delete(value["languages"].([]any)[0].(map[string]any), "discoveryMode")
 		}, "discoveryMode"},
@@ -123,7 +126,7 @@ func TestInstallPublishesExactContentAddressedTreeAndDetectsTampering(t *testing
 	source := writePackSource(t)
 	dataRoot := filepath.Join(t.TempDir(), "packs")
 	t.Cleanup(func() { makeWritable(dataRoot) })
-	identity, installed, err := Install(source, dataRoot)
+	identity, installed, err := Install(source, dataRoot, testEngineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +142,7 @@ func TestInstallPublishesExactContentAddressedTreeAndDetectsTampering(t *testing
 			t.Fatalf("installed pack root remained writable: %s", info.Mode().Perm())
 		}
 	}
-	second, secondRoot, err := Install(source, dataRoot)
+	second, secondRoot, err := Install(source, dataRoot, testEngineVersion)
 	if err != nil || second != identity || secondRoot != installed {
 		t.Fatalf("idempotent install failed: %+v %s %v", second, secondRoot, err)
 	}
@@ -163,16 +166,16 @@ func TestTreeDigestIsDeterministicAndDifferentBytesNeverReplaceAnIdentity(t *tes
 	secondSource := writePackSource(t)
 	dataRoot := filepath.Join(t.TempDir(), "packs")
 	t.Cleanup(func() { makeWritable(dataRoot) })
-	first, _, err := Install(firstSource, dataRoot)
+	first, _, err := Install(firstSource, dataRoot, testEngineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, _, err := Install(secondSource, dataRoot)
+	second, _, err := Install(secondSource, dataRoot, testEngineVersion)
 	if err != nil || first != second {
 		t.Fatalf("identical trees did not share an identity: %+v %+v %v", first, second, err)
 	}
 	writeTestFile(t, secondSource, "README.md", "# Different bytes\n", 0o644)
-	changed, changedRoot, err := Install(secondSource, dataRoot)
+	changed, changedRoot, err := Install(secondSource, dataRoot, testEngineVersion)
 	if err != nil || changed.Name != first.Name || changed.Version != first.Version || changed.Digest == first.Digest || changedRoot == InstalledRoot(dataRoot, first.Name, first.Version, first.Digest) {
 		t.Fatalf("changed bytes replaced an identity: %+v %s %v", changed, changedRoot, err)
 	}
@@ -188,7 +191,7 @@ func TestSourceValidationRejectsLinksBeforeInstallation(t *testing.T) {
 	}
 	dataRoot := filepath.Join(t.TempDir(), "packs")
 	t.Cleanup(func() { makeWritable(dataRoot) })
-	if _, _, err := Install(source, dataRoot); err == nil || !strings.Contains(err.Error(), "symlink") {
+	if _, _, err := Install(source, dataRoot, testEngineVersion); err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("unsafe source passed: %v", err)
 	}
 	if _, err := os.Stat(dataRoot); !errors.Is(err, os.ErrNotExist) {
@@ -298,12 +301,12 @@ func TestResolveCompilesExactPackProvidersIntoManagedProfiles(t *testing.T) {
 	source := writePackSource(t)
 	dataRoot := filepath.Join(t.TempDir(), "packs")
 	t.Cleanup(func() { makeWritable(dataRoot) })
-	identity, _, err := Install(source, dataRoot)
+	identity, _, err := Install(source, dataRoot, testEngineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 	selected := policy.PackSelection{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}
-	resolution := Resolve([]policy.PackSelection{selected}, dataRoot)
+	resolution := Resolve([]policy.PackSelection{selected}, dataRoot, testEngineVersion)
 	if len(resolution.Findings) != 0 || len(resolution.Commands) != 1 {
 		t.Fatalf("unexpected resolution: %+v", resolution)
 	}
@@ -313,15 +316,46 @@ func TestResolveCompilesExactPackProvidersIntoManagedProfiles(t *testing.T) {
 	}
 }
 
+func TestEngineUpgradeRequiresAnExactPackCutover(t *testing.T) {
+	source := writePackSource(t)
+	dataRoot := filepath.Join(t.TempDir(), "packs")
+	t.Cleanup(func() { makeWritable(dataRoot) })
+	if _, _, err := Install(source, dataRoot, "0.26.0"); err == nil || !strings.Contains(err.Error(), "requires Code Polishy "+testEngineVersion) {
+		t.Fatalf("different engine installed pack: %v", err)
+	}
+	identity, _, err := Install(source, dataRoot, testEngineVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := []policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}
+	resolution := Resolve(selected, dataRoot, "0.26.0")
+	if len(resolution.Findings) != 1 || len(resolution.Commands) == 0 || !strings.Contains(resolution.Findings[0].Message, "requires Code Polishy") {
+		t.Fatalf("different engine resolved pack: %+v", resolution)
+	}
+	config := policy.Config{}
+	Apply(&config, resolution)
+	repo := repository.Repository{Config: config}
+	if owner := repo.AnalysisOwner("main.fixture", "lint", "check"); owner.Native || !strings.Contains(owner.Problem, "unavailable") {
+		t.Fatalf("different engine enabled fallback: %+v", owner)
+	}
+	statuses, err := List(dataRoot, selected, "0.26.0")
+	if err != nil || len(statuses) != 1 || statuses[0].State != "incompatible" {
+		t.Fatalf("different engine status = %+v: %v", statuses, err)
+	}
+	if _, err := VerifySource(context.Background(), source, source, "0.26.0", &responseRunner{}); err == nil || !strings.Contains(err.Error(), "requires Code Polishy") {
+		t.Fatalf("different engine verified pack: %v", err)
+	}
+}
+
 func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *testing.T) {
 	source := writePackSource(t)
 	dataRoot := filepath.Join(t.TempDir(), "packs")
 	t.Cleanup(func() { makeWritable(dataRoot) })
-	identity, installed, err := Install(source, dataRoot)
+	identity, installed, err := Install(source, dataRoot, testEngineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolution := Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, dataRoot)
+	resolution := Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, dataRoot, testEngineVersion)
 	root := t.TempDir()
 	writeTestFile(t, root, "src/main.fixture", "bad\n", 0o644)
 	config := policy.Config{Modules: []policy.Module{{Name: "app", Paths: []string{"src/**"}}}, ModuleByName: map[string]int{"app": 0}}
@@ -354,7 +388,7 @@ func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 		[]byte(`{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
 		[]byte(`{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
 	}}
-	result, err := VerifySource(context.Background(), source, source, boundary)
+	result, err := VerifySource(context.Background(), source, source, testEngineVersion, boundary)
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
 		t.Fatalf("fixture verification failed: %+v %v", result, err)
 	}
@@ -372,7 +406,7 @@ func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
 		[]byte(`{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`),
 		[]byte(`{"protocolVersion":4,"status":"findings","coverage":{"analyzed":["src/main.fixture"],"unsupported":[]},"findings":[{"capability":"lint","rule":"invalid-source","path":"src/main.fixture","subject":"bad","message":"bad source"}]}`),
 	}}
-	result, err := VerifySource(context.Background(), source, source, boundary)
+	result, err := VerifySource(context.Background(), source, source, testEngineVersion, boundary)
 	if err != nil || result.Fixtures != 2 || len(boundary.requests) != 2 {
 		t.Fatalf("fixture verification failed: %+v %v", result, err)
 	}
@@ -432,7 +466,7 @@ func testManifest(t *testing.T) []byte {
 	t.Helper()
 	manifest := Manifest{
 		Schema: "../../schema/code-polishy-pack.schema.json", ManifestVersion: ManifestVersion,
-		Name: "fixture-language", Version: "1.0.0", ProtocolVersion: ProtocolVersion, Platforms: []string{CurrentPlatform()},
+		Name: "fixture-language", Version: "1.0.0", EngineVersion: testEngineVersion, ProtocolVersion: ProtocolVersion, Platforms: []string{CurrentPlatform()},
 		Languages: []Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}},
 		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: CommandExecution{Type: "self-contained", Network: "none"}}},
 		Fixtures: []Fixture{
@@ -461,7 +495,7 @@ func writeTestFile(t *testing.T, root, relative, content string, mode os.FileMod
 func TestUnavailablePackRetainsOnlyAuthenticatedClaims(t *testing.T) {
 	source, store := writePackSource(t), t.TempDir()
 	t.Cleanup(func() { makeWritable(store) })
-	identity, installed, err := Install(source, store)
+	identity, installed, err := Install(source, store, testEngineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +504,7 @@ func TestUnavailablePackRetainsOnlyAuthenticatedClaims(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(installed, "bin/adapter"), []byte("changed"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	resolution := Resolve(selected, store)
+	resolution := Resolve(selected, store, testEngineVersion)
 	if len(resolution.Findings) != 1 || len(resolution.Commands) == 0 {
 		t.Fatalf("failed pack lost authenticated claims: %+v", resolution)
 	}
@@ -486,7 +520,7 @@ func TestUnavailablePackRetainsOnlyAuthenticatedClaims(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(installed, ManifestFilename), []byte("forged"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if forged := Resolve(selected, store); len(forged.Findings) != 1 || len(forged.Commands) != 0 {
+	if forged := Resolve(selected, store, testEngineVersion); len(forged.Findings) != 1 || len(forged.Commands) != 0 {
 		t.Fatalf("unauthenticated manifest established claims: %+v", forged)
 	}
 }

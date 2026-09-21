@@ -18,10 +18,13 @@ type VerificationResult struct {
 	Fixtures int
 }
 
-func VerifySource(ctx context.Context, source, policyRoot string, commandRunner runner.Runner) (VerificationResult, error) {
+func VerifySource(ctx context.Context, source, policyRoot, engineVersion string, commandRunner runner.Runner) (VerificationResult, error) {
 	tree, err := readSourceTree(source, true)
 	if err != nil {
 		return VerificationResult{}, err
+	}
+	if tree.Manifest.EngineVersion != engineVersion {
+		return VerificationResult{}, fmt.Errorf("pack %s@%s requires Code Polishy %s, not %s", tree.Manifest.Name, tree.Manifest.Version, tree.Manifest.EngineVersion, engineVersion)
 	}
 	root, err := canonicalDirectory(source)
 	if err != nil {

@@ -85,14 +85,15 @@ func providerGraphRepository(t *testing.T, language string) repository.Repositor
 	writeArchitectureFile(t, source, "bin/analyze", "fixture analyzer entry\n")
 	writeArchitectureFile(t, source, "fixtures/pass/main.fixture", "valid\n")
 	writeArchitectureFile(t, source, "fixtures/fail/main.fixture", "invalid\n")
-	manifest := fmt.Sprintf(`{"manifestVersion":3,"protocolVersion":4,"name":"graph-proof","version":"1.0.0","platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"],"discoveryMode":"file-scoped"}],"commands":[{"name":"analyze","argv":["bin/analyze"],"languages":[%q],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10,"execution":{"type":"self-contained","network":"none"}}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, pack.CurrentPlatform(), language, language)
+	engineVersion := "0.25.0"
+	manifest := fmt.Sprintf(`{"manifestVersion":3,"protocolVersion":4,"name":"graph-proof","version":"1.0.0","engineVersion":%q,"platforms":[%q],"languages":[{"id":%q,"sourcePatterns":["**/*.fixture"],"discoveryMode":"file-scoped"}],"commands":[{"name":"analyze","argv":["bin/analyze"],"languages":[%q],"capabilities":["architecture"],"profiles":["check","gate"],"timeoutSeconds":10,"execution":{"type":"self-contained","network":"none"}}],"fixtures":[{"name":"pass","command":"analyze","capability":"architecture","project":"fixtures/pass","files":["main.fixture"],"expectedStatus":"pass"},{"name":"fail","command":"analyze","capability":"architecture","project":"fixtures/fail","files":["main.fixture"],"expectedStatus":"findings","expectedRules":["unresolved"]}]}`, engineVersion, pack.CurrentPlatform(), language, language)
 	writeArchitectureFile(t, source, pack.ManifestFilename, manifest)
-	identity, _, err := pack.Install(source, store)
+	identity, _, err := pack.Install(source, store, engineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 	config := policy.Config{Modules: []policy.Module{{Name: "foreign", Paths: []string{"foreign/**"}}, {Name: "native", Paths: []string{"native/**"}}}, ModuleByName: map[string]int{"foreign": 0, "native": 1}}
-	pack.Apply(&config, pack.Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, store))
+	pack.Apply(&config, pack.Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, store, engineVersion))
 	repo, err := repository.Open(root, root, config)
 	if err != nil {
 		t.Fatal(err)

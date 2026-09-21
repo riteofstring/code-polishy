@@ -18,8 +18,9 @@ are rejected rather than translated. Use
 request and response examples live under `tools/fixtures/language-pack/examples`.
 The complete `tools/fixtures/language-pack` proof pack ships with every release,
 so authors can run and modify the same verified example without a source checkout.
-Declare an exact version, supported platforms, languages and source patterns,
-one discovery mode, dependency and metadata patterns, command languages,
+Declare an exact pack version, the one exact `engineVersion` that may load it,
+supported platforms, languages and source patterns, one discovery mode,
+dependency and metadata patterns, command languages,
 capabilities, execution profiles and type, timeouts, network authority, and
 permitted environment names. `file-scoped` discovery accepts no metadata patterns;
 `static` and `evaluated` discovery require explicit metadata patterns.
@@ -129,7 +130,7 @@ still run, but their successful exit does not establish structured source covera
 Architecture providers run through the architecture command so graph policy is
 always evaluated.
 
-Obtain and review a pack through a trusted channel, then run:
+For a local source pack, obtain and review it through a trusted channel, then run:
 
 ```sh
 code-polishy pack verify --source ./example-pack
@@ -141,6 +142,23 @@ Verification executes declared conformance fixtures. Installation executes no pa
 code. It rejects links and special files, hashes the entire tree, and atomically
 publishes an immutable receipt under the local pack store. The tree is bounded at
 20,000 files, 128 MiB total, and 16 MiB per file.
+
+An official local catalog adds a separate authenticated distribution boundary:
+
+```sh
+code-polishy pack catalog --catalog ./catalog.json --sha256 DIGEST
+code-polishy pack install --official example-rust@1.0.0 --catalog ./catalog.json --sha256 DIGEST
+code-polishy pack list
+```
+
+The caller supplies the reviewed catalog digest. The catalog binds the exact pack
+tree, compatibility, authority, tools, dependencies, licenses, and provenance
+attestation. Its artifact and attestation must be contained regular local files;
+catalog operations neither access the network nor execute pack code. Use `pack
+update example-rust --to 1.1.0` with the same catalog arguments to install an
+explicit candidate. Updating, installing, or removing a pack never changes a
+repository's selection or engine lock. If multiple trees share a name and
+version, removal requires their exact `--digest`.
 
 Select the printed exact identity in the target's existing `.code-polishy.json`:
 
@@ -161,6 +179,10 @@ until that exact tree is installed on the current machine. Installed paths do no
 belong in project policy. Default storage is
 `${XDG_DATA_HOME:-$HOME/.local/share}/code-polishy/packs/` on Unix and
 `%LOCALAPPDATA%\CodePolishy\packs\` on Windows.
+
+`pack list --format json` provides the versioned machine-readable state document.
+Human output and `doctor --strict` distinguish installed, selected, missing,
+incompatible, and corrupt identities.
 
 Use valid source, seeded defects, excluded inputs, stricter policy, mapping errors,
 and tool failures to test a provider. Then exercise its exact installed identity

@@ -32,6 +32,9 @@ var CodePolishyBehaviorReview []byte
 //go:embed code-polishy-pack.schema.json
 var CodePolishyPack []byte
 
+//go:embed code-polishy-pack-catalog-v1.schema.json
+var CodePolishyPackCatalogV1 []byte
+
 //go:embed code-polishy-pack-request-v4.schema.json
 var CodePolishyPackRequestV4 []byte
 

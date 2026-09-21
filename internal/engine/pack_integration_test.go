@@ -22,12 +22,13 @@ func TestOpenResolvesExactCommunityPackAndDoctorUsesItsCoverage(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", dataHome)
 	}
 	source := packIntegrationSource(t)
+	engineVersion := packIntegrationEngineVersion(t)
 	dataRoot, err := pack.UserDataRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { makePackTreeWritable(dataRoot) })
-	identity, _, err := pack.Install(source, dataRoot)
+	identity, _, err := pack.Install(source, dataRoot, engineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,11 +36,11 @@ func TestOpenResolvesExactCommunityPackAndDoctorUsesItsCoverage(t *testing.T) {
 	writeEngineFile(t, root, "src/main.fixture", "good\n", 0o600)
 	config := fmt.Sprintf(`{"version":4,"project":{"kind":"content"},"packs":[{"name":%q,"version":%q,"digest":%q}],"modules":[{"name":"app","paths":["src/**"]}],"tests":{"ownership":[],"suites":[{"name":"app-test","kind":"unit","scope":"module","modules":["app"],"argv":["go","test","./..."]},{"name":"full","kind":"contract","scope":"repository","argv":["go","test","./..."]}]}}`, identity.Name, identity.Version, identity.Digest)
 	writeEngineFile(t, root, policy.ConfigFilename, config, 0o600)
-	policyEngine, err := Open(root, root, "")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := policyEngine.Doctor(t.Context())
+	report, err := policyEngine.Doctor(t.Context(), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,13 +52,18 @@ func TestOpenResolvesExactCommunityPackAndDoctorUsesItsCoverage(t *testing.T) {
 	}) {
 		t.Fatalf("doctor did not apply generic language coverage: %+v", report.Findings)
 	}
+	if !slices.ContainsFunc(report.Notes, func(note string) bool {
+		return strings.Contains(note, "pack "+identity.Name+"@"+identity.Version) && strings.Contains(note, ": selected")
+	}) {
+		t.Fatalf("strict doctor did not report exact pack state: %+v", report.Notes)
+	}
 }
 
 func packIntegrationSource(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	manifest := pack.Manifest{
-		ManifestVersion: pack.ManifestVersion, Name: "fixture-language", Version: "1.0.0", ProtocolVersion: pack.ProtocolVersion, Platforms: []string{pack.CurrentPlatform()},
+		ManifestVersion: pack.ManifestVersion, Name: "fixture-language", Version: "1.0.0", EngineVersion: packIntegrationEngineVersion(t), ProtocolVersion: pack.ProtocolVersion, Platforms: []string{pack.CurrentPlatform()},
 		Languages: []pack.Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}},
 		Commands:  []pack.Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: pack.CommandExecution{Type: "self-contained", Network: "none"}}},
 		Fixtures: []pack.Fixture{
@@ -72,6 +78,15 @@ func packIntegrationSource(t *testing.T) string {
 	writeEngineFile(t, root, "fixtures/pass/src/main.fixture", "good\n", 0o600)
 	writeEngineFile(t, root, "fixtures/fail/src/main.fixture", "bad\n", 0o600)
 	return root
+}
+
+func packIntegrationEngineVersion(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(enginePolicyRoot(t), "VERSION"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func makePackTreeWritable(root string) {

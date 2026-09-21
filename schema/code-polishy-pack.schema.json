@@ -8,6 +8,7 @@
     "manifestVersion",
     "name",
     "version",
+    "engineVersion",
     "protocolVersion",
     "platforms",
     "languages",
@@ -26,6 +27,9 @@
       "$ref": "#/$defs/identifier"
     },
     "version": {
+      "$ref": "#/$defs/semanticVersion"
+    },
+    "engineVersion": {
       "$ref": "#/$defs/semanticVersion"
     },
     "protocolVersion": {

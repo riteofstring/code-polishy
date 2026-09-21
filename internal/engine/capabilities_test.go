@@ -16,13 +16,14 @@ func TestCapabilitiesExposeInstalledPackAndUnavailableSelectedPack(t *testing.T)
 	t.Parallel()
 	dataRoot := t.TempDir()
 	t.Cleanup(func() { makePackTreeWritable(dataRoot) })
-	identity, _, err := pack.Install(packIntegrationSource(t), dataRoot)
+	engineVersion := packIntegrationEngineVersion(t)
+	identity, _, err := pack.Install(packIntegrationSource(t), dataRoot, engineVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := contentRepository(t, nil)
 	writeEngineFile(t, root, "content/main.fixture", "good\n", 0o600)
-	policyEngine, err := Open(root, root, "")
+	policyEngine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
 	}

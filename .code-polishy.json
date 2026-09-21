@@ -1279,6 +1279,8 @@
           "scripts/test-installed-release-contract.sh",
           "cmd/code-polishy/**",
           "internal/pack/**",
+          "tools/fixtures/code-polishy-pack-catalog-v1.json",
+          "tools/fixtures/language-pack-provenance.json",
           "tools/fixtures/language-pack/**",
           "tools/fixtures/language-conformance/**"
         ],

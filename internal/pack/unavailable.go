@@ -8,7 +8,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func retainUnavailableClaims(root string, selection policy.PackSelection, resolution *Resolution) {
+func retainUnavailableClaims(root string, selection policy.PackSelection, engineVersion string, resolution *Resolution) {
 	receipt, err := readReceipt(root)
 	if err != nil || receipt.Name != selection.Name || receipt.Version != selection.Version || receipt.Digest != selection.Digest {
 		return
@@ -26,7 +26,7 @@ func retainUnavailableClaims(root string, selection policy.PackSelection, resolu
 		return
 	}
 	manifest, err := ParseManifest(data, ManifestFilename)
-	if err == nil {
+	if err == nil && manifest.EngineVersion == engineVersion {
 		compileManifest(root, selection, manifest, resolution)
 	}
 }

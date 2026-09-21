@@ -43,11 +43,16 @@ function prepare() {
   const metadata = JSON.parse(
     readFileSync(join(source, "package.json"), "utf8"),
   );
+  const engineVersion = readFileSync(
+    join(source, "../../VERSION"),
+    "utf8",
+  ).trim();
   const manifest = {
     manifestVersion: 3,
     protocolVersion: 4,
     name: "javascript",
     version: metadata.version,
+    engineVersion,
     platforms: [
       "darwin-amd64",
       "darwin-arm64",

@@ -29,14 +29,14 @@ func Unavailable(selected []policy.PackSelection, err error) Resolution {
 	return resolution
 }
 
-func Resolve(selected []policy.PackSelection, dataRoot string) Resolution {
+func Resolve(selected []policy.PackSelection, dataRoot, engineVersion string) Resolution {
 	resolution := Resolution{}
 	for _, selection := range selected {
 		root := InstalledRoot(dataRoot, selection.Name, selection.Version, selection.Digest)
 		receipt, err := VerifyInstalled(root)
 		if err != nil {
 			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
-			retainUnavailableClaims(root, selection, &resolution)
+			retainUnavailableClaims(root, selection, engineVersion, &resolution)
 			continue
 		}
 		if receipt.Name != selection.Name || receipt.Version != selection.Version || receipt.Digest != selection.Digest {
@@ -49,9 +49,14 @@ func Resolve(selected []policy.PackSelection, dataRoot string) Resolution {
 			continue
 		}
 		manifest, err := ParseManifest(data, filepath.Join(root, ManifestFilename))
-		if err != nil || !slices.Contains(manifest.Platforms, CurrentPlatform()) {
+		if err != nil || manifest.EngineVersion != engineVersion || !slices.Contains(manifest.Platforms, CurrentPlatform()) {
 			if err == nil {
-				err = fmt.Errorf("installed pack does not support %s", CurrentPlatform())
+				compileManifest(root, selection, manifest, &resolution)
+				if manifest.EngineVersion != engineVersion {
+					err = fmt.Errorf("installed pack requires Code Polishy %s, not %s", manifest.EngineVersion, engineVersion)
+				} else {
+					err = fmt.Errorf("installed pack does not support %s", CurrentPlatform())
+				}
 			}
 			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
 			continue

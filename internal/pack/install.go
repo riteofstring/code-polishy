@@ -50,11 +50,18 @@ type sourceFile struct {
 	Executable bool
 }
 
-func Install(source, dataRoot string) (Identity, string, error) {
+func Install(source, dataRoot, engineVersion string) (Identity, string, error) {
 	tree, err := readSourceTree(source, true)
 	if err != nil {
 		return Identity{}, "", err
 	}
+	if tree.Manifest.EngineVersion != engineVersion {
+		return Identity{}, "", fmt.Errorf("pack %s@%s requires Code Polishy %s, not %s", tree.Manifest.Name, tree.Manifest.Version, tree.Manifest.EngineVersion, engineVersion)
+	}
+	return installTree(tree, dataRoot)
+}
+
+func installTree(tree sourceTree, dataRoot string) (Identity, string, error) {
 	target := InstalledRoot(dataRoot, tree.Receipt.Name, tree.Receipt.Version, tree.Receipt.Digest)
 	exists, err := existingInstall(target)
 	if err != nil {

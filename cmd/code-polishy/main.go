@@ -25,7 +25,7 @@ Commands:
   capabilities [--query TEXT] [--format human|json]
   task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
-  pack <install|verify|conformance|root>
+  pack <catalog|install|update|remove|verify|list|conformance|root>
   agents <install|sync|check>
   lock --index URL --sha256 DIGEST
   upgrade <plan|apply> [options]
@@ -420,7 +420,7 @@ func handleDoctor(ctx context.Context, policyEngine *engine.Engine, arguments []
 	if !onlyAllowed(arguments, "--strict") {
 		return commandResult{}, commandInputError(fmt.Errorf("doctor accepts only --strict"))
 	}
-	report, err := policyEngine.Doctor(ctx)
+	report, err := policyEngine.Doctor(ctx, slices.Contains(arguments, "--strict"))
 	return commandResult{report: report}, err
 }
 

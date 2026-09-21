@@ -319,6 +319,8 @@ release_contents=(
   "tools/vulture_wheel_checksums.txt"
   "tools/javascript_bundle_inventory.txt"
   "tools/fixtures/language-pack"
+  "tools/fixtures/code-polishy-pack-catalog-v1.json"
+  "tools/fixtures/language-pack-provenance.json"
 )
 
 

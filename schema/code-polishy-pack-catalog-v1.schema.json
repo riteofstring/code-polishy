@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-catalog-v1.schema.json",
+  "title": "Code Polishy authenticated language-pack catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "entries"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "protocol": { "const": "code-polishy-pack-catalog/v1" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "boundedList": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512,
+        "pattern": "^\\S(?:.*\\S)?$"
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "digest",
+        "artifactUrl",
+        "artifactBytes",
+        "manifestVersion",
+        "protocolVersion",
+        "engineVersion",
+        "platforms",
+        "discoveryModes",
+        "executionTypes",
+        "capabilities",
+        "tools",
+        "dependencies",
+        "licenses",
+        "provenance"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": { "$ref": "#/$defs/semanticVersion" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "artifactUrl": {
+          "type": "string",
+          "pattern": "^file:[^\\\\?#]+$"
+        },
+        "artifactBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 134217728
+        },
+        "manifestVersion": { "const": 3 },
+        "protocolVersion": { "const": 4 },
+        "engineVersion": { "$ref": "#/$defs/semanticVersion" },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "darwin-amd64",
+              "darwin-arm64",
+              "linux-amd64",
+              "linux-arm64",
+              "windows-amd64"
+            ]
+          }
+        },
+        "discoveryModes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["file-scoped", "static", "evaluated"] }
+        },
+        "executionTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["self-contained", "host-toolchain"] }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "format",
+              "lint",
+              "typecheck",
+              "complexity",
+              "dead-code",
+              "architecture",
+              "build",
+              "dependency-policy",
+              "lock-sync",
+              "release-age",
+              "security"
+            ]
+          }
+        },
+        "tools": {
+          "allOf": [{ "$ref": "#/$defs/boundedList" }],
+          "minItems": 1
+        },
+        "dependencies": { "$ref": "#/$defs/boundedList" },
+        "licenses": {
+          "allOf": [{ "$ref": "#/$defs/boundedList" }],
+          "minItems": 1
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceRevision",
+            "builder",
+            "attestationUrl",
+            "attestationSha256"
+          ],
+          "properties": {
+            "sourceRevision": {
+              "type": "string",
+              "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+            },
+            "builder": { "$ref": "#/$defs/identifier" },
+            "attestationUrl": {
+              "type": "string",
+              "pattern": "^file:[^\\\\?#]+$"
+            },
+            "attestationSha256": { "$ref": "#/$defs/digest" }
+          }
+        }
+      }
+    }
+  }
+}

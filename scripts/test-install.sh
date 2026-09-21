@@ -127,6 +127,10 @@ build_source_checkout() {
   mkdir -p "${source_root}/tools/fixtures"
   cp -RPp "${policy_root}/tools/fixtures/language-pack" \
     "${source_root}/tools/fixtures/language-pack"
+  copy_file "${policy_root}/tools/fixtures/code-polishy-pack-catalog-v1.json" \
+    "${source_root}/tools/fixtures/code-polishy-pack-catalog-v1.json"
+  copy_file "${policy_root}/tools/fixtures/language-pack-provenance.json" \
+    "${source_root}/tools/fixtures/language-pack-provenance.json"
   chmod +x "${source_root}/scripts/install.sh" "${source_root}/scripts/release-manifest.sh" \
     "${source_root}/scripts/release-version.sh" \
     "${source_root}/tools/javascript-bundle-manifest.sh"
@@ -542,6 +546,8 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   tools/packaging-version.txt tools/packaging_wheel_checksums.txt \
   tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
+  tools/fixtures/code-polishy-pack-catalog-v1.json \
+  tools/fixtures/language-pack-provenance.json \
   tools/fixtures/language-pack/code-polishy-pack.json \
   tools/fixtures/language-pack/bin/adapter \
   tools/fixtures/language-pack/examples/request-v4.json \

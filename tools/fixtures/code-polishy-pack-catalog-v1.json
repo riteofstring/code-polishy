@@ -1,0 +1,34 @@
+{
+  "$schema": "../../schema/code-polishy-pack-catalog-v1.schema.json",
+  "protocol": "code-polishy-pack-catalog/v1",
+  "entries": [
+    {
+      "name": "sqlite-syntax-proof",
+      "version": "1.0.0",
+      "digest": "8951638815c37592bfa93a188bfbc8f0de1a6061d8075eb8d263f6322a65adf0",
+      "artifactUrl": "file:language-pack",
+      "artifactBytes": 5772,
+      "manifestVersion": 3,
+      "protocolVersion": 4,
+      "engineVersion": "0.27.8",
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64"
+      ],
+      "discoveryModes": ["file-scoped"],
+      "executionTypes": ["host-toolchain"],
+      "capabilities": ["lint"],
+      "tools": ["node@24.18.0"],
+      "dependencies": [],
+      "licenses": ["MIT"],
+      "provenance": {
+        "sourceRevision": "8f5c69115848a5a6aed8f1d53f161ea1cc4bac91",
+        "builder": "code-polishy",
+        "attestationUrl": "file:language-pack-provenance.json",
+        "attestationSha256": "f070117fe62ee6568e33335ff21774c3b5530d20922ea77c0ced9030e468539a"
+      }
+    }
+  ]
+}

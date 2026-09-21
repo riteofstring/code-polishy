@@ -25,12 +25,16 @@ const (
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 var semanticVersionPattern = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 var environmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var packCapabilities = []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture", "build", "dependency-policy", "lock-sync", "release-age", "security"}
+var packDiscoveryModes = []string{"file-scoped", "static", "evaluated"}
+var packExecutionTypes = []string{"self-contained", "host-toolchain"}
 
 type Manifest struct {
 	Schema          string     `json:"$schema,omitempty"`
 	ManifestVersion int        `json:"manifestVersion"`
 	Name            string     `json:"name"`
 	Version         string     `json:"version"`
+	EngineVersion   string     `json:"engineVersion"`
 	ProtocolVersion int        `json:"protocolVersion"`
 	Platforms       []string   `json:"platforms"`
 	Languages       []Language `json:"languages"`
@@ -123,10 +127,17 @@ func validateManifestIdentity(manifest Manifest) error {
 	if !semanticVersionPattern.MatchString(manifest.Version) {
 		return errors.New("version must be an exact semantic version")
 	}
+	if !ValidEngineVersion(manifest.EngineVersion) {
+		return errors.New("engineVersion must be an exact semantic version")
+	}
 	if manifest.ProtocolVersion != ProtocolVersion {
 		return fmt.Errorf("protocolVersion must be %d", ProtocolVersion)
 	}
 	return nil
+}
+
+func ValidEngineVersion(value string) bool {
+	return semanticVersionPattern.MatchString(value)
 }
 
 func validatePlatforms(platforms []string) error {
@@ -167,7 +178,7 @@ func validateLanguage(language Language, index int, seen map[string]bool, builtI
 	if len(language.SourcePatterns) == 0 && !slices.Contains(builtIn, language.ID) {
 		return fmt.Errorf("custom language %q requires sourcePatterns", language.ID)
 	}
-	if !slices.Contains([]string{"file-scoped", "static", "evaluated"}, language.DiscoveryMode) {
+	if !slices.Contains(packDiscoveryModes, language.DiscoveryMode) {
 		return expected(fmt.Sprintf("languages[%d].discoveryMode", index), "file-scoped, static, or evaluated")
 	}
 	if language.DiscoveryMode == "file-scoped" && len(language.MetadataPatterns) != 0 {
@@ -201,10 +212,9 @@ func validateCommands(commands []Command, languages []Language) error {
 	for _, language := range languages {
 		knownLanguages = append(knownLanguages, language.ID)
 	}
-	capabilities := []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture", "build", "dependency-policy", "lock-sync", "release-age", "security"}
 	profiles := []string{"check", "gate", "format", "build", "supply-chain", "supply-chain-online", "security"}
 	for index, command := range commands {
-		if err := validateCommand(command, index, seen, knownLanguages, capabilities, profiles); err != nil {
+		if err := validateCommand(command, index, seen, knownLanguages, packCapabilities, profiles); err != nil {
 			return err
 		}
 	}
@@ -242,7 +252,7 @@ func validateCommand(command Command, index int, seen map[string]bool, languages
 }
 
 func validateCommandExecution(command Command, label string) error {
-	if !slices.Contains([]string{"self-contained", "host-toolchain"}, command.Execution.Type) {
+	if !slices.Contains(packExecutionTypes, command.Execution.Type) {
 		return expected(label+".execution.type", "self-contained or host-toolchain")
 	}
 	if command.Execution.Network != "none" {
