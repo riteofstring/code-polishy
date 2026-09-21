@@ -204,6 +204,12 @@ func TestTaskStartMarkdownDeliveryDoesNotSelectMergeGate(t *testing.T) {
 
 func assertTaskStartDeliveryBoundary(t *testing.T, actions []engine.TaskStartAction) {
 	t.Helper()
+	if !slices.ContainsFunc(actions, func(action engine.TaskStartAction) bool {
+		return action.Name == "implement" && strings.Contains(action.Description, "least-complex end-to-end solution") &&
+			strings.Contains(action.Description, "reduces total complexity and failure modes")
+	}) {
+		t.Fatalf("task implementation simplicity boundary is missing: %+v", actions)
+	}
 	if len(actions) == 0 || actions[len(actions)-1].Name != "deliver" ||
 		!strings.Contains(actions[len(actions)-1].Description, "Ordinary task completion and a requested commit do not select a merge gate") {
 		t.Fatalf("task delivery boundary is missing: %+v", actions)

@@ -21,6 +21,14 @@ Evaluate whether the declared graph represents real concept ownership. Check
 boundary depth, dependency direction, catch-all ownership, disconnected
 responsibilities, and project/package roots. Inspect the patch for source moves
 or file splits whose main effect is introducing forwarding-only boundaries.
+Evaluate the end-to-end design rather than rewarding formal robustness at each
+local boundary. Treat every added module, adapter, wrapper, generator,
+configuration surface, validation layer, state, and evidence path as complexity
+and a possible failure mode. Report materially unjustified machinery only when
+concrete packet evidence shows that it does not address a current requirement or
+demonstrated risk and substantially harms correctness, operation, recovery, or
+changeability. Prefer a correction that deletes or consolidates machinery. Do
+not demand another abstraction to repair excessive abstraction.
 Use mapped current design documents to understand the intended ownership.
 Inspect the complete candidate source in `sources`, including unchanged files.
 Use implementation excerpts to substantiate boundary depth and identify

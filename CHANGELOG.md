@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.27.9 - 2026-09-21
+
+- Direct implementation agents and architecture reviewers to prefer the
+  least-complex end-to-end solution and reject locally robust machinery that
+  increases total complexity and failure modes.
 - Publish the digest-pinned GHCR image from the version-tag release workflow by
   reusing the already verified Linux x64 archive and release engine.
 

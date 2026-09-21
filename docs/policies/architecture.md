@@ -5,9 +5,31 @@ directory diagram. The target is a codebase in which important invalid states,
 ownership conflicts, partial mutations, and dependency inversions are either
 unrepresentable or rejected at one narrow boundary.
 
+## Optimize the whole system
+
+Prefer the least-complex end-to-end design that satisfies current requirements
+and makes material failures acceptably unlikely. Do not optimize every local
+boundary for maximum formal correctness when the combined abstractions,
+adapters, configuration, states, evidence, and recovery paths make the system
+harder to understand, operate, or change. Every new piece of machinery is also
+a coordination point and possible failure mode.
+
+Before adding a boundary, abstraction, wrapper, adapter, generator, state model,
+configuration surface, validation layer, or evidence mechanism:
+
+1. Name the concrete current requirement or demonstrated failure it addresses.
+2. Compare it with the direct solution across implementation, tests, operation,
+   and recovery.
+3. Add it only when it reduces total complexity and risk; otherwise keep the
+   design direct or delete or consolidate existing machinery.
+
+Do not build for hypothetical reuse, scale, portability, extensibility, or
+future requirements. Local elegance is useful only when it improves the
+behavior and comprehensibility of the whole system.
+
 ## Required outcomes
 
-Every code-bearing repository must be able to answer:
+For each material concept, answer only the applicable questions:
 
 1. Who owns each important concept and contract?
 2. Where does untrusted or weakly typed data become valid domain data?
@@ -21,8 +43,15 @@ Every code-bearing repository must be able to answer:
 The answers should fit in a short repository architecture document and the
 `.code-polishy.json` boundary contract. If understanding one concept requires
 bouncing through many forwarding helpers and files, the module is too shallow.
+A direct implementation with one obvious owner can be the complete answer. Do
+not create a module, interface, state model, or executable rule merely to fill
+this list.
 
-## Make these failures impossible
+## Choose proportionate mechanisms
+
+The following are options for demonstrated, material risks, not layers every
+repository must acquire. Choose the smallest mechanism that reduces end-to-end
+risk:
 
 | Error class                          | Architectural mechanism                                           | Executable evidence                                |
 | ------------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------- |
@@ -39,8 +68,10 @@ bouncing through many forwarding helpers and files, the module is too shallow.
 | Sibling checkout changes a build     | Versioned input bundle or declared package dependency             | Empty-workspace consumer fixture                   |
 | Concurrent writers lose data         | Serialized command boundary, compare-and-swap, or transaction     | Deterministic concurrency test                     |
 
-Not every row applies to every repository. Every material error class that does
-apply needs a mechanism and evidence; prose alone is not enforcement.
+Not every row applies to every repository. A risk warrants a mechanism and
+evidence only when its likely consequence justifies the added system complexity.
+Keep low-consequence local behavior direct and cover it at an existing stable
+boundary.
 
 ## One owner per concept
 
@@ -499,8 +530,9 @@ truncated packet or an implied pass.
 The harness starts a reviewer with no inherited conversation and supplies only
 that packet. The locked instructions in `templates/architecture-review.md`
 require concrete packet citations and an explanation of real concept ownership,
-boundary depth, direction, disconnected responsibilities, and forwarding-only
-rewrites. Findings include exact evidence and a corrected module/ownership graph.
+boundary depth, direction, disconnected responsibilities, forwarding-only
+rewrites, and materially unjustified machinery. Findings include exact evidence
+and a corrected module/ownership graph.
 The harness saves the strict JSON result at the packet's result path and runs
 `finalize`. Empty evidence, invented citations, duplicate or unknown fields,
 findings, and changed candidate material cannot produce acceptance.
@@ -536,6 +568,9 @@ For a material component or workflow, record:
 
 ```text
 Concept and owner:
+Concrete current risk or requirement:
+Simplest direct design considered:
+Added machinery and the complexity or failure modes it removes:
 Invalid states to exclude:
 Ingress and validation boundary:
 Public interface (1–3 common entry points when possible):

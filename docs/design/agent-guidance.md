@@ -91,6 +91,14 @@ immutable identity, or evidence binding. Hashes that only mirror mutable local
 state or repeat a digest already produced within one trusted operation create
 maintenance and runtime cost without adding authority.
 
+The end-to-end simplicity rule addresses another recurring failure: individually
+defensible boundaries that collectively add more machinery and failure modes than
+the current problem warrants. Canonical guidance states the default, the agent
+workflow and task-start output repeat it when a solution is chosen, architecture
+policy supplies the decision test, and an explicitly requested architecture
+review examines material violations. Those surfaces serve different decisions;
+the repetition is deliberate rather than a substitute for enforcement.
+
 ## Size budget
 
 The focused agents test caps canonical guidance at 5 KiB. The number is an
