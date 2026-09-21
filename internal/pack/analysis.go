@@ -109,7 +109,7 @@ func validateAnalysisResponse(response Response, request Request) error {
 
 func validateCoverage(response Response, request Request) error {
 	if response.Coverage == nil || response.Coverage.Analyzed == nil || response.Coverage.Unsupported == nil {
-		return errors.New("analysis requires explicit analyzed and unsupported coverage")
+		return expected("coverage", "explicit analyzed and unsupported arrays")
 	}
 	accounted, err := accountCoverage(*response.Coverage, request.DiagnosticFiles)
 	if err != nil {
@@ -117,36 +117,40 @@ func validateCoverage(response Response, request Request) error {
 	}
 	for _, path := range request.Files {
 		if !accounted[path] {
-			return fmt.Errorf("analysis omitted requested path %q", path)
+			return expected("coverage", fmt.Sprintf("requested path %q to be accounted for", path))
 		}
 	}
 	if response.Status == "pass" && len(response.Coverage.Unsupported) > 0 {
-		return errors.New("pass requires complete coverage")
+		return expected("status", "incomplete when coverage.unsupported is non-empty")
 	}
 	return nil
 }
 
 func accountCoverage(coverage Coverage, selected []string) (map[string]bool, error) {
 	accounted := map[string]bool{}
-	for _, path := range coverage.Analyzed {
-		if err := accountCoveragePath(accounted, selected, path); err != nil {
+	for index, path := range coverage.Analyzed {
+		if err := accountCoveragePath(accounted, selected, path, indexed("coverage.analyzed", index)); err != nil {
 			return nil, err
 		}
 	}
-	for _, item := range coverage.Unsupported {
+	for index, item := range coverage.Unsupported {
+		label := indexed("coverage.unsupported", index)
 		if strings.TrimSpace(item.Reason) == "" || len(item.Reason) > 4096 {
-			return nil, fmt.Errorf("invalid unsupported reason for %s", item.Path)
+			return nil, expected(label+".reason", "1 to 4096 non-whitespace bytes")
 		}
-		if err := accountCoveragePath(accounted, selected, item.Path); err != nil {
+		if err := accountCoveragePath(accounted, selected, item.Path, label+".path"); err != nil {
 			return nil, err
 		}
 	}
 	return accounted, nil
 }
 
-func accountCoveragePath(accounted map[string]bool, selected []string, path string) error {
-	if !slices.Contains(selected, path) || accounted[path] {
-		return fmt.Errorf("invalid or repeated coverage path %q", path)
+func accountCoveragePath(accounted map[string]bool, selected []string, path, label string) error {
+	if !slices.Contains(selected, path) {
+		return expected(label, "a path from diagnosticFiles")
+	}
+	if accounted[path] {
+		return expected(label, "a path accounted for exactly once")
 	}
 	accounted[path] = true
 	return nil
@@ -189,11 +193,14 @@ func validateImportFacts(facts *[]ImportFact, capability string, analyzed []stri
 	if facts == nil {
 		return nil
 	}
-	if capability != "architecture" || len(*facts) > 20000 {
-		return errors.New("unexpected or excessive import facts")
+	if capability != "architecture" {
+		return expected("facts.imports", "imports only for the architecture capability")
 	}
-	for _, fact := range *facts {
-		if err := validateImportFact(fact, analyzed); err != nil {
+	if len(*facts) > 20000 {
+		return expected("facts.imports", "at most 20000 items")
+	}
+	for index, fact := range *facts {
+		if err := validateImportFact(fact, analyzed, indexed("facts.imports", index)); err != nil {
 			return err
 		}
 	}
@@ -204,65 +211,119 @@ func validateCommentFacts(facts *[]CommentFact, capability string, analyzed []st
 	if facts == nil {
 		return nil
 	}
-	if capability != "lint" || len(*facts) > 20000 {
-		return errors.New("unexpected or excessive comment facts")
+	if capability != "lint" {
+		return expected("facts.comments", "comments only for the lint capability")
 	}
-	for _, fact := range *facts {
-		if !validCommentFact(fact, analyzed) {
-			return errors.New("invalid or incomplete source-comment fact")
+	if len(*facts) > 20000 {
+		return expected("facts.comments", "at most 20000 items")
+	}
+	for index, fact := range *facts {
+		if err := validateCommentFact(fact, analyzed, indexed("facts.comments", index)); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func validCommentFact(fact CommentFact, analyzed []string) bool {
-	return validFactLocation(fact.Path, fact.Line, fact.Column, analyzed) && len(fact.Raw) > 0 && len(fact.Raw) <= 65536 && slices.Contains([]string{"Line", "Block", "Docstring", "HTML", "Shebang"}, fact.Kind)
+func validateCommentFact(fact CommentFact, analyzed []string, label string) error {
+	if err := validateFactLocation(fact.Path, fact.Line, fact.Column, analyzed, label); err != nil {
+		return err
+	}
+	if !slices.Contains([]string{"Line", "Block", "Docstring", "HTML", "Shebang"}, fact.Kind) {
+		return expected(label+".kind", "Line, Block, Docstring, HTML, or Shebang")
+	}
+	if len(fact.Raw) == 0 || len(fact.Raw) > 65536 {
+		return expected(label+".raw", "1 to 65536 bytes")
+	}
+	return nil
 }
 
 func validateFunctionFacts(facts *[]FunctionFact, capability string, analyzed []string) error {
 	if facts == nil {
 		return nil
 	}
-	if capability != "complexity" || len(*facts) > 20000 {
-		return errors.New("unexpected or excessive function facts")
+	if capability != "complexity" {
+		return expected("facts.functions", "functions only for the complexity capability")
 	}
-	for _, fact := range *facts {
-		if !validFunctionFact(fact, analyzed) {
-			return errors.New("invalid function fact")
+	if len(*facts) > 20000 {
+		return expected("facts.functions", "at most 20000 items")
+	}
+	for index, fact := range *facts {
+		if err := validateFunctionFact(fact, analyzed, indexed("facts.functions", index)); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func validFunctionFact(fact FunctionFact, analyzed []string) bool {
-	return validFactLocation(fact.Path, fact.Line, fact.Column, analyzed) && strings.TrimSpace(fact.Name) != "" && len(fact.Name) <= 1024 && fact.Complexity >= 1 && fact.Depth >= 0 && fact.Parameters >= 0
-}
-
-func validateImportFact(fact ImportFact, analyzed []string) error {
-	if !validFactLocation(fact.Path, fact.Line, fact.Column, analyzed) || strings.TrimSpace(fact.Specifier) == "" || len(fact.Specifier) > 4096 || len(fact.Package) > 214 {
-		return errors.New("invalid import fact")
+func validateFunctionFact(fact FunctionFact, analyzed []string, label string) error {
+	if err := validateFactLocation(fact.Path, fact.Line, fact.Column, analyzed, label); err != nil {
+		return err
 	}
-	if !slices.Contains([]string{"runtime", "type-only", "re-export", "proven-dynamic"}, fact.Kind) {
-		return errors.New("invalid import edge kind")
+	if strings.TrimSpace(fact.Name) == "" || len(fact.Name) > 1024 {
+		return expected(label+".name", "1 to 1024 non-whitespace bytes")
 	}
-	if fact.Resolved != "" {
-		return exactRelativePath(fact.Resolved)
+	if fact.Complexity < 1 {
+		return expected(label+".complexity", "an integer of at least 1")
+	}
+	if fact.Depth < 0 {
+		return expected(label+".depth", "a non-negative integer")
+	}
+	if fact.Parameters < 0 {
+		return expected(label+".parameters", "a non-negative integer")
 	}
 	return nil
 }
 
-func validFactLocation(path string, line, column int, analyzed []string) bool {
-	return slices.Contains(analyzed, path) && line > 0 && column > 0
+func validateImportFact(fact ImportFact, analyzed []string, label string) error {
+	if err := validateFactLocation(fact.Path, fact.Line, fact.Column, analyzed, label); err != nil {
+		return err
+	}
+	if strings.TrimSpace(fact.Specifier) == "" || len(fact.Specifier) > 4096 {
+		return expected(label+".specifier", "1 to 4096 non-whitespace bytes")
+	}
+	if len(fact.Package) > 214 {
+		return expected(label+".package", "at most 214 bytes")
+	}
+	if !slices.Contains([]string{"runtime", "type-only", "re-export", "proven-dynamic"}, fact.Kind) {
+		return expected(label+".kind", "runtime, type-only, re-export, or proven-dynamic")
+	}
+	if fact.Resolved != "" {
+		if err := exactRelativePath(fact.Resolved); err != nil {
+			return expected(label+".resolved", "an exact contained relative path")
+		}
+	}
+	return nil
+}
+
+func validateFactLocation(path string, line, column int, analyzed []string, label string) error {
+	if !slices.Contains(analyzed, path) {
+		return expected(label+".path", "a path from coverage.analyzed")
+	}
+	if line < 1 {
+		return expected(label+".line", "a one-based line")
+	}
+	if column < 1 {
+		return expected(label+".column", "a one-based UTF-8 byte column")
+	}
+	return nil
 }
 
 func validateInputs(inputs []InputFile) error {
 	if len(inputs) > 10000 {
-		return errors.New("analysis input count exceeds its limit")
+		return expected("inputs", "at most 10000 items")
 	}
 	seen := map[string]bool{}
-	for _, input := range inputs {
-		if seen[input.Path] || exactRelativePath(input.Path) != nil || !validDigest(input.SHA256) {
-			return errors.New("analysis inputs must have distinct contained paths and SHA-256 identities")
+	for index, input := range inputs {
+		label := indexed("inputs", index)
+		if exactRelativePath(input.Path) != nil {
+			return expected(label+".path", "an exact contained relative path")
+		}
+		if seen[input.Path] {
+			return expected(label+".path", "a path listed only once")
+		}
+		if !validDigest(input.SHA256) {
+			return expected(label+".sha256", "a lowercase SHA-256 digest")
 		}
 		seen[input.Path] = true
 	}

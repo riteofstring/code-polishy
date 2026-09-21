@@ -16,12 +16,12 @@ func TestAnalysisCoverageCannotOmitOrInventWork(t *testing.T) {
 		coverage        *Coverage
 		status, problem string
 	}{
-		{"omitted file", &Coverage{Analyzed: []string{"src/a.fixture"}, Unsupported: []Unsupported{}}, "pass", "omitted"},
-		{"duplicate", &Coverage{Analyzed: []string{"src/a.fixture", "src/a.fixture"}, Unsupported: []Unsupported{}}, "pass", "repeated"},
-		{"unselected", &Coverage{Analyzed: []string{"other.fixture"}, Unsupported: []Unsupported{}}, "pass", "invalid"},
-		{"false pass", &Coverage{Analyzed: []string{"src/a.fixture"}, Unsupported: []Unsupported{{Path: "src/b.fixture", Reason: "syntax unsupported"}}}, "pass", "complete coverage"},
+		{"omitted file", &Coverage{Analyzed: []string{"src/a.fixture"}, Unsupported: []Unsupported{}}, "pass", "requested path"},
+		{"duplicate", &Coverage{Analyzed: []string{"src/a.fixture", "src/a.fixture"}, Unsupported: []Unsupported{}}, "pass", "accounted for exactly once"},
+		{"unselected", &Coverage{Analyzed: []string{"other.fixture"}, Unsupported: []Unsupported{}}, "pass", "path from diagnosticFiles"},
+		{"false pass", &Coverage{Analyzed: []string{"src/a.fixture"}, Unsupported: []Unsupported{{Path: "src/b.fixture", Reason: "syntax unsupported"}}}, "pass", "incomplete when"},
 		{"missing coverage", nil, "pass", "explicit"},
-		{"overlapping coverage", &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{{Path: "src/a.fixture", Reason: "ignored"}}}, "incomplete", "repeated"},
+		{"overlapping coverage", &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{{Path: "src/a.fixture", Reason: "ignored"}}}, "incomplete", "accounted for exactly once"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := Response{ProtocolVersion: ProtocolVersion, Status: test.status, Evidence: []string{"type checker completed"}, Coverage: test.coverage}
@@ -69,6 +69,60 @@ func TestFactsRequiredByPolicyAreNotOptional(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestCommentFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
+	forbidden := false
+	request := Request{
+		Capability:      "lint",
+		Files:           []string{"src/a.fixture"},
+		DiagnosticFiles: []string{"src/a.fixture"},
+		WriteFiles:      []string{"src/a.fixture"},
+		Policy:          PolicyInput{Quality: policy.Quality{AllowComments: &forbidden}},
+	}
+	valid := CommentFact{Path: "src/a.fixture", Line: 1, Column: 1, Kind: "Line", Raw: "// prose", Complete: true}
+	tests := []struct {
+		name   string
+		change func(*CommentFact)
+		want   string
+	}{
+		{"path", func(fact *CommentFact) { fact.Path = "src/other.fixture" }, "facts.comments[0].path: expected a path from coverage.analyzed"},
+		{"line", func(fact *CommentFact) { fact.Line = 0 }, "facts.comments[0].line: expected a one-based line"},
+		{"column", func(fact *CommentFact) { fact.Column = 0 }, "facts.comments[0].column: expected a one-based UTF-8 byte column"},
+		{"kind", func(fact *CommentFact) { fact.Kind = "line" }, "facts.comments[0].kind: expected Line, Block, Docstring, HTML, or Shebang"},
+		{"raw", func(fact *CommentFact) { fact.Raw = "" }, "facts.comments[0].raw: expected 1 to 65536 bytes"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fact := valid
+			test.change(&fact)
+			comments := []CommentFact{fact}
+			response := Response{
+				ProtocolVersion: ProtocolVersion,
+				Status:          "pass",
+				Evidence:        []string{"lint completed"},
+				Coverage:        &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}},
+				Facts:           &SourceFacts{Comments: &comments},
+			}
+			if err := validateResponse(response, request); err == nil || err.Error() != test.want {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectionDiagnosticsRetainIndexes(t *testing.T) {
+	request := Request{Capability: "architecture", Files: []string{"src/a.fixture"}, DiagnosticFiles: []string{"src/a.fixture"}}
+	imports := []ImportFact{{Path: "src/a.fixture", Line: 1, Column: 1, Specifier: "./b", Kind: "runtime"}, {Path: "src/a.fixture", Line: 2, Column: 1, Specifier: "./c", Kind: "dynamic"}}
+	response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"graph completed"}, Coverage: &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}}, Facts: &SourceFacts{Imports: &imports}}
+	if err := validateResponse(response, request); err == nil || err.Error() != "facts.imports[1].kind: expected runtime, type-only, re-export, or proven-dynamic" {
+		t.Fatalf("indexed import error = %v", err)
+	}
+	response.Facts = &SourceFacts{Imports: &[]ImportFact{}}
+	response.Inputs = []InputFile{{Path: "src/a.fixture", SHA256: strings.Repeat("a", 64)}, {Path: "src/a.fixture", SHA256: strings.Repeat("b", 64)}}
+	if err := validateResponse(response, request); err == nil || err.Error() != "inputs[1].path: expected a path listed only once" {
+		t.Fatalf("indexed input error = %v", err)
 	}
 }
 

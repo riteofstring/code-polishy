@@ -54,11 +54,11 @@ func TestResolvedProviderContextRetainsGeneratedOwnershipAndEffectivePolicy(t *t
 		t.Fatal("analysis received write authority")
 	}
 	finding := ResponseFinding{Capability: "typecheck", Path: "frontend/dependent.ts", Rule: "type-2322", Subject: "assignment", Message: "wrong type", Line: 1, Column: 1}
-	if err := validateResponseFinding(finding, request); err != nil {
+	if err := validateResponseFinding(finding, request, "findings[0]"); err != nil {
 		t.Fatal(err)
 	}
 	finding.Path = "backend/app.py"
-	if err := validateResponseFinding(finding, request); err == nil {
+	if err := validateResponseFinding(finding, request, "findings[0]"); err == nil {
 		t.Fatal("unowned diagnostic was accepted")
 	}
 }

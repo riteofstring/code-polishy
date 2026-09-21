@@ -199,16 +199,22 @@ func validateResponse(response Response, request Request) error {
 
 func validateResponseEnvelope(response Response) error {
 	if response.ProtocolVersion != ProtocolVersion {
-		return fmt.Errorf("adapter returned unsupported protocol version %d", response.ProtocolVersion)
+		return expected("protocolVersion", fmt.Sprintf("%d", ProtocolVersion))
 	}
 	if !slices.Contains([]string{"pass", "findings", "incomplete", "operational-failure"}, response.Status) {
-		return fmt.Errorf("adapter returned unknown status %q", response.Status)
+		return expected("status", "pass, findings, incomplete, or operational-failure")
 	}
 	if len(response.Notes) > 32 {
-		return errors.New("adapter returned too many notes")
+		return expected("notes", "at most 32 items")
 	}
-	if len(response.Evidence) > 64 || len(response.Findings) > 4096 || len(response.Failure) > 4096 {
-		return errors.New("adapter response exceeds its evidence, finding, or failure limit")
+	if len(response.Evidence) > 64 {
+		return expected("evidence", "at most 64 items")
+	}
+	if len(response.Findings) > 4096 {
+		return expected("findings", "at most 4096 items")
+	}
+	if len(response.Failure) > 4096 {
+		return expected("failure", "at most 4096 bytes")
 	}
 	return nil
 }
@@ -217,13 +223,13 @@ func validateResponseText(response Response) error {
 	if err := validateResponseStrings(response.Evidence, "evidence"); err != nil {
 		return err
 	}
-	return validateResponseStrings(response.Notes, "note")
+	return validateResponseStrings(response.Notes, "notes")
 }
 
-func validateResponseStrings(values []string, label string) error {
-	for _, value := range values {
+func validateResponseStrings(values []string, path string) error {
+	for index, value := range values {
 		if strings.TrimSpace(value) == "" || len(value) > 1024 {
-			return fmt.Errorf("adapter returned empty or oversized %s", label)
+			return expected(indexed(path, index), "1 to 1024 non-whitespace bytes")
 		}
 	}
 	return nil
@@ -232,18 +238,27 @@ func validateResponseStrings(values []string, label string) error {
 func validateResponseStatus(response Response) error {
 	switch response.Status {
 	case "pass":
-		if len(response.Evidence) == 0 || responseHasFailure(response) {
-			return errors.New("pass response requires evidence and no findings or failure")
+		if len(response.Evidence) == 0 {
+			return expected("evidence", "at least one item when status is pass")
+		}
+		if responseHasFailure(response) {
+			return expected("status", "findings or operational-failure when findings or failure are present")
 		}
 	case "findings":
-		if len(response.Findings) == 0 || response.Failure != "" {
-			return errors.New("findings response requires at least one finding and no failure")
+		if len(response.Findings) == 0 {
+			return expected("findings", "at least one item when status is findings")
+		}
+		if response.Failure != "" {
+			return expected("failure", "empty when status is findings")
 		}
 	case "incomplete":
 		return validateIncompleteStatus(response)
 	case "operational-failure":
-		if strings.TrimSpace(response.Failure) == "" || len(response.Findings) != 0 {
-			return errors.New("operational-failure response requires a failure and no findings")
+		if strings.TrimSpace(response.Failure) == "" {
+			return expected("failure", "1 to 4096 non-whitespace bytes when status is operational-failure")
+		}
+		if len(response.Findings) != 0 {
+			return expected("findings", "empty when status is operational-failure")
 		}
 	}
 	return nil
@@ -254,8 +269,11 @@ func responseHasFailure(response Response) bool {
 }
 
 func validateIncompleteStatus(response Response) error {
-	if response.Coverage == nil || len(response.Coverage.Unsupported) == 0 || response.Failure != "" {
-		return errors.New("incomplete response requires unsupported coverage and no operational failure")
+	if response.Coverage == nil || len(response.Coverage.Unsupported) == 0 {
+		return expected("coverage.unsupported", "at least one item when status is incomplete")
+	}
+	if response.Failure != "" {
+		return expected("failure", "empty when status is incomplete")
 	}
 	return nil
 }
@@ -288,35 +306,43 @@ func verifyRuntimeIdentity(repo repository.Repository, command policy.Command, i
 }
 
 func validateResponseFindings(findings []ResponseFinding, request Request) error {
-	for _, finding := range findings {
-		if err := validateResponseFinding(finding, request); err != nil {
+	for index, finding := range findings {
+		if err := validateResponseFinding(finding, request, indexed("findings", index)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateResponseFinding(finding ResponseFinding, request Request) error {
-	if malformedResponseFinding(finding, request.Capability) {
-		return errors.New("adapter returned a malformed finding")
+func validateResponseFinding(finding ResponseFinding, request Request, label string) error {
+	if finding.Capability != request.Capability {
+		return expected(label+".capability", request.Capability)
+	}
+	if strings.TrimSpace(finding.Subject) == "" || len(finding.Subject) > 1024 {
+		return expected(label+".subject", "1 to 1024 non-whitespace bytes")
+	}
+	if strings.TrimSpace(finding.Message) == "" || len(finding.Message) > 4096 {
+		return expected(label+".message", "1 to 4096 non-whitespace bytes")
+	}
+	if !validRule(finding.Rule) {
+		return expected(label+".rule", "a 1 to 256 byte rule identifier without whitespace, backslashes, or NUL")
+	}
+	if finding.Line < 0 {
+		return expected(label+".line", "a non-negative integer")
+	}
+	if finding.Column < 0 || finding.Column > 0 && finding.Line == 0 {
+		return expected(label+".column", "zero without a line or a positive UTF-8 byte column with a line")
 	}
 	if finding.Path == "repository" {
 		return nil
 	}
 	if err := exactRelativePath(finding.Path); err != nil {
-		return fmt.Errorf("adapter finding path: %w", err)
+		return expected(label+".path", "repository or an exact contained relative path")
 	}
 	if !slices.Contains(request.DiagnosticFiles, finding.Path) {
-		return fmt.Errorf("adapter finding path %q is outside diagnostic scope", finding.Path)
+		return expected(label+".path", "repository or a path from diagnosticFiles")
 	}
 	return nil
-}
-
-func malformedResponseFinding(finding ResponseFinding, capability string) bool {
-	missing := finding.Capability != capability || strings.TrimSpace(finding.Subject) == "" || strings.TrimSpace(finding.Message) == "" || !validRule(finding.Rule)
-	oversized := len(finding.Subject) > 1024 || len(finding.Message) > 4096
-	invalidLocation := finding.Line < 0 || finding.Column < 0 || finding.Column > 0 && finding.Line == 0
-	return missing || oversized || invalidLocation
 }
 
 func requestFor(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) Request {

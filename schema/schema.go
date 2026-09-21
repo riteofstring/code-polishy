@@ -28,3 +28,12 @@ var CodePolishyReviewSnapshot []byte
 
 //go:embed code-polishy-behavior-review.schema.json
 var CodePolishyBehaviorReview []byte
+
+//go:embed code-polishy-pack.schema.json
+var CodePolishyPack []byte
+
+//go:embed code-polishy-pack-request-v3.schema.json
+var CodePolishyPackRequestV3 []byte
+
+//go:embed code-polishy-pack-response-v3.schema.json
+var CodePolishyPackResponseV3 []byte

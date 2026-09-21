@@ -51,6 +51,9 @@ func (shippedLoader) Load(url string) (any, error) {
 		ConfigurationBase + "code-polishy-supply-chain.schema.json":        CodePolishySupplyChain,
 		ConfigurationBase + "code-polishy-python.schema.json":              CodePolishyPython,
 		ConfigurationBase + "code-polishy-git-evidence.schema.json":        CodePolishyGitEvidence,
+		ConfigurationBase + "code-polishy-pack.schema.json":                CodePolishyPack,
+		ConfigurationBase + "code-polishy-pack-request-v3.schema.json":     CodePolishyPackRequestV3,
+		ConfigurationBase + "code-polishy-pack-response-v3.schema.json":    CodePolishyPackResponseV3,
 		"https://code-polishy.dev/schema/code-polishy-report.schema.json":  CodePolishyReport,
 		"https://json.schemastore.org/sarif-2.1.0.json":                    SARIF210,
 	}

@@ -10,8 +10,12 @@ framework does not require its own pack or a second project configuration fragme
 
 A local pack contains `code-polishy-pack.json`, `README.md`, contained adapter
 entries, pinned tools, and conformance projects. Manifest version 2 and protocol version 3
-form one public contract; earlier prerelease protocols are rejected. Use `schema/code-polishy-pack.schema.json` for the
-manifest. Declare an exact version, supported platforms, languages and source
+form one public contract; earlier prerelease protocols are rejected. Use
+`schema/code-polishy-pack.schema.json` for the manifest,
+`schema/code-polishy-pack-request-v3.schema.json` for requests, and
+`schema/code-polishy-pack-response-v3.schema.json` for responses. Executable
+request and response examples live under `tools/fixtures/language-pack/examples`.
+Declare an exact version, supported platforms, languages and source
 patterns, dependency manifests, command paths, capabilities, execution profiles,
 timeouts, and permitted environment names.
 
@@ -95,7 +99,9 @@ Requests and responses are bounded at 8 MiB. Additional limits bound file counts
 findings, fact collections, and text fields. Standard error is a bounded diagnostic
 stream, not evidence of successful analysis. Unknown fields, extra JSON values,
 escaping paths, missing identities, malformed facts, and contradictory success
-claims are rejected.
+claims are rejected. Semantic validation identifies the exact JSON field and
+collection index with its expected constraint, for example
+`facts.comments[0].kind: expected Line, Block, Docstring, HTML, or Shebang`.
 
 ## Ownership, verification, and installation
 

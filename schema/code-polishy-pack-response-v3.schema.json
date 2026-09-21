@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-response-v3.schema.json",
+  "title": "Code Polishy language pack response protocol v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "status"],
+  "properties": {
+    "protocolVersion": { "const": 3 },
+    "status": {
+      "enum": ["pass", "findings", "incomplete", "operational-failure"]
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/shortText" }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "notes": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/shortText" }
+    },
+    "failure": { "type": "string", "maxLength": 4096 },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "facts": { "$ref": "#/$defs/facts" },
+    "inputs": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/input" }
+    },
+    "edits": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edit" }
+    }
+  },
+  "$defs": {
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": ".*\\S.*"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
+    },
+    "rule": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\s\\\\\\u0000]+$"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "unsupported": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "reason"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analyzed", "unsupported"],
+      "properties": {
+        "analyzed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "unsupported": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/unsupported" }
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "import": {
+      "allOf": [{ "$ref": "#/$defs/location" }],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "line",
+        "column",
+        "specifier",
+        "resolved",
+        "package",
+        "kind"
+      ],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "specifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "resolved": { "type": "string" },
+        "package": { "type": "string", "maxLength": 214 },
+        "kind": {
+          "enum": ["runtime", "type-only", "re-export", "proven-dynamic"]
+        }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "line",
+        "column",
+        "kind",
+        "raw",
+        "complete",
+        "beforeCode",
+        "preamble",
+        "byteZero"
+      ],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "kind": { "enum": ["Line", "Block", "Docstring", "HTML", "Shebang"] },
+        "raw": { "type": "string", "minLength": 1, "maxLength": 65536 },
+        "complete": { "type": "boolean" },
+        "beforeCode": { "type": "boolean" },
+        "preamble": { "type": "boolean" },
+        "byteZero": { "type": "boolean" }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "line",
+        "column",
+        "name",
+        "complexity",
+        "depth",
+        "parameters"
+      ],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": ".*\\S.*"
+        },
+        "complexity": { "type": "integer", "minimum": 1 },
+        "depth": { "type": "integer", "minimum": 0 },
+        "parameters": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imports": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "$ref": "#/$defs/import" }
+        },
+        "comments": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "$ref": "#/$defs/comment" }
+        },
+        "functions": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "$ref": "#/$defs/function" }
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "path", "subject", "message", "rule"],
+      "properties": {
+        "capability": { "type": "string", "minLength": 1 },
+        "path": {
+          "anyOf": [{ "const": "repository" }, { "$ref": "#/$defs/path" }]
+        },
+        "line": { "type": "integer", "minimum": 0 },
+        "column": { "type": "integer", "minimum": 0 },
+        "subject": { "$ref": "#/$defs/shortText" },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "rule": { "$ref": "#/$defs/rule" }
+      }
+    },
+    "edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "content": { "type": "string" }
+      }
+    }
+  }
+}

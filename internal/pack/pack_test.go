@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/schema"
 )
 
 func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
@@ -46,6 +48,55 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 				t.Fatalf("expected %q, received %v", test.want, err)
 			}
 		})
+	}
+}
+
+func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
+	root := filepath.Join("..", "..")
+	manifestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", ManifestFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack.schema.json").Validate(manifestData); err != nil {
+		t.Fatalf("manifest schema: %v", err)
+	}
+	if _, err := ParseManifest(manifestData, ManifestFilename); err != nil {
+		t.Fatalf("manifest decoder: %v", err)
+	}
+	requestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestValidator := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-request-v3.schema.json")
+	if err := requestValidator.Validate(requestData); err != nil {
+		t.Fatalf("request schema: %v", err)
+	}
+	requestDecoder := json.NewDecoder(bytes.NewReader(requestData))
+	requestDecoder.DisallowUnknownFields()
+	request := Request{}
+	if err := requestDecoder.Decode(&request); err != nil {
+		t.Fatalf("request decoder: %v", err)
+	}
+	encodedRequest, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := requestValidator.Validate(encodedRequest); err != nil {
+		t.Fatalf("production request encoder: %v", err)
+	}
+	responseData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "response-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-response-v3.schema.json").Validate(responseData); err != nil {
+		t.Fatalf("response schema: %v", err)
+	}
+	response, err := decodeResponse(responseData)
+	if err != nil {
+		t.Fatalf("response decoder: %v", err)
+	}
+	if err := validateResponse(response, request); err != nil {
+		t.Fatalf("response contract: %v", err)
 	}
 }
 

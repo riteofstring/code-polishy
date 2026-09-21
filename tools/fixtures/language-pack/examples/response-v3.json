@@ -1,0 +1,18 @@
+{
+  "protocolVersion": 3,
+  "status": "pass",
+  "evidence": ["lint parsed every selected source"],
+  "coverage": {
+    "analyzed": ["src/main.ts"],
+    "unsupported": []
+  },
+  "facts": {
+    "comments": []
+  },
+  "inputs": [
+    {
+      "path": "src/main.ts",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}

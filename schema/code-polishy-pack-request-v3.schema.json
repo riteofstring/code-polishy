@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-request-v3.schema.json",
+  "title": "Code Polishy language pack request protocol v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "provider",
+    "units",
+    "diagnosticFiles",
+    "writeFiles",
+    "protocolVersion",
+    "operation",
+    "capability",
+    "projectRoot",
+    "files",
+    "modules",
+    "mode",
+    "profile",
+    "context",
+    "policy",
+    "complete",
+    "pack"
+  ],
+  "properties": {
+    "provider": { "$ref": "#/$defs/nonempty" },
+    "units": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/unit" }
+    },
+    "diagnosticFiles": { "$ref": "#/$defs/paths" },
+    "writeFiles": { "$ref": "#/$defs/paths" },
+    "protocolVersion": { "const": 3 },
+    "operation": { "enum": ["check", "format"] },
+    "capability": { "$ref": "#/$defs/identifier" },
+    "projectRoot": { "$ref": "#/$defs/nonempty" },
+    "files": {
+      "allOf": [{ "$ref": "#/$defs/paths" }],
+      "maxItems": 10000
+    },
+    "modules": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/module" }
+    },
+    "mode": { "enum": ["check", "write"] },
+    "profile": { "$ref": "#/$defs/identifier" },
+    "outputDirectory": { "$ref": "#/$defs/path" },
+    "context": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/input" }
+    },
+    "policy": { "$ref": "#/$defs/policy" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "complete": { "type": "boolean" },
+    "pack": { "$ref": "#/$defs/pack" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "nonempty": {
+      "type": "string",
+      "pattern": ".*\\S.*"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
+    },
+    "paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "root",
+        "packageRoot",
+        "manifest",
+        "workspaceRoot",
+        "configuration",
+        "members",
+        "entryFiles"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "root": { "type": "string" },
+        "packageRoot": { "type": "string" },
+        "manifest": { "type": "string" },
+        "workspaceRoot": { "type": "string" },
+        "configuration": { "type": "string" },
+        "members": { "$ref": "#/$defs/paths" },
+        "entryFiles": { "$ref": "#/$defs/paths" }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "paths", "dependsOn"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "paths": { "$ref": "#/$defs/paths" },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    },
+    "lint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reactHooks", "jsxAccessibility"],
+      "properties": {
+        "reactHooks": { "type": "boolean" },
+        "jsxAccessibility": { "type": "boolean" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "owner",
+        "sourcePackage",
+        "lint",
+        "path",
+        "language",
+        "test",
+        "generated",
+        "development"
+      ],
+      "properties": {
+        "unit": { "type": "string" },
+        "owner": { "type": "string" },
+        "sourcePackage": { "type": "string" },
+        "lint": { "$ref": "#/$defs/lint" },
+        "path": { "$ref": "#/$defs/path" },
+        "language": { "type": "string" },
+        "test": { "type": "boolean" },
+        "generated": { "type": "boolean" },
+        "development": { "type": "boolean" }
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "go": { "type": "integer" },
+        "goTest": { "type": "integer" },
+        "python": { "type": "integer" },
+        "typescript": { "type": "integer" },
+        "typescriptTest": { "type": "integer" }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewFileLines": { "type": "integer" },
+        "reviewTestFileLines": { "type": "integer" },
+        "maxFileLines": { "type": "integer" },
+        "maxTestFileLines": { "type": "integer" },
+        "complexity": { "$ref": "#/$defs/complexity" },
+        "allowComments": { "type": "boolean" },
+        "maxDepth": { "type": "integer" },
+        "maxTestDepth": { "type": "integer" },
+        "maxParams": { "type": "integer" },
+        "maxTestParams": { "type": "integer" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality", "files"],
+      "properties": {
+        "quality": { "$ref": "#/$defs/quality" },
+        "files": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/source" }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sha256"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "digest"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

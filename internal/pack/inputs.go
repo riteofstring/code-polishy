@@ -268,13 +268,26 @@ func validateEdits(edits []Edit, status string, request Request) error {
 	if len(edits) == 0 {
 		return nil
 	}
-	if request.Capability != "format" || request.Mode != "write" || status != "pass" {
-		return errors.New("only successful format writes may return edits")
+	if request.Capability != "format" {
+		return expected("edits", "items only for the format capability")
+	}
+	if request.Mode != "write" {
+		return expected("edits", "items only when mode is write")
+	}
+	if status != "pass" {
+		return expected("edits", "items only when status is pass")
 	}
 	seen := map[string]bool{}
-	for _, edit := range edits {
-		if seen[edit.Path] || !slices.Contains(request.WriteFiles, edit.Path) || !utf8.ValidString(edit.Content) {
-			return errors.New("provider edits must target distinct selected UTF-8 files")
+	for index, edit := range edits {
+		label := indexed("edits", index)
+		if !slices.Contains(request.WriteFiles, edit.Path) {
+			return expected(label+".path", "a path from writeFiles")
+		}
+		if seen[edit.Path] {
+			return expected(label+".path", "a path edited only once")
+		}
+		if !utf8.ValidString(edit.Content) {
+			return expected(label+".content", "valid UTF-8")
 		}
 		seen[edit.Path] = true
 	}

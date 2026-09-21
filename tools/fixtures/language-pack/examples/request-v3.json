@@ -1,0 +1,72 @@
+{
+  "provider": "pack.example.adapter.lint",
+  "units": [
+    {
+      "id": "typescript:package.json:tsconfig.json",
+      "root": ".",
+      "packageRoot": ".",
+      "manifest": "package.json",
+      "workspaceRoot": ".",
+      "configuration": "tsconfig.json",
+      "members": ["src/main.ts"],
+      "entryFiles": ["src/main.ts"]
+    }
+  ],
+  "diagnosticFiles": ["src/main.ts"],
+  "writeFiles": [],
+  "protocolVersion": 3,
+  "operation": "check",
+  "capability": "lint",
+  "projectRoot": "/example/project",
+  "files": ["src/main.ts"],
+  "modules": [
+    {
+      "name": "application",
+      "paths": ["src/**"],
+      "dependsOn": []
+    }
+  ],
+  "mode": "check",
+  "profile": "check",
+  "context": [
+    {
+      "path": "src/main.ts",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "policy": {
+    "quality": {
+      "complexity": {
+        "typescript": 20,
+        "typescriptTest": 30
+      },
+      "allowComments": false,
+      "maxDepth": 4,
+      "maxTestDepth": 6,
+      "maxParams": 5,
+      "maxTestParams": 8
+    },
+    "files": [
+      {
+        "unit": "typescript:package.json:tsconfig.json",
+        "owner": "pack.example.adapter.lint",
+        "sourcePackage": "",
+        "lint": {
+          "reactHooks": false,
+          "jsxAccessibility": false
+        },
+        "path": "src/main.ts",
+        "language": "typescript",
+        "test": false,
+        "generated": false,
+        "development": false
+      }
+    ]
+  },
+  "complete": true,
+  "pack": {
+    "name": "example",
+    "version": "1.0.0",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}
