@@ -301,6 +301,15 @@ under the target configuration's `packs` array. It performs no download and
 executes no pack code. See `code-polishy docs read adding-a-language` for the
 manifest, protocol, trust, and contributor contracts.
 
+The breaking native-to-pack cutover uses `pack migration plan` with the complete
+set of repeated `--select NAME@VERSION` arguments from one authenticated local
+catalog. Planning installs and verifies those exact artifacts but does not select
+them. `pack migration apply --plan PATH` atomically replaces only pack policy;
+`pack migration rollback --plan PATH` restores the exact prior configuration.
+Both reject stale evidence and leave `.code-polishy.lock.json` unchanged. The
+transaction provides rollback, not backward compatibility: old and replacement
+protocols are never selected together.
+
 A release carries no source checkout, no history, and no build inputs.
 Installing does not modify the checkout it was built from.
 

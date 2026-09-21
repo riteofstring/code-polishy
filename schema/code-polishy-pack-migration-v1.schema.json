@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-migration-v1.schema.json",
+  "title": "Code Polishy language-pack repository migration plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "protocol",
+    "migrationId",
+    "engineVersion",
+    "configPath",
+    "lockSha256",
+    "catalogPath",
+    "catalogSha256",
+    "beforeConfigSha256",
+    "afterConfigSha256",
+    "backupPath",
+    "beforePacks",
+    "afterPacks",
+    "packs",
+    "inventory",
+    "coverage",
+    "coverageSha256",
+    "currentDiagnosticsSha256",
+    "candidateDiagnosticsSha256",
+    "addedDiagnostics",
+    "gaps",
+    "ready"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack-migration-v1.schema.json"
+    },
+    "protocol": { "const": "code-polishy-pack-migration/v1" },
+    "migrationId": { "$ref": "#/$defs/digest" },
+    "engineVersion": { "$ref": "#/$defs/version" },
+    "configPath": { "$ref": "#/$defs/path" },
+    "lockSha256": { "$ref": "#/$defs/digest" },
+    "catalogPath": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "catalogSha256": { "$ref": "#/$defs/digest" },
+    "beforeConfigSha256": { "$ref": "#/$defs/digest" },
+    "afterConfigSha256": { "$ref": "#/$defs/digest" },
+    "backupPath": { "$ref": "#/$defs/path" },
+    "beforePacks": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/selection" }
+    },
+    "afterPacks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/selection" }
+    },
+    "packs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/pack" }
+    },
+    "inventory": { "$ref": "#/$defs/inventory" },
+    "coverage": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/coverage" }
+    },
+    "coverageSha256": { "$ref": "#/$defs/digest" },
+    "currentDiagnosticsSha256": { "$ref": "#/$defs/digest" },
+    "candidateDiagnosticsSha256": { "$ref": "#/$defs/digest" },
+    "addedDiagnostics": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/gap" }
+    },
+    "ready": { "type": "boolean" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "textList": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "digest"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": { "$ref": "#/$defs/version" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection",
+        "capabilities",
+        "tools",
+        "dependencies",
+        "licenses",
+        "builder",
+        "sourceRevision"
+      ],
+      "properties": {
+        "selection": { "$ref": "#/$defs/selection" },
+        "capabilities": { "$ref": "#/$defs/textList" },
+        "tools": { "$ref": "#/$defs/textList" },
+        "dependencies": { "$ref": "#/$defs/textList" },
+        "licenses": { "$ref": "#/$defs/textList" },
+        "builder": { "$ref": "#/$defs/identifier" },
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+        }
+      }
+    },
+    "languageInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "files", "generatedFiles"],
+      "properties": {
+        "language": { "$ref": "#/$defs/identifier" },
+        "files": { "type": "integer", "minimum": 0 },
+        "generatedFiles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "customClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "capabilities", "paths", "profiles"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "capabilities": { "$ref": "#/$defs/textList" },
+        "paths": { "$ref": "#/$defs/textList" },
+        "profiles": { "$ref": "#/$defs/textList" }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "languages",
+        "customClaims",
+        "nativeClaims",
+        "packClaims"
+      ],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "languages": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/languageInventory" }
+        },
+        "customClaims": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/customClaim" }
+        },
+        "nativeClaims": { "type": "integer", "minimum": 0 },
+        "packClaims": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "language",
+        "capability",
+        "profile",
+        "generated",
+        "required",
+        "packOwned",
+        "missing"
+      ],
+      "properties": {
+        "language": { "$ref": "#/$defs/identifier" },
+        "capability": { "$ref": "#/$defs/identifier" },
+        "profile": { "$ref": "#/$defs/identifier" },
+        "generated": { "type": "boolean" },
+        "required": { "type": "integer", "minimum": 0 },
+        "packOwned": { "type": "integer", "minimum": 0 },
+        "missing": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fingerprint", "ruleId", "severity", "path", "message"],
+      "properties": {
+        "fingerprint": { "$ref": "#/$defs/digest" },
+        "ruleId": { "$ref": "#/$defs/text" },
+        "severity": { "enum": ["error", "warning", "information"] },
+        "path": { "type": "string", "maxLength": 4096 },
+        "message": { "$ref": "#/$defs/text" }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "language", "capability", "profile", "message"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "language": { "$ref": "#/$defs/identifier" },
+        "capability": { "$ref": "#/$defs/identifier" },
+        "profile": { "$ref": "#/$defs/identifier" },
+        "message": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

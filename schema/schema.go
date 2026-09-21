@@ -35,6 +35,9 @@ var CodePolishyPack []byte
 //go:embed code-polishy-pack-catalog-v1.schema.json
 var CodePolishyPackCatalogV1 []byte
 
+//go:embed code-polishy-pack-migration-v1.schema.json
+var CodePolishyPackMigrationV1 []byte
+
 //go:embed code-polishy-pack-request-v4.schema.json
 var CodePolishyPackRequestV4 []byte
 

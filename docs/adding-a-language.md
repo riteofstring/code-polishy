@@ -184,6 +184,27 @@ belong in project policy. Default storage is
 Human output and `doctor --strict` distinguish installed, selected, missing,
 incompatible, and corrupt identities.
 
+For the coordinated breaking release, migrate a repository with an explicit
+complete pack set instead of editing one pin at a time:
+
+```sh
+code-polishy pack migration plan \
+  --catalog ./catalog.json \
+  --sha256 DIGEST \
+  --select shell@1.0.0 \
+  --select python@1.0.0
+code-polishy pack migration apply --plan .code-polishy-reports/pack-migrations/ID/plan.json
+```
+
+Planning installs and verifies only the named artifacts, records current native,
+pack, generated-source, and custom-command coverage, and leaves repository policy
+untouched. Apply rejects coverage gaps, new error diagnostics, changed evidence,
+or an engine-lock change, then atomically replaces the complete `packs` array.
+The plan prints an exact rollback command. Rollback restores the preserved
+configuration only if doing so cannot overwrite later edits. This is a hard
+cutover: there is no legacy decoder, automatic pin translation, alias, dual
+execution, or native fallback for a missing replacement claim.
+
 Use valid source, seeded defects, excluded inputs, stricter policy, mapping errors,
 and tool failures to test a provider. Then exercise its exact installed identity
 in a disposable project through ordinary checks and gates. Unsupported cases stay

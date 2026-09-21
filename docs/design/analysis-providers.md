@@ -81,8 +81,26 @@ policy. `pack remove` deletes only one unambiguous exact identity and never edit
 a repository. `pack list` and `doctor --strict` use the same state model to report
 installed, selected, missing, incompatible, and corrupt identities. Engine locks
 continue to select only the engine; pack lifecycle commands never rewrite them or
-pack pins. These boundaries are the local lifecycle foundation for the later
-explicit, rollback-capable repository migration transaction.
+pack pins.
+
+Repository migration is one explicit hard-cutover transaction. `pack migration
+plan` accepts the complete replacement set as repeated exact catalog selections,
+installs and runs every declared fixture, inventories native, selected-pack,
+generated-source, and custom-command claims, then evaluates the candidate policy
+without changing repository selection. The versioned durable plan binds the
+catalog, engine version, engine-lock bytes, before/after configuration bytes,
+coverage ledger, and diagnostic snapshots. Missing replacement ownership or a
+new error diagnostic blocks application.
+
+`pack migration apply` reauthenticates the catalog and installed trees, rejects
+stale repository or diagnostic evidence, and atomically replaces only the
+configuration's complete `packs` value. The engine lock must match before and
+after. `pack migration rollback` restores the exact preserved configuration only
+while the applied bytes and engine lock still match the plan; it refuses to
+overwrite later edits. Installed but unselected immutable packs may remain. No
+step translates old manifests, merges implicit pins, invokes native fallback for
+a missing replacement claim, or makes the outgoing engine understand the new
+protocol.
 
 A runtime declaration requests an exact policy-owned tool version. The first
 runtime implementation resolves Node from a verified installed release, checks

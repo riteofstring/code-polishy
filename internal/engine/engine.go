@@ -45,6 +45,11 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	dataRoot, dataRootErr := pack.UserDataRoot()
+	return openConfigured(repoRoot, policyRoot, config, dataRoot, dataRootErr)
+}
+
+func openConfigured(repoRoot, policyRoot string, config policy.Config, dataRoot string, dataRootErr error) (*Engine, error) {
 	engineVersion := ""
 	versionData, versionErr := os.ReadFile(filepath.Join(policyRoot, "VERSION"))
 	if versionErr == nil {
@@ -64,7 +69,6 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataRoot, dataRootErr := pack.UserDataRoot()
 	packResolution := pack.Resolve(config.Packs, dataRoot, engineVersion)
 	if dataRootErr != nil && len(config.Packs) > 0 {
 		packResolution = pack.Unavailable(config.Packs, dataRootErr)

@@ -12,7 +12,7 @@ import (
 
 func handlePackMeta(invocation invocation) int {
 	if len(invocation.arguments) == 0 {
-		return commandUsageError("pack", "pack requires catalog, install, update, remove, verify, list, conformance, or root")
+		return commandUsageError("pack", "pack requires catalog, install, update, remove, verify, list, migration, conformance, or root")
 	}
 	action, arguments := invocation.arguments[0], invocation.arguments[1:]
 	switch action {
@@ -28,6 +28,8 @@ func handlePackMeta(invocation invocation) int {
 		return verifyPack(arguments, invocation.policyRoot)
 	case "list":
 		return listPacks(invocation, arguments)
+	case "migration":
+		return migratePacks(invocation, arguments)
 	case "conformance":
 		return runPackConformance(arguments)
 	case "root":
