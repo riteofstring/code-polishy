@@ -18,20 +18,26 @@ type InputFile struct {
 }
 
 type PolicyInput struct {
-	Quality policy.Quality `json:"quality"`
-	Files   []SourceInput  `json:"files"`
+	Quality policy.Quality      `json:"quality"`
+	Modules []PolicyModuleInput `json:"modules"`
+	Files   []SourceInput       `json:"files"`
+}
+
+type PolicyModuleInput struct {
+	Name string `json:"name"`
+	Root string `json:"root"`
 }
 
 type SourceInput struct {
-	Unit          string         `json:"unit"`
-	Owner         string         `json:"owner"`
-	SourcePackage string         `json:"sourcePackage"`
-	Lint          LintActivation `json:"lint"`
-	Path          string         `json:"path"`
-	Language      string         `json:"language"`
-	Test          bool           `json:"test"`
-	Generated     bool           `json:"generated"`
-	Development   bool           `json:"development"`
+	Scopes      []string `json:"scopes"`
+	Owner       string   `json:"owner"`
+	Context     string   `json:"context"`
+	Path        string   `json:"path"`
+	Language    string   `json:"language"`
+	Test        bool     `json:"test"`
+	Generated   bool     `json:"generated"`
+	Data        bool     `json:"data"`
+	Development bool     `json:"development"`
 }
 
 type RuntimeIdentity struct {

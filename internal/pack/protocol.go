@@ -18,7 +18,9 @@ import (
 
 type Request struct {
 	Provider        string               `json:"provider"`
-	Units           []AnalysisUnit       `json:"units"`
+	Inventory       []InventoryEntry     `json:"inventory"`
+	Selection       SelectionInput       `json:"selection"`
+	Scopes          []AnalysisScope      `json:"scopes"`
 	DiagnosticFiles []string             `json:"diagnosticFiles"`
 	WriteFiles      []string             `json:"writeFiles"`
 	ProtocolVersion int                  `json:"protocolVersion"`
@@ -46,6 +48,8 @@ type RequestModule struct {
 type Response struct {
 	ProtocolVersion int               `json:"protocolVersion"`
 	Status          string            `json:"status"`
+	ScopeHandles    []string          `json:"scopeHandles,omitempty"`
+	Discovery       *DiscoveryResult  `json:"discovery,omitempty"`
 	Evidence        []string          `json:"evidence,omitempty"`
 	Findings        []ResponseFinding `json:"findings,omitempty"`
 	Notes           []string          `json:"notes,omitempty"`
@@ -54,6 +58,54 @@ type Response struct {
 	Facts           *SourceFacts      `json:"facts,omitempty"`
 	Inputs          []InputFile       `json:"inputs,omitempty"`
 	Edits           []Edit            `json:"edits,omitempty"`
+}
+
+type SelectionInput struct {
+	Paths    []string `json:"paths"`
+	Deleted  []string `json:"deleted"`
+	Complete bool     `json:"complete"`
+}
+
+type InventoryEntry struct {
+	Path        string   `json:"path"`
+	Language    string   `json:"language,omitempty"`
+	Context     string   `json:"context,omitempty"`
+	Owner       string   `json:"owner,omitempty"`
+	Modules     []string `json:"modules"`
+	Source      bool     `json:"source"`
+	Metadata    bool     `json:"metadata"`
+	Dependency  bool     `json:"dependency"`
+	Asset       bool     `json:"asset"`
+	Test        bool     `json:"test"`
+	Generated   bool     `json:"generated"`
+	Data        bool     `json:"data"`
+	Development bool     `json:"development"`
+	Control     bool     `json:"control"`
+}
+
+type AnalysisScope struct {
+	Handle     string          `json:"handle"`
+	Language   string          `json:"language"`
+	Root       string          `json:"root"`
+	Members    []string        `json:"members"`
+	EntryFiles []string        `json:"entryFiles"`
+	Context    []string        `json:"context"`
+	Data       json.RawMessage `json:"data"`
+}
+
+type DiscoveryResult struct {
+	Scopes []DiscoveredScope `json:"scopes"`
+}
+
+type DiscoveredScope struct {
+	ID         string          `json:"id"`
+	Language   string          `json:"language"`
+	Root       string          `json:"root"`
+	Members    []string        `json:"members"`
+	EntryFiles []string        `json:"entryFiles"`
+	Context    []string        `json:"context"`
+	Selected   []string        `json:"selected"`
+	Data       json.RawMessage `json:"data"`
 }
 
 type Edit struct {
@@ -93,7 +145,7 @@ func RunAdapter(ctx context.Context, repo repository.Repository, selection repos
 		}
 	}
 	request := requestFor(repo, selection, command, profile)
-	if len(request.Files) == 0 {
+	if len(request.Files) == 0 && !AdapterSelected(repo, selection, command, profile) {
 		return Result{}
 	}
 	return runRequest(ctx, repo, command, commandRunner, request)
@@ -104,14 +156,30 @@ func runRequest(ctx context.Context, repo repository.Repository, command policy.
 	if err := verifyAdapter(command); err != nil {
 		return failedResult(adapter, err)
 	}
-	if len(request.Files) > 10000 || len(request.Modules) > 1000 {
+	if len(request.Files) > maximumInventoryEntries || len(request.Modules) > 1000 {
 		return failedResult(adapter, errors.New("adapter request exceeds its file or module count limit"))
 	}
-	prepared, preparedRequest, err := prepareExecution(repo, command, request)
+	prepared, identity, err := runtimeCommand(repo, command, adapter.Runtime)
 	if err != nil {
 		return failedResult(adapter, err)
 	}
-	request = preparedRequest
+	request.Runtime = identity
+	if hasProjectDiscovery(adapter) {
+		request, _, err = discoveryRequest(ctx, repo, prepared, commandRunner, request)
+		if err != nil {
+			return failedResult(adapter, err)
+		}
+		if len(request.Files) == 0 {
+			return Result{}
+		}
+		if err := verifyAdapter(command); err != nil {
+			return failedResult(adapter, fmt.Errorf("adapter changed during discovery: %w", err))
+		}
+		prepared.InputDerivation = DiscoveryInputDerivation
+	}
+	if err := prepareInputs(repo, &request, command); err != nil {
+		return failedResult(adapter, err)
+	}
 	response, err := execute(ctx, adapter.PackRoot, prepared, commandRunner, request)
 	if err != nil {
 		return failedResult(adapter, err)
@@ -139,8 +207,8 @@ func execute(ctx context.Context, root string, command policy.Command, commandRu
 	if err != nil {
 		return Response{}, err
 	}
-	if len(data) > 8<<20 {
-		return Response{}, errors.New("adapter request exceeds 8 MiB")
+	if len(data) > 64<<20 {
+		return Response{}, errors.New("adapter request exceeds 64 MiB")
 	}
 	command.Stdin = append(data, '\n')
 	result, output, runErr := boundary.RunStructured(ctx, root, command)
@@ -151,8 +219,8 @@ func execute(ctx context.Context, root string, command policy.Command, commandRu
 }
 
 func parseResponse(data []byte, request Request) (Response, error) {
-	if len(data) == 0 || len(data) > 8<<20 {
-		return Response{}, errors.New("adapter response is empty or exceeds 8 MiB")
+	if len(data) == 0 || len(data) > 16<<20 {
+		return Response{}, errors.New("adapter response is empty or exceeds 16 MiB")
 	}
 	response, err := decodeResponse(data)
 	if err != nil {
@@ -188,6 +256,15 @@ func validateResponse(response Response, request Request) error {
 	if err := validateResponseStatus(response); err != nil {
 		return err
 	}
+	if request.Operation == "discover" {
+		return validateDiscoveryResponse(response, request)
+	}
+	if response.Discovery != nil {
+		return expected("discovery", "omitted for capability responses")
+	}
+	if err := validateScopeHandles(response.ScopeHandles, request.Scopes); err != nil {
+		return err
+	}
 	if err := validateAnalysisResponse(response, request); err != nil {
 		return err
 	}
@@ -195,6 +272,17 @@ func validateResponse(response Response, request Request) error {
 		return err
 	}
 	return validateResponseFindings(response.Findings, request)
+}
+
+func validateScopeHandles(handles []string, scopes []AnalysisScope) error {
+	expectedHandles := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		expectedHandles = append(expectedHandles, scope.Handle)
+	}
+	if !slices.Equal(handles, expectedHandles) {
+		return expected("scopeHandles", "the ordered handles authorized by the request")
+	}
+	return nil
 }
 
 func validateResponseEnvelope(response Response) error {
@@ -359,7 +447,7 @@ func requestFor(repo repository.Repository, selection repository.Selection, comm
 			mode = "write"
 		}
 	}
-	return Request{Provider: command.Name, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
+	return Request{Provider: command.Name, ProtocolVersion: ProtocolVersion, Operation: operation, Capability: command.Adapter.Capability, ProjectRoot: repo.Root, Files: files, Selection: SelectionInput{Paths: selectionPaths(selection), Deleted: sortedUnique(selection.Candidate.Deleted), Complete: selection.All}, Modules: modules, Mode: mode, Profile: profile, Complete: selection.All, Pack: policy.PackSelection{Name: command.Adapter.PackName, Version: command.Adapter.PackVersion, Digest: command.Adapter.PackDigest}}
 }
 
 func packCommandSelects(repo repository.Repository, command policy.Command, selected string) bool {

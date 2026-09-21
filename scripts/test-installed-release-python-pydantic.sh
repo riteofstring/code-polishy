@@ -95,7 +95,7 @@ environment = root / ".venv" / executable
 python = ".venv/" + executable
 test_command = [python, "-B", "-m", "unittest", "discover", "-s", "src/tests", "-t", "src"]
 config = {
-    "version": 4,
+    "version": 5,
     "project": {"kind": "application", "capabilities": []},
     "scope": {"entryPoints": ["src/main.py"], "pythonContracts": [{"project": "pyproject.toml", "kind": "type", "target": "pydantic.BaseModel", "attributes": ["model_config"], "annotatedFields": True, "reason": "Model validation consumes declared fields and configuration."}]},
     "quality": {},

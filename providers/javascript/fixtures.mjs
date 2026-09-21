@@ -64,7 +64,7 @@ function generatedFixtures(root) {
     const project = `fixtures/${name}`;
     const files = {
       ".code-polishy.json": JSON.stringify({
-        version: 4,
+        version: 5,
         project: { kind: "application", capabilities: [] },
         modules: [{ name: "frontend", paths: ["frontend/**"] }],
         tests: {
@@ -88,10 +88,10 @@ function generatedFixtures(root) {
         },
         scope: {
           generated: ["python_pkg/generated/bundle.js"],
-          generatedJavaScript: [
+          sourceContexts: [
             {
               paths: ["python_pkg/generated/bundle.js"],
-              sourcePackage: "frontend/package.json",
+              context: "frontend/package.json",
             },
           ],
         },

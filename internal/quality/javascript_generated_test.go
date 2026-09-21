@@ -16,7 +16,7 @@ func TestGeneratedBundlesKeepSemanticChecksAndAuthoredHookCoverage(t *testing.T)
 	}
 	repo.PolicyRoot = root
 	repo.Config.Scope.Generated = []string{"generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{Paths: []string{"generated/**"}, SourcePackage: "web"}}
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{Paths: []string{"generated/**"}, Context: "web"}}
 	repo.Config.JavaScriptLintScopes = []policy.JavaScriptLintScope{{Root: "web", ReactHooks: true}}
 	source := `import { useEffect } from "react";
 export function Component() {

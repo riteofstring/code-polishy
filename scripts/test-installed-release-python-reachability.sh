@@ -112,7 +112,7 @@ def architecture_failure(description):
 
 
 config = {
-    "version": 4, "project": {"kind": "application", "capabilities": []},
+    "version": 5, "project": {"kind": "application", "capabilities": []},
     "scope": {}, "quality": {}, "modules": [{"name": "application", "paths": ["src/app/**"]}],
     "tests": {
         "ownership": [{"paths": ["src/tests/**"], "module": "application", "focusedSuite": "contracts"}],

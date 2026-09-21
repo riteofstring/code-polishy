@@ -1,15 +1,68 @@
 {
   "provider": "pack.example.adapter.lint",
-  "units": [
+  "inventory": [
     {
-      "id": "typescript:package.json:tsconfig.json",
+      "path": "package.json",
+      "context": "package.json",
+      "modules": ["application"],
+      "source": false,
+      "metadata": true,
+      "dependency": false,
+      "asset": false,
+      "test": false,
+      "generated": false,
+      "data": false,
+      "development": false,
+      "control": false
+    },
+    {
+      "path": "src/main.ts",
+      "language": "typescript",
+      "context": "src/main.ts",
+      "owner": "pack.example.adapter.lint",
+      "modules": ["application"],
+      "source": true,
+      "metadata": false,
+      "dependency": false,
+      "asset": false,
+      "test": false,
+      "generated": false,
+      "data": false,
+      "development": false,
+      "control": false
+    },
+    {
+      "path": "tsconfig.json",
+      "context": "tsconfig.json",
+      "modules": ["application"],
+      "source": false,
+      "metadata": true,
+      "dependency": false,
+      "asset": false,
+      "test": false,
+      "generated": false,
+      "data": false,
+      "development": false,
+      "control": false
+    }
+  ],
+  "selection": {
+    "paths": ["src/main.ts"],
+    "deleted": [],
+    "complete": true
+  },
+  "scopes": [
+    {
+      "handle": "scope-1",
+      "language": "typescript",
       "root": ".",
-      "packageRoot": ".",
-      "manifest": "package.json",
-      "workspaceRoot": ".",
-      "configuration": "tsconfig.json",
       "members": ["src/main.ts"],
-      "entryFiles": ["src/main.ts"]
+      "entryFiles": ["src/main.ts"],
+      "context": ["package.json", "tsconfig.json"],
+      "data": {
+        "manifest": "package.json",
+        "configuration": "tsconfig.json"
+      }
     }
   ],
   "diagnosticFiles": ["src/main.ts"],
@@ -30,8 +83,16 @@
   "profile": "check",
   "context": [
     {
-      "path": "src/main.ts",
+      "path": "package.json",
       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "src/main.ts",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
   ],
   "policy": {
@@ -46,19 +107,17 @@
       "maxParams": 5,
       "maxTestParams": 8
     },
+    "modules": [],
     "files": [
       {
-        "unit": "typescript:package.json:tsconfig.json",
+        "scopes": ["scope-1"],
         "owner": "pack.example.adapter.lint",
-        "sourcePackage": "",
-        "lint": {
-          "reactHooks": false,
-          "jsxAccessibility": false
-        },
+        "context": "src/main.ts",
         "path": "src/main.ts",
         "language": "typescript",
         "test": false,
         "generated": false,
+        "data": false,
         "development": false
       }
     ]
@@ -67,6 +126,6 @@
   "pack": {
     "name": "example",
     "version": "1.0.0",
-    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   }
 }

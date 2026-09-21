@@ -20,6 +20,7 @@ import (
 
 type providerPlanRunner struct {
 	capabilities []string
+	operations   []string
 	roots        []string
 }
 
@@ -32,8 +33,22 @@ func (boundary *providerPlanRunner) RunStructured(_ context.Context, root string
 	if err := json.Unmarshal(command.Stdin, &request); err != nil {
 		return runner.Result{}, runner.Output{}, err
 	}
-	boundary.capabilities = append(boundary.capabilities, request.Capability)
+	boundary.operations = append(boundary.operations, request.Operation)
 	boundary.roots = append(boundary.roots, root)
+	if request.Operation == "discover" {
+		members := []string{}
+		for _, entry := range request.Inventory {
+			if entry.Source && entry.Owner == request.Provider {
+				members = append(members, entry.Path)
+			}
+		}
+		response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", Evidence: []string{"fixture discovery"}, Discovery: &pack.DiscoveryResult{Scopes: []pack.DiscoveredScope{{
+			ID: "fixture", Language: "fixture", Root: ".", Members: members, EntryFiles: members, Context: []string{}, Selected: request.Files, Data: json.RawMessage(`{}`),
+		}}}}
+		data, err := json.Marshal(response)
+		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: data}, err
+	}
+	boundary.capabilities = append(boundary.capabilities, request.Capability)
 	imports, comments, functions := []pack.ImportFact{}, []pack.CommentFact{}, []pack.FunctionFact{}
 	facts := &pack.SourceFacts{}
 	switch request.Capability {
@@ -44,9 +59,44 @@ func (boundary *providerPlanRunner) RunStructured(_ context.Context, root string
 	case "complexity":
 		facts.Functions = &functions
 	}
-	response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", Evidence: []string{"fixture parsed"}, Coverage: &pack.Coverage{Analyzed: request.Files, Unsupported: []pack.Unsupported{}}, Inputs: request.Context, Facts: facts}
+	handles := make([]string, 0, len(request.Scopes))
+	for _, scope := range request.Scopes {
+		handles = append(handles, scope.Handle)
+	}
+	response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", ScopeHandles: handles, Evidence: []string{"fixture parsed"}, Coverage: &pack.Coverage{Analyzed: request.Files, Unsupported: []pack.Unsupported{}}, Inputs: request.Context, Facts: facts}
 	data, err := json.Marshal(response)
 	return runner.Result{ExitStatus: 0}, runner.Output{Stdout: data}, err
+}
+
+func TestStaticDiscoveryFollowupIsDerivedInsideTheGatePlan(t *testing.T) {
+	repo := providerPlanRepository(t)
+	command := repo.Config.Checks[slices.IndexFunc(repo.Config.Checks, func(command policy.Command) bool {
+		return command.Adapter != nil && command.Adapter.Capability == "lint"
+	})]
+	command.Adapter.Discovery[0].Mode = "static"
+	command.Adapter.Discovery[0].MetadataPatterns = []string{"**/project.fixture.json"}
+	planned, selected, err := pack.PlannedExecutions(repo, repository.Selection{Files: []string{"src/main.fixture"}, All: true}, command, "gate")
+	if err != nil || !selected || len(planned) != 2 || planned[0].InputDerivation != "" || planned[1].InputDerivation != pack.DiscoveryInputDerivation {
+		t.Fatalf("planned static provider = %+v, selected=%t: %v", planned, selected, err)
+	}
+	commands := mergeGateCheckCommands(gaterun.Check, planned)
+	delegate := &providerPlanRunner{}
+	boundary := &mergeGatePlannedRunner{root: repo.Root, repo: repo, expected: commands, delegate: delegate}
+	result := pack.RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}, All: true}, command, boundary, "gate")
+	if len(result.Findings) != 0 || boundary.err != nil || boundary.next != 2 || !slices.Equal(delegate.operations, []string{"discover", "check"}) {
+		t.Fatalf("static provider execution = %+v, boundary=%v %d, operations=%v", result.Findings, boundary.err, boundary.next, delegate.operations)
+	}
+
+	delegate = &providerPlanRunner{}
+	boundary = &mergeGatePlannedRunner{root: repo.Root, repo: repo, expected: commands, delegate: delegate}
+	if _, _, err := boundary.RunStructured(t.Context(), commands[0].Root, commands[0].Command); err != nil {
+		t.Fatal(err)
+	}
+	changed := commands[1].Command
+	changed.Stdin = []byte("{}\n")
+	if _, _, err := boundary.RunStructured(t.Context(), commands[1].Root, changed); err == nil {
+		t.Fatal("changed discovery follow-up entered the gate")
+	}
 }
 
 func TestPlannedPackExecutionAccountsForEveryCapability(t *testing.T) {

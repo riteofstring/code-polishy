@@ -123,7 +123,11 @@ func (boundary providerGraphRunner) RunStructured(_ context.Context, _ string, c
 	}
 	digest := sha256.Sum256(data)
 	inputs := append(slices.Clone(request.Context), pack.InputFile{Path: "native/value.go", SHA256: hex.EncodeToString(digest[:])})
-	response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", Evidence: []string{"fixture parser completed"}, Inputs: inputs, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
+	handles := make([]string, 0, len(request.Scopes))
+	for _, scope := range request.Scopes {
+		handles = append(handles, scope.Handle)
+	}
+	response := pack.Response{ProtocolVersion: pack.ProtocolVersion, Status: "pass", ScopeHandles: handles, Evidence: []string{"fixture parser completed"}, Inputs: inputs, Coverage: &pack.Coverage{Analyzed: analyzed, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}
 	data, err = json.Marshal(response)
 	return runner.Result{}, runner.Output{Stdout: data}, err
 }
@@ -146,7 +150,7 @@ func TestFocusedProviderArchitectureDoesNotScheduleUnselectedLanguages(t *testin
 func TestProviderGraphRetainsActualPackageBoundaries(t *testing.T) {
 	repo := providerGraphRepository(t, "foreign")
 	imports := []pack.ImportFact{}
-	result := pack.Result{Digest: strings.Repeat("a", 64), Request: pack.Request{Units: []pack.AnalysisUnit{{PackageRoot: "foreign", Members: []string{"foreign/main.fixture"}}}}, Response: pack.Response{Coverage: &pack.Coverage{Analyzed: []string{"foreign/main.fixture"}, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}}
+	result := pack.Result{Digest: strings.Repeat("a", 64), Request: pack.Request{Scopes: []pack.AnalysisScope{{Root: "foreign", Members: []string{"foreign/main.fixture"}}}}, Response: pack.Response{Coverage: &pack.Coverage{Analyzed: []string{"foreign/main.fixture"}, Unsupported: []pack.Unsupported{}}, Facts: &pack.SourceFacts{Imports: &imports}}}
 	part := providerResultGraph(repo, repo.Config.Checks[0], result)
 	if part.incomplete || len(part.nodes) != 1 || part.nodes[0].Root != "foreign" || len(part.inputs) != 1 || part.inputs[0].Root != "foreign" {
 		t.Fatalf("provider package boundaries disappeared: %+v", part)

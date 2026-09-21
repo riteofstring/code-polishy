@@ -231,7 +231,9 @@ function projectInputs(analysis, project) {
   const inherited = [...analysis.classifications.values()]
     .filter(
       (file) =>
-        file.sourcePackage && file.unit === unit.id && analysis.owns(file.path),
+        file.context !== file.path &&
+        file.scopes.includes(unit.id) &&
+        analysis.owns(file.path),
     )
     .map((file) => join(analysis.root, file.path));
   const files = [...new Set([...configured, ...inherited])];
@@ -250,7 +252,8 @@ function bindGeneratedResolution(analysis, host) {
   const original = host.resolveModuleNameLiterals?.bind(host);
   host.resolveModuleNameLiterals = (literals, containingFile, ...rest) => {
     const path = relative(analysis.root, containingFile).replaceAll("\\", "/");
-    const owner = analysis.classifications.get(path)?.sourcePackage;
+    const source = analysis.classifications.get(path);
+    const owner = source?.context !== path ? source?.context : "";
     return literals.map((literal) => {
       if (original && (!owner || literal.text.startsWith(".")))
         return original([literal], containingFile, ...rest)[0];

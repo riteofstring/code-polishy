@@ -36,13 +36,22 @@ function requestFor(root, files, capability) {
     operation: "check",
     capability,
     files,
+    selection: { paths: files, deleted: [], complete: true },
     context,
+    inventory: [],
+    scopes: [],
+    diagnosticFiles: [],
+    writeFiles: [],
     policy: {
       quality: {
         allowComments: false,
         complexity: { typescript: 10, typescriptTest: 20 },
       },
+      modules: [],
       files: context.map((input) => ({
+        scopes: [],
+        owner: "",
+        context: input.path,
         path: input.path,
         language:
           !input.path.includes("node_modules/") &&
@@ -50,6 +59,7 @@ function requestFor(root, files, capability) {
             ? "typescript"
             : "",
         generated: false,
+        data: false,
         test: false,
         development: false,
       })),
@@ -68,11 +78,11 @@ function requestFor(root, files, capability) {
     (input) => input.path === ".code-polishy.json",
   )
     ? (JSON.parse(readFileSync(join(root, ".code-polishy.json"), "utf8")).scope
-        ?.generatedJavaScript ?? [])
+        ?.sourceContexts ?? [])
     : [];
   const mappings = Object.fromEntries(
     declarations.flatMap((entry) =>
-      entry.paths.map((path) => [path, entry.sourcePackage]),
+      entry.paths.map((path) => [path, entry.context]),
     ),
   );
   resolveTestUnits(request, mappings);
@@ -89,13 +99,52 @@ function resolveTestUnits(request, mappings = {}) {
     if (!units.has(candidate.id)) units.set(candidate.id, candidate);
     bindTestSource(request, file, units.get(candidate.id), mappings);
   }
-  request.units = [...units.values()];
+  request.scopes = [...units.values()].map((unit, index) => ({
+    handle: `scope-${index + 1}`,
+    language: "typescript",
+    root: unit.root,
+    members: unit.members,
+    entryFiles: unit.entryFiles,
+    context: request.context
+      .map((input) => input.path)
+      .filter((path) => [unit.manifest, unit.configuration].includes(path)),
+    data: {
+      packageRoot: unit.packageRoot,
+      manifest: unit.manifest,
+      workspaceRoot: unit.workspaceRoot,
+      configuration: unit.configuration,
+    },
+  }));
+  const handleByUnit = new Map(
+    [...units.keys()].map((id, index) => [id, `scope-${index + 1}`]),
+  );
+  for (const file of request.policy.files)
+    if (file.testUnit) {
+      file.scopes = [handleByUnit.get(file.testUnit)];
+      delete file.testUnit;
+    }
   request.diagnosticFiles = ["typecheck", "architecture", "dead-code"].includes(
     request.capability,
   )
-    ? request.units.flatMap((unit) => unit.members)
+    ? request.scopes.flatMap((unit) => unit.members)
     : request.files;
   request.writeFiles = request.files.filter((path) => !mappings[path]);
+  request.inventory = request.policy.files.map((file) => ({
+    path: file.path,
+    language: file.language || undefined,
+    context: file.context,
+    owner: file.owner || undefined,
+    modules: [],
+    source: Boolean(file.language),
+    metadata: /(?:^|\/)(?:package|[jt]sconfig[^/]*)\.json$/.test(file.path),
+    dependency: false,
+    asset: false,
+    test: file.test,
+    generated: file.generated,
+    data: file.data,
+    development: file.development,
+    control: file.path === ".code-polishy.json",
+  }));
 }
 
 function nearestTestInput(inputs, path, names) {
@@ -140,13 +189,12 @@ function testUnitFor(inputs, context) {
 }
 
 function bindTestSource(request, file, unit, mappings) {
-  file.unit = unit.id;
+  file.testUnit = unit.id;
   file.owner = /\.(?:[cm]?[jt]s|[jt]sx|astro)$/.test(file.path)
     ? request.provider
     : "";
-  file.sourcePackage = mappings[file.path] ?? "";
-  file.generated = Boolean(file.sourcePackage);
-  file.lint = { reactHooks: false, jsxAccessibility: false };
+  file.context = mappings[file.path] ?? file.path;
+  file.generated = file.context !== file.path;
   if (file.owner) unit.members.push(file.path);
   const name = file.path.slice(
     unit.packageRoot === "." ? 0 : unit.packageRoot.length + 1,
@@ -716,9 +764,7 @@ test("React peer and optional dependencies preserve native rule activation", () 
       'import { useState } from "react"; export function View({enabled}) { if (enabled) useState(0); return <img />; }\n',
     );
     const nativeRequest = requestFor(root, ["view.tsx"], "lint");
-    nativeRequest.policy.files.find(
-      (file) => file.path === "view.tsx",
-    ).lint.reactHooks = true;
+    nativeRequest.policy.modules.push({ name: "react", root: "." });
     const native = analyze(nativeRequest);
     assert.ok(
       native.findings.some(
@@ -731,10 +777,7 @@ test("React peer and optional dependencies preserve native rule activation", () 
     manifest.optionalDependencies = { "react-dom": "19.2.6" };
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
     const domRequest = requestFor(root, ["view.tsx"], "lint");
-    domRequest.policy.files.find((file) => file.path === "view.tsx").lint = {
-      reactHooks: true,
-      jsxAccessibility: true,
-    };
+    domRequest.policy.modules.push({ name: "react", root: "." });
     const dom = analyze(domRequest);
     assert.ok(
       dom.findings.some((finding) => finding.rule === "jsx-a11y/alt-text"),
@@ -839,7 +882,7 @@ test("generated source uses its frontend package and remains non-writable", () =
     ]) {
       const request = requestFor(root, [path], capability);
       resolveTestUnits(request, mappings);
-      for (const unit of request.units)
+      for (const unit of request.scopes)
         if (unit.members.includes(path)) unit.entryFiles.push(path);
       const response = analyze(request);
       assert.ok(
@@ -1032,7 +1075,7 @@ test("normalized entries preserve literal route names and configuration conventi
     ])
       writeFileSync(join(root, path), "export const value = 1;\n");
     const request = requestFor(root, ["src/cli.ts"], "dead-code");
-    request.units[0].entryFiles.push("src/routes/[id].ts");
+    request.scopes[0].entryFiles.push("src/routes/[id].ts");
     const result = analyze(request);
     assert.equal(result.status, "findings", JSON.stringify(result));
     assert.deepEqual(
@@ -1086,7 +1129,7 @@ test("generated entries resolve package imports without relocating relative impo
     const check = () => {
       const request = requestFor(root, [bundle], "dead-code");
       resolveTestUnits(request, mappings);
-      for (const unit of request.units)
+      for (const unit of request.scopes)
         if (unit.members.includes(bundle)) unit.entryFiles.push(bundle);
       request.complete = false;
       return analyze(request);
@@ -1153,7 +1196,7 @@ test("dead code uses each nested compilation unit's aliases", () => {
       );
     }
     const request = requestFor(root, ["src/main.ts"], "dead-code");
-    for (const unit of request.units)
+    for (const unit of request.scopes)
       unit.entryFiles.push(`${unit.root}/main.ts`);
     const response = analyze(request);
     assert.deepEqual(

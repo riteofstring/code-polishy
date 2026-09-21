@@ -130,7 +130,7 @@ func newNodePackages(repo repository.Repository, allFiles []string) *nodePackage
 }
 
 func (packages *nodePackages) owning(path string) (nodePackage, bool) {
-	path = packages.repo.JavaScriptContextPath(path)
+	path = packages.repo.SourceContextPath(path)
 	directory := filepath.ToSlash(filepath.Dir(path))
 	for {
 		if packages.owners[directory] {

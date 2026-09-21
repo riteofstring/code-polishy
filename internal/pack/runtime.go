@@ -118,10 +118,21 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Runtime: declared.Runtime},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Runtime: declared.Runtime},
 			})
 		}
 	}
+}
+
+func manifestDiscoveryRules(manifest Manifest, selected []string) []policy.PackDiscovery {
+	discovery := make([]policy.PackDiscovery, 0, len(selected))
+	for _, language := range manifest.Languages {
+		if !slices.Contains(selected, language.ID) {
+			continue
+		}
+		discovery = append(discovery, policy.PackDiscovery{Language: language.ID, Mode: language.DiscoveryMode, MetadataPatterns: slices.Clone(language.MetadataPatterns), DependencyPatterns: slices.Clone(language.DependencyManifests)})
+	}
+	return discovery
 }
 
 func manifestLanguageRules(manifest Manifest, selected []string) []policy.LanguageRule {

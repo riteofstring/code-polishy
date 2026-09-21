@@ -85,11 +85,17 @@ type ConformanceFixture struct {
 	Gap            string                     `json:"gap,omitempty"`
 	BehaviorIDs    []string                   `json:"behaviorIds"`
 	Files          []ConformanceFixtureFile   `json:"files"`
+	LaneOverrides  *ConformanceLaneOverrides  `json:"laneOverrides,omitempty"`
 	Git            ConformanceFixtureGit      `json:"git"`
 	Arguments      []string                   `json:"arguments"`
 	TimeoutSeconds int                        `json:"timeoutSeconds"`
 	Platforms      []string                   `json:"platforms"`
 	Expected       ConformanceExpectedOutcome `json:"expected"`
+}
+
+type ConformanceLaneOverrides struct {
+	Reference []ConformanceFixtureFile `json:"reference"`
+	Candidate []ConformanceFixtureFile `json:"candidate"`
 }
 
 type ConformanceFixtureFile struct {
@@ -421,6 +427,14 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 			return expected(label+".files", fmt.Sprintf("at most %d decoded bytes", maximumConformanceFixtureBytes))
 		}
 	}
+	overrideBytes, err := validateConformanceLaneOverrides(fixture.LaneOverrides, label+".laneOverrides", paths, portablePaths, fixture.Git.Changes)
+	if err != nil {
+		return err
+	}
+	total += overrideBytes
+	if total > maximumConformanceFixtureBytes {
+		return expected(label+".files", fmt.Sprintf("at most %d decoded bytes including lane overrides", maximumConformanceFixtureBytes))
+	}
 	gitBytes, err := validateConformanceGit(fixture.Git, label+".git", paths, portablePaths)
 	if err != nil {
 		return err
@@ -447,6 +461,68 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 		return err
 	}
 	return validateConformanceExpected(fixture.Expected, label+".expected", paths)
+}
+
+func validateConformanceLaneOverrides(overrides *ConformanceLaneOverrides, label string, paths, portablePaths map[string]bool, changes []ConformanceGitChange) (int, error) {
+	if overrides == nil {
+		return 0, nil
+	}
+	if len(overrides.Reference) == 0 || len(overrides.Reference) != len(overrides.Candidate) || len(overrides.Reference) > maximumConformanceFiles {
+		return 0, expected(label, "equal nonempty reference and candidate file sets")
+	}
+	changed := map[string]bool{}
+	for _, change := range changes {
+		changed[strings.ToLower(change.Path)] = true
+	}
+	reference := map[string]ConformanceFixtureFile{}
+	total := 0
+	for index, file := range overrides.Reference {
+		portable := strings.ToLower(file.Path)
+		if err := validateConformanceOverrideFile(file, indexed(label+".reference", index), paths, portablePaths, changed); err != nil || reference[portable].Path != "" {
+			if err != nil {
+				return 0, err
+			}
+			return 0, expected(indexed(label+".reference", index)+".path", "a unique existing fixture path absent from Git changes")
+		}
+		data, err := conformanceFixtureBytes(file)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", indexed(label+".reference", index), err)
+		}
+		total += len(data)
+		reference[portable] = file
+	}
+	seen := map[string]bool{}
+	for index, file := range overrides.Candidate {
+		portable := strings.ToLower(file.Path)
+		if err := validateConformanceOverrideFile(file, indexed(label+".candidate", index), paths, portablePaths, changed); err != nil || seen[portable] {
+			if err != nil {
+				return 0, err
+			}
+			return 0, expected(indexed(label+".candidate", index)+".path", "a unique existing fixture path absent from Git changes")
+		}
+		matching, found := reference[portable]
+		if !found || matching.Path != file.Path || matching.Mode != file.Mode {
+			return 0, expected(indexed(label+".candidate", index), "the same exact path and mode as the reference lane")
+		}
+		data, err := conformanceFixtureBytes(file)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", indexed(label+".candidate", index), err)
+		}
+		total += len(data)
+		seen[portable] = true
+	}
+	return total, nil
+}
+
+func validateConformanceOverrideFile(file ConformanceFixtureFile, label string, paths, portablePaths, changed map[string]bool) error {
+	portable := strings.ToLower(file.Path)
+	if err := validateConformancePath(file.Path); err != nil || !paths[file.Path] || !portablePaths[portable] || changed[portable] {
+		return expected(label+".path", "an existing exact fixture path absent from Git changes")
+	}
+	if !slices.Contains([]string{"0644", "0755"}, file.Mode) {
+		return expected(label+".mode", "0644 or 0755")
+	}
+	return nil
 }
 
 func validateConformanceGit(git ConformanceFixtureGit, label string, paths, portablePaths map[string]bool) (int, error) {

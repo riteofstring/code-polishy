@@ -41,7 +41,7 @@ func validateArchitectureFindings(findings []ResponseFinding, reached map[string
 
 func architectureClosure(request Request, response Response) map[string]bool {
 	units := map[string]int{}
-	for index, unit := range request.Units {
+	for index, unit := range request.Scopes {
 		for _, file := range unit.Members {
 			units[file] = index
 		}
@@ -58,7 +58,7 @@ func architectureClosure(request Request, response Response) map[string]bool {
 		reached[file] = true
 		if index, exists := units[file]; exists && !expanded[index] {
 			expanded[index] = true
-			queue = append(queue, request.Units[index].Members...)
+			queue = append(queue, request.Scopes[index].Members...)
 		}
 		queue = append(queue, imports[file]...)
 	}

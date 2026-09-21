@@ -112,12 +112,13 @@ func CommandsForProfiles(repo repository.Repository, selection repository.Select
 	prepared := make([]policy.Command, 0, len(commands))
 	for _, command := range commands {
 		if command.Adapter != nil {
-			invocation, selected, err := pack.PlannedExecution(repo, selection, command, commandProfile(command, profiles))
+			invocations, selected, err := pack.PlannedExecutions(repo, selection, command, commandProfile(command, profiles))
 			if !selected {
 				continue
 			}
 			if err == nil {
-				command = invocation
+				prepared = append(prepared, invocations...)
+				continue
 			}
 		}
 		prepared = append(prepared, command)
@@ -312,7 +313,7 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
-	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
+	findings = append(findings, repo.SourceContextOwnershipFindings(files)...)
 	findings = append(findings, repo.InspectGeneration(files).Findings...)
 	findings = append(findings, generatedStyleCoverageFindings(repo, files)...)
 	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)
@@ -847,7 +848,7 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 
 func commandApplies(repo repository.Repository, command policy.Command, selection repository.Selection) bool {
 	if command.Adapter != nil {
-		return len(pack.SelectedFiles(repo, selection, command, repo.AnalysisProfile())) > 0
+		return pack.AdapterSelected(repo, selection, command, repo.AnalysisProfile())
 	}
 	if len(command.Paths) == 0 && len(command.Modules) == 0 {
 		return selection.All

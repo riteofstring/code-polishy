@@ -19,7 +19,18 @@ class Analysis {
     this.root = realpathSync(request.projectRoot);
     this.context = new Map(request.context.map((input) => [input.path, input]));
     this.inputs = new Map();
-    this.units = new Map(request.units.map((unit) => [unit.id, unit]));
+    this.units = new Map(
+      request.scopes.map((scope) => [
+        scope.handle,
+        {
+          ...scope.data,
+          id: scope.handle,
+          root: scope.root,
+          members: scope.members,
+          entryFiles: scope.entryFiles,
+        },
+      ]),
+    );
     this.reportable = new Set(request.diagnosticFiles);
     this.writable = new Set(request.writeFiles);
     this.classifications = new Map(
@@ -28,6 +39,7 @@ class Analysis {
     this.response = {
       protocolVersion: 4,
       status: "pass",
+      scopeHandles: request.scopes.map((scope) => scope.handle),
       evidence: [
         `${request.capability} completed using the installed JS/TS provider`,
       ],
@@ -60,8 +72,9 @@ class Analysis {
   }
 
   unit(path) {
-    const unit = this.units.get(this.classifications.get(path)?.unit);
-    if (!unit) throw new Error(`source has no resolved analysis unit: ${path}`);
+    const unit = this.units.get(this.classifications.get(path)?.scopes?.[0]);
+    if (!unit)
+      throw new Error(`source has no authorized analysis scope: ${path}`);
     return unit;
   }
 
@@ -160,7 +173,7 @@ export function packageFor(analysis, path) {
 }
 
 export function resolutionPath(analysis, path) {
-  return analysis.classifications.get(path)?.sourcePackage || path;
+  return analysis.classifications.get(path)?.context || path;
 }
 
 export function boundedText(value, maximum) {

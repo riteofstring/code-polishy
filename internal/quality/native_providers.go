@@ -67,10 +67,10 @@ func javascriptUnitProblem(repo repository.Repository, inventory, selected []str
 	packages := javascriptPackageRoots(inventory)
 	unit := func(path string) string {
 		if capability == "typecheck" {
-			project, _ := javascriptNearestProject(configurations, repo.JavaScriptContextPath(path))
+			project, _ := javascriptNearestProject(configurations, repo.SourceContextPath(path))
 			return project
 		}
-		root, _ := javascriptOwningPackage(packages, repo.JavaScriptContextPath(path))
+		root, _ := javascriptOwningPackage(packages, repo.SourceContextPath(path))
 		return root
 	}
 	units := map[string]bool{}

@@ -14,6 +14,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
+	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/quality"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -180,7 +181,7 @@ func (engine *Engine) finalizeMergeGateReplayFailure(ctx context.Context, base s
 }
 
 func (engine *Engine) executePlannedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) (Report, error) {
-	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: controller.runner, expected: plan.Commands}
+	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, repo: engine.Repository, delegate: controller.runner, expected: plan.Commands}
 	plannedEngine := *engine
 	plannedEngine.Runner = plannedRunner
 	report, gateErr := plannedEngine.runMergeGateLevel(ctx, plan)
@@ -483,12 +484,15 @@ func suiteCommand(suite policy.TestSuite) policy.Command {
 }
 
 type mergeGatePlannedRunner struct {
-	root     string
-	viewRoot string
-	delegate runner.Runner
-	expected []MergeGateExecutionCommand
-	next     int
-	err      error
+	root             string
+	viewRoot         string
+	repo             repository.Repository
+	delegate         runner.Runner
+	expected         []MergeGateExecutionCommand
+	next             int
+	err              error
+	discoveryCommand policy.Command
+	discoveryOutput  []byte
 }
 
 func (commandRunner *mergeGatePlannedRunner) TestDiagnosticRunner() runner.Runner {
@@ -612,13 +616,30 @@ func (commandRunner *mergeGatePlannedRunner) RunStructured(ctx context.Context, 
 	if err := commandRunner.start(root, command); err != nil {
 		return runner.Result{ExitStatus: -1}, runner.Output{}, err
 	}
+	derived := command.InputDerivation == pack.DiscoveryInputDerivation
 	if observed, ok := commandRunner.delegate.(runner.StructuredRunner); ok {
-		return observed.RunStructured(ctx, root, command)
+		result, output, err := observed.RunStructured(ctx, root, command)
+		commandRunner.recordDiscovery(command, output, err, derived)
+		return result, output, err
 	}
 	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, root, command)
+		result, output, err := observed.RunWithOutput(ctx, root, command)
+		commandRunner.recordDiscovery(command, output, err, derived)
+		return result, output, err
 	}
 	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture structured output for %q", command.Name)
+}
+
+func (commandRunner *mergeGatePlannedRunner) recordDiscovery(command policy.Command, output runner.Output, runErr error, derived bool) {
+	if derived {
+		commandRunner.discoveryCommand = policy.Command{}
+		commandRunner.discoveryOutput = nil
+		return
+	}
+	if runErr == nil && commandRunner.next < len(commandRunner.expected) && commandRunner.expected[commandRunner.next].Command.InputDerivation == pack.DiscoveryInputDerivation {
+		commandRunner.discoveryCommand = command
+		commandRunner.discoveryOutput = append([]byte(nil), output.Stdout...)
+	}
 }
 
 func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.Command) error {
@@ -630,6 +651,16 @@ func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.C
 		return commandRunner.err
 	}
 	expected := commandRunner.expected[commandRunner.next]
+	if expected.Command.InputDerivation == pack.DiscoveryInputDerivation {
+		if len(commandRunner.discoveryOutput) == 0 {
+			commandRunner.err = fmt.Errorf("merge gate pack follow-up has no completed discovery at position %d", commandRunner.next+1)
+			return commandRunner.err
+		}
+		if err := pack.ValidateDiscoveryFollowup(commandRunner.repo, expected.Command, commandRunner.discoveryCommand, command, commandRunner.discoveryOutput); err != nil {
+			commandRunner.err = fmt.Errorf("merge gate pack follow-up is invalid at position %d: %w", commandRunner.next+1, err)
+			return commandRunner.err
+		}
+	}
 	expectedRoot := expected.Root
 	if expectedRoot == "" {
 		expectedRoot = commandRunner.root
@@ -667,7 +698,7 @@ func unplannedCommand(label, plan string, index int, expected, actual policy.Com
 		{"selection", slices.Equal(expected.Paths, actual.Paths) && slices.Equal(expected.Modules, actual.Modules) &&
 			slices.Equal(expected.RunOn, actual.RunOn) && slices.Equal(expected.PassFilePaths, actual.PassFilePaths)},
 		{"artifacts", slices.Equal(expected.TestArtifacts, actual.TestArtifacts)},
-		{"request", bytes.Equal(expected.Stdin, actual.Stdin)},
+		{"request", samePolicyCommandInput(expected, actual)},
 		{"adapter", reflect.DeepEqual(expected.Adapter, actual.Adapter)},
 	} {
 		if !field.same {
@@ -678,16 +709,23 @@ func unplannedCommand(label, plan string, index int, expected, actual policy.Com
 }
 
 func samePolicyCommand(expected, actual policy.Command) bool {
-	if expected.Adapter == nil && actual.Adapter == nil && bytes.Equal(expected.Stdin, actual.Stdin) && artifactsecurity.MatchesPlannedCommand(expected, actual) {
+	if expected.Adapter == nil && actual.Adapter == nil && samePolicyCommandInput(expected, actual) && artifactsecurity.MatchesPlannedCommand(expected, actual) {
 		return true
 	}
-	return samePolicyCommandIdentity(expected, actual) && samePolicyCommandCollections(expected, actual) && bytes.Equal(expected.Stdin, actual.Stdin) && reflect.DeepEqual(expected.Adapter, actual.Adapter)
+	return samePolicyCommandIdentity(expected, actual) && samePolicyCommandCollections(expected, actual) && samePolicyCommandInput(expected, actual) && reflect.DeepEqual(expected.Adapter, actual.Adapter)
+}
+
+func samePolicyCommandInput(expected, actual policy.Command) bool {
+	if expected.InputDerivation != actual.InputDerivation {
+		return false
+	}
+	return expected.InputDerivation != "" || bytes.Equal(expected.Stdin, actual.Stdin)
 }
 
 func samePolicyCommandIdentity(expected, actual policy.Command) bool {
 	return expected.Name == actual.Name && expected.Cwd == actual.Cwd && expected.TimeoutSeconds == actual.TimeoutSeconds &&
 		expected.Managed == actual.Managed && expected.PassFiles == actual.PassFiles && expected.SealedEnvironment == actual.SealedEnvironment &&
-		expected.ReportProtocol == actual.ReportProtocol
+		expected.ReportProtocol == actual.ReportProtocol && expected.InputDerivation == actual.InputDerivation
 }
 
 func samePolicyCommandCollections(expected, actual policy.Command) bool {

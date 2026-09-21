@@ -213,27 +213,30 @@ an apparently valid empty result. See
   Production module paths do not assign test ownership, and test imports do not
   create production dependency
   edges.
-- `scope.generatedJavaScript` gives generated JavaScript or TypeScript the
-  package context of one real source package without a fake manifest or lock in
-  the output tree:
+- `scope.sourceContexts` maps generated source to one real contained ecosystem
+  context without putting a fake manifest, module, or lock in the output tree.
+  For example, generated TypeScript can use its source package manifest:
 
   ```json
   {
     "scope": {
       "generated": ["generated/client/**"],
-      "generatedJavaScript": [
+      "sourceContexts": [
         {
           "paths": ["generated/client/**/*.ts"],
-          "sourcePackage": "packages/client/package.json"
+          "context": "packages/client/package.json"
         }
       ]
     }
   }
   ```
 
-  Each output must exist, be generated JavaScript/TypeScript, and match exactly
-  one non-generated source package. It inherits that package's workspace,
-  lockfile, TypeScript, lint, dead-code, dependency, and module context.
+  Each matched output must exist, be declared generated, and have exactly one
+  mapping. The context path must exist, remain non-generated, and cannot itself
+  be another mapped output. Core transfers its module ownership; the selected
+  language pack interprets its ecosystem meaning. For JavaScript and TypeScript,
+  the package manifest supplies workspace, lockfile, compiler, lint, dead-code,
+  and dependency context.
 
 - `scope.data` is the non-rewrite category for hand-written product data. Use
   narrow patterns for `.json`, `.jsonc`, `.yaml`, `.yml`, or validated literal

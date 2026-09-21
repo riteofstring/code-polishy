@@ -9,7 +9,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func TestGeneratedJavaScriptDeadCodeUsesTheDeclaredOwnerEndToEnd(t *testing.T) {
+func TestSourceContextDeadCodeUsesTheDeclaredOwnerEndToEnd(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	var err error
@@ -18,8 +18,8 @@ func TestGeneratedJavaScriptDeadCodeUsesTheDeclaredOwnerEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo.Config.Scope.Generated = []string{"python_pkg/generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
-		Paths: []string{"python_pkg/generated/**"}, SourcePackage: "frontend/package.json",
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{
+		Paths: []string{"python_pkg/generated/**"}, Context: "frontend/package.json",
 	}}
 	writeQualityFile(t, repo.Root, "frontend/package.json", "{\"name\":\"frontend\",\"private\":true,\"type\":\"module\"}\n")
 	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = \"python-package\"\nversion = \"1.0.0\"\n")
@@ -47,18 +47,18 @@ func TestGeneratedJavaScriptDeadCodeUsesTheDeclaredOwnerEndToEnd(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptInvalidOwnerPreventsDeadCodeExecution(t *testing.T) {
+func TestSourceContextInvalidOwnerPreventsDeadCodeExecution(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"python_pkg/generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
-		Paths: []string{"python_pkg/generated/**"}, SourcePackage: "missing/package.json",
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{
+		Paths: []string{"python_pkg/generated/**"}, Context: "missing/package.json",
 	}}
 	policyRoot, observed := fakeFileBundle(t, emptyDeadCodeResult)
 	repo.PolicyRoot = policyRoot
 	writeQualityFile(t, repo.Root, "python_pkg/generated/client.ts", "export {};\n")
 	findings := JavaScriptDeadCodeFindings(t.Context(), repo, []string{"python_pkg/generated/client.ts"})
-	if len(findings) != 1 || findings[0].Check != "policy.generatedJavaScriptOwnership" {
+	if len(findings) != 1 || findings[0].Check != "policy.sourceContextOwnership" {
 		t.Fatalf("missing owner did not block analysis: %+v", findings)
 	}
 	if _, err := os.Lstat(observed); !os.IsNotExist(err) {

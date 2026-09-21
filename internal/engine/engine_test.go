@@ -1328,7 +1328,7 @@ func contentRepository(t *testing.T, excludes []string) string {
 		excludeJSON += `"` + item + `"`
 	}
 	config := `{
-  "version": 4,
+  "version": 5,
   "project": {"kind": "content"},
   "scope": {"exclude": [` + excludeJSON + `]},
   "quality": {},
@@ -1358,7 +1358,7 @@ func documentationRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	config := `{
-  "version": 4,
+  "version": 5,
   "project": {"kind": "tooling", "capabilities": ["cli"]},
   "scope": {},
   "quality": {},

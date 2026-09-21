@@ -11,7 +11,7 @@ const schemaRejection = "does not match shipped schema"
 
 func TestRuntimeSchemaRejectsStructureAcceptedByTypedDecoding(t *testing.T) {
 	t.Parallel()
-	configuration := strings.Replace(minimalConfig(), `{"version":4`, `{"$schema":"","version":4`, 1)
+	configuration := strings.Replace(minimalConfig(), `{"version":5`, `{"$schema":"","version":5`, 1)
 	_, err := Parse([]byte(configuration), ConfigFilename)
 	if err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("error = %v", err)
@@ -74,10 +74,10 @@ func TestRuntimeSchemaOwnsConditionalBoundaries(t *testing.T) {
 func TestRuntimeSchemaClosesEveryObjectBoundary(t *testing.T) {
 	t.Parallel()
 	configuration := `{
-  "version":4,
+  "version":5,
   "project":{"kind":"content"},
   "scope":{
-    "generatedJavaScript":[{"paths":["generated/**"],"sourcePackage":"package.json"}],
+    "sourceContexts":[{"paths":["generated/**"],"context":"package.json"}],
     "pythonDynamicReferences":[{"kind":"target","project":"pyproject.toml","target":{"module":"app.entry","symbol":"serve"},"consumer":{"kind":"callsite","importer":"loader.py","module":"loader","callable":"load","site":{"line":3,"column":1},"callee":"pkgutil.resolve_name","shape":"module-object-call/v1","argument":"name","sourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}],
     "pythonComputedImports":[{"project":"pyproject.toml","importer":"loader.py","module":"loader","moduleScope":true,"callee":"importlib.import_module","line":1,"column":1,"shape":"call","argument":"name","sourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","namespace":"loader.plugins","configuration":[{"path":"plugins.json","jsonPointer":"/plugins","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]}],
     "pythonExternalAttributes":[{"project":"pyproject.toml","module":"app","callable":"load","receiver":{"kind":"parameter","name":"settings","binding":{"line":1,"column":10},"type":"external.Settings"},"attribute":"path","write":{"line":2,"column":5}}],
@@ -106,7 +106,7 @@ func TestRuntimeSchemaClosesEveryObjectBoundary(t *testing.T) {
 	}
 	boundaries := map[string][]any{
 		"root": {}, "project": {"project"}, "scope": {"scope"},
-		"language": {"scope", "languages", 0}, "generated JavaScript": {"scope", "generatedJavaScript", 0},
+		"language": {"scope", "languages", 0}, "source context": {"scope", "sourceContexts", 0},
 		"dynamic reference": {"scope", "pythonDynamicReferences", 0}, "dynamic target": {"scope", "pythonDynamicReferences", 0, "target"}, "dynamic consumer": {"scope", "pythonDynamicReferences", 0, "consumer"}, "dynamic consumer site": {"scope", "pythonDynamicReferences", 0, "consumer", "site"}, "computed import": {"scope", "pythonComputedImports", 0},
 		"computed input": {"scope", "pythonComputedImports", 0, "configuration", 0}, "external attribute": {"scope", "pythonExternalAttributes", 0},
 		"external receiver":         {"scope", "pythonExternalAttributes", 0, "receiver"},
@@ -166,7 +166,7 @@ func runtimeSchemaObjectAt(t testing.TB, document any, path ...any) map[string]a
 
 func FuzzRuntimeSchemaBoundary(f *testing.F) {
 	f.Add([]byte(minimalConfig()))
-	f.Add([]byte(`{"version":4}`))
+	f.Add([]byte(`{"version":5}`))
 	f.Add([]byte(`null`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1024*1024 {

@@ -14,12 +14,16 @@ import (
 const maximumConformanceDifferences = 128
 const maximumConformanceDifferenceBytes = 1024
 
-func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot, referencePolicyRoot string, candidate ConformanceRunEvidence, candidateRoot, candidatePolicyRoot string) ([]ConformanceDifference, error) {
-	referenceValue, err := conformanceComparableValue(reference, referenceRoot, referencePolicyRoot)
+func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot, referencePolicyRoot string, candidate ConformanceRunEvidence, candidateRoot, candidatePolicyRoot string, variantPaths ...map[string]bool) ([]ConformanceDifference, error) {
+	variants := map[string]bool{}
+	if len(variantPaths) > 0 {
+		variants = variantPaths[0]
+	}
+	referenceValue, err := conformanceComparableValue(reference, referenceRoot, referencePolicyRoot, variants)
 	if err != nil {
 		return nil, fmt.Errorf("normalize reference: %w", err)
 	}
-	candidateValue, err := conformanceComparableValue(candidate, candidateRoot, candidatePolicyRoot)
+	candidateValue, err := conformanceComparableValue(candidate, candidateRoot, candidatePolicyRoot, variants)
 	if err != nil {
 		return nil, fmt.Errorf("normalize candidate: %w", err)
 	}
@@ -28,37 +32,62 @@ func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot, ref
 	return differences, nil
 }
 
-func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot string) (any, error) {
+func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot string, variantPaths map[string]bool) (any, error) {
 	report, err := decodeConformanceValue(run.Report)
 	if err != nil {
 		return nil, err
 	}
-	report = normalizeConformanceValue(report, root, policyRoot, "")
-	before, err := encodeConformanceValue(run.Before)
+	head := ""
+	if len(variantPaths) > 0 {
+		head = run.BeforeGit.Head
+	}
+	report = normalizeConformanceValue(report, root, policyRoot, head, "")
+	beforeFiles := normalizeConformanceFileIdentities(run.Before, variantPaths)
+	afterFiles := normalizeConformanceFileIdentities(run.After, variantPaths)
+	beforeGitIdentity := normalizeConformanceGitIdentity(run.BeforeGit, len(variantPaths) > 0)
+	afterGitIdentity := normalizeConformanceGitIdentity(run.AfterGit, len(variantPaths) > 0)
+	before, err := encodeConformanceValue(beforeFiles)
 	if err != nil {
 		return nil, err
 	}
-	after, err := encodeConformanceValue(run.After)
+	after, err := encodeConformanceValue(afterFiles)
 	if err != nil {
 		return nil, err
 	}
-	beforeGit, err := encodeConformanceValue(run.BeforeGit)
+	beforeGit, err := encodeConformanceValue(beforeGitIdentity)
 	if err != nil {
 		return nil, err
 	}
-	afterGit, err := encodeConformanceValue(run.AfterGit)
+	afterGit, err := encodeConformanceValue(afterGitIdentity)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{
 		"exitStatus": run.ExitStatus,
 		"report":     report,
-		"stderr":     normalizeConformanceString(run.Stderr, root, policyRoot),
+		"stderr":     normalizeConformanceString(run.Stderr, root, policyRoot, head),
 		"before":     before,
 		"after":      after,
 		"beforeGit":  beforeGit,
 		"afterGit":   afterGit,
 	}, nil
+}
+
+func normalizeConformanceFileIdentities(files []ConformanceFileIdentity, variants map[string]bool) []ConformanceFileIdentity {
+	result := append([]ConformanceFileIdentity{}, files...)
+	for index := range result {
+		if variants[result[index].Path] {
+			result[index].SHA256 = "$LANE_OVERRIDE"
+		}
+	}
+	return result
+}
+
+func normalizeConformanceGitIdentity(identity ConformanceGitIdentity, variant bool) ConformanceGitIdentity {
+	if variant {
+		identity.Head = "$LANE_HEAD"
+	}
+	return identity
 }
 
 func decodeConformanceValue(data []byte) (any, error) {
@@ -79,7 +108,7 @@ func encodeConformanceValue(value any) (any, error) {
 	return decodeConformanceValue(data)
 }
 
-func normalizeConformanceValue(value any, root, policyRoot, path string) any {
+func normalizeConformanceValue(value any, root, policyRoot, head, path string) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
@@ -88,13 +117,13 @@ func normalizeConformanceValue(value any, root, policyRoot, path string) any {
 			if dropConformanceField(path, key) {
 				continue
 			}
-			result[key] = normalizeConformanceValue(child, root, policyRoot, childPath)
+			result[key] = normalizeConformanceValue(child, root, policyRoot, head, childPath)
 		}
 		return result
 	case []any:
 		result := make([]any, 0, len(typed))
 		for index, child := range typed {
-			result = append(result, normalizeConformanceValue(child, root, policyRoot, path+"/"+strconv.Itoa(index)))
+			result = append(result, normalizeConformanceValue(child, root, policyRoot, head, path+"/"+strconv.Itoa(index)))
 		}
 		if sortConformanceArray(path) {
 			slices.SortFunc(result, func(left, right any) int {
@@ -105,7 +134,7 @@ func normalizeConformanceValue(value any, root, policyRoot, path string) any {
 		}
 		return result
 	case string:
-		return normalizeConformanceString(typed, root, policyRoot)
+		return normalizeConformanceString(typed, root, policyRoot, head)
 	default:
 		return value
 	}
@@ -147,7 +176,7 @@ func conformancePointerShape(path string) string {
 	return strings.Join(parts, "/")
 }
 
-func normalizeConformanceString(value, root, policyRoot string) string {
+func normalizeConformanceString(value, root, policyRoot string, heads ...string) string {
 	result := value
 	for _, item := range []struct {
 		value       string
@@ -157,6 +186,11 @@ func normalizeConformanceString(value, root, policyRoot string) string {
 			if replacement != "" {
 				result = strings.ReplaceAll(result, replacement, item.replacement)
 			}
+		}
+	}
+	for _, head := range heads {
+		if head != "" {
+			result = strings.ReplaceAll(result, head, "$LANE_HEAD")
 		}
 	}
 	return result

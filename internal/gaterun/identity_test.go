@@ -38,6 +38,7 @@ func TestIdentityDigestBindsCommandAndEnvironmentInputs(t *testing.T) {
 		{name: "command", mutate: func(value *IdentityInput) { value.Commands[0].Argv = []string{"tool", "changed"} }},
 		{name: "provider root", mutate: func(value *IdentityInput) { value.Commands[0].Root = "/sealed/pack" }},
 		{name: "provider request", mutate: func(value *IdentityInput) { value.Commands[0].InputSHA256 = ContentSHA256([]byte("request")) }},
+		{name: "provider request derivation", mutate: func(value *IdentityInput) { value.Commands[0].InputDerivation = "validated-pack-discovery-v1" }},
 		{name: "category", mutate: func(value *IdentityInput) { value.Commands[0].Category = Check }},
 		{name: "behavior review task selection", mutate: func(value *IdentityInput) {
 			value.BehaviorReview = requiredBehaviorReview("task-request")

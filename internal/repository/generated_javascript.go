@@ -2,55 +2,56 @@ package repository
 
 import (
 	"fmt"
-	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func (repo Repository) GeneratedJavaScriptOwner(path string) (policy.GeneratedJavaScript, bool) {
-	matches := []policy.GeneratedJavaScript{}
-	for _, declaration := range repo.Config.Scope.GeneratedJavaScript {
+func (repo Repository) SourceContextOwner(path string) (policy.SourceContext, bool) {
+	matches := []policy.SourceContext{}
+	for _, declaration := range repo.Config.Scope.SourceContexts {
 		if policy.MatchesAny(path, declaration.Paths) {
 			matches = append(matches, declaration)
 		}
 	}
 	if len(matches) != 1 {
-		return policy.GeneratedJavaScript{}, false
+		return policy.SourceContext{}, false
 	}
 	return matches[0], true
 }
 
-func (repo Repository) JavaScriptContextPath(path string) string {
-	if declaration, found := repo.GeneratedJavaScriptOwner(path); found {
-		return declaration.SourcePackage
+func (repo Repository) SourceContextPath(path string) string {
+	if !repo.IsGenerated(path) {
+		return path
+	}
+	if declaration, found := repo.SourceContextOwner(path); found {
+		return declaration.Context
 	}
 	return path
 }
 
-func (repo Repository) GeneratedJavaScriptOwnershipFindings(files []string) []policy.Finding {
+func (repo Repository) SourceContextOwnershipFindings(files []string) []policy.Finding {
 	fileSet := make(map[string]bool, len(files))
 	for _, path := range files {
 		fileSet[path] = true
 	}
 	findings := []policy.Finding{}
-	for _, declaration := range repo.Config.Scope.GeneratedJavaScript {
-		matched := generatedJavaScriptMatches(files, declaration)
-		if !fileSet[declaration.SourcePackage] {
-			findings = append(findings, generatedJavaScriptFinding(declaration.SourcePackage, "source package does not exist in governed source"))
+	for _, declaration := range repo.Config.Scope.SourceContexts {
+		matched := sourceContextsMatches(files, declaration)
+		if !fileSet[declaration.Context] {
+			findings = append(findings, sourceContextsFinding(declaration.Context, "context path does not exist in governed source"))
 		}
-		if repo.IsGenerated(declaration.SourcePackage) || generatedJavaScriptMappingCount(repo.Config.Scope.GeneratedJavaScript, declaration.SourcePackage) > 0 {
-			findings = append(findings, generatedJavaScriptFinding(declaration.SourcePackage, "source package cannot itself be generated output"))
+		if repo.IsGenerated(declaration.Context) || sourceContextsMappingCount(repo.Config.Scope.SourceContexts, declaration.Context) > 0 {
+			findings = append(findings, sourceContextsFinding(declaration.Context, "context path cannot itself be generated output or another mapped source"))
 		}
 		if len(matched) == 0 {
-			findings = append(findings, generatedJavaScriptFinding(declaration.SourcePackage, fmt.Sprintf("paths do not match any current file: %s", strings.Join(declaration.Paths, ", "))))
+			findings = append(findings, sourceContextsFinding(declaration.Context, fmt.Sprintf("paths do not match any current file: %s", strings.Join(declaration.Paths, ", "))))
 		}
 	}
 	for path := range fileSet {
-		owners := generatedJavaScriptMappingCount(repo.Config.Scope.GeneratedJavaScript, path)
-		if finding, found := repo.generatedJavaScriptOutputFinding(path, owners); found {
+		owners := sourceContextsMappingCount(repo.Config.Scope.SourceContexts, path)
+		if finding, found := repo.sourceContextsOutputFinding(path, owners); found {
 			findings = append(findings, finding)
 		}
 	}
@@ -60,7 +61,7 @@ func (repo Repository) GeneratedJavaScriptOwnershipFindings(files []string) []po
 	return findings
 }
 
-func generatedJavaScriptMatches(files []string, declaration policy.GeneratedJavaScript) []string {
+func sourceContextsMatches(files []string, declaration policy.SourceContext) []string {
 	matches := []string{}
 	for _, path := range files {
 		if policy.MatchesAny(path, declaration.Paths) {
@@ -70,22 +71,20 @@ func generatedJavaScriptMatches(files []string, declaration policy.GeneratedJava
 	return matches
 }
 
-func (repo Repository) generatedJavaScriptOutputFinding(path string, owners int) (policy.Finding, bool) {
+func (repo Repository) sourceContextsOutputFinding(path string, owners int) (policy.Finding, bool) {
 	switch {
 	case owners == 0:
 		return policy.Finding{}, false
 	case owners > 1:
-		return generatedJavaScriptFinding(path, "generated output matches more than one source-package declaration"), true
+		return sourceContextsFinding(path, "generated output matches more than one source-context declaration"), true
 	case !repo.IsGenerated(path):
-		return generatedJavaScriptFinding(path, "declared output is not in scope.generated"), true
-	case repo.Language(path) != "typescript" || !generatedJavaScriptExtension(path):
-		return generatedJavaScriptFinding(path, "declared output is not supported JavaScript or TypeScript source"), true
+		return sourceContextsFinding(path, "declared output is not in scope.generated"), true
 	default:
 		return policy.Finding{}, false
 	}
 }
 
-func generatedJavaScriptMappingCount(declarations []policy.GeneratedJavaScript, path string) int {
+func sourceContextsMappingCount(declarations []policy.SourceContext, path string) int {
 	count := 0
 	for _, declaration := range declarations {
 		if policy.MatchesAny(path, declaration.Paths) {
@@ -95,16 +94,12 @@ func generatedJavaScriptMappingCount(declarations []policy.GeneratedJavaScript, 
 	return count
 }
 
-func generatedJavaScriptExtension(path string) bool {
-	return slices.Contains([]string{".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"}, strings.ToLower(filepath.Ext(path)))
-}
-
-func generatedJavaScriptFinding(path, message string) policy.Finding {
-	return policy.Finding{Check: "policy.generatedJavaScriptOwnership", Path: path, Subject: "source-package", Message: message}
+func sourceContextsFinding(path, message string) policy.Finding {
+	return policy.Finding{Check: "policy.sourceContextOwnership", Path: path, Subject: "source-context", Message: message}
 }
 
 func (repo Repository) JavaScriptLintActivation(file string) policy.JavaScriptLintScope {
-	context := repo.JavaScriptContextPath(file)
+	context := repo.SourceContextPath(file)
 	activation := policy.JavaScriptLintScope{}
 	for _, scope := range repo.Config.JavaScriptLintScopes {
 		if scope.Root != "." && !strings.HasPrefix(context, scope.Root+"/") {

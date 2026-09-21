@@ -98,7 +98,7 @@ func TestConformanceRunnerProvesReproducibilityAndDetectsSemanticLoss(t *testing
 }
 
 func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
-	configuration := "{\"version\":4}\n"
+	configuration := "{\"version\":5}\n"
 	baseSource := "package sample\n"
 	deletedSource := "package deleted\n"
 	modifiedSource := "package sample\n\nconst Changed = true\n"
@@ -126,7 +126,7 @@ func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
 	identities := []ConformanceGitIdentity{}
 	for range 2 {
 		root := filepath.Join(t.TempDir(), "repository")
-		if err := materializeConformanceFixture(t.Context(), root, fixture, git.Path); err != nil {
+		if err := materializeConformanceFixture(t.Context(), root, fixture, "reference", git.Path); err != nil {
 			t.Fatal(err)
 		}
 		identity, err := conformanceGitSnapshot(t.Context(), git.Path, root)
@@ -158,6 +158,72 @@ func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
 	}
 	if !reflect.DeepEqual(identities[0], identities[1]) {
 		t.Fatalf("materialized Git identities differ: %+v", identities)
+	}
+}
+
+func TestConformanceLaneOverridesPreserveComparableEvidence(t *testing.T) {
+	baseConfiguration := "{\"version\":4}\n"
+	referenceConfiguration := "{\"version\":4,\"lane\":\"reference\"}\n"
+	candidateConfiguration := "{\"version\":5,\"lane\":\"candidate\"}\n"
+	fixture := ConformanceFixture{
+		Files: []ConformanceFixtureFile{{Path: ".code-polishy.json", Mode: "0644", Content: &baseConfiguration}},
+		LaneOverrides: &ConformanceLaneOverrides{
+			Reference: []ConformanceFixtureFile{{Path: ".code-polishy.json", Mode: "0644", Content: &referenceConfiguration}},
+			Candidate: []ConformanceFixtureFile{{Path: ".code-polishy.json", Mode: "0644", Content: &candidateConfiguration}},
+		},
+		Git: ConformanceFixtureGit{Branch: "main", CommitTimestamp: "2000-01-01T00:00:00Z"},
+	}
+	git, err := conformanceGitTool(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	temporary := t.TempDir()
+	referenceRoot := filepath.Join(temporary, "reference")
+	candidateRoot := filepath.Join(temporary, "candidate")
+	if err := materializeConformanceFixture(t.Context(), referenceRoot, fixture, "reference", git.Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := materializeConformanceFixture(t.Context(), candidateRoot, fixture, "candidate", git.Path); err != nil {
+		t.Fatal(err)
+	}
+	referenceFiles, err := conformanceSnapshot(referenceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateFiles, err := conformanceSnapshot(candidateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	variants := conformanceLaneOverridePaths(fixture.LaneOverrides)
+	if !equivalentConformanceSnapshots(referenceFiles, candidateFiles, variants) || reflect.DeepEqual(referenceFiles, candidateFiles) {
+		t.Fatalf("lane snapshots reference=%+v candidate=%+v", referenceFiles, candidateFiles)
+	}
+	referenceGit, err := conformanceGitSnapshot(t.Context(), git.Path, referenceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateGit, err := conformanceGitSnapshot(t.Context(), git.Path, candidateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equivalentConformanceGit(referenceGit, candidateGit, true) || referenceGit.Head == candidateGit.Head {
+		t.Fatalf("lane Git identities reference=%+v candidate=%+v", referenceGit, candidateGit)
+	}
+	referenceReport, err := json.Marshal(map[string]any{"head": referenceGit.Head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateReport, err := json.Marshal(map[string]any{"head": candidateGit.Head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	differences, err := compareConformanceRuns(
+		ConformanceRunEvidence{Report: referenceReport, Before: referenceFiles, After: referenceFiles, BeforeGit: referenceGit, AfterGit: referenceGit}, referenceRoot, "/reference-policy",
+		ConformanceRunEvidence{Report: candidateReport, Before: candidateFiles, After: candidateFiles, BeforeGit: candidateGit, AfterGit: candidateGit}, candidateRoot, "/candidate-policy",
+		variants,
+	)
+	if err != nil || len(differences) != 0 {
+		t.Fatalf("lane differences=%+v err=%v", differences, err)
 	}
 }
 
@@ -398,7 +464,7 @@ func writeConformanceTestLedger(t *testing.T) string {
 	if err := os.Mkdir(filepath.Join(root, "fixtures"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	configuration := "{\"version\":4,\"project\":{\"kind\":\"service\"},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+	configuration := "{\"version\":5,\"project\":{\"kind\":\"service\"},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
 	source := "package sample\n"
 	fixture := ConformanceFixture{
 		Protocol:       ConformanceFixtureProtocol,

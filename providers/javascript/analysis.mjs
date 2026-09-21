@@ -1,5 +1,7 @@
 import { extname } from "node:path";
 
+import { packageFor } from "./context.mjs";
+
 import { Linter } from "eslint";
 import tsParser from "@typescript-eslint/parser";
 import astroParser from "astro-eslint-parser";
@@ -105,7 +107,7 @@ function analyzeFile(analysis, path, adapter, facts) {
 }
 
 function lint(analysis, path, source, offset, extension) {
-  const effective = analysis.classifications.get(path)?.lint;
+  const effective = lintActivation(analysis, path);
   if (!effective) throw new Error("source has no effective lint activation");
   const activation = {
     ...effective,
@@ -121,6 +123,31 @@ function lint(analysis, path, source, offset, extension) {
   const messages = lintMessages(source, extension, rules);
   for (const message of messages)
     reportLintMessage(analysis, path, source, offset, message);
+}
+
+function lintActivation(analysis, path) {
+  const source = analysis.classifications.get(path);
+  if (!source) throw new Error("source has no effective lint activation");
+  const context = source.context || path;
+  const active = analysis.request.policy.modules
+    .filter(
+      (module) =>
+        module.name === "react" &&
+        (module.root === "." || context.startsWith(`${module.root}/`)),
+    )
+    .toSorted((left, right) => right.root.length - left.root.length)[0];
+  if (!active) return { reactHooks: false, jsxAccessibility: false };
+  const owner = packageFor(analysis, path);
+  const dependencies = {
+    ...owner?.data.dependencies,
+    ...owner?.data.devDependencies,
+    ...owner?.data.optionalDependencies,
+    ...owner?.data.peerDependencies,
+  };
+  return {
+    reactHooks: !source.generated,
+    jsxAccessibility: Boolean(dependencies["react-dom"]),
+  };
 }
 
 function configureAstroRules(rules) {

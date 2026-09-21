@@ -389,7 +389,7 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 	grouped := map[string][]string{}
 	ungoverned := []string{}
 	for _, path := range javascriptTypeCheckFiles(repo, files) {
-		contextPath := repo.JavaScriptContextPath(path)
+		contextPath := repo.SourceContextPath(path)
 		project, governed := javascriptNearestProject(configurations, contextPath)
 		if !governed {
 			ungoverned = append(ungoverned, path)
@@ -406,7 +406,7 @@ func javascriptTypeCheckProjects(repo repository.Repository, files, inventory []
 	for _, name := range names {
 		inherited := []string{}
 		for _, path := range grouped[name] {
-			if _, found := repo.GeneratedJavaScriptOwner(path); found {
+			if _, found := repo.SourceContextOwner(path); found {
 				inherited = append(inherited, path)
 			}
 		}
@@ -506,7 +506,7 @@ func JavaScriptDeadCodeFindings(ctx context.Context, repo repository.Repository,
 	if !javascriptDeadCodeSelected(files) {
 		return findings
 	}
-	if ownership := repo.GeneratedJavaScriptOwnershipFindings(inventory); len(ownership) > 0 {
+	if ownership := repo.SourceContextOwnershipFindings(inventory); len(ownership) > 0 {
 		return append(findings, ownership...)
 	}
 	analyses, uncovered := javascriptDeadCodeAnalyses(repo, inventory)
@@ -590,7 +590,7 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 				"the policy-owned dead-code analyzer does not analyze this file"})
 			continue
 		}
-		packageOwner, owned := javascriptOwningPackage(packages, repo.JavaScriptContextPath(path))
+		packageOwner, owned := javascriptOwningPackage(packages, repo.SourceContextPath(path))
 		if !owned {
 			uncovered = append(uncovered, javascriptUncoveredFile{path,
 				"no package.json governs this file, so no package declares what it belongs to"})
@@ -602,7 +602,7 @@ func javascriptDeadCodeAnalyses(repo repository.Repository, inventory []string) 
 			grouped[packageOwner] = workspace
 		}
 		workspace.Project = append(workspace.Project, path)
-		if _, inherited := repo.GeneratedJavaScriptOwner(path); inherited {
+		if _, inherited := repo.SourceContextOwner(path); inherited {
 			workspace.Inherited = append(workspace.Inherited, path)
 		}
 		if javascriptEntryPoint(repo, packageOwner, path) {

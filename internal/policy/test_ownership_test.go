@@ -64,7 +64,7 @@ func TestTestOwnershipSchemaRequiresOneExactPrimarySuite(t *testing.T) {
 func TestTestOwnershipCutoverRejectsSupersededForms(t *testing.T) {
 	t.Parallel()
 	for _, data := range []string{
-		strings.Replace(minimalConfig(), `"version":4`, `"version":3`, 1),
+		strings.Replace(minimalConfig(), `"version":5`, `"version":4`, 1),
 		strings.Replace(minimalConfig(), `"quality":{}`, `"scope":{"tests":["spec/**"]},"quality":{}`, 1),
 	} {
 		if _, err := Parse([]byte(data), ConfigFilename); err == nil {

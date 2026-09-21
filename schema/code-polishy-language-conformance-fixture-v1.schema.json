@@ -29,6 +29,7 @@
       "maxItems": 10000,
       "items": { "$ref": "#/$defs/file" }
     },
+    "laneOverrides": { "$ref": "#/$defs/laneOverrides" },
     "git": { "$ref": "#/$defs/git" },
     "arguments": {
       "type": "array",
@@ -93,6 +94,25 @@
         { "required": ["content"], "not": { "required": ["contentBase64"] } },
         { "required": ["contentBase64"], "not": { "required": ["content"] } }
       ]
+    },
+    "laneOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "candidate"],
+      "properties": {
+        "reference": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/file" }
+        },
+        "candidate": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/file" }
+        }
+      }
     },
     "git": {
       "type": "object",

@@ -382,6 +382,47 @@ func TestAdapterExecutionProducesNormalFindingsAndDetectsConcurrentTampering(t *
 	}
 }
 
+func TestRunAdapterValidatesStaticDiscoveryBeforeCapabilityExecution(t *testing.T) {
+	source := writePackSource(t)
+	manifest, err := ParseManifest(testManifest(t), "manifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Languages[0].DiscoveryMode = "static"
+	manifest.Languages[0].MetadataPatterns = []string{"**/project.fixture.json"}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, source, ManifestFilename, string(data), 0o644)
+	store := t.TempDir()
+	t.Cleanup(func() { makeWritable(store) })
+	identity, _, err := Install(source, store, testEngineVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution := Resolve([]policy.PackSelection{{Name: identity.Name, Version: identity.Version, Digest: identity.Digest}}, store, testEngineVersion)
+	root := t.TempDir()
+	writeTestFile(t, root, "project.fixture.json", "{}\n", 0o644)
+	writeTestFile(t, root, "src/main.fixture", "good\n", 0o644)
+	config := policy.Config{Modules: []policy.Module{{Name: "app", Paths: []string{"src/**", "project.fixture.json"}}}, ModuleByName: map[string]int{"app": 0}}
+	Apply(&config, resolution)
+	repo, err := repository.Open(root, root, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery := `{"protocolVersion":4,"status":"pass","evidence":["static fixture discovery"],"discovery":{"scopes":[{"id":"project","language":"fixture","root":".","members":["src/main.fixture"],"entryFiles":["src/main.fixture"],"context":["project.fixture.json"],"selected":["src/main.fixture"],"data":{"manifest":"project.fixture.json"}}]}}`
+	analysis := `{"protocolVersion":4,"status":"pass","evidence":["lint ran"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}}`
+	boundary := &responseRunner{responses: [][]byte{[]byte(discovery), []byte(analysis)}}
+	result := RunAdapter(t.Context(), repo, repository.Selection{Files: []string{"src/main.fixture"}}, resolution.Commands[0], boundary, "check")
+	if len(result.Findings) != 0 || len(boundary.requests) != 2 {
+		t.Fatalf("static execution = %+v, requests = %+v", result, boundary.requests)
+	}
+	if boundary.requests[0].Operation != "discover" || boundary.requests[1].Operation != "check" || len(boundary.requests[1].Scopes) != 1 || boundary.requests[1].Scopes[0].Handle != "scope-1" {
+		t.Fatalf("protocol sequence = %+v", boundary.requests)
+	}
+}
+
 func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 	source := writePackSource(t)
 	boundary := &responseRunner{responses: [][]byte{
@@ -394,7 +435,7 @@ func TestVerifySourceRunsEveryDeclaredFixture(t *testing.T) {
 	}
 }
 
-func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
+func TestVerifySourceBindsSensitiveControlWithoutTreatingItAsPackMetadata(t *testing.T) {
 	source := writePackSource(t)
 	writeTestFile(t, source, "fixtures/pass/package.json", "{}\n", 0o644)
 	writeTestFile(t, source, "fixtures/fail/package.json", "{}\n", 0o644)
@@ -412,7 +453,11 @@ func TestVerifySourceRetainsIgnoredFixtureMetadata(t *testing.T) {
 	}
 	for _, request := range boundary.requests {
 		if !slices.ContainsFunc(request.Context, func(input InputFile) bool { return input.Path == "package.json" }) {
-			t.Fatalf("fixture metadata disappeared inside a Git checkout: %+v", request.Context)
+			t.Fatalf("file-scoped fixture omitted sensitive control: %+v", request.Context)
+		}
+		entry := inventoryByPath(request.Inventory)["package.json"]
+		if !entry.Control || entry.Metadata || entry.Dependency || entry.Source {
+			t.Fatalf("sensitive control classification = %+v", entry)
 		}
 	}
 
@@ -446,6 +491,13 @@ func (boundary *responseRunner) RunStructured(_ context.Context, _ string, comma
 		return runner.Result{}, runner.Output{}, err
 	}
 	value["inputs"] = request.Context
+	if request.Operation != "discover" {
+		handles := make([]string, 0, len(request.Scopes))
+		for _, scope := range request.Scopes {
+			handles = append(handles, scope.Handle)
+		}
+		value["scopeHandles"] = handles
+	}
 	response, _ = json.Marshal(value)
 	boundary.responses = boundary.responses[1:]
 	return runner.Result{}, runner.Output{Stdout: response}, nil

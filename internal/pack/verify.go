@@ -2,6 +2,7 @@ package pack
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,7 +57,6 @@ type fixtureVerifier struct {
 
 func (verifier fixtureVerifier) run(fixture Fixture) error {
 	declared := verifier.tree.Manifest.Commands[slices.IndexFunc(verifier.tree.Manifest.Commands, func(command Command) bool { return command.Name == fixture.Command })]
-	command := policy.Command{Name: "pack-verify-" + fixture.Name, Argv: slices.Clone(declared.Argv), Cwd: ".", TimeoutSeconds: declared.TimeoutSeconds, Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{}, SealedEnvironment: true, Adapter: &policy.PackAdapter{PackRoot: verifier.root}}
 	projectRoot, err := filepath.EvalSymlinks(filepath.Join(verifier.root, filepath.FromSlash(fixture.Project)))
 	if err != nil {
 		return err
@@ -69,16 +69,33 @@ func (verifier fixtureVerifier) run(fixture Fixture) error {
 	resolution := Resolution{}
 	compileManifest(verifier.root, request.Pack, verifier.tree.Manifest, &resolution)
 	Apply(&repo.Config, resolution)
-	request.Provider = "pack." + request.Pack.Name + "." + fixture.Command + "." + fixture.Capability
-	request.Profile = declared.Profiles[0]
-	if err := prepareInputPaths(repo, &request, verifier.fixtureInputs(fixture)); err != nil {
-		return err
+	commandIndex := slices.IndexFunc(resolution.Commands, func(command policy.Command) bool {
+		return command.Adapter != nil && command.Adapter.Capability == fixture.Capability && strings.Contains(command.Name, "."+fixture.Command+".")
+	})
+	if commandIndex < 0 {
+		return errors.New("fixture command did not compile into a provider")
 	}
+	command := resolution.Commands[commandIndex]
+	request.Provider = command.Name
+	request.Profile = declared.Profiles[0]
 	prepared, identity, err := runtimeCommand(repo, command, declared.Runtime)
 	if err != nil {
 		return err
 	}
 	request.Runtime = identity
+	inputs := verifier.fixtureInputs(fixture)
+	if hasProjectDiscovery(command.Adapter) {
+		request, _, err = discoveryRequestPaths(verifier.ctx, repo, prepared, verifier.runner, request, inputs)
+		if err != nil {
+			return err
+		}
+		if len(request.Files) == 0 {
+			return errors.New("fixture discovery selected no source")
+		}
+	}
+	if err := prepareInputPaths(repo, &request, command, inputs); err != nil {
+		return err
+	}
 	response, err := execute(verifier.ctx, verifier.root, prepared, verifier.runner, request)
 	if err != nil {
 		return err

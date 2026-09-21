@@ -273,7 +273,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $target 'scripts') | Out-Null
           @'
           {
-            "version": 4,
+            "version": 5,
             "project": {"kind": "application", "capabilities": []},
             "scope": {"development": ["scripts/test.ps1"]},
             "quality": {},

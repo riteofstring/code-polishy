@@ -109,7 +109,7 @@ write_behavior_review_fixture_config() {
   fi
   write_file "${target}/.code-polishy.json" <<EOF
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},

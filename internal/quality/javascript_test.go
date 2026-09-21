@@ -545,12 +545,12 @@ func TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptUsesItsSourcePackageTypeProject(t *testing.T) {
+func TestSourceContextUsesItsContextTypeProject(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
-		Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json",
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{
+		Paths: []string{"generated/**"}, Context: "packages/app/package.json",
 	}}
 	policyRoot, observed := fakeFileBundle(t, typeCheckResult("generated/api.ts"))
 	repo.PolicyRoot = policyRoot
@@ -566,12 +566,12 @@ func TestGeneratedJavaScriptUsesItsSourcePackageTypeProject(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptRetainsAccessibilityWithoutAuthoredHookRules(t *testing.T) {
+func TestSourceContextRetainsAccessibilityWithoutAuthoredHookRules(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
-		Paths: []string{"generated/**"}, SourcePackage: "packages/web/package.json",
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{
+		Paths: []string{"generated/**"}, Context: "packages/web/package.json",
 	}}
 	repo.Config.JavaScriptLintScopes = []policy.JavaScriptLintScope{{Root: "packages/web", ReactHooks: true, JSXAccessibility: true}}
 	activation := javascriptLintActivation(repo, "generated/view.tsx")
@@ -612,12 +612,12 @@ func TestJavaScriptDeadCodeRunsOnlyForSelectionsItDependsOn(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptUsesItsSourcePackageDeadCodeWorkspace(t *testing.T) {
+func TestSourceContextUsesItsContextDeadCodeWorkspace(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{
-		Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json",
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{
+		Paths: []string{"generated/**"}, Context: "packages/app/package.json",
 	}}
 	policyRoot, observed := fakeFileBundle(t, deadCodeResult("generated/api.ts", "packages/app/src/index.ts"))
 	repo.PolicyRoot = policyRoot

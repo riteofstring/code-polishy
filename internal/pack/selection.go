@@ -1,7 +1,6 @@
 package pack
 
 import (
-	"path"
 	"slices"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -9,39 +8,37 @@ import (
 )
 
 func SelectedFiles(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) []string {
+	paths := slices.Clone(selection.Files)
+	if selection.All {
+		if inventory, err := repo.AllFiles(); err == nil {
+			paths = inventory
+		}
+	}
 	files := []string{}
-	for _, file := range selection.Files {
+	for _, file := range paths {
 		if selectedProviderFile(repo, command, file, profile) {
 			files = append(files, file)
 		}
 	}
-	if !slices.Contains([]string{"typecheck", "dead-code", "architecture"}, command.Adapter.Capability) {
-		return sortedUnique(files)
-	}
-	inventory, err := repo.AllFiles()
-	if err != nil {
-		return files
-	}
-	return sortedUnique(append(files, selectedInventoryFiles(repo, selection, command, profile, inventory)...))
+	return sortedUnique(files)
 }
 
-func selectedInventoryFiles(repo repository.Repository, selection repository.Selection, command policy.Command, profile string, inventory []string) []string {
-	units := newUnitInventory(inventory)
-	changed := append(slices.Clone(selection.Files), selection.Candidate.Deleted...)
-	triggered := slices.ContainsFunc(changed, func(file string) bool {
-		return providerMetadata(file) || selectedProviderFile(repo, command, file, profile)
-	})
-	files := []string{}
-	for _, file := range inventory {
-		if !selectedProviderFile(repo, command, file, profile) {
-			continue
-		}
-		unit := units.unit(repo, file)
-		if selection.All || command.Adapter.Capability == "dead-code" && triggered || selectedUnitMetadata(changed, unit) {
-			files = append(files, file)
+func AdapterSelected(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) bool {
+	if len(SelectedFiles(repo, selection, command, profile)) > 0 {
+		return true
+	}
+	for _, file := range selectionPaths(selection) {
+		metadata, dependency := adapterMetadata(command.Adapter, file)
+		projectWide := slices.Contains([]string{"typecheck", "dead-code", "architecture", "build", "dependency-policy", "lock-sync", "release-age", "security"}, command.Adapter.Capability)
+		if projectWide && (metadata || dependency || file == policy.ConfigFilename) {
+			return hasProjectDiscovery(command.Adapter)
 		}
 	}
-	return files
+	return false
+}
+
+func selectionPaths(selection repository.Selection) []string {
+	return sortedUnique(append(append(slices.Clone(selection.Files), selection.Candidate.AddedOrModified...), selection.Candidate.Deleted...))
 }
 
 func selectedProviderFile(repo repository.Repository, command policy.Command, file, profile string) bool {
@@ -52,18 +49,11 @@ func selectedProviderFile(repo repository.Repository, command policy.Command, fi
 	return owner.Name == command.Name || len(repo.Config.Checks) == 0
 }
 
-func providerMetadata(file string) bool {
-	return slices.Contains([]string{"package.json", "pnpm-workspace.yaml", policy.ConfigFilename}, path.Base(file)) || javaScriptConfiguration(file)
-}
-
-func selectedUnitMetadata(changed []string, unit AnalysisUnit) bool {
-	for _, file := range changed {
-		if file == policy.ConfigFilename || file == unit.Manifest || file == unit.Configuration {
-			return true
-		}
-		if path.Base(file) == "pnpm-workspace.yaml" && pathWithin(unit.PackageRoot, path.Dir(file)) {
-			return true
-		}
+func hasProjectDiscovery(adapter *policy.PackAdapter) bool {
+	if adapter == nil {
+		return false
 	}
-	return false
+	return slices.ContainsFunc(adapter.Discovery, func(discovery policy.PackDiscovery) bool {
+		return discovery.Mode != "file-scoped"
+	})
 }

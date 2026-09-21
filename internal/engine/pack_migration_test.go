@@ -19,7 +19,7 @@ import (
 
 func TestRenderPackMigrationConfigChangesOnlyPackPolicy(t *testing.T) {
 	selection := policy.PackSelection{Name: "shell", Version: "1.2.3", Digest: strings.Repeat("a", 64)}
-	without := []byte("{\n  \"version\": 4,\n  \"project\": {\"kind\": \"content\"}\n}\n")
+	without := []byte("{\n  \"version\": 5,\n  \"project\": {\"kind\": \"content\"}\n}\n")
 	inserted, err := renderPackMigrationConfig(without, []policy.PackSelection{selection})
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestRenderPackMigrationConfigChangesOnlyPackPolicy(t *testing.T) {
 	if !strings.Contains(string(inserted), "\"project\": {\"kind\": \"content\"}") || !strings.Contains(string(inserted), "\"packs\": [") {
 		t.Fatalf("inserted configuration = %s", inserted)
 	}
-	with := []byte("{\n\t\"version\": 4,\n\t\"packs\": [{\"name\":\"old\",\"version\":\"1.0.0\",\"digest\":\"" + strings.Repeat("b", 64) + "\"}],\n\t\"marker\": {\"exact\":true}\n}\n")
+	with := []byte("{\n\t\"version\": 5,\n\t\"packs\": [{\"name\":\"old\",\"version\":\"1.0.0\",\"digest\":\"" + strings.Repeat("b", 64) + "\"}],\n\t\"marker\": {\"exact\":true}\n}\n")
 	replaced, err := renderPackMigrationConfig(with, []policy.PackSelection{selection})
 	if err != nil {
 		t.Fatal(err)
@@ -142,8 +142,8 @@ func writePackMigrationCatalog(t *testing.T, policyRoot string) (string, string,
 		case "architecture":
 			facts = `,"facts":{"imports":[]}`
 		}
-		passResponse := fmt.Sprintf(`{"protocolVersion":4,"status":"pass","evidence":["parsed selected SQL"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}%s,"inputs":[{"path":"src/main.fixture","sha256":"%s"}]}`, facts, hex.EncodeToString(passDigest[:]))
-		failResponse := fmt.Sprintf(`{"protocolVersion":4,"status":"findings","evidence":["parsed selected SQL"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}%s,"inputs":[{"path":"src/main.fixture","sha256":"%s"}],"findings":[{"capability":"%s","path":"src/main.fixture","subject":"SELECT","message":"invalid query","rule":"invalid-source","line":1,"column":1}]}`, facts, hex.EncodeToString(failDigest[:]), capability)
+		passResponse := fmt.Sprintf(`{"protocolVersion":4,"status":"pass","scopeHandles":["scope-1"],"evidence":["parsed selected SQL"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}%s,"inputs":[{"path":"src/main.fixture","sha256":"%s"}]}`, facts, hex.EncodeToString(passDigest[:]))
+		failResponse := fmt.Sprintf(`{"protocolVersion":4,"status":"findings","scopeHandles":["scope-1"],"evidence":["parsed selected SQL"],"coverage":{"analyzed":["src/main.fixture"],"unsupported":[]}%s,"inputs":[{"path":"src/main.fixture","sha256":"%s"}],"findings":[{"capability":"%s","path":"src/main.fixture","subject":"SELECT","message":"invalid query","rule":"invalid-source","line":1,"column":1}]}`, facts, hex.EncodeToString(failDigest[:]), capability)
 		fmt.Fprintf(&adapter, "  *'\"capability\":\"%s\"'*) case \"$request\" in *fixtures/fail*) printf '%%s\\n' '%s' ;; *) printf '%%s\\n' '%s' ;; esac ;;\n", capability, failResponse, passResponse)
 		fixtures = append(fixtures,
 			pack.Fixture{Name: capability + "-pass", Command: "adapter", Capability: capability, Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},

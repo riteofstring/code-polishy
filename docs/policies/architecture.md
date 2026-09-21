@@ -233,12 +233,12 @@ Static and dynamic imports, `export ... from`, type-only imports, and a literal
 `require` are all edges. Resolution reads only inside the repository, so a
 specifier that climbs out of it names nothing.
 
-Generated JavaScript and TypeScript may declare one
-`scope.generatedJavaScript[].sourcePackage`. The output inherits that real
-package's workspace, manifest, lockfile, TypeScript resolution, dependency
-context, and module owner. It stays generated and non-rewritable; no synthetic
-package boundary is accepted. Missing, overlapping, stale, non-generated, or
-cyclic ownership fails before import evidence is trusted.
+Generated JavaScript and TypeScript may map to one package manifest through
+`scope.sourceContexts[].context`. The output inherits that real package's
+workspace, lockfile, TypeScript resolution, dependency context, and module owner.
+It stays generated and non-rewritable; no synthetic package boundary is accepted.
+Missing, overlapping, stale, non-generated, or cyclic context fails before import
+evidence is trusted.
 
 An import that names nothing the repository governs crosses no declared module
 boundary: an external package resolves into an installed tree, and a package

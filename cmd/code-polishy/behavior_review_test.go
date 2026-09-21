@@ -553,7 +553,7 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
 	t.Helper()
 	root := t.TempDir()
 	writeBehaviorReviewCLIFile(t, root, ".code-polishy.json", `{
-  "version": 4,
+  "version": 5,
   "project": {"kind": "application", "capabilities": []},
   "scope": {},
   "quality": {},

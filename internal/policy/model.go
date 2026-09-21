@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const ConfigVersion = 4
+const ConfigVersion = 5
 
 const (
 	BehaviorReviewOnRequest  = "on-request"
@@ -146,7 +146,7 @@ type Scope struct {
 	Data                 []string              `json:"data,omitempty"`
 
 	EntryPoints                 []string                     `json:"entryPoints,omitempty"`
-	GeneratedJavaScript         []GeneratedJavaScript        `json:"generatedJavaScript,omitempty"`
+	SourceContexts              []SourceContext              `json:"sourceContexts,omitempty"`
 	PythonDynamicReferences     []PythonDynamicReference     `json:"pythonDynamicReferences,omitempty"`
 	PythonComputedImports       []PythonComputedImport       `json:"pythonComputedImports,omitempty"`
 	PythonExternalPluginImports []PythonExternalPluginImport `json:"pythonExternalPluginImports,omitempty"`
@@ -156,9 +156,9 @@ type Scope struct {
 	Languages   []LanguageRule `json:"languages,omitempty"`
 }
 
-type GeneratedJavaScript struct {
-	Paths         []string `json:"paths"`
-	SourcePackage string   `json:"sourcePackage"`
+type SourceContext struct {
+	Paths   []string `json:"paths"`
+	Context string   `json:"context"`
 }
 
 type PythonDynamicReference struct {
@@ -320,6 +320,7 @@ type Command struct {
 	SealedEnvironment     bool           `json:"-"`
 	Adapter               *PackAdapter   `json:"-"`
 	Stdin                 []byte         `json:"-"`
+	InputDerivation       string         `json:"-"`
 	EnvironmentOverrides  []string       `json:"-"`
 	TestArtifacts         []TestArtifact `json:"-"`
 	TestArtifactSuite     string         `json:"-"`
@@ -337,7 +338,15 @@ type PackAdapter struct {
 	ProtocolVersion int
 	Capability      string
 	Languages       []LanguageRule
+	Discovery       []PackDiscovery
 	Runtime         *PackRuntime
+}
+
+type PackDiscovery struct {
+	Language           string
+	Mode               string
+	MetadataPatterns   []string
+	DependencyPatterns []string
 }
 
 type PackRuntime struct {

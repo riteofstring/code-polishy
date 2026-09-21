@@ -19,9 +19,6 @@ func runtimeCommand(repo repository.Repository, command policy.Command, requeste
 	if requested == nil {
 		return command, nil, nil
 	}
-	if requested.Name != "node" {
-		return command, nil, fmt.Errorf("policy-owned runtime %s is unavailable", requested.Name)
-	}
 	manifest, found, err := release.ReadLauncherManifest(repo.PolicyRoot)
 	if err != nil {
 		return command, nil, err
@@ -29,12 +26,12 @@ func runtimeCommand(repo repository.Repository, command policy.Command, requeste
 	if !found {
 		return command, nil, errors.New("pack runtimes require a verified installed Code Polishy release")
 	}
-	if manifest.Tools.Node != requested.Version {
-		return command, nil, fmt.Errorf("pack requires Node %s; the installed release supplies %s", requested.Version, manifest.Tools.Node)
-	}
 	for _, tool := range repo.CommandEnvironment().Tools {
 		if tool.Name != requested.Name {
 			continue
+		}
+		if tool.Version != requested.Version {
+			return command, nil, fmt.Errorf("pack requires %s %s; the installed release supplies %s", requested.Name, requested.Version, tool.Version)
 		}
 		identity, err := verifyRuntimeFile(repo.PolicyRoot, manifest, tool.Path, requested)
 		if err != nil {
@@ -45,7 +42,7 @@ func runtimeCommand(repo repository.Repository, command policy.Command, requeste
 		command.Argv = append([]string{tool.Path}, arguments...)
 		return command, &identity, nil
 	}
-	return command, nil, fmt.Errorf("policy-owned runtime %s is not installed", requested.Name)
+	return command, nil, fmt.Errorf("policy-owned runtime %s %s is not installed", requested.Name, requested.Version)
 }
 
 func verifyRuntimeFile(root string, manifest release.Manifest, executable string, requested *policy.PackRuntime) (RuntimeIdentity, error) {

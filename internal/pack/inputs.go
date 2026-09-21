@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -16,25 +18,36 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func prepareInputs(repo repository.Repository, request *Request) error {
+func prepareInputs(repo repository.Repository, request *Request, commands ...policy.Command) error {
 	paths, err := repo.AllFiles()
 	if err != nil {
 		return err
 	}
-	return prepareInputPaths(repo, request, paths)
+	command := policy.Command{Name: request.Provider, Adapter: &policy.PackAdapter{Capability: request.Capability, Languages: []policy.LanguageRule{{Name: "source", Paths: []string{"**/*"}}}}}
+	if len(commands) > 0 {
+		command = commands[0]
+	}
+	return prepareInputPaths(repo, request, command, paths)
 }
 
-func prepareInputPaths(repo repository.Repository, request *Request, paths []string) error {
+func prepareInputPaths(repo repository.Repository, request *Request, command policy.Command, paths []string) error {
 	paths = sortedUnique(append(slices.Clone(paths), request.Files...))
+	request.Inventory = governedInventory(repo, command, paths, request.Profile)
+	if len(request.Scopes) == 0 {
+		prepareFileScopes(repo, request)
+	}
+	if err := validateAnalysisScopes(*request); err != nil {
+		return err
+	}
+	request.Policy = policyInput(repo, *request)
+	paths = analysisContextPaths(*request)
 	assetLinks := validatedAssetLinkInputs(repo, paths)
-	request.Policy = PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Files: []SourceInput{}}
-	paths = prepareUnits(repo, request, paths)
 	for path := range assetLinks {
 		paths = append(paths, path)
 	}
 	paths = sortedUnique(paths)
-	if len(paths) > 10000 {
-		return errors.New("provider context exceeds 10000 files")
+	if len(paths) > 100000 {
+		return errors.New("provider context exceeds 100000 files")
 	}
 	request.Context = make([]InputFile, 0, len(paths))
 	root, err := os.OpenRoot(repo.Root)
@@ -53,6 +66,141 @@ func prepareInputPaths(repo repository.Repository, request *Request, paths []str
 		request.Context = append(request.Context, InputFile{Path: path, SHA256: inputDigest(data)})
 	}
 	return nil
+}
+
+func prepareFileScopes(repo repository.Repository, request *Request) {
+	initializeRequestScope(request)
+	entries := inventoryByPath(request.Inventory)
+	for index, file := range request.Files {
+		entry, found := entries[file]
+		if !found || !entry.Source {
+			continue
+		}
+		root := pathDirectory(file)
+		entryFiles := []string{}
+		if coreEntryPoint(repo, root, file) {
+			entryFiles = append(entryFiles, file)
+		}
+		request.Scopes = append(request.Scopes, AnalysisScope{Handle: fmt.Sprintf("scope-%d", index+1), Language: entry.Language, Root: root, Members: []string{file}, EntryFiles: entryFiles, Context: []string{}, Data: json.RawMessage(`{}`)})
+	}
+	request.WriteFiles = slices.DeleteFunc(request.WriteFiles, func(file string) bool {
+		entry := entries[file]
+		return entry.Generated || entry.Data
+	})
+}
+
+func policyInput(repo repository.Repository, request Request) PolicyInput {
+	input := PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Modules: []PolicyModuleInput{}, Files: []SourceInput{}}
+	for _, active := range repo.Config.ActivePolicyModules {
+		input.Modules = append(input.Modules, PolicyModuleInput{Name: active.Name, Root: active.Root})
+	}
+	scopeByMember := map[string][]string{}
+	for _, scope := range request.Scopes {
+		for _, member := range scope.Members {
+			scopeByMember[member] = append(scopeByMember[member], scope.Handle)
+		}
+	}
+	for _, entry := range request.Inventory {
+		if scopes := scopeByMember[entry.Path]; len(scopes) > 0 {
+			input.Files = append(input.Files, sourceInput(entry, scopes))
+		}
+	}
+	return input
+}
+
+func analysisContextPaths(request Request) []string {
+	paths := slices.Clone(request.DiagnosticFiles)
+	for _, scope := range request.Scopes {
+		paths = append(paths, scope.Context...)
+	}
+	if request.Capability == "architecture" {
+		for _, entry := range request.Inventory {
+			if entry.Asset {
+				paths = append(paths, entry.Path)
+			}
+		}
+	}
+	for _, entry := range request.Inventory {
+		if entry.Control {
+			paths = append(paths, entry.Path)
+		}
+	}
+	return sortedUnique(paths)
+}
+
+func validateAnalysisScopes(request Request) error {
+	if len(request.Scopes) == 0 || len(request.Scopes) > maximumDiscoveryScopes {
+		return expected("scopes", fmt.Sprintf("1 to %d items", maximumDiscoveryScopes))
+	}
+	inventory := inventoryByPath(request.Inventory)
+	handles := map[string]bool{}
+	members := map[string]bool{}
+	totalDataBytes := 0
+	for index, scope := range request.Scopes {
+		label := indexed("scopes", index)
+		if scope.Handle != fmt.Sprintf("scope-%d", index+1) || handles[scope.Handle] {
+			return expected(label+".handle", "its unique engine-issued invocation handle")
+		}
+		handles[scope.Handle] = true
+		if err := validateScopeRoot(scope.Root); err != nil {
+			return expected(label+".root", "a contained relative directory")
+		}
+		if len(scope.Members) == 0 || !allContained(scope.EntryFiles, scope.Members) {
+			return expected(label+".members", "at least one source with entryFiles contained within it")
+		}
+		for _, member := range scope.Members {
+			entry, found := inventory[member]
+			if !found || !entry.Source || entry.Language != scope.Language || entry.Owner != request.Provider {
+				return expected(label+".members", "provider-owned source paths from inventory")
+			}
+			members[member] = true
+		}
+		seenContext := map[string]bool{}
+		for contextIndex, context := range scope.Context {
+			if _, found := inventory[context]; !found {
+				return expected(indexed(label+".context", contextIndex), "a unique path from inventory")
+			}
+			if seenContext[context] {
+				return expected(indexed(label+".context", contextIndex), "a unique path from inventory")
+			}
+			seenContext[context] = true
+		}
+		canonical, err := canonicalScopeData(scope.Data)
+		if err != nil {
+			return fmt.Errorf("%s.data: %w", label, err)
+		}
+		totalDataBytes += len(canonical)
+		if totalDataBytes > maximumScopeDataBytes {
+			return expected(label+".data", "aggregate scope data of at most 2097152 bytes")
+		}
+	}
+	for _, file := range append(slices.Clone(request.Files), request.DiagnosticFiles...) {
+		if !members[file] {
+			return expected("diagnosticFiles", "selected paths and diagnostics contained in validated scopes")
+		}
+	}
+	for _, file := range request.WriteFiles {
+		if !slices.Contains(request.Files, file) || !members[file] {
+			return expected("writeFiles", "selected source paths contained in validated scopes")
+		}
+	}
+	return nil
+}
+
+func inventoryByPath(entries []InventoryEntry) map[string]InventoryEntry {
+	result := make(map[string]InventoryEntry, len(entries))
+	for _, entry := range entries {
+		result[entry.Path] = entry
+	}
+	return result
+}
+
+func pathDirectory(file string) string {
+	directory := strings.TrimSuffix(file, "/"+filepath.Base(file))
+	if directory == file || directory == "" {
+		return "."
+	}
+	return filepath.ToSlash(directory)
 }
 
 func validatedAssetLinkInputs(repo repository.Repository, paths []string) map[string][]byte {
@@ -114,19 +262,8 @@ func validDigest(value string) bool {
 }
 
 func verifyAnalysisInputs(repo repository.Repository, request Request, response Response) error {
-	root, err := os.OpenRoot(repo.Root)
-	if err != nil {
+	if err := verifyInputIdentities(repo, append(slices.Clone(request.Context), response.Inputs...)); err != nil {
 		return err
-	}
-	defer root.Close()
-	for _, input := range append(slices.Clone(request.Context), response.Inputs...) {
-		data, err := readContextInput(repo, root, input.Path)
-		if err != nil {
-			return err
-		}
-		if inputDigest(data) != input.SHA256 {
-			return fmt.Errorf("provider input %s changed or has an invalid identity", input.Path)
-		}
 	}
 	if response.Status != "operational-failure" {
 		required := slices.Clone(request.Files)
@@ -139,7 +276,30 @@ func verifyAnalysisInputs(repo repository.Repository, request Request, response 
 			}
 		}
 	}
+	root, err := os.OpenRoot(repo.Root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	return verifyLocations(root, request, response)
+}
+
+func verifyInputIdentities(repo repository.Repository, inputs []InputFile) error {
+	root, err := os.OpenRoot(repo.Root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	for _, input := range inputs {
+		data, err := readContextInput(repo, root, input.Path)
+		if err != nil {
+			return err
+		}
+		if inputDigest(data) != input.SHA256 {
+			return fmt.Errorf("provider input %s changed or has an invalid identity", input.Path)
+		}
+	}
+	return nil
 }
 
 func verifyLocations(root *os.Root, request Request, response Response) error {

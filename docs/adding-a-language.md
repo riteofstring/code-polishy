@@ -45,8 +45,8 @@ Commands provide `format`, `lint`, `typecheck`, `complexity`, `dead-code`,
 Every command declares `self-contained` or `host-toolchain` execution and currently
 declares `network: none`. A self-contained command omits `runtime`; a host-toolchain
 command requires one exact runtime identity. Node is the first supported runtime
-reference. Its executable and SHA-256 identity
-come from the verified engine installation. An ambient executable, target package,
+reference. Its executable and SHA-256 identity come from the verified engine
+installation's governed tool inventory. An ambient executable, target package,
 version range, or missing runtime cannot substitute. Native contained executable
 adapters can omit the runtime reference.
 
@@ -62,21 +62,33 @@ language using a real parser; it deliberately supplies lint only.
 
 ## Requests and responses
 
-The engine sends one bounded JSON request on standard input. Existing operation,
-capability, project root, selected files, modules, mode, and profile fields are
-joined by exact pack/runtime identity, full-versus-focused scope, effective policy,
-source classifications, entry points, and hashed read context.
+The engine sends bounded JSON requests on standard input. Every request carries
+the exact pack/runtime identity, operation, capability, project root, repository
+selection, mode, profile, modules, effective policy, governed inventory, and hashed
+read context. Inventory entries expose generic path, language, module, context,
+provider ownership, and source/metadata/dependency/asset/test/generated/data/
+development/control classifications.
 
-`files` requires explicit coverage. `diagnosticFiles` permits findings and additional
-coverage in owned analysis units; `writeFiles` alone authorizes selected format
-edits. Resolved `units` contain roots, manifests, configurations, members, and exact
-entry files. Each policy source carries its unit, provider owner, source-package
-mapping, and effective lint activation. Context supplies necessary project
-information and never grants write authority. Record every
-selected source and each additional dependency/configuration input in `inputs`,
-using contained repository-relative paths and SHA-256 digests. The engine verifies
-identities after execution, including import targets. Changed inputs invalidate
-analysis.
+For `static` or `evaluated` discovery, the first request has `operation: discover`.
+Return one or more discovered scopes with a private `id`, declared language,
+contained root, provider-owned source members, member entry files, contained
+context paths, selected members, and bounded non-null JSON `data`. Every requested
+source must appear in `selected` exactly once. Discovery cannot return findings,
+coverage, facts, edits, or scope handles. Core validates all paths against its
+inventory, verifies reported input identities, and replaces private IDs with
+ordered invocation-local handles. File-scoped commands receive engine-created
+scopes directly.
+
+The capability request's `files` require explicit coverage. `diagnosticFiles`
+alone permit source findings and additional coverage; `writeFiles` alone authorize
+selected format edits. Validated `scopes` carry handles, languages, roots, members,
+entry files, context paths, and the pack's canonical opaque data. Each policy source
+carries its scope handles, provider owner, physical path, generic source context,
+language, and classifications. Context never grants diagnostic or write authority.
+Return the ordered requested handles in `scopeHandles`. Record every selected source
+and each additional dependency or configuration read in `inputs`, using contained
+repository-relative paths and SHA-256 digests. The engine verifies identities after
+execution, including import targets. Changed inputs invalidate analysis.
 
 Return exactly one JSON response with `protocolVersion: 4` and one status:
 
@@ -106,12 +118,13 @@ declared data, and context-only paths cannot become write targets. Other operati
 and unsuccessful responses cannot return edits. Providers must not write source
 directly.
 
-Requests and responses are bounded at 8 MiB. Additional limits bound file counts,
-findings, fact collections, and text fields. Standard error is a bounded diagnostic
-stream, not evidence of successful analysis. Unknown fields, extra JSON values,
-escaping paths, missing identities, malformed facts, and contradictory success
-claims are rejected. Semantic validation identifies the exact JSON field and
-collection index with its expected constraint, for example
+Requests are bounded at 64 MiB and responses at 16 MiB. Additional limits bound
+inventory, context, scope count and data, findings, fact collections, and text
+fields. Standard error is a bounded diagnostic stream, not evidence of successful
+analysis. Unknown fields, extra JSON values, escaping paths, missing identities,
+malformed facts, and contradictory success claims are rejected. Semantic validation
+identifies the exact JSON field and collection index with its expected constraint,
+for example
 `facts.comments[0].kind: expected Line, Block, Docstring, HTML, or Shebang`.
 
 ## Ownership, verification, and installation
@@ -124,7 +137,7 @@ selected packs remain repository errors. Authenticated retained claims block
 native fallback for their exact language boundary. A missing pack without a
 trusted manifest cannot disable unrelated analyzers. Source outside every selected
 pack boundary retains its current route until the coordinated native-removal
-release. Whole-program checks must own coherent compilation units;
+release. Whole-program checks must own coherent discovered scopes;
 partial handoffs cannot imply whole-project coverage. Ordinary configured commands
 still run, but their successful exit does not establish structured source coverage.
 Architecture providers run through the architecture command so graph policy is

@@ -6,7 +6,9 @@
   "additionalProperties": false,
   "required": [
     "provider",
-    "units",
+    "inventory",
+    "selection",
+    "scopes",
     "diagnosticFiles",
     "writeFiles",
     "protocolVersion",
@@ -24,20 +26,26 @@
   ],
   "properties": {
     "provider": { "$ref": "#/$defs/nonempty" },
-    "units": {
+    "inventory": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/inventoryEntry" }
+    },
+    "selection": { "$ref": "#/$defs/selection" },
+    "scopes": {
       "type": "array",
       "maxItems": 10000,
-      "items": { "$ref": "#/$defs/unit" }
+      "items": { "$ref": "#/$defs/scope" }
     },
     "diagnosticFiles": { "$ref": "#/$defs/paths" },
     "writeFiles": { "$ref": "#/$defs/paths" },
     "protocolVersion": { "const": 4 },
-    "operation": { "enum": ["check", "format"] },
+    "operation": { "enum": ["discover", "check", "format"] },
     "capability": { "$ref": "#/$defs/identifier" },
     "projectRoot": { "$ref": "#/$defs/nonempty" },
     "files": {
       "allOf": [{ "$ref": "#/$defs/paths" }],
-      "maxItems": 10000
+      "maxItems": 100000
     },
     "modules": {
       "type": "array",
@@ -49,7 +57,7 @@
     "outputDirectory": { "$ref": "#/$defs/path" },
     "context": {
       "type": "array",
-      "maxItems": 10000,
+      "maxItems": 100000,
       "items": { "$ref": "#/$defs/input" }
     },
     "policy": { "$ref": "#/$defs/policy" },
@@ -84,28 +92,73 @@
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     },
-    "unit": {
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "deleted", "complete"],
+      "properties": {
+        "paths": { "$ref": "#/$defs/paths" },
+        "deleted": { "$ref": "#/$defs/paths" },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "inventoryEntry": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id",
-        "root",
-        "packageRoot",
-        "manifest",
-        "workspaceRoot",
-        "configuration",
-        "members",
-        "entryFiles"
+        "path",
+        "modules",
+        "source",
+        "metadata",
+        "dependency",
+        "asset",
+        "test",
+        "generated",
+        "data",
+        "development",
+        "control"
       ],
       "properties": {
-        "id": { "type": "string" },
-        "root": { "type": "string" },
-        "packageRoot": { "type": "string" },
-        "manifest": { "type": "string" },
-        "workspaceRoot": { "type": "string" },
-        "configuration": { "type": "string" },
+        "path": { "$ref": "#/$defs/path" },
+        "language": { "$ref": "#/$defs/identifier" },
+        "context": { "$ref": "#/$defs/path" },
+        "owner": { "type": "string" },
+        "modules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "source": { "type": "boolean" },
+        "metadata": { "type": "boolean" },
+        "dependency": { "type": "boolean" },
+        "asset": { "type": "boolean" },
+        "test": { "type": "boolean" },
+        "generated": { "type": "boolean" },
+        "data": { "type": "boolean" },
+        "development": { "type": "boolean" },
+        "control": { "type": "boolean" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "language",
+        "root",
+        "members",
+        "entryFiles",
+        "context",
+        "data"
+      ],
+      "properties": {
+        "handle": { "$ref": "#/$defs/nonempty" },
+        "language": { "$ref": "#/$defs/identifier" },
+        "root": { "$ref": "#/$defs/path" },
         "members": { "$ref": "#/$defs/paths" },
-        "entryFiles": { "$ref": "#/$defs/paths" }
+        "entryFiles": { "$ref": "#/$defs/paths" },
+        "context": { "$ref": "#/$defs/paths" },
+        "data": {}
       }
     },
     "module": {
@@ -122,39 +175,43 @@
         }
       }
     },
-    "lint": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["reactHooks", "jsxAccessibility"],
-      "properties": {
-        "reactHooks": { "type": "boolean" },
-        "jsxAccessibility": { "type": "boolean" }
-      }
-    },
     "source": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "unit",
+        "scopes",
         "owner",
-        "sourcePackage",
-        "lint",
+        "context",
         "path",
         "language",
         "test",
         "generated",
+        "data",
         "development"
       ],
       "properties": {
-        "unit": { "type": "string" },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonempty" }
+        },
         "owner": { "type": "string" },
-        "sourcePackage": { "type": "string" },
-        "lint": { "$ref": "#/$defs/lint" },
+        "context": { "$ref": "#/$defs/path" },
         "path": { "$ref": "#/$defs/path" },
-        "language": { "type": "string" },
+        "language": { "$ref": "#/$defs/identifier" },
         "test": { "type": "boolean" },
         "generated": { "type": "boolean" },
+        "data": { "type": "boolean" },
         "development": { "type": "boolean" }
+      }
+    },
+    "policyModule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "root"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "root": { "$ref": "#/$defs/path" }
       }
     },
     "complexity": {
@@ -187,12 +244,17 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["quality", "files"],
+      "required": ["quality", "modules", "files"],
       "properties": {
         "quality": { "$ref": "#/$defs/quality" },
+        "modules": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/policyModule" }
+        },
         "files": {
           "type": "array",
-          "maxItems": 10000,
+          "maxItems": 100000,
           "items": { "$ref": "#/$defs/source" }
         }
       }

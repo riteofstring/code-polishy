@@ -24,10 +24,10 @@ files = {
 }
 command = {"argv": ["bash", "scripts/generate.sh"], "cwd": ".", "timeoutSeconds": 900}
 config = {
-    "version": 4,
+    "version": 5,
     "project": {"kind": "application", "capabilities": []},
     "scope": {"entryPoints": ["frontend/src/index.js"], "generated": ["python_pkg/generated/**"],
-              "generatedJavaScript": [{"paths": ["python_pkg/generated/**"], "sourcePackage": "frontend/package.json"}]},
+              "sourceContexts": [{"paths": ["python_pkg/generated/**"], "context": "frontend/package.json"}]},
     "modules": [{"name": "frontend", "paths": ["frontend/**"]},
                 {"name": "backend", "paths": ["python_pkg/**"]},
                 {"name": "tooling", "paths": ["scripts/**"]}],
@@ -75,7 +75,7 @@ findings = report["findings"]
 dead = [item for item in findings if item["ruleId"] == "quality.deadCode"]
 assert any(item["path"] == "python_pkg/generated/client.js" and "unusedGenerated" in item["message"] for item in dead), findings
 assert any(item["path"] == "python_pkg/generated/orphan.js" for item in dead), findings
-assert not any(item["ruleId"] in {"policy.generatedJavaScriptOwnership", "policy.generationOwnership", "quality.format"} or "coverage" in item["ruleId"].lower() for item in findings), findings
+assert not any(item["ruleId"] in {"policy.sourceContextOwnership", "policy.generationOwnership", "quality.format"} or "coverage" in item["ruleId"].lower() for item in findings), findings
 assert not (root / "package.json").exists()
 assert not (root / "node_modules").exists()
 assert not (root / "producer-ran").exists()
@@ -125,7 +125,7 @@ for directory, count in [("selected", 15), ("context", 26)]:
         path.write_text(f"export const value{index} = {index};\n")
 (root / "package.json").write_text(json.dumps({"name": "context-selection", "private": True, "type": "module", "packageManager": "pnpm@11.13.0"}))
 config = {
-    "version": 4, "project": {"kind": "application", "capabilities": []},
+    "version": 5, "project": {"kind": "application", "capabilities": []},
     "scope": {"entryPoints": ["src/selected/**"]},
     "modules": [{"name": "application", "paths": ["src/**"]}, {"name": "tooling", "paths": ["scripts/**"]}],
     "checks": [

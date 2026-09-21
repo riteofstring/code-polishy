@@ -213,6 +213,9 @@ func validateCommand(command CommandSpec) error {
 	if command.InputSHA256 != "" && !validSHA256(command.InputSHA256) {
 		return fmt.Errorf("command structured input identity is invalid")
 	}
+	if command.InputDerivation != "" && !validToken(command.InputDerivation) {
+		return fmt.Errorf("command structured input derivation is invalid")
+	}
 	if strings.ContainsAny(command.Root, "\x00\r\n") {
 		return fmt.Errorf("command working root is invalid")
 	}

@@ -21,6 +21,22 @@
       "content": "package main\n\nfunc main( ){ println(\"seeded\") }\n"
     }
   ],
+  "laneOverrides": {
+    "reference": [
+      {
+        "path": ".code-polishy.json",
+        "mode": "0644",
+        "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
+      }
+    ],
+    "candidate": [
+      {
+        "path": ".code-polishy.json",
+        "mode": "0644",
+        "content": "{\"version\":5,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
+      }
+    ]
+  },
   "git": {
     "branch": "main",
     "commitTimestamp": "2000-01-01T00:00:00Z",

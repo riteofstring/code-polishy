@@ -7,7 +7,7 @@
   "required": ["version", "project", "modules", "tests"],
   "properties": {
     "$schema": { "type": "string", "minLength": 1 },
-    "version": { "const": 4 },
+    "version": { "const": 5 },
     "project": { "$ref": "#/$defs/project" },
     "scope": { "$ref": "#/$defs/scope" },
     "quality": { "$ref": "#/$defs/quality" },
@@ -174,10 +174,10 @@
         "generated": { "$ref": "#/$defs/paths" },
         "data": { "$ref": "#/$defs/paths" },
         "entryPoints": { "$ref": "#/$defs/paths" },
-        "generatedJavaScript": {
+        "sourceContexts": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/generatedJavaScript" }
+          "items": { "$ref": "#/$defs/sourceContext" }
         },
         "pythonRuntimeLoaders": {
           "type": "array",
@@ -232,16 +232,13 @@
         "paths": { "$ref": "#/$defs/nonemptyPaths" }
       }
     },
-    "generatedJavaScript": {
+    "sourceContext": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["paths", "sourcePackage"],
+      "required": ["paths", "context"],
       "properties": {
         "paths": { "$ref": "#/$defs/nonemptyPaths" },
-        "sourcePackage": {
-          "$ref": "#/$defs/exactPath",
-          "pattern": "(?:^|/)package\\.json$"
-        }
+        "context": { "$ref": "#/$defs/exactPath" }
       }
     },
     "pythonDynamicReference": {

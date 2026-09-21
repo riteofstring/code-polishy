@@ -10,6 +10,13 @@
     "status": {
       "enum": ["pass", "findings", "incomplete", "operational-failure"]
     },
+    "scopeHandles": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/shortText" }
+    },
+    "discovery": { "$ref": "#/$defs/discovery" },
     "evidence": {
       "type": "array",
       "maxItems": 64,
@@ -30,7 +37,7 @@
     "facts": { "$ref": "#/$defs/facts" },
     "inputs": {
       "type": "array",
-      "maxItems": 10000,
+      "maxItems": 100000,
       "items": { "$ref": "#/$defs/input" }
     },
     "edits": {
@@ -62,6 +69,63 @@
       "properties": {
         "path": { "$ref": "#/$defs/path" },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopes"],
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/discoveredScope" }
+        }
+      }
+    },
+    "discoveredScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "language",
+        "root",
+        "members",
+        "entryFiles",
+        "context",
+        "selected",
+        "data"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/shortText" },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "root": { "$ref": "#/$defs/path" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "entryFiles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "context": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "selected": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "data": {}
       }
     },
     "unsupported": {

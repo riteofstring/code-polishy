@@ -188,13 +188,13 @@ func TestJavaScriptArchitectureFailsClosedWithoutTheBundle(t *testing.T) {
 	}
 }
 
-func TestGeneratedJavaScriptInheritsSourcePackageDependencies(t *testing.T) {
+func TestSourceContextInheritsContextDependencies(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	config := policy.Config{
 		Scope: policy.Scope{
-			Generated:           []string{"generated/**"},
-			GeneratedJavaScript: []policy.GeneratedJavaScript{{Paths: []string{"generated/**"}, SourcePackage: "packages/app/package.json"}},
+			Generated:      []string{"generated/**"},
+			SourceContexts: []policy.SourceContext{{Paths: []string{"generated/**"}, Context: "packages/app/package.json"}},
 		},
 		Modules: []policy.Module{
 			{Name: "domain", Paths: []string{"packages/domain/**"}},

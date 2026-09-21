@@ -724,8 +724,8 @@ func (repo Repository) sizeOwnerModuleNames(path string) []string {
 		return repo.sizeTestOwnerModuleNames(path)
 	}
 	modulePath := path
-	if repo.sizeGenerated(path) && slices.Contains(repo.sizeLanguages(path), "typescript") {
-		modulePath = repo.JavaScriptContextPath(path)
+	if repo.sizeGenerated(path) {
+		modulePath = repo.SourceContextPath(path)
 	}
 	return repo.sizeDeclaredModuleNames(modulePath)
 }

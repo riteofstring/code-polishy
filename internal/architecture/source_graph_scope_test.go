@@ -116,7 +116,7 @@ func TestJavaScriptManifestSelectionIncludesItsTypeScriptProjects(t *testing.T) 
 	}
 }
 
-func TestGeneratedJavaScriptGraphSelectionUsesDeclaredSourceProject(t *testing.T) {
+func TestSourceContextGraphSelectionUsesDeclaredSourceProject(t *testing.T) {
 	t.Parallel()
 	repo := javascriptRepository(t, true)
 	writeArchitectureFile(t, repo.Root, "web/package.json", "{}\n")
@@ -125,7 +125,7 @@ func TestGeneratedJavaScriptGraphSelectionUsesDeclaredSourceProject(t *testing.T
 	writeArchitectureFile(t, repo.Root, "python_pkg/client.js", "export {};\n")
 	repo.Config.Modules[1].Paths = append(repo.Config.Modules[1].Paths, "python_pkg/**")
 	repo.Config.Scope.Generated = []string{"python_pkg/**"}
-	repo.Config.Scope.GeneratedJavaScript = []policy.GeneratedJavaScript{{Paths: []string{"python_pkg/**"}, SourcePackage: "web/package.json"}}
+	repo.Config.Scope.SourceContexts = []policy.SourceContext{{Paths: []string{"python_pkg/**"}, Context: "web/package.json"}}
 	repo.PolicyRoot = installImportBundle(t, `{"analyzed":["python_pkg/client.js","web/app.ts"],"imports":[],"unsupported":[]}`)
 	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"python_pkg/client.js"}, &pythonGraphRunner{})
 	if analysis.Graph == nil || len(analysis.Findings) != 0 {

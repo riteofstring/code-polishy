@@ -44,7 +44,7 @@ func providerOperations(repo repository.Repository, selected, allFiles []string)
 			continue
 		}
 		selection := repository.Selection{Files: selected, All: len(selected) == len(allFiles) && slices.Equal(selected, allFiles)}
-		if len(pack.SelectedFiles(repo, selection, command, repo.AnalysisProfile())) > 0 {
+		if pack.AdapterSelected(repo, selection, command, repo.AnalysisProfile()) {
 			operations = append(operations, providerOperation{command: command, selection: selection})
 		}
 	}
@@ -58,14 +58,14 @@ func ProviderCommands(repo repository.Repository, selected []string) []policy.Co
 	}
 	commands := []policy.Command{}
 	for _, operation := range providerOperations(repo, selected, allFiles) {
-		prepared, selected, err := pack.PlannedExecution(repo, operation.selection, operation.command, repo.AnalysisProfile())
+		prepared, selected, err := pack.PlannedExecutions(repo, operation.selection, operation.command, repo.AnalysisProfile())
 		if !selected {
 			continue
 		}
 		if err != nil {
-			prepared = operation.command
+			prepared = []policy.Command{operation.command}
 		}
-		commands = append(commands, prepared)
+		commands = append(commands, prepared...)
 	}
 	return commands
 }
@@ -235,10 +235,10 @@ func providerGraphProblem(part *sourceGraphPart, fact pack.ImportFact, reason st
 }
 
 func providerSourceRoot(request pack.Request, file string) string {
-	for _, unit := range request.Units {
+	for _, unit := range request.Scopes {
 		if slices.Contains(unit.Members, file) {
-			if unit.PackageRoot == "." || strings.HasPrefix(file, unit.PackageRoot+"/") {
-				return unit.PackageRoot
+			if unit.Root == "." || strings.HasPrefix(file, unit.Root+"/") {
+				return unit.Root
 			}
 			return "."
 		}

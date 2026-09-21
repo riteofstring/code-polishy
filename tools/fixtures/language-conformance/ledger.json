@@ -1183,7 +1183,7 @@
       "id": "javascript.discovery.generated-source-package",
       "language": "javascript",
       "capability": "discovery",
-      "guarantee": "Generated JavaScript retains its physical path, validated sourcePackage project context, dependency ownership, and non-writability across analysis capabilities.",
+      "guarantee": "Generated JavaScript retains its physical path, validated package context, dependency ownership, and non-writability across analysis capabilities.",
       "currentImplementation": [
         "internal/repository/generated_javascript.go",
         "internal/quality/javascript.go",
@@ -1191,7 +1191,7 @@
       ],
       "helpers": ["internal/policy/generated_javascript.go"],
       "cliRoutes": ["check", "architecture", "format"],
-      "policyKeys": ["scope.generatedJavaScript", "scope.generated"],
+      "policyKeys": ["scope.sourceContexts", "scope.generated"],
       "activation": [
         "A generated JavaScript mapping applies to selected source."
       ],
@@ -1200,8 +1200,8 @@
         "docs/design/javascript-import-assets.md"
       ],
       "tests": [
-        "internal/quality/javascript_test.go#TestGeneratedJavaScriptUsesItsSourcePackageTypeProject",
-        "internal/architecture/source_graph_scope_test.go#TestGeneratedJavaScriptGraphSelectionUsesDeclaredSourceProject"
+        "internal/quality/javascript_test.go#TestSourceContextUsesItsContextTypeProject",
+        "internal/architecture/source_graph_scope_test.go#TestSourceContextGraphSelectionUsesDeclaredSourceProject"
       ],
       "futureOwner": "shared-protocol",
       "boundaryRationale": "The pack uses project semantics while core validates the mapping and preserves physical ownership and write denial.",
@@ -1463,7 +1463,7 @@
         "providers/javascript/css.mjs"
       ],
       "cliRoutes": ["architecture", "check"],
-      "policyKeys": ["scope.generatedJavaScript"],
+      "policyKeys": ["scope.sourceContexts"],
       "activation": [
         "A selected import uses an alias, asset, stylesheet, or generated mapping."
       ],
@@ -1546,7 +1546,7 @@
       ],
       "tests": [
         "internal/quality/javascript_test.go#TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot",
-        "internal/quality/javascript_test.go#TestGeneratedJavaScriptRetainsAccessibilityWithoutAuthoredHookRules"
+        "internal/quality/javascript_test.go#TestSourceContextRetainsAccessibilityWithoutAuthoredHookRules"
       ],
       "futureOwner": "shared-protocol",
       "boundaryRationale": "The pack detects framework semantics; core applies release-locked activation and override policy.",
@@ -1929,7 +1929,7 @@
       ],
       "tests": [
         "internal/repository/repository_test.go#TestLanguageDetectionIsEcosystemAgnostic",
-        "internal/pack/units_test.go#TestResolvedProviderContextRetainsGeneratedOwnershipAndEffectivePolicy"
+        "internal/pack/units_test.go#TestStaticDiscoveryKeepsEcosystemShapeOutOfCore"
       ],
       "futureOwner": "core",
       "boundaryRationale": "Only core may define repository inventory and generic classifications that constrain all packs.",
@@ -1950,7 +1950,7 @@
       "id": "shared.scope.read-diagnostic-write",
       "language": "shared",
       "capability": "authority",
-      "guarantee": "Inventory, read context, diagnostic scope, and write targets remain separate; discovered units cannot expand findings or edits beyond core-granted per-capability authority.",
+      "guarantee": "Inventory, read context, diagnostic scope, and write targets remain separate; discovered scopes cannot expand findings or edits beyond core-granted per-capability authority.",
       "currentImplementation": [
         "internal/pack/units.go",
         "internal/pack/inputs.go",
@@ -1965,7 +1965,7 @@
         "docs/design/analysis-providers.md"
       ],
       "tests": [
-        "internal/pack/units_test.go#TestArchitectureRejectsUnrelatedUnitFindingsAndMissingClosureMembers",
+        "internal/pack/units_test.go#TestArchitectureRejectsUnrelatedScopeFindingsAndMissingClosureMembers",
         "internal/pack/analysis_test.go#TestProviderInputsLocationsAndWritesUseOriginalSelectedSource"
       ],
       "futureOwner": "core",
@@ -1997,7 +1997,7 @@
       "cliRoutes": ["check", "architecture", "format"],
       "policyKeys": [
         "scope.generated",
-        "scope.generatedJavaScript",
+        "scope.sourceContexts",
         "generation.producers"
       ],
       "activation": [
@@ -2006,7 +2006,7 @@
       "documentation": ["docs/design/provider-scope.md"],
       "tests": [
         "internal/quality/javascript_generated_test.go#TestGeneratedBundlesKeepSemanticChecksAndAuthoredHookCoverage",
-        "internal/pack/units_test.go#TestResolvedProviderContextRetainsGeneratedOwnershipAndEffectivePolicy"
+        "internal/pack/units_test.go#TestStaticDiscoveryKeepsEcosystemShapeOutOfCore"
       ],
       "futureOwner": "core",
       "boundaryRationale": "Core owns physical paths, generation declarations, and write denial; packs receive validated effective context.",

@@ -24,7 +24,8 @@ export function compilerFor(analysis) {
 
 function inheritModuleFormat(analysis, host, absolute, options) {
   const path = relative(analysis.root, absolute).split(sep).join("/");
-  const owner = analysis.classifications.get(path)?.sourcePackage;
+  const source = analysis.classifications.get(path);
+  const owner = source?.context !== path ? source?.context : "";
   if (!owner) return;
   options.impliedNodeFormat = moduleFormat(
     analysis,
@@ -34,7 +35,8 @@ function inheritModuleFormat(analysis, host, absolute, options) {
 }
 
 export function moduleFormat(analysis, path, options) {
-  const owner = analysis.classifications.get(path)?.sourcePackage;
+  const source = analysis.classifications.get(path);
+  const owner = source?.context !== path ? source?.context : "";
   return ts.getImpliedNodeFormatForFile(
     join(analysis.root, owner ? join(dirname(owner), basename(path)) : path),
     undefined,

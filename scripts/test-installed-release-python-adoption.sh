@@ -228,7 +228,7 @@ python_adoption_write_config() {
   local target="$1"
   write_file "${target}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {
     "entryPoints": ["src/adoption_api/endpoint.py"],

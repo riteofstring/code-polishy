@@ -95,7 +95,7 @@ function bindSourceResolution(analysis, principal, units, createResolver) {
   const resolvers = new Map();
   const resolve = (names, absolute) => {
     const path = relative(analysis.root, absolute).split(sep).join("/");
-    const unit = analysis.classifications.get(path)?.unit;
+    const unit = analysis.classifications.get(path)?.scopes?.[0];
     if (!units.has(unit)) return fallback(names, absolute);
     if (!resolvers.has(unit))
       resolvers.set(

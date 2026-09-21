@@ -45,7 +45,7 @@ func (scope *javascriptGraphScope) selectPath(path string, allFiles []string) {
 		roots := javascriptPackageRoots(allFiles)
 		owner := filepath.ToSlash(filepath.Dir(path))
 		for _, source := range allFiles {
-			if scope.repo.Language(source) == "typescript" && scope.repo.NativeAnalysis(source, "architecture") && javascriptPackageRoot(scope.repo.JavaScriptContextPath(source), roots) == owner {
+			if scope.repo.Language(source) == "typescript" && scope.repo.NativeAnalysis(source, "architecture") && javascriptPackageRoot(scope.repo.SourceContextPath(source), roots) == owner {
 				scope.includePath(source)
 			}
 		}
@@ -62,7 +62,7 @@ func javascriptProjectControl(path string) bool {
 }
 
 func (scope *javascriptGraphScope) project(path string) string {
-	return javascriptPackageRoot(scope.repo.JavaScriptContextPath(path), scope.roots)
+	return javascriptPackageRoot(scope.repo.SourceContextPath(path), scope.roots)
 }
 
 func (scope *javascriptGraphScope) includePath(path string) {

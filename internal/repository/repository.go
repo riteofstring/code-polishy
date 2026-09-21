@@ -469,6 +469,7 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 	shellcheckDirectory := filepath.Join(repo.PolicyRoot, ".tools", "shellcheck", shellcheckPlatform())
 	javascriptPlatform := runtime.GOOS + "-" + releaseArchitecture(runtime.GOARCH)
 	nodeDirectory := filepath.Join(repo.PolicyRoot, ".tools", "javascript", javascriptPlatform, "node", "bin")
+	pythonDirectory := filepath.Join(repo.PolicyRoot, ".tools", "python", javascriptPlatform)
 	bundleBin := filepath.Join(repo.PolicyRoot, ".tools", "javascript", "bundle", "node_modules", ".bin")
 	environment := GovernedEnvironment{
 		PathEntries: []string{goDirectory},
@@ -490,6 +491,7 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 		}},
 		{directory: shellcheckDirectory, tools: []GovernedTool{{Name: "shellcheck", Path: filepath.Join(shellcheckDirectory, executableName("shellcheck")), Version: repo.ToolPin("shellcheck")}}},
 		{directory: nodeDirectory, tools: []GovernedTool{{Name: "node", Path: filepath.Join(nodeDirectory, executableName("node")), Version: repo.ToolPin("node")}}},
+		{directory: pythonDirectory, tools: []GovernedTool{{Name: "python", Path: filepath.Join(pythonDirectory, executableName("python")), Version: repo.ToolPin("python")}}},
 		{directory: bundleBin},
 	} {
 		if !isDirectory(optional.directory) {
@@ -632,9 +634,7 @@ func (repo Repository) ModuleNames(path string) []string {
 }
 
 func (repo Repository) computeModuleNames(path string) []string {
-	if repo.IsGenerated(path) && repo.Language(path) == "typescript" {
-		path = repo.JavaScriptContextPath(path)
-	}
+	path = repo.SourceContextPath(path)
 	names := []string{}
 	for _, module := range repo.Config.Modules {
 		if policy.MatchesAny(path, module.Paths) {

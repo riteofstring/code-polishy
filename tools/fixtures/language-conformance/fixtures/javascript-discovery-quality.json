@@ -3,7 +3,7 @@
   "protocol": "language-conformance-fixture/v1",
   "id": "javascript-discovery-quality",
   "maturity": "planned",
-  "gap": "Split root, nested-only, workspace, generated sourcePackage, tsconfig, jsconfig, alternate config, module modes, formatting, lint, complexity, comments, and framework activation into positive and seeded-defect cases.",
+  "gap": "Split root, nested-only, workspace, generated context, tsconfig, jsconfig, alternate config, module modes, formatting, lint, complexity, comments, and framework activation into positive and seeded-defect cases.",
   "behaviorIds": [
     "javascript.discovery.packages-workspaces",
     "javascript.discovery.generated-source-package",

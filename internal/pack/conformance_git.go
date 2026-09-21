@@ -41,11 +41,20 @@ func conformanceGitTool(ctx context.Context) (ConformanceToolIdentity, error) {
 	return ConformanceToolIdentity{Path: path, SHA256: digest, Version: version}, nil
 }
 
-func materializeConformanceFixture(ctx context.Context, root string, fixture ConformanceFixture, gitExecutable string) error {
+func materializeConformanceFixture(ctx context.Context, root string, fixture ConformanceFixture, lane, gitExecutable string) error {
 	if err := os.Mkdir(root, 0o700); err != nil {
 		return err
 	}
 	for _, file := range fixture.Files {
+		data, err := conformanceFixtureBytes(file)
+		if err != nil {
+			return err
+		}
+		if err := writeConformanceMaterializedFile(root, file.Path, file.Mode, data); err != nil {
+			return err
+		}
+	}
+	for _, file := range conformanceLaneFiles(fixture.LaneOverrides, lane) {
 		data, err := conformanceFixtureBytes(file)
 		if err != nil {
 			return err
@@ -114,6 +123,16 @@ func materializeConformanceFixture(ctx context.Context, root string, fixture Con
 		}
 	}
 	return nil
+}
+
+func conformanceLaneFiles(overrides *ConformanceLaneOverrides, lane string) []ConformanceFixtureFile {
+	if overrides == nil {
+		return nil
+	}
+	if lane == "reference" {
+		return overrides.Reference
+	}
+	return overrides.Candidate
 }
 
 func writeConformanceMaterializedFile(root, name, modeName string, data []byte) error {

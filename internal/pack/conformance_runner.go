@@ -277,10 +277,10 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	defer os.RemoveAll(temporary)
 	referenceRoot := filepath.Join(temporary, "reference")
 	candidateRoot := filepath.Join(temporary, "candidate")
-	if err := materializeConformanceFixture(ctx, referenceRoot, fixture, gitExecutable); err != nil {
+	if err := materializeConformanceFixture(ctx, referenceRoot, fixture, "reference", gitExecutable); err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
-	if err := materializeConformanceFixture(ctx, candidateRoot, fixture, gitExecutable); err != nil {
+	if err := materializeConformanceFixture(ctx, candidateRoot, fixture, "candidate", gitExecutable); err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
 	referenceBefore, err := conformanceSnapshot(referenceRoot)
@@ -291,8 +291,9 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
-	if !slices.Equal(referenceBefore, candidateBefore) {
-		return ConformanceFixtureEvidence{}, errors.New("materialized repositories are not identical")
+	variantPaths := conformanceLaneOverridePaths(fixture.LaneOverrides)
+	if !equivalentConformanceSnapshots(referenceBefore, candidateBefore, variantPaths) {
+		return ConformanceFixtureEvidence{}, errors.New("materialized repositories differ outside declared lane overrides")
 	}
 	referenceBeforeGit, err := conformanceGitSnapshot(ctx, gitExecutable, referenceRoot)
 	if err != nil {
@@ -302,8 +303,8 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
-	if !reflect.DeepEqual(referenceBeforeGit, candidateBeforeGit) {
-		return ConformanceFixtureEvidence{}, errors.New("materialized Git repositories are not identical")
+	if !equivalentConformanceGit(referenceBeforeGit, candidateBeforeGit, len(variantPaths) > 0) {
+		return ConformanceFixtureEvidence{}, errors.New("materialized Git repositories differ outside declared lane overrides")
 	}
 	referenceRun, err := executeConformanceLane(ctx, fixture, referenceExecutable, gitExecutable, referenceRoot, referenceBefore, referenceBeforeGit, executor)
 	if err != nil {
@@ -313,7 +314,7 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("candidate: %w", err)
 	}
-	differences, err := compareConformanceRuns(referenceRun, referenceRoot, referencePolicyRoot, candidateRun, candidateRoot, candidatePolicyRoot)
+	differences, err := compareConformanceRuns(referenceRun, referenceRoot, referencePolicyRoot, candidateRun, candidateRoot, candidatePolicyRoot, variantPaths)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
@@ -331,6 +332,40 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 		evidence.Status = "failed"
 	}
 	return evidence, nil
+}
+
+func conformanceLaneOverridePaths(overrides *ConformanceLaneOverrides) map[string]bool {
+	paths := map[string]bool{}
+	if overrides == nil {
+		return paths
+	}
+	for _, file := range overrides.Reference {
+		paths[file.Path] = true
+	}
+	return paths
+}
+
+func equivalentConformanceSnapshots(reference, candidate []ConformanceFileIdentity, variants map[string]bool) bool {
+	if len(reference) != len(candidate) {
+		return false
+	}
+	for index := range reference {
+		if reference[index].Path != candidate[index].Path || reference[index].Mode != candidate[index].Mode {
+			return false
+		}
+		if !variants[reference[index].Path] && reference[index].SHA256 != candidate[index].SHA256 {
+			return false
+		}
+	}
+	return true
+}
+
+func equivalentConformanceGit(reference, candidate ConformanceGitIdentity, variant bool) bool {
+	if variant {
+		reference.Head = ""
+		candidate.Head = ""
+	}
+	return reflect.DeepEqual(reference, candidate)
 }
 
 func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, executable, gitExecutable, root string, before []ConformanceFileIdentity, beforeGit ConformanceGitIdentity, executor conformanceExecutor) (ConformanceRunEvidence, error) {

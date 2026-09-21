@@ -243,16 +243,19 @@ Data classification retains ownership and dependency obligations while excluding
 these modules from executable provider capabilities. Executable modes, shebangs,
 control inputs, and generated or excluded overlaps remain forbidden.
 
-Generated JavaScript and TypeScript can inherit one real source package's
-analysis context through `scope.generatedJavaScript`. Each declaration maps
-exact generated paths to a contained `sourcePackage` manifest. The output stays
-non-rewritable, but uses that package's workspace, lock, TypeScript project,
-sealed lint activation, dead-code tree, dependency declarations, and module
-ownership. Missing, overlapping, non-generated, stale, or recursively generated
-owners are policy findings; a generated tree never needs a synthetic
-`package.json` or lockfile.
+Generated source can inherit one real ecosystem analysis context through
+`scope.sourceContexts`. Each declaration maps exact generated paths to a contained
+non-generated `context` path. The output keeps its physical path and stays
+non-rewritable, while core transfers module ownership and the selected pack
+interprets the context. Missing, overlapping, non-generated, stale, or recursively
+mapped declarations are policy findings; a generated tree never needs synthetic
+ecosystem metadata or a lockfile.
 
-Knip runs from the declared source package when it owns generated outputs,
+For JavaScript and TypeScript, use the source package's `package.json` as the
+context. The JavaScript pack then uses that package's workspace, lock, TypeScript
+project, sealed lint activation, dead-code tree, and dependency declarations.
+
+Knip runs from the context's discovered source package when it owns generated outputs,
 including outputs inside a Python package. Its repository read boundary can
 contain those outputs without becoming its execution directory. An unrelated
 root `package.json` cannot replace the declared owner. The same exact mapping
@@ -822,8 +825,8 @@ surface, confuses tools and agents, and preserves superseded behavior.
   how it is spelled, so an import that leaves the repository — including through
   a link — reads as absent and the source only it reaches is reported as
   unreachable rather than kept alive by a tree the repository does not contain.
-  Generated JavaScript declared through `scope.generatedJavaScript` participates
-  in its source package's same dead-code tree. That package remains the
+  Generated JavaScript declared through `scope.sourceContexts` participates
+  in its context package's same dead-code tree. That package remains the
   execution context even when its generated output is outside the package
   directory; filesystem ancestry alone cannot assign another owner.
 - Python dead-code analysis is Vulture `2.16` at the fixed 60% confidence

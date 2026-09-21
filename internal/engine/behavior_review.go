@@ -325,7 +325,7 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
 	report, gateErr := engine.documentationMergeGate(ctx, execution.selection)
 	if gateErr == nil && !HasFindings(report) && len(execution.plan.Tests.Suites) > 0 {
-		plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
+		plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, repo: engine.Repository, delegate: execution.controller.runner, expected: execution.commands}
 		plannedEngine := *engine
 		plannedEngine.Runner = plannedRunner
 		tested, testErr := plannedEngine.testExactPlan(ctx, execution.plan.Tests, execution.selection, true)
@@ -351,7 +351,7 @@ func (engine *Engine) finalizeCheckpointReplayFailure(ctx context.Context, execu
 }
 
 func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
-	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
+	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, repo: engine.Repository, delegate: execution.controller.runner, expected: execution.commands}
 	plannedEngine := *engine
 	plannedEngine.Runner = plannedRunner
 	report, testErr := engine.checkpointChecksAndTests(ctx, plannedEngine, execution.selection, execution.plan.Tests)

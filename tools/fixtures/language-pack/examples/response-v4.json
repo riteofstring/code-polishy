@@ -1,6 +1,7 @@
 {
   "protocolVersion": 4,
   "status": "pass",
+  "scopeHandles": ["scope-1"],
   "evidence": ["lint parsed every selected source"],
   "coverage": {
     "analyzed": ["src/main.ts"],

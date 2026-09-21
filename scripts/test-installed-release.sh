@@ -396,7 +396,7 @@ chmod +x "${go_only}/scripts/test.sh"
 write_security_workflow "${go_only}"
 write_file "${go_only}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": [] },
   "scope": {},
   "quality": {},
@@ -508,7 +508,7 @@ write_target_commands "${pnpm_app}"
 write_security_workflow "${pnpm_app}"
 write_file "${pnpm_app}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": [] },
   "scope": { "entryPoints": ["src/**"] },
   "quality": {},
@@ -644,7 +644,7 @@ write_target_commands "${monorepo}"
 write_security_workflow "${monorepo}"
 write_file "${monorepo}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": [] },
   "scope": { "entryPoints": ["packages/*/src/index.js"] },
   "quality": {},
@@ -756,7 +756,7 @@ write_target_commands "${typescript}"
 write_security_workflow "${typescript}"
 write_file "${typescript}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "library", "capabilities": [] },
   "scope": { "entryPoints": ["src/index.ts"] },
   "quality": {},
@@ -916,7 +916,7 @@ write_target_commands "${react}"
 write_security_workflow "${react}"
 write_file "${react}/.code-polishy.json" <<'EOF'
 {
-  "version": 4,
+  "version": 5,
   "project": { "kind": "application", "capabilities": ["frontend", "ui"] },
   "scope": { "entryPoints": ["src/**"] },
   "quality": {},

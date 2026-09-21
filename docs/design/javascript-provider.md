@@ -9,8 +9,8 @@ and removes pnpm's link-bearing virtual store plus executable launcher links bef
 the final regular-file inventory.
 The measured initial artifact has 12,579 regular files and about 99 MB of content.
 The generic pack inventory permits 20,000 files while retaining its 128 MiB total
-and 16 MiB per-file limits. The response cap matches the runner's existing 8 MiB
-bound; the larger acceptance project's input identities alone exceed 1 MiB.
+and 16 MiB per-file limits. Protocol requests are bounded at 64 MiB and responses
+at 16 MiB; the larger acceptance project's input identities alone exceed 1 MiB.
 
 Framework dispatch lives inside the provider. Ordinary JS/TS and Astro adapters
 produce original-source ASTs, embedded-script mappings, formatting choices, and
@@ -31,7 +31,7 @@ disabled. Entries come from manifest exports, core-normalized policy entries, ro
 cli/index/main conventions, configuration files, tests, and statically recognized
 framework entries. Knip runs separately at each actual package tree, including
 repositories without a root manifest. Its configuration and workspace ownership
-come from resolved units; target Knip configuration is never loaded. Literal route names are escaped before
+come from pack-discovered scopes; target Knip configuration is never loaded. Literal route names are escaped before
 becoming analyzer glob inputs. Unsupported entry or import semantics cannot
 establish complete reachability. Formatting returns proposed edits to the core;
 reading project context does not authorize writing it.
@@ -87,22 +87,23 @@ Formatting and analysis have separate manifest commands. Only the formatting
 capability runs in the format profile; check and gate retain all six capabilities.
 The core continues honoring every provider's explicit manifest profiles.
 
-Compilation units use core-resolved configuration paths: the nearest tsconfig.json
-or jsconfig.json, or a unique tsconfig*.json when neither standard name exists.
-Generated source uses its declared source package for configuration and package
-resolution while keeping its original read and diagnostic path.
+Static discovery resolves each compilation scope from the authoritative generic
+inventory: the nearest tsconfig.json or jsconfig.json, or a unique tsconfig*.json
+when neither standard name exists. Generated source uses its declared context
+package for configuration and package resolution while keeping its original read
+and diagnostic path.
 Required allowJs and checkJs overrides apply while discovering root files and
 while compiling them; noEmit and noCheck overrides retain actual analysis without
 writes. Strictness and library checking retain the selected project's settings.
 Bounded informational notes identify the config, root-file count, and effective
 options. Selected sources excluded by that config remain incomplete; sibling
-configs are not merged or guessed. Projects are keyed by core-resolved analysis
-unit identity, so nested packages sharing an inherited configuration retain their
+configs are not merged or guessed. Projects are keyed by engine-issued invocation
+scope, so nested packages sharing an inherited configuration retain their
 own manifest, configured root members, and framework installation. Nested configs
 can own tooling or test source.
 
-Lint consumes core-resolved React activation, including disabled overrides and
-source-package inheritance. Ordinary source lint does not parse package metadata.
+Lint consumes locked policy-module activation plus pack-discovered framework
+metadata, including disabled overrides and source-context inheritance.
 Architecture retains parsed imports and uses default resolution with a visible
 note when compiler configuration is invalid. Type checking continues to require
 valid compilation configuration. Unsupported framework contracts remain explicit.
@@ -113,7 +114,7 @@ framework configurations.
 
 Dead-code module resolution uses each source's resolved compilation options,
 including nested configurations within one package. Generated bare and package
-imports resolve from the declared source package; relative imports keep their
+imports resolve from the declared context package; relative imports keep their
 physical source directory. Resolvers remain scoped to these compilation
 options so overlapping aliases cannot exchange targets between units.
 

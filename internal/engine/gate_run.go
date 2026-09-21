@@ -320,6 +320,7 @@ func gateRunCommandSpec(planned MergeGateExecutionCommand, receipts *testReceipt
 	if len(command.Stdin) > 0 {
 		specification.InputSHA256 = gaterun.ContentSHA256(command.Stdin)
 	}
+	specification.InputDerivation = command.InputDerivation
 	if receipts != nil {
 		if identity, found := receipts.identities[command.Name]; found {
 			specification.SuiteIdentitySHA256, _ = identity.Digest()

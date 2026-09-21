@@ -8,8 +8,8 @@ const { boundedText } = await import("./context.mjs");
 let input = "";
 for await (const chunk of process.stdin) {
   input += chunk;
-  if (Buffer.byteLength(input) > 8 * 1024 * 1024)
-    throw new Error("request exceeds 8 MiB");
+  if (Buffer.byteLength(input) > 64 * 1024 * 1024)
+    throw new Error("request exceeds 64 MiB");
 }
 try {
   process.stdout.write(`${JSON.stringify(await analyze(JSON.parse(input)))}\n`);

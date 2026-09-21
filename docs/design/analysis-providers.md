@@ -28,21 +28,28 @@ selected packs. It provides no legacy decoder, translator, alias, native fallbac
 dual execution, or automatic pack-pin migration. Migration is an explicit,
 rollback-capable transaction completed before the engine-lock authority cutover.
 
-Requests separate required analysis targets (`files`), permitted diagnostic paths
-(`diagnosticFiles`), and selected format writes (`writeFiles`). Resolved units
-carry package/workspace roots, manifests, configuration paths, governed members,
-and exact entry files. Source classifications bind the effective generated
-`sourcePackage`, per-capability provider owner, and resolved lint activation.
-Providers use that context without changing original paths for reads or findings.
+Core first supplies a bounded authoritative inventory and the exact repository
+selection. Inventory entries carry only generic path, language, module, context,
+ownership, and source/metadata/dependency/asset/test/generated/data/development/
+control classifications. For static discovery, the pack returns project scopes
+with a private identity, language, root, members, entry files, context paths,
+selected members, and bounded opaque JSON. Core validates every path against the
+inventory, requires selected sources exactly once, and replaces private identities
+with invocation-local scope handles. Ecosystem package, workspace, compiler, and
+framework shapes never enter the core contract.
 
-Only selected sources and relevant unit metadata are hashed before execution.
-Unit discovery inventories are path metadata, not mandatory reads. Providers
-record the inputs they actually read, including additional contained dependency
-inputs. Validated symbolic asset links are exceptional safety context: their link
-text, canonical target, and bounded target hashes bind resolution topology before
-provider execution. Core verifies initial context and reported identities afterward;
-unrelated regular assets neither consume context limits nor become mandatory
-analyzer inputs.
+Capability requests separate required analysis targets (`files`), permitted
+diagnostic paths (`diagnosticFiles`), and selected format writes (`writeFiles`).
+They carry only validated scopes. A `scope.sourceContexts` mapping binds generated
+source to a contained non-generated ecosystem context while preserving its physical
+path for reads, findings, and write protection.
+
+Discovery receives hashes for selected sources and relevant metadata, dependency,
+and control inputs. Capability execution receives hashes only for diagnostic files,
+scope context, controls, and validated symbolic asset links required by the
+operation. Providers report every input they actually read. Core verifies initial
+context and reported identities afterward; unrelated regular assets neither consume
+context limits nor become mandatory analyzer inputs.
 
 Coordinates are one-based UTF-8 byte positions in original source. Comment bytes
 must match that position; truncated comments remain bounded facts marked
@@ -50,13 +57,13 @@ incomplete and cannot establish a permitted directive. Format writes require
 valid UTF-8 in both original and replacement bytes. Core validates every target
 before applying any edit. Generated source and declared data remain non-writable.
 
-Focused type checking reports owned members of the effective compilation program.
+Focused type checking reports owned members of the discovered compilation scope.
 Focused dead-code analysis retains inventory-wide package reachability, including
 unchanged files and metadata-triggered work. Architecture starts only for selected
-providers and follows connected project units. Core validates coverage against
+providers and follows connected discovered scopes. Core validates coverage against
 that dependency closure and rejects unrelated findings. Graph evidence groups
 ordinary sources by actual package root. Inherited generated files outside that
-physical root retain a containing graph root; their effective package binding is
+physical root retain a containing graph root; their effective ecosystem context is
 part of the request evidence.
 
 An unavailable selected pack remains a repository error. If its manifest can

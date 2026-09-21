@@ -131,6 +131,7 @@ type EnvironmentFingerprint struct {
 type CommandSpec struct {
 	Root                string          `json:"root,omitempty"`
 	InputSHA256         string          `json:"input_sha256,omitempty"`
+	InputDerivation     string          `json:"input_derivation,omitempty"`
 	Category            CommandCategory `json:"category"`
 	Scope               string          `json:"scope"`
 	Cost                string          `json:"cost"`

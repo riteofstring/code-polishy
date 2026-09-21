@@ -339,7 +339,7 @@ func validateScope(config *Config) error {
 	if err := rejectUniversalPatterns(config.Scope.EntryPoints, "scope.entryPoints"); err != nil {
 		return err
 	}
-	if err := validateGeneratedJavaScript(config.Scope.GeneratedJavaScript); err != nil {
+	if err := validateSourceContext(config.Scope.SourceContexts); err != nil {
 		return err
 	}
 	if err := validatePythonDeclarations(&config.Scope); err != nil {

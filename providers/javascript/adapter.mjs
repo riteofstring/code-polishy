@@ -2,6 +2,7 @@ import { createAnalysis, containTypeScriptReads } from "./context.mjs";
 import { analyzeSource } from "./analysis.mjs";
 import { typecheck } from "./typecheck.mjs";
 import { deadcode } from "./deadcode.mjs";
+import { discover } from "./discovery.mjs";
 
 function validateRequest(request) {
   if (
@@ -14,7 +15,14 @@ function validateRequest(request) {
 }
 
 function validateScope(request) {
-  const arrays = ["files", "context", "units", "diagnosticFiles", "writeFiles"];
+  const arrays = [
+    "files",
+    "context",
+    "inventory",
+    "scopes",
+    "diagnosticFiles",
+    "writeFiles",
+  ];
   if (
     !arrays.every((name) => Array.isArray(request[name])) ||
     !request.policy ||
@@ -26,6 +34,7 @@ function validateScope(request) {
 
 export async function analyze(request) {
   validateRequest(request);
+  if (request.operation === "discover") return discover(request);
   const analysis = createAnalysis(request);
   for (const path of request.files) analysis.read(path);
   const restore = containTypeScriptReads(analysis);
