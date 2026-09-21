@@ -9,13 +9,13 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Keep updates under 100 words and outcome-first. Omit file, metric,
-  implementation, and raw-output detail unless action or safety needs it.
+- Keep updates outcome-first and under 100 words; omit detail unless action or
+  safety needs it.
 
 ## Implementation
 
-- Preserve unrelated work and avoid unrelated refactors; make the smallest
-  maintainable root-cause fix.
+- Preserve unrelated work. Prefer the simplest end-to-end root-cause fix; add
+  machinery only when it reduces total complexity and failure modes.
 - Hash only for trust-boundary authentication, immutable identity, or reusable
   evidence. Never hash local state for change detection, mirror an authoritative
   digest, or rehash within one trusted operation.
