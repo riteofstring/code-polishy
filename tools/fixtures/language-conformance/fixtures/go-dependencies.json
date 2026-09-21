@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "go-dependencies",
+  "maturity": "planned",
+  "gap": "Capture module and sum ownership, workspace membership, exact Go version, direct and transitive versions, local replacements, lock reconciliation, vulnerability, OSV, and release-age evidence with controlled advisory inputs.",
+  "behaviorIds": [
+    "go.dependencies.manifest-lock-replace",
+    "go.dependencies.vulnerability-release-age"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "go.mod",
+      "mode": "0644",
+      "content": "module example.test/conformance\n\ngo 1.25\n\nrequire example.test/dependency v1.2.3\n"
+    },
+    { "path": "src/main.go", "mode": "0644", "content": "package main\n" }
+  ],
+  "arguments": ["supply-chain", "--offline", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["supplyChain.goVersion"],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [".code-polishy.json", "go.mod", "src/main.go"]
+  }
+}

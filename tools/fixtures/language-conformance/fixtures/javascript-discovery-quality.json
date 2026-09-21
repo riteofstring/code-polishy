@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "javascript-discovery-quality",
+  "maturity": "planned",
+  "gap": "Split root, nested-only, workspace, generated sourcePackage, tsconfig, jsconfig, alternate config, module modes, formatting, lint, complexity, comments, and framework activation into positive and seeded-defect cases.",
+  "behaviorIds": [
+    "javascript.discovery.packages-workspaces",
+    "javascript.discovery.generated-source-package",
+    "javascript.discovery.compiler-config",
+    "javascript.quality.format",
+    "javascript.quality.lint-complexity-comments",
+    "javascript.frameworks.react-activation"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"entryPoints\":[\"src/index.js\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "package.json",
+      "mode": "0644",
+      "content": "{\"name\":\"conformance\",\"private\":true,\"type\":\"module\",\"packageManager\":\"pnpm@11.13.0\"}\n"
+    },
+    {
+      "path": "src/index.js",
+      "mode": "0644",
+      "content": "export function render( value ){return value}\n"
+    }
+  ],
+  "arguments": ["check", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["quality.format"],
+    "requiredCoverage": ["src/index.js"],
+    "writes": [],
+    "protected": [".code-polishy.json", "package.json", "src/index.js"]
+  }
+}

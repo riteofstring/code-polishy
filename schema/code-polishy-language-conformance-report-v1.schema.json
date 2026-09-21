@@ -100,8 +100,8 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
-        "status": { "enum": ["passed", "failed", "skipped"] },
-        "skipReason": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "status": { "enum": ["passed", "failed", "skipped", "blocked"] },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4096 },
         "reference": { "$ref": "#/$defs/run" },
         "candidate": { "$ref": "#/$defs/run" },
         "differences": {
@@ -117,11 +117,11 @@
       "allOf": [
         {
           "if": {
-            "properties": { "status": { "const": "skipped" } },
+            "properties": { "status": { "enum": ["skipped", "blocked"] } },
             "required": ["status"]
           },
           "then": {
-            "required": ["skipReason"],
+            "required": ["reason"],
             "not": {
               "anyOf": [
                 { "required": ["reference"] },
@@ -140,12 +140,38 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "passed", "failed", "skipped"],
+      "required": [
+        "status",
+        "passed",
+        "failed",
+        "skipped",
+        "blocked",
+        "behaviors"
+      ],
       "properties": {
         "status": { "enum": ["passed", "failed"] },
         "passed": { "type": "integer", "minimum": 0 },
         "failed": { "type": "integer", "minimum": 0 },
-        "skipped": { "type": "integer", "minimum": 0 }
+        "skipped": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "behaviors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "passing",
+            "untested",
+            "failing",
+            "blocked",
+            "deliberatelyChanged"
+          ],
+          "properties": {
+            "passing": { "type": "integer", "minimum": 0 },
+            "untested": { "type": "integer", "minimum": 0 },
+            "failing": { "type": "integer", "minimum": 0 },
+            "blocked": { "type": "integer", "minimum": 0 },
+            "deliberatelyChanged": { "type": "integer", "minimum": 0 }
+          }
+        }
       }
     }
   }

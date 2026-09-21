@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -104,14 +105,77 @@ func TestConformanceReportSchemaAcceptsSkippedFixture(t *testing.T) {
 	if err := os.WriteFile(fixturePath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	ledgerData, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := map[string]any{}
+	if err := json.Unmarshal(ledgerData, &ledger); err != nil {
+		t.Fatal(err)
+	}
+	ledger["behaviors"].([]any)[0].(map[string]any)["platforms"] = []any{"unsupported-test-platform"}
+	ledgerData, err = json.Marshal(ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ledgerPath, ledgerData, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	reference := writeConformanceTestExecutable(t, "reference")
 	candidate := writeConformanceTestExecutable(t, "candidate")
 	report, err := runConformance(context.Background(), ConformanceOptions{LedgerPath: ledgerPath, ReferenceExecutable: reference, CandidateExecutable: candidate}, conformanceTestExecutor{reference: reference, candidate: candidate})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Summary.Skipped != 1 || len(report.Fixtures) != 1 || report.Fixtures[0].SkipReason == "" {
+	if report.Summary.Skipped != 1 || len(report.Fixtures) != 1 || report.Fixtures[0].Reason == "" {
 		t.Fatalf("skipped report = %+v", report)
+	}
+}
+
+func TestConformanceReportBlocksPlannedFixtures(t *testing.T) {
+	ledgerPath := writeConformanceTestLedger(t)
+	fixturePath := filepath.Join(filepath.Dir(ledgerPath), "fixtures", "seeded.json")
+	data, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := map[string]any{}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	fixture["maturity"] = "planned"
+	fixture["gap"] = "native reference case has not been captured"
+	data, err = json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixturePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ledgerData, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := map[string]any{}
+	if err := json.Unmarshal(ledgerData, &ledger); err != nil {
+		t.Fatal(err)
+	}
+	ledger["behaviors"].([]any)[0].(map[string]any)["status"] = "untested"
+	ledgerData, err = json.Marshal(ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ledgerPath, ledgerData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reference := writeConformanceTestExecutable(t, "reference")
+	candidate := writeConformanceTestExecutable(t, "candidate")
+	report, err := runConformance(context.Background(), ConformanceOptions{LedgerPath: ledgerPath, ReferenceExecutable: reference, CandidateExecutable: candidate}, conformanceTestExecutor{reference: reference, candidate: candidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.Status != "failed" || report.Summary.Blocked != 1 || report.Summary.Behaviors.Untested != 1 || report.Fixtures[0].Status != "blocked" {
+		t.Fatalf("planned report = %+v", report)
 	}
 }
 
@@ -139,6 +203,54 @@ func TestConformanceLedgerRejectsBrokenFixtureLinksWithFieldPath(t *testing.T) {
 	}
 }
 
+func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t *testing.T) {
+	ledger, err := LoadConformanceLedger(filepath.Join("..", "..", "tools", "fixtures", "language-conformance", "ledger.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 19 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
+		t.Fatalf("inventory identity = behaviors:%d fixtures:%d base:%s", len(ledger.Behaviors), len(ledger.Fixtures), ledger.TaskBase)
+	}
+	for _, behavior := range ledger.Behaviors {
+		if behavior.Status != "untested" {
+			t.Fatalf("behavior %s status = %s", behavior.ID, behavior.Status)
+		}
+		for _, entry := range append(append(append(slices.Clone(behavior.CurrentImplementation), behavior.Helpers...), behavior.Documentation...), behavior.Tests...) {
+			path, symbol, _ := strings.Cut(entry, "#")
+			data, readErr := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(path)))
+			if readErr != nil {
+				if info, statErr := os.Stat(filepath.Join("..", "..", filepath.FromSlash(path))); statErr != nil || !info.IsDir() {
+					t.Fatalf("behavior %s evidence path %s: %v", behavior.ID, entry, readErr)
+				}
+			}
+			if symbol != "" && !bytes.Contains(data, []byte("func "+symbol+"(")) {
+				t.Fatalf("behavior %s test symbol does not exist: %s", behavior.ID, entry)
+			}
+		}
+	}
+	for _, fixture := range ledger.Fixtures {
+		if fixture.Maturity != "planned" || fixture.Gap == "" {
+			t.Fatalf("fixture %s maturity = %s gap = %q", fixture.ID, fixture.Maturity, fixture.Gap)
+		}
+	}
+	mapped := []string{}
+	for _, behavior := range ledger.Behaviors {
+		mapped = append(mapped, behavior.CurrentImplementation...)
+		mapped = append(mapped, behavior.Helpers...)
+	}
+	for _, required := range []string{
+		"internal/quality/quality.go", "internal/quality/python.go", "internal/quality/javascript.go", "internal/quality/comments_shell.go",
+		"internal/architecture/go_graph.go", "internal/architecture/python_graph.go", "internal/architecture/javascript_graph.go",
+		"internal/repository/go_modules.go", "internal/repository/python_project.go", "internal/pythonfacts/adapter.go", "internal/javascript/javascript.go",
+		"internal/supplychain/supplychain.go", "internal/testing/testing.go", "internal/policymodule/node.go", "internal/portability/portability.go",
+		"internal/policy/model.go", "internal/release/launcher_manifest.go", "scripts/install.sh", "providers/javascript/analysis.mjs",
+	} {
+		if !slices.Contains(mapped, required) {
+			t.Fatalf("required audit surface is not mapped: %s", required)
+		}
+	}
+}
+
 func writeConformanceTestLedger(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -150,6 +262,7 @@ func writeConformanceTestLedger(t *testing.T) string {
 	fixture := ConformanceFixture{
 		Protocol:       ConformanceFixtureProtocol,
 		ID:             "seeded-diagnostic",
+		Maturity:       "active",
 		BehaviorIDs:    []string{"go.lint.seeded"},
 		Files:          []ConformanceFixtureFile{{Path: ".code-polishy.json", Mode: "0644", Content: &configuration}, {Path: "src/main.go", Mode: "0644", Content: &source}},
 		Arguments:      []string{"check", "--all", "--format", "json"},

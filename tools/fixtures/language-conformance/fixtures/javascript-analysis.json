@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "javascript-analysis",
+  "maturity": "planned",
+  "gap": "Capture JavaScript checking, TypeScript dependent diagnostics, package-wide dead code, metadata-only changes, conventional and declared entries, JS/TS/JSX/TSX/CTS, and Astro mapping without unrelated package expansion.",
+  "behaviorIds": [
+    "javascript.quality.typecheck-dependent-scope",
+    "javascript.quality.dead-code-package-scope",
+    "javascript.frameworks.astro"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"entryPoints\":[\"src/a.ts\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "package.json",
+      "mode": "0644",
+      "content": "{\"name\":\"conformance\",\"private\":true,\"type\":\"module\",\"packageManager\":\"pnpm@11.13.0\"}\n"
+    },
+    {
+      "path": "tsconfig.json",
+      "mode": "0644",
+      "content": "{\"compilerOptions\":{\"strict\":true},\"include\":[\"src\"]}\n"
+    },
+    {
+      "path": "src/a.ts",
+      "mode": "0644",
+      "content": "export const value: string = 1;\n"
+    },
+    {
+      "path": "src/b.ts",
+      "mode": "0644",
+      "content": "import { value } from './a.js';\nexport const dependent: number = value;\n"
+    },
+    {
+      "path": "src/orphan.ts",
+      "mode": "0644",
+      "content": "export const orphan = 1;\n"
+    }
+  ],
+  "arguments": ["check", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["quality.typecheck", "quality.deadCode"],
+    "requiredCoverage": ["src/a.ts", "src/b.ts", "src/orphan.ts"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "package.json",
+      "tsconfig.json",
+      "src/a.ts",
+      "src/b.ts",
+      "src/orphan.ts"
+    ]
+  }
+}

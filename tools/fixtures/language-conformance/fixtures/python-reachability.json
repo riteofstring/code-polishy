@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "python-reachability",
+  "maturity": "planned",
+  "gap": "Capture runtime loaders, dynamic references, entry points, external plug-ins, protocol checks, callable and attribute flow, TypedDict reads, persisted state, invalidation, provenance, and denied stale evidence.",
+  "behaviorIds": [
+    "python.reachability.runtime-loaders",
+    "python.reachability.dynamic-references",
+    "python.reachability.external-plugins",
+    "python.reachability.external-attributes-types",
+    "python.reachability.state-invalidation"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"entryPoints\":[\"src/app/main.py\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "0644",
+      "content": "[project]\nname = \"conformance\"\nversion = \"1.0.0\"\nrequires-python = \"==3.12.*\"\n"
+    },
+    {
+      "path": "src/app/main.py",
+      "mode": "0644",
+      "content": "def main():\n    return 0\n"
+    },
+    {
+      "path": "src/app/orphan.py",
+      "mode": "0644",
+      "content": "def unreachable():\n    return 1\n"
+    }
+  ],
+  "arguments": ["check", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["quality.deadCode"],
+    "requiredCoverage": ["src/app/main.py", "src/app/orphan.py"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "pyproject.toml",
+      "src/app/main.py",
+      "src/app/orphan.py"
+    ]
+  }
+}

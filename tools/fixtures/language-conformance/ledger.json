@@ -1,0 +1,2524 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-ledger-v1.schema.json",
+  "protocol": "language-conformance-ledger/v1",
+  "taskBase": "ad60b7cfa0141e98dd2b72033db65cb73a5121d8",
+  "lockedRelease": "0.27.8",
+  "references": {
+    "currentMain": {
+      "revision": "ad60b7cfa0141e98dd2b72033db65cb73a5121d8",
+      "version": "0.27.8"
+    },
+    "immutableOrigin": {
+      "revision": "a800e66ef3ac5fc57c9d103dc84688aaa68ef4e8",
+      "version": "0.25.0"
+    },
+    "optionalProvider": {
+      "revision": "a800e66ef3ac5fc57c9d103dc84688aaa68ef4e8",
+      "version": "0.25.0"
+    }
+  },
+  "fixtures": [
+    "fixtures/go-discovery-quality.json",
+    "fixtures/go-architecture.json",
+    "fixtures/go-dependencies.json",
+    "fixtures/go-toolchain.json",
+    "fixtures/python-discovery-quality.json",
+    "fixtures/python-architecture.json",
+    "fixtures/python-reachability.json",
+    "fixtures/python-dependencies.json",
+    "fixtures/python-toolchain.json",
+    "fixtures/javascript-discovery-quality.json",
+    "fixtures/javascript-analysis.json",
+    "fixtures/javascript-architecture.json",
+    "fixtures/javascript-dependencies.json",
+    "fixtures/javascript-toolchain.json",
+    "fixtures/shell-complete.json",
+    "fixtures/shared-scope-policy.json",
+    "fixtures/shared-testing-dependencies.json",
+    "fixtures/shared-lifecycle-adjacent.json",
+    "fixtures/format-write.json"
+  ],
+  "behaviors": [
+    {
+      "id": "go.discovery.modules",
+      "language": "go",
+      "capability": "discovery",
+      "guarantee": "Root and nested go.mod projects are found statically, malformed or ambiguous ownership fails visibly, and every governed Go source has one contained module.",
+      "currentImplementation": [
+        "internal/repository/go_modules.go",
+        "internal/quality/quality.go"
+      ],
+      "helpers": ["internal/repository/repository_inventory.go"],
+      "cliRoutes": ["check", "architecture", "supply-chain"],
+      "policyKeys": [],
+      "activation": ["A governed .go file or go.mod is present."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/policies/supply-chain.md"
+      ],
+      "tests": [
+        "internal/repository/go_modules_test.go#TestInspectGoModulesUsesOfficialModuleParser",
+        "internal/quality/quality_test.go#TestCoverageRejectsAmbiguousCustomLanguageRules"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Go pack interprets Go module structure; core validates contained paths and unique ownership.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check", "architecture", "supply-chain"],
+      "profiles": ["check", "architecture", "offline"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.discovery.workspaces",
+      "language": "go",
+      "capability": "discovery",
+      "guarantee": "go.work use and replace declarations resolve only contained unique modules and do not add unlisted projects to focused analysis.",
+      "currentImplementation": [
+        "internal/repository/go_modules.go",
+        "internal/architecture/go_graph_scope.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check", "architecture", "supply-chain"],
+      "policyKeys": [],
+      "activation": ["A go.work file is present."],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/policies/supply-chain.md"
+      ],
+      "tests": [
+        "internal/repository/go_modules_test.go#TestInspectGoModulesResolvesContainedWorkspaceUses",
+        "internal/architecture/source_graph_scope_test.go#TestGoWorkspaceSelectionDoesNotIncludeUnlistedProjects"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns Go workspace semantics while core owns containment and selection authority.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check", "architecture", "supply-chain"],
+      "profiles": ["check", "architecture", "offline"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.discovery.packages-build-constraints",
+      "language": "go",
+      "capability": "discovery",
+      "guarantee": "Packages, external test packages, build tags, generated paths, and platform-constrained files retain their real package and source identities.",
+      "currentImplementation": [
+        "internal/architecture/go_graph.go",
+        "internal/architecture/go_graph_scope.go"
+      ],
+      "helpers": ["internal/repository/go_modules.go"],
+      "cliRoutes": ["check", "architecture"],
+      "policyKeys": ["scope.generated"],
+      "activation": [
+        "Governed Go source is selected or required as dependency context."
+      ],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/architecture/source_graph_test.go#TestGoExternalTestPackageImportsDoNotCreateSelfCycles",
+        "internal/architecture/architecture_test.go#TestGeneratedGoImportStillFollowsRepositoryGraph"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "Go syntax and build selection belong to the pack; core retains generated classification and graph policy.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check", "architecture"],
+      "profiles": ["check", "architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.quality.format-syntax",
+      "language": "go",
+      "capability": "format",
+      "guarantee": "Pinned gofmt detects exact unformatted selected files, write mode edits only authorized files, and Go syntax failures remain precise and non-silent.",
+      "currentImplementation": ["internal/quality/quality.go"],
+      "helpers": ["internal/repository/contained_write.go"],
+      "cliRoutes": ["check", "format"],
+      "policyKeys": ["scope.generated", "scope.data"],
+      "activation": ["Selected writable or check-only Go source exists."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/quality/quality_test.go#TestGoComplexityUsesProductionThreshold",
+        "internal/engine/generated_format_test.go#TestFormatGitChangesDoesNotWriteAnalysisExpansion"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Go pack owns parsing and formatting; core grants write authority and applies edits.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check", "format"],
+      "profiles": ["check", "format"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.quality.vet-staticcheck",
+      "language": "go",
+      "capability": "lint",
+      "guarantee": "go vet and pinned staticcheck run at the required package scope, preserve diagnostic identity and locations, and fail visibly when tools or coverage are unavailable.",
+      "currentImplementation": ["internal/quality/quality.go"],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": [
+        "Governed Go source is selected for check or gate analysis."
+      ],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/quality_test.go#TestCoverageAdmitsManagedBuiltInCommands"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns Go analyzers and package scope; core owns execution bounds and finding policy.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check", "gate"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.quality.complexity-comments",
+      "language": "go",
+      "capability": "source-facts",
+      "guarantee": "Go function complexity uses separate production and test thresholds, comments retain exact grammar and directives, and generated exemptions do not weaken other analysis.",
+      "currentImplementation": [
+        "internal/quality/quality.go",
+        "internal/quality/comments.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check"],
+      "policyKeys": [
+        "quality.complexity.go",
+        "quality.complexity.goTest",
+        "quality.allowComments"
+      ],
+      "activation": ["Governed Go source is selected."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/design/source-comment-policy.md"
+      ],
+      "tests": [
+        "internal/quality/quality_test.go#TestGoComplexityUsesProductionThreshold",
+        "internal/quality/comments_test.go#TestGoDirectiveGrammarBoundaries"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack emits Go syntax facts; core applies locked complexity and comment policy.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.quality.build-type",
+      "language": "go",
+      "capability": "build",
+      "guarantee": "Compilation and configured build checks cover the intended modules and report type or build failures without executing undeclared target behavior.",
+      "currentImplementation": [
+        "internal/quality/quality.go",
+        "internal/repository/command_discovery.go"
+      ],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["check", "gate"],
+      "policyKeys": ["checks"],
+      "activation": ["A selected Go module has a declared build capability."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/policies/verification.md"
+      ],
+      "tests": [
+        "internal/quality/command_selection_test.go#TestCommandPathsConstrainSharedModuleAndProjectExpansion"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The Go pack supplies build units and diagnostics; core alone schedules declared commands.",
+      "fixtures": ["go-discovery-quality"],
+      "commands": ["check", "gate"],
+      "profiles": ["build", "gate"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.architecture.import-graph",
+      "language": "go",
+      "capability": "architecture",
+      "guarantee": "Go imports produce package nodes and real file witnesses with exact module ownership for core dependency-direction enforcement.",
+      "currentImplementation": [
+        "internal/architecture/go_graph.go",
+        "internal/architecture/architecture.go"
+      ],
+      "helpers": ["internal/architecture/sourcegraph"],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "Selected Go source participates in architecture analysis."
+      ],
+      "documentation": ["docs/policies/architecture.md"],
+      "tests": [
+        "internal/architecture/architecture_test.go#TestGoImportMustFollowDeclaredModuleDependency",
+        "internal/architecture/architecture_test.go#TestDeclaredGoModuleDependencyPasses"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack resolves Go imports; core owns module direction and graph validation.",
+      "fixtures": ["go-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.architecture.focused-scope-cycles",
+      "language": "go",
+      "capability": "architecture",
+      "guarantee": "Focused Go analysis includes only transitively connected projects, retains manifest context, and reports deterministic production and test-aware cycle witnesses.",
+      "currentImplementation": [
+        "internal/architecture/go_graph_scope.go",
+        "internal/architecture/source_graph.go"
+      ],
+      "helpers": ["internal/architecture/sourcegraph"],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "A file or module selection requires Go dependency closure."
+      ],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/architecture/source_graph_scope_test.go#TestFocusedGoGraphRetainsTransitivelyConnectedProjects",
+        "internal/architecture/source_graph_test.go#TestGoPackageCycleReportsRealFileWitnesses"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack supplies closure and edge facts; core validates scope and cycles.",
+      "fixtures": ["go-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.dependencies.manifest-lock-replace",
+      "language": "go",
+      "capability": "dependencies",
+      "guarantee": "go.mod, go.sum, and go.work evidence preserves exact versions, module ownership, lock coverage, and contained local replacement identities.",
+      "currentImplementation": [
+        "internal/repository/go_modules.go",
+        "internal/supplychain/supplychain.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": ["supplyChain.allowedDependencyProtocols"],
+      "activation": ["A Go module or workspace is governed."],
+      "documentation": ["docs/policies/supply-chain.md"],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestGoModuleRequiresSumForRegistryDependencies",
+        "internal/supplychain/supplychain_test.go#TestGoWorkspaceRejectsEscapingUseAndReplace"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Go pack interprets ecosystem manifests; core applies generic source and lock policy.",
+      "fixtures": ["go-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.dependencies.vulnerability-release-age",
+      "language": "go",
+      "capability": "security",
+      "guarantee": "govulncheck, OSV, and release metadata retain exact dependency and advisory identity, reachable coverage, severity, and UTC age decisions.",
+      "currentImplementation": [
+        "internal/supplychain/online.go",
+        "internal/supplychain/osv.go",
+        "internal/supplychain/release_age.go"
+      ],
+      "helpers": [
+        "internal/policy/vulnerability.go",
+        "internal/policy/release_age.go"
+      ],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": [
+        "supplyChain.minimumReleaseAgeDays",
+        "supplyChain.vulnerabilityAssessments"
+      ],
+      "activation": [
+        "Go dependency security or release-age analysis is selected."
+      ],
+      "documentation": [
+        "docs/policies/security.md",
+        "docs/policies/supply-chain.md"
+      ],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestOnlineReportsYoungGoDependenciesFromSemanticToolResults",
+        "internal/supplychain/supplychain_test.go#TestOSVReportProducesExactTypedFindingAtUnknownSeverity"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack produces Go ecosystem evidence; core owns advisory and assessment policy.",
+      "fixtures": ["go-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "go.execution.toolchain",
+      "language": "go",
+      "capability": "execution",
+      "guarantee": "The exact declared Go, gofmt, staticcheck, and govulncheck toolchain is authenticated, sealed, platform-specific, and fails clearly when absent or wrong.",
+      "currentImplementation": [
+        "internal/release/launcher_manifest.go",
+        "scripts/install.sh",
+        "tools/install-go.sh",
+        "tools/install-go-tools.sh"
+      ],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["doctor", "check", "supply-chain"],
+      "policyKeys": ["supplyChain.releaseArtifacts"],
+      "activation": [
+        "A Go capability requires its carried or declared toolchain."
+      ],
+      "documentation": [
+        "docs/installation.md",
+        "docs/design/installed-release-verification.md"
+      ],
+      "tests": ["scripts/test-install.sh", "scripts/test-installed-release.sh"],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Go pack owns its analyzers and declared host contract; core verifies artifact and execution authority.",
+      "fixtures": ["go-toolchain"],
+      "commands": ["doctor", "check", "supply-chain"],
+      "profiles": ["installed"],
+      "modes": ["check"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+
+    {
+      "id": "python.discovery.projects-layouts",
+      "language": "python",
+      "capability": "discovery",
+      "guarantee": "Static pyproject discovery handles root, nested, flat, src, and in-tree backend layouts with one exact project owner and visible unsupported layouts.",
+      "currentImplementation": [
+        "internal/repository/python_project.go",
+        "internal/repository/python_build.go"
+      ],
+      "helpers": ["internal/repository/python_toml.go"],
+      "cliRoutes": ["check", "architecture", "supply-chain"],
+      "policyKeys": [],
+      "activation": ["A pyproject.toml or governed Python source is present."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/design/python-contract-evidence.md"
+      ],
+      "tests": [
+        "internal/repository/python_test.go#TestPythonProjectInventorySeparatesNestedProjectsAndRecordsCandidates",
+        "internal/quality/python_test.go#TestPythonQualityReportsUnsupportedLayoutOnceAndStopsDependentTools"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack interprets Python project layouts; core enforces path containment and ownership.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check", "architecture", "supply-chain"],
+      "profiles": ["check", "architecture", "offline"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.discovery.interpreter-environment",
+      "language": "python",
+      "capability": "discovery",
+      "guarantee": "Exact interpreter constraints and project-local .venv inputs are attributed to their project without ambient interpreter or dependency fallback.",
+      "currentImplementation": [
+        "internal/repository/python_project.go",
+        "internal/repository/python_tool.go",
+        "internal/repository/python_distribution_origin.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check", "doctor"],
+      "policyKeys": [],
+      "activation": [
+        "A Python project is selected for a tool-backed capability."
+      ],
+      "documentation": [
+        "docs/installation.md",
+        "docs/policies/code-quality.md"
+      ],
+      "tests": [
+        "internal/repository/python_test.go#TestReadPythonProjectRecordsProjectVenv",
+        "internal/quality/python_test.go#TestPythonQualityReportsOneMissingEnvironmentFindingWithoutTyCascade"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns Python environment semantics; core validates declared inputs and sealed execution.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check", "doctor"],
+      "profiles": ["check", "installed"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.quality.format-lint-complexity",
+      "language": "python",
+      "capability": "lint",
+      "guarantee": "Pinned Ruff formatting, lint, and complexity use the sealed baseline plus additive allowed target configuration, exact project roots, and precise diagnostics.",
+      "currentImplementation": [
+        "internal/quality/python.go",
+        "internal/quality/python_style.go",
+        "internal/repository/python_ruff.go"
+      ],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["check", "format"],
+      "policyKeys": ["quality.complexity.python"],
+      "activation": ["Governed Python source is selected."],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/python_test.go#TestPythonQualitySealsRuffBaselineAndKeepsTargetRulesAdditive",
+        "internal/quality/python_test.go#TestParsePythonRuffDiagnosticsAcceptsPhysicalContainedPath"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns Ruff semantics and project scope; core owns locked thresholds, finding authority, and writes.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check", "format"],
+      "profiles": ["check", "format"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.quality.typecheck",
+      "language": "python",
+      "capability": "typecheck",
+      "guarantee": "Pinned ty reports every structured project diagnostic with exact paths and ranges and fails closed without cascading when the project environment is unavailable.",
+      "currentImplementation": ["internal/quality/python.go"],
+      "helpers": ["internal/repository/python_tool.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": ["Governed Python source belongs to a supported project."],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/python_test.go#TestPythonQualityEmitsOneExactTyFindingPerDiagnostic",
+        "internal/quality/python_test.go#TestPythonQualityReportsPathOnlyTyDiagnosticWithExactIdentity"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack owns type analysis and project closure; core validates diagnostic authority.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.quality.dead-code",
+      "language": "python",
+      "capability": "dead-code",
+      "guarantee": "Vulture analyzes the complete required project scope, preserves exact symbol identities and confidence semantics, and fails closed on incomplete or malformed output.",
+      "currentImplementation": [
+        "internal/quality/vulture.go",
+        "internal/quality/vulture_response.go"
+      ],
+      "helpers": ["internal/quality/vulture_reachability.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": ["scope.entryPoints", "scope.pythonDynamicReferences"],
+      "activation": [
+        "Python dead-code policy is active for a selected project."
+      ],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/design/python-contract-evidence.md"
+      ],
+      "tests": [
+        "internal/quality/python_test.go#TestPythonVultureCoversTheWholeSelectedProjectAndFailsClosed",
+        "internal/quality/python_test.go#TestPythonVultureFindingsUseExactHashedSubjects"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack owns Vulture and Python reachability facts; core owns entry authority and policy findings.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.quality.comments-docstrings",
+      "language": "python",
+      "capability": "source-facts",
+      "guarantee": "Python comments, directives, strings, f-strings, and docstrings are classified from syntax with exact locations and bounded failure coverage.",
+      "currentImplementation": [
+        "internal/quality/comments_python.go",
+        "internal/quality/comments.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check"],
+      "policyKeys": ["quality.allowComments"],
+      "activation": ["Governed Python source is selected."],
+      "documentation": ["docs/design/source-comment-policy.md"],
+      "tests": [
+        "internal/quality/comments_test.go#TestPythonDocstringsAreSourceComments",
+        "internal/quality/comments_test.go#TestSourceCommentFStringAndHeredocSubstitutions"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack emits Python comment facts; core enforces source-comment policy.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.facts.static-analysis",
+      "language": "python",
+      "capability": "source-facts",
+      "guarantee": "Python facts are derived without executing target code, partition deterministically, retain source custody, and reject syntax, identity, and resource-boundary violations.",
+      "currentImplementation": [
+        "internal/pythonfacts/adapter.go",
+        "internal/pythonfacts/project.go"
+      ],
+      "helpers": ["internal/pythonfacts/program.go"],
+      "cliRoutes": ["check", "architecture"],
+      "policyKeys": [],
+      "activation": ["Python architecture or reachability facts are required."],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/pythonfacts/adapter_test.go#TestAdapterProducesVersionedManifestRequirementAndSourceFacts",
+        "internal/pythonfacts/project_test.go#TestProjectSourcePartitioningIsDeterministicAndValidatesTheUnion"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack owns parsing and ecosystem facts; core validates custody, limits, and generic evidence.",
+      "fixtures": ["python-discovery-quality"],
+      "commands": ["check", "architecture"],
+      "profiles": ["check", "architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.architecture.import-graph",
+      "language": "python",
+      "capability": "architecture",
+      "guarantee": "Absolute, relative, re-exported, stub, type-only, test, and literal Python imports resolve within the correct nested project and produce exact graph evidence.",
+      "currentImplementation": [
+        "internal/architecture/python_graph.go",
+        "internal/architecture/python_ruff_graph.go"
+      ],
+      "helpers": [
+        "internal/architecture/python_imports.go",
+        "internal/pythonfacts/module_imports.go"
+      ],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "Selected Python source participates in architecture analysis."
+      ],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/design/python-contract-evidence.md"
+      ],
+      "tests": [
+        "internal/architecture/python_test.go#TestPythonArchitectureCoversFlatNamespaceRelativeReexportStubTypeAndLiteralImports",
+        "internal/architecture/source_graph_test.go#TestPythonFocusedGraphStaysBoundedAndFullSelectionDetectsCycles"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack resolves Python modules; core validates graph scope, ownership, direction, and cycles.",
+      "fixtures": ["python-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.architecture.computed-imports",
+      "language": "python",
+      "capability": "architecture",
+      "guarantee": "Declared computed imports bind exact call sites, configuration digests, namespaces, and bounded possible targets without treating arbitrary strings as imports.",
+      "currentImplementation": [
+        "internal/architecture/python_computed_imports.go",
+        "internal/pythonfacts/module_imports.go"
+      ],
+      "helpers": ["internal/policy/python_computed_imports.go"],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["scope.pythonComputedImports"],
+      "activation": [
+        "A validated computed-import declaration applies to selected Python source."
+      ],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/architecture/python_imports_test.go#TestPythonComputedImportConfigurationIsDigestBoundAndNamespaced",
+        "internal/architecture/python_test.go#TestPythonArchitectureDoesNotTreatOrdinaryStringsAsImports"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack proves Python call semantics; core authenticates declarations and constrains graph authority.",
+      "fixtures": ["python-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.reachability.runtime-loaders",
+      "language": "python",
+      "capability": "reachability",
+      "guarantee": "Runtime loader declarations bind exact loader implementations, input grammar, rejecting checks, source locations, and current source evidence without executing target code.",
+      "currentImplementation": [
+        "internal/pythonfacts/runtime_loaders.go",
+        "internal/pythonfacts/runtime_checks.go"
+      ],
+      "helpers": ["internal/policy/python_runtime_loaders.go"],
+      "cliRoutes": ["check", "architecture"],
+      "policyKeys": ["scope.pythonRuntimeLoaders", "scope.pythonContracts"],
+      "activation": [
+        "A validated runtime-loader declaration applies to a Python project."
+      ],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/pythonfacts/runtime_checks_test.go#TestRuntimeChecksProveRejectingContractsOnTheLoadedValue",
+        "internal/architecture/python_runtime_loaders_test.go#TestPythonRuntimeLoaderDeclarationRejectsStaleSourceEvidence"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack proves Python semantics; core owns declaration authority and evidence freshness.",
+      "fixtures": ["python-reachability"],
+      "commands": ["check", "architecture"],
+      "profiles": ["check", "architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.reachability.dynamic-references",
+      "language": "python",
+      "capability": "reachability",
+      "guarantee": "Dynamic targets and consumers retain exact module, symbol, callable, argument, site, registry, and current-source identity and never preserve unproven symbols.",
+      "currentImplementation": [
+        "internal/quality/vulture_reachability.go",
+        "internal/pythonfacts/reachability.go"
+      ],
+      "helpers": ["internal/policy/python_dynamic_references.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": ["scope.pythonDynamicReferences"],
+      "activation": [
+        "A validated dynamic reference applies to Python dead-code analysis."
+      ],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/pythonfacts/reachability_test.go#TestReachabilityRejectsAlteredSourceAndTargetEvidence",
+        "internal/quality/python_test.go#TestPythonVultureDynamicReferenceProblemsArePolicyFindings"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack computes Python reachability; core authenticates explicit policy declarations.",
+      "fixtures": ["python-reachability"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.reachability.external-plugins",
+      "language": "python",
+      "capability": "reachability",
+      "guarantee": "External plug-in imports bind an exact direct distribution, locked version and source, namespace, consumer, protocol check, and dependency definition proof without granting local reachability.",
+      "currentImplementation": [
+        "internal/architecture/python_external_plugins.go",
+        "internal/pythonfacts/external_contracts_test.go"
+      ],
+      "helpers": [
+        "internal/policy/python_external_plugins.go",
+        "internal/repository/python_plugins.go"
+      ],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["scope.pythonExternalPluginImports"],
+      "activation": [
+        "A validated external plug-in declaration and direct dependency apply."
+      ],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/architecture/python_external_plugins_test.go#TestDeclaredPythonExternalPluginProducesComposition",
+        "internal/pythonfacts/external_contracts_test.go#TestExternalReachabilityRequiresDependencyDefinitionProof"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack resolves Python and distribution semantics; core validates provenance and graph authority.",
+      "fixtures": ["python-reachability"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.reachability.external-attributes-types",
+      "language": "python",
+      "capability": "reachability",
+      "guarantee": "External receiver attributes, local protocols, callables, TypedDict fields, and exact write sites preserve only proven members across deterministic source partitions.",
+      "currentImplementation": [
+        "internal/quality/vulture_attributes.go",
+        "internal/quality/vulture_types.go",
+        "internal/pythonfacts/types.go"
+      ],
+      "helpers": ["internal/policy/python_external_attributes.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": ["scope.pythonExternalAttributes", "scope.pythonContracts"],
+      "activation": [
+        "Validated contracts or external-attribute declarations apply to Python dead-code analysis."
+      ],
+      "documentation": ["docs/design/python-contract-evidence.md"],
+      "tests": [
+        "internal/pythonfacts/types_test.go#TestTypedDictReadsResolveAcrossBoundedProjectPartitions",
+        "internal/quality/vulture_types_test.go#TestPythonVultureTypedDictSchemasPreserveFieldsWithoutHidingOrdinaryDeclarations"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack proves Python member use; core validates declarations and reachability policy.",
+      "fixtures": ["python-reachability"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.reachability.state-invalidation",
+      "language": "python",
+      "capability": "reachability",
+      "guarantee": "Persisted reachability evidence is bound to source, target, configuration, dependency, tool, and partition identities; affected changes invalidate it while unrelated evidence remains reusable.",
+      "currentImplementation": [
+        "internal/repository/python_reachability_state.go",
+        "internal/repository/python_reachability.go"
+      ],
+      "helpers": ["internal/gaterun/identity.go"],
+      "cliRoutes": ["check", "gate"],
+      "policyKeys": [],
+      "activation": [
+        "Python reachability state is available for a matching project."
+      ],
+      "documentation": [
+        "docs/design/python-contract-evidence.md",
+        "docs/policies/verification.md"
+      ],
+      "tests": [
+        "internal/repository/python_reachability_state_test.go#TestPythonReachabilityStateSelectsOnlyDeclaredDistributions",
+        "internal/gaterun/identity_test.go#TestIdentityDigestBindsCommandAndEnvironmentInputs"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack supplies deterministic facts; core owns reusable evidence identity and invalidation.",
+      "fixtures": ["python-reachability"],
+      "commands": ["check", "gate"],
+      "profiles": ["check", "gate"],
+      "modes": ["reuse", "fresh"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.dependencies.requirements-lock",
+      "language": "python",
+      "capability": "dependencies",
+      "guarantee": "PEP 508 runtime, optional, group, marker, URL, and build requirements reconcile to exact importer-scoped uv lock evidence with contained local sources.",
+      "currentImplementation": [
+        "internal/repository/python_requirement.go",
+        "internal/repository/python_lock.go",
+        "internal/supplychain/supplychain.go"
+      ],
+      "helpers": ["internal/repository/python_toml.go"],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": ["supplyChain.allowedDependencyProtocols"],
+      "activation": [
+        "A Python project declares dependencies or build requirements."
+      ],
+      "documentation": ["docs/policies/supply-chain.md"],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestPythonDependenciesMustBeExactAndLocked",
+        "internal/repository/python_test.go#TestParsePythonProjectCollectsTypedRequirements"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack parses ecosystem metadata; core enforces generic exact-source and lock policy.",
+      "fixtures": ["python-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.dependencies.git-provenance",
+      "language": "python",
+      "capability": "dependencies",
+      "guarantee": "Python Git dependencies retain normalized repository, full commit, subdirectory, lock agreement, checkout state, signature, and source custody with explicit coverage failures.",
+      "currentImplementation": [
+        "internal/repository/python_git.go",
+        "internal/repository/python_git_inventory.go",
+        "internal/supplychain/git_evidence.go"
+      ],
+      "helpers": ["internal/policy/git_evidence.go"],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": ["supplyChain.gitEvidence"],
+      "activation": ["A Python direct or build dependency uses Git."],
+      "documentation": [
+        "docs/git-dependency-evidence.md",
+        "docs/source-provenance.md"
+      ],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestPythonGitDependenciesRequireMatchingUVSourceCommitAndSubdirectory",
+        "internal/repository/python_git_inventory_test.go#TestPythonGitInventoryRetainsRecordedRefAndResolution"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack interprets Python dependency linkage; core authenticates Git trust evidence.",
+      "fixtures": ["python-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.dependencies.vulnerability-release-age",
+      "language": "python",
+      "capability": "security",
+      "guarantee": "Python resolved graphs feed OSV, license, and release-age policy with exact lock scope, registry provenance, private-registry coverage, severity, and UTC decisions.",
+      "currentImplementation": [
+        "internal/supplychain/osv_uv.go",
+        "internal/supplychain/release_age.go",
+        "internal/supplychain/licenses.go"
+      ],
+      "helpers": ["internal/repository/python_lock.go"],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": [
+        "supplyChain.allowedLicenses",
+        "supplyChain.minimumReleaseAgeDays",
+        "supplyChain.vulnerabilityAssessments"
+      ],
+      "activation": [
+        "Python dependency security, license, or release-age analysis is selected."
+      ],
+      "documentation": [
+        "docs/policies/security.md",
+        "docs/policies/supply-chain.md"
+      ],
+      "tests": [
+        "internal/supplychain/osv_uv_test.go#TestOSVPartitionsGitEvidenceAndPublicRegistryCoverage",
+        "internal/supplychain/licenses_test.go#TestConfiguredLicensePolicyDecidesEveryResolvedRelease"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack supplies Python graph facts; core owns generic security and governance decisions.",
+      "fixtures": ["python-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "python.execution.toolchain",
+      "language": "python",
+      "capability": "execution",
+      "guarantee": "Exact CPython, uv, Ruff, ty, Vulture, packaging, and parser artifacts are authenticated, sealed, platform-specific, and fail clearly when missing, malformed, or wrong-version.",
+      "currentImplementation": [
+        "internal/release/launcher_manifest.go",
+        "scripts/install.sh",
+        "tools/install-python.sh",
+        "tools/install-ruff.sh",
+        "tools/install-ty.sh",
+        "tools/install-vulture.sh"
+      ],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["doctor", "check", "supply-chain"],
+      "policyKeys": ["supplyChain.releaseArtifacts"],
+      "activation": [
+        "A Python capability requires its carried runtime or analyzer."
+      ],
+      "documentation": [
+        "docs/installation.md",
+        "docs/design/installed-release-verification.md"
+      ],
+      "tests": [
+        "scripts/test-install.sh",
+        "scripts/test-installed-release-python-adoption.sh"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The Python pack owns its tool distribution; core verifies artifacts, limits, and execution authority.",
+      "fixtures": ["python-toolchain"],
+      "commands": ["doctor", "check", "supply-chain"],
+      "profiles": ["installed"],
+      "modes": ["check"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+
+    {
+      "id": "javascript.discovery.packages-workspaces",
+      "language": "javascript",
+      "capability": "discovery",
+      "guarantee": "Root, nested-only, independent, and workspace packages resolve to their nearest manifest and lock owner without requiring an unrelated root manifest.",
+      "currentImplementation": [
+        "internal/javascript/javascript.go",
+        "internal/repository/repository_inventory.go"
+      ],
+      "helpers": [
+        "providers/javascript/analysis.mjs",
+        "providers/javascript/context.mjs"
+      ],
+      "cliRoutes": ["check", "architecture", "supply-chain"],
+      "policyKeys": [],
+      "activation": [
+        "A governed JavaScript or TypeScript source or package manifest is present."
+      ],
+      "documentation": [
+        "docs/design/javascript-provider.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/architecture/javascript_test.go#TestNearestJavaScriptManifestOwnsItsDependencies",
+        "providers/javascript/provider.test.mjs"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The JavaScript pack owns package and workspace semantics; core owns path and claim containment.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check", "architecture", "supply-chain"],
+      "profiles": ["check", "architecture", "offline"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.discovery.generated-source-package",
+      "language": "javascript",
+      "capability": "discovery",
+      "guarantee": "Generated JavaScript retains its physical path, validated sourcePackage project context, dependency ownership, and non-writability across analysis capabilities.",
+      "currentImplementation": [
+        "internal/repository/generated_javascript.go",
+        "internal/quality/javascript.go",
+        "internal/architecture/javascript_graph_scope.go"
+      ],
+      "helpers": ["internal/policy/generated_javascript.go"],
+      "cliRoutes": ["check", "architecture", "format"],
+      "policyKeys": ["scope.generatedJavaScript", "scope.generated"],
+      "activation": [
+        "A generated JavaScript mapping applies to selected source."
+      ],
+      "documentation": [
+        "docs/design/provider-scope.md",
+        "docs/design/javascript-import-assets.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestGeneratedJavaScriptUsesItsSourcePackageTypeProject",
+        "internal/architecture/source_graph_scope_test.go#TestGeneratedJavaScriptGraphSelectionUsesDeclaredSourceProject"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack uses project semantics while core validates the mapping and preserves physical ownership and write denial.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check", "architecture", "format"],
+      "profiles": ["check", "architecture", "format"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.discovery.compiler-config",
+      "language": "javascript",
+      "capability": "discovery",
+      "guarantee": "tsconfig, jsconfig, extends chains, unique alternate configs, compiler members, JS checking, module modes, and supported source extensions resolve statically and exactly.",
+      "currentImplementation": ["internal/javascript/javascript.go"],
+      "helpers": [
+        "providers/javascript/compilers.mjs",
+        "providers/javascript/typescript-context.mjs"
+      ],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": ["JavaScript or TypeScript type analysis is selected."],
+      "documentation": ["docs/design/javascript-provider.md"],
+      "tests": [
+        "internal/javascript/javascript_test.go#TestATypeCheckRequestCarriesItsProject",
+        "providers/javascript/provider.test.mjs"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The JavaScript pack owns compiler configuration semantics; core bounds inputs and validates coverage.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.quality.format",
+      "language": "javascript",
+      "capability": "format",
+      "guarantee": "Pinned Prettier checks supported JavaScript, TypeScript, web, data, and Markdown inputs, rejects target formatter configuration, and writes only exact authorized selected files.",
+      "currentImplementation": ["internal/quality/javascript.go"],
+      "helpers": ["providers/javascript/analysis.mjs"],
+      "cliRoutes": ["check", "format"],
+      "policyKeys": ["scope.generated", "scope.data"],
+      "activation": ["A Prettier-supported governed file is selected."],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestJavaScriptFormatReportsChangedAndUndecidedFiles",
+        "internal/quality/javascript_test.go#TestJavaScriptFormatWritePreservesGeneratedAndDeclaredData"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns formatter support and edits; core validates configuration and write authority.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check", "format"],
+      "profiles": ["check", "format"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.quality.lint-complexity-comments",
+      "language": "javascript",
+      "capability": "lint",
+      "guarantee": "Pinned ESLint preserves syntax, lint, production and test complexity, React activation, parser comment facts, disabled overrides, and incomplete-coverage failures.",
+      "currentImplementation": ["internal/quality/javascript.go"],
+      "helpers": [
+        "providers/javascript/analysis.mjs",
+        "providers/javascript/metrics.mjs",
+        "providers/javascript/ast.mjs"
+      ],
+      "cliRoutes": ["check"],
+      "policyKeys": [
+        "quality.complexity.typescript",
+        "quality.complexity.typescriptTest",
+        "quality.allowComments",
+        "policyModules.overrides"
+      ],
+      "activation": [
+        "Governed JavaScript, TypeScript, JSX, TSX, or Astro source is selected."
+      ],
+      "documentation": [
+        "docs/policies/code-quality.md",
+        "docs/policies/conditional-modules.md",
+        "docs/design/source-comment-policy.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestJavaScriptLintSeparatesProductionAndTestBudgets",
+        "internal/quality/javascript_test.go#TestJavaScriptLintClassifiesParserCommentFacts"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack emits JavaScript diagnostics and syntax facts; core applies locked thresholds and comment policy.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.quality.typecheck-dependent-scope",
+      "language": "javascript",
+      "capability": "typecheck",
+      "guarantee": "A changed source and unchanged importing dependents receive required compiler diagnostics, every source is covered or refused explicitly, and unrelated projects are excluded.",
+      "currentImplementation": [
+        "internal/quality/javascript.go",
+        "internal/javascript/javascript.go"
+      ],
+      "helpers": ["providers/javascript/typecheck.mjs"],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": [
+        "Selected JavaScript or TypeScript belongs to a compiler project."
+      ],
+      "documentation": [
+        "docs/design/javascript-provider.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestJavaScriptTypeCheckReportsDiagnosticsAndRefusedProjects",
+        "internal/quality/javascript_test.go#TestJavaScriptTypeCheckSelectsOnlyGovernedTypeScript"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns compiler closure and diagnostics; core validates diagnostic authority and coverage.",
+      "fixtures": ["javascript-analysis"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.quality.dead-code-package-scope",
+      "language": "javascript",
+      "capability": "dead-code",
+      "guarantee": "Pinned Knip reports unused files and exports at required package scope for source, removal, and metadata changes while preserving independent-package focus and explicit coverage.",
+      "currentImplementation": [
+        "internal/quality/javascript.go",
+        "internal/javascript/javascript.go"
+      ],
+      "helpers": [
+        "providers/javascript/deadcode.mjs",
+        "providers/javascript/reachability.mjs"
+      ],
+      "cliRoutes": ["check"],
+      "policyKeys": ["scope.entryPoints"],
+      "activation": [
+        "JavaScript dead-code policy is active for a selected or metadata-affected package."
+      ],
+      "documentation": [
+        "docs/design/javascript-provider.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestJavaScriptDeadCodeAnalyzesIndependentTreesSeparately",
+        "internal/quality/javascript_test.go#TestJavaScriptDeadCodeReportsUnusedFilesExportsAndCoverage"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The pack owns package reachability and Knip; core owns selected/context classification and finding authority.",
+      "fixtures": ["javascript-analysis"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused", "metadata-change"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.architecture.import-resolution",
+      "language": "javascript",
+      "capability": "architecture",
+      "guarantee": "ES module, CommonJS, CTS, JSX, TSX, package, relative, and declared entry imports resolve to exact paths, package roots, semantic kinds, and module ownership.",
+      "currentImplementation": [
+        "internal/architecture/javascript.go",
+        "internal/architecture/javascript_graph.go"
+      ],
+      "helpers": [
+        "internal/javascript/imports.go",
+        "providers/javascript/imports.mjs"
+      ],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "Selected JavaScript or TypeScript participates in architecture analysis."
+      ],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/design/javascript-import-assets.md"
+      ],
+      "tests": [
+        "internal/architecture/javascript_test.go#TestJavaScriptImportMustFollowDeclaredModuleDependency",
+        "internal/javascript/javascript_test.go#TestInstalledImportReaderPreservesSemanticKinds"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack resolves ecosystem imports; core validates graph scope and module policy.",
+      "fixtures": ["javascript-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.architecture.assets-aliases",
+      "language": "javascript",
+      "capability": "architecture",
+      "guarantee": "TypeScript aliases, package exports, stylesheet and asset links, and mapped generated packages resolve with existence, path identity, and module-boundary checks.",
+      "currentImplementation": [
+        "internal/architecture/javascript.go",
+        "internal/repository/asset_links.go"
+      ],
+      "helpers": [
+        "providers/javascript/imports.mjs",
+        "providers/javascript/css.mjs"
+      ],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["scope.generatedJavaScript"],
+      "activation": [
+        "A selected import uses an alias, asset, stylesheet, or generated mapping."
+      ],
+      "documentation": ["docs/design/javascript-import-assets.md"],
+      "tests": [
+        "internal/architecture/javascript_assets_test.go#TestStylesheetImportsRetainExistenceAndModuleChecks",
+        "internal/pack/asset_inputs_test.go#TestProviderEvidenceBindsDiscoveredAssetLinkResolution"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack interprets import syntax and aliases; core resolves contained asset paths and enforces modules.",
+      "fixtures": ["javascript-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.architecture.focused-scope-cycles",
+      "language": "javascript",
+      "capability": "architecture",
+      "guarantee": "Focused JavaScript analysis includes dependency closure but not unrelated projects, preserves generated and test edge kinds, and reports cycles that module projection cannot hide.",
+      "currentImplementation": [
+        "internal/architecture/javascript_graph_scope.go",
+        "internal/architecture/source_graph.go"
+      ],
+      "helpers": ["internal/architecture/sourcegraph"],
+      "cliRoutes": ["architecture", "check"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "A file, module, manifest, or compiler selection requires JavaScript graph closure."
+      ],
+      "documentation": [
+        "docs/policies/architecture.md",
+        "docs/design/provider-scope.md"
+      ],
+      "tests": [
+        "internal/architecture/source_graph_scope_test.go#TestFocusedJavaScriptGraphRetainsTransitivelyConnectedProjects",
+        "internal/architecture/source_graph_test.go#TestAllowedModuleProjectionCannotHideJavaScriptSourceCycle"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack supplies closure and edges; core validates bounded scope and cycles.",
+      "fixtures": ["javascript-architecture"],
+      "commands": ["architecture", "check"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.frameworks.react-activation",
+      "language": "javascript",
+      "capability": "framework",
+      "guarantee": "React rules activate only in effective framework roots, generated source keeps accessibility checks without authored-hook policy, and explicit locked overrides remain authoritative.",
+      "currentImplementation": [
+        "internal/quality/javascript.go",
+        "internal/policymodule/node.go"
+      ],
+      "helpers": ["providers/javascript/frameworks.mjs"],
+      "cliRoutes": ["check"],
+      "policyKeys": ["policyModules.overrides"],
+      "activation": [
+        "React dependency and source facts identify an effective framework root."
+      ],
+      "documentation": [
+        "docs/policies/conditional-modules.md",
+        "docs/design/javascript-provider.md"
+      ],
+      "tests": [
+        "internal/quality/javascript_test.go#TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot",
+        "internal/quality/javascript_test.go#TestGeneratedJavaScriptRetainsAccessibilityWithoutAuthoredHookRules"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack detects framework semantics; core applies release-locked activation and override policy.",
+      "fixtures": ["javascript-discovery-quality"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.frameworks.astro",
+      "language": "javascript",
+      "capability": "framework",
+      "guarantee": "Astro frontmatter, component mapping, imports, compiler context, diagnostics, and generated positions preserve original source paths and complete coverage.",
+      "currentImplementation": [
+        "providers/javascript/frameworks/astro.mjs",
+        "providers/javascript/analysis.mjs"
+      ],
+      "helpers": ["providers/javascript/ast.mjs"],
+      "cliRoutes": ["check", "architecture"],
+      "policyKeys": [],
+      "activation": ["Governed .astro source belongs to an Astro package."],
+      "documentation": ["docs/design/javascript-provider.md"],
+      "tests": ["providers/javascript/provider.test.mjs"],
+      "futureOwner": "pack",
+      "boundaryRationale": "Astro syntax and compiler mapping belong wholly to the JavaScript pack.",
+      "fixtures": ["javascript-analysis"],
+      "commands": ["check", "architecture"],
+      "profiles": ["check", "architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.dependencies.manifest-lock",
+      "language": "javascript",
+      "capability": "dependencies",
+      "guarantee": "Node and package-manager pins, package and workspace ownership, pnpm importers, lock consistency, peers, overrides, local sources, and lifecycle policy retain exact evidence.",
+      "currentImplementation": [
+        "internal/supplychain/javascript.go",
+        "internal/supplychain/node_governance.go"
+      ],
+      "helpers": ["internal/javascript/javascript.go"],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": [
+        "supplyChain.allowedDependencyProtocols",
+        "supplyChain.dependencyOverrides"
+      ],
+      "activation": [
+        "A JavaScript package manifest or pnpm workspace is governed."
+      ],
+      "documentation": ["docs/policies/supply-chain.md"],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestPackageJSONRejectsRangesAndMissingLifecyclePolicy",
+        "internal/supplychain/supplychain_test.go#TestNestedPackageInheritsManagerAndLockFromAncestor"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The JavaScript pack interprets ecosystem metadata; core applies generic dependency policy.",
+      "fixtures": ["javascript-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.dependencies.audit-license-release-age",
+      "language": "javascript",
+      "capability": "security",
+      "guarantee": "Native audit, OSV, installed license metadata, release age, registry provenance, ignored-advisory denial, and platform packages preserve exact dependency and advisory identities.",
+      "currentImplementation": [
+        "internal/supplychain/online.go",
+        "internal/supplychain/licenses.go",
+        "internal/supplychain/release_age.go"
+      ],
+      "helpers": ["internal/javascript/javascript.go"],
+      "cliRoutes": ["supply-chain", "dependency-review"],
+      "policyKeys": [
+        "supplyChain.allowedLicenses",
+        "supplyChain.minimumReleaseAgeDays",
+        "supplyChain.vulnerabilityAssessments"
+      ],
+      "activation": [
+        "JavaScript dependency security, license, or release-age analysis is selected."
+      ],
+      "documentation": [
+        "docs/policies/security.md",
+        "docs/policies/supply-chain.md"
+      ],
+      "tests": [
+        "internal/supplychain/supplychain_test.go#TestNativeAuditAdvisoryBecomesExactTypedVulnerability",
+        "internal/supplychain/licenses_test.go#TestUnreadableLicenseMetadataIsMissingCoverage"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack supplies resolved JavaScript facts; core owns generic security and governance decisions.",
+      "fixtures": ["javascript-dependencies"],
+      "commands": ["supply-chain", "dependency-review"],
+      "profiles": ["offline", "online"],
+      "modes": ["full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "javascript.execution.runtime-bundle",
+      "language": "javascript",
+      "capability": "execution",
+      "guarantee": "Exact Node, pnpm, analyzer bundle, native packages, lock, and binary inventory are authenticated and sealed; target scripts and ambient runtimes never run implicitly.",
+      "currentImplementation": [
+        "internal/javascript/environment.go",
+        "internal/release/launcher_manifest.go",
+        "tools/install-javascript-runtime.sh",
+        "tools/install-javascript-bundle.sh"
+      ],
+      "helpers": ["tools/javascript-env.sh"],
+      "cliRoutes": ["doctor", "check", "architecture", "supply-chain"],
+      "policyKeys": ["supplyChain.releaseArtifacts"],
+      "activation": [
+        "A JavaScript capability or core structured-data service requires the sealed bundle."
+      ],
+      "documentation": [
+        "docs/installation.md",
+        "docs/design/installed-release-verification.md"
+      ],
+      "tests": [
+        "internal/javascript/javascript_test.go#TestTheRunnerLaunchesUnderAClosedEnvironment",
+        "scripts/test-javascript-bundle.sh"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The JavaScript pack owns its analyzer runtime; core verifies artifact identity and execution authority.",
+      "fixtures": ["javascript-toolchain"],
+      "commands": ["doctor", "check", "architecture", "supply-chain"],
+      "profiles": ["installed"],
+      "modes": ["check"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+
+    {
+      "id": "shell.discovery.extensions-shebangs-dialects",
+      "language": "shell",
+      "capability": "discovery",
+      "guarantee": "Supported shell extensions and shebang-only scripts are recognized with the correct Bash or POSIX dialect without claiming unrelated executable text.",
+      "currentImplementation": [
+        "internal/quality/quality.go",
+        "internal/quality/comments_shell.go"
+      ],
+      "helpers": ["internal/quality/comments_shell_parser.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": ["A supported shell extension or shebang is governed."],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/comments_test.go#TestSourceCommentScannersHonorGrammarBoundaries",
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "Shell recognition and dialect semantics belong to the shell pack; core retains inventory containment.",
+      "fixtures": ["shell-complete"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shell.quality.syntax-shellcheck",
+      "language": "shell",
+      "capability": "lint",
+      "guarantee": "Shell syntax and pinned ShellCheck diagnostics preserve exact paths and locations, declared source reads, dialects, and visible tool or coverage failures.",
+      "currentImplementation": ["internal/quality/quality.go"],
+      "helpers": ["tools/shellcheck.sh", "internal/runner/runner.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": [],
+      "activation": ["Governed shell source is selected."],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The shell pack owns syntax and ShellCheck; core validates reads, bounds, and finding authority.",
+      "fixtures": ["shell-complete"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shell.quality.comments-directives",
+      "language": "shell",
+      "capability": "source-facts",
+      "guarantee": "Shell comments and directives respect heredocs, quoting, substitutions, shebangs, byte limits, and grammar boundaries with exact locations.",
+      "currentImplementation": [
+        "internal/quality/comments_shell.go",
+        "internal/quality/comments_shell_parser.go"
+      ],
+      "helpers": ["internal/quality/comments.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": ["quality.allowComments"],
+      "activation": ["Governed shell source is selected."],
+      "documentation": ["docs/design/source-comment-policy.md"],
+      "tests": [
+        "internal/quality/comments_test.go#TestShellSourceParserIsByteBounded",
+        "internal/quality/comments_test.go#TestSourceCommentFStringAndHeredocSubstitutions"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack emits shell syntax facts; core enforces source-comment policy.",
+      "fixtures": ["shell-complete"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shell.quality.format-absence",
+      "language": "shell",
+      "capability": "format",
+      "guarantee": "Shell formatting remains explicitly unsupported until a formatter is deliberately specified; checks never imply or perform an invented rewrite.",
+      "currentImplementation": ["internal/quality/quality.go"],
+      "helpers": [],
+      "cliRoutes": ["format", "check"],
+      "policyKeys": [],
+      "activation": ["Governed shell source is selected for formatting."],
+      "documentation": ["docs/policies/code-quality.md"],
+      "tests": [
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The shell pack declares capability absence; core reports uncovered requested operations.",
+      "fixtures": ["shell-complete"],
+      "commands": ["format", "check"],
+      "profiles": ["format"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shell.portability.facts",
+      "language": "shell",
+      "capability": "portability",
+      "guarantee": "Shell machine paths, sibling references, and other portability facts retain exact source locations while policy coverage remains core-owned.",
+      "currentImplementation": [
+        "internal/portability/portability.go",
+        "internal/quality/comments_shell_parser.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check", "gate"],
+      "policyKeys": ["portability"],
+      "activation": ["Shell source is included in portability analysis."],
+      "documentation": ["docs/policies/portability.md"],
+      "tests": [
+        "internal/portability/portability_test.go#TestAdvisoriesPreserveLocationsAndCanonicalOrder"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "The pack identifies shell syntax facts; core owns cross-language portability policy.",
+      "fixtures": ["shell-complete"],
+      "commands": ["check", "gate"],
+      "profiles": ["portability"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shell.execution.tool-platform-failure",
+      "language": "shell",
+      "capability": "execution",
+      "guarantee": "The exact ShellCheck artifact and supported platform are authenticated and sealed, and missing, wrong-version, or unsupported hosts produce visible incomplete evidence without hiding other languages.",
+      "currentImplementation": [
+        "internal/release/launcher_manifest.go",
+        "tools/install-shellcheck.sh",
+        "tools/shellcheck.sh"
+      ],
+      "helpers": ["internal/runner/runner.go"],
+      "cliRoutes": ["doctor", "check"],
+      "policyKeys": ["supplyChain.releaseArtifacts"],
+      "activation": ["Shell lint is claimed for governed source."],
+      "documentation": [
+        "docs/installation.md",
+        "docs/design/installed-release-verification.md"
+      ],
+      "tests": [
+        "scripts/test-install.sh",
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+      ],
+      "futureOwner": "pack",
+      "boundaryRationale": "The shell pack owns its analyzer distribution; core verifies artifact and failure isolation.",
+      "fixtures": ["shell-complete"],
+      "commands": ["doctor", "check"],
+      "profiles": ["installed"],
+      "modes": ["check"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+
+    {
+      "id": "shared.inventory.classification",
+      "language": "shared",
+      "capability": "inventory",
+      "guarantee": "Core produces the authoritative contained inventory and data, generated, test, control, and executable classifications before any pack receives input.",
+      "currentImplementation": [
+        "internal/repository/repository_inventory.go",
+        "internal/repository/path_facts.go",
+        "internal/policy/data.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check", "architecture", "format", "supply-chain"],
+      "policyKeys": ["scope.data", "scope.generated", "modules"],
+      "activation": ["Any governed analysis command runs."],
+      "documentation": [
+        "docs/design/provider-scope.md",
+        "docs/policy-engine-architecture.md"
+      ],
+      "tests": [
+        "internal/repository/repository_test.go#TestLanguageDetectionIsEcosystemAgnostic",
+        "internal/pack/units_test.go#TestResolvedProviderContextRetainsGeneratedOwnershipAndEffectivePolicy"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Only core may define repository inventory and generic classifications that constrain all packs.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check", "architecture", "format", "supply-chain"],
+      "profiles": ["all"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.scope.read-diagnostic-write",
+      "language": "shared",
+      "capability": "authority",
+      "guarantee": "Inventory, read context, diagnostic scope, and write targets remain separate; discovered units cannot expand findings or edits beyond core-granted per-capability authority.",
+      "currentImplementation": [
+        "internal/pack/units.go",
+        "internal/pack/inputs.go",
+        "internal/repository/contained_write.go"
+      ],
+      "helpers": ["internal/pack/analysis.go"],
+      "cliRoutes": ["check", "architecture", "format"],
+      "policyKeys": ["modules", "scope.generated", "scope.data"],
+      "activation": ["A pack capability is selected."],
+      "documentation": [
+        "docs/design/provider-scope.md",
+        "docs/design/analysis-providers.md"
+      ],
+      "tests": [
+        "internal/pack/units_test.go#TestArchitectureRejectsUnrelatedUnitFindingsAndMissingClosureMembers",
+        "internal/pack/analysis_test.go#TestProviderInputsLocationsAndWritesUseOriginalSelectedSource"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Authority is repository policy and cannot be delegated to language code.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check", "architecture", "format"],
+      "profiles": ["all"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.scope.generated-ownership",
+      "language": "shared",
+      "capability": "authority",
+      "guarantee": "Generated source retains physical and effective ownership, receives required semantic checks, and stays non-writable unless core policy explicitly authorizes an exact target.",
+      "currentImplementation": [
+        "internal/repository/generation_ownership.go",
+        "internal/repository/generated_javascript.go",
+        "internal/quality/generated_commands.go"
+      ],
+      "helpers": ["internal/policy/generation.go"],
+      "cliRoutes": ["check", "architecture", "format"],
+      "policyKeys": [
+        "scope.generated",
+        "scope.generatedJavaScript",
+        "generation.producers"
+      ],
+      "activation": [
+        "A governed generated path is selected or required as context."
+      ],
+      "documentation": ["docs/design/provider-scope.md"],
+      "tests": [
+        "internal/quality/javascript_generated_test.go#TestGeneratedBundlesKeepSemanticChecksAndAuthoredHookCoverage",
+        "internal/pack/units_test.go#TestResolvedProviderContextRetainsGeneratedOwnershipAndEffectivePolicy"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Core owns physical paths, generation declarations, and write denial; packs receive validated effective context.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check", "architecture", "format"],
+      "profiles": ["all"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.scope.data-literals",
+      "language": "shared",
+      "capability": "authority",
+      "guarantee": "Declared data and literal modules are parse-only, byte-preserved, non-executable, and non-writable while syntax and containment failures remain visible.",
+      "currentImplementation": [
+        "internal/policy/data.go",
+        "internal/quality/data.go",
+        "internal/javascript/literal_data_test.go"
+      ],
+      "helpers": ["internal/repository/path_facts.go"],
+      "cliRoutes": ["check", "format"],
+      "policyKeys": ["scope.data", "scope.literalModules"],
+      "activation": ["A declared data or literal path is governed."],
+      "documentation": [
+        "docs/design/provider-scope.md",
+        "docs/policies/code-quality.md"
+      ],
+      "tests": [
+        "internal/javascript/literal_data_test.go#TestLiteralDataParseRejectsExecutionAndPreservesEveryInput",
+        "internal/quality/data_test.go#TestDataSyntaxValidationUsesTheParseOnlyBundleForAllStructuredFormats"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Core owns non-execution and write protection; a language-neutral parser service may supply syntax evidence.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check", "format"],
+      "profiles": ["check", "format"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.policy.comments-metrics",
+      "language": "shared",
+      "capability": "policy",
+      "guarantee": "Language packs supply complete comment, function, and metric facts while core alone applies release-locked allowComments, complexity, length, and exception policy.",
+      "currentImplementation": [
+        "internal/quality/comments.go",
+        "internal/quality/quality.go",
+        "internal/pack/function_facts.go"
+      ],
+      "helpers": ["internal/policy/exceptions.go"],
+      "cliRoutes": ["check"],
+      "policyKeys": [
+        "quality.allowComments",
+        "quality.complexity",
+        "quality.maxFileLines",
+        "exceptions"
+      ],
+      "activation": [
+        "A governed source capability supplies facts required by policy."
+      ],
+      "documentation": [
+        "docs/design/source-comment-policy.md",
+        "docs/policies/code-quality.md",
+        "docs/policies/exceptions.md"
+      ],
+      "tests": [
+        "internal/pack/function_facts_test.go#TestFunctionFactsUseCorePolicyInAnalysisAndConformance",
+        "internal/quality/comments_test.go#TestAllowCommentsDisablesOnlySourceCommentFindings"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "Syntax facts are language-specific; policy thresholds and waivers remain generic core authority.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check"],
+      "profiles": ["check"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.policy.module-direction-cycles",
+      "language": "shared",
+      "capability": "architecture",
+      "guarantee": "Pack graph facts from all languages combine into one validated cross-language graph for module direction, production and test cycles, ownership, summaries, and review topology.",
+      "currentImplementation": [
+        "internal/architecture/source_graph.go",
+        "internal/architecture/architecture.go",
+        "internal/architecture/sourcegraph"
+      ],
+      "helpers": ["internal/architecture/review_topology.go"],
+      "cliRoutes": ["architecture", "check", "architecture-review"],
+      "policyKeys": ["modules.dependsOn"],
+      "activation": [
+        "Architecture analysis includes one or more language graphs."
+      ],
+      "documentation": ["docs/policies/architecture.md"],
+      "tests": [
+        "internal/architecture/sourcegraph/providers_test.go#TestProviderGraphBindsNewLanguagesAndPreservesCrossLanguageCycles",
+        "internal/architecture/test_direction_test.go#TestJavaScriptAndPythonTestsDoNotCreateProductionDependencyEdges"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Packs resolve language edges; only core combines ownership and enforces repository architecture.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["architecture", "check", "architecture-review"],
+      "profiles": ["architecture"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.policy.pack-claims-failure-isolation",
+      "language": "shared",
+      "capability": "claims",
+      "guarantee": "Exact selected packs claim capabilities per scope, conflicts and gaps fail visibly, unavailable or corrupt packs cannot claim success, and unrelated diagnostics continue.",
+      "currentImplementation": [
+        "internal/pack/selection.go",
+        "internal/pack/manifest.go",
+        "internal/quality/providers.go",
+        "internal/architecture/providers.go"
+      ],
+      "helpers": ["internal/repository/providers.go"],
+      "cliRoutes": ["check", "architecture", "doctor"],
+      "policyKeys": ["packs", "checks.adapter"],
+      "activation": [
+        "One or more packs are selected or a language requires coverage."
+      ],
+      "documentation": [
+        "docs/design/analysis-providers.md",
+        "docs/adding-a-language.md"
+      ],
+      "tests": [
+        "internal/pack/pack_test.go#TestUnavailablePackRetainsOnlyAuthenticatedClaims",
+        "internal/quality/providers_test.go#TestProviderCoverageDoesNotCreditUnexaminedModuleFiles"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Claims grant policy authority and must remain authenticated and enforced by core.",
+      "fixtures": ["shared-scope-policy"],
+      "commands": ["check", "architecture", "doctor"],
+      "profiles": ["all"],
+      "modes": ["full", "focused", "failure"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.testing.discovery-ownership-impact",
+      "language": "shared",
+      "capability": "testing",
+      "guarantee": "Language test recognition and impact facts feed core-owned explicit ownership, focused suites, reverse dependencies, unmapped diagnostics, and repository-wide requirements.",
+      "currentImplementation": [
+        "internal/repository/test_ownership.go",
+        "internal/testing/ownership.go",
+        "internal/testing/testing.go"
+      ],
+      "helpers": ["internal/testing/ownership_diagnostics.go"],
+      "cliRoutes": ["test", "test-plan", "check"],
+      "policyKeys": ["tests.ownership", "tests.suites"],
+      "activation": ["Governed source or test paths affect test selection."],
+      "documentation": [
+        "docs/design/test-ownership.md",
+        "docs/policies/test-strength.md"
+      ],
+      "tests": [
+        "internal/testing/ownership_test.go#TestTestOwnershipUsesOneProductionModuleWithoutAddingArchitectureEdges",
+        "internal/testing/testing_test.go#TestChangedFoundationIncludesReverseDependents"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "Packs recognize language tests and impacts; core owns suite declarations, scheduling, and coverage.",
+      "fixtures": ["shared-testing-dependencies"],
+      "commands": ["test", "test-plan", "check"],
+      "profiles": ["focused", "recommended", "full"],
+      "modes": ["changed", "module", "repository"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.testing.receipts-scheduling",
+      "language": "shared",
+      "capability": "testing",
+      "guarantee": "Reusable test receipts retain exact path, digest, command, environment, artifact, source, and candidate identities; packs cannot authorize supplemental execution or fabricate reuse.",
+      "currentImplementation": [
+        "internal/testing/testing.go",
+        "internal/testreceipt",
+        "internal/gaterun/identity.go"
+      ],
+      "helpers": ["internal/testartifact"],
+      "cliRoutes": ["test", "checkpoint-gate", "merge-gate"],
+      "policyKeys": ["tests.requiredSupplementalKinds", "verification"],
+      "activation": ["A test plan, gate, or imported receipt is evaluated."],
+      "documentation": ["docs/policies/verification.md"],
+      "tests": [
+        "internal/testing/reuse_execution_test.go#TestRunReusesSuiteWithoutStartingCommandOrArtifactExecution",
+        "internal/testing/testing_test.go#TestDeclaredSupplementalKindsDoNotSelectOrdinaryPlans"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Scheduling and reusable evidence are workflow authority, never a language-pack capability.",
+      "fixtures": ["shared-testing-dependencies"],
+      "commands": ["test", "checkpoint-gate", "merge-gate"],
+      "profiles": ["focused", "recommended", "full", "supplemental"],
+      "modes": ["fresh", "reuse"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.dependencies.workflow",
+      "language": "shared",
+      "capability": "dependencies",
+      "guarantee": "Dependency review precedes installation; installation is exact, frozen, and script-disabled; offline verification, licenses, release age, and vulnerability decisions remain distinct attributable stages.",
+      "currentImplementation": [
+        "internal/supplychain/review.go",
+        "internal/supplychain/supplychain.go",
+        "internal/engine/engine.go"
+      ],
+      "helpers": ["internal/supplychain/review_inventory.go"],
+      "cliRoutes": ["dependency-review", "supply-chain"],
+      "policyKeys": ["supplyChain"],
+      "activation": ["Dependency changes or installation are proposed."],
+      "documentation": [
+        "docs/policies/supply-chain.md",
+        "docs/policies/security.md"
+      ],
+      "tests": [
+        "internal/supplychain/review_inventory_test.go#TestDependencyReviewComparesHistoricalTagRepairAndRecordedResolution",
+        "internal/supplychain/supplychain_test.go#TestDependencyChangesCompareDirectAndTransitiveCandidateVersions"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Packs provide ecosystem facts; core sequences trust and policy decisions.",
+      "fixtures": ["shared-testing-dependencies"],
+      "commands": ["dependency-review", "supply-chain"],
+      "profiles": ["review", "offline", "online"],
+      "modes": ["pre-install", "post-install"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.repository.control-inputs",
+      "language": "shared",
+      "capability": "repository",
+      "guarantee": "Language manifests, locks, compiler and analyzer settings, pack policy, wrappers, and workflow files remain direct product or control inputs with core-owned change and review semantics.",
+      "currentImplementation": [
+        "internal/policy/control_inputs.go",
+        "internal/repository/control_inputs.go",
+        "internal/repository/impact.go"
+      ],
+      "helpers": [],
+      "cliRoutes": ["check", "test-plan", "behavior-review"],
+      "policyKeys": ["behaviorReview", "verification"],
+      "activation": ["A control or product input changes or is selected."],
+      "documentation": [
+        "docs/design/behavior-review-intent.md",
+        "docs/policy-engine-architecture.md"
+      ],
+      "tests": [
+        "internal/repository/control_inputs_test.go#TestCanonicalBootstrapWrappersAreControlArtifacts",
+        "internal/testing/testing_test.go#TestDocumentationMergeDecisionEscalatesControlProductAndMixedInputs"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Repository change classification and review authority cannot move into language packs.",
+      "fixtures": ["shared-lifecycle-adjacent"],
+      "commands": ["check", "test-plan", "behavior-review"],
+      "profiles": ["all"],
+      "modes": ["changed", "full"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.repository.configured-commands",
+      "language": "shared",
+      "capability": "execution",
+      "guarantee": "Declared build, check, lock, generation, test, and security commands run only under core-selected profiles, exact scopes, sealed inputs, limits, and explicit external approval rules.",
+      "currentImplementation": [
+        "internal/repository/command_discovery.go",
+        "internal/quality/quality.go",
+        "internal/runner/runner.go"
+      ],
+      "helpers": ["internal/policy/model.go"],
+      "cliRoutes": ["check", "gate", "test", "supply-chain"],
+      "policyKeys": ["checks", "generation.producers", "tests.suites"],
+      "activation": ["A configured command is selected by a core workflow."],
+      "documentation": [
+        "docs/policies/verification.md",
+        "docs/policies/code-quality.md"
+      ],
+      "tests": [
+        "internal/quality/command_selection_test.go#TestRepositoryCommandRunsOnlyWhenExplicitlySelected",
+        "internal/quality/quality_test.go#TestManagedCommandUsesExactOwnedFilesRelativeToItsWorkingDirectory"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Packs may declare needs and facts but cannot schedule arbitrary target execution.",
+      "fixtures": ["shared-lifecycle-adjacent"],
+      "commands": ["check", "gate", "test", "supply-chain"],
+      "profiles": ["all"],
+      "modes": ["full", "focused"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.lifecycle.installation-doctor",
+      "language": "shared",
+      "capability": "lifecycle",
+      "guarantee": "Managed wrappers, archive-backed setup, exact installed engine and pack identities, immutable stores, offline reuse, missing or corrupt state, and doctor diagnostics remain coherent.",
+      "currentImplementation": [
+        "internal/agents",
+        "internal/release",
+        "internal/pack/install.go",
+        "internal/engine/engine.go"
+      ],
+      "helpers": ["code-polishyw", "scripts/install.sh"],
+      "cliRoutes": ["agents", "pack", "doctor"],
+      "policyKeys": ["packs"],
+      "activation": [
+        "Adoption, installation, pack selection, or strict diagnosis runs."
+      ],
+      "documentation": [
+        "docs/installation.md",
+        "docs/design/bootstrap-wrapper.md",
+        "docs/design/installed-release-verification.md"
+      ],
+      "tests": [
+        "scripts/test-installed-release-contract.sh",
+        "internal/pack/pack_test.go#TestInstallPublishesExactContentAddressedTreeAndDetectsTampering"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Installation trust and repository guidance are core services independent of any selected language.",
+      "fixtures": ["shared-lifecycle-adjacent"],
+      "commands": ["agents", "pack", "doctor"],
+      "profiles": ["installed"],
+      "modes": ["install", "verify", "offline"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.lifecycle.upgrade-publication",
+      "language": "shared",
+      "capability": "lifecycle",
+      "guarantee": "Authenticated capability previews, two-phase upgrade, stale-plan rejection, rollback, lock-last authority, native archives, indexes, OCI publication, and explicit hard pack cutover remain core-owned.",
+      "currentImplementation": [
+        "cmd/code-polishy/upgrade_meta.go",
+        "internal/release/publication.go",
+        "internal/release/release.go"
+      ],
+      "helpers": ["scripts/build-release.sh", "scripts/build-oci-image.sh"],
+      "cliRoutes": ["upgrade", "release-manifest", "pack"],
+      "policyKeys": ["packs"],
+      "activation": [
+        "An engine or pack migration, release, or rollback is prepared."
+      ],
+      "documentation": [
+        "docs/release-checklist.md",
+        "docs/plans/authenticated-release-publication.md",
+        "docs/design/bootstrap-wrapper.md"
+      ],
+      "tests": [
+        "cmd/code-polishy/capability_upgrade_test.go#TestLockPublishesTheDeltaReturnedByLaterCapabilityInspection",
+        "internal/release/publication_test.go#TestPublicationIndexRequiresEveryHostFromOneSource"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Release authority and hard-cutover orchestration cannot be delegated to a language pack.",
+      "fixtures": ["shared-lifecycle-adjacent"],
+      "commands": ["upgrade", "release-manifest", "pack"],
+      "profiles": ["release"],
+      "modes": ["plan", "apply", "rollback"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "referenceChange": "Post-v0.25.0 publication-backed v2 locks and two-phase upgrade behavior are part of the current-main reference.",
+      "status": "untested"
+    },
+    {
+      "id": "shared.adjacent.css-html-powershell-structured-data",
+      "language": "shared",
+      "capability": "adjacent-formats",
+      "guarantee": "CSS asset imports, HTML and PowerShell comments, Markdown and web formatting, and JSON or YAML parse-only services keep explicit owners and do not silently disappear with the four language extractions.",
+      "currentImplementation": [
+        "internal/architecture/javascript.go",
+        "internal/quality/comments_web.go",
+        "internal/quality/markdown.go",
+        "internal/quality/data.go",
+        "internal/javascript/literal_data_test.go"
+      ],
+      "helpers": ["providers/javascript/css.mjs"],
+      "cliRoutes": ["check", "architecture", "format"],
+      "policyKeys": ["quality.allowComments", "scope.data"],
+      "activation": ["An adjacent supported format is governed."],
+      "documentation": [
+        "docs/design/javascript-import-assets.md",
+        "docs/design/source-comment-policy.md"
+      ],
+      "tests": [
+        "internal/architecture/javascript_assets_test.go#TestStylesheetImportsRetainExistenceAndModuleChecks",
+        "internal/quality/comments_test.go#TestPowerShellInterpolatedSubexpressionsExposeComments"
+      ],
+      "futureOwner": "shared-protocol",
+      "boundaryRationale": "Each service receives an explicit final owner; core retains policy and non-execution guarantees.",
+      "fixtures": ["shared-lifecycle-adjacent"],
+      "commands": ["check", "architecture", "format"],
+      "profiles": ["all"],
+      "modes": ["check", "write"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    },
+    {
+      "id": "shared.format.write-idempotence",
+      "language": "shared",
+      "capability": "format",
+      "guarantee": "Format check and write are distinct; writes are selected, atomic, idempotent, and byte-preserving outside authority across invalid UTF-8, BOM, line endings, links, special files, escapes, and concurrent changes.",
+      "currentImplementation": [
+        "internal/engine/format.go",
+        "internal/repository/contained_write.go",
+        "internal/pack/protocol.go"
+      ],
+      "helpers": ["internal/pack/units.go"],
+      "cliRoutes": ["format"],
+      "policyKeys": ["scope.generated", "scope.data"],
+      "activation": ["Format check or write is explicitly selected."],
+      "documentation": [
+        "docs/design/provider-scope.md",
+        "docs/policies/code-quality.md"
+      ],
+      "tests": [
+        "internal/pack/units_test.go#TestFormatRejectsInvalidOriginalUTF8BeforeApplyingAnyEdits",
+        "internal/quality/javascript_test.go#TestJavaScriptFormatWritePreservesGeneratedAndDeclaredData"
+      ],
+      "futureOwner": "core",
+      "boundaryRationale": "Packs propose edits; core validates original identity, selected write authority, atomic application, and safety.",
+      "fixtures": ["format-write"],
+      "commands": ["format"],
+      "profiles": ["format"],
+      "modes": ["check", "write", "idempotence"],
+      "platforms": [
+        "darwin-amd64",
+        "darwin-arm64",
+        "linux-amd64",
+        "linux-arm64",
+        "windows-amd64"
+      ],
+      "status": "untested"
+    }
+  ]
+}

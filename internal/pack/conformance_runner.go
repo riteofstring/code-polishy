@@ -49,7 +49,7 @@ type ConformanceFixtureEvidence struct {
 	ID                string                  `json:"id"`
 	BehaviorIDs       []string                `json:"behaviorIds"`
 	Status            string                  `json:"status"`
-	SkipReason        string                  `json:"skipReason,omitempty"`
+	Reason            string                  `json:"reason,omitempty"`
 	Reference         *ConformanceRunEvidence `json:"reference,omitempty"`
 	Candidate         *ConformanceRunEvidence `json:"candidate,omitempty"`
 	Differences       []ConformanceDifference `json:"differences,omitempty"`
@@ -77,10 +77,20 @@ type ConformanceDifference struct {
 }
 
 type ConformanceReportSummary struct {
-	Status  string `json:"status"`
-	Passed  int    `json:"passed"`
-	Failed  int    `json:"failed"`
-	Skipped int    `json:"skipped"`
+	Status    string                     `json:"status"`
+	Passed    int                        `json:"passed"`
+	Failed    int                        `json:"failed"`
+	Skipped   int                        `json:"skipped"`
+	Blocked   int                        `json:"blocked"`
+	Behaviors ConformanceBehaviorSummary `json:"behaviors"`
+}
+
+type ConformanceBehaviorSummary struct {
+	Passing             int `json:"passing"`
+	Untested            int `json:"untested"`
+	Failing             int `json:"failing"`
+	Blocked             int `json:"blocked"`
+	DeliberatelyChanged int `json:"deliberatelyChanged"`
 }
 
 type conformanceExecution struct {
@@ -122,8 +132,14 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 		Summary:   ConformanceReportSummary{Status: "passed"},
 	}
 	for _, fixture := range ledger.Fixtures {
+		if fixture.Maturity == "planned" {
+			report.Fixtures = append(report.Fixtures, ConformanceFixtureEvidence{ID: fixture.ID, BehaviorIDs: slices.Clone(fixture.BehaviorIDs), Status: "blocked", Reason: fixture.Gap})
+			report.Summary.Blocked++
+			report.Summary.Status = "failed"
+			continue
+		}
 		if !slices.Contains(fixture.Platforms, CurrentPlatform()) {
-			report.Fixtures = append(report.Fixtures, ConformanceFixtureEvidence{ID: fixture.ID, BehaviorIDs: slices.Clone(fixture.BehaviorIDs), Status: "skipped", SkipReason: "platform " + CurrentPlatform() + " is not declared by the fixture"})
+			report.Fixtures = append(report.Fixtures, ConformanceFixtureEvidence{ID: fixture.ID, BehaviorIDs: slices.Clone(fixture.BehaviorIDs), Status: "skipped", Reason: "platform " + CurrentPlatform() + " is not declared by the fixture"})
 			report.Summary.Skipped++
 			continue
 		}
@@ -136,6 +152,23 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 			report.Summary.Passed++
 		} else {
 			report.Summary.Failed++
+			report.Summary.Status = "failed"
+		}
+	}
+	for _, behavior := range ledger.Behaviors {
+		switch behavior.Status {
+		case "passing":
+			report.Summary.Behaviors.Passing++
+		case "deliberately-changed":
+			report.Summary.Behaviors.DeliberatelyChanged++
+		case "untested":
+			report.Summary.Behaviors.Untested++
+			report.Summary.Status = "failed"
+		case "failing":
+			report.Summary.Behaviors.Failing++
+			report.Summary.Status = "failed"
+		case "blocked":
+			report.Summary.Behaviors.Blocked++
 			report.Summary.Status = "failed"
 		}
 	}

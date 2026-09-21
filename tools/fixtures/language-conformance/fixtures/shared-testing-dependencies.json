@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "shared-testing-dependencies",
+  "maturity": "planned",
+  "gap": "Capture test discovery, ownership and impact facts, reusable receipt identity, supplemental scheduling limits, dependency review, frozen script-disabled installation, offline verification, licenses, and exact vulnerability decisions.",
+  "behaviorIds": [
+    "shared.testing.discovery-ownership-impact",
+    "shared.testing.receipts-scheduling",
+    "shared.dependencies.workflow"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\",\"tests/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "src/app.py",
+      "mode": "0644",
+      "content": "def value():\n    return 1\n"
+    },
+    {
+      "path": "tests/test_app.py",
+      "mode": "0644",
+      "content": "from app import value\n\ndef test_value():\n    assert value() == 1\n"
+    }
+  ],
+  "arguments": ["test-plan", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [".code-polishy.json", "src/app.py", "tests/test_app.py"]
+  }
+}

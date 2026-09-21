@@ -80,6 +80,8 @@ type ConformanceFixture struct {
 	Schema         string                     `json:"$schema,omitempty"`
 	Protocol       string                     `json:"protocol"`
 	ID             string                     `json:"id"`
+	Maturity       string                     `json:"maturity"`
+	Gap            string                     `json:"gap,omitempty"`
 	BehaviorIDs    []string                   `json:"behaviorIds"`
 	Files          []ConformanceFixtureFile   `json:"files"`
 	Arguments      []string                   `json:"arguments"`
@@ -363,6 +365,16 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 	if !identifierPattern.MatchString(fixture.ID) {
 		return expected(label+".id", "a lowercase identifier")
 	}
+	if !slices.Contains([]string{"active", "planned"}, fixture.Maturity) {
+		return expected(label+".maturity", "active or planned")
+	}
+	if fixture.Maturity == "planned" {
+		if err := validateConformanceText(fixture.Gap, label+".gap", 4096); err != nil {
+			return err
+		}
+	} else if fixture.Gap != "" {
+		return expected(label+".gap", "absent for an active fixture")
+	}
 	if err := validateConformanceStrings(fixture.BehaviorIDs, label+".behaviorIds", true); err != nil {
 		return err
 	}
@@ -489,10 +501,22 @@ func validateConformanceLinks(ledger ConformanceLedger) error {
 		}
 	}
 	for behaviorIndex, behavior := range ledger.Behaviors {
+		coveredPlatforms := map[string]bool{}
 		for fixtureIndex, fixtureID := range behavior.Fixtures {
 			fixture, exists := fixtures[fixtureID]
 			if !exists || !slices.Contains(fixture.BehaviorIDs, behavior.ID) {
 				return expected(indexed(indexed("behaviors", behaviorIndex)+".fixtures", fixtureIndex), "a fixture that links back to this behavior")
+			}
+			if behavior.Status == "passing" && fixture.Maturity != "active" {
+				return expected(indexed(indexed("behaviors", behaviorIndex)+".fixtures", fixtureIndex), "an active fixture for a passing behavior")
+			}
+			for _, platform := range fixture.Platforms {
+				coveredPlatforms[platform] = true
+			}
+		}
+		for platformIndex, platform := range behavior.Platforms {
+			if !coveredPlatforms[platform] {
+				return expected(indexed(indexed("behaviors", behaviorIndex)+".platforms", platformIndex), "a platform covered by a linked fixture")
 			}
 		}
 	}

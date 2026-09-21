@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "go-toolchain",
+  "maturity": "planned",
+  "gap": "Capture exact Go, gofmt, staticcheck, and govulncheck identities, sealed environment, unavailable and wrong-version failures, and supported host cells through installed products.",
+  "behaviorIds": ["go.execution.toolchain"],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"main.go\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "go.mod",
+      "mode": "0644",
+      "content": "module example.test/conformance\n\ngo 1.26\n"
+    },
+    {
+      "path": "main.go",
+      "mode": "0644",
+      "content": "package main\n\nfunc main() {}\n"
+    }
+  ],
+  "arguments": ["doctor", "--strict", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [".code-polishy.json", "go.mod", "main.go"]
+  }
+}

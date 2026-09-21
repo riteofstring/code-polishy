@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "python-toolchain",
+  "maturity": "planned",
+  "gap": "Capture exact CPython, uv, Ruff, ty, Vulture, packaging, and parser identities, sealed execution, project-local dependency inputs, wrong versions, and unavailable host cells through installed products.",
+  "behaviorIds": ["python.execution.toolchain"],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "0644",
+      "content": "[project]\nname = \"conformance\"\nversion = \"1.0.0\"\nrequires-python = \"==3.12.*\"\n"
+    },
+    { "path": "src/app.py", "mode": "0644", "content": "VALUE = 1\n" }
+  ],
+  "arguments": ["doctor", "--strict", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [".code-polishy.json", "pyproject.toml", "src/app.py"]
+  }
+}

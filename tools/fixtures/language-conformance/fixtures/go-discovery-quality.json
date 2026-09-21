@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "go-discovery-quality",
+  "maturity": "planned",
+  "gap": "Split root, nested, workspace, build-tag, format, syntax, vet, staticcheck, complexity, comment, build, and type behavior into positive and seeded-defect executable cases.",
+  "behaviorIds": [
+    "go.discovery.modules",
+    "go.discovery.workspaces",
+    "go.discovery.packages-build-constraints",
+    "go.quality.format-syntax",
+    "go.quality.vet-staticcheck",
+    "go.quality.complexity-comments",
+    "go.quality.build-type"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "go.mod",
+      "mode": "0644",
+      "content": "module example.test/conformance\n\ngo 1.26\n"
+    },
+    {
+      "path": "src/main.go",
+      "mode": "0644",
+      "content": "package main\n\nfunc main( ){ println(\"seeded\") }\n"
+    }
+  ],
+  "arguments": ["check", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["quality.gofmt"],
+    "requiredCoverage": ["src/main.go"],
+    "writes": [],
+    "protected": [".code-polishy.json", "go.mod", "src/main.go"]
+  }
+}

@@ -1279,7 +1279,8 @@
           "scripts/test-installed-release-contract.sh",
           "cmd/code-polishy/**",
           "internal/pack/**",
-          "tools/fixtures/language-pack/**"
+          "tools/fixtures/language-pack/**",
+          "tools/fixtures/language-conformance/**"
         ],
         "argv": ["./scripts/test-installed-release-contract.sh"]
       },

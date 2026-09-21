@@ -7,6 +7,7 @@
   "required": [
     "protocol",
     "id",
+    "maturity",
     "behaviorIds",
     "files",
     "arguments",
@@ -18,6 +19,8 @@
     "$schema": { "type": "string", "minLength": 1 },
     "protocol": { "const": "language-conformance-fixture/v1" },
     "id": { "$ref": "#/$defs/identifier" },
+    "maturity": { "enum": ["active", "planned"] },
+    "gap": { "$ref": "#/$defs/text" },
     "behaviorIds": { "$ref": "#/$defs/requiredStrings" },
     "files": {
       "type": "array",
@@ -35,6 +38,16 @@
     "platforms": { "$ref": "#/$defs/requiredStrings" },
     "expected": { "$ref": "#/$defs/expected" }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "maturity": { "const": "planned" } },
+        "required": ["maturity"]
+      },
+      "then": { "required": ["gap"] },
+      "else": { "not": { "required": ["gap"] } }
+    }
+  ],
   "$defs": {
     "identifier": {
       "type": "string",

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "javascript-architecture",
+  "maturity": "planned",
+  "gap": "Capture package roots, imports, aliases, assets, package dependency declarations, generated mappings, test edges, focused closure, module direction, and cycles across supported syntax and invalid inputs.",
+  "behaviorIds": [
+    "javascript.architecture.import-resolution",
+    "javascript.architecture.assets-aliases",
+    "javascript.architecture.focused-scope-cycles"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"api\",\"paths\":[\"src/api/**\"]},{\"name\":\"storage\",\"paths\":[\"src/storage/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "package.json",
+      "mode": "0644",
+      "content": "{\"name\":\"conformance\",\"private\":true,\"type\":\"module\",\"packageManager\":\"pnpm@11.13.0\"}\n"
+    },
+    {
+      "path": "src/api/index.js",
+      "mode": "0644",
+      "content": "import { value } from '../storage/index.js';\nexport { value };\n"
+    },
+    {
+      "path": "src/storage/index.js",
+      "mode": "0644",
+      "content": "export const value = 1;\n"
+    }
+  ],
+  "arguments": ["architecture", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["architecture.moduleDependency"],
+    "requiredCoverage": ["src/api/index.js", "src/storage/index.js"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "package.json",
+      "src/api/index.js",
+      "src/storage/index.js"
+    ]
+  }
+}

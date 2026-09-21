@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "shared-scope-policy",
+  "maturity": "planned",
+  "gap": "Capture inventory classification, read/diagnostic/write authority, generated and data mappings, policy thresholds, comments, metrics, module direction, pack claims, conflicts, unclaimed files, and failure isolation in mixed-language repositories.",
+  "behaviorIds": [
+    "shared.inventory.classification",
+    "shared.scope.read-diagnostic-write",
+    "shared.scope.generated-ownership",
+    "shared.scope.data-literals",
+    "shared.policy.comments-metrics",
+    "shared.policy.module-direction-cycles",
+    "shared.policy.pack-claims-failure-isolation"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"scope\":{\"generated\":[\"generated/**\"],\"data\":[\"data/**\"]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\",\"generated/**\"]},{\"name\":\"data\",\"paths\":[\"data/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    { "path": "src/main.go", "mode": "0644", "content": "package main\n" },
+    {
+      "path": "generated/client.js",
+      "mode": "0644",
+      "content": "export const generated = true;\n"
+    },
+    {
+      "path": "data/catalog.json",
+      "mode": "0644",
+      "content": "{\"enabled\":true}\n"
+    }
+  ],
+  "arguments": ["check", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": ["src/main.go", "generated/client.js"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "src/main.go",
+      "generated/client.js",
+      "data/catalog.json"
+    ]
+  }
+}

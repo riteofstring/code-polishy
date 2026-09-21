@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "shared-lifecycle-adjacent",
+  "maturity": "planned",
+  "gap": "Capture control inputs, configured commands, wrappers, installed release, doctor, hard-cutover upgrade, publication, CSS and HTML helpers, PowerShell comments, and structured-data parsing without retaining migrated language ownership in core.",
+  "behaviorIds": [
+    "shared.repository.control-inputs",
+    "shared.repository.configured-commands",
+    "shared.lifecycle.installation-doctor",
+    "shared.lifecycle.upgrade-publication",
+    "shared.adjacent.css-html-powershell-structured-data"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"web/**\"]},{\"name\":\"tooling\",\"paths\":[\"scripts/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "web/index.html",
+      "mode": "0644",
+      "content": "<!doctype html><main>conformance</main>\n"
+    },
+    {
+      "path": "web/style.css",
+      "mode": "0644",
+      "content": "main { color: black; }\n"
+    },
+    { "path": "web/data.json", "mode": "0644", "content": "{\"value\":1}\n" },
+    {
+      "path": "scripts/task.ps1",
+      "mode": "0644",
+      "content": "Write-Output \"conformance\"\n"
+    }
+  ],
+  "arguments": ["doctor", "--strict", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "web/index.html",
+      "web/style.css",
+      "web/data.json",
+      "scripts/task.ps1"
+    ]
+  }
+}

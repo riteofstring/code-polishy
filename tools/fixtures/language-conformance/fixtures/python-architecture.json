@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "python-architecture",
+  "maturity": "planned",
+  "gap": "Capture module, object, relative, type-only, stub, literal, computed, nested-project, focused closure, direction, and cycle evidence with valid counterexamples and malformed-fact failures.",
+  "behaviorIds": [
+    "python.architecture.import-graph",
+    "python.architecture.computed-imports"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"api\",\"paths\":[\"src/api/**\"]},{\"name\":\"storage\",\"paths\":[\"src/storage/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "pyproject.toml",
+      "mode": "0644",
+      "content": "[project]\nname = \"conformance\"\nversion = \"1.0.0\"\nrequires-python = \"==3.12.*\"\n"
+    },
+    {
+      "path": "src/api/main.py",
+      "mode": "0644",
+      "content": "from storage import database\n"
+    },
+    {
+      "path": "src/storage/database.py",
+      "mode": "0644",
+      "content": "VALUE = 1\n"
+    }
+  ],
+  "arguments": ["architecture", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["architecture.moduleDependency"],
+    "requiredCoverage": ["src/api/main.py", "src/storage/database.py"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "pyproject.toml",
+      "src/api/main.py",
+      "src/storage/database.py"
+    ]
+  }
+}

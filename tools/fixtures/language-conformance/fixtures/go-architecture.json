@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "go-architecture",
+  "maturity": "planned",
+  "gap": "Capture allowed and forbidden module edges, nested modules, workspaces, test-only edges, focused closure, build constraints, and cycle witnesses through the native CLI.",
+  "behaviorIds": [
+    "go.architecture.import-graph",
+    "go.architecture.focused-scope-cycles"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"api\",\"paths\":[\"api/**\"]},{\"name\":\"storage\",\"paths\":[\"storage/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[]}}\n"
+    },
+    {
+      "path": "go.mod",
+      "mode": "0644",
+      "content": "module example.test/conformance\n\ngo 1.26\n"
+    },
+    {
+      "path": "api/api.go",
+      "mode": "0644",
+      "content": "package api\n\nimport _ \"example.test/conformance/storage\"\n"
+    },
+    {
+      "path": "storage/storage.go",
+      "mode": "0644",
+      "content": "package storage\n"
+    }
+  ],
+  "arguments": ["architecture", "--all", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["architecture.moduleDependency"],
+    "requiredCoverage": ["api/api.go", "storage/storage.go"],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      "go.mod",
+      "api/api.go",
+      "storage/storage.go"
+    ]
+  }
+}
