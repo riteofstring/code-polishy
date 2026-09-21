@@ -1,6 +1,8 @@
 # Installable First-Party Language Packs
 
-Status: proposed implementation plan; baseline `v0.25.0` on `main`
+Status: proposed implementation plan; refreshed 2026-09-20 against `main` at
+`c7c83ff00fa57ab91bb63895dd79508641972d41` with locked release `v0.27.8`;
+immutable behavior origin `v0.25.0`
 
 ## Outcome and implementation boundary
 
@@ -14,29 +16,75 @@ The planning work originated on `beta-language-packs`, branched from `beta` at
 `854604a33e32421b3d3b25a60d888042a0751c43`, and was incorporated into `main`
 after the v0.25.0 release without changing runtime ownership, pack selection, or
 release defaults. That branch is historical planning provenance, not the active
-implementation branch. Begin implementation from the then-current `main` after
-the inventory and test framework below are ready.
+implementation branch. This refresh audited `main` through the revision above.
+Begin implementation from the then-current `main` after the inventory and test
+framework below are ready, and account for any later delta before editing source.
 
 Use small, reviewable milestones on the implementation branch. Preserve the
 original reference when incorporating later `main` fixes; give each
 behavior-changing fix its own fixture and record any deliberate reference
-update. Do not merge a partial language extraction into `main` or advertise
-parity while required cases are uncovered. Public language cutovers must be
-coherent even when intermediate branch commits are incomplete.
+update. Do not merge partial native-ownership removal into `main` or advertise
+parity while required cases are uncovered. A foundation release may add the
+complete replacement contract and parity-proven packs while native routes remain
+for unclaimed paths and capabilities; exact selected claims still execute only
+once. This bounded migration state is not a protocol compatibility layer. Public
+ownership cutovers remain coherent even when intermediate branch commits are
+incomplete.
 
 The first deliverable is an executable behavior inventory and a differential
 runner. No native implementation is removed before that runner proves the
 replacement against its reference. This is evidence of the enumerated contract,
 not a claim that finite tests prove every possible program equivalent.
 
+## Refreshed implementation baseline
+
+Keep three identities separate throughout the work:
+
+1. The tagged `v0.25.0` release is the immutable origin for the existing pack
+   contract and the native/provider regressions that motivated this plan.
+2. The exact current-`main` task base is the primary behavior reference for an
+   implementation task. It includes every accepted fix after `v0.25.0`.
+3. The candidate core and exact pack artifacts are the proposed replacement.
+
+The 2026-09-20 audit found `internal/pack`, `providers/javascript`, the pack
+schema, the example pack, and the authoring guide unchanged from `v0.25.0`.
+Manifest version 2 and protocol version 3 therefore retain their existing
+authoring and JavaScript-shaped discovery limitations. This does not mean the
+rest of the runtime is unchanged. The current-main ledger must include these
+post-reference behaviors before extraction begins:
+
+- selected format writes remain confined to their selected added or modified
+  files and never fall back to unrelated command paths;
+- managed repository wrappers, archive-backed setup, publication-backed v2
+  locks, and their control-input classification remain core repository services;
+- two-phase `upgrade plan` / `upgrade apply`, authenticated capability and
+  diagnostic previews, stale-plan rejection, rollback, and lock-last authority
+  cutover remain intact;
+- reusable-suite evidence retains its exact receipt path and digest, while
+  current checkpoint, merge-gate, and supplemental scheduling stays core-owned;
+- dependency review before installation remains distinct from frozen,
+  script-disabled installation, offline supply-chain verification, and installed
+  license evidence;
+- date-only exception, assessment, and dependency-governance expiry uses explicit
+  UTC-day semantics;
+- local policy-owned files are validated directly rather than protected by
+  mirrored checksums; digests remain for trust boundaries, immutable artifacts,
+  and reusable evidence.
+
+At implementation task start, record the exact `main` revision and locked
+release, inspect the delta from the audited revision above, and add any changed
+observable behavior to the ledger before changing governed source. Later product
+fixes update the current-main lane; they do not rewrite the immutable origin.
+
 ## Starting point and related work
 
-The v0.25.0 baseline has native implementations for all four language groups and
-an optional JavaScript/TypeScript provider. Its manifest version is 2 and its
-analysis protocol is 3. The optional provider already supports useful Astro
-mapping, JavaScript type checking, jsconfig, TypeScript aliases, asset resolution,
-and manifest/framework entries. Preserve these alongside native behavior; the
-provider is not yet a complete replacement for the native language boundary.
+The immutable v0.25.0 origin has native implementations for all four language
+groups and an optional JavaScript/TypeScript provider. The refreshed current-main
+baseline still uses manifest version 2 and analysis protocol version 3 for packs.
+The optional provider supports useful Astro mapping, JavaScript type checking,
+jsconfig, TypeScript aliases, asset resolution, and manifest/framework entries.
+Preserve these alongside every later accepted native behavior; the provider is
+not yet a complete replacement for the native language boundary.
 
 The [analysis ownership design](../design/provider-scope.md) is the current
 scope contract. In particular, read context, required coverage, reportable
@@ -98,7 +146,10 @@ Each ledger row records:
 - future owner: core, pack, or shared protocol, with the boundary rationale;
 - fixture IDs, selected command/profile/mode, required platform/toolchain cells,
   and expected findings, coverage, writes, and failures;
-- reference identity, candidate pack identity, and exact evidence for each run;
+- current-main reference identity, any applicable immutable-origin identity,
+  candidate pack identity, and exact evidence for each run;
+- the post-audit change that introduced or last intentionally changed the
+  behavior, when it differs from the immutable origin;
 - status: untested, passing, failing, blocked, or deliberately changed.
 
 Inventory behavior by tracing source, registered checks, configuration/schema,
@@ -127,18 +178,20 @@ must not be recorded as successful analysis.
 This table is a starting checklist, not a completed or exhaustive inventory.
 Split its entries into individually testable ledger rows during Phase 0.
 
-| Area                                   | Existing behavior to enumerate and preserve                                                                                                                                                                                                                                                                            |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go discovery and tools                 | Root and nested modules, packages and workspaces, test packages, build constraints/tags, local replacements, exact toolchain/environment, gofmt, vet, staticcheck, compilation/type errors, dead-code and complexity behavior, configured builds                                                                       |
-| Go architecture and dependencies       | Package/import graphs, focused dependency closure, module direction and cycles, source comments/directives, module/sum ownership, exact versions, lock evidence, govulncheck and OSV coverage, release age and dependency policy                                                                                       |
-| Python projects and style              | Static pyproject discovery, nested and source-layout projects, interpreter pins, project-local `.venv` dependency evidence, Ruff configuration/activation, formatting, lint, complexity, ty configuration and full project diagnostics                                                                                 |
-| Python reachability and architecture   | Vulture, module/object imports, computed imports, runtime-loader contracts, entry points/plugins, external distribution ownership and provenance, callable/attribute flows, framework and repository contracts, persisted reachability evidence and invalidation, docstrings/directives, module direction and cycles   |
-| Python dependencies and execution      | PEP 508 requirements, extras/groups/markers, build-system requirements, uv lock reconciliation, Git dependency state/signature evidence, frozen-check requirements, OSV and release-age evidence, carried CPython/uv/tool installation, missing or malformed environment behavior                                      |
-| JavaScript and TypeScript projects     | Root/nested packages and workspaces, no root manifest, generated `sourcePackage`, tsconfig/jsconfig/unique alternate config, compiler members, JS checking, aliases/assets, module/CommonJS modes including `.cts`, JSX/TSX, Astro mapping, installed dependency types                                                 |
-| JavaScript and TypeScript analysis     | Format/lint/complexity/comments, effective React and framework activation including disabled overrides, downstream type errors, package-wide Knip findings, metadata-only selection, conventional and manifest/framework entry points, policy glob grammar, import graphs and project roots                            |
-| JavaScript and TypeScript dependencies | Node/package-manager pins, package/workspace/lock ownership, pnpm lock synchronization, dependency-source policy, licenses, release age, native audit and OSV, lifecycle-script restrictions, sealed runtime/bundle inventories and platform-specific packages                                                         |
-| Bash and POSIX shell                   | Supported extensions/shebangs and dialects, syntax and ShellCheck behavior, existing formatting support or explicit absence, comment/directive parsing, heredocs/quoting/substitutions, portability facts, configured commands, exact shell/tool requirements and unavailable-platform behavior                        |
-| Shared integration                     | Generated/data/test classification, control inputs, parse-only data and literal modules, comment and metric policy, test discovery/ownership/impact, portability evidence, build/check coverage, policy modules, exception identity, doctor/adoption, check/format/gate modes, receipts and installed-release behavior |
+| Area                                   | Existing behavior to enumerate and preserve                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Go discovery and tools                 | Root and nested modules, packages and workspaces, test packages, build constraints/tags, local replacements, exact toolchain/environment, gofmt, vet, staticcheck, compilation/type errors, dead-code and complexity behavior, configured builds                                                                                                                               |
+| Go architecture and dependencies       | Package/import graphs, focused dependency closure, module direction and cycles, source comments/directives, module/sum ownership, exact versions, lock evidence, govulncheck and OSV coverage, release age and dependency policy                                                                                                                                               |
+| Python projects and style              | Static pyproject discovery, nested and source-layout projects, interpreter pins, project-local `.venv` dependency evidence, Ruff configuration/activation, formatting, lint, complexity, ty configuration and full project diagnostics                                                                                                                                         |
+| Python reachability and architecture   | Vulture, module/object imports, computed imports, runtime-loader contracts, entry points/plugins, external distribution ownership and provenance, callable/attribute flows, framework and repository contracts, persisted reachability evidence and invalidation, docstrings/directives, module direction and cycles                                                           |
+| Python dependencies and execution      | PEP 508 requirements, extras/groups/markers, build-system requirements, uv lock reconciliation, Git dependency state/signature evidence, frozen-check requirements, OSV and release-age evidence, carried CPython/uv/tool installation, missing or malformed environment behavior                                                                                              |
+| JavaScript and TypeScript projects     | Root/nested packages and workspaces, no root manifest, generated `sourcePackage`, tsconfig/jsconfig/unique alternate config, compiler members, JS checking, aliases/assets, module/CommonJS modes including `.cts`, JSX/TSX, Astro mapping, installed dependency types                                                                                                         |
+| JavaScript and TypeScript analysis     | Format/lint/complexity/comments, effective React and framework activation including disabled overrides, downstream type errors, package-wide Knip findings, metadata-only selection, conventional and manifest/framework entry points, policy glob grammar, import graphs and project roots                                                                                    |
+| JavaScript and TypeScript dependencies | Node/package-manager pins, package/workspace/lock ownership, pnpm lock synchronization, dependency-source policy, licenses, release age, native audit and OSV, lifecycle-script restrictions, sealed runtime/bundle inventories and platform-specific packages                                                                                                                 |
+| Bash and POSIX shell                   | Supported extensions/shebangs and dialects, syntax and ShellCheck behavior, existing formatting support or explicit absence, comment/directive parsing, heredocs/quoting/substitutions, portability facts, configured commands, exact shell/tool requirements and unavailable-platform behavior                                                                                |
+| Shared integration                     | Generated/data/test classification, control inputs, parse-only data and literal modules, selected format-write authority, comment and metric policy, test discovery/ownership/impact, portability evidence, build/check coverage, policy modules, exception identity, doctor/adoption, check/format/gate modes, reusable receipt paths/digests, and installed-release behavior |
+| Dependency workflow                    | Pre-install dependency review, frozen script-disabled installation, offline supply-chain verification, installed license evidence, release-age and vulnerability decisions, and the boundary between pack-owned ecosystem facts and core scheduling                                                                                                                            |
+| Engine lifecycle and publication       | Managed wrappers, archive-backed setup, publication-backed v2 locks, authenticated capability catalogs, two-phase upgrade planning/application, lock-last guidance cutover, source recovery, native archive/index/OCI publication, and installed-release verification                                                                                                          |
 
 Start the source audit in `internal/quality`, `internal/architecture`,
 `internal/repository`, `internal/pythonfacts`, `internal/javascript`,
@@ -155,23 +208,27 @@ their existing behavior or imply new unsupported language coverage.
 ### Freeze reproducible references
 
 Preserve the tagged v0.25.0 native implementation at
-`a800e66ef3ac5fc57c9d103dc84688aaa68ef4e8` as the initial immutable reference
-build, with executable/artifact digests, exact tool and dependency pins, platform,
-command environment, and policy identity. The governing installed release lock
-is workflow authority; it is not automatically the correct behavior reference
-for a newer implementation tree.
+`a800e66ef3ac5fc57c9d103dc84688aaa68ef4e8` as the immutable origin build, with
+executable/artifact digests, exact tool and dependency pins, platform, command
+environment, and policy identity. Also freeze the exact current-main task base
+and its installed release as the primary reference build. The governing installed
+release lock is workflow authority; it is not automatically the correct behavior
+reference for another implementation tree.
 
-Use three expectation lanes:
+Use four expectation lanes:
 
-1. Native baseline: each of the four current native language implementations.
-2. Existing optional provider: its supported JS/TS and Astro improvements and
+1. Current-main native baseline: each current language implementation, including
+   accepted changes after `v0.25.0`.
+2. Immutable origin: the tagged `v0.25.0` behavior used to attribute the existing
+   protocol and provider regressions, never to override a later accepted fix.
+3. Existing optional provider: its supported JS/TS and Astro improvements and
    explicit incomplete-coverage behavior.
-3. Required corrections: separately documented fixes where neither reference is
+4. Required corrections: separately documented fixes where no reference is
    the intended behavior, backed by direct expected outcomes and regressions.
 
 The original main revision `a57aaa6fc70959699c8f8e6c0f0975dd05e0922d`
 is historical evidence for disputed native parity, not a blanket replacement for
-the tagged v0.25.0 reference. Never refresh expected results simply to match the
+the tagged v0.25.0 origin. Never refresh expected results simply to match the
 candidate. Each intentional difference names the behavior, reason, affected
 fixtures, old/new outcomes, and a maintainer decision before public cutover.
 Keep dependency/tool upgrades separate from extraction where possible so their
@@ -191,8 +248,8 @@ response identities so a changing public service cannot masquerade as a language
 regression. Test denial of unauthorized network and target-script execution.
 Live upstream checks remain separately authorized release evidence.
 
-For each scenario, run the baseline CLI and candidate core plus exact selected
-pack, then collect structured reports, process status, input/read evidence,
+For each scenario, run the applicable reference CLI and candidate core plus exact
+selected pack, then collect structured reports, process status, input/read evidence,
 coverage, writes, artifacts, and filesystem changes. Exercise format check and
 format write separately. Re-run formatted output to assert idempotence and
 compare byte-for-byte protection of every file outside write authority.
@@ -255,7 +312,7 @@ not turn focused checks into repository-wide work.
 
 ### Mandatory provider regression corpus
 
-Carry forward the regressions repaired in the v0.25.0 baseline as named, direct
+Carry forward the regressions repaired in the v0.25.0 origin as named, direct
 assertions:
 
 - `a.ts` changes and an unchanged importing `b.ts` receives the type error.
@@ -324,6 +381,42 @@ containment before freezing a replacement protocol. Do not replace a global
 file cap with silent truncation. Keep ecosystem structure pack-owned while core
 validates the generic evidence needed to enforce its guarantees.
 
+## Pack authoring and certification gate
+
+Treat pack authoring as a supported product surface, not an exercise in reading
+core implementation. Before any language extraction, the companion protocol plan
+must produce:
+
+- versioned machine-readable schemas for every manifest, request, response, and
+  evidence document, mechanically checked against the production decoder;
+- executable minimal adapters and request/response fixtures for every operation,
+  profile, mode, discovery type, and execution type used by the first-party packs;
+- language-neutral test vectors or small reference helpers for canonical paths,
+  input identities, coverage accounting, diagnostic scope, and dependency
+  closure, without requiring another runtime to reproduce Go internals;
+- bounded validation errors that identify the exact field and collection index,
+  reject the offending value safely, and state the expected constraint;
+- one local command that runs the same production validation used after
+  installation and emits stable machine-readable results for editor and CI use.
+
+Certification has three distinct evidence layers:
+
+1. Protocol conformance proves that requests and responses obey the contract,
+   including malformed and boundary cases.
+2. Capability behavior proves valid counterexamples, seeded defects, incomplete
+   coverage, policy activation, and framework-specific semantics across each
+   declared supported version and configuration.
+3. Installed product integration exercises the exact pack identity in
+   representative disposable applications through ordinary checks, format check,
+   format write, `doctor --strict`, and applicable gates. Format write also proves
+   edits, idempotence, and byte preservation outside write authority.
+
+The existing SQLite proof remains one executable example, not the authoring kit
+or framework-readiness evidence. Wire-compatible field-specific diagnostics may
+improve protocol v3 before replacement, but do not create a long-lived v3 SDK or
+compatibility layer. Publish the durable kit with the replacement contract and
+use it for first-party and third-party packs alike.
+
 ## Official pack distribution and repository transition
 
 The initial set is `go`, `python`, `javascript-typescript`, and `shell`.
@@ -343,6 +436,14 @@ tool and dependency inventories, licenses, and provenance. Local packs use the
 same protocol and validation; an official-looking name does not authenticate a
 local artifact. Installation verifies bytes before an atomic, code-free store
 update. Offline CI uses preprovisioned artifacts and exact pins.
+
+Reuse the current engine publication model where its trust primitives fit: a
+bounded versioned index, separately reviewed index digest, exact per-platform
+artifacts, verified installation, immutable storage, and offline reuse. Pack
+artifacts keep their own catalog namespace, receipts, compatibility identity,
+and lifecycle. The publication-backed v2 repository lock continues to select
+the engine only; exact pack selection remains explicit repository policy. Do not
+make an engine-lock update silently install, select, update, or remove a pack.
 
 Implement and document a concrete lifecycle, starting from these proposed forms:
 
@@ -368,22 +469,36 @@ Before removing native support, provide a deliberate repository migration flow:
 3. Install only the explicitly authorized artifacts, without changing selection.
 4. Verify the candidate configuration in temporary state and compare required
    capability coverage, including generated-source ownership and custom checks.
-5. Atomically update repository policy and lock-related state only after success.
-   Failure leaves prior selection and repository bytes intact; a verified unused
-   pack may remain in the immutable store and is reported as such.
+5. Atomically update repository pack policy only after success, without changing
+   the engine lock. Failure leaves prior selection and repository bytes intact;
+   a verified unused pack may remain in the immutable store and is reported as
+   such.
 6. Demonstrate rollback using the preserved prior engine and configuration, with
    no dual implementation embedded in the new engine.
 
-Coordinate engine compatibility, pack availability, and repository migration so
-there is an executable path through the cutover; do not require the old engine
-to run a protocol it cannot understand. Resolve and test the exact outgoing /
-incoming authority sequence before extraction: outgoing guidance governs
-preparation, and only the verified incoming release's atomic lock rewrite
-activates incoming guidance. Do not run an incoming migration mutation before
-that boundary. Prove failure recovery around the lock and selection changes,
-including interruption, from an actual pre-migration installation before
-publishing the engine that removes native support. An ordinary engine upgrade
-must not silently rewrite pack pins; repository migration is an explicit action.
+Use this ordered cutover rather than combining pack migration with an engine-lock
+change:
+
+1. Finish and verify the replacement contract, authoring kit, local lifecycle,
+   migration preview, and every parity-complete pack before public cutover.
+2. Publish one compatible foundation engine, exact pack set, and authenticated
+   catalog while native implementations remain available for unclaimed paths and
+   capabilities. Replace protocol v3 atomically across affected surfaces; do not
+   add a protocol translation layer. Repositories then explicitly install, verify,
+   and pin the packs. A selected pack owns its exact claims, so native and pack
+   implementations do not both execute them.
+3. Only then publish an engine release that removes native language ownership.
+   Its existing `upgrade plan` must reject an unprepared repository before
+   authority changes and must evaluate the incoming release with the repository's
+   already selected exact packs. `upgrade apply` changes managed guidance,
+   wrappers, and the engine lock with the lock last; it never rewrites pack pins.
+
+The old engine never runs a protocol it cannot understand, and incoming migration
+code never mutates repository policy before its lock becomes authoritative. Prove
+interruption and rollback separately for pack-policy migration and for current
+two-phase engine upgrade, starting from a real pre-migration installation. Follow
+the then-current release checklist for publication and lock changes rather than
+freezing that command choreography in this plan.
 
 Use local authenticated fixture catalogs for development. Artifact publication,
 credentials, and live distribution checks are separate authorized release work.
@@ -393,12 +508,14 @@ credentials, and live distribution checks are separate authorized release work.
 ### Phase 0: Complete the inventory and references
 
 Audit all surfaces above, resolve shared ownership, record platform/tool support,
-and pin reproducible native/provider references. Classify unsupported behavior
-and intentional changes without disguising either as parity.
+pin reproducible current-main, immutable-origin, and provider references, and
+record every behavior delta after the audit revision. Classify unsupported
+behavior and intentional changes without disguising either as parity.
 
 Exit: every discovered feature and policy path has a ledger row, owner, reference,
-and planned executable cases. Open gaps are visible; this phase does not assert
-that the cases already pass.
+and planned executable cases; the recorded task base matches the implementation
+branch. Open gaps are visible; this phase does not assert that the cases already
+pass.
 
 ### Phase 1: Land the conformance framework first
 
@@ -406,25 +523,34 @@ Build the ledger validator, fixture materializer, dual-installation CLI runner,
 strict comparator, and structured evidence report. Reuse existing meaningful
 fixtures and add missing positive, negative, focused, safety, and failure cases.
 First prove reference-versus-reference reproducibility and deliberate mismatch
-detection, then run the current optional JS provider to expose remaining gaps.
+detection, then run the current optional JS provider and one non-JavaScript
+adapter to expose remaining protocol and authoring gaps. Prototype the versioned
+schemas, field-indexed diagnostics, language-neutral test vectors, and the three
+certification layers with this same framework.
 
 Exit: the runner detects seeded loss of diagnostics, coverage, and write safety;
-all required native reference cases execute; optional-provider gaps are explicit.
-No extraction starts before this independent measurement exists.
+all required native reference cases execute; optional-provider gaps are explicit;
+and a pack author can diagnose the seeded malformed fixtures without reading core
+source. No extraction starts before this independent measurement exists.
 
 ### Phase 2: Finish the generic contract and local lifecycle
 
 Implement only the capability/discovery/toolchain gaps needed by the ledger.
 Add authenticated local catalog fixtures, atomic lifecycle operations, missing
 pack isolation, and a core-only installed smoke test. Provide each new boundary
-with a quick ordinary suite and test conflict/malformed evidence cases.
+with a quick ordinary suite and test conflict/malformed evidence cases. Implement
+and continuously verify the production-checked schemas, examples, reference
+vectors or helpers, validator output, and installed-product certification
+workflow that will ship with the replacement contract.
 
 Exit: realistic fixtures for all four languages fit the contract without core
 interpreting their ecosystem metadata. Local pack lifecycle and migration
 previews work without publication. A pack cannot weaken locked policy or acquire
-more read, write, diagnostic, network, or supplemental authority.
+more read, write, diagnostic, network, or supplemental authority. Protocol,
+capability, format-write, and installed-integration evidence are distinct and
+machine-readable. Phase 2 is the readiness gate for governed language extraction.
 
-### Phase 3: Extract shell completely
+### Phase 3: Build the complete shell pack
 
 Move supported Bash/POSIX source recognition, syntax/comment handling,
 ShellCheck integration, portability facts, tool/platform declarations, and
@@ -432,11 +558,12 @@ applicable configured-check behavior. Inventory formatting rather than inventing
 a new formatter during migration. Keep core launcher/build scripts independent
 of whether a user's repository selects the shell pack.
 
-Exit: the complete shell ledger passes through the installed pack, core-only
-operation survives its removal, and native shell implementation/assets have been
-removed from the candidate. Unsupported host/tool cases fail as specified.
+Exit: the complete shell ledger passes through the installed pack, generic
+core-only repository services operate without selecting it, and unsupported
+host/tool cases fail as specified. Native shell ownership remains only for
+unclaimed paths and capabilities until the migration release sequence below.
 
-### Phase 4: Extract Python completely
+### Phase 4: Build the complete Python pack
 
 Move the validated static project inventory, source-facts adapter, Ruff/Vulture/ty,
 CPython/uv/tool distribution, framework/runtime contracts, architecture,
@@ -445,8 +572,9 @@ inputs and all existing dynamic-reference and provenance limits.
 
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python
-semantics and tool setup have one pack owner, and unrelated packs keep operating
-when Python is absent or broken.
+semantics and tool setup have one selected pack owner, unrelated packs keep
+operating when Python is absent or broken, and native ownership remains available
+only to unclaimed paths and capabilities during migration.
 
 ### Phase 5: Consolidate JavaScript and TypeScript
 
@@ -458,10 +586,11 @@ runtime distribution as well as source analysis.
 
 Exit: both native-preservation and provider-enhancement lanes pass; generated
 ownership and non-writability hold across capabilities; nested-only packages
-work; the optional `javascript` selection has an explicit transition; core no
-longer supplies an implicit Node runtime or native JS analysis fallback.
+work; and the optional `javascript` selection has an explicit transition. The
+pack supplies its independent runtime; native JS analysis remains only for
+unclaimed paths and capabilities until the removal release.
 
-### Phase 6: Extract Go completely
+### Phase 6: Build the complete Go pack
 
 Move project/package discovery, gofmt/vet/staticcheck, type/complexity/dead-code
 behavior, source facts, builds, and module/dependency/vulnerability adapters.
@@ -470,15 +599,17 @@ based on the existing platform requirements and prove it with installed fixtures
 
 Exit: all Go rows pass, including build tags, nested modules, workspace policy,
 local replacements, failure handling, and focused scopes. Go may remain the
-engine's implementation language; user-source Go analysis lives solely in its
-pack.
+engine's implementation language; selected user-source Go analysis is wholly
+pack-owned while native ownership remains available only for unclaimed paths and
+capabilities during migration.
 
-### Phase 7: Prove the combined release and remove residue
+### Phase 7: Publish the foundation and prove repository migration
 
-Audit core imports, language switches, schemas/defaults, commands, tool pins,
-installers, assets, docs, test recognition, supply-chain readers, and release
-builders. Remove obsolete native paths and move useful tests to their final
-owners. Preserve generic repository services with direct core-only fixtures.
+Freeze the replacement protocol and authoring kit only after all four packs pass
+their ledgers. Prepare one compatible foundation engine, exact pack set, and
+authenticated catalog. Update permanent docs, schemas, examples, release
+manifests, and website together. Follow the current release checklist and obtain
+the normal explicit publication authorization.
 
 Run all 16 pack-selection subsets as installed smoke tests, with full per-pack
 feature coverage and explicit mixed-language interaction fixtures. Include
@@ -487,12 +618,34 @@ every declared platform, exercise real installed executables and exact tools;
 cross-compilation alone is not runtime evidence. Record unsupported combinations
 honestly rather than silently skipping them.
 
-Exit: every required ledger/platform cell has evidence for the final candidate;
-there are no unexplained differences or hidden native fallbacks; offline setup,
-migration, update/removal, doctor, format/check, CI, and gates agree on identity
-and coverage. Update permanent docs, schemas, examples, release manifests, and
-website for the coherent cutover. Protocol/pack artifacts must be available and
-verified before any authorized public release removes native support.
+Exercise current `upgrade plan` / `upgrade apply` from real pre-foundation locks,
+then run the separate explicit pack-policy migration. Prove interruption and
+rollback at both boundaries. The engine upgrade must neither select packs nor
+edit their pins; the pack migration must not replace the engine lock.
+
+Exit: every required ledger/platform cell has evidence for the foundation
+candidate; exact protocol and pack artifacts are published and verified; and
+representative repositories can migrate and roll back without an authority gap.
+Native implementations still serve only unclaimed paths and capabilities, and no
+selected claim executes both routes.
+
+### Phase 8: Remove native ownership and residue
+
+Audit core imports, language switches, schemas/defaults, commands, tool pins,
+installers, assets, docs, test recognition, supply-chain readers, and release
+builders. Remove native language discovery, tools, source rules, fallbacks, and
+obsolete tests; move useful tests to their final owners. Preserve generic
+repository services with direct core-only fixtures.
+
+Repeat the installed matrix against the removal candidate. Repositories missing
+required packs fail clearly before useful unrelated diagnostics are lost. The
+incoming upgrade plan rejects missing, corrupt, incompatible, or incompletely
+selected packs before lock cutover and reports the exact remediation.
+
+Exit: there are no unexplained differences, language semantics, or hidden native
+fallbacks in core; offline setup, explicit pack migration, doctor, format/check,
+CI, gates, and the removal-release upgrade agree on identity and coverage. Only
+then may an authorized public release remove native support.
 
 ## Verification and delivery rules
 
@@ -501,6 +654,10 @@ change. Add shared conformance and installed smoke suites to their appropriate
 ordinary events; policy declarations alone do not authorize supplemental work.
 The [Verification and Testing Policy](../policies/verification.md) remains the
 owner of test scheduling, artifacts, receipts, and gate reuse.
+
+At each task boundary, use the then-current locked agent workflow, design context,
+and event-selected verification. This plan fixes outcomes and gates, not a stale
+copy of evolving task-start, checkpoint, upgrade, or release commands.
 
 Checkpoint task-owned progress at meaningful milestones. For completed code work
 on the implementation branch, use the locked workflow's checkpoint gate against
@@ -534,5 +691,9 @@ credentialed/live/supplemental probes retain their explicit authorization rules.
 - The core has no migrated language semantics or fallback; shared repository
   services and generic policy continue to work without language packs.
 - Migration and rollback are proven from real pre-migration installations.
+- A pack author can implement and locally certify the public contract without
+  reading core source, and every rejected field identifies its exact constraint.
+- Protocol conformance, capability behavior, framework behavior, format write,
+  and installed product integration have separately attributable evidence.
 - Release surfaces describe one coherent ownership model, supported by exact
   final-candidate evidence rather than a parity claim based on code inspection.

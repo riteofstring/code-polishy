@@ -1,6 +1,8 @@
 # Language-Pack Discovery and Universal Capabilities
 
-Status: proposed; companion protocol direction based on v0.25.0
+Status: proposed replacement-protocol direction; refreshed 2026-09-20 against
+`main` at `c7c83ff00fa57ab91bb63895dd79508641972d41` with locked release
+`v0.27.8`; current pack-contract origin `v0.25.0`
 
 ## Relationship to the first-party migration
 
@@ -8,13 +10,25 @@ The [first-party migration plan](installable-first-party-language-packs.md)
 owns the complete feature inventory, equivalence runner, and extraction sequence
 for shell, Python, JavaScript/TypeScript, and Go. The planning documents were
 incorporated into `main` after v0.25.0; implementation begins on a separate branch,
-and its test framework lands before native implementations are removed.
+and its test framework and authoring contract land before native implementations
+are removed.
 
-The v0.25.0 baseline uses manifest version 2 and protocol version 3.
-This document describes a future contract, not the current wire schema. Preserve
-protocol v3's effective generated-source context, per-capability ownership,
-unit-wide diagnostic authority, focused architecture closure, and restricted
-write targets when moving ecosystem discovery into packs.
+The 2026-09-20 audit found the pack runtime, optional JavaScript provider, pack
+schema, example pack, and authoring guide unchanged from v0.25.0. The current
+contract therefore still uses manifest version 2 and protocol version 3 even
+though the surrounding product is now locked to v0.27.8. This document describes
+a future contract, not the current wire schema. Preserve protocol v3's effective
+generated-source context, per-capability ownership, unit-wide diagnostic
+authority, focused architecture closure, and restricted write targets when
+moving ecosystem discovery into packs.
+
+The same audit confirms that current request construction remains shaped around
+JavaScript package manifests, tsconfig/jsconfig, pnpm/Astro metadata, and
+React-specific lint activation. Current fixture verification always uses check
+mode, and malformed source facts can still collapse several field failures into
+one generic error. Those are active contract limitations, not evidence that the
+broader runtime is frozen. Recheck the delta from the audited revision at each
+implementation task base.
 
 Implement the contract needed by those four existing language groups first.
 The broader ecosystem prototypes below are a separate research track. They are
@@ -56,16 +70,17 @@ execution authority, capability outcomes, and verifiable evidence.
 
 ## Product boundary
 
-| Code Polishy owns                                     | A language pack owns                                   |
-| ----------------------------------------------------- | ------------------------------------------------------ |
-| Exact pack selection and receipt verification         | Recognizing its ecosystem layouts                      |
-| Complete governed file inventory and active selection | Interpreting manifests, locks, and build metadata      |
-| File classifications and repository modules           | Resolving packages, targets, imports, and dependencies |
-| Module dependency direction                           | Running ecosystem-specific tools                       |
-| `scope.data` parse-only and no-rewrite rules          | Producing structured findings and evidence             |
-| Ordinary and supplemental execution boundaries        | Declaring supported capabilities and discovery mode    |
-| Timeouts, isolation, artifacts, reports, and receipts | Declaring any host toolchain requirements              |
-| Checkpoint and merge gates                            | Shipping conformance fixtures                          |
+| Code Polishy owns                                        | A language pack owns                                   |
+| -------------------------------------------------------- | ------------------------------------------------------ |
+| Exact pack selection and receipt verification            | Recognizing its ecosystem layouts                      |
+| Complete governed file inventory and active selection    | Interpreting manifests, locks, and build metadata      |
+| File classifications and repository modules              | Resolving packages, targets, imports, and dependencies |
+| Module dependency direction                              | Running ecosystem-specific tools                       |
+| `scope.data` parse-only and no-rewrite rules             | Producing structured findings and evidence             |
+| Ordinary and supplemental execution boundaries           | Declaring supported capabilities and discovery mode    |
+| Timeouts, isolation, artifacts, reports, and receipts    | Declaring any host toolchain requirements              |
+| Checkpoint and merge gates                               | Shipping conformance fixtures                          |
+| Versioned schemas, production validators, and author kit | Ecosystem examples and capability-specific test cases  |
 
 Language packs remain execution and evidence adapters. Repository services such
 as GitLab CI remain built-in policy. A broader plugin system is a separate
@@ -156,20 +171,24 @@ properties only:
 - canonical paths contained in the supplied inventory;
 - exact per-capability ownership and validated membership/closure evidence for
   the requested diagnostic scope, without granting additional write authority;
-- deterministic ordering and an `analysisScopeDigest`;
+- deterministic canonical scope content and an engine-issued invocation-local
+  scope handle;
 - no unknown fields, extra JSON values, or evidence-free success;
-- no capability result referring to a different scope digest.
+- no capability result referring to a different or unknown scope handle.
 
 Code Polishy does not require a universal `{root, sourceRoots, manifests,
 locks}` project object, exactly-one file ownership, or non-overlapping projects.
 A Cargo adapter may describe workspaces and packages; a Gradle adapter may
 describe builds and projects; a CMake adapter may describe configured targets.
 
-Validated discovery facts and their digest are reused by capabilities sharing
-that discovery input in one engine invocation. Each capability retains its own
-selection, coverage, diagnostic, and write authority; local work need not obtain
-a graph it does not use. Packs may return a concise display summary for
-diagnostics, but the engine does not infer policy from display text.
+Validated discovery facts are reused by reference within one engine invocation;
+the engine does not rehash trusted in-memory state to detect changes. When a
+report or reusable receipt crosses a trust or persistence boundary, core derives
+one canonical evidence identity from the validated scope and records it there.
+Each capability retains its own selection, coverage, diagnostic, and write
+authority; local work need not obtain a graph it does not use. Packs may return
+a concise display summary for diagnostics, but the engine does not infer policy
+from display text.
 
 ### 5. Identify packs by ecosystem provider
 
@@ -231,6 +250,45 @@ artifact, receipt-reuse, final-gate, and suite-deduplication contracts. This
 pack protocol supplies exact inputs to that engine policy; it does not create a
 second scheduler.
 
+### 8. Make pack authoring a supported contract
+
+An author must be able to build and diagnose a pack without reading Go source or
+reverse-engineering the optional JavaScript provider. The replacement contract
+ships one versioned authoring kit with:
+
+- machine-readable schemas for manifests and every request, response, discovery,
+  scope, finding, fact, edit, and evidence document;
+- executable valid and invalid examples for every operation, mode, profile,
+  discovery type, and execution type;
+- language-neutral test vectors or small reference helpers for contained paths,
+  input identities, coverage accounting, diagnostic authority, and dependency
+  closure;
+- a local validator that uses the production decoder and produces stable
+  machine-readable results;
+- field-indexed errors such as `facts.comments[0].kind`, with a bounded offending
+  value and exact expected constraint, while never printing source or environment
+  content unnecessarily.
+
+Mechanically check schemas, examples, validator behavior, and production types in
+one ordinary contract suite so they cannot drift. An SDK for a particular runtime
+is optional; normative schemas and test vectors are not. Do not create a durable
+protocol v3 compatibility SDK. Wire-compatible diagnostic improvements may land
+earlier, while the durable kit cuts over with the replacement protocol.
+
+Keep three certifications distinct:
+
+1. Protocol conformance validates transport and evidence shape.
+2. Capability conformance validates real seeded defects, valid counterexamples,
+   coverage, policy, and ecosystem or framework semantics across each declared
+   supported version and configuration.
+3. Installed integration validates the exact installed identity in representative
+   disposable applications through ordinary product commands, including format
+   check and write, idempotence, unrelated-byte protection, `doctor --strict`, and
+   applicable gates.
+
+Passing one layer never implies another. `pack verify` may orchestrate all three,
+but its result records them separately and states what was not exercised.
+
 ## Scale requirements
 
 Measure the current request, context, per-file, and response bounds against
@@ -261,7 +319,10 @@ shared conformance fixtures from the first-party migration plan. Identify
 capability gaps before extraction, including dependency/build adapters, test and
 portability facts, policy activation, and toolchain distribution. Prove each
 actual project model with small, nested, focused, generated-source, and large-unit
-fixtures.
+fixtures. Record the exact current-main task base and any delta after the audited
+revision. Capture author-facing friction as executable malformed fixtures,
+including ambiguous field errors, check-only format verification, and assumptions
+that require JavaScript package metadata.
 
 For future expansion beyond those languages, build disposable adapters for four
 deliberately different systems:
@@ -288,8 +349,12 @@ migration plan.
    path fields.
 3. Define which standard capabilities are legal for each discovery mode.
 4. Define exact stored approval for evaluated discovery and host toolchains.
-5. Update `docs/adding-a-language.md` with ecosystem-provider guidance and
-   examples for all three modes.
+5. Draft machine-readable schemas for every contract document and mechanically
+   check them against production types without freezing final version numbers.
+6. Define field-indexed error records, stable machine-readable validator output,
+   normative reference vectors, and the three certification layers.
+7. Update `docs/adding-a-language.md` with ecosystem-provider guidance and
+   executable examples for all three modes.
 
 ### Phase 2: Add governed inventory transport
 
@@ -306,10 +371,12 @@ migration plan.
 
 1. Add strict discovery requests, responses, typed failures, and evidence.
 2. Validate returned paths against inventory and enforce resource limits.
-3. Calculate or verify the canonical `analysisScopeDigest`.
-4. Reuse validated discovery facts where inputs match while keeping each
+3. Canonicalize each validated scope once and bind it to an engine-issued
+   invocation-local handle.
+4. Reuse the validated in-memory scope where inputs match while keeping each
    capability's diagnostic and write authority distinct.
-5. Reject capability evidence tied to another digest.
+5. Reject capability evidence tied to another handle; derive a canonical digest
+   only when durable report or receipt evidence requires one.
 6. Keep the scope in memory; do not add persistent caching in this change.
 
 ### Phase 4: Enforce evaluated and host-toolchain authority
@@ -332,7 +399,9 @@ migration plan.
    pack's ecosystem analysis scope.
 4. Make dependency capabilities identify the manifests, locks, or resolved
    graph they actually evaluated without imposing exactly-one ownership.
-5. Extend `pack verify` with mode-specific conformance fixtures.
+5. Extend `pack verify` with mode-specific protocol, capability, and installed
+   integration certification. Exercise format check and write separately and
+   report each layer independently.
 6. Make `doctor --strict` report mode, approval, toolchain, platform, provider
    conflicts, capability coverage, and bounded discovery summaries.
 
@@ -342,14 +411,19 @@ Only after every affected current language passes its declared conformance
 boundary and the reference-versus-pack behavior matrix:
 
 1. freeze the required manifest and protocol schemas with explicit versions;
-2. convert affected fixtures, schemas, CLI help, and permanent documentation;
+2. freeze the authoring kit, error format, examples, CLI help, and permanent
+   documentation from the same production-checked contract;
 3. build and verify exact pack artifacts and their authenticated catalog;
-4. verify migration, install, selection, doctor, format, focused diagnostics,
-   gates, and installed execution on supported platforms;
-5. obtain release authorization before publishing the compatible artifacts and
-   engine as one coherent public cutover;
-6. remove the previous protocol only when every affected supported pack and
-   release surface is ready, without a dual-protocol translation layer.
+4. verify engine upgrade and explicit pack-policy migration as separate
+   transactions, plus install, selection, doctor, format, focused diagnostics,
+   gates, rollback, and installed execution on supported platforms;
+5. obtain release authorization before publishing one compatible foundation
+   engine, pack set, catalog, schemas, and authoring kit;
+6. remove protocol v3 in that foundation release without a translation layer,
+   while retaining native ownership only for paths and capabilities without a
+   selected parity-complete pack;
+7. remove native language ownership only in a later release after migration and
+   rollback evidence proves repositories can reach the pack-backed state.
 
 Future ecosystem prototypes remain necessary evidence for expanding evaluated
 or target-specific support; their completion is not a gate on the four-language
@@ -372,7 +446,8 @@ Add observable boundary coverage for:
 - generated-source effective package ownership and unchanged physical paths;
 - missing packs and invalid metadata preserving unrelated useful diagnostics;
 - canonical paths, links, special files, missing files, and escaping paths;
-- deterministic analysis scopes and cross-capability digest consistency;
+- deterministic analysis scopes, cross-capability scope-handle consistency, and
+  a single durable identity only at report or receipt boundaries;
 - aggregate workspaces, shared locks, overlapping targets, optional locks, and
   conditional configuration;
 - provider conflicts across built-in, repository-owned, and pack-owned checks;
@@ -383,6 +458,10 @@ Add observable boundary coverage for:
 - contained per-execution outputs and exact receipt invalidation after pack,
   discovery, toolchain, source, and unrelated documentation changes;
 - repeated capabilities reusing evidence without duplicate adapter execution;
+- schema/production-decoder drift, unknown fields, wrong casing, invalid
+  locations, oversized text, and collection errors that identify the exact field;
+- protocol, capability, framework, format-write, and installed-integration
+  failures remaining separately attributable;
 - Unix and native Windows behavior for each supported execution type.
 
 Use temporary repositories and fake adapters for ordinary coverage. Credentialed,
@@ -400,11 +479,15 @@ gates.
   own required coverage, diagnostic scope, and write authority.
 - Ecosystem-specific structure stays in the owning pack instead of becoming a
   lossy universal project model.
+- A pack author can implement and locally validate the contract without reading
+  core source, using production-checked schemas, examples, and reference vectors.
+- Validation errors identify the exact field and constraint without leaking
+  unbounded source, request, or environment content.
 - Data safety, supplemental isolation, installation integrity, evidence, and
   gates remain engine-owned and cannot be weakened by a pack.
 - The current four-language migration proves all required discovery and execution
   models through shared conformance fixtures before its protocol cutover.
 - Cargo, Gradle, Bundler, and CMake prove any later claim of support for their
   additional discovery models.
-- Permanent documentation, schema, CLI help, fixtures, and platform checks agree
-  at the public cutover.
+- Permanent documentation, schemas, authoring kit, CLI help, fixtures, and
+  platform checks agree at the public cutover.
