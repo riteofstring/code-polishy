@@ -18,7 +18,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
 
-func TestMergeGateAcceptsPassingFocusedRetryAndRetainsBothAttempts(t *testing.T) {
+func TestMergeGateContinuesAfterPassingFocusedRetryAndRetainsBothAttempts(t *testing.T) {
 	root, report, commandRunner := runIntermittentMergeGate(t)
 	if len(report.Findings) != 0 || report.GateRunPolicy == nil || report.GateRunPolicy.Status != "passed" ||
 		len(report.TestDiagnostics) != 1 || report.TestDiagnostics[0].State != TestDiagnosticIntermittentObserved {
@@ -32,6 +32,10 @@ func TestMergeGateAcceptsPassingFocusedRetryAndRetainsBothAttempts(t *testing.T)
 	if outcome.Status != gaterun.Passed || len(outcome.Attempts) != 2 || outcome.Attempts[0].Status != gaterun.Failed ||
 		outcome.Attempts[1].Status != gaterun.Passed || outcome.Attempts[1].Diagnostic || outcome.ReceiptPath == "" {
 		t.Fatalf("focused outcome = %+v", outcome)
+	}
+	later := readGateCommandOutcome(t, root, report.GateRunPolicy.ReportPath, "later")
+	if later.Status != gaterun.Passed || len(later.Attempts) != 1 {
+		t.Fatalf("later outcome = %+v", later)
 	}
 }
 
@@ -180,8 +184,9 @@ func runIntermittentMergeGate(t *testing.T) (string, Report, *intermittentGateRu
 	}
 	configured := strings.Replace(
 		string(configuration),
-		`"argv":["go","test","./..."]`,
-		`"argv":["go","test","./..."],"retryArgv":["go","test","./...","-run","TestFailed"]`,
+		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."]},`,
+		`{"name":"focused","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./..."],"retryArgv":["go","test","./...","-run","TestFailed"]},
+    {"name":"later","kind":"content","scope":"module","modules":["content"],"argv":["go","test","./later/..."]},`,
 		1,
 	)
 	writeEngineFile(t, root, policy.ConfigFilename, configured, 0o600)

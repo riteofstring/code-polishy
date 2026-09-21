@@ -300,24 +300,39 @@ func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, s
 		return engine.finish(nil, notes), nil
 	}
 	reporter := testpolicy.NewDirectExecutionReporter(engine.Output, plan, engine.Verbose)
-	runSuites := testpolicy.RunWithEvidence
-	if stopAfterFailure {
-		runSuites = testpolicy.RunUntilFailureWithEvidence
+	runResult := testpolicy.RunResult{}
+	testCommands := []TestCommandEvidence{}
+	testDiagnostics := []TestFailureDiagnostic{}
+	if !stopAfterFailure {
+		runResult = testpolicy.RunWithEvidence(ctx, engine.Repository, engine.Runner, plan, reporter)
+		testCommands = engine.testCommandEvidence(plan, selection, runResult.Executions, "working-tree")
+	} else {
+		remaining := plan
+		for len(remaining.Suites) > 0 {
+			batch := testpolicy.RunUntilFailureWithEvidence(ctx, engine.Repository, engine.Runner, remaining, reporter)
+			diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, batch.Executions)
+			batch.Findings = resolveIntermittentTestFindings(batch.Findings, diagnostics)
+			runResult.Findings = append(runResult.Findings, batch.Findings...)
+			runResult.Executions = append(runResult.Executions, batch.Executions...)
+			testCommands = append(testCommands, engine.testCommandEvidence(plan, selection, batch.Executions, "working-tree")...)
+			testCommands = append(testCommands, diagnosticEvidence...)
+			testDiagnostics = append(testDiagnostics, diagnostics...)
+			if len(batch.Findings) > 0 || len(batch.Executions) == 0 {
+				break
+			}
+			remaining.Suites = remaining.Suites[len(batch.Executions):]
+			reporter = nil
+		}
 	}
-	runResult := runSuites(ctx, engine.Repository, engine.Runner, plan, reporter)
 	notes = append(notes, fmt.Sprintf("ran %d test suites", len(plan.Suites)))
 	if provider, ok := engine.Runner.(interface{ ReceiptNotes() []string }); ok {
 		notes = append(notes, provider.ReceiptNotes()...)
 	}
 	report := engine.finish(runResult.Findings, notes)
-	report.TestCommands = engine.testCommandEvidence(plan, selection, runResult.Executions, "working-tree")
+	report.TestCommands = testCommands
 	report.TestAggregations = append([]testpolicy.SuiteAggregation{}, plan.Aggregations...)
 	if stopAfterFailure {
-		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, runResult.Executions)
-		report.TestDiagnostics = diagnostics
-		report.TestCommands = append(report.TestCommands, diagnosticEvidence...)
-		report.Findings = resolveIntermittentTestFindings(report.Findings, diagnostics)
-		report.Summary = summarizeReport(report)
+		report.TestDiagnostics = testDiagnostics
 	}
 	return report, nil
 }

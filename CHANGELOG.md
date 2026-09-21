@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Continue the remaining planned test suites after a passing merge-gate retry
+  instead of advancing to the next phase with an incomplete execution plan.
+
 ## 0.27.9 - 2026-09-21
 
 - Direct implementation agents and architecture reviewers to prefer the
