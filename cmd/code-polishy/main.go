@@ -25,7 +25,7 @@ Commands:
   capabilities [--query TEXT] [--format human|json]
   task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
-  pack <install|verify|root>
+  pack <install|verify|conformance|root>
   agents <install|sync|check>
   lock --index URL --sha256 DIGEST
   upgrade <plan|apply> [options]

@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-ledger-v1.schema.json",
+  "title": "Code Polishy language conformance ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "taskBase",
+    "lockedRelease",
+    "references",
+    "fixtures",
+    "behaviors"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "protocol": { "const": "language-conformance-ledger/v1" },
+    "taskBase": { "$ref": "#/$defs/revision" },
+    "lockedRelease": { "$ref": "#/$defs/version" },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentMain", "immutableOrigin", "optionalProvider"],
+      "properties": {
+        "currentMain": { "$ref": "#/$defs/reference" },
+        "immutableOrigin": { "$ref": "#/$defs/reference" },
+        "optionalProvider": { "$ref": "#/$defs/reference" }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "behaviors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/behavior" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*\\.json$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": ".*\\S.*"
+    },
+    "strings": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "requiredStrings": {
+      "allOf": [{ "$ref": "#/$defs/strings" }],
+      "minItems": 1
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "version"],
+      "properties": {
+        "revision": { "$ref": "#/$defs/revision" },
+        "version": {
+          "anyOf": [{ "const": "" }, { "$ref": "#/$defs/version" }]
+        },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "language",
+        "capability",
+        "guarantee",
+        "currentImplementation",
+        "helpers",
+        "cliRoutes",
+        "policyKeys",
+        "activation",
+        "documentation",
+        "tests",
+        "futureOwner",
+        "boundaryRationale",
+        "fixtures",
+        "commands",
+        "profiles",
+        "modes",
+        "platforms",
+        "status"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "language": { "$ref": "#/$defs/identifier" },
+        "capability": { "$ref": "#/$defs/identifier" },
+        "guarantee": { "$ref": "#/$defs/text" },
+        "currentImplementation": { "$ref": "#/$defs/requiredStrings" },
+        "helpers": { "$ref": "#/$defs/strings" },
+        "cliRoutes": { "$ref": "#/$defs/requiredStrings" },
+        "policyKeys": { "$ref": "#/$defs/strings" },
+        "activation": { "$ref": "#/$defs/requiredStrings" },
+        "documentation": { "$ref": "#/$defs/requiredStrings" },
+        "tests": { "$ref": "#/$defs/requiredStrings" },
+        "futureOwner": { "enum": ["core", "pack", "shared-protocol"] },
+        "boundaryRationale": { "$ref": "#/$defs/text" },
+        "fixtures": { "$ref": "#/$defs/requiredStrings" },
+        "commands": { "$ref": "#/$defs/requiredStrings" },
+        "profiles": { "$ref": "#/$defs/requiredStrings" },
+        "modes": { "$ref": "#/$defs/requiredStrings" },
+        "platforms": { "$ref": "#/$defs/requiredStrings" },
+        "referenceChange": { "$ref": "#/$defs/text" },
+        "status": {
+          "enum": [
+            "untested",
+            "passing",
+            "failing",
+            "blocked",
+            "deliberately-changed"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -37,3 +37,12 @@ var CodePolishyPackRequestV3 []byte
 
 //go:embed code-polishy-pack-response-v3.schema.json
 var CodePolishyPackResponseV3 []byte
+
+//go:embed code-polishy-language-conformance-ledger-v1.schema.json
+var CodePolishyLanguageConformanceLedgerV1 []byte
+
+//go:embed code-polishy-language-conformance-fixture-v1.schema.json
+var CodePolishyLanguageConformanceFixtureV1 []byte
+
+//go:embed code-polishy-language-conformance-report-v1.schema.json
+var CodePolishyLanguageConformanceReportV1 []byte

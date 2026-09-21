@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-report-v1.schema.json",
+  "title": "Code Polishy language conformance report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "protocol",
+    "ledger",
+    "reference",
+    "candidate",
+    "fixtures",
+    "summary"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-report-v1.schema.json"
+    },
+    "protocol": { "const": "language-conformance-report/v1" },
+    "ledger": { "$ref": "#/$defs/evidenceIdentity" },
+    "reference": { "$ref": "#/$defs/executableIdentity" },
+    "candidate": { "$ref": "#/$defs/executableIdentity" },
+    "fixtures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fixtureEvidence" }
+    },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "evidenceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "executableIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "fileIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mode", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "mode": { "type": "string", "pattern": "^[0-7]{4}$" },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exitStatus", "report", "before", "after"],
+      "properties": {
+        "exitStatus": { "type": "integer" },
+        "report": {
+          "$ref": "https://code-polishy.dev/schema/code-polishy-report.schema.json"
+        },
+        "stderr": { "type": "string", "maxLength": 65536 },
+        "before": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fileIdentity" }
+        },
+        "after": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fileIdentity" }
+        }
+      }
+    },
+    "difference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "reference", "candidate"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "maxLength": 1027 },
+        "candidate": { "type": "string", "maxLength": 1027 }
+      }
+    },
+    "fixtureEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "behaviorIds", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "behaviorIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "status": { "enum": ["passed", "failed", "skipped"] },
+        "skipReason": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "reference": { "$ref": "#/$defs/run" },
+        "candidate": { "$ref": "#/$defs/run" },
+        "differences": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/difference" }
+        },
+        "assertionFailures": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "skipped" } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["skipReason"],
+            "not": {
+              "anyOf": [
+                { "required": ["reference"] },
+                { "required": ["candidate"] },
+                { "required": ["differences"] },
+                { "required": ["assertionFailures"] }
+              ]
+            }
+          },
+          "else": {
+            "required": ["reference", "candidate"]
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "passed", "failed", "skipped"],
+      "properties": {
+        "status": { "enum": ["passed", "failed"] },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -11,7 +12,7 @@ import (
 
 func handlePackMeta(invocation invocation) int {
 	if len(invocation.arguments) == 0 {
-		return commandUsageError("pack", "pack requires install, verify, or root")
+		return commandUsageError("pack", "pack requires install, verify, conformance, or root")
 	}
 	action, arguments := invocation.arguments[0], invocation.arguments[1:]
 	switch action {
@@ -19,6 +20,8 @@ func handlePackMeta(invocation invocation) int {
 		return installPack(arguments)
 	case "verify":
 		return verifyPack(arguments, invocation.policyRoot)
+	case "conformance":
+		return runPackConformance(arguments)
 	case "root":
 		return printPackRoot(arguments)
 	default:
@@ -65,6 +68,37 @@ func printPackRoot(arguments []string) int {
 		return operationalError(err)
 	}
 	fmt.Fprintln(os.Stdout, root)
+	return 0
+}
+
+func runPackConformance(arguments []string) int {
+	flags := flag.NewFlagSet("pack conformance", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	ledger := flags.String("ledger", "", "language conformance ledger")
+	reference := flags.String("reference", "", "reference Code Polishy executable")
+	candidate := flags.String("candidate", "", "candidate Code Polishy executable")
+	if err := flags.Parse(arguments); err != nil {
+		return commandUsageError("pack", err.Error())
+	}
+	if flags.NArg() != 0 || *ledger == "" || *reference == "" || *candidate == "" {
+		return commandUsageError("pack", "pack conformance requires --ledger PATH --reference PATH --candidate PATH and no positional arguments")
+	}
+	report, err := pack.RunConformance(context.Background(), pack.ConformanceOptions{
+		LedgerPath:          *ledger,
+		ReferenceExecutable: *reference,
+		CandidateExecutable: *candidate,
+	})
+	if err != nil {
+		return operationalError(err)
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(report); err != nil {
+		return operationalError(err)
+	}
+	if report.Summary.Status == "failed" {
+		return 1
+	}
 	return 0
 }
 

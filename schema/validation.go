@@ -44,18 +44,21 @@ type shippedLoader struct{}
 
 func (shippedLoader) Load(url string) (any, error) {
 	resources := map[string][]byte{
-		ConfigurationBase + "code-polishy-review-snapshot.schema.json":     CodePolishyReviewSnapshot,
-		ConfigurationBase + "code-polishy-architecture-review.schema.json": CodePolishyArchitectureReview,
-		ConfigurationBase + "code-polishy-behavior-review.schema.json":     CodePolishyBehaviorReview,
-		ConfigurationBase + "code-polishy.schema.json":                     CodePolishy,
-		ConfigurationBase + "code-polishy-supply-chain.schema.json":        CodePolishySupplyChain,
-		ConfigurationBase + "code-polishy-python.schema.json":              CodePolishyPython,
-		ConfigurationBase + "code-polishy-git-evidence.schema.json":        CodePolishyGitEvidence,
-		ConfigurationBase + "code-polishy-pack.schema.json":                CodePolishyPack,
-		ConfigurationBase + "code-polishy-pack-request-v3.schema.json":     CodePolishyPackRequestV3,
-		ConfigurationBase + "code-polishy-pack-response-v3.schema.json":    CodePolishyPackResponseV3,
-		"https://code-polishy.dev/schema/code-polishy-report.schema.json":  CodePolishyReport,
-		"https://json.schemastore.org/sarif-2.1.0.json":                    SARIF210,
+		ConfigurationBase + "code-polishy-review-snapshot.schema.json":                 CodePolishyReviewSnapshot,
+		ConfigurationBase + "code-polishy-architecture-review.schema.json":             CodePolishyArchitectureReview,
+		ConfigurationBase + "code-polishy-behavior-review.schema.json":                 CodePolishyBehaviorReview,
+		ConfigurationBase + "code-polishy.schema.json":                                 CodePolishy,
+		ConfigurationBase + "code-polishy-supply-chain.schema.json":                    CodePolishySupplyChain,
+		ConfigurationBase + "code-polishy-python.schema.json":                          CodePolishyPython,
+		ConfigurationBase + "code-polishy-git-evidence.schema.json":                    CodePolishyGitEvidence,
+		ConfigurationBase + "code-polishy-pack.schema.json":                            CodePolishyPack,
+		ConfigurationBase + "code-polishy-pack-request-v3.schema.json":                 CodePolishyPackRequestV3,
+		ConfigurationBase + "code-polishy-pack-response-v3.schema.json":                CodePolishyPackResponseV3,
+		ConfigurationBase + "code-polishy-language-conformance-ledger-v1.schema.json":  CodePolishyLanguageConformanceLedgerV1,
+		ConfigurationBase + "code-polishy-language-conformance-fixture-v1.schema.json": CodePolishyLanguageConformanceFixtureV1,
+		ConfigurationBase + "code-polishy-language-conformance-report-v1.schema.json":  CodePolishyLanguageConformanceReportV1,
+		"https://code-polishy.dev/schema/code-polishy-report.schema.json":              CodePolishyReport,
+		"https://json.schemastore.org/sarif-2.1.0.json":                                SARIF210,
 	}
 	data, exists := resources[url]
 	if !exists {

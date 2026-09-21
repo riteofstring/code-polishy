@@ -9,7 +9,7 @@ import (
 func TestPackHelpAndRootWorkBeforeRepositoryInitialization(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	status, stdout, stderr := captureRunOutput(t, []string{"--repo-root", missing, "pack", "--help"})
-	if status != 0 || stderr != "" || !strings.Contains(stdout, "code-polishy pack install --source PATH") {
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "code-polishy pack install --source PATH") || !strings.Contains(stdout, "code-polishy pack conformance --ledger PATH --reference PATH --candidate PATH") {
 		t.Fatalf("pack help failed: %d %q %q", status, stdout, stderr)
 	}
 	status, stdout, stderr = captureRunOutput(t, []string{"--repo-root", missing, "pack", "root"})
@@ -19,7 +19,7 @@ func TestPackHelpAndRootWorkBeforeRepositoryInitialization(t *testing.T) {
 }
 
 func TestPackRejectsIncompleteAndUnknownActionsBeforeReadingSource(t *testing.T) {
-	for _, arguments := range [][]string{{"pack"}, {"pack", "install"}, {"pack", "verify"}, {"pack", "root", "extra"}, {"pack", "unknown"}} {
+	for _, arguments := range [][]string{{"pack"}, {"pack", "install"}, {"pack", "verify"}, {"pack", "conformance"}, {"pack", "conformance", "--ledger", "ledger.json", "--reference", "reference"}, {"pack", "root", "extra"}, {"pack", "unknown"}} {
 		status, stdout, stderr := captureRunOutput(t, arguments)
 		if status != 2 || stdout != "" || !strings.Contains(stderr, "usage error:") {
 			t.Fatalf("invalid pack action was not a usage failure: %v => %d %q %q", arguments, status, stdout, stderr)

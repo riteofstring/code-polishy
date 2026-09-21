@@ -89,20 +89,22 @@ var commandHelpPages = []commandHelpPage{
 	},
 	{
 		name:    "pack",
-		summary: "Install, verify, or inspect an exact local language pack.",
+		summary: "Install, verify, compare, or inspect exact language-pack behavior.",
 		syntax: []string{
 			"code-polishy pack install --source PATH",
 			"code-polishy pack verify --source PATH",
+			"code-polishy pack conformance --ledger PATH --reference PATH --candidate PATH",
 			"code-polishy pack root",
 		},
 		selectors: []string{
 			"install validates and atomically installs one local source directory.",
 			"verify runs the source directory's declared conformance fixtures without installing it.",
+			"conformance runs identical repositories through exact reference and candidate executables and emits one machine-readable differential report.",
 			"root prints the effective local pack storage root.",
 		},
-		sideEffects: []string{"install writes an immutable content-addressed user-data directory; verify executes declared local adapters; root only reads platform configuration."},
-		exits:       []string{"0 requested action completed", "2 invalid usage, unsafe pack, unavailable integration, or operational failure"},
-		examples:    []string{"code-polishy pack verify --source ./code-polishy-rust", "code-polishy pack install --source ./code-polishy-rust", "code-polishy pack root"},
+		sideEffects: []string{"install writes an immutable content-addressed user-data directory; verify executes declared local adapters; conformance executes both named binaries in disposable repositories; root only reads platform configuration."},
+		exits:       []string{"0 requested action completed or all conformance cases matched", "1 conformance behavior differed", "2 invalid usage, unsafe pack, unavailable integration, or operational failure"},
+		examples:    []string{"code-polishy pack verify --source ./code-polishy-rust", "code-polishy pack conformance --ledger ./tests/language-conformance/ledger.json --reference ./reference/code-polishy --candidate ./candidate/code-polishy", "code-polishy pack install --source ./code-polishy-rust", "code-polishy pack root"},
 	},
 	{
 		name:    "agents",
