@@ -16,6 +16,13 @@ Unsupported work blocks a required capability. An operational failure establishe
 neither facts nor coverage. Conformance requires a passing source fixture and a
 seeded defect with an expected rule for every claimed capability.
 
+The planned replacement contract is a hard release cutover. Its first public
+engine accepts only the replacement manifest and protocol, removes native
+language ownership in the same release, and rejects repositories without exact
+selected packs. It provides no legacy decoder, translator, alias, native fallback,
+dual execution, or automatic pack-pin migration. Migration is an explicit,
+rollback-capable transaction completed before the engine-lock authority cutover.
+
 Requests separate required analysis targets (`files`), permitted diagnostic paths
 (`diagnosticFiles`), and selected format writes (`writeFiles`). Resolved units
 carry package/workspace roots, manifests, configuration paths, governed members,

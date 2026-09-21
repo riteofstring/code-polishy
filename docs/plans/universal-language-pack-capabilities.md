@@ -417,20 +417,20 @@ boundary and the reference-versus-pack behavior matrix:
 4. verify engine upgrade and explicit pack-policy migration as separate
    transactions, plus install, selection, doctor, format, focused diagnostics,
    gates, rollback, and installed execution on supported platforms;
-5. obtain release authorization before publishing one compatible foundation
-   engine, pack set, catalog, schemas, and authoring kit;
-6. remove protocol v3 in that foundation release without a translation layer,
-   while retaining native ownership only for paths and capabilities without a
-   selected parity-complete pack;
-7. remove native language ownership only in a later release after migration and
-   rollback evidence proves repositories can reach the pack-backed state.
+5. prepare but do not publish the exact engine, pack set, catalog, schemas, and
+   authoring kit while any native ownership remains;
+6. remove protocol v3 and native language ownership in the same candidate, with
+   no translation layer, alias, fallback, or automatic pack-pin migration;
+7. obtain release authorization only after migration and rollback evidence proves
+   repositories can make the explicit hard cutover to that candidate.
 
 Future ecosystem prototypes remain necessary evidence for expanding evaluated
 or target-specific support; their completion is not a gate on the four-language
 migration.
 
-No dual-protocol translation layer is planned. Delaying the cutover is cheaper
-than maintaining a permanent compatibility path for an unproven contract.
+No mixed-ownership compatibility release is planned. Development may stage the
+new contract before native removal, but the first public replacement release is
+a hard cutover and accepts only its current manifest and protocol versions.
 
 ## Verification
 

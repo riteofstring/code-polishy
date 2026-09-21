@@ -24,12 +24,12 @@ Use small, reviewable milestones on the implementation branch. Preserve the
 original reference when incorporating later `main` fixes; give each
 behavior-changing fix its own fixture and record any deliberate reference
 update. Do not merge partial native-ownership removal into `main` or advertise
-parity while required cases are uncovered. A foundation release may add the
-complete replacement contract and parity-proven packs while native routes remain
-for unclaimed paths and capabilities; exact selected claims still execute only
-once. This bounded migration state is not a protocol compatibility layer. Public
-ownership cutovers remain coherent even when intermediate branch commits are
-incomplete.
+parity while required cases are uncovered. Intermediate implementation commits
+may stage the replacement contract and packs while native routes still exist,
+but no release may ship that mixed ownership state. The first release carrying
+the replacement protocol also removes native ownership and rejects repositories
+that have not made the explicit pack-policy cutover. There is no compatibility
+release, dual execution, alias, translation layer, or automatic pin migration.
 
 The first deliverable is an executable behavior inventory and a differential
 runner. No native implementation is removed before that runner proves the
@@ -476,29 +476,31 @@ Before removing native support, provide a deliberate repository migration flow:
 6. Demonstrate rollback using the preserved prior engine and configuration, with
    no dual implementation embedded in the new engine.
 
-Use this ordered cutover rather than combining pack migration with an engine-lock
-change:
+Use this ordered cutover without publishing an intermediate compatibility release:
 
 1. Finish and verify the replacement contract, authoring kit, local lifecycle,
    migration preview, and every parity-complete pack before public cutover.
-2. Publish one compatible foundation engine, exact pack set, and authenticated
-   catalog while native implementations remain available for unclaimed paths and
-   capabilities. Replace protocol v3 atomically across affected surfaces; do not
-   add a protocol translation layer. Repositories then explicitly install, verify,
-   and pin the packs. A selected pack owns its exact claims, so native and pack
-   implementations do not both execute them.
-3. Only then publish an engine release that removes native language ownership.
-   Its existing `upgrade plan` must reject an unprepared repository before
-   authority changes and must evaluate the incoming release with the repository's
-   already selected exact packs. `upgrade apply` changes managed guidance,
-   wrappers, and the engine lock with the lock last; it never rewrites pack pins.
+2. Build and authenticate the cutover engine, exact pack set, and catalog without
+   publishing them. Use the incoming candidate to preview and verify the explicit
+   pack-policy migration while the repository lock still names the old engine.
+   Beginning that migration is an intentional hard cutover: the old engine need
+   not continue operating against the new policy, and rollback restores the prior
+   policy before the old engine is used again.
+3. Publish one coordinated breaking release that replaces protocol v3 and removes
+   native language ownership together. Its `upgrade plan` rejects an unprepared
+   repository before authority changes and evaluates the incoming release with the
+   repository's already selected exact packs. `upgrade apply` changes managed
+   guidance, wrappers, and the engine lock with the lock last; it never rewrites
+   pack pins, translates old manifests, or supplies a native fallback.
 
-The old engine never runs a protocol it cannot understand, and incoming migration
-code never mutates repository policy before its lock becomes authoritative. Prove
-interruption and rollback separately for pack-policy migration and for current
-two-phase engine upgrade, starting from a real pre-migration installation. Follow
-the then-current release checklist for publication and lock changes rather than
-freezing that command choreography in this plan.
+The old engine never runs a protocol it cannot understand. Only the user's
+explicit incoming migration command may update pack policy before the engine lock;
+that begins the hard-cutover window in which the repository must either finish
+the engine upgrade or roll the policy back. Prove interruption and rollback
+separately for pack-policy migration and for current two-phase engine upgrade,
+starting from a real pre-migration installation. Follow the then-current release
+checklist for publication and lock changes rather than freezing that command
+choreography in this plan.
 
 Use local authenticated fixture catalogs for development. Artifact publication,
 credentials, and live distribution checks are separate authorized release work.
@@ -603,13 +605,13 @@ engine's implementation language; selected user-source Go analysis is wholly
 pack-owned while native ownership remains available only for unclaimed paths and
 capabilities during migration.
 
-### Phase 7: Publish the foundation and prove repository migration
+### Phase 7: Prepare the cutover and prove repository migration
 
 Freeze the replacement protocol and authoring kit only after all four packs pass
-their ledgers. Prepare one compatible foundation engine, exact pack set, and
-authenticated catalog. Update permanent docs, schemas, examples, release
-manifests, and website together. Follow the current release checklist and obtain
-the normal explicit publication authorization.
+their ledgers. Prepare one cutover engine, exact pack set, and authenticated
+catalog without publishing a mixed native/pack release. Update permanent docs,
+schemas, examples, release manifests, and website together. Publication remains
+separately authorized after native removal and final evidence are complete.
 
 Run all 16 pack-selection subsets as installed smoke tests, with full per-pack
 feature coverage and explicit mixed-language interaction fixtures. Include
@@ -618,16 +620,15 @@ every declared platform, exercise real installed executables and exact tools;
 cross-compilation alone is not runtime evidence. Record unsupported combinations
 honestly rather than silently skipping them.
 
-Exercise current `upgrade plan` / `upgrade apply` from real pre-foundation locks,
+Exercise current `upgrade plan` / `upgrade apply` from real pre-cutover locks,
 then run the separate explicit pack-policy migration. Prove interruption and
 rollback at both boundaries. The engine upgrade must neither select packs nor
 edit their pins; the pack migration must not replace the engine lock.
 
-Exit: every required ledger/platform cell has evidence for the foundation
-candidate; exact protocol and pack artifacts are published and verified; and
+Exit: every required ledger/platform cell has evidence for the unpublished
+cutover candidate; exact protocol and pack artifacts are authenticated; and
 representative repositories can migrate and roll back without an authority gap.
-Native implementations still serve only unclaimed paths and capabilities, and no
-selected claim executes both routes.
+No public release or repository can select both old and replacement protocols.
 
 ### Phase 8: Remove native ownership and residue
 
@@ -637,15 +638,16 @@ builders. Remove native language discovery, tools, source rules, fallbacks, and
 obsolete tests; move useful tests to their final owners. Preserve generic
 repository services with direct core-only fixtures.
 
-Repeat the installed matrix against the removal candidate. Repositories missing
-required packs fail clearly before useful unrelated diagnostics are lost. The
+Remove native ownership in the same candidate prepared by Phase 7, then repeat
+the installed matrix. Repositories missing required packs fail clearly before
+useful unrelated diagnostics are lost. The
 incoming upgrade plan rejects missing, corrupt, incompatible, or incompletely
 selected packs before lock cutover and reports the exact remediation.
 
 Exit: there are no unexplained differences, language semantics, or hidden native
 fallbacks in core; offline setup, explicit pack migration, doctor, format/check,
 CI, gates, and the removal-release upgrade agree on identity and coverage. Only
-then may an authorized public release remove native support.
+then may an authorized public release expose the replacement protocol and packs.
 
 ## Verification and delivery rules
 
