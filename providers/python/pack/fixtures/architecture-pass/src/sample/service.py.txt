@@ -1,0 +1,9 @@
+python-pack-fixture
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .types import Value
+
+
+def identity(value: "Value"):
+    return value

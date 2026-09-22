@@ -594,9 +594,14 @@ CPython comment/docstring/function facts. Discovery now derives Python 3.7–3.1
 targets and source roots from authenticated project metadata, validates locked
 Ruff line length, and withholds only an invalid scope. Ruff uses no cache, format
 writes return only core-authorized edits, type checking covers unchanged scope
-members, and ten built-pack fixtures include target-version and incomplete-config
-evidence. Dead code, architecture, dependency evidence, environment resolution,
-framework contracts, and the shared conformance matrix remain open.
+members, and the pack now returns authored static import facts reconciled with
+Ruff's complete and runtime project graphs. Core retains module direction,
+cycle, and coverage enforcement. Twelve built-pack fixtures include
+target-version, incomplete-config, runtime/type-only/re-export architecture, and
+ambiguous-module evidence. Known computed-import calls fail incomplete instead
+of being guessed. Dead code, computed-import declarations, runtime loaders,
+dependency evidence, environment resolution, framework contracts, focused graph
+closure, and the shared conformance matrix remain open.
 
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python

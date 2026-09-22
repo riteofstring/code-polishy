@@ -1,0 +1,4 @@
+python-pack-fixture
+from .service import identity
+
+__all__ = ["identity"]

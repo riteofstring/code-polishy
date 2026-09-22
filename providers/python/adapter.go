@@ -86,13 +86,13 @@ func validateRequest(value request) error {
 	if value.Operation == "discover" {
 		return nil
 	}
-	if slices.Contains([]string{"lint", "complexity", "typecheck"}, value.Capability) && value.Operation == "check" {
+	if slices.Contains([]string{"lint", "complexity", "typecheck", "architecture"}, value.Capability) && value.Operation == "check" {
 		return nil
 	}
 	if value.Capability == "format" && value.Operation == "format" {
 		return nil
 	}
-	return errors.New("operation and capability must be discover, check/lint, or format/format")
+	return errors.New("operation and capability must be discover, a supported check capability, or format/format")
 }
 
 func (adapter adapter) run(ctx context.Context, request request) response {
@@ -137,7 +137,7 @@ func (adapter adapter) analyze(ctx context.Context, request request) (response, 
 	if err != nil {
 		return response{}, err
 	}
-	if request.Capability == "typecheck" {
+	if slices.Contains([]string{"typecheck", "architecture"}, request.Capability) {
 		groups, err = state.scopeMemberGroups()
 		if err != nil {
 			return response{}, err
@@ -204,6 +204,8 @@ func (state *analysisState) executeCapability(ctx context.Context, adapter adapt
 		return state.complexity(ctx, adapter.ruff, adapter.facts, workspace, groups)
 	case "typecheck":
 		return state.typecheck(ctx, adapter.ty, workspace, groups)
+	case "architecture":
+		return state.architecture(ctx, adapter.ruff, adapter.facts, workspace, groups)
 	default:
 		return fmt.Errorf("unsupported Python capability %s", state.request.Capability)
 	}
@@ -236,7 +238,7 @@ func (state *analysisState) scopeMemberGroups() ([]analysisGroup, error) {
 		groups[index].scope = scope
 		for _, file := range scope.Members {
 			if seen[file] {
-				return nil, fmt.Errorf("python typecheck scopes repeat member %s", file)
+				return nil, fmt.Errorf("python project scopes repeat member %s", file)
 			}
 			seen[file] = true
 			if state.usable(file) {
@@ -433,10 +435,10 @@ func (state *analysisState) finish() response {
 }
 
 func validateTools(request request) error {
-	if slices.Contains([]string{"format", "lint", "complexity"}, request.Capability) && (!hasTool(request.Tools, "ruff", "ruff", "0.16.0") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_RUFF")) == "") {
+	if slices.Contains([]string{"format", "lint", "complexity", "architecture"}, request.Capability) && (!hasTool(request.Tools, "ruff", "ruff", "0.16.0") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_RUFF")) == "") {
 		return errors.New("request does not bind an available Ruff 0.16.0 executable")
 	}
-	if slices.Contains([]string{"lint", "complexity"}, request.Capability) && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
+	if slices.Contains([]string{"lint", "complexity", "architecture"}, request.Capability) && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
 		return errors.New("request does not bind an available CPython 3.12.13+20260728 executable")
 	}
 	if request.Capability == "typecheck" && (!hasTool(request.Tools, "ty", "ty", "0.0.65") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_TY")) == "") {

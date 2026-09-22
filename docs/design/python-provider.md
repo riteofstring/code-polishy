@@ -25,8 +25,22 @@ measurements while CPython supplies matching function depth and parameter
 facts for core-owned limits. `ty` checks every authenticated member of a
 selected project scope and may report diagnostics on unchanged members.
 
-The executable quality slice claims format, lint, complexity, and type checking.
-Dead code, architecture, dependency evidence, project-environment resolution,
-and runtime contracts remain migration work and cannot be inferred from these
-claims. The pack is not eligible for the ownership cutover until every Python
-ledger row has executable evidence.
+Architecture analysis runs Ruff's isolated complete and runtime import graphs
+over every authenticated member of the selected project scope. CPython supplies
+the authored static import site and distinguishes imports guarded by a bound
+`typing.TYPE_CHECKING` name and package re-exports. The adapter reconciles both
+sources, resolves local modules against the most specific authenticated source
+root, and returns runtime, type-only, and re-export facts. Unresolved relative or
+project-local imports remain unresolved facts, and ambiguous module locations
+are findings. Invalid module layouts invalidate their scope. Calls bound to
+`__import__` or `importlib.import_module` remain incomplete until an explicit
+pack declaration can prove their targets; the adapter does not guess from string
+arguments. Core retains module ownership, dependency direction, cycle, and
+coverage enforcement.
+
+The executable quality slice claims format, lint, complexity, type checking,
+and static architecture facts. Dead code, computed imports, runtime loaders,
+dependency evidence, project-environment resolution, and runtime contracts
+remain migration work and cannot be inferred from these claims. The pack is not
+eligible for the ownership cutover until every Python ledger row has executable
+evidence.

@@ -26,7 +26,10 @@ type ruffExecutor interface {
 	format(context.Context, string, analysisScope, string, []byte) ([]byte, error)
 	lint(context.Context, string, analysisScope, []string, map[string]bool) ([]responseFinding, error)
 	complexity(context.Context, string, analysisScope, []string) ([]functionFact, error)
+	graph(context.Context, string, analysisScope, []string, bool) (ruffGraph, error)
 }
+
+type ruffGraph map[string]map[string]bool
 
 type osRuff struct {
 	executable string
@@ -140,6 +143,32 @@ func (runner osRuff) complexity(ctx context.Context, workspace string, scope ana
 		return nil, err
 	}
 	return parseRuffComplexities(workspace, scope, files, output)
+}
+
+func (runner osRuff) graph(ctx context.Context, workspace string, scope analysisScope, files []string, typeChecking bool) (ruffGraph, error) {
+	if err := runner.validate(); err != nil {
+		return nil, err
+	}
+	directory, relative, _, err := ruffFiles(workspace, scope, files)
+	if err != nil {
+		return nil, err
+	}
+	options, err := ruffOptions(scope)
+	if err != nil {
+		return nil, err
+	}
+	arguments := []string{"analyze", "graph", "--quiet", "--isolated"}
+	arguments = append(arguments, options...)
+	flag := "--no-type-checking-imports"
+	if typeChecking {
+		flag = "--type-checking-imports"
+	}
+	arguments = append(arguments, flag, "--")
+	output, err := executeTool(ctx, runner.executable, directory, append(arguments, relative...), nil)
+	if err != nil {
+		return nil, err
+	}
+	return parseRuffGraph(workspace, scope, files, output)
 }
 
 func (runner osRuff) validate() error {
@@ -322,6 +351,79 @@ func parseRuffComplexities(workspace string, scope analysisScope, files []string
 		functions = append(functions, function)
 	}
 	return functions, nil
+}
+
+func parseRuffGraph(workspace string, scope analysisScope, files []string, data []byte) (ruffGraph, error) {
+	raw, err := decodeRuffGraph(data)
+	if err != nil {
+		return nil, err
+	}
+	graph, err := canonicalRuffGraph(workspace, scope, files, raw)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if graph[file] == nil {
+			return nil, fmt.Errorf("ruff graph omitted Python source %s", file)
+		}
+	}
+	return graph, nil
+}
+
+func decodeRuffGraph(data []byte) (map[string][]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	raw := map[string][]string{}
+	if err := decoder.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decode ruff graph: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, errors.New("ruff graph contains more than one JSON value")
+	}
+	if len(raw) > 10000 {
+		return nil, errors.New("ruff graph exceeds 10000 sources")
+	}
+	return raw, nil
+}
+
+func canonicalRuffGraph(workspace string, scope analysisScope, files []string, raw map[string][]string) (ruffGraph, error) {
+	allowedSources := factAllowedPaths(files)
+	allowedTargets := factAllowedPaths(scope.Members)
+	graph := ruffGraph{}
+	edges := 0
+	for rawSource, rawTargets := range raw {
+		count, err := addRuffGraphEntry(workspace, scope, graph, allowedSources, allowedTargets, rawSource, rawTargets)
+		if err != nil {
+			return nil, err
+		}
+		edges += count
+		if edges > 20000 {
+			return nil, errors.New("ruff graph exceeds 20000 imports")
+		}
+	}
+	return graph, nil
+}
+
+func addRuffGraphEntry(workspace string, scope analysisScope, graph ruffGraph, allowedSources, allowedTargets map[string]bool, rawSource string, rawTargets []string) (int, error) {
+	source, err := ruffResultPath(workspace, scope, rawSource)
+	if err != nil {
+		return 0, err
+	}
+	if !allowedSources[source] || graph[source] != nil || rawTargets == nil {
+		return 0, fmt.Errorf("ruff graph returned an unexpected source %s", source)
+	}
+	graph[source] = map[string]bool{}
+	for _, rawTarget := range rawTargets {
+		target, pathErr := ruffResultPath(workspace, scope, rawTarget)
+		if pathErr != nil {
+			return 0, pathErr
+		}
+		if !allowedTargets[target] || graph[source][target] {
+			return 0, fmt.Errorf("ruff graph returned an invalid target %s", target)
+		}
+		graph[source][target] = true
+	}
+	return len(rawTargets), nil
 }
 
 func ruffComplexity(workspace string, scope analysisScope, diagnostic ruffDiagnostic, allowed map[string]bool) (functionFact, error) {

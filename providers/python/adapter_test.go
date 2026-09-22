@@ -13,10 +13,13 @@ import (
 )
 
 type fakeRuff struct {
-	formatted map[string][]byte
-	findings  []responseFinding
-	functions []functionFact
-	err       error
+	formatted     map[string][]byte
+	findings      []responseFinding
+	functions     []functionFact
+	completeGraph ruffGraph
+	runtimeGraph  ruffGraph
+	graphFiles    *[]string
+	err           error
 }
 
 func (ruff fakeRuff) format(_ context.Context, _ string, _ analysisScope, file string, source []byte) ([]byte, error) {
@@ -35,6 +38,16 @@ func (ruff fakeRuff) lint(context.Context, string, analysisScope, []string, map[
 
 func (ruff fakeRuff) complexity(context.Context, string, analysisScope, []string) ([]functionFact, error) {
 	return slices.Clone(ruff.functions), ruff.err
+}
+
+func (ruff fakeRuff) graph(_ context.Context, _ string, _ analysisScope, files []string, typeChecking bool) (ruffGraph, error) {
+	if ruff.graphFiles != nil {
+		*ruff.graphFiles = slices.Clone(files)
+	}
+	if typeChecking {
+		return ruff.completeGraph, ruff.err
+	}
+	return ruff.runtimeGraph, ruff.err
 }
 
 type fakeFacts struct {
@@ -89,6 +102,10 @@ func (facts fakeFacts) functions(context.Context, string, []string) (factResult,
 	return facts.result, facts.err
 }
 
+func (facts fakeFacts) imports(context.Context, string, []string) (factResult, error) {
+	return facts.result, facts.err
+}
+
 func TestDiscoverySelectsTheNearestPythonProject(t *testing.T) {
 	t.Parallel()
 	request := request{
@@ -127,6 +144,25 @@ func TestDiscoveryRejectsSelectedSourceWithoutAProject(t *testing.T) {
 	}, fakeProject{})
 	if result.Status != "operational-failure" || !strings.Contains(result.Failure, "no contained pyproject.toml") {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestDiscoveryMarksUnsupportedPythonModuleLayoutsInvalid(t *testing.T) {
+	t.Parallel()
+	request := request{
+		Provider: "pack.python.analyze.lint", Files: []string{"src/bad-name.py"},
+		Inventory: []inventoryEntry{
+			{Path: "pyproject.toml", Metadata: true},
+			{Path: "src/bad-name.py", Language: "python", Source: true, Owner: "pack.python.analyze.lint"},
+		},
+	}
+	result := discover(context.Background(), request, fakeProject{})
+	if result.Status != "pass" || result.Discovery == nil || len(result.Discovery.Scopes) != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+	data, err := decodePythonScopeData(result.Discovery.Scopes[0].Data)
+	if err != nil || len(data.Problems) != 1 || data.Problems[0].Path != "src/bad-name.py" {
+		t.Fatalf("scope data = %+v, err = %v", data, err)
 	}
 }
 
@@ -227,6 +263,71 @@ func TestTypecheckAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
 	}
 }
 
+func TestArchitectureReturnsResolvedRuntimeImportFactsForTheCompleteProjectScope(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "architecture", []byte("from helper import value\n"))
+	helper := []byte("value = 1\n")
+	writePythonTestInput(t, root, &request, "src/helper.py", helper)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/helper.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/helper.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/helper.py")
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	complete := ruffGraph{"src/app.py": {"src/helper.py": true}, "src/helper.py": {}}
+	runtime := ruffGraph{"src/app.py": {"src/helper.py": true}, "src/helper.py": {}}
+	authored := authoredImport{Path: "src/app.py", Module: "helper", Names: []string{"value"}, Line: 1, Column: 1, Kind: "runtime"}
+	checked := []string{}
+	adapter := adapter{
+		ruff:  fakeRuff{completeGraph: complete, runtimeGraph: runtime, graphFiles: &checked},
+		facts: fakeFacts{result: factResult{Imports: []authoredImport{authored}, Failures: map[string]string{}}},
+	}
+	result := adapter.run(context.Background(), request)
+	want := importFact{Path: "src/app.py", Line: 1, Column: 1, Specifier: "helper", Resolved: "src/helper.py", Kind: "runtime"}
+	if result.Status != "pass" || result.Facts == nil || result.Facts.Imports == nil || !slices.Equal(*result.Facts.Imports, []importFact{want}) {
+		t.Fatalf("result = %+v", result)
+	}
+	if !slices.Equal(checked, []string{"src/app.py", "src/helper.py"}) || !slices.Equal(result.Coverage.Analyzed, checked) {
+		t.Fatalf("coverage = %+v, checked = %v", result.Coverage, checked)
+	}
+}
+
+func TestArchitectureRejectsComputedImportsUntilDeclarationsAreSupported(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "architecture", []byte("__import__(name)\n"))
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	dynamic := dynamicImport{Path: "src/app.py", Line: 1, Column: 1, Callee: "__import__"}
+	adapter := adapter{ruff: fakeRuff{}, facts: fakeFacts{result: factResult{DynamicImports: []dynamicImport{dynamic}, Failures: map[string]string{}}}}
+	result := adapter.run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "explicit pack declaration") {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestPythonImportResolutionPreservesTypeOnlyAndReExportKinds(t *testing.T) {
+	t.Parallel()
+	scope := analysisScope{
+		Root: ".", Members: []string{"src/pkg/__init__.py", "src/pkg/model.py", "src/pkg/types.py"},
+		Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"problems":[]}`),
+	}
+	imports := []authoredImport{
+		{Path: "src/pkg/__init__.py", Module: ".types", Names: []string{"Thing"}, Line: 1, Column: 1, Kind: "re-export"},
+		{Path: "src/pkg/model.py", Module: "pkg.types", Names: []string{"Thing"}, Line: 2, Column: 5, Kind: "type-only"},
+	}
+	complete := ruffGraph{
+		"src/pkg/__init__.py": {"src/pkg/types.py": true},
+		"src/pkg/model.py":    {"src/pkg/types.py": true},
+	}
+	runtime := ruffGraph{"src/pkg/__init__.py": {"src/pkg/types.py": true}, "src/pkg/model.py": {}}
+	result, err := resolvePythonImports(scope, []string{"src/pkg/__init__.py", "src/pkg/model.py"}, imports, complete, runtime)
+	if err != nil || len(result.failures) != 0 || len(result.facts) != 2 {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	if result.facts[0].Kind != "re-export" || result.facts[1].Kind != "type-only" {
+		t.Fatalf("facts = %+v", result.facts)
+	}
+}
+
 func TestDecodeRequestRejectsUnknownFieldsAndTrailingDocuments(t *testing.T) {
 	t.Parallel()
 	if _, err := decodeRequest(strings.NewReader(`{"protocolVersion":4,"operation":"discover","unknown":true}`)); err == nil {
@@ -283,7 +384,7 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 	case "format":
 		operation = "format"
 		tools = append(tools, toolIdentity{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)})
-	case "lint", "complexity":
+	case "lint", "complexity", "architecture":
 		tools = append(tools,
 			toolIdentity{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)},
 			toolIdentity{ID: "python", Name: "python", Version: "3.12.13+20260728", SHA256: strings.Repeat("b", 64)},

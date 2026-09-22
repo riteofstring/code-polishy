@@ -8,7 +8,9 @@ import sys
 import tokenize
 
 LIMIT = 65536
-ENCODING = re.compile(r"^#[ \t]*(?:-\*-[ \t]*)?coding[:=][ \t]*[-_.A-Za-z0-9]+[ \t]*(?:-\*-[ \t]*)?$")
+ENCODING = re.compile(
+    r"^#[ \t]*(?:-\*-[ \t]*)?coding[:=][ \t]*[-_.A-Za-z0-9]+[ \t]*(?:-\*-[ \t]*)?$"
+)
 
 
 def starts(data):
@@ -62,7 +64,10 @@ def comment_tokens(path, data, text, line_starts):
     for token in tokens:
         row, column = token.start
         if row > 0 and token.type not in ignored:
-            first_code = min(first_code, offset_at(line_starts, row, byte_column(lines, row, column) - 1))
+            first_code = min(
+                first_code,
+                offset_at(line_starts, row, byte_column(lines, row, column) - 1),
+            )
         if token.type != tokenize.COMMENT:
             continue
         column_bytes = byte_column(lines, row, column)
@@ -80,7 +85,8 @@ def comment_tokens(path, data, text, line_starts):
                 "beforeCode": offset < first_code,
                 "preamble": False,
                 "byteZero": offset == 0,
-                "machineDirective": complete and machine_directive(raw, row, offset, data, lines),
+                "machineDirective": complete
+                and machine_directive(raw, row, offset, data, lines),
                 "_offset": offset,
             }
         )
@@ -94,7 +100,11 @@ def docstrings(path, data, tree, line_starts, first_code):
         if not isinstance(scope, scope_types) or not scope.body:
             continue
         statement = scope.body[0]
-        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Constant) or not isinstance(statement.value.value, str):
+        if (
+            not isinstance(statement, ast.Expr)
+            or not isinstance(statement.value, ast.Constant)
+            or not isinstance(statement.value.value, str)
+        ):
             continue
         value = statement.value
         start = offset_at(line_starts, value.lineno, value.col_offset)
@@ -118,9 +128,303 @@ def docstrings(path, data, tree, line_starts, first_code):
     return result
 
 
+def function_arguments(node):
+    result = (
+        list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
+    )
+    if node.args.vararg is not None:
+        result.append(node.args.vararg)
+    if node.args.kwarg is not None:
+        result.append(node.args.kwarg)
+    return result
+
+
+def function_defaults(node):
+    return list(node.args.defaults) + [
+        value for value in node.args.kw_defaults if value is not None
+    ]
+
+
+class ImportVisitor(ast.NodeVisitor):
+    def __init__(self, path):
+        self.path = path
+        self.imports = []
+        self.dynamic_imports = []
+        self.type_only = 0
+        self.bindings = [{"__import__": "__import__"}]
+
+    def import_kind(self):
+        if self.type_only or self.path.endswith(".pyi"):
+            return "type-only"
+        if self.path.endswith("/__init__.py") or self.path == "__init__.py":
+            return "re-export"
+        return "runtime"
+
+    def bind(self, name, value):
+        self.bindings[-1][name] = value
+
+    def shadow(self, name):
+        self.bindings[-1][name] = ""
+
+    def visit_target(self, target):
+        if isinstance(target, ast.Name):
+            self.shadow(target.id)
+        elif isinstance(target, ast.Starred):
+            self.visit_target(target.value)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for item in target.elts:
+                self.visit_target(item)
+        else:
+            self.visit(target)
+
+    def visit_Import(self, node):
+        for item in node.names:
+            self.imports.append(
+                {
+                    "path": self.path,
+                    "module": item.name,
+                    "names": [],
+                    "line": node.lineno,
+                    "column": node.col_offset + 1,
+                    "kind": self.import_kind(),
+                }
+            )
+            bound = item.asname or item.name.split(".")[0]
+            canonical = item.name if item.asname else item.name.split(".")[0]
+            self.bind(bound, canonical)
+
+    def visit_ImportFrom(self, node):
+        module = "." * node.level + (node.module or "")
+        self.imports.append(
+            {
+                "path": self.path,
+                "module": module,
+                "names": [item.name for item in node.names],
+                "line": node.lineno,
+                "column": node.col_offset + 1,
+                "kind": self.import_kind(),
+            }
+        )
+        if any(item.name == "*" for item in node.names):
+            for name in list(self.bindings[-1]):
+                self.shadow(name)
+            return
+        known = {
+            ("builtins", "__import__"): "__import__",
+            ("importlib", "import_module"): "importlib.import_module",
+            ("typing", "TYPE_CHECKING"): "typing.TYPE_CHECKING",
+        }
+        for item in node.names:
+            bound = item.asname or item.name
+            self.shadow(bound)
+            canonical = known.get((node.module, item.name)) if node.level == 0 else None
+            if canonical:
+                self.bind(bound, canonical)
+
+    def visit_If(self, node):
+        self.visit(node.test)
+        if self.callee(node.test) == "typing.TYPE_CHECKING":
+            self.type_only += 1
+            for statement in node.body:
+                self.visit(statement)
+            self.type_only -= 1
+            for statement in node.orelse:
+                self.visit(statement)
+            return
+        for statement in node.body:
+            self.visit(statement)
+        for statement in node.orelse:
+            self.visit(statement)
+
+    def visit_Call(self, node):
+        callee = self.callee(node.func)
+        if callee == "builtins.__import__":
+            callee = "__import__"
+        if callee in {"__import__", "importlib.import_module"}:
+            self.dynamic_imports.append(
+                {
+                    "path": self.path,
+                    "line": node.lineno,
+                    "column": node.col_offset + 1,
+                    "callee": callee,
+                }
+            )
+        self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        self.visit(node.value)
+        for target in node.targets:
+            self.visit_target(target)
+
+    def visit_AnnAssign(self, node):
+        self.visit(node.annotation)
+        if node.value is not None:
+            self.visit(node.value)
+        self.visit_target(node.target)
+
+    def visit_NamedExpr(self, node):
+        self.visit(node.value)
+        self.visit_target(node.target)
+
+    def visit_AugAssign(self, node):
+        if not isinstance(node.target, ast.Name):
+            self.visit(node.target)
+        self.visit(node.value)
+        self.visit_target(node.target)
+
+    def visit_Delete(self, node):
+        for target in node.targets:
+            self.visit_target(target)
+
+    def visit_for(self, node):
+        self.visit(node.iter)
+        self.visit_target(node.target)
+        for statement in node.body:
+            self.visit(statement)
+        for statement in node.orelse:
+            self.visit(statement)
+
+    def visit_For(self, node):
+        self.visit_for(node)
+
+    def visit_AsyncFor(self, node):
+        self.visit_for(node)
+
+    def visit_with(self, node):
+        for item in node.items:
+            self.visit(item.context_expr)
+            if item.optional_vars is not None:
+                self.visit_target(item.optional_vars)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_With(self, node):
+        self.visit_with(node)
+
+    def visit_AsyncWith(self, node):
+        self.visit_with(node)
+
+    def visit_ExceptHandler(self, node):
+        if node.type is not None:
+            self.visit(node.type)
+        if node.name is not None:
+            self.shadow(node.name)
+        for statement in node.body:
+            self.visit(statement)
+
+    def callee(self, node):
+        if isinstance(node, ast.Name):
+            for bindings in reversed(self.bindings):
+                if node.id in bindings:
+                    return bindings[node.id]
+            return ""
+        if isinstance(node, ast.Attribute):
+            base = self.callee(node.value)
+            if base:
+                return base + "." + node.attr
+        return ""
+
+    def visit_function_signature(self, node):
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for argument in function_arguments(node):
+            if argument.annotation is not None:
+                self.visit(argument.annotation)
+        for default in function_defaults(node):
+            self.visit(default)
+        if node.returns is not None:
+            self.visit(node.returns)
+        for type_parameter in getattr(node, "type_params", []):
+            self.visit(type_parameter)
+
+    def visit_callable_body(self, body, bindings):
+        self.bindings.append(bindings)
+        for statement in body:
+            self.visit(statement)
+        self.bindings.pop()
+
+    def visit_function(self, node):
+        self.visit_function_signature(node)
+        bindings = dict(self.bindings[-1])
+        bindings[node.name] = ""
+        for argument in function_arguments(node):
+            bindings[argument.arg] = ""
+        self.visit_callable_body(node.body, bindings)
+        self.shadow(node.name)
+
+    def visit_FunctionDef(self, node):
+        self.visit_function(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        self.visit_function(node)
+
+    def visit_ClassDef(self, node):
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for base in node.bases:
+            self.visit(base)
+        for keyword_argument in node.keywords:
+            self.visit(keyword_argument.value)
+        for type_parameter in getattr(node, "type_params", []):
+            self.visit(type_parameter)
+        self.bindings.append(dict(self.bindings[-1]))
+        for statement in node.body:
+            self.visit(statement)
+        self.bindings.pop()
+        self.shadow(node.name)
+
+    def visit_Lambda(self, node):
+        for default in function_defaults(node):
+            self.visit(default)
+        bindings = dict(self.bindings[-1])
+        for argument in function_arguments(node):
+            bindings[argument.arg] = ""
+        self.bindings.append(bindings)
+        self.visit(node.body)
+        self.bindings.pop()
+
+    def visit_comprehension(self, node, outputs):
+        self.bindings.append(dict(self.bindings[-1]))
+        for generator in node.generators:
+            self.visit(generator.iter)
+            self.visit_target(generator.target)
+            for condition in generator.ifs:
+                self.visit(condition)
+        for output in outputs:
+            self.visit(output)
+        self.bindings.pop()
+
+    def visit_ListComp(self, node):
+        self.visit_comprehension(node, [node.elt])
+
+    def visit_SetComp(self, node):
+        self.visit_comprehension(node, [node.elt])
+
+    def visit_GeneratorExp(self, node):
+        self.visit_comprehension(node, [node.elt])
+
+    def visit_DictComp(self, node):
+        self.visit_comprehension(node, [node.key, node.value])
+
+
+def authored_imports(path, tree):
+    visitor = ImportVisitor(path)
+    visitor.visit(tree)
+    return visitor.imports, visitor.dynamic_imports
+
+
 def function_depth(function):
     boundaries = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
-    controls = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith, ast.Match)
+    controls = (
+        ast.If,
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.Try,
+        ast.With,
+        ast.AsyncWith,
+        ast.Match,
+    )
     maximum = 0
 
     def visit(node, depth):
@@ -139,7 +443,13 @@ def function_depth(function):
 
 def function_parameters(function):
     arguments = function.args
-    return len(arguments.posonlyargs) + len(arguments.args) + len(arguments.kwonlyargs) + int(arguments.vararg is not None) + int(arguments.kwarg is not None)
+    return (
+        len(arguments.posonlyargs)
+        + len(arguments.args)
+        + len(arguments.kwonlyargs)
+        + int(arguments.vararg is not None)
+        + int(arguments.kwarg is not None)
+    )
 
 
 def functions(path, data, tree, line_starts):
@@ -180,16 +490,30 @@ def inspect(path):
     for index, item in enumerate(comments):
         item["preamble"] = index == 0 and not data[: item["_offset"]].strip()
         del item["_offset"]
-    return comments, functions(path, data, tree, line_starts)
+    imports, dynamic_imports = authored_imports(path, tree)
+    return comments, functions(path, data, tree, line_starts), imports, dynamic_imports
 
 
 request = json.load(sys.stdin)
-response = {"comments": [], "functions": [], "failures": []}
+response = {
+    "comments": [],
+    "functions": [],
+    "imports": [],
+    "dynamicImports": [],
+    "failures": [],
+}
 for source in request["files"]:
     try:
-        comments, metrics = inspect(source)
+        comments, metrics, imports, dynamic_imports = inspect(source)
         response["comments"].extend(comments)
         response["functions"].extend(metrics)
+        response["imports"].extend(imports)
+        response["dynamicImports"].extend(dynamic_imports)
     except (OSError, UnicodeError, SyntaxError, tokenize.TokenError) as error:
-        response["failures"].append({"path": source, "reason": f"Python source facts require valid syntax: {error}"})
+        response["failures"].append(
+            {
+                "path": source,
+                "reason": f"Python source facts require valid syntax: {error}",
+            }
+        )
 json.dump(response, sys.stdout, sort_keys=True, separators=(",", ":"))

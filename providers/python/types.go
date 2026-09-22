@@ -127,8 +127,35 @@ type unsupported struct {
 }
 
 type sourceFacts struct {
+	Imports   *[]importFact   `json:"imports,omitempty"`
 	Comments  *[]commentFact  `json:"comments,omitempty"`
 	Functions *[]functionFact `json:"functions,omitempty"`
+}
+
+type importFact struct {
+	Path      string `json:"path"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	Specifier string `json:"specifier"`
+	Resolved  string `json:"resolved"`
+	Package   string `json:"package"`
+	Kind      string `json:"kind"`
+}
+
+type authoredImport struct {
+	Path   string   `json:"path"`
+	Module string   `json:"module"`
+	Names  []string `json:"names"`
+	Line   int      `json:"line"`
+	Column int      `json:"column"`
+	Kind   string   `json:"kind"`
+}
+
+type dynamicImport struct {
+	Path   string `json:"path"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Callee string `json:"callee"`
 }
 
 type commentFact struct {

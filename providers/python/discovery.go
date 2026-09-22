@@ -174,9 +174,14 @@ func (value pythonDiscovery) scope(manifest string, project projectFact) (discov
 	if project.Manifest != manifest {
 		return discoveredScope{}, fmt.Errorf("python project facts omitted %s", manifest)
 	}
+	sourceRoots := pythonSourceRoots(projectRoot(manifest), members, project.BackendPaths)
+	problems := slices.Clone(project.Problems)
+	if len(problems) == 0 {
+		problems = pythonModuleProblems(sourceRoots, members)
+	}
 	data, err := json.Marshal(pythonScopeData{
 		Manifest: manifest, RequiresPython: project.RequiresPython, TargetVersion: project.TargetVersion,
-		SourceRoots: pythonSourceRoots(projectRoot(manifest), members, project.BackendPaths), Problems: project.Problems,
+		SourceRoots: sourceRoots, Problems: problems,
 	})
 	if err != nil {
 		return discoveredScope{}, err
@@ -185,6 +190,15 @@ func (value pythonDiscovery) scope(manifest string, project projectFact) (discov
 		ID: "python:" + manifest, Language: "python", Root: projectRoot(manifest), Members: members,
 		EntryFiles: pythonEntryFiles(members, selected), Context: uniqueSorted(context), Selected: uniqueSorted(selected), Data: data,
 	}, nil
+}
+
+func pythonModuleProblems(sourceRoots, members []string) []projectProblem {
+	for _, member := range members {
+		if _, err := pythonModuleName(sourceRoots, member); err != nil {
+			return []projectProblem{{Path: member, Message: "Python project layout is unsupported: " + err.Error()}}
+		}
+	}
+	return []projectProblem{}
 }
 
 func pythonSourceRoots(root string, members, backendPaths []string) []string {

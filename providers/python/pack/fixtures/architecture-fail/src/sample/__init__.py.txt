@@ -1,0 +1,2 @@
+python-pack-fixture
+VALUE = 2

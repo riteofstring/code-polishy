@@ -10,12 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 type factExecutor interface {
 	comments(context.Context, string, []string) (factResult, error)
 	functions(context.Context, string, []string) (factResult, error)
+	imports(context.Context, string, []string) (factResult, error)
 }
 
 type osPythonFacts struct {
@@ -24,9 +26,11 @@ type osPythonFacts struct {
 }
 
 type factResult struct {
-	Comments  []commentFact
-	Functions []functionFact
-	Failures  map[string]string
+	Comments       []commentFact
+	Functions      []functionFact
+	Imports        []authoredImport
+	DynamicImports []dynamicImport
+	Failures       map[string]string
 }
 
 type factRequest struct {
@@ -34,9 +38,11 @@ type factRequest struct {
 }
 
 type factResponse struct {
-	Comments  []commentFact  `json:"comments"`
-	Functions []functionFact `json:"functions"`
-	Failures  []factFailure  `json:"failures"`
+	Comments       []commentFact    `json:"comments"`
+	Functions      []functionFact   `json:"functions"`
+	Imports        []authoredImport `json:"imports"`
+	DynamicImports []dynamicImport  `json:"dynamicImports"`
+	Failures       []factFailure    `json:"failures"`
 }
 
 type factFailure struct {
@@ -49,6 +55,10 @@ func (runner osPythonFacts) comments(ctx context.Context, workspace string, file
 }
 
 func (runner osPythonFacts) functions(ctx context.Context, workspace string, files []string) (factResult, error) {
+	return runner.inspect(ctx, workspace, files)
+}
+
+func (runner osPythonFacts) imports(ctx context.Context, workspace string, files []string) (factResult, error) {
 	return runner.inspect(ctx, workspace, files)
 }
 
@@ -113,7 +123,15 @@ func parseFactResponse(data []byte, files []string) (factResult, error) {
 	if err != nil {
 		return factResult{}, err
 	}
-	return factResult{Comments: comments, Functions: functions, Failures: failures}, nil
+	imports, err := validatedAuthoredImports(value.Imports, allowed, failures)
+	if err != nil {
+		return factResult{}, err
+	}
+	dynamic, err := validatedDynamicImports(value.DynamicImports, allowed, failures)
+	if err != nil {
+		return factResult{}, err
+	}
+	return factResult{Comments: comments, Functions: functions, Imports: imports, DynamicImports: dynamic, Failures: failures}, nil
 }
 
 func decodeFactResponse(data []byte) (factResponse, error) {
@@ -175,4 +193,53 @@ func validatedFactFunctions(values []functionFact, allowed map[string]bool, fail
 		functions = append(functions, function)
 	}
 	return functions, nil
+}
+
+func validatedAuthoredImports(values []authoredImport, allowed map[string]bool, failures map[string]string) ([]authoredImport, error) {
+	imports := []authoredImport{}
+	if values == nil || len(values) > 20000 {
+		return nil, errors.New("python source facts exceed 20000 imports")
+	}
+	for _, value := range values {
+		if !allowed[value.Path] || failures[value.Path] != "" {
+			continue
+		}
+		if err := validateAuthoredImport(value); err != nil {
+			return nil, err
+		}
+		imports = append(imports, value)
+	}
+	return imports, nil
+}
+
+func validatedDynamicImports(values []dynamicImport, allowed map[string]bool, failures map[string]string) ([]dynamicImport, error) {
+	if values == nil || len(values) > 20000 {
+		return nil, errors.New("python source facts contain an invalid computed-import collection")
+	}
+	result := []dynamicImport{}
+	for _, value := range values {
+		if !allowed[value.Path] || failures[value.Path] != "" {
+			continue
+		}
+		if value.Line < 1 || value.Column < 1 || !slices.Contains([]string{"__import__", "importlib.import_module"}, value.Callee) {
+			return nil, errors.New("python source facts contain an invalid computed import")
+		}
+		result = append(result, value)
+	}
+	return result, nil
+}
+
+func validateAuthoredImport(value authoredImport) error {
+	if value.Line < 1 || value.Column < 1 || strings.TrimSpace(value.Module) == "" || len(value.Module) > 4096 || value.Names == nil || !slices.Contains([]string{"runtime", "type-only", "re-export"}, value.Kind) {
+		return errors.New("python source facts contain an invalid import")
+	}
+	if len(value.Names) > 1024 {
+		return errors.New("python source facts contain an import with too many names")
+	}
+	if slices.ContainsFunc(value.Names, func(name string) bool {
+		return strings.TrimSpace(name) == "" || len(name) > 1024
+	}) {
+		return errors.New("python source facts contain an invalid imported name")
+	}
+	return nil
 }
