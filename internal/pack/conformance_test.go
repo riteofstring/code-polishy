@@ -633,7 +633,7 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 24 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
+	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 25 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
 		t.Fatalf("inventory identity = behaviors:%d fixtures:%d base:%s", len(ledger.Behaviors), len(ledger.Fixtures), ledger.TaskBase)
 	}
 	assertConformanceBehaviorEvidence(t, ledger.Behaviors)
