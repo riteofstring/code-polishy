@@ -13,13 +13,21 @@ Run an exact reference and candidate pair with:
 code-polishy pack conformance \
   --ledger tools/fixtures/language-conformance/ledger.json \
   --reference /exact/reference/code-polishy \
-  --candidate /exact/candidate/code-polishy
+  --reference-policy-root /exact/reference/policy \
+  --candidate /exact/candidate/code-polishy \
+  --candidate-policy-root /exact/candidate/policy \
+  --candidate-pack /exact/candidate/pack
 ```
 
 The command emits one schema-validated JSON report. Exit status `0` means every
 active case matched and every behavior is ready; `1` means a semantic mismatch
 or an explicitly unfinished inventory case; `2` means the run was invalid or
 could not execute.
+
+Policy-root flags are optional when each executable is already contained by its
+matching policy root. Candidate packs are installed into a disposable data home
+visible only to the candidate lane, and their exact identities are recorded in
+the report.
 
 Every fixture declares a branch, canonical UTC commit timestamp, and explicit
 staged or unstaged modified, deleted, and untracked paths. The runner creates

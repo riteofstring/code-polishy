@@ -13,10 +13,12 @@ files. The adapter materializes that authenticated context into an isolated
 temporary tree before invoking ShellCheck with target configuration disabled.
 
 One pack artifact contains a cross-compiled analyzer for every supported
-platform. The exact policy-owned Node runtime selects the platform binary; the
-analyzer receives the exact policy-owned ShellCheck path through the sealed
-tool environment. No ambient interpreter, PATH lookup, target configuration,
-network access, or target command execution participates.
+platform. The manifest declares each platform binary as executable, so its
+authenticated installation receipt preserves the mode required by the exact
+policy-owned Node runtime that selects it. The analyzer receives the exact
+policy-owned ShellCheck path through the sealed tool environment. No ambient
+interpreter, PATH lookup, target configuration, network access, or target command
+execution participates.
 
 Formatting is an explicit absence. A formatter will be added only through a
 separate product decision with write-safety and idempotence evidence.

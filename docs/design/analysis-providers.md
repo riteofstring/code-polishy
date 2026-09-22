@@ -126,7 +126,9 @@ a verified installed release, checks its bytes against that release's manifest,
 binds the ordered identities into analysis, and exposes each path through a
 tool-ID-specific environment variable. It never resolves a tool from the target
 project or ambient PATH. Providers carry their own pinned dependencies in the
-integrity-checked installed pack tree.
+integrity-checked installed pack tree. When a pack launcher delegates to contained
+runtime binaries, the manifest names each exact executable path and the immutable
+installation receipt authenticates both its bytes and executable mode.
 
 The core interprets source-comment, literal, and function facts. JavaScript machine
 directives use the existing policy grammar. Provider-classified machine directives
@@ -150,10 +152,13 @@ plugins, or lint configurations. Framework-specific parsers and mappings stay
 inside that provider. Local reports and diagnostics remain part of Code Polishy;
 dashboards, remote telemetry, and aggregate analytics are outside its product scope.
 
-Conformance context comes from the verified pack inventory beneath each declared
-fixture project. It never depends on an enclosing checkout's tracked files or
-ignore rules. Fixture language classification uses the same manifest declarations
-as installed analysis. Operational fixture failures retain the analyzer's reason.
+Conformance runs each executable with its exact recorded policy root and an
+isolated user-data home. Candidate pack sources are installed once into that
+temporary home before fixtures run; the report records their exact identities,
+and the reference lane cannot observe them. Fixture projects never depend on an
+enclosing checkout's tracked files or ignore rules. Fixture language
+classification uses the same verified installed manifest declarations as product
+analysis. Operational fixture failures retain the analyzer's reason.
 
 Function facts are interpreted once when the core constructs adapter findings.
 Conformance uses that same interpretation: its expected status and rule include

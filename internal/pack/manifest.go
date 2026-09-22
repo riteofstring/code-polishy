@@ -38,6 +38,7 @@ type Manifest struct {
 	EngineVersion   string     `json:"engineVersion"`
 	ProtocolVersion int        `json:"protocolVersion"`
 	Platforms       []string   `json:"platforms"`
+	Executables     []string   `json:"executables,omitempty"`
 	Languages       []Language `json:"languages"`
 	Commands        []Command  `json:"commands"`
 	Fixtures        []Fixture  `json:"fixtures"`
@@ -114,6 +115,9 @@ func validateManifest(manifest Manifest) error {
 	if err := validatePlatforms(manifest.Platforms); err != nil {
 		return err
 	}
+	if err := validateExecutablePaths(manifest.Executables); err != nil {
+		return err
+	}
 	if len(manifest.Languages) == 0 || len(manifest.Commands) == 0 || len(manifest.Fixtures) == 0 {
 		return errors.New("languages, commands, and fixtures must not be empty")
 	}
@@ -127,6 +131,21 @@ func validateManifest(manifest Manifest) error {
 		return err
 	}
 	return validateFixtures(manifest.Commands, manifest.Fixtures)
+}
+
+func validateExecutablePaths(executables []string) error {
+	if len(executables) > 256 {
+		return errors.New("executables must contain at most 256 paths")
+	}
+	if err := validateUnique(executables, "executables"); err != nil {
+		return err
+	}
+	for index, executable := range executables {
+		if err := exactRelativePath(executable); err != nil {
+			return fmt.Errorf("executables[%d]: %w", index, err)
+		}
+	}
+	return nil
 }
 
 func validateManifestIdentity(manifest Manifest) error {

@@ -64,6 +64,9 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"unsafe executable", func(value map[string]any) {
 			value["commands"].([]any)[0].(map[string]any)["argv"] = []any{"../adapter"}
 		}, "contained relative path"},
+		{"unsafe runtime executable", func(value map[string]any) {
+			value["executables"] = []any{"../helper"}
+		}, "executables[0]"},
 		{"unknown command language", func(value map[string]any) {
 			value["commands"].([]any)[0].(map[string]any)["languages"] = []any{"other"}
 		}, "languages"},
@@ -176,6 +179,13 @@ func TestManifestCommandOwnsPatternsAndShebangsWithoutBroadeningEitherClaim(t *t
 	if repo.CommandOwnsPath(command, "scripts/other") {
 		t.Fatal("manifest command claimed an undeclared shebang")
 	}
+	inventory := inventoryByPath(governedInventory(repo, command, []string{"src/pattern.fixture", "scripts/tool", "scripts/other"}, "check"))
+	if !inventory["scripts/tool"].Source || inventory["scripts/tool"].Language != "fixture" || inventory["scripts/tool"].Owner != command.Name {
+		t.Fatalf("shebang inventory = %+v", inventory["scripts/tool"])
+	}
+	if inventory["scripts/other"].Source {
+		t.Fatalf("unclaimed shebang inventory = %+v", inventory["scripts/other"])
+	}
 }
 
 func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
@@ -263,6 +273,43 @@ func TestInstallPublishesExactContentAddressedTreeAndDetectsTampering(t *testing
 	}
 	if _, err := VerifyInstalled(installed); err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("tampered adapter passed: %v", err)
+	}
+}
+
+func TestInstallPreservesDeclaredRuntimeExecutables(t *testing.T) {
+	source := writePackSource(t)
+	manifest, err := ParseManifest(testManifest(t), "manifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Executables = []string{"bin/runtime-helper"}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, source, ManifestFilename, string(data), 0o644)
+	writeTestFile(t, source, "bin/runtime-helper", "helper\n", 0o755)
+	dataRoot := filepath.Join(t.TempDir(), "packs")
+	t.Cleanup(func() { makeWritable(dataRoot) })
+	_, installed, err := Install(source, dataRoot, testEngineVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(installed, "bin", "runtime-helper"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o555 {
+		t.Fatalf("runtime helper mode = %s", info.Mode().Perm())
+	}
+	manifest.Executables = []string{"bin/missing-helper"}
+	data, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, source, ManifestFilename, string(data), 0o644)
+	if _, _, err := Install(source, dataRoot, testEngineVersion); err == nil || !strings.Contains(err.Error(), "executables[0]") {
+		t.Fatalf("missing runtime executable passed: %v", err)
 	}
 }
 

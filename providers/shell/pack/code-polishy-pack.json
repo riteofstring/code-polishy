@@ -12,6 +12,13 @@
     "linux-arm64",
     "windows-amd64"
   ],
+  "executables": [
+    "bin/adapter-darwin-amd64",
+    "bin/adapter-darwin-arm64",
+    "bin/adapter-linux-amd64",
+    "bin/adapter-linux-arm64",
+    "bin/adapter-windows-amd64.exe"
+  ],
   "languages": [
     {
       "id": "shell",

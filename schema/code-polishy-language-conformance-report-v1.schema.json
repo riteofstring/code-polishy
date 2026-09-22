@@ -10,6 +10,7 @@
     "ledger",
     "reference",
     "candidate",
+    "candidatePacks",
     "environment",
     "fixtures",
     "summary"
@@ -22,6 +23,11 @@
     "ledger": { "$ref": "#/$defs/evidenceIdentity" },
     "reference": { "$ref": "#/$defs/executableIdentity" },
     "candidate": { "$ref": "#/$defs/executableIdentity" },
+    "candidatePacks": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/packIdentity" }
+    },
     "environment": { "$ref": "#/$defs/environmentIdentity" },
     "fixtures": {
       "type": "array",
@@ -51,6 +57,22 @@
         "path": { "type": "string", "minLength": 1 },
         "policyRoot": { "type": "string", "minLength": 1 },
         "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "packIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "digest"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": { "$ref": "#/$defs/digest" }
       }
     },
     "toolIdentity": {

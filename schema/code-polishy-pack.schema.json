@@ -49,6 +49,12 @@
         ]
       }
     },
+    "executables": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/exactPath" }
+    },
     "languages": {
       "type": "array",
       "minItems": 1,
@@ -84,12 +90,25 @@
       "type": "string",
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).*\\S.*$"
     },
+    "concretePath": {
+      "$ref": "#/$defs/path",
+      "not": { "pattern": "[*?]|\\[" }
+    },
+    "exactPath": {
+      "$ref": "#/$defs/concretePath",
+      "not": { "pattern": "(?:^\\./|/\\.(?:/|$)|//|/$)" }
+    },
     "paths": {
       "type": "array",
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/path"
       }
+    },
+    "exactPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/exactPath" }
     },
     "language": {
       "type": "object",
@@ -215,7 +234,7 @@
           "minItems": 1,
           "prefixItems": [
             {
-              "$ref": "#/$defs/path"
+              "$ref": "#/$defs/exactPath"
             }
           ],
           "items": {
@@ -362,10 +381,10 @@
           "$ref": "#/$defs/identifier"
         },
         "project": {
-          "$ref": "#/$defs/path"
+          "$ref": "#/$defs/exactPath"
         },
         "files": {
-          "$ref": "#/$defs/paths",
+          "$ref": "#/$defs/exactPaths",
           "minItems": 1
         },
         "expectedStatus": {

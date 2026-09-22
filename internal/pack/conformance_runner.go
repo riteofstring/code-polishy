@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -21,20 +22,24 @@ import (
 )
 
 type ConformanceOptions struct {
-	LedgerPath          string
-	ReferenceExecutable string
-	CandidateExecutable string
+	LedgerPath           string
+	ReferenceExecutable  string
+	ReferencePolicyRoot  string
+	CandidateExecutable  string
+	CandidatePolicyRoot  string
+	CandidatePackSources []string
 }
 
 type ConformanceReport struct {
-	Schema      string                         `json:"$schema"`
-	Protocol    string                         `json:"protocol"`
-	Ledger      ConformanceEvidenceIdentity    `json:"ledger"`
-	Reference   ConformanceExecutableIdentity  `json:"reference"`
-	Candidate   ConformanceExecutableIdentity  `json:"candidate"`
-	Environment ConformanceEnvironmentIdentity `json:"environment"`
-	Fixtures    []ConformanceFixtureEvidence   `json:"fixtures"`
-	Summary     ConformanceReportSummary       `json:"summary"`
+	Schema         string                         `json:"$schema"`
+	Protocol       string                         `json:"protocol"`
+	Ledger         ConformanceEvidenceIdentity    `json:"ledger"`
+	Reference      ConformanceExecutableIdentity  `json:"reference"`
+	Candidate      ConformanceExecutableIdentity  `json:"candidate"`
+	CandidatePacks []ConformancePackIdentity      `json:"candidatePacks"`
+	Environment    ConformanceEnvironmentIdentity `json:"environment"`
+	Fixtures       []ConformanceFixtureEvidence   `json:"fixtures"`
+	Summary        ConformanceReportSummary       `json:"summary"`
 }
 
 type ConformanceEvidenceIdentity struct {
@@ -46,6 +51,12 @@ type ConformanceExecutableIdentity struct {
 	Path       string `json:"path"`
 	PolicyRoot string `json:"policyRoot"`
 	SHA256     string `json:"sha256"`
+}
+
+type ConformancePackIdentity struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Digest  string `json:"digest"`
 }
 
 type ConformanceEnvironmentIdentity struct {
@@ -123,7 +134,7 @@ type conformanceExecution struct {
 }
 
 type conformanceExecutor interface {
-	Run(context.Context, string, string, []string, int) (conformanceExecution, error)
+	Run(context.Context, string, string, string, []string, int, []string) (conformanceExecution, error)
 }
 
 type osConformanceExecutor struct{}
@@ -137,27 +148,43 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 	if err != nil {
 		return ConformanceReport{}, err
 	}
-	reference, err := conformanceExecutableIdentity(options.ReferenceExecutable)
+	reference, err := conformanceExecutableIdentity(options.ReferenceExecutable, options.ReferencePolicyRoot)
 	if err != nil {
 		return ConformanceReport{}, fmt.Errorf("reference executable: %w", err)
 	}
-	candidate, err := conformanceExecutableIdentity(options.CandidateExecutable)
+	candidate, err := conformanceExecutableIdentity(options.CandidateExecutable, options.CandidatePolicyRoot)
 	if err != nil {
 		return ConformanceReport{}, fmt.Errorf("candidate executable: %w", err)
 	}
 	git, err := conformanceGitTool(ctx)
 	if err != nil {
-		return ConformanceReport{}, fmt.Errorf("Git tool: %w", err)
+		return ConformanceReport{}, fmt.Errorf("git tool: %w", err)
+	}
+	environmentRoot, err := conformanceTemporary("code-polishy-conformance-environment-")
+	if err != nil {
+		return ConformanceReport{}, err
+	}
+	defer func() {
+		makeWritable(environmentRoot)
+		_ = os.RemoveAll(environmentRoot)
+	}()
+	referenceEnvironment := conformanceDataEnvironment(filepath.Join(environmentRoot, "reference"))
+	candidateHome := filepath.Join(environmentRoot, "candidate")
+	candidateEnvironment := conformanceDataEnvironment(candidateHome)
+	candidatePacks, err := installConformancePacks(options.CandidatePackSources, conformanceDataRoot(candidateHome), candidate.PolicyRoot)
+	if err != nil {
+		return ConformanceReport{}, err
 	}
 	report := ConformanceReport{
-		Schema:      ConformanceReportSchema,
-		Protocol:    ConformanceReportProtocol,
-		Ledger:      ConformanceEvidenceIdentity{Path: filepath.ToSlash(ledger.Path), SHA256: ledger.SHA256},
-		Reference:   reference,
-		Candidate:   candidate,
-		Environment: ConformanceEnvironmentIdentity{Platform: CurrentPlatform(), Git: git},
-		Fixtures:    []ConformanceFixtureEvidence{},
-		Summary:     ConformanceReportSummary{Status: "passed"},
+		Schema:         ConformanceReportSchema,
+		Protocol:       ConformanceReportProtocol,
+		Ledger:         ConformanceEvidenceIdentity{Path: filepath.ToSlash(ledger.Path), SHA256: ledger.SHA256},
+		Reference:      reference,
+		Candidate:      candidate,
+		CandidatePacks: candidatePacks,
+		Environment:    ConformanceEnvironmentIdentity{Platform: CurrentPlatform(), Git: git},
+		Fixtures:       []ConformanceFixtureEvidence{},
+		Summary:        ConformanceReportSummary{Status: "passed"},
 	}
 	for _, fixture := range ledger.Fixtures {
 		if fixture.Maturity == "planned" {
@@ -171,7 +198,7 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 			report.Summary.Skipped++
 			continue
 		}
-		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, reference.PolicyRoot, candidate.Path, candidate.PolicyRoot, git.Path, executor)
+		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, reference.PolicyRoot, candidate.Path, candidate.PolicyRoot, git.Path, referenceEnvironment, candidateEnvironment, executor)
 		if runErr != nil {
 			return ConformanceReport{}, fmt.Errorf("fixture %s: %w", fixture.ID, runErr)
 		}
@@ -210,16 +237,82 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 	return report, nil
 }
 
-func conformanceExecutableIdentity(name string) (ConformanceExecutableIdentity, error) {
+func installConformancePacks(sources []string, dataRoot, policyRoot string) ([]ConformancePackIdentity, error) {
+	versionData, err := os.ReadFile(filepath.Join(policyRoot, "VERSION"))
+	if err != nil {
+		return nil, fmt.Errorf("candidate policy version: %w", err)
+	}
+	engineVersion := strings.TrimSpace(string(versionData))
+	identities := make([]ConformancePackIdentity, 0, len(sources))
+	seen := map[string]bool{}
+	for index, source := range sources {
+		identity, _, err := Install(source, dataRoot, engineVersion)
+		if err != nil {
+			return nil, fmt.Errorf("candidate pack source %d: %w", index, err)
+		}
+		if seen[identity.Name] {
+			return nil, fmt.Errorf("candidate pack source %d repeats pack %s", index, identity.Name)
+		}
+		seen[identity.Name] = true
+		identities = append(identities, ConformancePackIdentity(identity))
+	}
+	slices.SortFunc(identities, func(left, right ConformancePackIdentity) int { return strings.Compare(left.Name, right.Name) })
+	return identities, nil
+}
+
+func conformanceDataEnvironment(root string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{"LOCALAPPDATA=" + root}
+	}
+	return []string{"XDG_DATA_HOME=" + root}
+}
+
+func conformanceDataRoot(root string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(root, "CodePolishy", "packs")
+	}
+	return filepath.Join(root, "code-polishy", "packs")
+}
+
+func conformanceTemporary(pattern string) (string, error) {
+	root, err := os.MkdirTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return "", err
+	}
+	return canonical, nil
+}
+
+func conformanceExecutableIdentity(name, requestedPolicyRoot string) (ConformanceExecutableIdentity, error) {
 	canonical, digest, err := conformanceExecutablePathAndDigest(name)
 	if err != nil {
 		return ConformanceExecutableIdentity{}, err
 	}
-	policyRoot, err := conformancePolicyRoot(canonical)
+	policyRoot, err := resolveConformancePolicyRoot(canonical, requestedPolicyRoot)
 	if err != nil {
 		return ConformanceExecutableIdentity{}, err
 	}
 	return ConformanceExecutableIdentity{Path: canonical, PolicyRoot: policyRoot, SHA256: digest}, nil
+}
+
+func resolveConformancePolicyRoot(executable, requested string) (string, error) {
+	if strings.TrimSpace(requested) == "" {
+		return conformancePolicyRoot(executable)
+	}
+	root, err := canonicalDirectory(requested)
+	if err != nil {
+		return "", err
+	}
+	version, versionErr := os.Stat(filepath.Join(root, "VERSION"))
+	configuration, configurationErr := os.Stat(filepath.Join(root, "schema", "code-polishy.schema.json"))
+	if versionErr != nil || configurationErr != nil || !version.Mode().IsRegular() || !configuration.Mode().IsRegular() {
+		return "", errors.New("policy root must contain regular VERSION and schema/code-polishy.schema.json files")
+	}
+	return root, nil
 }
 
 func conformanceExecutablePathAndDigest(name string) (string, string, error) {
@@ -269,8 +362,8 @@ func conformancePolicyRoot(executable string) (string, error) {
 	}
 }
 
-func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, referencePolicyRoot, candidateExecutable, candidatePolicyRoot, gitExecutable string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
-	temporary, err := os.MkdirTemp("", "code-polishy-conformance-")
+func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, referencePolicyRoot, candidateExecutable, candidatePolicyRoot, gitExecutable string, referenceEnvironment, candidateEnvironment []string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
+	temporary, err := conformanceTemporary("code-polishy-conformance-")
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
@@ -306,11 +399,11 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if !equivalentConformanceGit(referenceBeforeGit, candidateBeforeGit, len(variantPaths) > 0) {
 		return ConformanceFixtureEvidence{}, errors.New("materialized Git repositories differ outside declared lane overrides")
 	}
-	referenceRun, err := executeConformanceLane(ctx, fixture, referenceExecutable, gitExecutable, referenceRoot, referenceBefore, referenceBeforeGit, executor)
+	referenceRun, err := executeConformanceLane(ctx, fixture, referenceExecutable, referencePolicyRoot, gitExecutable, referenceRoot, referenceBefore, referenceBeforeGit, referenceEnvironment, executor)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("reference: %w", err)
 	}
-	candidateRun, err := executeConformanceLane(ctx, fixture, candidateExecutable, gitExecutable, candidateRoot, candidateBefore, candidateBeforeGit, executor)
+	candidateRun, err := executeConformanceLane(ctx, fixture, candidateExecutable, candidatePolicyRoot, gitExecutable, candidateRoot, candidateBefore, candidateBeforeGit, candidateEnvironment, executor)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("candidate: %w", err)
 	}
@@ -368,8 +461,8 @@ func equivalentConformanceGit(reference, candidate ConformanceGitIdentity, varia
 	return reflect.DeepEqual(reference, candidate)
 }
 
-func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, executable, gitExecutable, root string, before []ConformanceFileIdentity, beforeGit ConformanceGitIdentity, executor conformanceExecutor) (ConformanceRunEvidence, error) {
-	execution, err := executor.Run(ctx, executable, root, slices.Clone(fixture.Arguments), fixture.TimeoutSeconds)
+func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, executable, policyRoot, gitExecutable, root string, before []ConformanceFileIdentity, beforeGit ConformanceGitIdentity, environment []string, executor conformanceExecutor) (ConformanceRunEvidence, error) {
+	execution, err := executor.Run(ctx, executable, policyRoot, root, slices.Clone(fixture.Arguments), fixture.TimeoutSeconds, environment)
 	if err != nil {
 		return ConformanceRunEvidence{}, err
 	}
@@ -402,13 +495,14 @@ func executeConformanceLane(ctx context.Context, fixture ConformanceFixture, exe
 	}, nil
 }
 
-func (osConformanceExecutor) Run(ctx context.Context, executable, root string, arguments []string, timeout int) (conformanceExecution, error) {
+func (osConformanceExecutor) Run(ctx context.Context, executable, policyRoot, root string, arguments []string, timeout int, environment []string) (conformanceExecution, error) {
 	command := policy.Command{
-		Name:               "language-conformance",
-		Argv:               append([]string{executable, "--repo-root", root}, arguments...),
-		Cwd:                ".",
-		TimeoutSeconds:     timeout,
-		ExclusiveResources: []string{},
+		Name:                 "language-conformance",
+		Argv:                 append([]string{executable, "--repo-root", root, "--policy-root", policyRoot}, arguments...),
+		Cwd:                  ".",
+		TimeoutSeconds:       timeout,
+		ExclusiveResources:   []string{},
+		EnvironmentOverrides: slices.Clone(environment),
 	}
 	result, output, err := (runner.OSRunner{}).RunStructured(ctx, root, command)
 	if err != nil && result.FailureCategory != runner.FailureCommandExit {

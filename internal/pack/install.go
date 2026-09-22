@@ -292,7 +292,7 @@ func validateSourceFiles(root string, files []sourceFile, enforcePlatform bool) 
 	if enforcePlatform && !slices.Contains(manifest.Platforms, CurrentPlatform()) {
 		return Manifest{}, nil, fmt.Errorf("pack %s %s does not support %s", manifest.Name, manifest.Version, CurrentPlatform())
 	}
-	executables, err := validateSourceCommands(files, manifest.Commands)
+	executables, err := validateSourceExecutables(files, manifest.Commands, manifest.Executables)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
@@ -302,13 +302,19 @@ func validateSourceFiles(root string, files []sourceFile, enforcePlatform bool) 
 	return manifest, executables, nil
 }
 
-func validateSourceCommands(files []sourceFile, commands []Command) (map[string]bool, error) {
+func validateSourceExecutables(files []sourceFile, commands []Command, declared []string) (map[string]bool, error) {
 	executables := map[string]bool{}
 	for _, command := range commands {
 		executables[command.Argv[0]] = true
 		if sourceFileByPath(files, command.Argv[0]) == nil {
 			return nil, fmt.Errorf("pack command %q is missing %s", command.Name, command.Argv[0])
 		}
+	}
+	for index, executable := range declared {
+		if sourceFileByPath(files, executable) == nil {
+			return nil, fmt.Errorf("pack executables[%d] is missing %s", index, executable)
+		}
+		executables[executable] = true
 	}
 	return executables, nil
 }

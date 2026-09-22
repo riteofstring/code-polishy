@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -18,9 +19,15 @@ type conformanceTestExecutor struct {
 	reference string
 	candidate string
 	mutation  string
+	observe   func(string, string, []string) error
 }
 
-func (executor conformanceTestExecutor) Run(_ context.Context, executable, root string, _ []string, _ int) (conformanceExecution, error) {
+func (executor conformanceTestExecutor) Run(_ context.Context, executable, policyRoot, root string, _ []string, _ int, environment []string) (conformanceExecution, error) {
+	if executor.observe != nil {
+		if err := executor.observe(executable, policyRoot, environment); err != nil {
+			return conformanceExecution{}, err
+		}
+	}
 	findings := []map[string]any{conformanceTestFinding()}
 	coverage := []string{"src/main.go"}
 	candidate := filepath.Base(executable) == filepath.Base(executor.candidate)
@@ -48,6 +55,97 @@ func (executor conformanceTestExecutor) Run(_ context.Context, executable, root 
 		return conformanceExecution{}, err
 	}
 	return conformanceExecution{ExitStatus: 1, Stdout: report}, nil
+}
+
+func TestConformanceRunnerIsolatesAndRecordsCandidatePacks(t *testing.T) {
+	ledgerPath := writeConformanceTestLedger(t)
+	reference := writeConformanceTestExecutable(t, "reference")
+	candidate := writeConformanceTestExecutable(t, "candidate")
+	candidatePolicyExecutable := writeConformanceTestExecutableVersion(t, "candidate-policy", testEngineVersion)
+	candidatePolicyRoot, err := filepath.EvalSymlinks(filepath.Dir(candidatePolicyExecutable))
+	if err != nil {
+		t.Fatal(err)
+	}
+	packSource := writePackSource(t)
+	environments := map[string]string{}
+	executor := conformanceTestExecutor{
+		reference: reference,
+		candidate: candidate,
+		observe:   conformancePackObserver(reference, candidatePolicyRoot, environments),
+	}
+	report, err := runConformance(context.Background(), ConformanceOptions{
+		LedgerPath:           ledgerPath,
+		ReferenceExecutable:  reference,
+		CandidateExecutable:  candidate,
+		CandidatePolicyRoot:  candidatePolicyRoot,
+		CandidatePackSources: []string{packSource},
+	}, executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.Status != "passed" || report.Candidate.PolicyRoot != candidatePolicyRoot || len(report.CandidatePacks) != 1 {
+		t.Fatalf("candidate evidence = %+v", report)
+	}
+	identity := report.CandidatePacks[0]
+	if identity.Name != "fixture-language" || identity.Version != "1.0.0" || !validDigest(identity.Digest) {
+		t.Fatalf("candidate pack identity = %+v", identity)
+	}
+	referenceDataRoot := environments[filepath.Base(reference)]
+	candidateDataRoot := environments[filepath.Base(candidate)]
+	if referenceDataRoot == "" || candidateDataRoot == "" || referenceDataRoot == candidateDataRoot {
+		t.Fatalf("lane data roots = %+v", environments)
+	}
+}
+
+func conformancePackObserver(reference, candidatePolicyRoot string, environments map[string]string) func(string, string, []string) error {
+	return func(executable, policyRoot string, environment []string) error {
+		dataRoot, err := conformanceTestDataRoot(environment)
+		if err != nil {
+			return err
+		}
+		lane := filepath.Base(executable)
+		environments[lane] = dataRoot
+		if lane == filepath.Base(reference) {
+			return verifyEmptyConformanceDataRoot(dataRoot)
+		}
+		if policyRoot != candidatePolicyRoot {
+			return fmt.Errorf("candidate policy root = %s", policyRoot)
+		}
+		matches, err := filepath.Glob(filepath.Join(dataRoot, "fixture-language", "1.0.0", "*", ReceiptFilename))
+		if err != nil || len(matches) != 1 {
+			return fmt.Errorf("candidate receipts = %v: %w", matches, err)
+		}
+		_, err = VerifyInstalled(filepath.Dir(matches[0]))
+		return err
+	}
+}
+
+func verifyEmptyConformanceDataRoot(dataRoot string) error {
+	entries, err := os.ReadDir(dataRoot)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return fmt.Errorf("reference data root contains candidate state: %v", entries)
+	}
+	return nil
+}
+
+func conformanceTestDataRoot(environment []string) (string, error) {
+	name := "XDG_DATA_HOME"
+	if runtime.GOOS == "windows" {
+		name = "LOCALAPPDATA"
+	}
+	for _, entry := range environment {
+		key, value, found := strings.Cut(entry, "=")
+		if found && key == name {
+			return conformanceDataRoot(value), nil
+		}
+	}
+	return "", fmt.Errorf("%s override is absent", name)
 }
 
 func TestConformanceRunnerProvesReproducibilityAndDetectsSemanticLoss(t *testing.T) {
@@ -537,12 +635,16 @@ func writeConformanceTestLedger(t *testing.T) string {
 }
 
 func writeConformanceTestExecutable(t *testing.T, name string) string {
+	return writeConformanceTestExecutableVersion(t, name, "0.27.8")
+}
+
+func writeConformanceTestExecutableVersion(t *testing.T, name, version string) string {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "schema"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte("0.27.8\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte(version+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "schema", "code-polishy.schema.json"), []byte("{}\n"), 0o600); err != nil {

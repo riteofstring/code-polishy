@@ -45,7 +45,7 @@ func adapterLanguage(repo repository.Repository, adapter *policy.PackAdapter, fi
 		return "", false
 	}
 	for _, language := range adapter.Languages {
-		if policy.MatchesAny(file, language.Paths) || len(language.Paths) == 0 && repo.Language(file) == language.Name {
+		if repo.MatchesPackLanguage(file, language, adapter.LanguageDetectors) {
 			return language.Name, true
 		}
 	}

@@ -95,7 +95,7 @@ func (repo Repository) CommandOwnsPath(command policy.Command, path string) bool
 	}
 	if command.Adapter != nil && len(command.Adapter.Languages) > 0 && slices.Contains([]string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, command.Adapter.Capability) {
 		if !slices.ContainsFunc(command.Adapter.Languages, func(language policy.LanguageRule) bool {
-			return policy.MatchesAny(path, language.Paths) || len(language.Paths) == 0 && repo.Language(path) == language.Name || repo.packShebangLanguage(path, language.Name, command.Adapter.LanguageDetectors)
+			return repo.MatchesPackLanguage(path, language, command.Adapter.LanguageDetectors)
 		}) {
 			return false
 		}
@@ -109,6 +109,10 @@ func (repo Repository) CommandOwnsPath(command policy.Command, path string) bool
 		}
 	}
 	return false
+}
+
+func (repo Repository) MatchesPackLanguage(path string, language policy.LanguageRule, detectors []policy.PackLanguageDetector) bool {
+	return policy.MatchesAny(path, language.Paths) || len(language.Paths) == 0 && repo.Language(path) == language.Name || repo.packShebangLanguage(path, language.Name, detectors)
 }
 
 func (repo Repository) packShebangLanguage(path, language string, detectors []policy.PackLanguageDetector) bool {

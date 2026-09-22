@@ -56,7 +56,9 @@ identities come from the verified engine installation's governed inventory. The
 engine exposes each path as `CODE_POLISHY_TOOL_<ID>` and prepends the one declared
 launcher to the adapter command. An ambient executable, target package, version
 range, or missing tool cannot substitute. Native contained executable adapters
-use self-contained execution.
+use self-contained execution. A pack with subordinate runtime binaries lists
+their exact paths in top-level `executables`; installation rejects missing paths
+and binds executable mode into the immutable receipt.
 
 Each command/capability pair requires a passing fixture and a real seeded defect
 producing `findings` with `expectedRules` after core policy evaluation. Function

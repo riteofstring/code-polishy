@@ -36,7 +36,7 @@ func conformanceGitTool(ctx context.Context) (ConformanceToolIdentity, error) {
 	}
 	version := strings.TrimSpace(string(stdout))
 	if version == "" || len(version) > 1024 || strings.ContainsAny(version, "\r\n") {
-		return ConformanceToolIdentity{}, errors.New("Git returned an invalid version identity")
+		return ConformanceToolIdentity{}, errors.New("git returned an invalid version identity")
 	}
 	return ConformanceToolIdentity{Path: path, SHA256: digest, Version: version}, nil
 }
@@ -70,7 +70,7 @@ func materializeConformanceFixture(ctx context.Context, root string, fixture Con
 	} else if errors.Is(err, os.ErrExist) {
 		info, statErr := os.Stat(globalConfiguration)
 		if statErr != nil || !info.Mode().IsRegular() {
-			return errors.New("conformance Git configuration is not a regular file")
+			return errors.New("conformance git configuration is not a regular file")
 		}
 		err = nil
 	}
@@ -182,7 +182,7 @@ func conformanceGitSnapshot(ctx context.Context, gitExecutable, root string) (Co
 	head := strings.TrimSpace(string(headOutput))
 	branch := strings.TrimSpace(string(branchOutput))
 	if !validConformanceObjectID(head) || !validConformanceBranch(branch) {
-		return ConformanceGitIdentity{}, errors.New("Git returned an invalid repository identity")
+		return ConformanceGitIdentity{}, errors.New("git returned an invalid repository identity")
 	}
 	status, err := conformanceGitStatus(statusOutput)
 	if err != nil {
@@ -194,20 +194,20 @@ func conformanceGitSnapshot(ctx context.Context, gitExecutable, root string) (Co
 
 func conformanceGitStatus(data []byte) ([]string, error) {
 	if len(data) > maximumConformanceGitOutputBytes || !utf8.Valid(data) {
-		return nil, errors.New("Git status output is invalid or exceeds its limit")
+		return nil, errors.New("git status output is invalid or exceeds its limit")
 	}
 	if len(data) == 0 {
 		return []string{}, nil
 	}
 	if data[len(data)-1] != 0 {
-		return nil, errors.New("Git status output is not NUL terminated")
+		return nil, errors.New("git status output is not NUL terminated")
 	}
 	items := strings.Split(string(data[:len(data)-1]), "\x00")
 	if len(items) > maximumConformanceFiles*2 {
-		return nil, errors.New("Git status output exceeds its item limit")
+		return nil, errors.New("git status output exceeds its item limit")
 	}
 	if slices.Contains(items, "") {
-		return nil, errors.New("Git status output contains an empty item")
+		return nil, errors.New("git status output contains an empty item")
 	}
 	return items, nil
 }
@@ -236,7 +236,7 @@ func runConformanceGit(ctx context.Context, executable, root, globalConfiguratio
 	command.Stderr = &stderr
 	err := command.Run()
 	if stdout.Len() > maximumConformanceGitOutputBytes || stderr.Len() > 64<<10 {
-		return nil, nil, errors.New("Git output exceeds its limit")
+		return nil, nil, errors.New("git output exceeds its limit")
 	}
 	return stdout.Bytes(), stderr.Bytes(), err
 }
