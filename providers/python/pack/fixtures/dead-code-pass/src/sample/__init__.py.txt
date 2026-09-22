@@ -1,0 +1,15 @@
+python-pack-fixture
+import ast
+
+
+def identity(value):
+    return value
+
+
+class Visitor(ast.NodeVisitor):
+    def visit_Name(self, node):
+        print(node.id)
+
+
+print(identity(1))
+Visitor().visit(ast.parse("value"))

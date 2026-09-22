@@ -29,6 +29,7 @@ type adapter struct {
 	facts   factExecutor
 	project projectExecutor
 	ty      tyExecutor
+	vulture vultureExecutor
 }
 
 func newAdapter() adapter {
@@ -45,6 +46,10 @@ func newAdapter() adapter {
 			script:     filepath.Join(packRoot, "lib", "project.py"),
 		},
 		ty: osTy{executable: os.Getenv("CODE_POLISHY_TOOL_TY"), config: filepath.Join(packRoot, "config", "ty.toml")},
+		vulture: osVulture{
+			executable: os.Getenv("CODE_POLISHY_TOOL_PYTHON"),
+			script:     filepath.Join(packRoot, "lib", "vulture.py"),
+		},
 	}
 }
 
@@ -86,7 +91,7 @@ func validateRequest(value request) error {
 	if value.Operation == "discover" {
 		return nil
 	}
-	if slices.Contains([]string{"lint", "complexity", "typecheck", "architecture"}, value.Capability) && value.Operation == "check" {
+	if slices.Contains([]string{"lint", "complexity", "typecheck", "dead-code", "architecture"}, value.Capability) && value.Operation == "check" {
 		return nil
 	}
 	if value.Capability == "format" && value.Operation == "format" {
@@ -137,7 +142,7 @@ func (adapter adapter) analyze(ctx context.Context, request request) (response, 
 	if err != nil {
 		return response{}, err
 	}
-	if slices.Contains([]string{"typecheck", "architecture"}, request.Capability) {
+	if slices.Contains([]string{"typecheck", "dead-code", "architecture"}, request.Capability) {
 		groups, err = state.scopeMemberGroups()
 		if err != nil {
 			return response{}, err
@@ -204,6 +209,8 @@ func (state *analysisState) executeCapability(ctx context.Context, adapter adapt
 		return state.complexity(ctx, adapter.ruff, adapter.facts, workspace, groups)
 	case "typecheck":
 		return state.typecheck(ctx, adapter.ty, workspace, groups)
+	case "dead-code":
+		return state.deadCode(ctx, adapter.vulture, workspace, groups)
 	case "architecture":
 		return state.architecture(ctx, adapter.ruff, adapter.facts, workspace, groups)
 	default:
@@ -371,6 +378,58 @@ func (state *analysisState) typecheck(ctx context.Context, ty tyExecutor, worksp
 	return nil
 }
 
+func (state *analysisState) deadCode(ctx context.Context, vulture vultureExecutor, workspace string, groups []analysisGroup) error {
+	facts := []deadCodeFact{}
+	for _, group := range groups {
+		if len(group.files) == 0 {
+			continue
+		}
+		reason, err := state.deadCodeUnsupportedReason(group.scope)
+		if err != nil {
+			return err
+		}
+		if reason != "" {
+			for _, file := range group.files {
+				state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: reason})
+			}
+			continue
+		}
+		found, err := vulture.deadCode(ctx, workspace, group.files)
+		if err != nil {
+			return err
+		}
+		facts = append(facts, found...)
+		state.result.Coverage.Analyzed = append(state.result.Coverage.Analyzed, group.files...)
+	}
+	if len(facts) > 10000 {
+		return errors.New("python dead-code facts exceed the protocol collection limit")
+	}
+	sortDeadCode(facts)
+	state.result.Facts = &sourceFacts{DeadCode: &facts}
+	state.result.Evidence = []string{"Vulture 2.16 scanned complete Python project scopes with target suppressions disabled"}
+	return nil
+}
+
+func (state *analysisState) deadCodeUnsupportedReason(scope analysisScope) (string, error) {
+	data, err := decodePythonScopeData(scope.Data)
+	if err != nil {
+		return "", err
+	}
+	if len(data.EntryPoints) > 0 {
+		return "Python project entry-point reachability is not yet supported by the pack dead-code analyzer", nil
+	}
+	input, err := decodePolicyInput(state.request.Policy)
+	if err != nil {
+		return "", err
+	}
+	for _, declaration := range input.Declarations {
+		if slices.Contains(declaration.Scopes, scope.Handle) {
+			return "Python runtime reachability declarations are not yet supported by the pack dead-code analyzer", nil
+		}
+	}
+	return "", nil
+}
+
 func (state *analysisState) accountFactFiles(files []string, failures map[string]string) {
 	for _, file := range files {
 		if reason := failures[file]; reason != "" {
@@ -438,7 +497,7 @@ func validateTools(request request) error {
 	if slices.Contains([]string{"format", "lint", "complexity", "architecture"}, request.Capability) && (!hasTool(request.Tools, "ruff", "ruff", "0.16.0") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_RUFF")) == "") {
 		return errors.New("request does not bind an available Ruff 0.16.0 executable")
 	}
-	if slices.Contains([]string{"lint", "complexity", "architecture"}, request.Capability) && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
+	if slices.Contains([]string{"lint", "complexity", "dead-code", "architecture"}, request.Capability) && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
 		return errors.New("request does not bind an available CPython 3.12.13+20260728 executable")
 	}
 	if request.Capability == "typecheck" && (!hasTool(request.Tools, "ty", "ty", "0.0.65") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_TY")) == "") {
@@ -650,5 +709,11 @@ func sortComments(comments []commentFact) {
 func sortFunctions(functions []functionFact) {
 	sort.SliceStable(functions, func(left, right int) bool {
 		return functionIdentity(functions[left]) < functionIdentity(functions[right])
+	})
+}
+
+func sortDeadCode(facts []deadCodeFact) {
+	sort.SliceStable(facts, func(left, right int) bool {
+		return deadCodeIdentity(facts[left]) < deadCodeIdentity(facts[right])
 	})
 }

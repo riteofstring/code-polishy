@@ -1,0 +1,358 @@
+python-pack-library
+import ast
+import importlib.metadata
+import json
+import os
+import pkgutil
+import sys
+from collections import defaultdict
+
+PROTOCOL = "code-polishy-python-vulture/v1"
+TOOL_VERSION = "2.16"
+MAX_INPUT_BYTES = 4 * 1024 * 1024
+MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+MAX_FILES = 10000
+MAX_SOURCE_BYTES = 512 * 1024 * 1024
+MAX_AST_NODES = 2000000
+MAX_FACTS = 10000
+MAX_STRING_BYTES = 4096
+KINDS = {
+    "attribute",
+    "class",
+    "function",
+    "import",
+    "method",
+    "property",
+    "unreachable_code",
+    "variable",
+}
+
+
+def exact_object(value, keys, name):
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise ValueError(f"{name} has invalid fields")
+
+
+def bounded(value):
+    return value.encode("utf-8")[:MAX_STRING_BYTES].decode("utf-8", "ignore")
+
+
+def exact_path(value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value.encode("utf-8")) > MAX_STRING_BYTES
+        or value.startswith("/")
+        or "\\" in value
+        or any(part in {"", ".", ".."} for part in value.split("/"))
+        or not value.endswith((".py", ".pyi"))
+    ):
+        raise ValueError("request contains an invalid Python path")
+    return value
+
+
+def contained_file(root, path):
+    target = os.path.realpath(os.path.join(root, *path.split("/")))
+    if os.path.commonpath((root, target)) != root or not os.path.isfile(target):
+        raise ValueError(f"Python source {path} escapes the project")
+    return target
+
+
+def definition_location(path, node, name):
+    decorators = getattr(node, "decorator_list", ())
+    line = decorators[0].lineno if decorators else node.lineno
+    if isinstance(node, (ast.Assign, ast.AnnAssign, ast.Name, ast.Attribute)):
+        end_line = line
+    else:
+        end_line = node.end_lineno
+    return path, line, end_line, name
+
+
+def import_from_module(file, node):
+    parts = []
+    if node.level:
+        package = file["package"]
+        if not package:
+            return ""
+        parts = package.split(".")
+        if len(parts) < node.level - 1:
+            return ""
+        parts = parts[: len(parts) - node.level + 1]
+    if node.module:
+        parts.append(node.module)
+    return ".".join(parts)
+
+
+def import_bindings(file):
+    result = {}
+    for node in file["tree"].body:
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                result[item.asname or item.name.partition(".")[0]] = (
+                    item.name if item.asname else item.name.partition(".")[0]
+                )
+        elif isinstance(node, ast.ImportFrom):
+            module = import_from_module(file, node)
+            if module:
+                for item in node.names:
+                    if item.name != "*":
+                        result[item.asname or item.name] = module + "." + item.name
+    return result
+
+
+def expanded_name(node, bindings):
+    if isinstance(node, ast.Name):
+        return bindings.get(node.id, node.id)
+    if isinstance(node, ast.Attribute):
+        parent = expanded_name(node.value, bindings)
+        return parent + "." + node.attr if parent else ""
+    return ""
+
+
+def callback_locations(file):
+    result = set()
+    bindings = import_bindings(file)
+    zip_infos = set()
+    protocols = {
+        "ast.NodeVisitor": lambda name: name.startswith("visit_"),
+        "ast.NodeTransformer": lambda name: name.startswith("visit_"),
+        "urllib.request.BaseHandler": lambda name: (
+            name in {"redirect_request", "default_open", "unknown_open", "proxy_open"}
+            or name.startswith("http_error_")
+            or name.endswith("_open")
+        ),
+        "urllib.request.HTTPRedirectHandler": lambda name: (
+            name == "redirect_request" or name.startswith("http_error_")
+        ),
+        "html.parser.HTMLParser": lambda name: (
+            name
+            in {
+                "handle_starttag",
+                "handle_startendtag",
+                "handle_endtag",
+                "handle_data",
+                "handle_entityref",
+                "handle_charref",
+                "handle_comment",
+                "handle_decl",
+                "unknown_decl",
+            }
+        ),
+    }
+    for node in ast.walk(file["tree"]):
+        if isinstance(node, ast.ClassDef):
+            predicates = [
+                protocols.get(expanded_name(base, bindings)) for base in node.bases
+            ]
+            predicates = [
+                predicate for predicate in predicates if predicate is not None
+            ]
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+                    predicate(child.name) for predicate in predicates
+                ):
+                    result.add(definition_location(file["path"], child, child.name))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {
+            "__exit__",
+            "__aexit__",
+        }:
+            arguments = (
+                list(node.args.posonlyargs)
+                + list(node.args.args)
+                + list(node.args.kwonlyargs)
+            )
+            if node.args.vararg is not None:
+                arguments.append(node.args.vararg)
+            if node.args.kwarg is not None:
+                arguments.append(node.args.kwarg)
+            for argument in arguments:
+                result.add(definition_location(file["path"], argument, argument.arg))
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value
+            if (
+                isinstance(value, ast.Call)
+                and expanded_name(value.func, bindings) == "zipfile.ZipInfo"
+            ):
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        zip_infos.add(target.id)
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Store)
+            and node.attr
+            in {"__cause__", "__context__", "__traceback__", "__suppress_context__"}
+        ):
+            result.add(definition_location(file["path"], node, node.attr))
+    for node in ast.walk(file["tree"]):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Store)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in zip_infos
+        ):
+            result.add(definition_location(file["path"], node, node.attr))
+    return result
+
+
+def read_files(paths):
+    root = os.path.realpath(os.getcwd())
+    files = []
+    source_bytes = 0
+    ast_nodes = 0
+    for path in paths:
+        target = contained_file(root, path)
+        with open(target, "rb") as source_file:
+            data = source_file.read(4 * 1024 * 1024 + 1)
+        if len(data) > 4 * 1024 * 1024:
+            raise ValueError(f"Python source {path} exceeds 4 MiB")
+        source = data.decode("utf-8")
+        tree = ast.parse(source, filename=path)
+        source_bytes += len(data)
+        ast_nodes += sum(1 for _ in ast.walk(tree))
+        if source_bytes > MAX_SOURCE_BYTES or ast_nodes > MAX_AST_NODES:
+            raise ValueError(
+                "Python project exceeds its source or AST resource boundary"
+            )
+        package_parts = path.split("/")[:-1]
+        if package_parts and package_parts[-1] == "__pycache__":
+            raise ValueError("Python source inventory contains __pycache__")
+        module_parts = path.removesuffix(".py").removesuffix(".pyi").split("/")
+        if module_parts[-1] == "__init__":
+            module_parts = module_parts[:-1]
+        files.append(
+            {
+                "path": path,
+                "source": source,
+                "tree": tree,
+                "package": ".".join(module_parts[:-1]),
+            }
+        )
+    return files
+
+
+def analyze(request):
+    exact_object(request, {"protocol", "toolVersion", "files"}, "request")
+    if request["protocol"] != PROTOCOL or request["toolVersion"] != TOOL_VERSION:
+        raise ValueError("request has the wrong protocol or tool version")
+    if (
+        not isinstance(request["files"], list)
+        or not 1 <= len(request["files"]) <= MAX_FILES
+    ):
+        raise ValueError("request has an invalid Python source count")
+    paths = [exact_path(path) for path in request["files"]]
+    if paths != sorted(set(paths)):
+        raise ValueError("request Python paths must be unique and sorted")
+    if sys.version_info[:2] != (3, 12):
+        raise ValueError("Python dead-code analysis requires CPython 3.12")
+    installed_version = importlib.metadata.version("vulture")
+    if installed_version != TOOL_VERSION:
+        raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
+    files = read_files(paths)
+    import vulture.core as vulture_core
+
+    vulture_core.noqa.parse_noqa = lambda _: defaultdict(set)
+    analyzer = vulture_core.Vulture()
+    for file in files:
+        analyzer.scan(file["source"], filename=file["path"])
+    for name in {item.name for item in analyzer.defined_imports}:
+        whitelist = f"whitelists/{name}_whitelist.py"
+        try:
+            data = pkgutil.get_data("vulture", whitelist)
+        except OSError:
+            continue
+        if data is not None:
+            analyzer.scan(data.decode("utf-8"), filename=whitelist)
+    keep = set()
+    for file in files:
+        keep.update(callback_locations(file))
+    dead_code = []
+    for item in analyzer.get_unused_code(min_confidence=60):
+        identity = (
+            str(item.filename),
+            item.first_lineno,
+            item.last_lineno,
+            item.name,
+        )
+        if identity[0] not in paths or identity in keep:
+            continue
+        if (
+            not item.name
+            or len(item.name.encode("utf-8")) > MAX_STRING_BYTES
+            or item.typ not in KINDS
+            or type(item.confidence) is not int
+            or not 60 <= item.confidence <= 100
+            or not item.message
+            or len(item.message.encode("utf-8")) > MAX_STRING_BYTES
+        ):
+            raise ValueError("Vulture produced an invalid dead-code fact")
+        dead_code.append(
+            {
+                "analyzer": "vulture",
+                "path": identity[0],
+                "line": identity[1],
+                "endLine": identity[2],
+                "name": identity[3],
+                "kind": item.typ,
+                "confidence": item.confidence,
+                "message": item.message,
+            }
+        )
+    if len(dead_code) > MAX_FACTS:
+        raise ValueError("Vulture produced more than 10000 dead-code facts")
+    dead_code.sort(
+        key=lambda item: (
+            item["path"],
+            item["line"],
+            item["endLine"],
+            item["name"],
+            item["kind"],
+            item["confidence"],
+            item["message"],
+        )
+    )
+    return dead_code
+
+
+def response(failure="", covered=None, dead_code=None):
+    return {
+        "protocol": PROTOCOL,
+        "toolVersion": TOOL_VERSION,
+        "covered": [] if covered is None else covered,
+        "deadCode": [] if dead_code is None else dead_code,
+        "failure": bounded(failure),
+    }
+
+
+def main():
+    covered = []
+    try:
+        data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+        if len(data) > MAX_INPUT_BYTES:
+            raise ValueError("request exceeds the byte limit")
+        request = json.loads(data)
+        if isinstance(request, dict) and isinstance(request.get("files"), list):
+            covered = request["files"]
+        result = response(covered=covered, dead_code=analyze(request))
+    except (
+        ImportError,
+        OSError,
+        SyntaxError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+    ) as error:
+        result = response(str(error))
+    output = json.dumps(
+        result, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    if len(output) > MAX_OUTPUT_BYTES:
+        output = json.dumps(
+            response("response exceeds the byte limit"), separators=(",", ":")
+        ).encode("utf-8")
+    sys.stdout.buffer.write(output + b"\n")
+
+
+main()

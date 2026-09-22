@@ -45,10 +45,19 @@ escaping, ambiguous, or malformed evidence makes the importer incomplete. The
 adapter does not guess from runtime strings. Core retains module ownership,
 dependency direction, cycle, and coverage enforcement.
 
+Vulture 2.16 scans every authenticated member of a selected project scope during
+complete checks and gates. Target `noqa` suppression is disabled, while Vulture's
+bundled import whitelists and release-owned standard-library callback protections
+remain active. The adapter returns dead-code facts for core to interpret as the
+existing `quality.deadCode` finding. A scope with PEP 621 entry points or a bound
+runtime reachability declaration fails incomplete until those contracts move to
+the pack; it never runs a reduced analysis and presents it as complete.
+
 The executable quality slice claims format, lint, complexity, type checking,
-static architecture facts, and finite computed-import declarations for its
-recognized callsites. Dead code, cross-module loader-alias parity, runtime
-loaders, dependency evidence, project-environment resolution, and runtime
-contracts remain migration work and cannot be inferred from these claims. The
-pack is not eligible for the ownership cutover until every Python ledger row has
-executable evidence.
+plain complete-project dead code, static architecture facts, and finite
+computed-import declarations for its recognized callsites. TypedDict and
+framework retention, dynamic references, external attributes, in-tree build
+backend hooks, cross-module loader-alias parity, runtime loaders, dependency
+evidence, and project-environment resolution remain migration work and cannot be
+inferred from these claims. The pack is not eligible for the ownership cutover
+until every Python ledger row has executable evidence.

@@ -61,6 +61,12 @@ type fakeTy struct {
 	err      error
 }
 
+type fakeVulture struct {
+	facts []deadCodeFact
+	files *[]string
+	err   error
+}
+
 type fakeProject struct {
 	facts map[string]projectFact
 	err   error
@@ -92,6 +98,13 @@ func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files [
 		*ty.files = slices.Clone(files)
 	}
 	return slices.Clone(ty.findings), ty.err
+}
+
+func (vulture fakeVulture) deadCode(_ context.Context, _ string, files []string) ([]deadCodeFact, error) {
+	if vulture.files != nil {
+		*vulture.files = slices.Clone(files)
+	}
+	return slices.Clone(vulture.facts), vulture.err
 }
 
 func (facts fakeFacts) comments(context.Context, string, []string) (factResult, error) {
@@ -259,6 +272,50 @@ func TestTypecheckAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
 	adapter := adapter{ty: fakeTy{findings: []responseFinding{finding}, files: &checked}}
 	result := adapter.run(context.Background(), request)
 	if result.Status != "findings" || !slices.Equal(checked, []string{"src/app.py", "src/other.py"}) || !slices.Equal(result.Coverage.Analyzed, checked) {
+		t.Fatalf("result = %+v, checked = %v", result, checked)
+	}
+}
+
+func TestDeadCodeAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("from .other import value\nprint(value)\n"))
+	other := []byte("value = 1\nunneeded = 2\n")
+	writePythonTestInput(t, root, &request, "src/other.py", other)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/other.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/other.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/other.py")
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	fact := deadCodeFact{Analyzer: "vulture", Path: "src/other.py", Line: 2, EndLine: 2, Name: "unneeded", Kind: "variable", Confidence: 60, Message: "unused variable 'unneeded'"}
+	checked := []string{}
+	result := (adapter{vulture: fakeVulture{facts: []deadCodeFact{fact}, files: &checked}}).run(context.Background(), request)
+	if result.Status != "pass" || result.Facts == nil || result.Facts.DeadCode == nil || !slices.Equal(*result.Facts.DeadCode, []deadCodeFact{fact}) {
+		t.Fatalf("result = %+v", result)
+	}
+	if !slices.Equal(checked, []string{"src/app.py", "src/other.py"}) || !slices.Equal(result.Coverage.Analyzed, checked) {
+		t.Fatalf("coverage = %+v, checked = %v", result.Coverage, checked)
+	}
+}
+
+func TestDeadCodeRejectsUnimplementedRuntimeDeclarations(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	checked := []string{}
+	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "runtime reachability declarations") || len(checked) != 0 {
+		t.Fatalf("result = %+v, checked = %v", result, checked)
+	}
+}
+
+func TestDeadCodeRejectsUnimplementedEntryPoints(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
+	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[{"group":"sample.plugins","module":"sample.plugin"}],"problems":[]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	checked := []string{}
+	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "entry-point reachability") || len(checked) != 0 {
 		t.Fatalf("result = %+v, checked = %v", result, checked)
 	}
 }
@@ -484,6 +541,8 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 			toolIdentity{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)},
 			toolIdentity{ID: "python", Name: "python", Version: "3.12.13+20260728", SHA256: strings.Repeat("b", 64)},
 		)
+	case "dead-code":
+		tools = append(tools, toolIdentity{ID: "python", Name: "python", Version: "3.12.13+20260728", SHA256: strings.Repeat("b", 64)})
 	case "typecheck":
 		tools = append(tools, toolIdentity{ID: "ty", Name: "ty", Version: "0.0.65", SHA256: strings.Repeat("c", 64)})
 	}

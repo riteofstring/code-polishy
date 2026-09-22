@@ -121,6 +121,32 @@
           }
         ]
       }
+    },
+    {
+      "name": "dead-code",
+      "argv": ["bin/adapter"],
+      "languages": ["python"],
+      "capabilities": ["dead-code"],
+      "profiles": ["check", "gate"],
+      "activation": "complete-or-gate",
+      "timeoutSeconds": 300,
+      "execution": {
+        "type": "host-toolchain",
+        "network": "none",
+        "tools": [
+          {
+            "id": "node",
+            "name": "node",
+            "version": "24.18.0",
+            "launcher": true
+          },
+          {
+            "id": "python",
+            "name": "python",
+            "version": "3.12.13+20260728"
+          }
+        ]
+      }
     }
   ],
   "fixtures": [
@@ -191,6 +217,23 @@
       "files": ["src/sample/__init__.py"],
       "expectedStatus": "findings",
       "expectedRules": ["ty.invalid-assignment"]
+    },
+    {
+      "name": "dead-code-pass",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-pass",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "dead-code-fail",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-fail",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "findings",
+      "expectedRules": ["quality.deadCode"]
     },
     {
       "name": "target-version-pass",

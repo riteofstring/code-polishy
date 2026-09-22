@@ -597,25 +597,31 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Thirteen built-pack fixtures include
+enforcement. Fifteen built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
 current source and configuration digests, resolve direct, strict JSON, PEP 621
 entry-point, and module-object registry targets, and return ordinary
 `proven-dynamic` facts. Undeclared, stale, escaping, malformed, or ambiguous
-evidence fails incomplete instead of being guessed. Dead code, remaining
-cross-module loader-alias parity, runtime loaders, dependency evidence,
-environment resolution, framework contracts, focused graph closure, and the
-shared conformance matrix remain open.
+evidence fails incomplete instead of being guessed. The pack now runs sealed
+Vulture 2.16 over complete authenticated project scopes, disables target `noqa`
+suppression, retains bundled whitelists and standard-library callback behavior,
+and returns dead-code facts that core maps to the existing finding. Projects
+with entry points or runtime reachability declarations fail incomplete until
+their interpreters move. TypedDict retention, framework and repository
+contracts, dynamic references, external attributes, in-tree build backends,
+remaining cross-module loader-alias parity, runtime loaders, dependency
+evidence, environment resolution, focused graph closure, and the shared
+conformance matrix remain open.
 
-The generic response contract now accepts bounded dead-code facts and has core
+The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and
-remediation. Python still needs to execute Vulture and interpret its contract and
-reachability declarations before that capability is claimed by the pack.
-Command activation now distinguishes ordinary selected work from
-`complete-or-gate` whole-project analysis so Python can retain its current focused
-check deferral without a language-specific core branch.
+remediation. Command activation distinguishes ordinary selected work from
+`complete-or-gate` whole-project analysis, so Python retains its current focused
+check deferral without a language-specific core branch. Contract and
+reachability interpretation remains required before the pack can claim complete
+dead-code parity.
 
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python
