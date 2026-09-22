@@ -404,7 +404,7 @@ func (state *analysisState) deadCodeGroup(ctx context.Context, vulture vultureEx
 		state.markUnsupported(group.files, "Python dead-code analysis requires every project source")
 		return nil, nil
 	}
-	references, reason, err := pythonContractReferences(state.request.Policy, group.scope)
+	contracts, reason, err := pythonContractsForScope(state.request.Policy, group.scope)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func (state *analysisState) deadCodeGroup(ctx context.Context, vulture vultureEx
 		state.markUnsupported(group.files, reason)
 		return nil, nil
 	}
-	found, err := vulture.deadCode(ctx, workspace, group.scope, group.files, references)
+	found, err := vulture.deadCode(ctx, workspace, group.scope, group.files, contracts)
 	if err != nil {
 		return nil, err
 	}

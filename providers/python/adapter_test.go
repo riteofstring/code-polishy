@@ -64,10 +64,10 @@ type fakeTy struct {
 }
 
 type fakeVulture struct {
-	result     vultureResult
-	files      *[]string
-	references *[]vultureReference
-	err        error
+	result    vultureResult
+	files     *[]string
+	contracts *[]vultureContract
+	err       error
 }
 
 type fakeProject struct {
@@ -103,12 +103,12 @@ func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files [
 	return slices.Clone(ty.findings), ty.err
 }
 
-func (vulture fakeVulture) deadCode(_ context.Context, _ string, _ analysisScope, files []string, references []vultureReference) (vultureResult, error) {
+func (vulture fakeVulture) deadCode(_ context.Context, _ string, _ analysisScope, files []string, contracts []vultureContract) (vultureResult, error) {
 	if vulture.files != nil {
 		*vulture.files = slices.Clone(files)
 	}
-	if vulture.references != nil {
-		*vulture.references = slices.Clone(references)
+	if vulture.contracts != nil {
+		*vulture.contracts = cloneVultureContracts(contracts)
 	}
 	return vulture.result, vulture.err
 }
@@ -319,11 +319,24 @@ func TestDeadCodeCarriesRepositoryEntryPointContracts(t *testing.T) {
 	request := pythonTestRequest(t, root, "dead-code", []byte("class Handler:\n    def execute(self):\n        return 1\n"))
 	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"entry-point","target":"app:Handler","members":["execute"],"reason":"Runtime selects this handler."}}]}`)
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
-	references := []vultureReference{}
-	result := (adapter{vulture: fakeVulture{references: &references}}).run(context.Background(), request)
-	want := []vultureReference{{ID: "config:python.contract:entry-point:app:Handler", Module: "app", Symbol: "Handler", Members: []string{"execute"}, Contract: true}}
-	if result.Status != "pass" || !reflect.DeepEqual(references, want) {
-		t.Fatalf("result = %+v, references = %+v", result, references)
+	contracts := []vultureContract{}
+	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
+	want := []vultureContract{{ID: "config:python.contract:entry-point:app:Handler", Kind: "entry-point", Target: "app:Handler", Members: []string{"execute"}, Attributes: []string{}, Decorators: []string{}, Keywords: map[string]bool{}}}
+	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
+		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
+	}
+}
+
+func TestDeadCodeCarriesRepositoryDecoratorContracts(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("def handler():\n    return 1\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"decorator","target":"vendor.register","keywords":{"active":true},"reason":"Runtime calls registered handlers."}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	contracts := []vultureContract{}
+	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
+	want := []vultureContract{{ID: "config:python.contract:decorator:vendor.register", Kind: "decorator", Target: "vendor.register", Members: []string{}, Attributes: []string{}, Decorators: []string{}, Keywords: map[string]bool{"active": true}}}
+	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
+		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
 	}
 }
 

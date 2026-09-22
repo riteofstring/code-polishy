@@ -54,22 +54,24 @@ entry-point targets retain their source definition and re-export chain. An exact
 in-tree build backend retains its object and recognized build hooks when
 `backend-path` makes it project-owned. Missing, ambiguous, or stale manifest
 targets make the whole scope incomplete. A scope with a bound runtime
-reachability declaration fails incomplete unless it is a repository-local
-`python.contract` entry point. The authenticated Astroid 4.1.2 resolver reads
-only the complete materialized project, follows direct and nested instance
-attributes, and retains exact definitions, explicit members, and re-export
-chains without importing target code. Missing, ambiguous, conditional, stale,
-malformed, external, or otherwise unsupported contract evidence withholds
-scope-wide dead-code facts; the adapter never runs a reduced analysis and
-presents it as complete.
+reachability declaration fails incomplete unless it is a supported
+`python.contract`. Repository-local entry points use the authenticated Astroid
+4.1.2 resolver over only the complete materialized project; it follows direct
+and nested instance attributes and retains exact definitions, explicit members,
+and re-export chains without importing target code. Decorator contracts require
+an exact unshadowed import and retain only definitions carrying the named
+decorator with any declared literal boolean keyword values. Missing, ambiguous,
+conditional, stale, malformed, external, or otherwise unsupported contract
+evidence withholds scope-wide dead-code facts; the adapter never runs a reduced
+analysis and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. Repository-local
-entry-point contracts are interpreted for dead-code reachability. TypedDict and
-framework retention, type, decorator, and module-binding contracts, dynamic
-references, external attributes, cross-module loader-alias parity, runtime
-loaders, dependency evidence, and
+entry-point contracts and exact imported decorator contracts are interpreted
+for dead-code reachability. TypedDict and framework retention, type and
+module-binding contracts, dynamic references, external attributes, cross-module
+loader-alias parity, runtime loaders, dependency evidence, and
 project-environment resolution remain migration work and cannot be inferred from
 these claims. The pack is not eligible for the ownership cutover until every
 Python ledger row has executable evidence.

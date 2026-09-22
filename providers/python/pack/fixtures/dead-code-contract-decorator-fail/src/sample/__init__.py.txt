@@ -1,0 +1,7 @@
+python-pack-fixture
+from vendor import register
+
+
+@register(active=False)
+def handler():
+    return 1

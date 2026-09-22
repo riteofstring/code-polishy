@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,7 +20,7 @@ const vultureProtocol = "code-polishy-python-vulture/v1"
 const vultureVersion = "2.16"
 
 type vultureExecutor interface {
-	deadCode(context.Context, string, analysisScope, []string, []vultureReference) (vultureResult, error)
+	deadCode(context.Context, string, analysisScope, []string, []vultureContract) (vultureResult, error)
 }
 
 type osVulture struct {
@@ -33,6 +34,7 @@ type vultureRequest struct {
 	Files       []vultureFile      `json:"files"`
 	References  []vultureReference `json:"references"`
 	Backends    []vultureBackend   `json:"backends"`
+	Contracts   []vultureContract  `json:"contracts"`
 }
 
 type vultureFile struct {
@@ -42,11 +44,21 @@ type vultureFile struct {
 }
 
 type vultureReference struct {
-	ID       string   `json:"id"`
-	Module   string   `json:"module"`
-	Symbol   string   `json:"symbol"`
-	Members  []string `json:"members"`
-	Contract bool     `json:"contract"`
+	ID      string   `json:"id"`
+	Module  string   `json:"module"`
+	Symbol  string   `json:"symbol"`
+	Members []string `json:"members"`
+}
+
+type vultureContract struct {
+	ID              string          `json:"id"`
+	Kind            string          `json:"kind"`
+	Target          string          `json:"target"`
+	Members         []string        `json:"members"`
+	Attributes      []string        `json:"attributes"`
+	Decorators      []string        `json:"decorators"`
+	AnnotatedFields bool            `json:"annotatedFields"`
+	Keywords        map[string]bool `json:"keywords"`
 }
 
 type vultureBackend struct {
@@ -74,12 +86,12 @@ type vultureResponseWire struct {
 	Failure     *string           `json:"failure"`
 }
 
-func (runner osVulture) deadCode(ctx context.Context, workspace string, scope analysisScope, files []string, references []vultureReference) (vultureResult, error) {
+func (runner osVulture) deadCode(ctx context.Context, workspace string, scope analysisScope, files []string, contracts []vultureContract) (vultureResult, error) {
 	if err := runner.validate(); err != nil {
 		return vultureResult{}, err
 	}
 	files = uniqueSorted(files)
-	request, err := newVultureRequest(scope, files, references)
+	request, err := newVultureRequest(scope, files, contracts)
 	if err != nil {
 		return vultureResult{}, err
 	}
@@ -94,7 +106,7 @@ func (runner osVulture) deadCode(ctx context.Context, workspace string, scope an
 	return parseVultureResponse(output, files)
 }
 
-func newVultureRequest(scope analysisScope, files []string, references []vultureReference) (vultureRequest, error) {
+func newVultureRequest(scope analysisScope, files []string, contracts []vultureContract) (vultureRequest, error) {
 	data, err := decodePythonScopeData(scope.Data)
 	if err != nil {
 		return vultureRequest{}, err
@@ -103,7 +115,7 @@ func newVultureRequest(scope analysisScope, files []string, references []vulture
 	if err != nil {
 		return vultureRequest{}, err
 	}
-	request := vultureRequest{Protocol: vultureProtocol, ToolVersion: vultureVersion, Files: []vultureFile{}, References: slices.Clone(references), Backends: []vultureBackend{}}
+	request := vultureRequest{Protocol: vultureProtocol, ToolVersion: vultureVersion, Files: []vultureFile{}, References: []vultureReference{}, Backends: []vultureBackend{}, Contracts: cloneVultureContracts(contracts)}
 	for _, file := range files {
 		identity, found := index.byPath[file]
 		if !found {
@@ -120,7 +132,20 @@ func newVultureRequest(scope analysisScope, files []string, references []vulture
 		request.Backends = append(request.Backends, vultureBackend{ID: id, Module: data.BuildBackend.Module, Object: data.BuildBackend.Object})
 	}
 	sort.Slice(request.References, func(left, right int) bool { return request.References[left].ID < request.References[right].ID })
+	sort.Slice(request.Contracts, func(left, right int) bool { return request.Contracts[left].ID < request.Contracts[right].ID })
 	return request, nil
+}
+
+func cloneVultureContracts(contracts []vultureContract) []vultureContract {
+	result := make([]vultureContract, len(contracts))
+	for index, contract := range contracts {
+		contract.Members = slices.Clone(contract.Members)
+		contract.Attributes = slices.Clone(contract.Attributes)
+		contract.Decorators = slices.Clone(contract.Decorators)
+		contract.Keywords = maps.Clone(contract.Keywords)
+		result[index] = contract
+	}
+	return result
 }
 
 func (runner osVulture) validate() error {

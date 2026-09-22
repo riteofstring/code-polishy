@@ -93,18 +93,15 @@ func TestNewVultureRequestCarriesManifestReachability(t *testing.T) {
 		Members: []string{"backend.py", "src/sample/__init__.py"},
 		Data:    json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"backendPaths":["."],"buildBackend":{"module":"backend","object":"Builder"},"entryPoints":[{"group":"console_scripts","name":"sample","module":"sample","symbol":"main"}],"problems":[]}`),
 	}
-	configured := []vultureReference{{ID: "config:python.contract:entry-point:sample:Handler", Module: "sample", Symbol: "Handler", Members: []string{"run"}, Contract: true}}
+	configured := []vultureContract{{ID: "config:python.contract:entry-point:sample:Handler", Kind: "entry-point", Target: "sample:Handler", Members: []string{"run"}, Attributes: []string{}, Decorators: []string{}, Keywords: map[string]bool{}}}
 	request, err := newVultureRequest(scope, scope.Members, configured)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantFiles := []vultureFile{{Path: "backend.py", Module: "backend"}, {Path: "src/sample/__init__.py", Module: "sample", Package: "sample"}}
-	wantReferences := []vultureReference{
-		{ID: "config:python.contract:entry-point:sample:Handler", Module: "sample", Symbol: "Handler", Members: []string{"run"}, Contract: true},
-		{ID: "manifest:pyproject.toml:console_scripts:sample:sample:main", Module: "sample", Symbol: "main", Members: []string{}},
-	}
+	wantReferences := []vultureReference{{ID: "manifest:pyproject.toml:console_scripts:sample:sample:main", Module: "sample", Symbol: "main", Members: []string{}}}
 	wantBackends := []vultureBackend{{ID: "manifest:pyproject.toml:build-system.build-backend:backend:Builder", Module: "backend", Object: "Builder"}}
-	if !slices.Equal(request.Files, wantFiles) || !reflect.DeepEqual(request.References, wantReferences) || !slices.Equal(request.Backends, wantBackends) {
+	if !slices.Equal(request.Files, wantFiles) || !reflect.DeepEqual(request.References, wantReferences) || !slices.Equal(request.Backends, wantBackends) || !reflect.DeepEqual(request.Contracts, configured) {
 		t.Fatalf("request = %+v", request)
 	}
 }

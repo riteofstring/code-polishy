@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Twenty-one built-pack fixtures include
+enforcement. Twenty-four built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -615,11 +615,13 @@ facts. Repository-local `python.contract` entry points now use the authenticated
 contained Astroid resolver to retain direct and nested-instance definitions,
 explicit members, and re-export chains without importing target code. Invalid,
 stale, conditional, ambiguous, external, and unsupported runtime reachability
-declarations fail incomplete. TypedDict retention, framework contracts, type,
-decorator, and module-binding contracts, dynamic references, external
-attributes, remaining cross-module loader-alias parity, runtime loaders,
-dependency evidence, environment resolution, focused graph closure, and the
-shared conformance matrix remain open.
+declarations fail incomplete. Exact imported decorator contracts now retain only
+decorated definitions satisfying their declared literal boolean keyword
+constraints; unmatched or shadowed declarations fail incomplete. TypedDict
+retention, framework contracts, type contracts, module-binding contracts,
+dynamic references, external attributes, remaining cross-module loader-alias
+parity, runtime loaders, dependency evidence, environment resolution, focused
+graph closure, and the shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

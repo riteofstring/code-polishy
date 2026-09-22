@@ -19,6 +19,8 @@ MAX_SOURCE_BYTES = 512 * 1024 * 1024
 MAX_AST_NODES = 2000000
 MAX_FACTS = 10000
 MAX_REFERENCES = 4096
+MAX_CONTRACT_NAMES = 128
+MAX_CONTRACT_KEYWORDS = 32
 MAX_STRING_BYTES = 4096
 KINDS = {
     "attribute",
@@ -213,22 +215,22 @@ class ContainedAstroidReferences:
         self.cache[name] = module
         return module
 
-    def entry_point(self, reference):
+    def entry_point(self, contract):
         try:
-            return self.resolve_entry_point(reference)
+            return self.resolve_entry_point(contract)
         except self.errors as error:
             raise ValueError(str(error)) from error
 
-    def resolve_entry_point(self, reference):
-        module_name = reference["module"]
+    def resolve_entry_point(self, contract):
+        module_name, symbol = contract["target"].split(":", 1)
         module = self.load(module_name)
         if module_name not in self.paths:
             raise ValueError(f"entry-point module is not project source: {module_name}")
         current = module
         kept = set()
-        for part in reference["symbol"].split("."):
+        for part in symbol.split("."):
             current = self.member(current, part, kept)
-        for name in reference["members"]:
+        for name in contract["members"]:
             self.member(current, name, kept)
         return kept
 
@@ -316,6 +318,112 @@ def expanded_name(node, bindings):
         parent = expanded_name(node.value, bindings)
         return parent + "." + node.attr if parent else ""
     return ""
+
+
+def statement_binding_names(node):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return {node.name}
+    if isinstance(node, ast.Lambda):
+        return set()
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return {
+            item.asname or item.name.partition(".")[0]
+            for item in node.names
+            if item.name != "*"
+        }
+    result = set()
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        result.add(node.id)
+    if isinstance(node, ast.ExceptHandler) and node.name:
+        result.add(node.name)
+    for child in ast.iter_child_nodes(node):
+        result.update(statement_binding_names(child))
+    return result
+
+
+def exact_import_bindings(file):
+    writes = defaultdict(int)
+    candidates = defaultdict(list)
+    for node in file["tree"].body:
+        for name in statement_binding_names(node):
+            writes[name] += 1
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                name = item.asname or item.name.partition(".")[0]
+                target = item.name if item.asname else item.name.partition(".")[0]
+                candidates[name].append(target)
+        elif isinstance(node, ast.ImportFrom):
+            module = import_from_module(file, node)
+            if module:
+                for item in node.names:
+                    if item.name != "*":
+                        candidates[item.asname or item.name].append(
+                            module + "." + item.name
+                        )
+    return {
+        name: values[0]
+        for name, values in candidates.items()
+        if len(values) == 1 and writes[name] == 1
+    }
+
+
+def root_name(node):
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def decorator_matches(node, contract, bindings, blocked):
+    target = node.func if isinstance(node, ast.Call) else node
+    root = root_name(target)
+    if not root or root in blocked or root not in bindings:
+        return False
+    if expanded_name(target, bindings) != contract["target"]:
+        return False
+    keywords = contract["keywords"]
+    if not keywords:
+        return True
+    if not isinstance(node, ast.Call) or node.args:
+        return False
+    actual = {keyword.arg: keyword.value for keyword in node.keywords}
+    return None not in actual and all(
+        name in actual
+        and isinstance(actual[name], ast.Constant)
+        and actual[name].value is value
+        for name, value in keywords.items()
+    )
+
+
+def decorator_body_locations(file, body, contract, bindings, blocked):
+    result = set()
+    for node in body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if any(
+            decorator_matches(decorator, contract, bindings, blocked)
+            for decorator in node.decorator_list
+        ):
+            result.add(definition_location(file["path"], node, node.name))
+        if isinstance(node, ast.ClassDef):
+            local = set()
+            for statement in node.body:
+                local.update(statement_binding_names(statement))
+            result.update(
+                decorator_body_locations(
+                    file, node.body, contract, bindings, blocked | local
+                )
+            )
+    return result
+
+
+def decorator_locations(files, contract):
+    result = set()
+    for file in files:
+        bindings = exact_import_bindings(file)
+        result.update(
+            decorator_body_locations(file, file["tree"].body, contract, bindings, set())
+        )
+    return result
 
 
 def callback_locations(file):
@@ -455,20 +563,81 @@ def exact_text(value):
     )
 
 
+def exact_contract_names(value, qualified=False):
+    return (
+        isinstance(value, list)
+        and len(value) <= MAX_CONTRACT_NAMES
+        and value == sorted(set(value))
+        and all(
+            identifier_chain(name) and (qualified or "." not in name) for name in value
+        )
+    )
+
+
+def exact_contract(contract, index, identifiers):
+    exact_object(
+        contract,
+        {
+            "id",
+            "kind",
+            "target",
+            "members",
+            "attributes",
+            "decorators",
+            "annotatedFields",
+            "keywords",
+        },
+        f"contract {index}",
+    )
+    keywords = contract["keywords"]
+    valid = (
+        exact_text(contract["id"])
+        and contract["id"] not in identifiers
+        and contract["kind"] in {"entry-point", "decorator"}
+        and exact_text(contract["target"])
+        and exact_contract_names(contract["members"])
+        and exact_contract_names(contract["attributes"])
+        and exact_contract_names(contract["decorators"], qualified=True)
+        and type(contract["annotatedFields"]) is bool
+        and isinstance(keywords, dict)
+        and len(keywords) <= MAX_CONTRACT_KEYWORDS
+        and all(
+            identifier_chain(name) and "." not in name and type(value) is bool
+            for name, value in keywords.items()
+        )
+    )
+    if contract["kind"] == "entry-point":
+        parts = contract["target"].split(":")
+        valid = (
+            valid and len(parts) == 2 and all(identifier_chain(part) for part in parts)
+        )
+        valid = valid and not contract["attributes"] and not contract["decorators"]
+        valid = valid and not contract["annotatedFields"] and not keywords
+    else:
+        valid = valid and identifier_chain(contract["target"])
+        valid = valid and not contract["members"] and not contract["attributes"]
+        valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+    if not valid:
+        raise ValueError(f"contract {index} is invalid")
+    identifiers.add(contract["id"])
+
+
 def reachability_inputs(request):
     references = request["references"]
     backends = request["backends"]
+    contracts = request["contracts"]
     if (
         not isinstance(references, list)
         or not isinstance(backends, list)
-        or len(references) + len(backends) > MAX_REFERENCES
+        or not isinstance(contracts, list)
+        or len(references) + len(backends) + len(contracts) > MAX_REFERENCES
     ):
         raise ValueError("request has an invalid reachability count")
     identifiers = set()
     for index, reference in enumerate(references):
         exact_object(
             reference,
-            {"id", "module", "symbol", "members", "contract"},
+            {"id", "module", "symbol", "members"},
             f"reference {index}",
         )
         if (
@@ -476,7 +645,6 @@ def reachability_inputs(request):
             or reference["id"] in identifiers
             or not identifier_chain(reference["module"])
             or not identifier_chain(reference["symbol"])
-            or type(reference["contract"]) is not bool
             or not isinstance(reference["members"], list)
             or len(reference["members"]) > MAX_REFERENCES
             or any(
@@ -498,7 +666,9 @@ def reachability_inputs(request):
         ):
             raise ValueError(f"backend {index} is invalid")
         identifiers.add(backend["id"])
-    return references, backends
+    for index, contract in enumerate(contracts):
+        exact_contract(contract, index, identifiers)
+    return references, backends, contracts
 
 
 def definition_chain(file, parts):
@@ -558,37 +728,45 @@ def backend_locations(modules, backend):
     return result
 
 
-def reachability_locations(files, references, backends):
+def reachability_locations(files, references, backends, contracts):
     modules = {}
     for file in files:
         if file["module"] and file["path"].endswith(".py"):
             modules.setdefault(file["module"], []).append(file)
     keep = set()
     problems = []
-    configured = [reference for reference in references if reference["contract"]]
-    context = ContainedAstroidReferences(files) if configured else nullcontext()
+    entry_points = [
+        contract for contract in contracts if contract["kind"] == "entry-point"
+    ]
+    context = ContainedAstroidReferences(files) if entry_points else nullcontext()
     with context as resolver:
         for reference in references:
             try:
-                if reference["contract"]:
-                    locations = resolver.entry_point(reference)
-                else:
-                    parts = reference["symbol"].split(".")
-                    locations = module_reference(
-                        modules, reference["module"], parts, set()
-                    )
-                    for member in reference["members"]:
-                        locations.extend(
-                            module_reference(
-                                modules,
-                                reference["module"],
-                                parts + [member],
-                                set(),
-                            )
+                parts = reference["symbol"].split(".")
+                locations = module_reference(modules, reference["module"], parts, set())
+                for member in reference["members"]:
+                    locations.extend(
+                        module_reference(
+                            modules,
+                            reference["module"],
+                            parts + [member],
+                            set(),
                         )
+                    )
                 keep.update(locations)
             except (TypeError, ValueError) as error:
                 problems.append({"id": reference["id"], "message": bounded(str(error))})
+        for contract in contracts:
+            try:
+                if contract["kind"] == "entry-point":
+                    locations = resolver.entry_point(contract)
+                else:
+                    locations = decorator_locations(files, contract)
+                if not locations:
+                    raise ValueError("contract matches no source definitions")
+                keep.update(locations)
+            except (TypeError, ValueError) as error:
+                problems.append({"id": contract["id"], "message": bounded(str(error))})
     for backend in backends:
         try:
             keep.update(backend_locations(modules, backend))
@@ -601,7 +779,14 @@ def reachability_locations(files, references, backends):
 def analyze(request):
     exact_object(
         request,
-        {"protocol", "toolVersion", "files", "references", "backends"},
+        {
+            "protocol",
+            "toolVersion",
+            "files",
+            "references",
+            "backends",
+            "contracts",
+        },
         "request",
     )
     if request["protocol"] != PROTOCOL or request["toolVersion"] != TOOL_VERSION:
@@ -611,13 +796,13 @@ def analyze(request):
         or not 1 <= len(request["files"]) <= MAX_FILES
     ):
         raise ValueError("request has an invalid Python source count")
-    references, backends = reachability_inputs(request)
+    references, backends, contracts = reachability_inputs(request)
     if sys.version_info[:2] != (3, 12):
         raise ValueError("Python dead-code analysis requires CPython 3.12")
     installed_version = importlib.metadata.version("vulture")
     if installed_version != TOOL_VERSION:
         raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
-    if any(reference["contract"] for reference in references):
+    if any(contract["kind"] == "entry-point" for contract in contracts):
         installed_astroid = importlib.metadata.version("astroid")
         if installed_astroid != ASTROID_VERSION:
             raise ValueError(
@@ -642,7 +827,9 @@ def analyze(request):
     keep = set()
     for file in files:
         keep.update(callback_locations(file))
-    reachability, problems = reachability_locations(files, references, backends)
+    reachability, problems = reachability_locations(
+        files, references, backends, contracts
+    )
     keep.update(reachability)
     if problems:
         return [], problems, paths
