@@ -1,0 +1,7 @@
+python-pack-fixture
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def unused_fixture():
+    return "unused"

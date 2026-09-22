@@ -1,0 +1,6 @@
+python-pack-fixture
+def fixture(**options):
+    def decorate(value):
+        return value
+
+    return decorate

@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Thirty-four built-pack fixtures include
+enforcement. Thirty-six built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -607,11 +607,14 @@ entry-point, and module-object registry targets, and return ordinary
 evidence fails incomplete instead of being guessed. The pack now runs sealed
 Vulture 2.16 over complete authenticated project scopes, disables target `noqa`
 suppression, retains bundled whitelists and standard-library callback behavior,
-and returns dead-code facts that core maps to the existing finding. PEP 621
-scripts and grouped entry points now retain exact module-symbol definitions and
-re-export chains; project-owned build backends retain their objects and standard
-hooks. Missing or ambiguous manifest targets withhold project-wide dead-code
-facts. Repository-local `python.contract` entry points now use the authenticated,
+and returns dead-code facts that core maps to the existing finding. Exact
+external pytest imports and project re-export chains retain autouse fixtures and
+nonempty module marks, while project-local and rebound lookalikes remain
+reportable. PEP 621 scripts and grouped entry points now retain exact
+module-symbol definitions and re-export chains; project-owned build backends
+retain their objects and standard hooks. Missing or ambiguous manifest targets
+withhold project-wide dead-code facts. Repository-local `python.contract` entry
+points now use the authenticated,
 contained Astroid resolver to retain direct and nested-instance definitions,
 explicit members, and re-export chains without importing target code. Invalid,
 stale, conditional, ambiguous, external, and unsupported runtime reachability
@@ -632,10 +635,10 @@ on proven types and instance writes reached through proven constructors,
 annotations, method receivers, and aliases. The forward flow invalidates
 reassignments and mutation-sensitive receiver paths, intersects branch exits,
 handles loops and exceptions conservatively, and rejects ambiguous same-line
-writes. TypedDict retention, framework contracts, dynamic references, external
-attributes, remaining cross-module loader-alias parity, runtime loaders,
-dependency evidence, environment resolution, focused graph closure, and the
-shared conformance matrix remain open.
+writes. TypedDict retention, remaining framework contracts, dynamic references,
+external attributes, remaining cross-module loader-alias parity, runtime
+loaders, dependency evidence, environment resolution, focused graph closure,
+and the shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

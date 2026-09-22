@@ -48,12 +48,15 @@ dependency direction, cycle, and coverage enforcement.
 Vulture 2.16 scans every authenticated member of a selected project scope during
 complete checks and gates. Target `noqa` suppression is disabled, while Vulture's
 bundled import whitelists and release-owned standard-library callback protections
-remain active. The adapter returns dead-code facts for core to interpret as the
-existing `quality.deadCode` finding. Exact PEP 621 script, GUI script, and grouped
-entry-point targets retain their source definition and re-export chain. An exact
-in-tree build backend retains its object and recognized build hooks when
-`backend-path` makes it project-owned. Missing, ambiguous, or stale manifest
-targets make the whole scope incomplete. A scope with a bound runtime
+remain active. Exact external pytest imports and project re-export chains retain
+autouse fixtures and nonempty module marks; project-local, rebound, non-autouse,
+and function-local lookalikes remain reportable. The adapter returns dead-code
+facts for core to interpret as the existing `quality.deadCode` finding. Exact PEP
+621 script, GUI script, and grouped entry-point targets retain their source
+definition and re-export chain. An exact in-tree build backend retains its object
+and recognized build hooks when `backend-path` makes it project-owned. Missing,
+ambiguous, or stale manifest targets make the whole scope incomplete. A scope
+with a bound runtime
 reachability declaration fails incomplete unless it is a supported
 `python.contract`. Repository-local entry points use the authenticated Astroid
 4.1.2 resolver over only the complete materialized project; it follows direct
@@ -83,9 +86,10 @@ plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. Repository-local
 entry-point contracts and exact imported decorator contracts are interpreted
 for dead-code reachability, as are exact imported module-binding contracts and
-complete type contracts for members, fields, decorators, and attributes.
-TypedDict and framework retention, dynamic references, external attributes,
-cross-module loader-alias parity, runtime loaders, dependency evidence, and
-project-environment resolution remain migration work and cannot be inferred from
-these claims. The pack is not eligible for the ownership cutover until every
-Python ledger row has executable evidence.
+complete type contracts for members, fields, decorators, and attributes. Exact
+pytest autouse fixtures and module marks are bundled framework behavior.
+TypedDict and remaining framework retention, dynamic references, external
+attributes, cross-module loader-alias parity, runtime loaders, dependency
+evidence, and project-environment resolution remain migration work and cannot be
+inferred from these claims. The pack is not eligible for the ownership cutover
+until every Python ledger row has executable evidence.

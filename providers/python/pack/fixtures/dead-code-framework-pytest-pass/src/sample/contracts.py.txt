@@ -1,0 +1,5 @@
+python-pack-fixture
+from pytest import fixture as automatic
+from pytest import mark as markers
+
+__all__ = ["automatic", "markers"]

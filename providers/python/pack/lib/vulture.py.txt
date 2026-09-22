@@ -566,6 +566,50 @@ def exact_import_bindings(file):
     }
 
 
+class ExactReferences:
+    def __init__(self, files):
+        self.modules = defaultdict(list)
+        self.bindings = {}
+        for file in files:
+            if file["module"] and file["path"].endswith(".py"):
+                self.modules[file["module"]].append(file)
+
+    def file_bindings(self, file):
+        if file["path"] not in self.bindings:
+            self.bindings[file["path"]] = exact_import_bindings(file)
+        return self.bindings[file["path"]]
+
+    def qualified(self, file, node, blocked=frozenset()):
+        name = reference_name(node)
+        if not name:
+            return None
+        parts = name.split(".")
+        if parts[0] in blocked:
+            return None
+        target = self.file_bindings(file).get(parts[0])
+        if target is None:
+            return None
+        return self.resolve(target.split(".") + parts[1:], set())
+
+    def resolve(self, parts, seen):
+        candidates = []
+        for module, files in self.modules.items():
+            module_parts = module.split(".")
+            if parts[: len(module_parts)] == module_parts:
+                candidates.append((len(module_parts), module, files))
+        if not candidates:
+            return ".".join(parts)
+        length, module, files = max(candidates, key=lambda item: item[0])
+        identity = module, ".".join(parts[length:])
+        if len(files) != 1 or identity in seen or len(parts) == length:
+            return None
+        name = parts[length]
+        target = self.file_bindings(files[0]).get(name)
+        if target is None:
+            return None
+        return self.resolve(target.split(".") + parts[length + 1 :], seen | {identity})
+
+
 def root_name(node):
     while isinstance(node, ast.Attribute):
         node = node.value
@@ -995,6 +1039,71 @@ def module_scope_nodes(node):
     yield node
     for child in ast.iter_child_nodes(node):
         yield from module_scope_nodes(child)
+
+
+def pytest_autouse_fixture(node, file, references, blocked):
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if references.qualified(file, target, blocked) != "pytest.fixture":
+            continue
+        if not isinstance(decorator, ast.Call) or decorator.args:
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in decorator.keywords}
+        autouse = keywords.get("autouse")
+        if isinstance(autouse, ast.Constant) and autouse.value is True:
+            return True
+    return False
+
+
+def pytest_fixture_locations(file, body, references, blocked=frozenset()):
+    result = set()
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if pytest_autouse_fixture(node, file, references, blocked):
+                result.add(definition_location(file["path"], node, node.name))
+        elif isinstance(node, ast.ClassDef):
+            local = set()
+            for statement in node.body:
+                local.update(statement_binding_names(statement))
+            result.update(
+                pytest_fixture_locations(file, node.body, references, blocked | local)
+            )
+    return result
+
+
+def pytest_mark_value(node, file, references):
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return bool(node.elts) and all(
+            pytest_mark_value(value, file, references) for value in node.elts
+        )
+    target = node.func if isinstance(node, ast.Call) else node
+    qualified = references.qualified(file, target)
+    return qualified is not None and qualified.startswith("pytest.mark.")
+
+
+def pytest_locations(files):
+    references = ExactReferences(files)
+    result = set()
+    for file in files:
+        result.update(pytest_fixture_locations(file, file["tree"].body, references))
+        writes = source_write_counts(file)
+        for node in module_scope_nodes(file["tree"]):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if not pytest_mark_value(node.value, file, references):
+                continue
+            for target in targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == "pytestmark"
+                    and writes[(target.lineno, target.id)] <= 1
+                ):
+                    result.add(definition_location(file["path"], target, target.id))
+    return result
 
 
 def module_binding_value(node, contract, bindings):
@@ -1455,6 +1564,7 @@ def analyze(request):
     keep = set()
     for file in files:
         keep.update(callback_locations(file))
+    keep.update(pytest_locations(files))
     reachability, problems = reachability_locations(
         files, references, backends, contracts
     )

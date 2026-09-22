@@ -1,0 +1,16 @@
+python-pack-fixture
+from .contracts import automatic, markers
+
+pytestmark = [markers.integration]
+
+
+@automatic(autouse=True)
+def prepare_environment():
+    return "ready"
+
+
+def exercise():
+    return "done"
+
+
+exercise()
