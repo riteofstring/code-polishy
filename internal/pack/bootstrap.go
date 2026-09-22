@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -73,16 +74,11 @@ func verifyToolFile(root string, manifest release.Manifest, executable string, r
 		return ToolIdentity{}, errors.New("tool is outside the installed release")
 	}
 	relative = filepath.ToSlash(relative)
-	index := slices.IndexFunc(manifest.Entries, func(entry release.Entry) bool { return entry.Path == relative && entry.SHA256 != "" })
-	if index < 0 {
-		return ToolIdentity{}, errors.New("tool is not recorded in the installed release")
-	}
-	directory, err := os.OpenRoot(root)
+	resolved, entry, err := resolveManifestTool(root, manifest.Entries, relative)
 	if err != nil {
 		return ToolIdentity{}, err
 	}
-	defer directory.Close()
-	file, err := directory.Open(relative)
+	file, err := os.Open(resolved)
 	if err != nil {
 		return ToolIdentity{}, err
 	}
@@ -92,10 +88,78 @@ func verifyToolFile(root string, manifest release.Manifest, executable string, r
 		return ToolIdentity{}, err
 	}
 	digest := hex.EncodeToString(hash.Sum(nil))
-	if digest != manifest.Entries[index].SHA256 {
+	if digest != entry.SHA256 {
 		return ToolIdentity{}, errors.New("tool does not match the installed release identity")
 	}
 	return ToolIdentity{ID: requested.ID, Name: requested.Name, Version: requested.Version, SHA256: digest}, nil
+}
+
+func resolveManifestTool(root string, entries []release.Entry, relative string) (string, release.Entry, error) {
+	byPath := make(map[string]release.Entry, len(entries))
+	for _, entry := range entries {
+		byPath[entry.Path] = entry
+	}
+	seen := map[string]bool{}
+	current := relative
+	for {
+		entry, err := nextManifestToolEntry(byPath, seen, current)
+		if err != nil {
+			return "", release.Entry{}, err
+		}
+		if entry.SHA256 != "" {
+			return manifestToolFile(root, current, entry)
+		}
+		current, err = manifestToolLinkTarget(root, current, entry.Symlink)
+		if err != nil {
+			return "", release.Entry{}, err
+		}
+	}
+}
+
+func nextManifestToolEntry(entries map[string]release.Entry, seen map[string]bool, current string) (release.Entry, error) {
+	entry, found := entries[current]
+	if !found || seen[current] {
+		return release.Entry{}, errors.New("tool is not recorded in the installed release")
+	}
+	seen[current] = true
+	return entry, nil
+}
+
+func manifestToolFile(root, current string, entry release.Entry) (string, release.Entry, error) {
+	absolute := filepath.Join(root, filepath.FromSlash(current))
+	info, err := os.Lstat(absolute)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", release.Entry{}, errors.New("recorded tool target is not a regular file")
+	}
+	return absolute, entry, nil
+}
+
+func manifestToolLinkTarget(root, current, target string) (string, error) {
+	absolute := filepath.Join(root, filepath.FromSlash(current))
+	if err := verifyManifestToolLink(absolute, target); err != nil {
+		return "", err
+	}
+	normalizedTarget := filepath.ToSlash(target)
+	if path.IsAbs(normalizedTarget) || filepath.IsAbs(target) {
+		return "", errors.New("recorded tool link escapes the installed release")
+	}
+	next := path.Clean(path.Join(path.Dir(current), normalizedTarget))
+	if next == "." || next == ".." || strings.HasPrefix(next, "../") || path.IsAbs(next) {
+		return "", errors.New("recorded tool link escapes the installed release")
+	}
+	return next, nil
+}
+
+func verifyManifestToolLink(absolute, target string) error {
+	info, err := os.Lstat(absolute)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return errors.New("recorded tool link is not a symbolic link")
+	}
+	actual, err := os.Readlink(absolute)
+	if err != nil || actual != target {
+		return errors.New("tool link does not match the installed release identity")
+	}
+	return nil
 }
 
 func toolEnvironmentName(id string) string {

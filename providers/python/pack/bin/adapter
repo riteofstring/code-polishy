@@ -1,0 +1,32 @@
+const { spawn } = require("node:child_process");
+const { join } = require("node:path");
+
+const platforms = {
+  "darwin:x64": "adapter-darwin-amd64",
+  "darwin:arm64": "adapter-darwin-arm64",
+  "linux:x64": "adapter-linux-amd64",
+  "linux:arm64": "adapter-linux-arm64",
+  "win32:x64": "adapter-windows-amd64.exe",
+};
+const executable = platforms[`${process.platform}:${process.arch}`];
+if (!executable) {
+  process.stderr.write(
+    `unsupported Python pack platform ${process.platform}:${process.arch}\n`,
+  );
+  process.exit(1);
+}
+const child = spawn(join(__dirname, executable), [], {
+  stdio: "inherit",
+  env: process.env,
+});
+child.once("error", (error) => {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(1);
+});
+child.once("exit", (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code ?? 1);
+});

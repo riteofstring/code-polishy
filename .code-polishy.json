@@ -212,6 +212,10 @@
       {
         "path": "docs/design/shell-provider.md",
         "module": "shell-provider"
+      },
+      {
+        "path": "docs/design/python-provider.md",
+        "module": "python-provider"
       }
     ]
   },
@@ -245,7 +249,8 @@
         "launcher",
         "tooling",
         "javascript-provider",
-        "shell-provider"
+        "shell-provider",
+        "python-provider"
       ]
     }
   },
@@ -466,6 +471,11 @@
       "name": "shell-provider",
       "paths": ["providers/shell/**"],
       "dependsOn": ["tooling"]
+    },
+    {
+      "name": "python-provider",
+      "paths": ["providers/python/**"],
+      "dependsOn": ["tooling"]
     }
   ],
   "checks": [
@@ -529,6 +539,13 @@
       "provides": ["build"],
       "argv": ["./scripts/build-shell-provider.sh"],
       "modules": ["shell-provider"],
+      "runOn": ["build"]
+    },
+    {
+      "name": "python-provider-build",
+      "provides": ["build"],
+      "argv": ["./scripts/build-python-provider.sh"],
+      "modules": ["python-provider"],
       "runOn": ["build"]
     }
   ],
@@ -711,6 +728,14 @@
         "modules": ["shell-provider"],
         "argv": ["go", "test", "-count=1", "./providers/shell/..."],
         "paths": ["providers/shell/**/*_test.go"]
+      },
+      {
+        "name": "python-provider-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["python-provider"],
+        "argv": ["go", "test", "-count=1", "./providers/python/..."],
+        "paths": ["providers/python/**/*_test.go"]
       },
       {
         "name": "policymodule-unit",
@@ -1464,6 +1489,11 @@
         "paths": ["providers/shell/**/*_test.go"],
         "module": "shell-provider",
         "focusedSuite": "shell-provider-unit"
+      },
+      {
+        "paths": ["providers/python/**/*_test.go"],
+        "module": "python-provider",
+        "focusedSuite": "python-provider-unit"
       },
       {
         "paths": ["internal/policymodule/**/*_test.go"],

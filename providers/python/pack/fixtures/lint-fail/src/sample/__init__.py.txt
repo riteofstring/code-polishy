@@ -1,0 +1,6 @@
+python-pack-fixture
+import os
+
+
+def identity(value):
+    return value

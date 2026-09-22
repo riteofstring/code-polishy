@@ -43,6 +43,48 @@ func TestToolIdentityRequiresRecordedContainedUnchangedBytes(t *testing.T) {
 	}
 }
 
+func TestToolIdentityFollowsOnlyAnExactRecordedSymlinkChain(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "runtime/bin/python3.12", "recorded runtime\n", 0o755)
+	if err := os.Symlink("bin/python", filepath.Join(root, "runtime", "python")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("python3.12", filepath.Join(root, "runtime", "bin", "python")); err != nil {
+		t.Fatal(err)
+	}
+	manifest := release.Manifest{Entries: []release.Entry{
+		{Path: "runtime/python", Symlink: "bin/python"},
+		{Path: "runtime/bin/python", Symlink: "python3.12"},
+		{Path: "runtime/bin/python3.12", SHA256: inputDigest([]byte("recorded runtime\n"))},
+	}}
+	requested := policy.PackTool{ID: "python", Name: "python", Version: "3.12.13+20260728"}
+	identity, err := verifyToolFile(root, manifest, filepath.Join(root, "runtime", "python"), requested)
+	if err != nil || identity.SHA256 != manifest.Entries[2].SHA256 {
+		t.Fatalf("recorded symlink tool was rejected: %+v %v", identity, err)
+	}
+	if err := os.Remove(filepath.Join(root, "runtime", "python")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("bin/python3.12", filepath.Join(root, "runtime", "python")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verifyToolFile(root, manifest, filepath.Join(root, "runtime", "python"), requested); err == nil {
+		t.Fatal("changed tool symlink was accepted")
+	}
+	outside := filepath.Join(t.TempDir(), "python")
+	writeTestFile(t, filepath.Dir(outside), filepath.Base(outside), "recorded runtime\n", 0o755)
+	if err := os.Remove(filepath.Join(root, "runtime", "python")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "runtime", "python")); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Entries[0].Symlink = outside
+	if _, err := verifyToolFile(root, manifest, filepath.Join(root, "runtime", "python"), requested); err == nil {
+		t.Fatal("escaping tool symlink was accepted")
+	}
+}
+
 func TestToolchainBindsEveryExactToolAndOnlyOneLauncher(t *testing.T) {
 	root := t.TempDir()
 	packRoot := filepath.Join(root, "pack")

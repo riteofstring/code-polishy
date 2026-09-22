@@ -1,0 +1,142 @@
+python-pack-runtime
+import ast
+import io
+import json
+import pathlib
+import re
+import sys
+import tokenize
+
+LIMIT = 65536
+ENCODING = re.compile(r"^#[ \t]*(?:-\*-[ \t]*)?coding[:=][ \t]*[-_.A-Za-z0-9]+[ \t]*(?:-\*-[ \t]*)?$")
+
+
+def starts(data):
+    result = [0]
+    for index, value in enumerate(data):
+        if value == 10:
+            result.append(index + 1)
+    return result
+
+
+def byte_column(lines, row, column):
+    return len(lines[row - 1][:column].encode("utf-8")) + 1
+
+
+def offset_at(line_starts, row, column):
+    return line_starts[row - 1] + column
+
+
+def bounded(raw):
+    data = raw.encode("utf-8")
+    if len(data) <= LIMIT:
+        return raw, True
+    return data[:LIMIT].decode("utf-8", "ignore"), False
+
+
+def machine_directive(raw, row, offset, data, lines):
+    if offset == 0 and raw.startswith("#!") and raw[2:].strip():
+        return True
+    if row not in (1, 2) or not ENCODING.fullmatch(raw):
+        return False
+    if row == 1:
+        return True
+    first = lines[0].lstrip(" \t\f\ufeff")
+    return first == "" or first.startswith("#")
+
+
+def comment_tokens(path, data, text, line_starts):
+    lines = text.splitlines(keepends=True)
+    result = []
+    first_code = len(data) + 1
+    tokens = list(tokenize.tokenize(io.BytesIO(data).readline))
+    ignored = {
+        tokenize.ENCODING,
+        tokenize.ENDMARKER,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.NEWLINE,
+        tokenize.NL,
+        tokenize.COMMENT,
+    }
+    for token in tokens:
+        row, column = token.start
+        if row > 0 and token.type not in ignored:
+            first_code = min(first_code, offset_at(line_starts, row, byte_column(lines, row, column) - 1))
+        if token.type != tokenize.COMMENT:
+            continue
+        column_bytes = byte_column(lines, row, column)
+        offset = offset_at(line_starts, row, column_bytes - 1)
+        raw, complete = bounded(token.string)
+        shebang = offset == 0 and raw.startswith("#!")
+        result.append(
+            {
+                "path": path,
+                "line": row,
+                "column": column_bytes,
+                "kind": "Shebang" if shebang else "Line",
+                "raw": raw,
+                "complete": complete,
+                "beforeCode": offset < first_code,
+                "preamble": False,
+                "byteZero": offset == 0,
+                "machineDirective": complete and machine_directive(raw, row, offset, data, lines),
+                "_offset": offset,
+            }
+        )
+    return result, first_code
+
+
+def docstrings(path, data, tree, line_starts, first_code):
+    result = []
+    scope_types = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    for scope in ast.walk(tree):
+        if not isinstance(scope, scope_types) or not scope.body:
+            continue
+        statement = scope.body[0]
+        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Constant) or not isinstance(statement.value.value, str):
+            continue
+        value = statement.value
+        start = offset_at(line_starts, value.lineno, value.col_offset)
+        end = offset_at(line_starts, value.end_lineno, value.end_col_offset)
+        raw, complete = bounded(data[start:end].decode("utf-8"))
+        result.append(
+            {
+                "path": path,
+                "line": value.lineno,
+                "column": value.col_offset + 1,
+                "kind": "Docstring",
+                "raw": raw,
+                "complete": complete,
+                "beforeCode": start <= first_code,
+                "preamble": False,
+                "byteZero": start == 0,
+                "machineDirective": False,
+                "_offset": start,
+            }
+        )
+    return result
+
+
+def inspect(path):
+    data = pathlib.Path(path).read_bytes()
+    text = data.decode("utf-8")
+    line_starts = starts(data)
+    comments, first_code = comment_tokens(path, data, text, line_starts)
+    tree = ast.parse(text, filename=path, type_comments=True)
+    comments.extend(docstrings(path, data, tree, line_starts, first_code))
+    comments.sort(key=lambda item: (item["_offset"], item["kind"]))
+    for index, item in enumerate(comments):
+        item["preamble"] = index == 0 and not data[: item["_offset"]].strip()
+        del item["_offset"]
+    return comments
+
+
+request = json.load(sys.stdin)
+response = {"comments": [], "failures": []}
+for source in request["files"]:
+    try:
+        response["comments"].extend(inspect(source))
+    except (OSError, UnicodeError, SyntaxError, tokenize.TokenError) as error:
+        response["failures"].append({"path": source, "reason": f"Python source facts require valid syntax: {error}"})
+json.dump(response, sys.stdout, sort_keys=True, separators=(",", ":"))
