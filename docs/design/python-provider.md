@@ -62,16 +62,19 @@ and re-export chains without importing target code. Decorator contracts require
 an exact unshadowed import and retain only definitions carrying the named
 decorator with any declared literal boolean keyword values. Missing, ambiguous,
 conditional, stale, malformed, external, or otherwise unsupported contract
-evidence withholds scope-wide dead-code facts; the adapter never runs a reduced
-analysis and presents it as complete.
+evidence withholds scope-wide dead-code facts. Module-binding contracts retain
+only declared module-level names whose nonempty value is entirely constructed
+from APIs beneath the exact unshadowed import target. The adapter never runs a
+reduced analysis and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. Repository-local
 entry-point contracts and exact imported decorator contracts are interpreted
-for dead-code reachability. TypedDict and framework retention, type and
-module-binding contracts, dynamic references, external attributes, cross-module
-loader-alias parity, runtime loaders, dependency evidence, and
+for dead-code reachability, as are exact imported module-binding contracts.
+TypedDict and framework retention, type contracts, dynamic references, external
+attributes, cross-module loader-alias parity, runtime loaders, dependency
+evidence, and
 project-environment resolution remain migration work and cannot be inferred from
 these claims. The pack is not eligible for the ownership cutover until every
 Python ledger row has executable evidence.

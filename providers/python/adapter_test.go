@@ -340,6 +340,19 @@ func TestDeadCodeCarriesRepositoryDecoratorContracts(t *testing.T) {
 	}
 }
 
+func TestDeadCodeCarriesRepositoryModuleBindingContracts(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("registry = []\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"module-binding","target":"vendor.api","members":["registry"],"reason":"Runtime reads this registry."}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	contracts := []vultureContract{}
+	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
+	want := []vultureContract{{ID: "config:python.contract:module-binding:vendor.api", Kind: "module-binding", Target: "vendor.api", Members: []string{"registry"}, Attributes: []string{}, Decorators: []string{}, Keywords: map[string]bool{}}}
+	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
+		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
+	}
+}
+
 func TestDeadCodeAcceptsManifestEntryPointReachability(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))

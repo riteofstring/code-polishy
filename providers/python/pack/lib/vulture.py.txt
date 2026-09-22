@@ -426,6 +426,49 @@ def decorator_locations(files, contract):
     return result
 
 
+def module_scope_nodes(node):
+    if isinstance(
+        node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    ):
+        return
+    yield node
+    for child in ast.iter_child_nodes(node):
+        yield from module_scope_nodes(child)
+
+
+def module_binding_value(node, contract, bindings):
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return bool(node.elts) and all(
+            module_binding_value(value, contract, bindings) for value in node.elts
+        )
+    target = node.func if isinstance(node, ast.Call) else node
+    root = root_name(target)
+    if not root or root not in bindings:
+        return False
+    qualified = expanded_name(target, bindings)
+    return qualified.startswith(contract["target"] + ".")
+
+
+def module_binding_locations(files, contract):
+    result = set()
+    members = set(contract["members"])
+    for file in files:
+        bindings = exact_import_bindings(file)
+        for node in module_scope_nodes(file["tree"]):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if not module_binding_value(node.value, contract, bindings):
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id in members:
+                    result.add(definition_location(file["path"], target, target.id))
+    return result
+
+
 def callback_locations(file):
     result = set()
     bindings = import_bindings(file)
@@ -593,7 +636,7 @@ def exact_contract(contract, index, identifiers):
     valid = (
         exact_text(contract["id"])
         and contract["id"] not in identifiers
-        and contract["kind"] in {"entry-point", "decorator"}
+        and contract["kind"] in {"entry-point", "decorator", "module-binding"}
         and exact_text(contract["target"])
         and exact_contract_names(contract["members"])
         and exact_contract_names(contract["attributes"])
@@ -613,10 +656,15 @@ def exact_contract(contract, index, identifiers):
         )
         valid = valid and not contract["attributes"] and not contract["decorators"]
         valid = valid and not contract["annotatedFields"] and not keywords
-    else:
+    elif contract["kind"] == "decorator":
         valid = valid and identifier_chain(contract["target"])
         valid = valid and not contract["members"] and not contract["attributes"]
         valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+    else:
+        valid = valid and identifier_chain(contract["target"])
+        valid = valid and bool(contract["members"]) and not contract["attributes"]
+        valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+        valid = valid and not keywords
     if not valid:
         raise ValueError(f"contract {index} is invalid")
     identifiers.add(contract["id"])
@@ -760,8 +808,10 @@ def reachability_locations(files, references, backends, contracts):
             try:
                 if contract["kind"] == "entry-point":
                     locations = resolver.entry_point(contract)
-                else:
+                elif contract["kind"] == "decorator":
                     locations = decorator_locations(files, contract)
+                else:
+                    locations = module_binding_locations(files, contract)
                 if not locations:
                     raise ValueError("contract matches no source definitions")
                 keep.update(locations)

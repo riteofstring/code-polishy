@@ -1,0 +1,4 @@
+python-pack-fixture
+from vendor import api
+
+registry = [api.Primary(), api.Secondary()]

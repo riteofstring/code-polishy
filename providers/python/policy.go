@@ -158,7 +158,7 @@ func pythonContractInput(declaration policyDeclarationInput, manifest string, in
 	if err != nil {
 		return vultureContract{}, "", fmt.Errorf("policy declaration %d: %w", index, err)
 	}
-	if contract.Kind != "entry-point" && contract.Kind != "decorator" {
+	if contract.Kind != "entry-point" && contract.Kind != "decorator" && contract.Kind != "module-binding" {
 		return vultureContract{}, "Python contract kind " + contract.Kind + " is not yet supported by the pack dead-code analyzer", nil
 	}
 	input, err := newVultureContract(manifest, contract)
@@ -227,7 +227,10 @@ func validPythonContractShape(contract pythonContractDeclaration, members []stri
 	if contract.Kind == "entry-point" {
 		return len(contract.Keywords) == 0
 	}
-	return contract.Kind == "decorator" && len(members) == 0
+	if contract.Kind == "decorator" {
+		return len(members) == 0
+	}
+	return contract.Kind == "module-binding" && len(members) > 0 && len(contract.Keywords) == 0
 }
 
 func pythonContractMembers(values []string) ([]string, error) {
