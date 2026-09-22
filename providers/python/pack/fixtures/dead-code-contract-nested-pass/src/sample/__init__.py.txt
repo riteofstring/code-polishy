@@ -1,0 +1,12 @@
+python-pack-fixture
+class Handler:
+    def execute(self):
+        return 1
+
+
+class Registry:
+    def __init__(self):
+        self.primary = Handler()
+
+
+registry = Registry()

@@ -321,7 +321,7 @@ func TestDeadCodeCarriesRepositoryEntryPointContracts(t *testing.T) {
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
 	references := []vultureReference{}
 	result := (adapter{vulture: fakeVulture{references: &references}}).run(context.Background(), request)
-	want := []vultureReference{{ID: "config:python.contract:entry-point:app:Handler", Module: "app", Symbol: "Handler", Members: []string{"execute"}}}
+	want := []vultureReference{{ID: "config:python.contract:entry-point:app:Handler", Module: "app", Symbol: "Handler", Members: []string{"execute"}, Contract: true}}
 	if result.Status != "pass" || !reflect.DeepEqual(references, want) {
 		t.Fatalf("result = %+v, references = %+v", result, references)
 	}

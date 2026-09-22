@@ -6,9 +6,12 @@ import os
 import pkgutil
 import sys
 from collections import defaultdict
+from contextlib import nullcontext
+from unittest.mock import patch
 
 PROTOCOL = "code-polishy-python-vulture/v1"
 TOOL_VERSION = "2.16"
+ASTROID_VERSION = "4.1.2"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_FILES = 10000
@@ -157,6 +160,121 @@ def module_reference(modules, module, parts, seen):
             seen | {identity},
         )
     return class_member(file, match[1], parts)
+
+
+class ContainedAstroidReferences:
+    def __init__(self, files):
+        from astroid import AstroidError, AstroidImportError
+        from astroid.builder import AstroidBuilder
+        from astroid.manager import AstroidManager
+
+        self.manager_type = AstroidManager
+        self.import_error = AstroidImportError
+        self.errors = (AstroidError, RecursionError)
+        self.sources = {file["path"]: file for file in files}
+        self.modules = {}
+        for file in files:
+            if file["module"] and file["path"].endswith(".py"):
+                self.modules.setdefault(file["module"], []).append(file)
+        self.module_roots = {name.split(".")[0] for name in self.modules}
+        self.manager = AstroidManager()
+        self.builder = AstroidBuilder(self.manager, apply_transforms=False)
+        self.cache = {}
+        self.paths = {}
+        self.override = patch.object(
+            self.manager_type, "ast_from_module_name", self.load
+        )
+
+    def __enter__(self):
+        self.override.__enter__()
+        return self
+
+    def __exit__(self, kind, value, traceback):
+        return self.override.__exit__(kind, value, traceback)
+
+    def load(self, name, context_file=None, use_cache=True):
+        if context_file is not None and context_file not in self.sources:
+            raise self.import_error("entry-point inference requested external source")
+        if use_cache and name in self.cache:
+            return self.cache[name]
+        candidates = self.modules.get(name, [])
+        if len(candidates) == 1:
+            source = candidates[0]
+            module = self.builder.string_build(source["source"], name, source["path"])
+            module.package = (
+                source["path"].endswith("/__init__.py")
+                or source["path"] == "__init__.py"
+            )
+            self.paths[name] = source["path"]
+        elif candidates or name.split(".")[0] in self.module_roots:
+            raise self.import_error(f"unresolved contained entry-point module: {name}")
+        else:
+            raise self.import_error(f"unadmitted entry-point module: {name}")
+        self.cache[name] = module
+        return module
+
+    def entry_point(self, reference):
+        try:
+            return self.resolve_entry_point(reference)
+        except self.errors as error:
+            raise ValueError(str(error)) from error
+
+    def resolve_entry_point(self, reference):
+        module_name = reference["module"]
+        module = self.load(module_name)
+        if module_name not in self.paths:
+            raise ValueError(f"entry-point module is not project source: {module_name}")
+        current = module
+        kept = set()
+        for part in reference["symbol"].split("."):
+            current = self.member(current, part, kept)
+        for name in reference["members"]:
+            self.member(current, name, kept)
+        return kept
+
+    def member(self, owner, name, kept):
+        from astroid import bases, nodes
+
+        definitions = owner.getattr(name)
+        if len(definitions) != 1:
+            raise ValueError(f"entry-point member is stale or ambiguous: {name}")
+        definition = definitions[0]
+        self.unconditional(definition)
+        path = self.paths.get(definition.root().name)
+        if path is None:
+            raise ValueError(f"entry-point member is not project source: {name}")
+        start = definition.fromlineno
+        end = (
+            definition.tolineno
+            if isinstance(definition, (nodes.FunctionDef, nodes.ClassDef))
+            else start
+        )
+        kept.add((path, start, end, name))
+        inferred = []
+        for value in definition.infer():
+            if value not in inferred:
+                inferred.append(value)
+            if len(inferred) > 1:
+                break
+        if len(inferred) != 1 or not isinstance(
+            inferred[0],
+            (nodes.Module, nodes.ClassDef, nodes.FunctionDef, bases.Instance),
+        ):
+            raise ValueError(f"entry-point member cannot resolve uniquely: {name}")
+        return inferred[0]
+
+    def unconditional(self, definition):
+        from astroid import nodes
+
+        current = definition.parent
+        while current is not None:
+            if isinstance(
+                current, (nodes.If, nodes.For, nodes.While, nodes.Try, nodes.With)
+            ):
+                raise TypeError("entry-point definition is conditional")
+            if isinstance(current, (nodes.FunctionDef, nodes.ClassDef, nodes.Module)):
+                return
+            current = current.parent
 
 
 def import_from_module(file, node):
@@ -349,13 +467,16 @@ def reachability_inputs(request):
     identifiers = set()
     for index, reference in enumerate(references):
         exact_object(
-            reference, {"id", "module", "symbol", "members"}, f"reference {index}"
+            reference,
+            {"id", "module", "symbol", "members", "contract"},
+            f"reference {index}",
         )
         if (
             not exact_text(reference["id"])
             or reference["id"] in identifiers
             or not identifier_chain(reference["module"])
             or not identifier_chain(reference["symbol"])
+            or type(reference["contract"]) is not bool
             or not isinstance(reference["members"], list)
             or len(reference["members"]) > MAX_REFERENCES
             or any(
@@ -444,22 +565,30 @@ def reachability_locations(files, references, backends):
             modules.setdefault(file["module"], []).append(file)
     keep = set()
     problems = []
-    for reference in references:
-        try:
-            parts = reference["symbol"].split(".")
-            locations = module_reference(modules, reference["module"], parts, set())
-            for member in reference["members"]:
-                locations.extend(
-                    module_reference(
-                        modules,
-                        reference["module"],
-                        parts + [member],
-                        set(),
+    configured = [reference for reference in references if reference["contract"]]
+    context = ContainedAstroidReferences(files) if configured else nullcontext()
+    with context as resolver:
+        for reference in references:
+            try:
+                if reference["contract"]:
+                    locations = resolver.entry_point(reference)
+                else:
+                    parts = reference["symbol"].split(".")
+                    locations = module_reference(
+                        modules, reference["module"], parts, set()
                     )
-                )
-            keep.update(locations)
-        except (TypeError, ValueError) as error:
-            problems.append({"id": reference["id"], "message": bounded(str(error))})
+                    for member in reference["members"]:
+                        locations.extend(
+                            module_reference(
+                                modules,
+                                reference["module"],
+                                parts + [member],
+                                set(),
+                            )
+                        )
+                keep.update(locations)
+            except (TypeError, ValueError) as error:
+                problems.append({"id": reference["id"], "message": bounded(str(error))})
     for backend in backends:
         try:
             keep.update(backend_locations(modules, backend))
@@ -488,6 +617,12 @@ def analyze(request):
     installed_version = importlib.metadata.version("vulture")
     if installed_version != TOOL_VERSION:
         raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
+    if any(reference["contract"] for reference in references):
+        installed_astroid = importlib.metadata.version("astroid")
+        if installed_astroid != ASTROID_VERSION:
+            raise ValueError(
+                f"Python contract analysis requires Astroid {ASTROID_VERSION}"
+            )
     files = read_files(request["files"])
     paths = [file["path"] for file in files]
     import vulture.core as vulture_core

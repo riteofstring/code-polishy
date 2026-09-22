@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Nineteen built-pack fixtures include
+enforcement. Twenty-one built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -611,14 +611,15 @@ and returns dead-code facts that core maps to the existing finding. PEP 621
 scripts and grouped entry points now retain exact module-symbol definitions and
 re-export chains; project-owned build backends retain their objects and standard
 hooks. Missing or ambiguous manifest targets withhold project-wide dead-code
-facts. Directly resolvable repository-local `python.contract` entry points now
-retain their exact definitions, explicit class members, and re-export chains.
-Invalid, stale, external, nested-instance, and unsupported runtime reachability
-declarations fail incomplete. TypedDict retention, framework contracts,
-nested-instance entry points, type, decorator, and module-binding contracts,
-dynamic references, external attributes, remaining cross-module loader-alias
-parity, runtime loaders, dependency evidence, environment resolution, focused
-graph closure, and the shared conformance matrix remain open.
+facts. Repository-local `python.contract` entry points now use the authenticated,
+contained Astroid resolver to retain direct and nested-instance definitions,
+explicit members, and re-export chains without importing target code. Invalid,
+stale, conditional, ambiguous, external, and unsupported runtime reachability
+declarations fail incomplete. TypedDict retention, framework contracts, type,
+decorator, and module-binding contracts, dynamic references, external
+attributes, remaining cross-module loader-alias parity, runtime loaders,
+dependency evidence, environment resolution, focused graph closure, and the
+shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

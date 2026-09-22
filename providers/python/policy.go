@@ -190,7 +190,7 @@ func pythonEntryPointContractReference(manifest string, contract pythonContractD
 		return vultureReference{}, err
 	}
 	id := "config:python.contract:entry-point:" + contract.Target
-	return vultureReference{ID: id, Module: module, Symbol: symbol, Members: members}, nil
+	return vultureReference{ID: id, Module: module, Symbol: symbol, Members: members, Contract: true}, nil
 }
 
 func pythonEntryPointContractTarget(target string) (string, string, bool) {

@@ -42,10 +42,11 @@ type vultureFile struct {
 }
 
 type vultureReference struct {
-	ID      string   `json:"id"`
-	Module  string   `json:"module"`
-	Symbol  string   `json:"symbol"`
-	Members []string `json:"members"`
+	ID       string   `json:"id"`
+	Module   string   `json:"module"`
+	Symbol   string   `json:"symbol"`
+	Members  []string `json:"members"`
+	Contract bool     `json:"contract"`
 }
 
 type vultureBackend struct {
