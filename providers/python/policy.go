@@ -173,10 +173,10 @@ func unsupportedPythonContractReason(contract pythonContractDeclaration) string 
 	case "entry-point", "decorator", "module-binding":
 		return ""
 	case "type":
-		if len(contract.Attributes) == 0 && len(contract.Decorators) == 0 && !contract.AnnotatedFields {
+		if len(contract.Attributes) == 0 && len(contract.Decorators) == 0 {
 			return ""
 		}
-		return "Python type contract attributes, decorators, and annotated fields are not yet supported by the pack dead-code analyzer"
+		return "Python type contract attributes and decorators are not yet supported by the pack dead-code analyzer"
 	default:
 		return "Python contract kind " + contract.Kind + " is not yet supported by the pack dead-code analyzer"
 	}
@@ -213,7 +213,7 @@ func newVultureContract(manifest string, contract pythonContractDeclaration) (vu
 	id := "config:python.contract:" + contract.Kind + ":" + contract.Target
 	return vultureContract{
 		ID: id, Kind: contract.Kind, Target: contract.Target, Members: members,
-		Attributes: []string{}, Decorators: []string{}, AnnotatedFields: false, Keywords: keywords,
+		Attributes: []string{}, Decorators: []string{}, AnnotatedFields: contract.AnnotatedFields, Keywords: keywords,
 	}, nil
 }
 
@@ -235,16 +235,23 @@ func pythonEntryPointContractTarget(target string) (string, string, bool) {
 }
 
 func validPythonContractShape(contract pythonContractDeclaration, members []string) bool {
-	if len(contract.Attributes) > 0 || len(contract.Decorators) > 0 || contract.AnnotatedFields {
+	if pythonContractHasUnsupportedFields(contract) {
 		return false
 	}
-	if contract.Kind == "entry-point" {
+	switch contract.Kind {
+	case "entry-point":
 		return len(contract.Keywords) == 0
-	}
-	if contract.Kind == "decorator" {
+	case "decorator":
 		return len(members) == 0
+	case "type":
+		return (len(members) > 0 || contract.AnnotatedFields) && len(contract.Keywords) == 0
+	default:
+		return contract.Kind == "module-binding" && len(members) > 0 && len(contract.Keywords) == 0
 	}
-	return (contract.Kind == "module-binding" || contract.Kind == "type") && len(members) > 0 && len(contract.Keywords) == 0
+}
+
+func pythonContractHasUnsupportedFields(contract pythonContractDeclaration) bool {
+	return len(contract.Attributes) > 0 || len(contract.Decorators) > 0 || contract.Kind != "type" && contract.AnnotatedFields
 }
 
 func pythonContractMembers(values []string) ([]string, error) {

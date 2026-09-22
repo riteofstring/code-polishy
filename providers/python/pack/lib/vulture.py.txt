@@ -239,7 +239,7 @@ class ContainedAstroidReferences:
         except self.errors as error:
             raise ValueError(str(error)) from error
 
-    def type_contract(self, contract):
+    def type_classes(self, contract):
         try:
             return self.resolve_type_contract(contract)
         except self.errors as error:
@@ -251,29 +251,13 @@ class ContainedAstroidReferences:
         for name in sorted(self.modules):
             self.load(name)
         roots = {contract["target"]}
-        members = set(contract["members"])
-        kept = set()
+        classes = set()
         for name, path in sorted(self.paths.items()):
             module = self.cache[name]
             for node in module.nodes_of_class(nodes.ClassDef):
-                if not self.has_base(node, roots, set()):
-                    continue
-                for method in node.nodes_of_class(nodes.FunctionDef):
-                    if method.name in members and self.method_owner(method) is node:
-                        kept.add(
-                            (path, method.fromlineno, method.tolineno, method.name)
-                        )
-        return kept
-
-    def method_owner(self, node):
-        from astroid import nodes
-
-        current = node.parent
-        while current is not None:
-            if isinstance(current, (nodes.ClassDef, nodes.Module)):
-                return current
-            current = current.parent
-        return None
+                if self.has_base(node, roots, set()):
+                    classes.add((path, node.lineno, node.name))
+        return classes
 
     def has_base(self, node, roots, seen):
         from astroid import nodes
@@ -506,6 +490,66 @@ def decorator_locations(files, contract):
         result.update(
             decorator_body_locations(file, file["tree"].body, contract, bindings, set())
         )
+    return result
+
+
+def class_scope_nodes(node):
+    yield node
+    if isinstance(
+        node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    ):
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from class_scope_nodes(child)
+
+
+def class_var_annotation(annotation, bindings):
+    if not isinstance(annotation, ast.Subscript):
+        return False
+    root = root_name(annotation.value)
+    if not root or root not in bindings:
+        return False
+    return expanded_name(annotation.value, bindings) in {
+        "typing.ClassVar",
+        "typing_extensions.ClassVar",
+    }
+
+
+def type_contract_locations(files, contract, resolver):
+    applicable = resolver.type_classes(contract)
+    members = set(contract["members"])
+    result = set()
+    for file in files:
+        classes = {
+            (line, name) for path, line, name in applicable if path == file["path"]
+        }
+        if not classes:
+            continue
+        bindings = exact_import_bindings(file)
+        for node in ast.walk(file["tree"]):
+            if (
+                not isinstance(node, ast.ClassDef)
+                or (node.lineno, node.name) not in classes
+            ):
+                continue
+            for statement in node.body:
+                for item in class_scope_nodes(statement):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        if item.name in members:
+                            result.add(
+                                definition_location(file["path"], item, item.name)
+                            )
+                    elif (
+                        contract["annotatedFields"]
+                        and isinstance(item, ast.AnnAssign)
+                        and isinstance(item.target, ast.Name)
+                        and not class_var_annotation(item.annotation, bindings)
+                    ):
+                        result.add(
+                            definition_location(
+                                file["path"], item.target, item.target.id
+                            )
+                        )
     return result
 
 
@@ -750,8 +794,8 @@ def exact_contract(contract, index, identifiers):
         valid = valid and not keywords
     else:
         valid = valid and identifier_chain(contract["target"])
-        valid = valid and bool(contract["members"]) and not contract["attributes"]
-        valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+        valid = valid and (bool(contract["members"]) or contract["annotatedFields"])
+        valid = valid and not contract["attributes"] and not contract["decorators"]
         valid = valid and not keywords
     if not valid:
         raise ValueError(f"contract {index} is invalid")
@@ -903,7 +947,7 @@ def reachability_locations(files, references, backends, contracts):
                 if contract["kind"] == "entry-point":
                     locations = resolver.entry_point(contract)
                 elif contract["kind"] == "type":
-                    locations = resolver.type_contract(contract)
+                    locations = type_contract_locations(files, contract, resolver)
                 elif contract["kind"] == "decorator":
                     locations = decorator_locations(files, contract)
                 else:

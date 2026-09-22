@@ -1,0 +1,13 @@
+python-pack-fixture
+from vendor.api import Model
+
+
+class Item(Model):
+    field: str
+
+
+def build():
+    return Item()
+
+
+build()

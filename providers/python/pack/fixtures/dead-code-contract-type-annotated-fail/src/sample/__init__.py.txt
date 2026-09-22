@@ -1,0 +1,15 @@
+python-pack-fixture
+from typing import ClassVar
+
+from vendor.api import Model
+
+
+class Item(Model):
+    schema: ClassVar[str]
+
+
+def build():
+    return Item()
+
+
+build()

@@ -305,11 +305,11 @@ func TestDeadCodeAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
 func TestDeadCodeRejectsUnimplementedRuntimeDeclarations(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
-	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"type","target":"vendor.Model","annotatedFields":true,"reason":"Runtime contract."}}]}`)
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"type","target":"vendor.Model","attributes":["state"],"reason":"Runtime contract."}}]}`)
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
 	checked := []string{}
 	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
-	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "annotated fields") || len(checked) != 0 {
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "attributes") || len(checked) != 0 {
 		t.Fatalf("result = %+v, checked = %v", result, checked)
 	}
 }
@@ -361,6 +361,19 @@ func TestDeadCodeCarriesRepositoryTypeMemberContracts(t *testing.T) {
 	contracts := []vultureContract{}
 	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
 	want := []vultureContract{{ID: "config:python.contract:type:vendor.Model", Kind: "type", Target: "vendor.Model", Members: []string{"serialize"}, Attributes: []string{}, Decorators: []string{}, Keywords: map[string]bool{}}}
+	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
+		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
+	}
+}
+
+func TestDeadCodeCarriesRepositoryAnnotatedTypeContracts(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("class Model:\n    field: str\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"type","target":"vendor.Model","annotatedFields":true,"reason":"Runtime reads annotated fields."}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	contracts := []vultureContract{}
+	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
+	want := []vultureContract{{ID: "config:python.contract:type:vendor.Model", Kind: "type", Target: "vendor.Model", Members: []string{}, Attributes: []string{}, Decorators: []string{}, AnnotatedFields: true, Keywords: map[string]bool{}}}
 	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
 		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
 	}

@@ -347,6 +347,23 @@
       "expectedRules": ["policy.packCoverage"]
     },
     {
+      "name": "dead-code-contract-type-annotated-pass",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-contract-type-annotated-pass",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "dead-code-contract-type-annotated-fail",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-contract-type-annotated-fail",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "incomplete",
+      "expectedRules": ["policy.packCoverage"]
+    },
+    {
       "name": "target-version-pass",
       "command": "analyze",
       "capability": "lint",
