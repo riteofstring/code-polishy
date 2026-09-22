@@ -1,11 +1,8 @@
+python-pack-fixture
 [project]
 name = "sample"
 version = "1.0.0"
 requires-python = "==3.12.*"
 
 [project.scripts]
-sample = "sample:main"
-
-[build-system]
-build-backend = "backend"
-backend-path = ["."]
+sample = "sample:missing"
