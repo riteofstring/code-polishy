@@ -54,14 +54,21 @@ entry-point targets retain their source definition and re-export chain. An exact
 in-tree build backend retains its object and recognized build hooks when
 `backend-path` makes it project-owned. Missing, ambiguous, or stale manifest
 targets make the whole scope incomplete. A scope with a bound runtime
-reachability declaration also fails incomplete until those contracts move to the
-pack; the adapter never runs a reduced analysis and presents it as complete.
+reachability declaration fails incomplete unless it is a directly resolvable,
+repository-local `python.contract` entry point. Those contracts retain the exact
+definition, explicit class members, and any re-export chain. Missing, ambiguous,
+stale, malformed, external, nested-instance, or otherwise unsupported contract
+evidence withholds scope-wide dead-code facts; the adapter never runs a reduced
+analysis and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
-computed-import declarations for its recognized callsites. TypedDict and
-framework retention, dynamic references, external attributes, cross-module
-loader-alias parity, runtime loaders, dependency evidence, and
+computed-import declarations for its recognized callsites. Directly resolvable
+repository-local entry-point contracts are interpreted for dead-code
+reachability. TypedDict and framework retention, nested-instance entry points,
+type, decorator, and module-binding contracts, dynamic references, external
+attributes, cross-module loader-alias parity, runtime loaders, dependency
+evidence, and
 project-environment resolution remain migration work and cannot be inferred from
 these claims. The pack is not eligible for the ownership cutover until every
 Python ledger row has executable evidence.

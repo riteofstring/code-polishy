@@ -404,7 +404,7 @@ func (state *analysisState) deadCodeGroup(ctx context.Context, vulture vultureEx
 		state.markUnsupported(group.files, "Python dead-code analysis requires every project source")
 		return nil, nil
 	}
-	reason, err := state.deadCodeUnsupportedReason(group.scope)
+	references, reason, err := pythonContractReferences(state.request.Policy, group.scope)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func (state *analysisState) deadCodeGroup(ctx context.Context, vulture vultureEx
 		state.markUnsupported(group.files, reason)
 		return nil, nil
 	}
-	found, err := vulture.deadCode(ctx, workspace, group.scope, group.files)
+	found, err := vulture.deadCode(ctx, workspace, group.scope, group.files, references)
 	if err != nil {
 		return nil, err
 	}
@@ -428,19 +428,6 @@ func (state *analysisState) markUnsupported(files []string, reason string) {
 	for _, file := range files {
 		state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: reason})
 	}
-}
-
-func (state *analysisState) deadCodeUnsupportedReason(scope analysisScope) (string, error) {
-	input, err := decodePolicyInput(state.request.Policy)
-	if err != nil {
-		return "", err
-	}
-	for _, declaration := range input.Declarations {
-		if slices.Contains(declaration.Scopes, scope.Handle) {
-			return "Python runtime reachability declarations are not yet supported by the pack dead-code analyzer", nil
-		}
-	}
-	return "", nil
 }
 
 func vultureProblemReason(problems []vultureProblem) string {

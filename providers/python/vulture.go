@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -18,7 +19,7 @@ const vultureProtocol = "code-polishy-python-vulture/v1"
 const vultureVersion = "2.16"
 
 type vultureExecutor interface {
-	deadCode(context.Context, string, analysisScope, []string) (vultureResult, error)
+	deadCode(context.Context, string, analysisScope, []string, []vultureReference) (vultureResult, error)
 }
 
 type osVulture struct {
@@ -41,9 +42,10 @@ type vultureFile struct {
 }
 
 type vultureReference struct {
-	ID     string `json:"id"`
-	Module string `json:"module"`
-	Symbol string `json:"symbol"`
+	ID      string   `json:"id"`
+	Module  string   `json:"module"`
+	Symbol  string   `json:"symbol"`
+	Members []string `json:"members"`
 }
 
 type vultureBackend struct {
@@ -71,12 +73,12 @@ type vultureResponseWire struct {
 	Failure     *string           `json:"failure"`
 }
 
-func (runner osVulture) deadCode(ctx context.Context, workspace string, scope analysisScope, files []string) (vultureResult, error) {
+func (runner osVulture) deadCode(ctx context.Context, workspace string, scope analysisScope, files []string, references []vultureReference) (vultureResult, error) {
 	if err := runner.validate(); err != nil {
 		return vultureResult{}, err
 	}
 	files = uniqueSorted(files)
-	request, err := newVultureRequest(scope, files)
+	request, err := newVultureRequest(scope, files, references)
 	if err != nil {
 		return vultureResult{}, err
 	}
@@ -91,7 +93,7 @@ func (runner osVulture) deadCode(ctx context.Context, workspace string, scope an
 	return parseVultureResponse(output, files)
 }
 
-func newVultureRequest(scope analysisScope, files []string) (vultureRequest, error) {
+func newVultureRequest(scope analysisScope, files []string, references []vultureReference) (vultureRequest, error) {
 	data, err := decodePythonScopeData(scope.Data)
 	if err != nil {
 		return vultureRequest{}, err
@@ -100,7 +102,7 @@ func newVultureRequest(scope analysisScope, files []string) (vultureRequest, err
 	if err != nil {
 		return vultureRequest{}, err
 	}
-	request := vultureRequest{Protocol: vultureProtocol, ToolVersion: vultureVersion, Files: []vultureFile{}, References: []vultureReference{}, Backends: []vultureBackend{}}
+	request := vultureRequest{Protocol: vultureProtocol, ToolVersion: vultureVersion, Files: []vultureFile{}, References: slices.Clone(references), Backends: []vultureBackend{}}
 	for _, file := range files {
 		identity, found := index.byPath[file]
 		if !found {
@@ -110,12 +112,13 @@ func newVultureRequest(scope analysisScope, files []string) (vultureRequest, err
 	}
 	for _, entry := range data.EntryPoints {
 		id := strings.Join([]string{"manifest", data.Manifest, entry.Group, entry.Name, entry.Module, entry.Symbol}, ":")
-		request.References = append(request.References, vultureReference{ID: id, Module: entry.Module, Symbol: entry.Symbol})
+		request.References = append(request.References, vultureReference{ID: id, Module: entry.Module, Symbol: entry.Symbol, Members: []string{}})
 	}
 	if len(data.BackendPaths) > 0 && data.BuildBackend.Module != "" {
 		id := strings.Join([]string{"manifest", data.Manifest, "build-system.build-backend", data.BuildBackend.Module, data.BuildBackend.Object}, ":")
 		request.Backends = append(request.Backends, vultureBackend{ID: id, Module: data.BuildBackend.Module, Object: data.BuildBackend.Object})
 	}
+	sort.Slice(request.References, func(left, right int) bool { return request.References[left].ID < request.References[right].ID })
 	return request, nil
 }
 

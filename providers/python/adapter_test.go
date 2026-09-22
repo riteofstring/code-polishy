@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -63,9 +64,10 @@ type fakeTy struct {
 }
 
 type fakeVulture struct {
-	result vultureResult
-	files  *[]string
-	err    error
+	result     vultureResult
+	files      *[]string
+	references *[]vultureReference
+	err        error
 }
 
 type fakeProject struct {
@@ -101,9 +103,12 @@ func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files [
 	return slices.Clone(ty.findings), ty.err
 }
 
-func (vulture fakeVulture) deadCode(_ context.Context, _ string, _ analysisScope, files []string) (vultureResult, error) {
+func (vulture fakeVulture) deadCode(_ context.Context, _ string, _ analysisScope, files []string, references []vultureReference) (vultureResult, error) {
 	if vulture.files != nil {
 		*vulture.files = slices.Clone(files)
+	}
+	if vulture.references != nil {
+		*vulture.references = slices.Clone(references)
 	}
 	return vulture.result, vulture.err
 }
@@ -300,12 +305,25 @@ func TestDeadCodeAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
 func TestDeadCodeRejectsUnimplementedRuntimeDeclarations(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
-	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{}}]}`)
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"type","target":"vendor.Model","members":["run"],"reason":"Runtime contract."}}]}`)
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
 	checked := []string{}
 	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
-	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "runtime reachability declarations") || len(checked) != 0 {
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "contract kind type") || len(checked) != 0 {
 		t.Fatalf("result = %+v, checked = %v", result, checked)
+	}
+}
+
+func TestDeadCodeCarriesRepositoryEntryPointContracts(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("class Handler:\n    def execute(self):\n        return 1\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"entry-point","target":"app:Handler","members":["execute"],"reason":"Runtime selects this handler."}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	references := []vultureReference{}
+	result := (adapter{vulture: fakeVulture{references: &references}}).run(context.Background(), request)
+	want := []vultureReference{{ID: "config:python.contract:entry-point:app:Handler", Module: "app", Symbol: "Handler", Members: []string{"execute"}}}
+	if result.Status != "pass" || !reflect.DeepEqual(references, want) {
+		t.Fatalf("result = %+v, references = %+v", result, references)
 	}
 }
 

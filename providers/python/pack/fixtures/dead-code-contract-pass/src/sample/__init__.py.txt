@@ -1,0 +1,4 @@
+python-pack-fixture
+class Handler:
+    def execute(self):
+        return 1

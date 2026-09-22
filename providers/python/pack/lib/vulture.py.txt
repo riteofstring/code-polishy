@@ -348,12 +348,21 @@ def reachability_inputs(request):
         raise ValueError("request has an invalid reachability count")
     identifiers = set()
     for index, reference in enumerate(references):
-        exact_object(reference, {"id", "module", "symbol"}, f"reference {index}")
+        exact_object(
+            reference, {"id", "module", "symbol", "members"}, f"reference {index}"
+        )
         if (
             not exact_text(reference["id"])
             or reference["id"] in identifiers
             or not identifier_chain(reference["module"])
             or not identifier_chain(reference["symbol"])
+            or not isinstance(reference["members"], list)
+            or len(reference["members"]) > MAX_REFERENCES
+            or any(
+                not identifier_chain(member) or "." in member
+                for member in reference["members"]
+            )
+            or reference["members"] != sorted(set(reference["members"]))
         ):
             raise ValueError(f"reference {index} is invalid")
         identifiers.add(reference["id"])
@@ -437,14 +446,18 @@ def reachability_locations(files, references, backends):
     problems = []
     for reference in references:
         try:
-            keep.update(
-                module_reference(
-                    modules,
-                    reference["module"],
-                    reference["symbol"].split("."),
-                    set(),
+            parts = reference["symbol"].split(".")
+            locations = module_reference(modules, reference["module"], parts, set())
+            for member in reference["members"]:
+                locations.extend(
+                    module_reference(
+                        modules,
+                        reference["module"],
+                        parts + [member],
+                        set(),
+                    )
                 )
-            )
+            keep.update(locations)
         except (TypeError, ValueError) as error:
             problems.append({"id": reference["id"], "message": bounded(str(error))})
     for backend in backends:

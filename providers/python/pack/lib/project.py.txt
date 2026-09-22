@@ -3,8 +3,8 @@ import importlib.metadata
 import json
 import re
 import sys
-import tomllib
 
+import tomllib
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import InvalidName, canonicalize_name
 from packaging.version import InvalidVersion, Version

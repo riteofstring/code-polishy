@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -92,14 +93,18 @@ func TestNewVultureRequestCarriesManifestReachability(t *testing.T) {
 		Members: []string{"backend.py", "src/sample/__init__.py"},
 		Data:    json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"backendPaths":["."],"buildBackend":{"module":"backend","object":"Builder"},"entryPoints":[{"group":"console_scripts","name":"sample","module":"sample","symbol":"main"}],"problems":[]}`),
 	}
-	request, err := newVultureRequest(scope, scope.Members)
+	configured := []vultureReference{{ID: "config:python.contract:entry-point:sample:Handler", Module: "sample", Symbol: "Handler", Members: []string{"run"}}}
+	request, err := newVultureRequest(scope, scope.Members, configured)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantFiles := []vultureFile{{Path: "backend.py", Module: "backend"}, {Path: "src/sample/__init__.py", Module: "sample", Package: "sample"}}
-	wantReferences := []vultureReference{{ID: "manifest:pyproject.toml:console_scripts:sample:sample:main", Module: "sample", Symbol: "main"}}
+	wantReferences := []vultureReference{
+		{ID: "config:python.contract:entry-point:sample:Handler", Module: "sample", Symbol: "Handler", Members: []string{"run"}},
+		{ID: "manifest:pyproject.toml:console_scripts:sample:sample:main", Module: "sample", Symbol: "main", Members: []string{}},
+	}
 	wantBackends := []vultureBackend{{ID: "manifest:pyproject.toml:build-system.build-backend:backend:Builder", Module: "backend", Object: "Builder"}}
-	if !slices.Equal(request.Files, wantFiles) || !slices.Equal(request.References, wantReferences) || !slices.Equal(request.Backends, wantBackends) {
+	if !slices.Equal(request.Files, wantFiles) || !reflect.DeepEqual(request.References, wantReferences) || !slices.Equal(request.Backends, wantBackends) {
 		t.Fatalf("request = %+v", request)
 	}
 }
