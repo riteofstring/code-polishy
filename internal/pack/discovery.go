@@ -105,11 +105,19 @@ func discoveryRequestPaths(ctx context.Context, repo repository.Repository, comm
 
 func validateDiscoveryResponse(response Response, request Request) error {
 	if response.Status == "operational-failure" {
-		if response.Discovery != nil || response.Coverage != nil || response.Facts != nil || len(response.Findings) != 0 || len(response.Edits) != 0 || len(response.ScopeHandles) != 0 {
-			return errors.New("discovery operational failure cannot assert scopes, capability coverage, facts, findings, edits, or scope handles")
-		}
-		return validateInputs(response.Inputs)
+		return validateDiscoveryFailure(response)
 	}
+	return validateDiscoverySuccess(response, request)
+}
+
+func validateDiscoveryFailure(response Response) error {
+	if response.Discovery != nil || discoveryCarriesCapabilityResult(response) {
+		return errors.New("discovery operational failure cannot assert scopes, capability coverage, facts, findings, edits, or scope handles")
+	}
+	return validateInputs(response.Inputs)
+}
+
+func validateDiscoverySuccess(response Response, request Request) error {
 	if response.Discovery == nil {
 		return expected("discovery", "a bounded scope result")
 	}
@@ -119,7 +127,7 @@ func validateDiscoveryResponse(response Response, request Request) error {
 	if len(response.Evidence) == 0 {
 		return expected("evidence", "at least one item when discovery passes")
 	}
-	if response.Coverage != nil || response.Facts != nil || len(response.Findings) != 0 || len(response.Edits) != 0 || len(response.ScopeHandles) != 0 {
+	if discoveryCarriesCapabilityResult(response) {
 		return errors.New("discovery cannot assert capability coverage, facts, findings, edits, or scope handles")
 	}
 	if err := validateDiscoveredScopes(response.Discovery.Scopes, request); err != nil {
@@ -128,72 +136,108 @@ func validateDiscoveryResponse(response Response, request Request) error {
 	return validateInputs(response.Inputs)
 }
 
+func discoveryCarriesCapabilityResult(response Response) bool {
+	return response.Coverage != nil || response.Facts != nil || len(response.Findings) != 0 || len(response.Edits) != 0 || len(response.ScopeHandles) != 0
+}
+
 func validateDiscoveredScopes(scopes []DiscoveredScope, request Request) error {
 	if len(scopes) == 0 || len(scopes) > maximumDiscoveryScopes {
 		return expected("discovery.scopes", fmt.Sprintf("1 to %d items", maximumDiscoveryScopes))
 	}
-	inventory := inventoryByPath(request.Inventory)
-	languages := discoveryLanguages(request)
-	selected := map[string]int{}
-	identities := map[string]bool{}
-	totalBytes := 0
+	validation := discoveryScopeValidation{
+		inventory: inventoryByPath(request.Inventory), languages: discoveryLanguages(request),
+		selected: map[string]int{}, identities: map[string]bool{}, provider: request.Provider,
+	}
 	for index := range scopes {
-		label := indexed("discovery.scopes", index)
-		scope := &scopes[index]
-		if strings.TrimSpace(scope.ID) == "" || len(scope.ID) > 256 || identities[scope.ID] {
-			return expected(label+".id", "a unique 1 to 256 byte non-whitespace identity")
-		}
-		identities[scope.ID] = true
-		if !languages[scope.Language] {
-			return expected(label+".language", "a language declared by this command")
-		}
-		if err := validateScopeRoot(scope.Root); err != nil {
-			return expected(label+".root", "a contained relative directory")
-		}
-		if len(scope.Members) == 0 {
-			return expected(label+".members", "at least one governed source path")
-		}
-		if scope.EntryFiles == nil || scope.Context == nil || scope.Selected == nil {
-			return expected(label, "explicit entryFiles, context, and selected arrays")
-		}
-		for _, field := range []struct {
-			name   string
-			values []string
-		}{
-			{"members", scope.Members}, {"entryFiles", scope.EntryFiles}, {"context", scope.Context}, {"selected", scope.Selected},
-		} {
-			if err := validateScopePaths(label+"."+field.name, field.values, inventory); err != nil {
-				return err
-			}
-		}
-		for _, member := range scope.Members {
-			entry := inventory[member]
-			if !entry.Source || entry.Language != scope.Language || entry.Owner != request.Provider {
-				return expected(label+".members", "source paths owned by this provider and language")
-			}
-		}
-		if !allContained(scope.EntryFiles, scope.Members) {
-			return expected(label+".entryFiles", "paths from members")
-		}
-		if !allContained(scope.Selected, scope.Members) {
-			return expected(label+".selected", "paths from members")
-		}
-		for _, file := range scope.Selected {
-			selected[file]++
-		}
-		canonical, err := canonicalScopeData(scope.Data)
-		if err != nil {
-			return fmt.Errorf("%s.data: %w", label, err)
-		}
-		totalBytes += len(canonical)
-		if len(canonical) > maximumScopeBytes || totalBytes > maximumScopeDataBytes {
-			return expected(label+".data", "bounded canonical JSON")
+		if err := validation.validate(scopes[index], indexed("discovery.scopes", index)); err != nil {
+			return err
 		}
 	}
 	for _, file := range request.Files {
-		if selected[file] != 1 {
+		if validation.selected[file] != 1 {
 			return expected("discovery.scopes[].selected", fmt.Sprintf("requested source %q exactly once", file))
 		}
+	}
+	return nil
+}
+
+type discoveryScopeValidation struct {
+	inventory  map[string]InventoryEntry
+	languages  map[string]bool
+	selected   map[string]int
+	identities map[string]bool
+	provider   string
+	totalBytes int
+}
+
+func (validation *discoveryScopeValidation) validate(scope DiscoveredScope, label string) error {
+	if err := validation.validateIdentity(scope, label); err != nil {
+		return err
+	}
+	if err := validation.validatePaths(scope, label); err != nil {
+		return err
+	}
+	for _, file := range scope.Selected {
+		validation.selected[file]++
+	}
+	return validation.validateData(scope.Data, label)
+}
+
+func (validation *discoveryScopeValidation) validateIdentity(scope DiscoveredScope, label string) error {
+	if strings.TrimSpace(scope.ID) == "" || len(scope.ID) > 256 || validation.identities[scope.ID] {
+		return expected(label+".id", "a unique 1 to 256 byte non-whitespace identity")
+	}
+	validation.identities[scope.ID] = true
+	if !validation.languages[scope.Language] {
+		return expected(label+".language", "a language declared by this command")
+	}
+	if err := validateScopeRoot(scope.Root); err != nil {
+		return expected(label+".root", "a contained relative directory")
+	}
+	if len(scope.Members) == 0 {
+		return expected(label+".members", "at least one governed source path")
+	}
+	if scope.EntryFiles == nil || scope.Context == nil || scope.Selected == nil {
+		return expected(label, "explicit entryFiles, context, and selected arrays")
+	}
+	return nil
+}
+
+func (validation discoveryScopeValidation) validatePaths(scope DiscoveredScope, label string) error {
+	fields := []struct {
+		name   string
+		values []string
+	}{
+		{"members", scope.Members}, {"entryFiles", scope.EntryFiles}, {"context", scope.Context}, {"selected", scope.Selected},
+	}
+	for _, field := range fields {
+		if err := validateScopePaths(label+"."+field.name, field.values, validation.inventory); err != nil {
+			return err
+		}
+	}
+	for _, member := range scope.Members {
+		entry := validation.inventory[member]
+		if !entry.Source || entry.Language != scope.Language || entry.Owner != validation.provider {
+			return expected(label+".members", "source paths owned by this provider and language")
+		}
+	}
+	if !allContained(scope.EntryFiles, scope.Members) {
+		return expected(label+".entryFiles", "paths from members")
+	}
+	if !allContained(scope.Selected, scope.Members) {
+		return expected(label+".selected", "paths from members")
+	}
+	return nil
+}
+
+func (validation *discoveryScopeValidation) validateData(data json.RawMessage, label string) error {
+	canonical, err := canonicalScopeData(data)
+	if err != nil {
+		return fmt.Errorf("%s.data: %w", label, err)
+	}
+	validation.totalBytes += len(canonical)
+	if len(canonical) > maximumScopeBytes || validation.totalBytes > maximumScopeDataBytes {
+		return expected(label+".data", "bounded canonical JSON")
 	}
 	return nil
 }
@@ -203,51 +247,64 @@ func capabilityRequest(request Request, response Response) (Request, error) {
 	if request.Capability == "format" {
 		request.Operation = "format"
 	}
-	active := map[string]bool{}
-	for _, scope := range response.Discovery.Scopes {
-		if len(scope.Selected) > 0 {
-			active[scope.ID] = true
-		}
+	files, scopes, err := capabilityScopes(request.Capability, response.Discovery.Scopes)
+	if err != nil {
+		return Request{}, err
 	}
-	includeAll := request.Capability == "architecture"
-	request.Files = []string{}
-	request.Scopes = []AnalysisScope{}
-	for _, discovered := range response.Discovery.Scopes {
-		request.Files = append(request.Files, discovered.Selected...)
-		if !includeAll && !active[discovered.ID] {
-			continue
-		}
-		canonical, err := canonicalScopeData(discovered.Data)
-		if err != nil {
-			return Request{}, err
-		}
-		request.Scopes = append(request.Scopes, AnalysisScope{
-			Handle: fmt.Sprintf("scope-%d", len(request.Scopes)+1), Language: discovered.Language, Root: discovered.Root,
-			Members: slices.Clone(discovered.Members), EntryFiles: slices.Clone(discovered.EntryFiles), Context: slices.Clone(discovered.Context), Data: canonical,
-		})
-	}
-	request.Files = sortedUnique(request.Files)
+	request.Files = files
+	request.Scopes = scopes
 	if len(request.Files) == 0 {
 		return request, nil
 	}
-	request.DiagnosticFiles = slices.Clone(request.Files)
-	if slices.Contains([]string{"typecheck", "dead-code", "architecture"}, request.Capability) {
-		for _, scope := range request.Scopes {
-			request.DiagnosticFiles = append(request.DiagnosticFiles, scope.Members...)
-		}
-		request.DiagnosticFiles = sortedUnique(request.DiagnosticFiles)
-	}
-	request.WriteFiles = []string{}
-	if request.Capability == "format" && request.Mode == "write" {
-		inventory := inventoryByPath(request.Inventory)
-		for _, file := range request.Files {
-			entry := inventory[file]
-			if !entry.Generated && !entry.Data {
-				request.WriteFiles = append(request.WriteFiles, file)
-			}
-		}
-	}
+	request.DiagnosticFiles = capabilityDiagnosticFiles(request.Capability, request.Files, request.Scopes)
+	request.WriteFiles = capabilityWriteFiles(request)
 	return request, nil
+}
+
+func capabilityScopes(capability string, discovered []DiscoveredScope) ([]string, []AnalysisScope, error) {
+	files := []string{}
+	scopes := []AnalysisScope{}
+	for _, scope := range discovered {
+		files = append(files, scope.Selected...)
+		if capability != "architecture" && len(scope.Selected) == 0 {
+			continue
+		}
+		canonical, err := canonicalScopeData(scope.Data)
+		if err != nil {
+			return nil, nil, err
+		}
+		scopes = append(scopes, AnalysisScope{
+			Handle: fmt.Sprintf("scope-%d", len(scopes)+1), Language: scope.Language, Root: scope.Root,
+			Members: slices.Clone(scope.Members), EntryFiles: slices.Clone(scope.EntryFiles), Context: slices.Clone(scope.Context), Data: canonical,
+		})
+	}
+	return sortedUnique(files), scopes, nil
+}
+
+func capabilityDiagnosticFiles(capability string, files []string, scopes []AnalysisScope) []string {
+	result := slices.Clone(files)
+	if !slices.Contains([]string{"typecheck", "dead-code", "architecture"}, capability) {
+		return result
+	}
+	for _, scope := range scopes {
+		result = append(result, scope.Members...)
+	}
+	return sortedUnique(result)
+}
+
+func capabilityWriteFiles(request Request) []string {
+	result := []string{}
+	if request.Capability != "format" || request.Mode != "write" {
+		return result
+	}
+	inventory := inventoryByPath(request.Inventory)
+	for _, file := range request.Files {
+		entry := inventory[file]
+		if !entry.Generated && !entry.Data {
+			result = append(result, file)
+		}
+	}
+	return result
 }
 
 func verifyDiscoveryInputs(repo repository.Repository, request Request, response Response) error {

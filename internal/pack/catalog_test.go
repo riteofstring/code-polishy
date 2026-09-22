@@ -80,11 +80,11 @@ func TestPublishedLocalCatalogAuthenticatesTheShippedProofPack(t *testing.T) {
 
 func TestCatalogAuthenticationAndMetadataFailBeforeInstallation(t *testing.T) {
 	catalogRoot, source := containedCatalogPack(t)
-	path, digest, entry := writeTestCatalog(t, catalogRoot, source, "0.25.0", nil)
+	path, _, _ := writeTestCatalog(t, catalogRoot, source, "0.25.0", nil)
 	if _, err := LoadCatalog(path, strings.Repeat("c", 64)); err == nil || !strings.Contains(err.Error(), "required SHA-256") {
 		t.Fatalf("unauthenticated catalog loaded: %v", err)
 	}
-	path, digest, entry = writeTestCatalog(t, catalogRoot, source, "0.25.0", func(candidate *CatalogEntry) {
+	path, digest, entry := writeTestCatalog(t, catalogRoot, source, "0.25.0", func(candidate *CatalogEntry) {
 		candidate.Capabilities = []string{"format"}
 	})
 	loaded, err := LoadCatalog(path, digest)

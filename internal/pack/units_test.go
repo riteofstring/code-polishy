@@ -58,6 +58,23 @@ func TestStaticDiscoveryKeepsEcosystemShapeOutOfCore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertStaticDiscoveryRequest(t, discovery, command)
+	response := staticDiscoveryResponse()
+	if err := validateResponse(response, discovery); err != nil {
+		t.Fatal(err)
+	}
+	request, err := capabilityRequest(base, response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareInputPaths(repo, &request, command, paths); err != nil {
+		t.Fatal(err)
+	}
+	assertStaticCapabilityRequest(t, request)
+}
+
+func assertStaticDiscoveryRequest(t *testing.T, discovery Request, command policy.Command) {
+	t.Helper()
 	generated := inventoryByPath(discovery.Inventory)["python_pkg/generated/bundle.js"]
 	if generated.Context != "frontend/package.json" || !generated.Generated || generated.Owner != command.Name {
 		t.Fatalf("generated inventory = %+v", generated)
@@ -72,21 +89,18 @@ func TestStaticDiscoveryKeepsEcosystemShapeOutOfCore(t *testing.T) {
 	if !slices.ContainsFunc(discovery.Context, func(input InputFile) bool { return input.Path == ".github/workflows/ci.yml" }) {
 		t.Fatal("policy-sensitive control input was not bound into discovery")
 	}
+}
+
+func staticDiscoveryResponse() Response {
 	scopeData := json.RawMessage(`{"configuration":"frontend/tsconfig.app.json","manifest":"frontend/package.json","workspace":"frontend"}`)
-	response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"static discovery"}, Discovery: &DiscoveryResult{Scopes: []DiscoveredScope{{
+	return Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"static discovery"}, Discovery: &DiscoveryResult{Scopes: []DiscoveredScope{{
 		ID: "frontend", Language: "typescript", Root: "frontend", Members: []string{"frontend/dependent.ts", "frontend/index.ts", "python_pkg/generated/bundle.js"},
 		EntryFiles: []string{"frontend/index.ts"}, Context: []string{"frontend/package.json", "frontend/tsconfig.app.json"}, Selected: []string{"python_pkg/generated/bundle.js"}, Data: scopeData,
 	}}}}
-	if err := validateResponse(response, discovery); err != nil {
-		t.Fatal(err)
-	}
-	request, err := capabilityRequest(base, response)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := prepareInputPaths(repo, &request, command, paths); err != nil {
-		t.Fatal(err)
-	}
+}
+
+func assertStaticCapabilityRequest(t *testing.T, request Request) {
+	t.Helper()
 	if len(request.Scopes) != 1 || !slices.Contains(request.DiagnosticFiles, "frontend/dependent.ts") || slices.Contains(request.DiagnosticFiles, "backend/app.py") {
 		t.Fatalf("validated scope = %+v, diagnostics = %v", request.Scopes, request.DiagnosticFiles)
 	}

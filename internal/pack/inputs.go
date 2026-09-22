@@ -147,48 +147,81 @@ func validateAnalysisScopes(request Request) error {
 	if len(request.Scopes) == 0 || len(request.Scopes) > maximumDiscoveryScopes {
 		return expected("scopes", fmt.Sprintf("1 to %d items", maximumDiscoveryScopes))
 	}
-	inventory := inventoryByPath(request.Inventory)
-	handles := map[string]bool{}
-	members := map[string]bool{}
-	totalDataBytes := 0
+	validation := analysisScopeValidation{
+		inventory: inventoryByPath(request.Inventory), handles: map[string]bool{}, members: map[string]bool{}, provider: request.Provider,
+	}
 	for index, scope := range request.Scopes {
-		label := indexed("scopes", index)
-		if scope.Handle != fmt.Sprintf("scope-%d", index+1) || handles[scope.Handle] {
-			return expected(label+".handle", "its unique engine-issued invocation handle")
-		}
-		handles[scope.Handle] = true
-		if err := validateScopeRoot(scope.Root); err != nil {
-			return expected(label+".root", "a contained relative directory")
-		}
-		if len(scope.Members) == 0 || !allContained(scope.EntryFiles, scope.Members) {
-			return expected(label+".members", "at least one source with entryFiles contained within it")
-		}
-		for _, member := range scope.Members {
-			entry, found := inventory[member]
-			if !found || !entry.Source || entry.Language != scope.Language || entry.Owner != request.Provider {
-				return expected(label+".members", "provider-owned source paths from inventory")
-			}
-			members[member] = true
-		}
-		seenContext := map[string]bool{}
-		for contextIndex, context := range scope.Context {
-			if _, found := inventory[context]; !found {
-				return expected(indexed(label+".context", contextIndex), "a unique path from inventory")
-			}
-			if seenContext[context] {
-				return expected(indexed(label+".context", contextIndex), "a unique path from inventory")
-			}
-			seenContext[context] = true
-		}
-		canonical, err := canonicalScopeData(scope.Data)
-		if err != nil {
-			return fmt.Errorf("%s.data: %w", label, err)
-		}
-		totalDataBytes += len(canonical)
-		if totalDataBytes > maximumScopeDataBytes {
-			return expected(label+".data", "aggregate scope data of at most 2097152 bytes")
+		if err := validation.validate(scope, index); err != nil {
+			return err
 		}
 	}
+	return validateAnalysisScopeSelections(request, validation.members)
+}
+
+type analysisScopeValidation struct {
+	inventory      map[string]InventoryEntry
+	handles        map[string]bool
+	members        map[string]bool
+	provider       string
+	totalDataBytes int
+}
+
+func (validation *analysisScopeValidation) validate(scope AnalysisScope, index int) error {
+	label := indexed("scopes", index)
+	if scope.Handle != fmt.Sprintf("scope-%d", index+1) || validation.handles[scope.Handle] {
+		return expected(label+".handle", "its unique engine-issued invocation handle")
+	}
+	validation.handles[scope.Handle] = true
+	if err := validateScopeRoot(scope.Root); err != nil {
+		return expected(label+".root", "a contained relative directory")
+	}
+	if len(scope.Members) == 0 || !allContained(scope.EntryFiles, scope.Members) {
+		return expected(label+".members", "at least one source with entryFiles contained within it")
+	}
+	if err := validation.validateMembers(scope, label); err != nil {
+		return err
+	}
+	if err := validation.validateContext(scope.Context, label); err != nil {
+		return err
+	}
+	return validation.validateData(scope.Data, label)
+}
+
+func (validation *analysisScopeValidation) validateMembers(scope AnalysisScope, label string) error {
+	for _, member := range scope.Members {
+		entry, found := validation.inventory[member]
+		if !found || !entry.Source || entry.Language != scope.Language || entry.Owner != validation.provider {
+			return expected(label+".members", "provider-owned source paths from inventory")
+		}
+		validation.members[member] = true
+	}
+	return nil
+}
+
+func (validation analysisScopeValidation) validateContext(contexts []string, label string) error {
+	seen := map[string]bool{}
+	for index, context := range contexts {
+		if _, found := validation.inventory[context]; !found || seen[context] {
+			return expected(indexed(label+".context", index), "a unique path from inventory")
+		}
+		seen[context] = true
+	}
+	return nil
+}
+
+func (validation *analysisScopeValidation) validateData(data json.RawMessage, label string) error {
+	canonical, err := canonicalScopeData(data)
+	if err != nil {
+		return fmt.Errorf("%s.data: %w", label, err)
+	}
+	validation.totalDataBytes += len(canonical)
+	if validation.totalDataBytes > maximumScopeDataBytes {
+		return expected(label+".data", "aggregate scope data of at most 2097152 bytes")
+	}
+	return nil
+}
+
+func validateAnalysisScopeSelections(request Request, members map[string]bool) error {
 	for _, file := range append(slices.Clone(request.Files), request.DiagnosticFiles...) {
 		if !members[file] {
 			return expected("diagnosticFiles", "selected paths and diagnostics contained in validated scopes")
