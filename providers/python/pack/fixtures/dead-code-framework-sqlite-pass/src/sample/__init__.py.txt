@@ -1,0 +1,16 @@
+python-pack-fixture
+from .database import Connection, open_database
+
+
+def configure():
+    with open_database(":memory:", factory=Connection) as connection:
+        connection.row_factory = str
+    return connection
+
+
+def customize(connection: "Connection"):
+    connection.row_factory = str
+
+
+database = configure()
+customize(database)

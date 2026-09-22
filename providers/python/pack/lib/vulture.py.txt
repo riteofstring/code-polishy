@@ -581,6 +581,9 @@ class ExactReferences:
 
     def qualified(self, file, node, blocked=frozenset()):
         name = reference_name(node)
+        return self.qualified_name(file, name, blocked)
+
+    def qualified_name(self, file, name, blocked=frozenset()):
         if not name:
             return None
         parts = name.split(".")
@@ -962,6 +965,97 @@ class TypeAttributeVisitor(ConnectionFlow):
         ):
             self.keep(node)
         self.generic_visit(node)
+
+
+class SQLiteVisitor(ConnectionFlow):
+    def __init__(self, file, references, writes):
+        super().__init__(self.connection_call)
+        self.file = file
+        self.references = references
+        self.writes = writes
+        self.kept = set()
+
+    def keep(self, node):
+        if self.writes[(node.lineno, node.attr)] <= 1:
+            self.kept.add(definition_location(self.file["path"], node, node.attr))
+
+    def connection_call(self, node):
+        qualified = self.references.qualified(self.file, node.func)
+        if qualified not in {"sqlite3.connect", "sqlite3.Connection"}:
+            return False
+        if any(isinstance(argument, ast.Starred) for argument in node.args):
+            return False
+        if any(keyword.arg is None for keyword in node.keywords):
+            return False
+        factories = [
+            keyword.value for keyword in node.keywords if keyword.arg == "factory"
+        ]
+        if len(node.args) > 5:
+            factories.append(node.args[5])
+        return all(
+            self.references.qualified(self.file, value) == "sqlite3.Connection"
+            for value in factories
+        )
+
+    def parameters(self, node):
+        result = set()
+        arguments = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+        for argument in arguments:
+            annotation = argument.annotation
+            if isinstance(annotation, ast.Constant) and isinstance(
+                annotation.value, str
+            ):
+                qualified = self.references.qualified_name(self.file, annotation.value)
+            else:
+                qualified = self.references.qualified(self.file, annotation)
+            if qualified == "sqlite3.Connection":
+                result.add((argument.arg,))
+        return result
+
+    def visit_ClassDef(self, node):
+        previous = self.scope, self.connections, self.mutable_names
+        self.scope = f"{self.scope}/class:{node.lineno}:{node.col_offset + 1}"
+        self.connections = self.block(node.body, set())
+        self.scope, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
+
+    def visit_FunctionDef(self, node):
+        previous = self.scope, self.connections, self.mutable_names
+        self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
+        self.connections = self.parameters(node)
+        self.mutable_names = {
+            name
+            for value in ast.walk(node)
+            if isinstance(value, (ast.Nonlocal, ast.Global))
+            for name in value.names
+        }
+        for statement in node.body:
+            self.visit(statement)
+        self.scope, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Attribute(self, node):
+        if (
+            isinstance(node.ctx, ast.Store)
+            and node.attr == "row_factory"
+            and self.connection(node.value)
+        ):
+            self.keep(node)
+        self.generic_visit(node)
+
+
+def sqlite_locations(files):
+    references = ExactReferences(files)
+    result = set()
+    for file in files:
+        visitor = SQLiteVisitor(file, references, source_write_counts(file))
+        visitor.visit(file["tree"])
+        result.update(visitor.kept)
+    return result
 
 
 def type_contract_locations(files, contract, resolver):
@@ -1565,6 +1659,7 @@ def analyze(request):
     for file in files:
         keep.update(callback_locations(file))
     keep.update(pytest_locations(files))
+    keep.update(sqlite_locations(files))
     reachability, problems = reachability_locations(
         files, references, backends, contracts
     )

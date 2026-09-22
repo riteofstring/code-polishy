@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Thirty-six built-pack fixtures include
+enforcement. Thirty-eight built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -610,11 +610,14 @@ suppression, retains bundled whitelists and standard-library callback behavior,
 and returns dead-code facts that core maps to the existing finding. Exact
 external pytest imports and project re-export chains retain autouse fixtures and
 nonempty module marks, while project-local and rebound lookalikes remain
-reportable. PEP 621 scripts and grouped entry points now retain exact
-module-symbol definitions and re-export chains; project-owned build backends
-retain their objects and standard hooks. Missing or ambiguous manifest targets
-withhold project-wide dead-code facts. Repository-local `python.contract` entry
-points now use the authenticated,
+reportable. SQLite `row_factory` writes now require receivers proven through an
+exact external constructor or annotation; constructor aliases and context
+managers flow through the same conservative state, while unknown factories,
+reassignments, and ambiguous writes remain findings. PEP 621 scripts and grouped
+entry points now retain exact module-symbol definitions and re-export chains;
+project-owned build backends retain their objects and standard hooks. Missing or
+ambiguous manifest targets withhold project-wide dead-code facts.
+Repository-local `python.contract` entry points now use the authenticated,
 contained Astroid resolver to retain direct and nested-instance definitions,
 explicit members, and re-export chains without importing target code. Invalid,
 stale, conditional, ambiguous, external, and unsupported runtime reachability

@@ -1,0 +1,5 @@
+python-pack-fixture
+from sqlite3 import Connection
+from sqlite3 import connect as open_database
+
+__all__ = ["Connection", "open_database"]

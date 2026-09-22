@@ -1,0 +1,11 @@
+python-pack-fixture
+import sqlite3
+
+
+def configure(factory):
+    connection = sqlite3.connect(":memory:", factory=factory)
+    connection.row_factory = str
+    return connection
+
+
+configure(object)

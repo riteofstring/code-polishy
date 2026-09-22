@@ -415,6 +415,23 @@
       "expectedRules": ["quality.deadCode"]
     },
     {
+      "name": "dead-code-framework-sqlite-pass",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-framework-sqlite-pass",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "dead-code-framework-sqlite-fail",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-framework-sqlite-fail",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "findings",
+      "expectedRules": ["quality.deadCode"]
+    },
+    {
       "name": "target-version-pass",
       "command": "analyze",
       "capability": "lint",
