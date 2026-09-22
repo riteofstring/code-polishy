@@ -300,29 +300,14 @@ func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, s
 		return engine.finish(nil, notes), nil
 	}
 	reporter := testpolicy.NewDirectExecutionReporter(engine.Output, plan, engine.Verbose)
-	runResult := testpolicy.RunResult{}
-	testCommands := []TestCommandEvidence{}
-	testDiagnostics := []TestFailureDiagnostic{}
-	if !stopAfterFailure {
+	var runResult testpolicy.RunResult
+	var testCommands []TestCommandEvidence
+	var testDiagnostics []TestFailureDiagnostic
+	if stopAfterFailure {
+		runResult, testCommands, testDiagnostics = engine.runGateTestPlan(ctx, plan, selection, reporter)
+	} else {
 		runResult = testpolicy.RunWithEvidence(ctx, engine.Repository, engine.Runner, plan, reporter)
 		testCommands = engine.testCommandEvidence(plan, selection, runResult.Executions, "working-tree")
-	} else {
-		remaining := plan
-		for len(remaining.Suites) > 0 {
-			batch := testpolicy.RunUntilFailureWithEvidence(ctx, engine.Repository, engine.Runner, remaining, reporter)
-			diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, batch.Executions)
-			batch.Findings = resolveIntermittentTestFindings(batch.Findings, diagnostics)
-			runResult.Findings = append(runResult.Findings, batch.Findings...)
-			runResult.Executions = append(runResult.Executions, batch.Executions...)
-			testCommands = append(testCommands, engine.testCommandEvidence(plan, selection, batch.Executions, "working-tree")...)
-			testCommands = append(testCommands, diagnosticEvidence...)
-			testDiagnostics = append(testDiagnostics, diagnostics...)
-			if len(batch.Findings) > 0 || len(batch.Executions) == 0 {
-				break
-			}
-			remaining.Suites = remaining.Suites[len(batch.Executions):]
-			reporter = nil
-		}
 	}
 	notes = append(notes, fmt.Sprintf("ran %d test suites", len(plan.Suites)))
 	if provider, ok := engine.Runner.(interface{ ReceiptNotes() []string }); ok {
@@ -335,6 +320,29 @@ func (engine *Engine) testExactPlan(ctx context.Context, plan testpolicy.Plan, s
 		report.TestDiagnostics = testDiagnostics
 	}
 	return report, nil
+}
+
+func (engine *Engine) runGateTestPlan(ctx context.Context, plan testpolicy.Plan, selection repository.Selection, reporter *testpolicy.ExecutionReporter) (testpolicy.RunResult, []TestCommandEvidence, []TestFailureDiagnostic) {
+	runResult := testpolicy.RunResult{}
+	testCommands := []TestCommandEvidence{}
+	testDiagnostics := []TestFailureDiagnostic{}
+	remaining := plan
+	for len(remaining.Suites) > 0 {
+		batch := testpolicy.RunUntilFailureWithEvidence(ctx, engine.Repository, engine.Runner, remaining, reporter)
+		diagnostics, diagnosticEvidence := engine.testFailureDiagnostics(ctx, plan, selection, batch.Executions)
+		batch.Findings = resolveIntermittentTestFindings(batch.Findings, diagnostics)
+		runResult.Findings = append(runResult.Findings, batch.Findings...)
+		runResult.Executions = append(runResult.Executions, batch.Executions...)
+		testCommands = append(testCommands, engine.testCommandEvidence(plan, selection, batch.Executions, "working-tree")...)
+		testCommands = append(testCommands, diagnosticEvidence...)
+		testDiagnostics = append(testDiagnostics, diagnostics...)
+		if len(batch.Findings) > 0 || len(batch.Executions) == 0 {
+			break
+		}
+		remaining.Suites = remaining.Suites[len(batch.Executions):]
+		reporter = nil
+	}
+	return runResult, testCommands, testDiagnostics
 }
 
 func (engine *Engine) TestPlan(base string) (Report, error) {
