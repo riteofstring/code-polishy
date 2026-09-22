@@ -15,6 +15,7 @@ MAX_FILES = 10000
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
 MAX_AST_NODES = 2000000
 MAX_FACTS = 10000
+MAX_REFERENCES = 4096
 MAX_STRING_BYTES = 4096
 KINDS = {
     "attribute",
@@ -51,6 +52,17 @@ def exact_path(value):
     return value
 
 
+def identifier_chain(value):
+    return (
+        isinstance(value, str)
+        and value
+        and all(
+            part.isascii() and part.isidentifier() and not part[0].isdigit()
+            for part in value.split(".")
+        )
+    )
+
+
 def contained_file(root, path):
     target = os.path.realpath(os.path.join(root, *path.split("/")))
     if os.path.commonpath((root, target)) != root or not os.path.isfile(target):
@@ -66,6 +78,85 @@ def definition_location(path, node, name):
     else:
         end_line = node.end_lineno
     return path, line, end_line, name
+
+
+def assignment_targets(node):
+    if isinstance(node, (ast.Tuple, ast.List)):
+        for item in node.elts:
+            yield from assignment_targets(item)
+    elif isinstance(node, ast.Name):
+        yield node
+
+
+def definition_sites(file, body, name):
+    result = []
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == name:
+                result.append(("definition", node))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                for assigned in assignment_targets(target):
+                    if assigned.id == name:
+                        result.append(("definition", assigned))
+        elif isinstance(node, ast.ImportFrom):
+            for item in node.names:
+                if (item.asname or item.name.partition(".")[0]) == name:
+                    result.append(("import", node, item))
+    return result
+
+
+def module_file(modules, module):
+    candidates = modules.get(module, [])
+    runtime = [file for file in candidates if file["path"].endswith(".py")]
+    selected = runtime if runtime else candidates
+    locations = {
+        file["path"].removesuffix(".py").removesuffix(".pyi") for file in selected
+    }
+    if not selected:
+        raise ValueError("module has no project definition")
+    if len(locations) != 1 or len(selected) != 1:
+        raise ValueError("module is ambiguous")
+    return selected[0]
+
+
+def class_member(file, node, parts):
+    result = [definition_location(file["path"], node, parts[0])]
+    if len(parts) == 1:
+        return result
+    if not isinstance(node, ast.ClassDef):
+        raise TypeError("symbol has no class member")
+    found = definition_sites(file, node.body, parts[1])
+    if len(found) != 1 or found[0][0] != "definition":
+        raise ValueError("class member is stale or ambiguous")
+    return result + class_member(file, found[0][1], parts[1:])
+
+
+def module_reference(modules, module, parts, seen):
+    identity = module, ".".join(parts)
+    if identity in seen:
+        raise ValueError("reference re-export cycle")
+    file = module_file(modules, module)
+    found = definition_sites(file, file["tree"].body, parts[0])
+    if len(found) != 1:
+        raise ValueError("symbol is stale or ambiguous")
+    match = found[0]
+    if match[0] == "import":
+        node, item = match[1:]
+        target_module = import_from_module(file, node)
+        if not target_module:
+            raise ValueError("re-export has no module")
+        location = definition_location(
+            file["path"], node, item.asname or item.name.partition(".")[0]
+        )
+        return [location] + module_reference(
+            modules,
+            target_module,
+            item.name.split(".") + parts[1:],
+            seen | {identity},
+        )
+    return class_member(file, match[1], parts)
 
 
 def import_from_module(file, node):
@@ -197,12 +288,18 @@ def callback_locations(file):
     return result
 
 
-def read_files(paths):
+def read_files(items):
     root = os.path.realpath(os.getcwd())
     files = []
     source_bytes = 0
     ast_nodes = 0
-    for path in paths:
+    for index, item in enumerate(items):
+        exact_object(item, {"path", "module", "package"}, f"file {index}")
+        path = exact_path(item["path"])
+        if item["module"] and not identifier_chain(item["module"]):
+            raise ValueError(f"file {index} has an invalid module")
+        if item["package"] and not identifier_chain(item["package"]):
+            raise ValueError(f"file {index} has an invalid package")
         target = contained_file(root, path)
         with open(target, "rb") as source_file:
             data = source_file.read(4 * 1024 * 1024 + 1)
@@ -216,25 +313,155 @@ def read_files(paths):
             raise ValueError(
                 "Python project exceeds its source or AST resource boundary"
             )
-        package_parts = path.split("/")[:-1]
-        if package_parts and package_parts[-1] == "__pycache__":
-            raise ValueError("Python source inventory contains __pycache__")
-        module_parts = path.removesuffix(".py").removesuffix(".pyi").split("/")
-        if module_parts[-1] == "__init__":
-            module_parts = module_parts[:-1]
         files.append(
             {
                 "path": path,
+                "module": item["module"],
+                "package": item["package"],
                 "source": source,
                 "tree": tree,
-                "package": ".".join(module_parts[:-1]),
             }
         )
+    paths = [file["path"] for file in files]
+    if paths != sorted(set(paths)):
+        raise ValueError("request Python paths must be unique and sorted")
     return files
 
 
+def exact_text(value):
+    return (
+        isinstance(value, str)
+        and value
+        and "\x00" not in value
+        and len(value.encode("utf-8")) <= MAX_STRING_BYTES
+    )
+
+
+def reachability_inputs(request):
+    references = request["references"]
+    backends = request["backends"]
+    if (
+        not isinstance(references, list)
+        or not isinstance(backends, list)
+        or len(references) + len(backends) > MAX_REFERENCES
+    ):
+        raise ValueError("request has an invalid reachability count")
+    identifiers = set()
+    for index, reference in enumerate(references):
+        exact_object(reference, {"id", "module", "symbol"}, f"reference {index}")
+        if (
+            not exact_text(reference["id"])
+            or reference["id"] in identifiers
+            or not identifier_chain(reference["module"])
+            or not identifier_chain(reference["symbol"])
+        ):
+            raise ValueError(f"reference {index} is invalid")
+        identifiers.add(reference["id"])
+    for index, backend in enumerate(backends):
+        exact_object(backend, {"id", "module", "object"}, f"backend {index}")
+        if (
+            not exact_text(backend["id"])
+            or backend["id"] in identifiers
+            or not identifier_chain(backend["module"])
+            or backend["object"]
+            and not identifier_chain(backend["object"])
+        ):
+            raise ValueError(f"backend {index} is invalid")
+        identifiers.add(backend["id"])
+    return references, backends
+
+
+def definition_chain(file, parts):
+    body = file["tree"].body
+    locations = []
+    node = None
+    for index, name in enumerate(parts):
+        found = definition_sites(file, body, name)
+        if len(found) != 1 or found[0][0] != "definition":
+            raise ValueError("build backend object is stale or ambiguous")
+        node = found[0][1]
+        locations.append(definition_location(file["path"], node, name))
+        if index < len(parts) - 1:
+            if not isinstance(node, ast.ClassDef):
+                raise ValueError("build backend object cannot resolve statically")
+            body = node.body
+    return locations, node
+
+
+def backend_locations(modules, backend):
+    file = module_file(modules, backend["module"])
+    body = file["tree"].body
+    result = []
+    if backend["object"]:
+        locations, node = definition_chain(file, backend["object"].split("."))
+        result.extend(locations)
+        if not isinstance(node, ast.ClassDef):
+            raise ValueError("build backend object cannot expose hooks statically")
+        body = node.body
+    hooks = {
+        "build_wheel",
+        "build_sdist",
+        "get_requires_for_build_wheel",
+        "prepare_metadata_for_build_wheel",
+        "get_requires_for_build_sdist",
+        "build_editable",
+        "get_requires_for_build_editable",
+        "prepare_metadata_for_build_editable",
+    }
+    for name in sorted(hooks):
+        found = definition_sites(file, body, name)
+        if len(found) > 1:
+            raise ValueError("build backend hook is ambiguous")
+        if not found:
+            continue
+        match = found[0]
+        if match[0] == "definition":
+            result.append(definition_location(file["path"], match[1], name))
+        else:
+            node, item = match[1:]
+            module = import_from_module(file, node)
+            if not module:
+                raise ValueError("build backend hook re-export has no module")
+            result.extend(
+                module_reference(modules, module, item.name.split("."), set())
+            )
+    return result
+
+
+def reachability_locations(files, references, backends):
+    modules = {}
+    for file in files:
+        if file["module"] and file["path"].endswith(".py"):
+            modules.setdefault(file["module"], []).append(file)
+    keep = set()
+    problems = []
+    for reference in references:
+        try:
+            keep.update(
+                module_reference(
+                    modules,
+                    reference["module"],
+                    reference["symbol"].split("."),
+                    set(),
+                )
+            )
+        except (TypeError, ValueError) as error:
+            problems.append({"id": reference["id"], "message": bounded(str(error))})
+    for backend in backends:
+        try:
+            keep.update(backend_locations(modules, backend))
+        except (TypeError, ValueError) as error:
+            problems.append({"id": backend["id"], "message": bounded(str(error))})
+    problems.sort(key=lambda item: item["id"])
+    return keep, problems
+
+
 def analyze(request):
-    exact_object(request, {"protocol", "toolVersion", "files"}, "request")
+    exact_object(
+        request,
+        {"protocol", "toolVersion", "files", "references", "backends"},
+        "request",
+    )
     if request["protocol"] != PROTOCOL or request["toolVersion"] != TOOL_VERSION:
         raise ValueError("request has the wrong protocol or tool version")
     if (
@@ -242,15 +469,14 @@ def analyze(request):
         or not 1 <= len(request["files"]) <= MAX_FILES
     ):
         raise ValueError("request has an invalid Python source count")
-    paths = [exact_path(path) for path in request["files"]]
-    if paths != sorted(set(paths)):
-        raise ValueError("request Python paths must be unique and sorted")
+    references, backends = reachability_inputs(request)
     if sys.version_info[:2] != (3, 12):
         raise ValueError("Python dead-code analysis requires CPython 3.12")
     installed_version = importlib.metadata.version("vulture")
     if installed_version != TOOL_VERSION:
         raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
-    files = read_files(paths)
+    files = read_files(request["files"])
+    paths = [file["path"] for file in files]
     import vulture.core as vulture_core
 
     vulture_core.noqa.parse_noqa = lambda _: defaultdict(set)
@@ -268,6 +494,10 @@ def analyze(request):
     keep = set()
     for file in files:
         keep.update(callback_locations(file))
+    reachability, problems = reachability_locations(files, references, backends)
+    keep.update(reachability)
+    if problems:
+        return [], problems, paths
     dead_code = []
     for item in analyzer.get_unused_code(min_confidence=60):
         identity = (
@@ -313,29 +543,28 @@ def analyze(request):
             item["message"],
         )
     )
-    return dead_code
+    return dead_code, problems, paths
 
 
-def response(failure="", covered=None, dead_code=None):
+def response(failure="", covered=None, dead_code=None, problems=None):
     return {
         "protocol": PROTOCOL,
         "toolVersion": TOOL_VERSION,
         "covered": [] if covered is None else covered,
         "deadCode": [] if dead_code is None else dead_code,
+        "problems": [] if problems is None else problems,
         "failure": bounded(failure),
     }
 
 
 def main():
-    covered = []
     try:
         data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if len(data) > MAX_INPUT_BYTES:
             raise ValueError("request exceeds the byte limit")
         request = json.loads(data)
-        if isinstance(request, dict) and isinstance(request.get("files"), list):
-            covered = request["files"]
-        result = response(covered=covered, dead_code=analyze(request))
+        dead_code, problems, covered = analyze(request)
+        result = response(covered=covered, dead_code=dead_code, problems=problems)
     except (
         ImportError,
         OSError,

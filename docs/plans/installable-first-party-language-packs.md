@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Fifteen built-pack fixtures include
+enforcement. Seventeen built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -607,13 +607,15 @@ entry-point, and module-object registry targets, and return ordinary
 evidence fails incomplete instead of being guessed. The pack now runs sealed
 Vulture 2.16 over complete authenticated project scopes, disables target `noqa`
 suppression, retains bundled whitelists and standard-library callback behavior,
-and returns dead-code facts that core maps to the existing finding. Projects
-with entry points or runtime reachability declarations fail incomplete until
-their interpreters move. TypedDict retention, framework and repository
-contracts, dynamic references, external attributes, in-tree build backends,
-remaining cross-module loader-alias parity, runtime loaders, dependency
-evidence, environment resolution, focused graph closure, and the shared
-conformance matrix remain open.
+and returns dead-code facts that core maps to the existing finding. PEP 621
+scripts and grouped entry points now retain exact module-symbol definitions and
+re-export chains; project-owned build backends retain their objects and standard
+hooks. Missing or ambiguous manifest targets withhold project-wide dead-code
+facts. Runtime reachability declarations still fail incomplete until their
+interpreters move. TypedDict retention, framework and repository contracts,
+dynamic references, external attributes, remaining cross-module loader-alias
+parity, runtime loaders, dependency evidence, environment resolution, focused
+graph closure, and the shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

@@ -49,15 +49,19 @@ Vulture 2.16 scans every authenticated member of a selected project scope during
 complete checks and gates. Target `noqa` suppression is disabled, while Vulture's
 bundled import whitelists and release-owned standard-library callback protections
 remain active. The adapter returns dead-code facts for core to interpret as the
-existing `quality.deadCode` finding. A scope with PEP 621 entry points or a bound
-runtime reachability declaration fails incomplete until those contracts move to
-the pack; it never runs a reduced analysis and presents it as complete.
+existing `quality.deadCode` finding. Exact PEP 621 script, GUI script, and grouped
+entry-point targets retain their source definition and re-export chain. An exact
+in-tree build backend retains its object and recognized build hooks when
+`backend-path` makes it project-owned. Missing, ambiguous, or stale manifest
+targets make the whole scope incomplete. A scope with a bound runtime
+reachability declaration also fails incomplete until those contracts move to the
+pack; the adapter never runs a reduced analysis and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. TypedDict and
-framework retention, dynamic references, external attributes, in-tree build
-backend hooks, cross-module loader-alias parity, runtime loaders, dependency
-evidence, and project-environment resolution remain migration work and cannot be
-inferred from these claims. The pack is not eligible for the ownership cutover
-until every Python ledger row has executable evidence.
+framework retention, dynamic references, external attributes, cross-module
+loader-alias parity, runtime loaders, dependency evidence, and
+project-environment resolution remain migration work and cannot be inferred from
+these claims. The pack is not eligible for the ownership cutover until every
+Python ledger row has executable evidence.

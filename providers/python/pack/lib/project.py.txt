@@ -154,25 +154,67 @@ def entry_point_target(value):
         if normalized in seen:
             raise ValueError(f"declares extra {extra!r} more than once")
         seen.add(normalized)
-    return parts[0]
+    return parts[0], parts[1]
 
 
-def project_entry_points(path, project, problems):
-    root = project.get("entry-points", {})
-    if not isinstance(root, dict):
+def project_build_backend(path, build_system, problems):
+    value = build_system.get("build-backend", "")
+    if value == "":
+        return {"module": "", "object": ""}
+    parts = value.split(":") if isinstance(value, str) else []
+    if (
+        len(parts) not in {1, 2}
+        or not identifier_chain(parts[0])
+        or len(parts) == 2
+        and not identifier_chain(parts[1])
+    ):
         problems.append(
             {
                 "path": path,
-                "message": "project.entry-points must contain entry point groups",
+                "message": "build-system.build-backend must be an exact module or module:object reference",
             }
         )
-        return []
+        return {"module": "", "object": ""}
+    return {"module": parts[0], "object": parts[1] if len(parts) == 2 else ""}
+
+
+def project_entry_points(path, project, problems):
     result = []
 
-    def visit(value, parts):
+    def add(group, name, value, field):
+        try:
+            module, symbol = entry_point_target(value)
+        except ValueError as error:
+            problems.append(
+                {"path": path, "message": f"invalid entry point {field}: {error}"}
+            )
+            return
+        result.append(
+            {
+                "group": group,
+                "name": name,
+                "module": module,
+                "symbol": symbol,
+            }
+        )
+
+    def direct(table, group):
+        root = project.get(table, {})
+        if not isinstance(root, dict):
+            problems.append(
+                {
+                    "path": path,
+                    "message": f"project.{table} must contain entry point names",
+                }
+            )
+            return
+        for name in sorted(root):
+            add(group, name, root[name], f"project.{table}.{name}")
+
+    def visit_group(value, parts):
         if isinstance(value, dict):
             for key in sorted(value):
-                visit(value[key], parts + [key])
+                visit_group(value[key], parts + [key])
             return
         if len(parts) < 2:
             problems.append(
@@ -183,17 +225,29 @@ def project_entry_points(path, project, problems):
             )
             return
         field = "project.entry-points." + ".".join(parts)
-        try:
-            module = entry_point_target(value)
-        except ValueError as error:
-            problems.append(
-                {"path": path, "message": f"invalid entry point {field}: {error}"}
-            )
-            return
-        result.append({"group": ".".join(parts[:-1]), "module": module})
+        add(".".join(parts[:-1]), parts[-1], value, field)
 
-    visit(root, [])
-    return sorted({(item["group"], item["module"]) for item in result})
+    direct("scripts", "console_scripts")
+    direct("gui-scripts", "gui_scripts")
+    root = project.get("entry-points", {})
+    if not isinstance(root, dict):
+        problems.append(
+            {
+                "path": path,
+                "message": "project.entry-points must contain entry point groups",
+            }
+        )
+    else:
+        visit_group(root, [])
+    return sorted(
+        result,
+        key=lambda item: (
+            item["group"],
+            item["name"],
+            item["module"],
+            item["symbol"],
+        ),
+    )
 
 
 def manifest_fact(item):
@@ -202,6 +256,7 @@ def manifest_fact(item):
     target = ""
     requires_python = ""
     backend_paths = []
+    build_backend = {"module": "", "object": ""}
     entry_points = []
     try:
         document = tomllib.loads(item["source"])
@@ -211,6 +266,7 @@ def manifest_fact(item):
             project = {}
         if not isinstance(build_system, dict):
             build_system = {}
+        build_backend = project_build_backend(path, build_system, problems)
         requires_python = project.get("requires-python", "")
         if not isinstance(requires_python, str) or not requires_python:
             problems.append(
@@ -251,9 +307,8 @@ def manifest_fact(item):
         "requiresPython": requires_python,
         "targetVersion": target,
         "backendPaths": sorted(set(backend_paths)),
-        "entryPoints": [
-            {"group": group, "module": module} for group, module in entry_points
-        ],
+        "buildBackend": build_backend,
+        "entryPoints": entry_points,
         "problems": problems,
     }
 

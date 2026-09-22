@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -62,9 +63,9 @@ type fakeTy struct {
 }
 
 type fakeVulture struct {
-	facts []deadCodeFact
-	files *[]string
-	err   error
+	result vultureResult
+	files  *[]string
+	err    error
 }
 
 type fakeProject struct {
@@ -100,11 +101,11 @@ func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files [
 	return slices.Clone(ty.findings), ty.err
 }
 
-func (vulture fakeVulture) deadCode(_ context.Context, _ string, files []string) ([]deadCodeFact, error) {
+func (vulture fakeVulture) deadCode(_ context.Context, _ string, _ analysisScope, files []string) (vultureResult, error) {
 	if vulture.files != nil {
 		*vulture.files = slices.Clone(files)
 	}
-	return slices.Clone(vulture.facts), vulture.err
+	return vulture.result, vulture.err
 }
 
 func (facts fakeFacts) comments(context.Context, string, []string) (factResult, error) {
@@ -206,7 +207,7 @@ func TestInvalidProjectMetadataStopsOnlyItsScopeWithoutRequiringTools(t *testing
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "lint", []byte("value = 1\n"))
 	request.Tools = nil
-	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"","targetVersion":"","sourceRoots":[".","src"],"entryPoints":[],"problems":[{"path":"pyproject.toml","message":"project.requires-python is required"}]}`)
+	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"","targetVersion":"","sourceRoots":[".","src"],"backendPaths":[],"buildBackend":{"module":"","object":""},"entryPoints":[],"problems":[{"path":"pyproject.toml","message":"project.requires-python is required"}]}`)
 	result := (adapter{}).run(context.Background(), request)
 	if result.Status != "incomplete" || len(result.Findings) != 1 || result.Findings[0].Rule != "project.configuration" || len(result.Coverage.Unsupported) != 1 {
 		t.Fatalf("result = %+v", result)
@@ -287,7 +288,7 @@ func TestDeadCodeAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
 	fact := deadCodeFact{Analyzer: "vulture", Path: "src/other.py", Line: 2, EndLine: 2, Name: "unneeded", Kind: "variable", Confidence: 60, Message: "unused variable 'unneeded'"}
 	checked := []string{}
-	result := (adapter{vulture: fakeVulture{facts: []deadCodeFact{fact}, files: &checked}}).run(context.Background(), request)
+	result := (adapter{vulture: fakeVulture{result: vultureResult{Facts: []deadCodeFact{fact}}, files: &checked}}).run(context.Background(), request)
 	if result.Status != "pass" || result.Facts == nil || result.Facts.DeadCode == nil || !slices.Equal(*result.Facts.DeadCode, []deadCodeFact{fact}) {
 		t.Fatalf("result = %+v", result)
 	}
@@ -308,14 +309,41 @@ func TestDeadCodeRejectsUnimplementedRuntimeDeclarations(t *testing.T) {
 	}
 }
 
-func TestDeadCodeRejectsUnimplementedEntryPoints(t *testing.T) {
+func TestDeadCodeAcceptsManifestEntryPointReachability(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
-	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[{"group":"sample.plugins","module":"sample.plugin"}],"problems":[]}`)
+	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"backendPaths":[],"buildBackend":{"module":"","object":""},"entryPoints":[{"group":"sample.plugins","name":"first","module":"sample.plugin","symbol":"Plugin"}],"problems":[]}`)
 	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
 	checked := []string{}
 	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
-	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "entry-point reachability") || len(checked) != 0 {
+	if result.Status != "pass" || !slices.Equal(checked, []string{"src/app.py"}) || !slices.Equal(result.Coverage.Analyzed, checked) {
+		t.Fatalf("result = %+v, checked = %v", result, checked)
+	}
+}
+
+func TestDeadCodeWithholdsFactsForUnresolvedManifestReachability(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	problem := vultureProblem{ID: "manifest:pyproject.toml:console_scripts:sample:sample:missing", Message: "symbol is stale or ambiguous"}
+	result := (adapter{vulture: fakeVulture{result: vultureResult{Problems: []vultureProblem{problem}}}}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, problem.ID) || result.Facts == nil || result.Facts.DeadCode == nil || len(*result.Facts.DeadCode) != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestDeadCodeRequiresEveryProjectSource(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))
+	large := bytes.Repeat([]byte("x"), maximumPythonBytes+1)
+	writePythonTestInput(t, root, &request, "src/large.py", large)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/large.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/large.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/large.py")
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	checked := []string{}
+	result := (adapter{vulture: fakeVulture{files: &checked}}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 2 || len(checked) != 0 {
 		t.Fatalf("result = %+v, checked = %v", result, checked)
 	}
 }
@@ -447,7 +475,7 @@ func TestComputedImportTargetsUseEntryPointsAndObjectRegistries(t *testing.T) {
 	if reason != "" || !slices.Equal(objectTargets, []string{"app.plugins.first"}) {
 		t.Fatalf("object targets = %v, reason = %q", objectTargets, reason)
 	}
-	entryTargets, reason := computedImportTargets(pythonScopeData{EntryPoints: []projectEntryPoint{{Group: "app.plugins", Module: "app.plugins.first"}}}, nil, computedImportDeclaration{EntryPointGroup: "app.plugins"})
+	entryTargets, reason := computedImportTargets(pythonScopeData{EntryPoints: []projectEntryPoint{{Group: "app.plugins", Name: "first", Module: "app.plugins.first", Symbol: "Plugin"}}}, nil, computedImportDeclaration{EntryPointGroup: "app.plugins"})
 	if reason != "" || !slices.Equal(entryTargets, []string{"app.plugins.first"}) {
 		t.Fatalf("entry targets = %v, reason = %q", entryTargets, reason)
 	}
@@ -460,7 +488,7 @@ func TestPythonImportResolutionPreservesTypeOnlyAndReExportKinds(t *testing.T) {
 	t.Parallel()
 	scope := analysisScope{
 		Root: ".", Members: []string{"src/pkg/__init__.py", "src/pkg/model.py", "src/pkg/types.py"},
-		Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[],"problems":[]}`),
+		Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"backendPaths":[],"buildBackend":{"module":"","object":""},"entryPoints":[],"problems":[]}`),
 	}
 	imports := []authoredImport{
 		{Path: "src/pkg/__init__.py", Module: ".types", Names: []string{"Thing"}, Line: 1, Column: 1, Kind: "re-export"},
@@ -551,7 +579,7 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 		Files: []string{"src/app.py"}, DiagnosticFiles: []string{"src/app.py"}, Mode: "check",
 		Scopes: []analysisScope{{
 			Handle: "scope-1", Language: "python", Root: ".", Members: []string{"src/app.py"}, Context: []string{"pyproject.toml", "src/app.py"},
-			Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[],"problems":[]}`),
+			Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"backendPaths":[],"buildBackend":{"module":"","object":""},"entryPoints":[],"problems":[]}`),
 		}},
 		Context: context, Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true}},
 		Policy: json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[]}`), Tools: tools,

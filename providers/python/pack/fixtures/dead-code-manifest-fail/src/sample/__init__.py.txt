@@ -1,0 +1,3 @@
+python-pack-fixture
+def existing():
+    return 1

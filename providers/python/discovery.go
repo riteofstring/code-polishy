@@ -26,6 +26,8 @@ type pythonScopeData struct {
 	RequiresPython string              `json:"requiresPython"`
 	TargetVersion  string              `json:"targetVersion"`
 	SourceRoots    []string            `json:"sourceRoots"`
+	BackendPaths   []string            `json:"backendPaths"`
+	BuildBackend   projectBuildBackend `json:"buildBackend"`
 	EntryPoints    []projectEntryPoint `json:"entryPoints"`
 	Problems       []projectProblem    `json:"problems"`
 }
@@ -182,7 +184,7 @@ func (value pythonDiscovery) scope(manifest string, project projectFact) (discov
 	}
 	data, err := json.Marshal(pythonScopeData{
 		Manifest: manifest, RequiresPython: project.RequiresPython, TargetVersion: project.TargetVersion,
-		SourceRoots: sourceRoots, EntryPoints: project.EntryPoints, Problems: problems,
+		SourceRoots: sourceRoots, BackendPaths: project.BackendPaths, BuildBackend: project.BuildBackend, EntryPoints: project.EntryPoints, Problems: problems,
 	})
 	if err != nil {
 		return discoveredScope{}, err
@@ -232,10 +234,16 @@ func decodePythonScopeData(data json.RawMessage) (pythonScopeData, error) {
 	if err := requireEnd(decoder); err != nil {
 		return pythonScopeData{}, err
 	}
-	if value.Manifest == "" || len(value.SourceRoots) == 0 || value.EntryPoints == nil || value.Problems == nil {
+	if value.Manifest == "" || len(value.SourceRoots) == 0 || value.BackendPaths == nil || value.EntryPoints == nil || value.Problems == nil {
 		return pythonScopeData{}, errors.New("python scope data is incomplete")
 	}
+	if err := validateProjectBackendPaths(value.BackendPaths); err != nil {
+		return pythonScopeData{}, err
+	}
 	if err := validateProjectEntryPoints(value.EntryPoints); err != nil {
+		return pythonScopeData{}, err
+	}
+	if err := validateProjectBuildBackend(value.BuildBackend); err != nil {
 		return pythonScopeData{}, err
 	}
 	return value, nil

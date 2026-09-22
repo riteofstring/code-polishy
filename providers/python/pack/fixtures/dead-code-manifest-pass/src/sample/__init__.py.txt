@@ -1,0 +1,3 @@
+python-pack-fixture
+def main():
+    print("sample")

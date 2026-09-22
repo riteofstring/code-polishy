@@ -381,25 +381,11 @@ func (state *analysisState) typecheck(ctx context.Context, ty tyExecutor, worksp
 func (state *analysisState) deadCode(ctx context.Context, vulture vultureExecutor, workspace string, groups []analysisGroup) error {
 	facts := []deadCodeFact{}
 	for _, group := range groups {
-		if len(group.files) == 0 {
-			continue
-		}
-		reason, err := state.deadCodeUnsupportedReason(group.scope)
-		if err != nil {
-			return err
-		}
-		if reason != "" {
-			for _, file := range group.files {
-				state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: reason})
-			}
-			continue
-		}
-		found, err := vulture.deadCode(ctx, workspace, group.files)
+		found, err := state.deadCodeGroup(ctx, vulture, workspace, group)
 		if err != nil {
 			return err
 		}
 		facts = append(facts, found...)
-		state.result.Coverage.Analyzed = append(state.result.Coverage.Analyzed, group.files...)
 	}
 	if len(facts) > 10000 {
 		return errors.New("python dead-code facts exceed the protocol collection limit")
@@ -410,14 +396,41 @@ func (state *analysisState) deadCode(ctx context.Context, vulture vultureExecuto
 	return nil
 }
 
-func (state *analysisState) deadCodeUnsupportedReason(scope analysisScope) (string, error) {
-	data, err := decodePythonScopeData(scope.Data)
+func (state *analysisState) deadCodeGroup(ctx context.Context, vulture vultureExecutor, workspace string, group analysisGroup) ([]deadCodeFact, error) {
+	if len(group.files) == 0 {
+		return nil, nil
+	}
+	if len(group.files) != len(group.scope.Members) {
+		state.markUnsupported(group.files, "Python dead-code analysis requires every project source")
+		return nil, nil
+	}
+	reason, err := state.deadCodeUnsupportedReason(group.scope)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(data.EntryPoints) > 0 {
-		return "Python project entry-point reachability is not yet supported by the pack dead-code analyzer", nil
+	if reason != "" {
+		state.markUnsupported(group.files, reason)
+		return nil, nil
 	}
+	found, err := vulture.deadCode(ctx, workspace, group.scope, group.files)
+	if err != nil {
+		return nil, err
+	}
+	if len(found.Problems) > 0 {
+		state.markUnsupported(group.files, vultureProblemReason(found.Problems))
+		return nil, nil
+	}
+	state.result.Coverage.Analyzed = append(state.result.Coverage.Analyzed, group.files...)
+	return found.Facts, nil
+}
+
+func (state *analysisState) markUnsupported(files []string, reason string) {
+	for _, file := range files {
+		state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: reason})
+	}
+}
+
+func (state *analysisState) deadCodeUnsupportedReason(scope analysisScope) (string, error) {
 	input, err := decodePolicyInput(state.request.Policy)
 	if err != nil {
 		return "", err
@@ -428,6 +441,14 @@ func (state *analysisState) deadCodeUnsupportedReason(scope analysisScope) (stri
 		}
 	}
 	return "", nil
+}
+
+func vultureProblemReason(problems []vultureProblem) string {
+	reason := "Python dead-code reachability could not resolve " + problems[0].ID + ": " + problems[0].Message
+	if len(problems) > 1 {
+		reason += fmt.Sprintf(" (and %d more problems)", len(problems)-1)
+	}
+	return boundedFailure(errors.New(reason))
 }
 
 func (state *analysisState) accountFactFiles(files []string, failures map[string]string) {

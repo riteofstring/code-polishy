@@ -45,13 +45,21 @@ type projectFact struct {
 	RequiresPython string              `json:"requiresPython"`
 	TargetVersion  string              `json:"targetVersion"`
 	BackendPaths   []string            `json:"backendPaths"`
+	BuildBackend   projectBuildBackend `json:"buildBackend"`
 	EntryPoints    []projectEntryPoint `json:"entryPoints"`
 	Problems       []projectProblem    `json:"problems"`
 }
 
+type projectBuildBackend struct {
+	Module string `json:"module"`
+	Object string `json:"object"`
+}
+
 type projectEntryPoint struct {
 	Group  string `json:"group"`
+	Name   string `json:"name"`
 	Module string `json:"module"`
+	Symbol string `json:"symbol"`
 }
 
 type projectProblem struct {
@@ -188,6 +196,9 @@ func validateProjectFact(project projectFact, allowed map[string]bool) error {
 	if err := validateProjectBackendPaths(project.BackendPaths); err != nil {
 		return err
 	}
+	if err := validateProjectBuildBackend(project.BuildBackend); err != nil {
+		return err
+	}
 	if err := validateProjectEntryPoints(project.EntryPoints); err != nil {
 		return err
 	}
@@ -202,6 +213,16 @@ func validateProjectFact(project projectFact, allowed map[string]bool) error {
 	}
 	_, err := pythonVersionForTarget(project.TargetVersion)
 	return err
+}
+
+func validateProjectBuildBackend(backend projectBuildBackend) error {
+	if backend.Module == "" && backend.Object == "" {
+		return nil
+	}
+	if !validPythonModuleParts(strings.Split(backend.Module, ".")) || backend.Object != "" && !validPythonModuleParts(strings.Split(backend.Object, ".")) {
+		return errors.New("python project facts contain an invalid build backend")
+	}
+	return nil
 }
 
 func validateProjectBackendPaths(paths []string) error {
@@ -228,8 +249,8 @@ func validateProjectEntryPoints(entries []projectEntryPoint) error {
 	}
 	previous := ""
 	for _, entry := range entries {
-		identity := entry.Group + "\x00" + entry.Module
-		if entry.Group == "" || len(entry.Group) > 256 || !validPythonModuleParts(strings.Split(entry.Module, ".")) || identity <= previous {
+		identity := strings.Join([]string{entry.Group, entry.Name, entry.Module, entry.Symbol}, "\x00")
+		if entry.Group == "" || len(entry.Group) > 256 || entry.Name == "" || len(entry.Name) > 256 || !validPythonModuleParts(strings.Split(entry.Module, ".")) || !validPythonModuleParts(strings.Split(entry.Symbol, ".")) || identity <= previous {
 			return errors.New("python project facts contain an invalid entry point")
 		}
 		previous = identity

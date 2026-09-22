@@ -236,6 +236,23 @@
       "expectedRules": ["quality.deadCode"]
     },
     {
+      "name": "dead-code-manifest-pass",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-manifest-pass",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "dead-code-manifest-fail",
+      "command": "dead-code",
+      "capability": "dead-code",
+      "project": "fixtures/dead-code-manifest-fail",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "incomplete",
+      "expectedRules": ["policy.packCoverage"]
+    },
+    {
       "name": "target-version-pass",
       "command": "analyze",
       "capability": "lint",
