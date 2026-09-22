@@ -56,6 +56,15 @@ allowed module and exact artifact path before the worker starts.
 
 ## Interactive work
 
+Optimize for end-to-end simplicity rather than maximum formalism at each local
+boundary. Before adding an abstraction, layer, adapter, generator, state,
+configuration surface, validation path, or evidence mechanism, name the concrete
+current requirement or failure, compare the direct solution, and count the new
+coordination and failure modes across implementation, tests, operation, and
+recovery. Add machinery only when it reduces total complexity and risk. Do not
+generalize for hypothetical reuse, scale, portability, extensibility, or future
+requirements.
+
 When adopting Code Polishy or restructuring architecture, capture the request
 and read its current design context before drafting module ownership. Automated
 ownership, import, cycle, and dependency checks still apply. Architecture agent

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.27.10 - 2026-09-21
+
+- Let failed tag publications resume from the exact retained native artifacts,
+  and include the complete verified Linux publication in the GHCR image build.
+- Continue the remaining planned test suites after a passing merge-gate retry
+  instead of advancing to the next phase with an incomplete execution plan.
+
+## 0.27.9 - 2026-09-21
+
+- Direct implementation agents and architecture reviewers to prefer the
+  least-complex end-to-end solution and reject locally robust machinery that
+  increases total complexity and failure modes.
 - Publish the digest-pinned GHCR image from the version-tag release workflow by
   reusing the already verified Linux x64 archive and release engine.
 
