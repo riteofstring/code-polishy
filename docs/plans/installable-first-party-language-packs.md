@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Thirty-two built-pack fixtures include
+enforcement. Thirty-four built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -627,10 +627,15 @@ same-named methods do not satisfy the contract. Requested annotated fields on
 those proven types are also retained, while direct `ClassVar` declarations are
 excluded. Decorated methods on proven types now require the configured exact
 unshadowed decorator import; a same-named decorator from another module does not
-satisfy the contract. TypedDict retention, framework contracts, type attributes,
-dynamic references, external attributes, remaining cross-module loader-alias
-parity, runtime loaders, dependency evidence, environment resolution, focused
-graph closure, and the shared conformance matrix remain open.
+satisfy the contract. Configured attributes now retain exact class assignments
+on proven types and instance writes reached through proven constructors,
+annotations, method receivers, and aliases. The forward flow invalidates
+reassignments and mutation-sensitive receiver paths, intersects branch exits,
+handles loops and exceptions conservatively, and rejects ambiguous same-line
+writes. TypedDict retention, framework contracts, dynamic references, external
+attributes, remaining cross-module loader-alias parity, runtime loaders,
+dependency evidence, environment resolution, focused graph closure, and the
+shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

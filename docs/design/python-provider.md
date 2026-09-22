@@ -70,17 +70,22 @@ methods only on the configured type and proven subclasses. The same exact type
 evidence retains annotated class fields when requested, except direct
 `typing.ClassVar` and `typing_extensions.ClassVar` declarations. Configured
 decorators retain methods on those proven types only when the decorator resolves
-through an exact unshadowed import. The adapter never runs a reduced analysis
-and presents it as complete.
+through an exact unshadowed import. Configured type attributes retain exact class
+assignments on those proven types and instance writes only when a contained
+constructor, annotated parameter, or applicable method receiver establishes the
+receiver. Forward flow carries aliases, intersects branches, treats loops and
+exception paths conservatively, invalidates reassignment and mutation-sensitive
+state, and rejects ambiguous same-line writes. The adapter never runs a reduced
+analysis and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. Repository-local
 entry-point contracts and exact imported decorator contracts are interpreted
-for dead-code reachability, as are exact imported module-binding contracts.
-TypedDict and framework retention, type-contract attributes, dynamic references,
-external attributes, cross-module loader-alias parity, runtime loaders,
-dependency evidence, and
+for dead-code reachability, as are exact imported module-binding contracts and
+complete type contracts for members, fields, decorators, and attributes.
+TypedDict and framework retention, dynamic references, external attributes,
+cross-module loader-alias parity, runtime loaders, dependency evidence, and
 project-environment resolution remain migration work and cannot be inferred from
 these claims. The pack is not eligible for the ownership cutover until every
 Python ledger row has executable evidence.

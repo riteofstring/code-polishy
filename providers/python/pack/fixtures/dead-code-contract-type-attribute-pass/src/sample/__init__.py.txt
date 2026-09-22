@@ -1,0 +1,20 @@
+python-pack-fixture
+from .models import Item
+
+
+def update(item: "Item"):
+    item.state = "updated"
+
+
+def build(flag):
+    if flag:
+        item = Item()
+    else:
+        item = Item()
+    item.state = "ready"
+    item.configure()
+    update(item)
+    return item
+
+
+build(True)

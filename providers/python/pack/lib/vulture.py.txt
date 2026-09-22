@@ -5,7 +5,7 @@ import json
 import os
 import pkgutil
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import nullcontext
 from unittest.mock import patch
 
@@ -184,6 +184,7 @@ class ContainedAstroidReferences:
         self.builder = AstroidBuilder(self.manager, apply_transforms=False)
         self.cache = {}
         self.paths = {}
+        self.expression_indexes = {}
         self.declared_roots = {
             contract["target"] for contract in contracts if contract["kind"] == "type"
         }
@@ -287,6 +288,137 @@ class ContainedAstroidReferences:
             definitions[0].root() is not node.root()
             or definitions[0].lineno <= node.lineno
         )
+
+    def expression_applies(self, file, node, contract, applicable):
+        from astroid import nodes
+
+        try:
+            expression = self.astroid_expression(file, node)
+            if expression is None:
+                return False
+            if isinstance(expression, nodes.Const) and isinstance(
+                expression.value, str
+            ):
+                inferred = self.string_reference(expression)
+            else:
+                names = expression.nodes_of_class(nodes.Name)
+                if any(not self.unique_binding(name) for name in names):
+                    return False
+                inferred = self.unique_inference(expression)
+            return self.inferred_applies(inferred, contract, applicable)
+        except (*self.errors, AttributeError, TypeError, ValueError):
+            return False
+
+    def astroid_expression(self, file, node):
+        from astroid import nodes
+
+        module = self.cache.get(file["module"])
+        labels = {ast.Name: "name", ast.Attribute: "attribute", ast.Constant: "text"}
+        label = labels.get(type(node))
+        if module is None or label is None:
+            return None
+        if file["module"] not in self.expression_indexes:
+            index = defaultdict(list)
+            for candidate in module.nodes_of_class(
+                (nodes.Name, nodes.Attribute, nodes.Const)
+            ):
+                if isinstance(candidate, nodes.Name):
+                    key = (
+                        "name",
+                        candidate.fromlineno,
+                        candidate.col_offset,
+                        candidate.name,
+                    )
+                elif isinstance(candidate, nodes.Attribute):
+                    key = (
+                        "attribute",
+                        candidate.fromlineno,
+                        candidate.col_offset,
+                        candidate.as_string(),
+                    )
+                elif isinstance(candidate.value, str):
+                    key = (
+                        "text",
+                        candidate.fromlineno,
+                        candidate.col_offset,
+                        candidate.value,
+                    )
+                else:
+                    continue
+                index[key].append(candidate)
+            self.expression_indexes[file["module"]] = index
+        rendered = node.value if isinstance(node, ast.Constant) else ast.unparse(node)
+        key = label, node.lineno, node.col_offset, rendered
+        matches = self.expression_indexes[file["module"]].get(key, [])
+        return matches[0] if len(matches) == 1 else None
+
+    def unique_inference(self, node):
+        values = []
+        for value in node.infer():
+            if value not in values:
+                values.append(value)
+            if len(values) > 1:
+                return None
+        return values[0] if len(values) == 1 else None
+
+    def string_reference(self, expression):
+        from astroid import nodes
+
+        if not identifier_chain(expression.value):
+            return None
+        parts = expression.value.split(".")
+        definitions = expression.scope().lookup(parts[0])[1]
+        if len(definitions) != 1:
+            return None
+        definition = definitions[0]
+        if (
+            definition.root() is expression.root()
+            and definition.fromlineno > expression.fromlineno
+        ):
+            return None
+        if isinstance(definition, nodes.ImportFrom):
+            names = [
+                original
+                for original, alias in definition.names
+                if (alias or original) == parts[0]
+            ]
+            if len(names) != 1:
+                return None
+            imported = definition.do_import_module(definition.modname)
+            values = imported.getattr(names[0])
+            current = self.unique_inference(values[0]) if len(values) == 1 else None
+        elif isinstance(definition, nodes.Import):
+            names = [
+                imported
+                for imported, alias in definition.names
+                if (alias or imported.partition(".")[0]) == parts[0]
+            ]
+            if len(names) != 1:
+                return None
+            module_name = (
+                names[0]
+                if any(alias == parts[0] for _, alias in definition.names)
+                else names[0].partition(".")[0]
+            )
+            current = definition.do_import_module(module_name)
+        else:
+            current = self.unique_inference(definition)
+        for part in parts[1:]:
+            if current is None:
+                return None
+            values = current.getattr(part)
+            current = self.unique_inference(values[0]) if len(values) == 1 else None
+        return current
+
+    def inferred_applies(self, inferred, contract, applicable):
+        from astroid import nodes
+
+        if not isinstance(inferred, nodes.ClassDef):
+            return False
+        path = self.paths.get(inferred.root().name)
+        if path is None:
+            return inferred.qname() == contract["target"]
+        return (path, inferred.lineno, inferred.name) in applicable
 
     def resolve_entry_point(self, contract):
         module_name, symbol = contract["target"].split(":", 1)
@@ -519,17 +651,286 @@ def class_var_annotation(annotation, bindings):
     }
 
 
+def reference_name(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = reference_name(node.value)
+        return parent + "." + node.attr if parent else ""
+    return ""
+
+
+def connection_path(node):
+    name = reference_name(node)
+    return tuple(name.split(".")) if name else ()
+
+
+def source_write_counts(file):
+    return Counter(
+        (
+            node.lineno,
+            node.attr if isinstance(node, ast.Attribute) else node.id,
+        )
+        for node in ast.walk(file["tree"])
+        if isinstance(node, (ast.Attribute, ast.Name))
+        and isinstance(node.ctx, ast.Store)
+    )
+
+
+class ConnectionFlow(ast.NodeVisitor):
+    def __init__(self, connection_factory):
+        self.connections = set()
+        self.mutable_names = set()
+        self.scope = "module"
+        self.connection_factory = connection_factory
+
+    def connection(self, node):
+        if isinstance(node, ast.Call):
+            return self.connection_factory(node)
+        return connection_path(node) in self.connections
+
+    def bind(self, target, connected=False):
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for item in target.elts:
+                self.bind(item)
+            return
+        path = connection_path(target)
+        self.connections = {
+            known
+            for known in self.connections
+            if known[: len(path)] != path
+            and not (len(path) > 1 and path[-1] in known[1:])
+        }
+        if connected and path:
+            self.connections.add(path)
+
+    def visit_Assign(self, node):
+        connected = self.connection(node.value)
+        self.visit(node.value)
+        for target in node.targets:
+            self.visit(target)
+            self.bind(target, connected)
+
+    def visit_AnnAssign(self, node):
+        if node.value is None:
+            return
+        connected = self.connection(node.value)
+        self.visit(node.value)
+        self.visit(node.target)
+        self.bind(node.target, connected)
+
+    def visit_AugAssign(self, node):
+        self.generic_visit(node)
+        self.bind(node.target)
+
+    def visit_NamedExpr(self, node):
+        connected = self.connection(node.value)
+        self.visit(node.value)
+        self.bind(node.target, connected)
+
+    def visit_Delete(self, node):
+        for target in node.targets:
+            self.bind(target)
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        self.connections = {
+            path
+            for path in self.connections
+            if len(path) == 1
+            and path[0] not in self.mutable_names
+            and self.scope != "module"
+        }
+
+    def block(self, statements, initial):
+        self.connections = initial.copy()
+        for statement in statements:
+            self.visit(statement)
+        return self.connections.copy()
+
+    def visit_If(self, node):
+        self.visit(node.test)
+        initial = self.connections.copy()
+        left = self.block(node.body, initial)
+        right = self.block(node.orelse, initial)
+        self.connections = left & right
+
+    def visit_IfExp(self, node):
+        self.visit(node.test)
+        initial = self.connections.copy()
+        left = self.block([node.body], initial)
+        right = self.block([node.orelse], initial)
+        self.connections = left & right
+
+    def visit_BoolOp(self, node):
+        possible = []
+        for value in node.values:
+            self.visit(value)
+            possible.append(self.connections.copy())
+        self.connections = set.intersection(*possible)
+
+    def visit_Try(self, node):
+        normal = self.block(node.body, self.connections)
+        normal = self.block(node.orelse, normal)
+        exits = [normal]
+        for handler in node.handlers:
+            exits.append(self.block(handler.body, set()))
+        merged = set.intersection(*exits)
+        self.connections = (
+            self.block(node.finalbody, set()) if node.finalbody else merged
+        )
+
+    def visit_TryStar(self, node):
+        self.visit_Try(node)
+
+    def visit_For(self, node):
+        self.visit(node.iter)
+        self.loop(node)
+
+    visit_AsyncFor = visit_For
+
+    def visit_While(self, node):
+        self.visit(node.test)
+        self.loop(node)
+
+    def loop(self, node):
+        initial = self.connections.copy()
+        body = self.block(node.body, set())
+        self.connections = self.block(node.orelse, initial & body)
+
+    def visit_With(self, node):
+        initial = self.connections.copy()
+        nonsuppressing = True
+        for item in node.items:
+            connected = self.connection(item.context_expr)
+            nonsuppressing = nonsuppressing and connected
+            self.visit(item.context_expr)
+            if item.optional_vars is not None:
+                self.bind(item.optional_vars, connected)
+        normal = self.block(node.body, self.connections)
+        self.connections = normal if nonsuppressing else initial & normal
+
+    def visit_AsyncWith(self, node):
+        self.block(node.body, set())
+        self.connections.clear()
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            self.bind(ast.Name(id=alias.asname or alias.name.split(".")[0]))
+
+    def visit_ImportFrom(self, node):
+        for alias in node.names:
+            if alias.name == "*":
+                self.connections.clear()
+            else:
+                self.bind(ast.Name(id=alias.asname or alias.name))
+
+    def visit_Match(self, node):
+        self.visit(node.subject)
+        initial = self.connections.copy()
+        exits = [initial]
+        for case in node.cases:
+            exits.append(self.block(case.body, set()))
+        self.connections = set.intersection(*exits)
+
+    def visit_Lambda(self, node):
+        return
+
+    def visit_ListComp(self, node):
+        self.connections.clear()
+
+    visit_SetComp = visit_ListComp
+    visit_DictComp = visit_ListComp
+    visit_GeneratorExp = visit_ListComp
+
+
+class TypeAttributeVisitor(ConnectionFlow):
+    def __init__(self, file, contract, resolver, applicable, writes):
+        super().__init__(self.connection_call)
+        self.file = file
+        self.contract = contract
+        self.resolver = resolver
+        self.applicable = applicable
+        self.attributes = set(contract["attributes"])
+        self.writes = writes
+        self.owner = False
+        self.kept = set()
+
+    def keep(self, node):
+        if self.writes[(node.lineno, node.attr)] <= 1:
+            self.kept.add(definition_location(self.file["path"], node, node.attr))
+
+    def connection_call(self, node):
+        return self.resolver.expression_applies(
+            self.file, node.func, self.contract, self.applicable
+        )
+
+    def parameters(self, node):
+        result = set()
+        arguments = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+        for argument in arguments:
+            if argument.annotation is not None and self.resolver.expression_applies(
+                self.file, argument.annotation, self.contract, self.applicable
+            ):
+                result.add((argument.arg,))
+        decorators = {reference_name(value) for value in node.decorator_list}
+        if (
+            arguments
+            and self.owner
+            and not decorators & {"staticmethod", "classmethod"}
+        ):
+            result.add((arguments[0].arg,))
+        return result
+
+    def visit_ClassDef(self, node):
+        previous = self.scope, self.owner, self.connections, self.mutable_names
+        self.owner = (self.file["path"], node.lineno, node.name) in self.applicable
+        self.scope = f"{self.scope}/class:{node.lineno}:{node.col_offset + 1}"
+        self.connections = self.block(node.body, set())
+        self.scope, self.owner, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
+
+    def visit_FunctionDef(self, node):
+        previous = self.scope, self.owner, self.connections, self.mutable_names
+        self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
+        self.connections = self.parameters(node)
+        self.owner = False
+        self.mutable_names = {
+            name
+            for value in ast.walk(node)
+            if isinstance(value, (ast.Nonlocal, ast.Global))
+            for name in value.names
+        }
+        for statement in node.body:
+            self.visit(statement)
+        self.scope, self.owner, self.connections, self.mutable_names = previous
+        self.bind(ast.Name(id=node.name))
+        self.connections = {path for path in self.connections if len(path) == 1}
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Attribute(self, node):
+        if (
+            isinstance(node.ctx, ast.Store)
+            and node.attr in self.attributes
+            and self.connection(node.value)
+        ):
+            self.keep(node)
+        self.generic_visit(node)
+
+
 def type_contract_locations(files, contract, resolver):
     applicable = resolver.type_classes(contract)
     members = set(contract["members"])
+    attributes = set(contract["attributes"])
     decorators = set(contract["decorators"])
     result = set()
     for file in files:
+        writes = source_write_counts(file)
         classes = {
             (line, name) for path, line, name in applicable if path == file["path"]
         }
-        if not classes:
-            continue
         bindings = exact_import_bindings(file)
         for node in ast.walk(file["tree"]):
             if (
@@ -554,17 +955,35 @@ def type_contract_locations(files, contract, resolver):
                             result.add(
                                 definition_location(file["path"], item, item.name)
                             )
+                    elif isinstance(item, ast.Assign):
+                        for target in item.targets:
+                            if (
+                                isinstance(target, ast.Name)
+                                and target.id in attributes
+                                and writes[(target.lineno, target.id)] <= 1
+                            ):
+                                result.add(
+                                    definition_location(file["path"], target, target.id)
+                                )
                     elif (
-                        contract["annotatedFields"]
-                        and isinstance(item, ast.AnnAssign)
+                        isinstance(item, ast.AnnAssign)
                         and isinstance(item.target, ast.Name)
-                        and not class_var_annotation(item.annotation, bindings)
+                        and (
+                            item.target.id in attributes
+                            or contract["annotatedFields"]
+                            and not class_var_annotation(item.annotation, bindings)
+                        )
+                        and writes[(item.target.lineno, item.target.id)] <= 1
                     ):
                         result.add(
                             definition_location(
                                 file["path"], item.target, item.target.id
                             )
                         )
+        if attributes:
+            visitor = TypeAttributeVisitor(file, contract, resolver, applicable, writes)
+            visitor.visit(file["tree"])
+            result.update(visitor.kept)
     return result
 
 
@@ -811,10 +1230,10 @@ def exact_contract(contract, index, identifiers):
         valid = valid and identifier_chain(contract["target"])
         valid = valid and (
             bool(contract["members"])
+            or bool(contract["attributes"])
             or contract["annotatedFields"]
             or bool(contract["decorators"])
         )
-        valid = valid and not contract["attributes"]
         valid = valid and not keywords
     if not valid:
         raise ValueError(f"contract {index} is invalid")

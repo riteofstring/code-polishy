@@ -1,0 +1,37 @@
+python-pack-fixture
+from vendor.api import Model
+
+
+class Item(Model):
+    pass
+
+
+def configure(other):
+    item = Item()
+    item.state = "configured"; other.state = "unrelated"
+
+
+def rebound():
+    item = Item()
+    item = object()
+    item.state = "unrelated"
+
+
+def conditional(flag):
+    item = None
+    if flag:
+        item = Item()
+    item.state = "unproven"
+
+
+class Holder:
+    def mutate(self, callback):
+        self.item = Item()
+        callback(self)
+        self.item.state = "unproven"
+
+
+configure(object())
+rebound()
+conditional(True)
+Holder().mutate(lambda value: value)

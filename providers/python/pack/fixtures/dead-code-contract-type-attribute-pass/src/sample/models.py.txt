@@ -1,0 +1,9 @@
+python-pack-fixture
+from vendor.api import Model
+
+
+class Item(Model):
+    state = None
+
+    def configure(self):
+        self.state = "configured"

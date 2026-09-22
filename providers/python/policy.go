@@ -170,13 +170,8 @@ func pythonContractInput(declaration policyDeclarationInput, manifest string, in
 
 func unsupportedPythonContractReason(contract pythonContractDeclaration) string {
 	switch contract.Kind {
-	case "entry-point", "decorator", "module-binding":
+	case "entry-point", "decorator", "module-binding", "type":
 		return ""
-	case "type":
-		if len(contract.Attributes) == 0 {
-			return ""
-		}
-		return "Python type contract attributes are not yet supported by the pack dead-code analyzer"
 	default:
 		return "Python contract kind " + contract.Kind + " is not yet supported by the pack dead-code analyzer"
 	}
@@ -203,6 +198,10 @@ func newVultureContract(manifest string, contract pythonContractDeclaration) (vu
 	if err != nil {
 		return vultureContract{}, err
 	}
+	attributes, err := pythonContractAttributes(contract.Attributes)
+	if err != nil {
+		return vultureContract{}, err
+	}
 	decorators, err := pythonContractDecorators(contract.Decorators)
 	if err != nil {
 		return vultureContract{}, err
@@ -217,7 +216,7 @@ func newVultureContract(manifest string, contract pythonContractDeclaration) (vu
 	id := "config:python.contract:" + contract.Kind + ":" + contract.Target
 	return vultureContract{
 		ID: id, Kind: contract.Kind, Target: contract.Target, Members: members,
-		Attributes: []string{}, Decorators: decorators, AnnotatedFields: contract.AnnotatedFields, Keywords: keywords,
+		Attributes: attributes, Decorators: decorators, AnnotatedFields: contract.AnnotatedFields, Keywords: keywords,
 	}, nil
 }
 
@@ -248,14 +247,14 @@ func validPythonContractShape(contract pythonContractDeclaration, members []stri
 	case "decorator":
 		return len(members) == 0
 	case "type":
-		return (len(members) > 0 || contract.AnnotatedFields || len(contract.Decorators) > 0) && len(contract.Keywords) == 0
+		return (len(members) > 0 || len(contract.Attributes) > 0 || contract.AnnotatedFields || len(contract.Decorators) > 0) && len(contract.Keywords) == 0
 	default:
 		return contract.Kind == "module-binding" && len(members) > 0 && len(contract.Keywords) == 0
 	}
 }
 
 func pythonContractHasUnsupportedFields(contract pythonContractDeclaration) bool {
-	return len(contract.Attributes) > 0 || contract.Kind != "type" && (len(contract.Decorators) > 0 || contract.AnnotatedFields)
+	return contract.Kind != "type" && (len(contract.Attributes) > 0 || len(contract.Decorators) > 0 || contract.AnnotatedFields)
 }
 
 func pythonContractMembers(values []string) ([]string, error) {
@@ -273,6 +272,23 @@ func pythonContractMembers(values []string) ([]string, error) {
 		return nil, errors.New("python contract repeats a member")
 	}
 	return members, nil
+}
+
+func pythonContractAttributes(values []string) ([]string, error) {
+	attributes := append([]string{}, values...)
+	if len(attributes) > 128 {
+		return nil, errors.New("python contract has too many attributes")
+	}
+	for _, attribute := range attributes {
+		if len(attribute) > 255 || !validPythonModulePart(attribute) {
+			return nil, errors.New("python contract contains an invalid attribute")
+		}
+	}
+	sort.Strings(attributes)
+	if len(slices.Compact(slices.Clone(attributes))) != len(attributes) {
+		return nil, errors.New("python contract repeats an attribute")
+	}
+	return attributes, nil
 }
 
 func pythonContractDecorators(values []string) ([]string, error) {
