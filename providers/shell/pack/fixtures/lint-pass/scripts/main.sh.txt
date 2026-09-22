@@ -1,0 +1,3 @@
+shell-pack-fixture
+#!/bin/sh
+printf '%s\n' "$1"

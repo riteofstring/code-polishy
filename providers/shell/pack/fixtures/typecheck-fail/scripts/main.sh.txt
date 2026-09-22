@@ -1,0 +1,3 @@
+shell-pack-fixture
+#!/bin/sh
+values=(one two)

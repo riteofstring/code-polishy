@@ -1,0 +1,100 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-pack.schema.json",
+  "manifestVersion": 3,
+  "name": "shell",
+  "version": "0.27.10",
+  "engineVersion": "0.27.10",
+  "protocolVersion": 4,
+  "platforms": [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-amd64",
+    "linux-arm64",
+    "windows-amd64"
+  ],
+  "languages": [
+    {
+      "id": "shell",
+      "sourcePatterns": ["**/*.bash", "**/*.sh"],
+      "shebangs": [
+        "#!/bin/bash",
+        "#!/bin/sh",
+        "#!/usr/bin/bash",
+        "#!/usr/bin/env bash",
+        "#!/usr/bin/env sh",
+        "#!/usr/bin/sh"
+      ],
+      "discoveryMode": "static",
+      "metadataPatterns": ["**/.shellcheckrc"],
+      "unsupportedCapabilities": [
+        {
+          "capability": "format",
+          "reason": "the first-party shell pack does not specify a formatter"
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "name": "analyze",
+      "argv": ["bin/adapter"],
+      "languages": ["shell"],
+      "capabilities": ["lint", "typecheck"],
+      "profiles": ["check", "gate"],
+      "timeoutSeconds": 300,
+      "execution": {
+        "type": "host-toolchain",
+        "network": "none",
+        "tools": [
+          {
+            "id": "node",
+            "name": "node",
+            "version": "24.18.0",
+            "launcher": true
+          },
+          {
+            "id": "shellcheck",
+            "name": "shellcheck",
+            "version": "0.11.0"
+          }
+        ]
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "lint-pass",
+      "command": "analyze",
+      "capability": "lint",
+      "project": "fixtures/lint-pass",
+      "files": ["scripts/main.sh"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "lint-fail",
+      "command": "analyze",
+      "capability": "lint",
+      "project": "fixtures/lint-fail",
+      "files": ["scripts/main.sh"],
+      "expectedStatus": "findings",
+      "expectedRules": ["shellcheck.sc2086"]
+    },
+    {
+      "name": "typecheck-pass",
+      "command": "analyze",
+      "capability": "typecheck",
+      "project": "fixtures/typecheck-pass",
+      "files": ["scripts/main.sh"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "typecheck-fail",
+      "command": "analyze",
+      "capability": "typecheck",
+      "project": "fixtures/typecheck-fail",
+      "files": ["scripts/main.sh"],
+      "expectedStatus": "findings",
+      "expectedRules": ["syntax"]
+    }
+  ]
+}

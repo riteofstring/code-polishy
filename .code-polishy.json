@@ -208,6 +208,10 @@
       {
         "path": "docs/design/javascript-provider.md",
         "module": "javascript-provider"
+      },
+      {
+        "path": "docs/design/shell-provider.md",
+        "module": "shell-provider"
       }
     ]
   },
@@ -240,7 +244,8 @@
         "cli",
         "launcher",
         "tooling",
-        "javascript-provider"
+        "javascript-provider",
+        "shell-provider"
       ]
     }
   },
@@ -456,6 +461,11 @@
       "name": "javascript-provider",
       "paths": ["providers/javascript/**"],
       "dependsOn": ["tooling"]
+    },
+    {
+      "name": "shell-provider",
+      "paths": ["providers/shell/**"],
+      "dependsOn": ["tooling"]
     }
   ],
   "checks": [
@@ -512,6 +522,13 @@
       "provides": ["build"],
       "argv": ["./scripts/build-javascript-provider.sh"],
       "modules": ["javascript-provider"],
+      "runOn": ["build"]
+    },
+    {
+      "name": "shell-provider-build",
+      "provides": ["build"],
+      "argv": ["./scripts/build-shell-provider.sh"],
+      "modules": ["shell-provider"],
       "runOn": ["build"]
     }
   ],
@@ -686,6 +703,14 @@
         "modules": ["pack"],
         "argv": ["go", "test", "-count=1", "./internal/pack/..."],
         "paths": ["internal/pack/**/*_test.go"]
+      },
+      {
+        "name": "shell-provider-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["shell-provider"],
+        "argv": ["go", "test", "-count=1", "./providers/shell/..."],
+        "paths": ["providers/shell/**/*_test.go"]
       },
       {
         "name": "policymodule-unit",
@@ -1434,6 +1459,11 @@
         "paths": ["internal/pack/**/*_test.go"],
         "module": "pack",
         "focusedSuite": "pack-unit"
+      },
+      {
+        "paths": ["providers/shell/**/*_test.go"],
+        "module": "shell-provider",
+        "focusedSuite": "shell-provider-unit"
       },
       {
         "paths": ["internal/policymodule/**/*_test.go"],
