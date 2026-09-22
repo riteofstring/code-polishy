@@ -5,12 +5,12 @@
     {
       "name": "sqlite-syntax-proof",
       "version": "1.0.0",
-      "digest": "c1fbd7f59ec1a62e9314b5d0e0d56e0e7492f9a31450c36f38355e202ab548fd",
+      "digest": "eeb05314fddc766f1d8881b54ced81a36e9bd48a907a9f250daaa179c7be71ff",
       "artifactUrl": "file:language-pack",
-      "artifactBytes": 7512,
+      "artifactBytes": 7740,
       "manifestVersion": 3,
       "protocolVersion": 4,
-      "engineVersion": "0.27.8",
+      "engineVersion": "0.27.10",
       "platforms": [
         "darwin-amd64",
         "darwin-arm64",
@@ -24,10 +24,10 @@
       "dependencies": [],
       "licenses": ["MIT"],
       "provenance": {
-        "sourceRevision": "c2f96a12cb848d0397c31587c254a638a6570e85",
+        "sourceRevision": "08c3f0849db2fa18a79427f75d3ae456f9609138",
         "builder": "code-polishy",
         "attestationUrl": "file:language-pack-provenance.json",
-        "attestationSha256": "7146b14128db0316407ad9ac1f8f5c6e05e6b5e1fc6f0e4e1fa04be8fffdffa2"
+        "attestationSha256": "47ebd1b28117c60ee86dcf72940eef870e839cd090acdef2ad87aec0cd0d7d96"
       }
     }
   ]
