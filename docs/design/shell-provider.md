@@ -22,3 +22,11 @@ execution participates.
 
 Formatting is an explicit absence. A formatter will be added only through a
 separate product decision with write-safety and idempotence evidence.
+
+Installed conformance cases separately exercise discovery and ShellCheck,
+comments and portability facts, POSIX/Bash syntax, and format absence. Exact
+accepted differences record the native command evidence and deliberate gains in
+diagnostic precision; they do not relax candidate assertions. The active local
+evidence covers `darwin-arm64`. The ledger keeps the other declared platforms
+and unavailable-tool/host cases blocked until their real installed runtimes are
+executed; cross-compilation is build evidence, not runtime evidence.

@@ -432,7 +432,6 @@ func TestConformanceComparisonRejectsUnboundedDifferenceEvidence(t *testing.T) {
 		for index := 0; index <= maximumConformanceDifferences; index++ {
 			key := fmt.Sprintf("value-%03d", index)
 			reference[key] = 0
-			candidate[key] = 1
 		}
 		_, err := compareConformanceTestReports(t, reference, candidate)
 		if err == nil || !strings.Contains(err.Error(), "exceeds 128 differences") {
@@ -445,6 +444,30 @@ func TestConformanceComparisonRejectsUnboundedDifferenceEvidence(t *testing.T) {
 			t.Fatalf("error = %v", err)
 		}
 	})
+}
+
+func TestConformanceComparisonPairsFindingsBySemanticIdentity(t *testing.T) {
+	reference := map[string]any{"findings": []map[string]any{
+		{"ruleId": "rule.b", "path": "sample.sh", "subject": "second", "message": "same"},
+		{"ruleId": "rule.a", "path": "sample.sh", "subject": "first", "message": "before"},
+	}}
+	candidate := map[string]any{"findings": []map[string]any{
+		{"ruleId": "rule.a", "path": "sample.sh", "subject": "first", "message": "after"},
+		{"ruleId": "rule.b", "path": "sample.sh", "subject": "second", "message": "same", "line": 2},
+	}}
+	differences, err := compareConformanceTestReports(t, reference, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/report/findings/0/message", "/report/findings/1/line"}
+	if len(differences) != len(want) {
+		t.Fatalf("differences = %+v", differences)
+	}
+	for index, path := range want {
+		if differences[index].Path != path {
+			t.Fatalf("differences = %+v", differences)
+		}
+	}
 }
 
 func compareConformanceTestReports(t *testing.T, reference, candidate any) ([]ConformanceDifference, error) {
@@ -610,10 +633,17 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 20 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
+	if len(ledger.Behaviors) != 67 || len(ledger.Fixtures) != 24 || ledger.TaskBase != "ad60b7cfa0141e98dd2b72033db65cb73a5121d8" {
 		t.Fatalf("inventory identity = behaviors:%d fixtures:%d base:%s", len(ledger.Behaviors), len(ledger.Fixtures), ledger.TaskBase)
 	}
-	for _, behavior := range ledger.Behaviors {
+	assertConformanceBehaviorEvidence(t, ledger.Behaviors)
+	assertConformanceFixtureMaturity(t, ledger.Fixtures, []string{"go-gofmt-diagnostic", "shell-comments-portability", "shell-discovery-lint", "shell-format-absence", "shell-syntax-dialects"})
+	assertConformanceAuditSurface(t, ledger.Behaviors)
+}
+
+func assertConformanceBehaviorEvidence(t *testing.T, behaviors []ConformanceBehavior) {
+	t.Helper()
+	for _, behavior := range behaviors {
 		if behavior.Status != "untested" {
 			t.Fatalf("behavior %s status = %s", behavior.ID, behavior.Status)
 		}
@@ -630,8 +660,12 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 			}
 		}
 	}
+}
+
+func assertConformanceFixtureMaturity(t *testing.T, fixtures []ConformanceFixture, wantActive []string) {
+	t.Helper()
 	active := []string{}
-	for _, fixture := range ledger.Fixtures {
+	for _, fixture := range fixtures {
 		if fixture.Maturity == "active" {
 			active = append(active, fixture.ID)
 			continue
@@ -640,11 +674,15 @@ func TestCheckedInLanguageConformanceInventoryIsStrictAndExplicitlyIncomplete(t 
 			t.Fatalf("fixture %s maturity = %s gap = %q", fixture.ID, fixture.Maturity, fixture.Gap)
 		}
 	}
-	if !slices.Equal(active, []string{"go-gofmt-diagnostic"}) {
+	if !slices.Equal(active, wantActive) {
 		t.Fatalf("active reference fixtures = %v", active)
 	}
+}
+
+func assertConformanceAuditSurface(t *testing.T, behaviors []ConformanceBehavior) {
+	t.Helper()
 	mapped := []string{}
-	for _, behavior := range ledger.Behaviors {
+	for _, behavior := range behaviors {
 		mapped = append(mapped, behavior.CurrentImplementation...)
 		mapped = append(mapped, behavior.Helpers...)
 	}

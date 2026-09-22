@@ -1,14 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
   "protocol": "language-conformance-fixture/v1",
-  "id": "go-gofmt-diagnostic",
+  "id": "shell-format-absence",
   "maturity": "active",
-  "behaviorIds": ["go.quality.format-syntax"],
+  "behaviorIds": ["shell.quality.format-absence"],
   "files": [
     {
       "path": ".code-polishy.json",
       "mode": "0644",
-      "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
+      "contentBase64": "eyJ2ZXJzaW9uIjo0LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
     },
     {
       "path": ".code-polishy.lock.json",
@@ -16,14 +16,9 @@
       "contentBase64": "ewogICJsb2NrVmVyc2lvbiI6IDIsCiAgImNvZGVQb2xpc2h5VmVyc2lvbiI6ICIwLjI3LjgiLAogICJyZWxlYXNlRGlnZXN0IjogIjRjOWQ4M2FlNTg2ZmI3MzBkMzllMzdkMGQ4MzE4NTMxNmRiZmFhYWIyMmE2MWU1MzcwZWM4NzdiMTMwOTUwYjYiLAogICJmZWF0dXJlcyI6IFsiamF2YXNjcmlwdC1idW5kbGUiXSwKICAicHVibGljYXRpb24iOiB7CiAgICAiaW5kZXhVcmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktcmVsZWFzZS1pbmRleC5qc29uIiwKICAgICJpbmRleFNoYTI1NiI6ICIxZjExMjUzZGViYmMzZGEyZjZiZGY3OTVjOWRkMWRhNmYxZjJjMjRjYzUxMWYwY2ViY2Y3YzY4Yjg4NGNiNWFiIiwKICAgICJhcmNoaXZlcyI6IFsKICAgICAgewogICAgICAgICJob3N0IjogImRhcndpbi1hcm02NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLWFybTY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI0ZDdmYWNjYzJjMDFiYTRhMjcwZDhmMDRlMmM4ZDljOTcxOTI1MjMyYmRiN2M5ZjNlNTE1YmIwODc3MjhmOTAxIiwKICAgICAgICAic2l6ZSI6IDI2ODEyOTM4NgogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAiZGFyd2luLXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLXg2NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiNzIyY2I3ODdkNGQxZDBlOGE4ZTQyZmIzZDU4MzEyOGE2NjllMGE2Y2Q5NjRmZmU1ZjdjZTE1MTZkMDc0YjJmNSIsCiAgICAgICAgInNpemUiOiAyNzIxMjUzMzIKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LWFybTY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjgvY29kZS1wb2xpc2h5LTAuMjcuOC1saW51eC1hcm02NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiMmEzZjkyNzJhM2MxYWIzOWU2NjY2ODYyNjUzOWY1MmZjMTJjYWYwOTQ3NDcxN2EzNWEyZWRkZThiOTc1NTE2NyIsCiAgICAgICAgInNpemUiOiAzMzMxMjU0NjgKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtbGludXgteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICIzZmVhYmMwYTIwOWE2NmIxMTY0MjljZDg2MDUzODNkYzRlYmM1MjU4ZmNiNWFiM2JhY2QwODkzOTdhMjY1NzdjIiwKICAgICAgICAic2l6ZSI6IDM2MDY4MjE4MwogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAid2luZG93cy14NjQiLAogICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktMC4yNy44LXdpbmRvd3MteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI4Y2Y5MjUzZWI1NTFkZjQ2OTM0NDk3ZjQxYzgyNWNmMjljMDhlNDM4OGU4MzIyZGU3NTk3MzY3OWI3NmU1ZDZjIiwKICAgICAgICAic2l6ZSI6IDI3NTQxMjc1OQogICAgICB9CiAgICBdCiAgfQp9Cg=="
     },
     {
-      "path": "go.mod",
-      "mode": "0644",
-      "content": "module example.test/conformance\n\ngo 1.26\n"
-    },
-    {
-      "path": "src/main.go",
-      "mode": "0644",
-      "content": "package main\n\nfunc main( ){ println(\"seeded\") }\n"
+      "path": "scripts/main.sh",
+      "mode": "0755",
+      "content": "#!/bin/sh\nprintf '%s\\n' \"$1\"\n"
     }
   ],
   "laneOverrides": {
@@ -31,7 +26,7 @@
       {
         "path": ".code-polishy.json",
         "mode": "0644",
-        "content": "{\"version\":4,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
+        "contentBase64": "eyJ2ZXJzaW9uIjo0LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
       },
       {
         "path": ".code-polishy.lock.json",
@@ -43,7 +38,7 @@
       {
         "path": ".code-polishy.json",
         "mode": "0644",
-        "content": "{\"version\":5,\"project\":{\"kind\":\"application\",\"capabilities\":[]},\"modules\":[{\"name\":\"application\",\"paths\":[\"src/**\"]}],\"tests\":{\"ownership\":[],\"suites\":[{\"name\":\"fixture-unit\",\"kind\":\"unit\",\"scope\":\"repository\",\"argv\":[\"go\",\"test\",\"./...\"]}]}}\n"
+        "contentBase64": "eyJ2ZXJzaW9uIjo1LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJwYWNrcyI6W3sibmFtZSI6InNoZWxsIiwidmVyc2lvbiI6IjAuMjcuMTAiLCJkaWdlc3QiOiI5ZGM0NmMxYzUyMzg5MTllZGVjNGFlYTBkOTJlZjFlZjZhOGZmMTMwNWYyM2I5MDc5MjNhNmZhMmJmMjUyMGI0In1dLCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
       },
       {
         "path": ".code-polishy.lock.json",
@@ -57,26 +52,78 @@
     "commitTimestamp": "2000-01-01T00:00:00Z",
     "changes": []
   },
-  "arguments": ["check", "--all", "--format", "json"],
+  "arguments": ["format", "--files", "scripts/main.sh", "--format", "json"],
   "timeoutSeconds": 900,
-  "platforms": [
-    "darwin-amd64",
-    "darwin-arm64",
-    "linux-amd64",
-    "linux-arm64",
-    "windows-amd64"
-  ],
+  "platforms": ["darwin-arm64"],
   "expected": {
-    "exitStatus": 1,
-    "reportStatus": "failed",
-    "requiredRules": ["quality.gofmt"],
-    "requiredCoverage": ["src/main.go"],
+    "exitStatus": 0,
+    "reportStatus": "passed",
+    "requiredRules": [],
+    "requiredCoverage": [],
     "writes": [],
     "protected": [
       ".code-polishy.json",
       ".code-polishy.lock.json",
-      "go.mod",
-      "src/main.go"
-    ]
-  }
+      "scripts/main.sh"
+    ],
+    "candidate": {
+      "exitStatus": 1,
+      "reportStatus": "failed",
+      "requiredRules": ["policy.packCoverage"],
+      "requiredCoverage": [],
+      "writes": [],
+      "protected": [
+        ".code-polishy.json",
+        ".code-polishy.lock.json",
+        "scripts/main.sh"
+      ]
+    }
+  },
+  "acceptedDifferences": [
+    {
+      "path": "/exitStatus",
+      "reference": "0",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/display/displayed",
+      "reference": "0",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/display/total",
+      "reference": "0",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/findings/0",
+      "reference": "\"<missing>\"",
+      "candidate": "{\"fingerprint\":\"99717bf7f6bf83060465a584ee1737d2b89274d0bb7323668b1ac572e28e3960\",\"message\":\"the first-party shell pack does not specify a formatter\",\"module\":\"tooling\",\"path\":\"scripts/main.sh\",\"remediation\":{\"nextCommand\":{\"argv\":[\"code-polishy\",\"doctor\"],\"cwd\":\".\"},\"summary\":\"Restore the exact authenticated pack declared by this repository and correct its manifest or capability coverage before retrying the affected operation.\"},\"ruleId\":\"policy.packCoverage\",\"scope\":{\"kind\":\"module\",\"value\":\"tooling\"},\"selectionRelation\":\"selected\",\"severity\":\"error\",\"status\":\"open\",\"subject\":\"format\"}"
+    },
+    {
+      "path": "/report/summary/byModule/tooling",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/byRule/policy.packCoverage",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/bySelectionRelation/selected",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/errors",
+      "reference": "0",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/status",
+      "reference": "\"passed\"",
+      "candidate": "\"failed\""
+    }
+  ]
 }

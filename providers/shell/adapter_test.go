@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,6 +134,51 @@ func TestTypecheckReportsDialectSyntaxAtItsSource(t *testing.T) {
 	if result.Status != "findings" || len(result.Findings) != 1 || result.Findings[0].Rule != "syntax" || result.Findings[0].Line != 2 {
 		t.Fatalf("result = %+v", result)
 	}
+}
+
+func TestLintReportsToolBindingAndExecutionFailures(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		tools []toolIdentity
+	}{
+		{name: "missing identity", tools: []toolIdentity{}},
+		{name: "wrong version", tools: []toolIdentity{{ID: "shellcheck", Name: "shellcheck", Version: "0.10.0", SHA256: strings.Repeat("a", 64)}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := (adapter{checker: fakeShellCheck{}}).run(context.Background(), request{Operation: "check", Capability: "lint", Tools: test.tools})
+			if result.Status != "operational-failure" || !strings.Contains(result.Failure, "does not bind shellcheck 0.11.0") {
+				t.Fatalf("result = %+v", result)
+			}
+		})
+	}
+
+	t.Run("missing executable", func(t *testing.T) {
+		t.Setenv("CODE_POLISHY_TOOL_SHELLCHECK", "")
+		result := (adapter{checker: fakeShellCheck{}}).run(context.Background(), request{
+			Operation: "check", Capability: "lint",
+			Tools: []toolIdentity{{ID: "shellcheck", Name: "shellcheck", Version: "0.11.0", SHA256: strings.Repeat("a", 64)}},
+		})
+		if result.Status != "operational-failure" || !strings.Contains(result.Failure, "CODE_POLISHY_TOOL_SHELLCHECK is unavailable") {
+			t.Fatalf("result = %+v", result)
+		}
+	})
+
+	t.Run("execution failure", func(t *testing.T) {
+		root := t.TempDir()
+		source := []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\n")
+		writeShellFile(t, root, "scripts/main.sh", source)
+		digest := sha256.Sum256(source)
+		t.Setenv("CODE_POLISHY_TOOL_SHELLCHECK", filepath.Join(root, "shellcheck"))
+		result := (adapter{checker: fakeShellCheck{err: errors.New("shellcheck stopped")}}).run(context.Background(), request{
+			Operation: "check", Capability: "lint", ProjectRoot: root, Files: []string{"scripts/main.sh"},
+			Scopes:  []analysisScope{{Handle: "scope-1", Members: []string{"scripts/main.sh"}, Context: []string{"scripts/main.sh"}}},
+			Context: []inputFile{{Path: "scripts/main.sh", SHA256: hex.EncodeToString(digest[:])}},
+			Tools:   []toolIdentity{{ID: "shellcheck", Name: "shellcheck", Version: "0.11.0", SHA256: strings.Repeat("a", 64)}},
+		})
+		if result.Status != "operational-failure" || result.Failure != "shellcheck stopped" || !slices.Equal(result.ScopeHandles, []string{"scope-1"}) {
+			t.Fatalf("result = %+v", result)
+		}
+	})
 }
 
 func TestDecodeRequestRejectsUnknownFieldsAndTrailingDocuments(t *testing.T) {

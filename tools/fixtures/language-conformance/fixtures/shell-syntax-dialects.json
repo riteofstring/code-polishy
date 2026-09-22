@@ -1,0 +1,319 @@
+{
+  "$schema": "https://raw.githubusercontent.com/riteofstring/code-polishy/main/schema/code-polishy-language-conformance-fixture-v1.schema.json",
+  "protocol": "language-conformance-fixture/v1",
+  "id": "shell-syntax-dialects",
+  "maturity": "active",
+  "behaviorIds": [
+    "shell.discovery.extensions-shebangs-dialects",
+    "shell.quality.syntax-shellcheck"
+  ],
+  "files": [
+    {
+      "path": ".code-polishy.json",
+      "mode": "0644",
+      "contentBase64": "eyJ2ZXJzaW9uIjo0LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
+    },
+    {
+      "path": ".code-polishy.lock.json",
+      "mode": "0644",
+      "contentBase64": "ewogICJsb2NrVmVyc2lvbiI6IDIsCiAgImNvZGVQb2xpc2h5VmVyc2lvbiI6ICIwLjI3LjgiLAogICJyZWxlYXNlRGlnZXN0IjogIjRjOWQ4M2FlNTg2ZmI3MzBkMzllMzdkMGQ4MzE4NTMxNmRiZmFhYWIyMmE2MWU1MzcwZWM4NzdiMTMwOTUwYjYiLAogICJmZWF0dXJlcyI6IFsiamF2YXNjcmlwdC1idW5kbGUiXSwKICAicHVibGljYXRpb24iOiB7CiAgICAiaW5kZXhVcmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktcmVsZWFzZS1pbmRleC5qc29uIiwKICAgICJpbmRleFNoYTI1NiI6ICIxZjExMjUzZGViYmMzZGEyZjZiZGY3OTVjOWRkMWRhNmYxZjJjMjRjYzUxMWYwY2ViY2Y3YzY4Yjg4NGNiNWFiIiwKICAgICJhcmNoaXZlcyI6IFsKICAgICAgewogICAgICAgICJob3N0IjogImRhcndpbi1hcm02NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLWFybTY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI0ZDdmYWNjYzJjMDFiYTRhMjcwZDhmMDRlMmM4ZDljOTcxOTI1MjMyYmRiN2M5ZjNlNTE1YmIwODc3MjhmOTAxIiwKICAgICAgICAic2l6ZSI6IDI2ODEyOTM4NgogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAiZGFyd2luLXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLXg2NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiNzIyY2I3ODdkNGQxZDBlOGE4ZTQyZmIzZDU4MzEyOGE2NjllMGE2Y2Q5NjRmZmU1ZjdjZTE1MTZkMDc0YjJmNSIsCiAgICAgICAgInNpemUiOiAyNzIxMjUzMzIKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LWFybTY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjgvY29kZS1wb2xpc2h5LTAuMjcuOC1saW51eC1hcm02NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiMmEzZjkyNzJhM2MxYWIzOWU2NjY2ODYyNjUzOWY1MmZjMTJjYWYwOTQ3NDcxN2EzNWEyZWRkZThiOTc1NTE2NyIsCiAgICAgICAgInNpemUiOiAzMzMxMjU0NjgKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtbGludXgteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICIzZmVhYmMwYTIwOWE2NmIxMTY0MjljZDg2MDUzODNkYzRlYmM1MjU4ZmNiNWFiM2JhY2QwODkzOTdhMjY1NzdjIiwKICAgICAgICAic2l6ZSI6IDM2MDY4MjE4MwogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAid2luZG93cy14NjQiLAogICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktMC4yNy44LXdpbmRvd3MteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI4Y2Y5MjUzZWI1NTFkZjQ2OTM0NDk3ZjQxYzgyNWNmMjljMDhlNDM4OGU4MzIyZGU3NTk3MzY3OWI3NmU1ZDZjIiwKICAgICAgICAic2l6ZSI6IDI3NTQxMjc1OQogICAgICB9CiAgICBdCiAgfQp9Cg=="
+    },
+    {
+      "path": "scripts/invalid.sh",
+      "mode": "0755",
+      "content": "#!/bin/sh\nvalues=(one two)\nprintf '%s\\n' \"${values[@]}\"\n"
+    },
+    {
+      "path": "scripts/valid.bash",
+      "mode": "0755",
+      "content": "values=(one two)\nprintf '%s\\n' \"${values[@]}\"\n"
+    }
+  ],
+  "laneOverrides": {
+    "reference": [
+      {
+        "path": ".code-polishy.json",
+        "mode": "0644",
+        "contentBase64": "eyJ2ZXJzaW9uIjo0LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
+      },
+      {
+        "path": ".code-polishy.lock.json",
+        "mode": "0644",
+        "contentBase64": "ewogICJsb2NrVmVyc2lvbiI6IDIsCiAgImNvZGVQb2xpc2h5VmVyc2lvbiI6ICIwLjI3LjgiLAogICJyZWxlYXNlRGlnZXN0IjogIjRjOWQ4M2FlNTg2ZmI3MzBkMzllMzdkMGQ4MzE4NTMxNmRiZmFhYWIyMmE2MWU1MzcwZWM4NzdiMTMwOTUwYjYiLAogICJmZWF0dXJlcyI6IFsiamF2YXNjcmlwdC1idW5kbGUiXSwKICAicHVibGljYXRpb24iOiB7CiAgICAiaW5kZXhVcmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktcmVsZWFzZS1pbmRleC5qc29uIiwKICAgICJpbmRleFNoYTI1NiI6ICIxZjExMjUzZGViYmMzZGEyZjZiZGY3OTVjOWRkMWRhNmYxZjJjMjRjYzUxMWYwY2ViY2Y3YzY4Yjg4NGNiNWFiIiwKICAgICJhcmNoaXZlcyI6IFsKICAgICAgewogICAgICAgICJob3N0IjogImRhcndpbi1hcm02NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLWFybTY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI0ZDdmYWNjYzJjMDFiYTRhMjcwZDhmMDRlMmM4ZDljOTcxOTI1MjMyYmRiN2M5ZjNlNTE1YmIwODc3MjhmOTAxIiwKICAgICAgICAic2l6ZSI6IDI2ODEyOTM4NgogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAiZGFyd2luLXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtZGFyd2luLXg2NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiNzIyY2I3ODdkNGQxZDBlOGE4ZTQyZmIzZDU4MzEyOGE2NjllMGE2Y2Q5NjRmZmU1ZjdjZTE1MTZkMDc0YjJmNSIsCiAgICAgICAgInNpemUiOiAyNzIxMjUzMzIKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LWFybTY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjgvY29kZS1wb2xpc2h5LTAuMjcuOC1saW51eC1hcm02NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiMmEzZjkyNzJhM2MxYWIzOWU2NjY2ODYyNjUzOWY1MmZjMTJjYWYwOTQ3NDcxN2EzNWEyZWRkZThiOTc1NTE2NyIsCiAgICAgICAgInNpemUiOiAzMzMxMjU0NjgKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LXg2NCIsCiAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcml0ZW9mc3RyaW5nL2NvZGUtcG9saXNoeS9yZWxlYXNlcy9kb3dubG9hZC92MC4yNy44L2NvZGUtcG9saXNoeS0wLjI3LjgtbGludXgteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICIzZmVhYmMwYTIwOWE2NmIxMTY0MjljZDg2MDUzODNkYzRlYmM1MjU4ZmNiNWFiM2JhY2QwODkzOTdhMjY1NzdjIiwKICAgICAgICAic2l6ZSI6IDM2MDY4MjE4MwogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAid2luZG93cy14NjQiLAogICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuOC9jb2RlLXBvbGlzaHktMC4yNy44LXdpbmRvd3MteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI4Y2Y5MjUzZWI1NTFkZjQ2OTM0NDk3ZjQxYzgyNWNmMjljMDhlNDM4OGU4MzIyZGU3NTk3MzY3OWI3NmU1ZDZjIiwKICAgICAgICAic2l6ZSI6IDI3NTQxMjc1OQogICAgICB9CiAgICBdCiAgfQp9Cg=="
+      }
+    ],
+    "candidate": [
+      {
+        "path": ".code-polishy.json",
+        "mode": "0644",
+        "contentBase64": "eyJ2ZXJzaW9uIjo1LCJwcm9qZWN0Ijp7ImtpbmQiOiJmaXh0dXJlIn0sInF1YWxpdHkiOnsiYWxsb3dDb21tZW50cyI6ZmFsc2V9LCJwYWNrcyI6W3sibmFtZSI6InNoZWxsIiwidmVyc2lvbiI6IjAuMjcuMTAiLCJkaWdlc3QiOiI5ZGM0NmMxYzUyMzg5MTllZGVjNGFlYTBkOTJlZjFlZjZhOGZmMTMwNWYyM2I5MDc5MjNhNmZhMmJmMjUyMGI0In1dLCJtb2R1bGVzIjpbeyJuYW1lIjoidG9vbGluZyIsInBhdGhzIjpbInNjcmlwdHMvKioiXX1dLCJ0ZXN0cyI6eyJvd25lcnNoaXAiOltdLCJzdWl0ZXMiOlt7Im5hbWUiOiJmaXh0dXJlLXVuaXQiLCJraW5kIjoidW5pdCIsInNjb3BlIjoibW9kdWxlIiwibW9kdWxlcyI6WyJ0b29saW5nIl0sImFyZ3YiOlsiZ28iLCJ0ZXN0IiwiLi8uLi4iXSwiY29zdCI6InF1aWNrIiwicnVuT24iOlsiZm9jdXNlZCIsInJlY29tbWVuZGVkIiwiZnVsbCJdfSx7Im5hbWUiOiJmaXh0dXJlLWZ1bGwiLCJraW5kIjoiaW50ZWdyYXRpb24iLCJzY29wZSI6InJlcG9zaXRvcnkiLCJhcmd2IjpbImdvIiwidGVzdCIsIi4vLi4uIl0sImNvc3QiOiJzdGFuZGFyZCIsInJ1bk9uIjpbInJlY29tbWVuZGVkIiwiZnVsbCJdfV19fQo="
+      },
+      {
+        "path": ".code-polishy.lock.json",
+        "mode": "0644",
+        "contentBase64": "ewogICJsb2NrVmVyc2lvbiI6IDIsCiAgImNvZGVQb2xpc2h5VmVyc2lvbiI6ICIwLjI3LjEwIiwKICAicmVsZWFzZURpZ2VzdCI6ICJjNzliMTY2ODI2ODlkNzZhMzFiZTg0NzZkMGMzOGYyZjNmNGJmMzMzOWE4NzY4NGZiNmY4MDZmZDU5M2IyMDhkIiwKICAiZmVhdHVyZXMiOiBbImphdmFzY3JpcHQtYnVuZGxlIl0sCiAgInB1YmxpY2F0aW9uIjogewogICAgImluZGV4VXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjEwL2NvZGUtcG9saXNoeS1yZWxlYXNlLWluZGV4Lmpzb24iLAogICAgImluZGV4U2hhMjU2IjogImUyMzk4ZGIxOWI4NTZhZDM4NTgzMTkwNzFmYzMzMWRiZTgwNjliNTEzYjYxMjcwOTQyODY0ZDA5MWRjZTczOGMiLAogICAgImFyY2hpdmVzIjogWwogICAgICB7CiAgICAgICAgImhvc3QiOiAiZGFyd2luLWFybTY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjEwL2NvZGUtcG9saXNoeS0wLjI3LjEwLWRhcndpbi1hcm02NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiNTNiYWIwMDU1OTVjOWNkMzUxNDM5ZTNlOTBlYmM4MDdhZDUwNWVjMTU3MzgyOWM3NTZhMDU3NTQyZWQ3MjU1ZCIsCiAgICAgICAgInNpemUiOiAyNjgxMzQ3MzgKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImRhcndpbi14NjQiLAogICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JpdGVvZnN0cmluZy9jb2RlLXBvbGlzaHkvcmVsZWFzZXMvZG93bmxvYWQvdjAuMjcuMTAvY29kZS1wb2xpc2h5LTAuMjcuMTAtZGFyd2luLXg2NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiNWY3NGE2YjkzYzJlZWU5MWY5ZGY0NDNkMjk1OWM4NTIzNmUxNDE3NWE5NTI4Y2FkMmUzZTIyMWQwMzViNzFhMSIsCiAgICAgICAgInNpemUiOiAyNzIxMzEwNDIKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogImxpbnV4LWFybTY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjEwL2NvZGUtcG9saXNoeS0wLjI3LjEwLWxpbnV4LWFybTY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICIxZGU3ZmY5NzU1ZTEwYzBmNTk1ODljODI1N2U3MDdmOGE2ZmNiMmUzZDMwMTU0ZWU3MjQ3ODU2MTVmZjYyZWUwIiwKICAgICAgICAic2l6ZSI6IDMzMzEzMTE5OQogICAgICB9LAogICAgICB7CiAgICAgICAgImhvc3QiOiAibGludXgteDY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjEwL2NvZGUtcG9saXNoeS0wLjI3LjEwLWxpbnV4LXg2NC56aXAiLAogICAgICAgICJzaGEyNTYiOiAiMTU5ZjdhNzYzNDk4ODU3NWRmZmUzNzE1YWRjNmM5ZjZmOTQwZTI0ZjBiMjgyYjMzNjNjOWU1NmViMGVlYTFjZCIsCiAgICAgICAgInNpemUiOiAzNjA2ODc2MDEKICAgICAgfSwKICAgICAgewogICAgICAgICJob3N0IjogIndpbmRvd3MteDY0IiwKICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yaXRlb2ZzdHJpbmcvY29kZS1wb2xpc2h5L3JlbGVhc2VzL2Rvd25sb2FkL3YwLjI3LjEwL2NvZGUtcG9saXNoeS0wLjI3LjEwLXdpbmRvd3MteDY0LnppcCIsCiAgICAgICAgInNoYTI1NiI6ICI0YTI2M2E5OWM3ZTkyZTZiNzA4MGM2OWNiOTZjZWZlMzBmZmMxY2ViNDE1ZDQwMjJkMGQ5NjllNzIyZmQ4YzBjIiwKICAgICAgICAic2l6ZSI6IDI3NTQxNzk1OAogICAgICB9CiAgICBdCiAgfQp9Cg=="
+      }
+    ]
+  },
+  "git": {
+    "branch": "main",
+    "commitTimestamp": "2000-01-01T00:00:00Z",
+    "changes": []
+  },
+  "arguments": ["check", "--files", "scripts", "--format", "json"],
+  "timeoutSeconds": 900,
+  "platforms": ["darwin-arm64"],
+  "expected": {
+    "exitStatus": 1,
+    "reportStatus": "failed",
+    "requiredRules": ["quality.shellcheck"],
+    "requiredCoverage": [],
+    "writes": [],
+    "protected": [
+      ".code-polishy.json",
+      ".code-polishy.lock.json",
+      "scripts/invalid.sh",
+      "scripts/valid.bash"
+    ],
+    "candidate": {
+      "exitStatus": 1,
+      "reportStatus": "failed",
+      "requiredRules": ["pack.shell.syntax"],
+      "requiredCoverage": [],
+      "writes": [],
+      "protected": [
+        ".code-polishy.json",
+        ".code-polishy.lock.json",
+        "scripts/invalid.sh",
+        "scripts/valid.bash"
+      ]
+    }
+  },
+  "acceptedDifferences": [
+    {
+      "path": "/report/display/displayed",
+      "reference": "1",
+      "candidate": "4"
+    },
+    {
+      "path": "/report/display/total",
+      "reference": "1",
+      "candidate": "4"
+    },
+    {
+      "path": "/report/execution/commands/0/argv/0",
+      "reference": "\"bash\"",
+      "candidate": "\"$POLICY_ROOT/.tools/javascript/darwin-arm64/node/bin/node\""
+    },
+    {
+      "path": "/report/execution/commands/0/argv/1",
+      "reference": "\"-n\"",
+      "candidate": "\"$PACK_DATA_ROOT/shell/0.27.10/9dc46c1c5238919edec4aea0d92ef1ef6a8ff1305f23b907923a6fa2bf2520b4/bin/adapter\""
+    },
+    {
+      "path": "/report/execution/commands/0/argv/2",
+      "reference": "\"scripts/invalid.sh\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/execution/commands/0/name",
+      "reference": "\"shell-syntax-scripts-invalid-sh\"",
+      "candidate": "\"pack.shell.analyze.lint\""
+    },
+    {
+      "path": "/report/execution/commands/1/argv/0",
+      "reference": "\"bash\"",
+      "candidate": "\"$POLICY_ROOT/.tools/javascript/darwin-arm64/node/bin/node\""
+    },
+    {
+      "path": "/report/execution/commands/1/argv/1",
+      "reference": "\"-n\"",
+      "candidate": "\"$PACK_DATA_ROOT/shell/0.27.10/9dc46c1c5238919edec4aea0d92ef1ef6a8ff1305f23b907923a6fa2bf2520b4/bin/adapter\""
+    },
+    {
+      "path": "/report/execution/commands/1/argv/2",
+      "reference": "\"scripts/valid.bash\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/execution/commands/1/name",
+      "reference": "\"shell-syntax-scripts-valid-bash\"",
+      "candidate": "\"pack.shell.analyze.lint\""
+    },
+    {
+      "path": "/report/execution/commands/2/argv/0",
+      "reference": "\"$POLICY_ROOT/tools/shellcheck.sh\"",
+      "candidate": "\"$POLICY_ROOT/.tools/javascript/darwin-arm64/node/bin/node\""
+    },
+    {
+      "path": "/report/execution/commands/2/argv/1",
+      "reference": "\"--external-sources\"",
+      "candidate": "\"$PACK_DATA_ROOT/shell/0.27.10/9dc46c1c5238919edec4aea0d92ef1ef6a8ff1305f23b907923a6fa2bf2520b4/bin/adapter\""
+    },
+    {
+      "path": "/report/execution/commands/2/argv/2",
+      "reference": "\"$REPOSITORY_ROOT/scripts/invalid.sh\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/execution/commands/2/argv/3",
+      "reference": "\"$REPOSITORY_ROOT/scripts/valid.bash\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/execution/commands/2/exitStatus",
+      "reference": "1",
+      "candidate": "0"
+    },
+    {
+      "path": "/report/execution/commands/2/failureCategory",
+      "reference": "\"command-exit\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/execution/commands/2/name",
+      "reference": "\"shellcheck\"",
+      "candidate": "\"pack.shell.analyze.typecheck\""
+    },
+    {
+      "path": "/report/execution/commands/3",
+      "reference": "\"<missing>\"",
+      "candidate": "{\"argv\":[\"$POLICY_ROOT/.tools/javascript/darwin-arm64/node/bin/node\",\"$PACK_DATA_ROOT/shell/0.27.10/9dc46c1c5238919edec4aea0d92ef1ef6a8ff1305f23b907923a6fa2bf2520b4/bin/adapter\"],\"cwd\":\".\",\"exitStatus\":0,\"name\":\"pack.shell.analyze.typecheck\",\"phase\":\"quality\"}"
+    },
+    {
+      "path": "/report/findings/0/column",
+      "reference": "\"<missing>\"",
+      "candidate": "8"
+    },
+    {
+      "path": "/report/findings/0/fingerprint",
+      "reference": "\"31627cea590beb0ddbfc0498b4f0e4b46de96d8eea491c0d25745ae5e63fed89\"",
+      "candidate": "\"4497d1c4853a5d3bd399d5ac08c95dd1baebf9dc283f792946b2ad6e06276b83\""
+    },
+    {
+      "path": "/report/findings/0/line",
+      "reference": "\"<missing>\"",
+      "candidate": "2"
+    },
+    {
+      "path": "/report/findings/0/message",
+      "reference": "\"command \\\"shellcheck\\\" failed: exit status 1\"",
+      "candidate": "\"In POSIX sh, arrays are undefined.\""
+    },
+    {
+      "path": "/report/findings/0/module",
+      "reference": "\"<missing>\"",
+      "candidate": "\"tooling\""
+    },
+    {
+      "path": "/report/findings/0/path",
+      "reference": "\"repository\"",
+      "candidate": "\"scripts/invalid.sh\""
+    },
+    {
+      "path": "/report/findings/0/remediation/nextCommand/argv/1",
+      "reference": "\"check\"",
+      "candidate": "\"doctor\""
+    },
+    {
+      "path": "/report/findings/0/remediation/nextCommand/argv/2",
+      "reference": "\"--all\"",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/findings/0/remediation/summary",
+      "reference": "\"Correct the reported analyzer diagnostic at its source while preserving the intended behavior; keep the analyzer enabled.\"",
+      "candidate": "\"Resolve pack.shell.shellcheck.sc3030 for SC3030 and rerun its owning policy command.\""
+    },
+    {
+      "path": "/report/findings/0/ruleId",
+      "reference": "\"quality.shellcheck\"",
+      "candidate": "\"pack.shell.shellcheck.sc3030\""
+    },
+    {
+      "path": "/report/findings/0/scope/kind",
+      "reference": "\"repository\"",
+      "candidate": "\"module\""
+    },
+    {
+      "path": "/report/findings/0/scope/value",
+      "reference": "\"repository\"",
+      "candidate": "\"tooling\""
+    },
+    {
+      "path": "/report/findings/0/selectionRelation",
+      "reference": "\"global\"",
+      "candidate": "\"selected\""
+    },
+    {
+      "path": "/report/findings/0/subject",
+      "reference": "\"shellcheck\"",
+      "candidate": "\"SC3030\""
+    },
+    {
+      "path": "/report/findings/1",
+      "reference": "\"<missing>\"",
+      "candidate": "{\"column\":16,\"fingerprint\":\"3d224657723c5d5b50ebc0981f08cd50c22ba6cbbca51168fbb7e3a5f69d7696\",\"line\":3,\"message\":\"In POSIX sh, array references are undefined.\",\"module\":\"tooling\",\"path\":\"scripts/invalid.sh\",\"remediation\":{\"nextCommand\":{\"argv\":[\"code-polishy\",\"doctor\"],\"cwd\":\".\"},\"summary\":\"Resolve pack.shell.shellcheck.sc3054 for SC3054 and rerun its owning policy command.\"},\"ruleId\":\"pack.shell.shellcheck.sc3054\",\"scope\":{\"kind\":\"module\",\"value\":\"tooling\"},\"selectionRelation\":\"selected\",\"severity\":\"error\",\"status\":\"open\",\"subject\":\"SC3054\"}"
+    },
+    {
+      "path": "/report/findings/2",
+      "reference": "\"<missing>\"",
+      "candidate": "{\"column\":8,\"fingerprint\":\"b55d6781198894532ae0f55ef9c8c2ef49cede29bcd3822d11d0b2824b23b923\",\"line\":2,\"message\":\"arrays is not valid in this shell dialect\",\"module\":\"tooling\",\"path\":\"scripts/invalid.sh\",\"remediation\":{\"nextCommand\":{\"argv\":[\"code-polishy\",\"doctor\"],\"cwd\":\".\"},\"summary\":\"Resolve pack.shell.syntax for syntax and rerun its owning policy command.\"},\"ruleId\":\"pack.shell.syntax\",\"scope\":{\"kind\":\"module\",\"value\":\"tooling\"},\"selectionRelation\":\"selected\",\"severity\":\"error\",\"status\":\"open\",\"subject\":\"syntax\"}"
+    },
+    {
+      "path": "/report/findings/3",
+      "reference": "\"<missing>\"",
+      "candidate": "{\"fingerprint\":\"4c4cf7329a39738816173dcd9add21449fcbbdfaaa2d92d66b04f9edd32a0e61\",\"message\":\"source-comment and portability facts require valid shell syntax\",\"module\":\"tooling\",\"path\":\"scripts/invalid.sh\",\"remediation\":{\"nextCommand\":{\"argv\":[\"code-polishy\",\"doctor\"],\"cwd\":\".\"},\"summary\":\"Restore the exact authenticated pack declared by this repository and correct its manifest or capability coverage before retrying the affected operation.\"},\"ruleId\":\"policy.packCoverage\",\"scope\":{\"kind\":\"module\",\"value\":\"tooling\"},\"selectionRelation\":\"selected\",\"severity\":\"error\",\"status\":\"open\",\"subject\":\"lint\"}"
+    },
+    {
+      "path": "/report/summary/byModule/tooling",
+      "reference": "\"<missing>\"",
+      "candidate": "4"
+    },
+    {
+      "path": "/report/summary/byRule/pack.shell.shellcheck.sc3030",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/byRule/pack.shell.shellcheck.sc3054",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/byRule/pack.shell.syntax",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/byRule/policy.packCoverage",
+      "reference": "\"<missing>\"",
+      "candidate": "1"
+    },
+    {
+      "path": "/report/summary/byRule/quality.shellcheck",
+      "reference": "1",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/summary/bySelectionRelation/global",
+      "reference": "1",
+      "candidate": "\"<missing>\""
+    },
+    {
+      "path": "/report/summary/bySelectionRelation/selected",
+      "reference": "\"<missing>\"",
+      "candidate": "4"
+    },
+    {
+      "path": "/report/summary/errors",
+      "reference": "1",
+      "candidate": "4"
+    },
+    {
+      "path": "/stderr",
+      "reference": "\"\\nIn $REPOSITORY_ROOT/scripts/invalid.sh line 2:\\nvalues=(one two)\\n       ^-------^ SC3030 (warning): In POSIX sh, arrays are undefined.\\n\\n\\nIn $REPOSITORY_ROOT/scripts/invalid.sh line 3:\\nprintf '%s\\\\n' \\\"${values[@]}\\\"\\n               ^----------^ SC3054 (warning): In POSIX sh, array references are undefined.\\n\\nFor more information:\\n  https://www.shellcheck.net/wiki/SC3030 -- In POSIX sh, arrays are undefined.\\n  https://www.shellcheck.net/wiki/SC3054 -- In POSIX sh, array references are...\\n\"",
+      "candidate": "\"\""
+    }
+  ]
+}

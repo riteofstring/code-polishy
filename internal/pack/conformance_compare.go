@@ -138,6 +138,9 @@ func normalizeConformanceValue(value any, roots conformanceComparisonRoots, head
 		}
 		if sortConformanceArray(path) {
 			slices.SortFunc(result, func(left, right any) int {
+				if order := strings.Compare(conformanceArraySortKey(path, left), conformanceArraySortKey(path, right)); order != 0 {
+					return order
+				}
 				leftJSON, _ := json.Marshal(left)
 				rightJSON, _ := json.Marshal(right)
 				return bytes.Compare(leftJSON, rightJSON)
@@ -149,6 +152,23 @@ func normalizeConformanceValue(value any, roots conformanceComparisonRoots, head
 	default:
 		return value
 	}
+}
+
+func conformanceArraySortKey(path string, value any) string {
+	if conformancePointerShape(path) != "/findings" {
+		return ""
+	}
+	finding, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	fields := []string{"ruleId", "path", "subject", "severity", "status", "selectionRelation"}
+	key := make([]string, 0, len(fields))
+	for _, field := range fields {
+		value, _ := finding[field].(string)
+		key = append(key, value)
+	}
+	return strings.Join(key, "\x00")
 }
 
 func dropConformanceField(parent, key string) bool {
@@ -218,52 +238,59 @@ func (collector *conformanceDifferenceCollector) compare(path string, reference,
 	referenceMap, referenceIsMap := reference.(map[string]any)
 	candidateMap, candidateIsMap := candidate.(map[string]any)
 	if referenceIsMap && candidateIsMap {
-		keys := make([]string, 0, len(referenceMap)+len(candidateMap))
-		seen := map[string]bool{}
-		for key := range referenceMap {
-			seen[key] = true
-			keys = append(keys, key)
-		}
-		for key := range candidateMap {
-			if !seen[key] {
-				keys = append(keys, key)
-			}
-		}
-		slices.Sort(keys)
-		for _, key := range keys {
-			left, leftExists := referenceMap[key]
-			right, rightExists := candidateMap[key]
-			childPath := path + "/" + escapeConformancePointer(key)
-			if !leftExists || !rightExists {
-				collector.add(childPath, conformanceMissing(left, leftExists), conformanceMissing(right, rightExists))
-				continue
-			}
-			collector.compare(childPath, left, right)
-		}
+		collector.compareMaps(path, referenceMap, candidateMap)
 		return
 	}
 	referenceArray, referenceIsArray := reference.([]any)
 	candidateArray, candidateIsArray := candidate.([]any)
 	if referenceIsArray && candidateIsArray {
-		maximum := max(len(referenceArray), len(candidateArray))
-		for index := 0; index < maximum; index++ {
-			childPath := path + "/" + strconv.Itoa(index)
-			if index >= len(referenceArray) || index >= len(candidateArray) {
-				var left, right any = "<missing>", "<missing>"
-				if index < len(referenceArray) {
-					left = referenceArray[index]
-				}
-				if index < len(candidateArray) {
-					right = candidateArray[index]
-				}
-				collector.add(childPath, left, right)
-				continue
-			}
-			collector.compare(childPath, referenceArray[index], candidateArray[index])
-		}
+		collector.compareArrays(path, referenceArray, candidateArray)
 		return
 	}
 	collector.add(path, reference, candidate)
+}
+
+func (collector *conformanceDifferenceCollector) compareMaps(path string, reference, candidate map[string]any) {
+	keys := make([]string, 0, len(reference)+len(candidate))
+	seen := map[string]bool{}
+	for key := range reference {
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	for key := range candidate {
+		if !seen[key] {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		left, leftExists := reference[key]
+		right, rightExists := candidate[key]
+		childPath := path + "/" + escapeConformancePointer(key)
+		if !leftExists || !rightExists {
+			collector.add(childPath, conformanceMissing(left, leftExists), conformanceMissing(right, rightExists))
+			continue
+		}
+		collector.compare(childPath, left, right)
+	}
+}
+
+func (collector *conformanceDifferenceCollector) compareArrays(path string, reference, candidate []any) {
+	for index := 0; index < max(len(reference), len(candidate)); index++ {
+		childPath := path + "/" + strconv.Itoa(index)
+		if index >= len(reference) || index >= len(candidate) {
+			var left, right any = "<missing>", "<missing>"
+			if index < len(reference) {
+				left = reference[index]
+			}
+			if index < len(candidate) {
+				right = candidate[index]
+			}
+			collector.add(childPath, left, right)
+			continue
+		}
+		collector.compare(childPath, reference[index], candidate[index])
+	}
 }
 
 func conformanceMissing(value any, exists bool) any {
@@ -275,6 +302,10 @@ func conformanceMissing(value any, exists bool) any {
 
 func (collector *conformanceDifferenceCollector) add(path string, reference, candidate any) {
 	if collector.err != nil {
+		return
+	}
+	if len(collector.differences) >= maximumConformanceDifferences {
+		collector.err = fmt.Errorf("comparison exceeds %d differences", maximumConformanceDifferences)
 		return
 	}
 	if path == "" {

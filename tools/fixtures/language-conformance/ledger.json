@@ -33,7 +33,11 @@
     "fixtures/javascript-architecture.json",
     "fixtures/javascript-dependencies.json",
     "fixtures/javascript-toolchain.json",
-    "fixtures/shell-complete.json",
+    "fixtures/shell-comments-portability.json",
+    "fixtures/shell-discovery-lint.json",
+    "fixtures/shell-format-absence.json",
+    "fixtures/shell-syntax-dialects.json",
+    "fixtures/shell-platform-matrix.json",
     "fixtures/shared-scope-policy.json",
     "fixtures/shared-testing-dependencies.json",
     "fixtures/shared-lifecycle-adjacent.json",
@@ -1722,20 +1726,32 @@
       "guarantee": "Supported shell extensions and shebang-only scripts are recognized with the correct Bash or POSIX dialect without claiming unrelated executable text.",
       "currentImplementation": [
         "internal/quality/quality.go",
-        "internal/quality/comments_shell.go"
+        "internal/quality/comments_shell.go",
+        "providers/shell/adapter.go",
+        "providers/shell/pack/code-polishy-pack.json"
       ],
-      "helpers": ["internal/quality/comments_shell_parser.go"],
+      "helpers": [
+        "internal/quality/comments_shell_parser.go",
+        "providers/shell/parse.go"
+      ],
       "cliRoutes": ["check"],
       "policyKeys": [],
       "activation": ["A supported shell extension or shebang is governed."],
       "documentation": ["docs/policies/code-quality.md"],
       "tests": [
         "internal/quality/comments_test.go#TestSourceCommentScannersHonorGrammarBoundaries",
-        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares",
+        "providers/shell/adapter_test.go#TestDiscoveryAccountsForSelectedShellSource",
+        "providers/shell/adapter_test.go#TestParseSourceUsesPOSIXAndBashDialects"
       ],
       "futureOwner": "pack",
       "boundaryRationale": "Shell recognition and dialect semantics belong to the shell pack; core retains inventory containment.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "Installed pack execution replaces per-file native syntax commands and the native ShellCheck wrapper while preserving the recognized shell inventory.",
+      "fixtures": [
+        "shell-platform-matrix",
+        "shell-discovery-lint",
+        "shell-syntax-dialects"
+      ],
       "commands": ["check"],
       "profiles": ["check"],
       "modes": ["full", "focused"],
@@ -1753,18 +1769,34 @@
       "language": "shell",
       "capability": "lint",
       "guarantee": "Shell syntax and pinned ShellCheck diagnostics preserve exact paths and locations, declared source reads, dialects, and visible tool or coverage failures.",
-      "currentImplementation": ["internal/quality/quality.go"],
-      "helpers": ["tools/shellcheck.sh", "internal/runner/runner.go"],
+      "currentImplementation": [
+        "internal/quality/quality.go",
+        "providers/shell/adapter.go",
+        "providers/shell/parse.go",
+        "providers/shell/shellcheck.go"
+      ],
+      "helpers": [
+        "tools/shellcheck.sh",
+        "internal/runner/runner.go",
+        "providers/shell/pack/bin/adapter"
+      ],
       "cliRoutes": ["check"],
       "policyKeys": [],
       "activation": ["Governed shell source is selected."],
       "documentation": ["docs/policies/code-quality.md"],
       "tests": [
-        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares",
+        "providers/shell/adapter_test.go#TestLintAnalysisReturnsFactsShellCheckAndVerifiedInputs",
+        "providers/shell/adapter_test.go#TestTypecheckReportsDialectSyntaxAtItsSource"
       ],
       "futureOwner": "pack",
       "boundaryRationale": "The shell pack owns syntax and ShellCheck; core validates reads, bounds, and finding authority.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "The pack replaces one repository-level ShellCheck command failure with exact located ShellCheck rules and a dialect-aware syntax finding.",
+      "fixtures": [
+        "shell-platform-matrix",
+        "shell-discovery-lint",
+        "shell-syntax-dialects"
+      ],
       "commands": ["check"],
       "profiles": ["check"],
       "modes": ["full", "focused"],
@@ -1784,7 +1816,8 @@
       "guarantee": "Shell comments and directives respect heredocs, quoting, substitutions, shebangs, byte limits, and grammar boundaries with exact locations.",
       "currentImplementation": [
         "internal/quality/comments_shell.go",
-        "internal/quality/comments_shell_parser.go"
+        "internal/quality/comments_shell_parser.go",
+        "providers/shell/parse.go"
       ],
       "helpers": ["internal/quality/comments.go"],
       "cliRoutes": ["check"],
@@ -1793,11 +1826,14 @@
       "documentation": ["docs/design/source-comment-policy.md"],
       "tests": [
         "internal/quality/comments_test.go#TestShellSourceParserIsByteBounded",
-        "internal/quality/comments_test.go#TestSourceCommentFStringAndHeredocSubstitutions"
+        "internal/quality/comments_test.go#TestSourceCommentFStringAndHeredocSubstitutions",
+        "providers/shell/adapter_test.go#TestParseSourceClassifiesDirectivesCommentsAndPortabilityFacts",
+        "providers/shell/adapter_test.go#TestParseSourceFindsCommentsInsideHeredocSubstitutions"
       ],
       "futureOwner": "shared-protocol",
       "boundaryRationale": "The pack emits shell syntax facts; core enforces source-comment policy.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "Pack comment facts retain the native policy result and add the exact source line and column to report evidence.",
+      "fixtures": ["shell-platform-matrix", "shell-comments-portability"],
       "commands": ["check"],
       "profiles": ["check"],
       "modes": ["full", "focused"],
@@ -1815,7 +1851,10 @@
       "language": "shell",
       "capability": "format",
       "guarantee": "Shell formatting remains explicitly unsupported until a formatter is deliberately specified; checks never imply or perform an invented rewrite.",
-      "currentImplementation": ["internal/quality/quality.go"],
+      "currentImplementation": [
+        "internal/quality/quality.go",
+        "providers/shell/pack/code-polishy-pack.json"
+      ],
       "helpers": [],
       "cliRoutes": ["format", "check"],
       "policyKeys": [],
@@ -1826,7 +1865,8 @@
       ],
       "futureOwner": "pack",
       "boundaryRationale": "The shell pack declares capability absence; core reports uncovered requested operations.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "The native formatter path silently performed no Shell work; the selected pack now reports its explicit unsupported-format declaration.",
+      "fixtures": ["shell-platform-matrix", "shell-format-absence"],
       "commands": ["format", "check"],
       "profiles": ["format"],
       "modes": ["check", "write"],
@@ -1846,7 +1886,9 @@
       "guarantee": "Shell machine paths, sibling references, and other portability facts retain exact source locations while policy coverage remains core-owned.",
       "currentImplementation": [
         "internal/portability/portability.go",
-        "internal/quality/comments_shell_parser.go"
+        "internal/quality/comments_shell_parser.go",
+        "internal/pack/function_facts.go",
+        "providers/shell/parse.go"
       ],
       "helpers": [],
       "cliRoutes": ["check", "gate"],
@@ -1854,11 +1896,13 @@
       "activation": ["Shell source is included in portability analysis."],
       "documentation": ["docs/policies/portability.md"],
       "tests": [
-        "internal/portability/portability_test.go#TestAdvisoriesPreserveLocationsAndCanonicalOrder"
+        "internal/portability/portability_test.go#TestAdvisoriesPreserveLocationsAndCanonicalOrder",
+        "providers/shell/adapter_test.go#TestParseSourceClassifiesDirectivesCommentsAndPortabilityFacts"
       ],
       "futureOwner": "shared-protocol",
       "boundaryRationale": "The pack identifies shell syntax facts; core owns cross-language portability policy.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "Pack literal facts preserve native portability rules and add exact source line and column evidence.",
+      "fixtures": ["shell-platform-matrix", "shell-comments-portability"],
       "commands": ["check", "gate"],
       "profiles": ["portability"],
       "modes": ["full", "focused"],
@@ -1879,7 +1923,11 @@
       "currentImplementation": [
         "internal/release/launcher_manifest.go",
         "tools/install-shellcheck.sh",
-        "tools/shellcheck.sh"
+        "tools/shellcheck.sh",
+        "providers/shell/adapter.go",
+        "providers/shell/pack/bin/adapter",
+        "providers/shell/pack/code-polishy-pack.json",
+        "scripts/build-shell-provider.sh"
       ],
       "helpers": ["internal/runner/runner.go"],
       "cliRoutes": ["doctor", "check"],
@@ -1891,11 +1939,13 @@
       ],
       "tests": [
         "scripts/test-install.sh",
-        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares"
+        "internal/quality/quality_test.go#TestShellCheckReadsTheSourcesAScriptDeclares",
+        "providers/shell/adapter_test.go#TestLintReportsToolBindingAndExecutionFailures"
       ],
       "futureOwner": "pack",
       "boundaryRationale": "The shell pack owns its analyzer distribution; core verifies artifact and failure isolation.",
-      "fixtures": ["shell-complete"],
+      "referenceChange": "The installed pack replaces native shell commands with the authenticated pack adapter and exact policy-owned Node and ShellCheck artifacts.",
+      "fixtures": ["shell-platform-matrix", "shell-discovery-lint"],
       "commands": ["doctor", "check"],
       "profiles": ["installed"],
       "modes": ["check"],

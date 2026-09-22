@@ -43,3 +43,8 @@ must also appear in `acceptedDifferences` with its exact normalized JSON
 pointer and exact canonical JSON values. Wildcards, path-only allowances, and
 undeclared differences fail the fixture. Repository, policy, and isolated pack
 data roots are the only filesystem values normalized for this comparison.
+
+Accepted differences are platform-specific evidence. A fixture must list only
+platforms on which those exact values were captured. Unexecuted platform cells
+remain planned fixtures with explicit gaps; building a foreign-platform binary
+does not activate or pass its runtime case.
