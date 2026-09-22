@@ -1,0 +1,13 @@
+python-pack-fixture
+import io
+
+
+class Input(io.RawIOBase):
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        return 0
+
+
+print(Input)

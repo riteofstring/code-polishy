@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Thirty-eight built-pack fixtures include
+enforcement. Forty built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -613,10 +613,14 @@ nonempty module marks, while project-local and rebound lookalikes remain
 reportable. SQLite `row_factory` writes now require receivers proven through an
 exact external constructor or annotation; constructor aliases and context
 managers flow through the same conservative state, while unknown factories,
-reassignments, and ambiguous writes remain findings. PEP 621 scripts and grouped
-entry points now retain exact module-symbol definitions and re-export chains;
-project-owned build backends retain their objects and standard hooks. Missing or
-ambiguous manifest targets withhold project-wide dead-code facts.
+reassignments, and ambiguous writes remain findings. Standard-library callbacks
+and class attributes now use contained ancestry across aliases and project
+re-exports, including AST visitors, parsers, handlers, raw streams, HTTP
+dispatch, and threading mixins; project-local lookalike modules cannot satisfy
+those contracts. PEP 621 scripts and grouped entry points now retain exact
+module-symbol definitions and re-export chains; project-owned build backends
+retain their objects and standard hooks. Missing or ambiguous manifest targets
+withhold project-wide dead-code facts.
 Repository-local `python.contract` entry points now use the authenticated,
 contained Astroid resolver to retain direct and nested-instance definitions,
 explicit members, and re-export chains without importing target code. Invalid,

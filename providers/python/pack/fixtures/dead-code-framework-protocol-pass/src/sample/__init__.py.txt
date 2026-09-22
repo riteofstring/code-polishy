@@ -1,0 +1,30 @@
+python-pack-fixture
+from .bases import HandlerBase, InputBase, ServerBase, VisitorBase
+
+
+class Input(InputBase):
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        return 0
+
+
+class Handler(HandlerBase):
+    def do_CUSTOM(self):
+        return None
+
+    def log_message(self, message, *args):
+        return None
+
+
+class Server(ServerBase):
+    daemon_threads = True
+
+
+class Visitor(VisitorBase):
+    def visit_Name(self, node):
+        return node
+
+
+print(Input, Handler, Server, Visitor)

@@ -1,0 +1,21 @@
+python-pack-fixture
+from ast import NodeVisitor as ASTVisitor
+from http.server import BaseHTTPRequestHandler as HTTPHandler
+from io import RawIOBase as Raw
+from socketserver import ThreadingMixIn as Threads
+
+
+class InputBase(Raw):
+    pass
+
+
+class HandlerBase(HTTPHandler):
+    pass
+
+
+class ServerBase(Threads):
+    pass
+
+
+class VisitorBase(ASTVisitor):
+    pass

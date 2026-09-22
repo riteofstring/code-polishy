@@ -53,7 +53,10 @@ autouse fixtures and nonempty module marks; project-local, rebound, non-autouse,
 and function-local lookalikes remain reportable. SQLite `row_factory` writes are
 retained only for receivers established by exact external constructors,
 validated `factory=` arguments, annotations, aliases, and conservative forward
-flow. The adapter returns dead-code facts for core to interpret as the existing
+flow. Standard-library callback and class-attribute contracts use contained
+ancestry across aliases and project re-exports; project-local lookalike modules
+cannot impersonate `ast`, `html`, `http`, `io`, `socketserver`, or `urllib`.
+The adapter returns dead-code facts for core to interpret as the existing
 `quality.deadCode` finding. Exact PEP 621 script, GUI script, and grouped
 entry-point targets retain their source definition and re-export chain. An exact
 in-tree build backend retains its object and recognized build hooks when
@@ -90,9 +93,10 @@ entry-point contracts and exact imported decorator contracts are interpreted
 for dead-code reachability, as are exact imported module-binding contracts and
 complete type contracts for members, fields, decorators, and attributes. Exact
 pytest autouse fixtures, module marks, and SQLite connection attributes are
-bundled framework behavior. TypedDict and remaining framework retention, dynamic
-references, external attributes, cross-module loader-alias parity, runtime
-loaders, dependency evidence, and project-environment resolution remain
+bundled framework behavior, together with provenance-aware standard-library
+callbacks and class attributes. TypedDict and remaining framework retention,
+dynamic references, external attributes, cross-module loader-alias parity,
+runtime loaders, dependency evidence, and project-environment resolution remain
 migration work and cannot be inferred from these claims. The pack is not
 eligible for the ownership cutover until every Python ledger row has executable
 evidence.

@@ -6,7 +6,6 @@ import os
 import pkgutil
 import sys
 from collections import Counter, defaultdict
-from contextlib import nullcontext
 from unittest.mock import patch
 
 PROTOCOL = "code-polishy-python-vulture/v1"
@@ -33,6 +32,16 @@ KINDS = {
     "unreachable_code",
     "variable",
 }
+BUNDLED_TYPE_TARGETS = (
+    "ast.NodeTransformer",
+    "ast.NodeVisitor",
+    "html.parser.HTMLParser",
+    "http.server.BaseHTTPRequestHandler",
+    "io.RawIOBase",
+    "socketserver.ThreadingMixIn",
+    "urllib.request.BaseHandler",
+    "urllib.request.HTTPRedirectHandler",
+)
 
 
 def exact_object(value, keys, name):
@@ -256,17 +265,24 @@ class ContainedAstroidReferences:
         for name, path in sorted(self.paths.items()):
             module = self.cache[name]
             for node in module.nodes_of_class(nodes.ClassDef):
-                if self.has_base(node, roots, set()):
-                    classes.add((path, node.lineno, node.name))
+                try:
+                    if self.has_base(
+                        node, roots, set(), contract.get("external", False)
+                    ):
+                        classes.add((path, node.lineno, node.name))
+                except self.errors:
+                    continue
         return classes
 
-    def has_base(self, node, roots, seen):
+    def has_base(self, node, roots, seen, external=False):
         from astroid import nodes
 
         if node in seen or len(seen) >= MAX_ASTROID_DEPTH:
             return False
         seen = seen | {node}
-        if node.qname() in roots & self.declared_roots:
+        if node.qname() in roots & self.declared_roots and (
+            not external or node.root().name not in self.paths
+        ):
             return True
         for base in node.bases:
             names = list(base.nodes_of_class(nodes.Name))
@@ -278,7 +294,7 @@ class ContainedAstroidReferences:
             parent = inferred[0]
             if parent.root().name not in self.paths and parent.qname() in roots:
                 return True
-            if self.has_base(parent, roots, seen):
+            if self.has_base(parent, roots, seen, external):
                 return True
         return False
 
@@ -1233,49 +1249,114 @@ def module_binding_locations(files, contract):
     return result
 
 
+def standard_protocol_callback(target, name):
+    if target in {"ast.NodeVisitor", "ast.NodeTransformer"}:
+        return name.startswith("visit_")
+    if target == "urllib.request.BaseHandler":
+        return (
+            name in {"redirect_request", "default_open", "unknown_open", "proxy_open"}
+            or name.startswith("http_error_")
+            or name.endswith("_open")
+        )
+    if target == "urllib.request.HTTPRedirectHandler":
+        return name == "redirect_request" or name.startswith("http_error_")
+    if target == "html.parser.HTMLParser":
+        return name in {
+            "handle_starttag",
+            "handle_startendtag",
+            "handle_endtag",
+            "handle_data",
+            "handle_entityref",
+            "handle_charref",
+            "handle_comment",
+            "handle_decl",
+            "unknown_decl",
+        }
+    if target == "io.RawIOBase":
+        return name in {"readable", "readinto"}
+    if target == "http.server.BaseHTTPRequestHandler":
+        return name == "log_message" or name.startswith("do_") and len(name) > 3
+    return False
+
+
+def standard_protocol_parameters(file, node, target):
+    result = set()
+    arguments = node.args.posonlyargs + node.args.args
+    buffered = target == "io.RawIOBase" and node.name == "readinto"
+    logging = (
+        target == "http.server.BaseHTTPRequestHandler" and node.name == "log_message"
+    )
+    if (buffered or logging) and len(arguments) > 1:
+        argument = arguments[1]
+        result.add(definition_location(file["path"], argument, argument.arg))
+    if logging and node.args.vararg is not None:
+        result.add(
+            definition_location(file["path"], node.args.vararg, node.args.vararg.arg)
+        )
+    return result
+
+
+def standard_protocol_locations(files, resolver):
+    result = set()
+    writes = {file["path"]: source_write_counts(file) for file in files}
+    for target in BUNDLED_TYPE_TARGETS:
+        contract = {"kind": "type", "target": target, "external": True}
+        try:
+            applicable = resolver.type_classes(contract)
+        except ValueError:
+            continue
+        for file in files:
+            classes = {
+                (line, name) for path, line, name in applicable if path == file["path"]
+            }
+            if not classes:
+                continue
+            for node in ast.walk(file["tree"]):
+                if (
+                    not isinstance(node, ast.ClassDef)
+                    or (node.lineno, node.name) not in classes
+                ):
+                    continue
+                for statement in node.body:
+                    for item in class_scope_nodes(statement):
+                        if isinstance(
+                            item, (ast.FunctionDef, ast.AsyncFunctionDef)
+                        ) and standard_protocol_callback(target, item.name):
+                            result.add(
+                                definition_location(file["path"], item, item.name)
+                            )
+                            result.update(
+                                standard_protocol_parameters(file, item, target)
+                            )
+                        elif target == "socketserver.ThreadingMixIn":
+                            if isinstance(item, ast.Assign):
+                                targets = item.targets
+                            elif isinstance(item, ast.AnnAssign):
+                                targets = [item.target]
+                            else:
+                                continue
+                            for assigned in targets:
+                                if (
+                                    isinstance(assigned, ast.Name)
+                                    and assigned.id == "daemon_threads"
+                                    and writes[file["path"]][
+                                        (assigned.lineno, assigned.id)
+                                    ]
+                                    <= 1
+                                ):
+                                    result.add(
+                                        definition_location(
+                                            file["path"], assigned, assigned.id
+                                        )
+                                    )
+    return result
+
+
 def callback_locations(file):
     result = set()
     bindings = import_bindings(file)
     zip_infos = set()
-    protocols = {
-        "ast.NodeVisitor": lambda name: name.startswith("visit_"),
-        "ast.NodeTransformer": lambda name: name.startswith("visit_"),
-        "urllib.request.BaseHandler": lambda name: (
-            name in {"redirect_request", "default_open", "unknown_open", "proxy_open"}
-            or name.startswith("http_error_")
-            or name.endswith("_open")
-        ),
-        "urllib.request.HTTPRedirectHandler": lambda name: (
-            name == "redirect_request" or name.startswith("http_error_")
-        ),
-        "html.parser.HTMLParser": lambda name: (
-            name
-            in {
-                "handle_starttag",
-                "handle_startendtag",
-                "handle_endtag",
-                "handle_data",
-                "handle_entityref",
-                "handle_charref",
-                "handle_comment",
-                "handle_decl",
-                "unknown_decl",
-            }
-        ),
-    }
     for node in ast.walk(file["tree"]):
-        if isinstance(node, ast.ClassDef):
-            predicates = [
-                protocols.get(expanded_name(base, bindings)) for base in node.bases
-            ]
-            predicates = [
-                predicate for predicate in predicates if predicate is not None
-            ]
-            for child in node.body:
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
-                    predicate(child.name) for predicate in predicates
-                ):
-                    result.add(definition_location(file["path"], child, child.name))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {
             "__exit__",
             "__aexit__",
@@ -1556,17 +1637,12 @@ def reachability_locations(files, references, backends, contracts):
             modules.setdefault(file["module"], []).append(file)
     keep = set()
     problems = []
-    semantic_contracts = [
-        contract
-        for contract in contracts
-        if contract["kind"] in {"entry-point", "type"}
+    bundled_contracts = [
+        {"kind": "type", "target": target, "external": True}
+        for target in BUNDLED_TYPE_TARGETS
     ]
-    context = (
-        ContainedAstroidReferences(files, contracts)
-        if semantic_contracts
-        else nullcontext()
-    )
-    with context as resolver:
+    with ContainedAstroidReferences(files, contracts + bundled_contracts) as resolver:
+        keep.update(standard_protocol_locations(files, resolver))
         for reference in references:
             try:
                 parts = reference["symbol"].split(".")
@@ -1633,12 +1709,9 @@ def analyze(request):
     installed_version = importlib.metadata.version("vulture")
     if installed_version != TOOL_VERSION:
         raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
-    if any(contract["kind"] in {"entry-point", "type"} for contract in contracts):
-        installed_astroid = importlib.metadata.version("astroid")
-        if installed_astroid != ASTROID_VERSION:
-            raise ValueError(
-                f"Python contract analysis requires Astroid {ASTROID_VERSION}"
-            )
+    installed_astroid = importlib.metadata.version("astroid")
+    if installed_astroid != ASTROID_VERSION:
+        raise ValueError(f"Python contract analysis requires Astroid {ASTROID_VERSION}")
     files = read_files(request["files"])
     paths = [file["path"] for file in files]
     import vulture.core as vulture_core
