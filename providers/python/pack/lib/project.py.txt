@@ -1,12 +1,13 @@
 python-pack-library
 import importlib.metadata
 import json
+import re
 import sys
 import tomllib
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.utils import InvalidName, canonicalize_name
 from packaging.version import InvalidVersion, Version
-
 
 PROTOCOL = "code-polishy-python-project/v1"
 PACKAGING_VERSION = "26.3"
@@ -21,7 +22,11 @@ def exact_object(value, keys, name):
 
 
 def stable_public_version(version):
-    return not version.is_prerelease and not version.is_devrelease and version.local is None
+    return (
+        not version.is_prerelease
+        and not version.is_devrelease
+        and version.local is None
+    )
 
 
 def specifier_version(value):
@@ -64,13 +69,19 @@ def target_version(value):
     if lower is None or len(lower.release) < 2:
         return "", "specifier has no minimum supported Python version"
     if lower.release[:2] < (3, 7) or lower.release[:2] > (3, 12):
-        return "", "minimum Python version is outside the carried parser range of 3.7 through 3.12"
+        return (
+            "",
+            "minimum Python version is outside the carried parser range of 3.7 through 3.12",
+        )
     for minor in range(lower.release[1], 13):
         for patch in sorted(candidates):
             candidate = Version(f"3.{minor}.{patch}")
             if specifiers.contains(candidate, prereleases=False):
                 return f"py3{minor}", ""
-    return "", "specifier has no stable Python version supported by the carried CPython 3.12 parser"
+    return (
+        "",
+        "specifier has no stable Python version supported by the carried CPython 3.12 parser",
+    )
 
 
 def line_length_problems(path, document, prefix):
@@ -89,11 +100,100 @@ def line_length_problems(path, document, prefix):
     if isinstance(lint, dict):
         pycodestyle = lint.get("pycodestyle", {})
         if isinstance(pycodestyle, dict) and "max-line-length" in pycodestyle:
-            values.append(("lint.pycodestyle.max-line-length", pycodestyle["max-line-length"]))
+            values.append(
+                ("lint.pycodestyle.max-line-length", pycodestyle["max-line-length"])
+            )
     for name, value in values:
         if type(value) is not int or value != 88:
-            problems.append({"path": path, "message": f"{name} must be the policy-owned line length 88"})
+            problems.append(
+                {
+                    "path": path,
+                    "message": f"{name} must be the policy-owned line length 88",
+                }
+            )
     return problems
+
+
+def identifier_chain(value):
+    return (
+        isinstance(value, str)
+        and value
+        and all(
+            re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", part) for part in value.split(".")
+        )
+    )
+
+
+def entry_point_target(value):
+    if not isinstance(value, str) or value.strip() != value:
+        raise ValueError("must be an exact module:symbol reference")
+    target = value
+    extras = ""
+    opening = value.find("[")
+    if opening >= 0:
+        if value.count("[") != 1 or value.count("]") != 1 or not value.endswith("]"):
+            raise ValueError("has malformed extras")
+        target = value[:opening].rstrip(" \t")
+        extras = value[opening + 1 : -1]
+        if not extras:
+            raise ValueError("has no extras")
+    parts = target.split(":")
+    if (
+        len(parts) != 2
+        or not identifier_chain(parts[0])
+        or not identifier_chain(parts[1])
+    ):
+        raise ValueError("must be an exact module:symbol reference")
+    seen = set()
+    for item in extras.split(",") if extras else ():
+        extra = item.strip()
+        try:
+            normalized = canonicalize_name(extra, validate=True)
+        except InvalidName as error:
+            raise ValueError(f"has invalid extra {extra!r}") from error
+        if normalized in seen:
+            raise ValueError(f"declares extra {extra!r} more than once")
+        seen.add(normalized)
+    return parts[0]
+
+
+def project_entry_points(path, project, problems):
+    root = project.get("entry-points", {})
+    if not isinstance(root, dict):
+        problems.append(
+            {
+                "path": path,
+                "message": "project.entry-points must contain entry point groups",
+            }
+        )
+        return []
+    result = []
+
+    def visit(value, parts):
+        if isinstance(value, dict):
+            for key in sorted(value):
+                visit(value[key], parts + [key])
+            return
+        if len(parts) < 2:
+            problems.append(
+                {
+                    "path": path,
+                    "message": "project.entry-points must identify an entry point",
+                }
+            )
+            return
+        field = "project.entry-points." + ".".join(parts)
+        try:
+            module = entry_point_target(value)
+        except ValueError as error:
+            problems.append(
+                {"path": path, "message": f"invalid entry point {field}: {error}"}
+            )
+            return
+        result.append({"group": ".".join(parts[:-1]), "module": module})
+
+    visit(root, [])
+    return sorted({(item["group"], item["module"]) for item in result})
 
 
 def manifest_fact(item):
@@ -102,6 +202,7 @@ def manifest_fact(item):
     target = ""
     requires_python = ""
     backend_paths = []
+    entry_points = []
     try:
         document = tomllib.loads(item["source"])
         project = document.get("project", {})
@@ -112,24 +213,47 @@ def manifest_fact(item):
             build_system = {}
         requires_python = project.get("requires-python", "")
         if not isinstance(requires_python, str) or not requires_python:
-            problems.append({"path": path, "message": "project.requires-python is required for policy-owned Python analysis"})
+            problems.append(
+                {
+                    "path": path,
+                    "message": "project.requires-python is required for policy-owned Python analysis",
+                }
+            )
             requires_python = ""
         else:
             target, error = target_version(requires_python)
             if error:
-                problems.append({"path": path, "message": f"project.requires-python cannot select Python analyzers: {error}"})
+                problems.append(
+                    {
+                        "path": path,
+                        "message": f"project.requires-python cannot select Python analyzers: {error}",
+                    }
+                )
         backend_paths = build_system.get("backend-path", [])
-        if not isinstance(backend_paths, list) or any(not isinstance(value, str) or not value for value in backend_paths):
-            problems.append({"path": path, "message": "build-system.backend-path must contain relative directory strings"})
+        if not isinstance(backend_paths, list) or any(
+            not isinstance(value, str) or not value for value in backend_paths
+        ):
+            problems.append(
+                {
+                    "path": path,
+                    "message": "build-system.backend-path must contain relative directory strings",
+                }
+            )
             backend_paths = []
+        entry_points = project_entry_points(path, project, problems)
         problems.extend(line_length_problems(path, document, ["tool", "ruff"]))
     except (TypeError, ValueError, tomllib.TOMLDecodeError) as error:
-        problems.append({"path": path, "message": f"pyproject.toml is malformed: {error}"})
+        problems.append(
+            {"path": path, "message": f"pyproject.toml is malformed: {error}"}
+        )
     return {
         "manifest": item["manifest"],
         "requiresPython": requires_python,
         "targetVersion": target,
         "backendPaths": sorted(set(backend_paths)),
+        "entryPoints": [
+            {"group": group, "module": module} for group, module in entry_points
+        ],
         "problems": problems,
     }
 
@@ -139,19 +263,31 @@ def add_ruff_problem(project, item):
         document = tomllib.loads(item["source"])
         project["problems"].extend(line_length_problems(item["path"], document, []))
     except (TypeError, ValueError, tomllib.TOMLDecodeError) as error:
-        project["problems"].append({"path": item["path"], "message": f"Ruff configuration is malformed: {error}"})
+        project["problems"].append(
+            {
+                "path": item["path"],
+                "message": f"Ruff configuration is malformed: {error}",
+            }
+        )
 
 
 def analyze(request):
     exact_object(request, {"protocol", "inputs"}, "request")
-    if request["protocol"] != PROTOCOL or not isinstance(request["inputs"], list) or not 1 <= len(request["inputs"]) <= MAX_ITEMS:
+    if (
+        request["protocol"] != PROTOCOL
+        or not isinstance(request["inputs"], list)
+        or not 1 <= len(request["inputs"]) <= MAX_ITEMS
+    ):
         raise ValueError("request has an invalid protocol identity or input count")
     projects = {}
     for index, item in enumerate(request["inputs"]):
         exact_object(item, {"path", "manifest", "kind", "source"}, f"input {index}")
         if item["kind"] not in {"manifest", "ruff"}:
             raise ValueError(f"input {index} has an invalid kind")
-        if not all(isinstance(item[field], str) and item[field] for field in ("path", "manifest", "source")):
+        if not all(
+            isinstance(item[field], str) and item[field]
+            for field in ("path", "manifest", "source")
+        ):
             raise ValueError(f"input {index} has an invalid value")
         if item["kind"] == "manifest":
             if item["path"] != item["manifest"] or item["manifest"] in projects:
@@ -164,18 +300,31 @@ def analyze(request):
             add_ruff_problem(projects[item["manifest"]], item)
     for project in projects.values():
         project["problems"].sort(key=lambda value: (value["path"], value["message"]))
-    return {"protocol": PROTOCOL, "projects": [projects[key] for key in sorted(projects)]}
+    return {
+        "protocol": PROTOCOL,
+        "projects": [projects[key] for key in sorted(projects)],
+    }
 
 
 def main():
     if sys.version_info[:2] != (3, 12):
         raise ValueError("Python project discovery requires CPython 3.12")
     if importlib.metadata.version("packaging") != PACKAGING_VERSION:
-        raise ValueError(f"Python project discovery requires packaging {PACKAGING_VERSION}")
+        raise ValueError(
+            f"Python project discovery requires packaging {PACKAGING_VERSION}"
+        )
     data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
     if len(data) > MAX_INPUT_BYTES:
         raise ValueError("request exceeds the byte limit")
-    response = json.dumps(analyze(json.loads(data)), ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8") + b"\n"
+    response = (
+        json.dumps(
+            analyze(json.loads(data)),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    )
     if len(response) > MAX_OUTPUT_BYTES:
         raise ValueError("response exceeds the byte limit")
     sys.stdout.buffer.write(response)

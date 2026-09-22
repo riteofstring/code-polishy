@@ -215,6 +215,14 @@
       "expectedStatus": "pass"
     },
     {
+      "name": "architecture-computed-pass",
+      "command": "analyze",
+      "capability": "architecture",
+      "project": "fixtures/architecture-computed-pass",
+      "files": ["src/sample/loader.py"],
+      "expectedStatus": "pass"
+    },
+    {
       "name": "architecture-fail",
       "command": "analyze",
       "capability": "architecture",

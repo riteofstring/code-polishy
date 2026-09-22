@@ -151,7 +151,7 @@ class ImportVisitor(ast.NodeVisitor):
         self.imports = []
         self.dynamic_imports = []
         self.type_only = 0
-        self.bindings = [{"__import__": "__import__"}]
+        self.bindings = [{"__import__": "builtins.__import__"}]
 
     def import_kind(self):
         if self.type_only or self.path.endswith(".pyi"):
@@ -210,8 +210,9 @@ class ImportVisitor(ast.NodeVisitor):
                 self.shadow(name)
             return
         known = {
-            ("builtins", "__import__"): "__import__",
+            ("builtins", "__import__"): "builtins.__import__",
             ("importlib", "import_module"): "importlib.import_module",
+            ("pkgutil", "resolve_name"): "pkgutil.resolve_name",
             ("typing", "TYPE_CHECKING"): "typing.TYPE_CHECKING",
         }
         for item in node.names:
@@ -238,9 +239,11 @@ class ImportVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node):
         callee = self.callee(node.func)
-        if callee == "builtins.__import__":
-            callee = "__import__"
-        if callee in {"__import__", "importlib.import_module"}:
+        if callee in {
+            "builtins.__import__",
+            "importlib.import_module",
+            "pkgutil.resolve_name",
+        }:
             self.dynamic_imports.append(
                 {
                     "path": self.path,

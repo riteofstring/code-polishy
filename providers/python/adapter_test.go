@@ -79,7 +79,7 @@ func (project fakeProject) inspect(_ context.Context, _ request, inputs []projec
 		if !found {
 			fact = projectFact{
 				Manifest: input.Manifest, RequiresPython: "==3.12.*", TargetVersion: "py312",
-				BackendPaths: []string{}, Problems: []projectProblem{},
+				BackendPaths: []string{}, EntryPoints: []projectEntryPoint{}, Problems: []projectProblem{},
 			}
 		}
 		result[input.Manifest] = fact
@@ -193,7 +193,7 @@ func TestInvalidProjectMetadataStopsOnlyItsScopeWithoutRequiringTools(t *testing
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "lint", []byte("value = 1\n"))
 	request.Tools = nil
-	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"","targetVersion":"","sourceRoots":[".","src"],"problems":[{"path":"pyproject.toml","message":"project.requires-python is required"}]}`)
+	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"","targetVersion":"","sourceRoots":[".","src"],"entryPoints":[],"problems":[{"path":"pyproject.toml","message":"project.requires-python is required"}]}`)
 	result := (adapter{}).run(context.Background(), request)
 	if result.Status != "incomplete" || len(result.Findings) != 1 || result.Findings[0].Rule != "project.configuration" || len(result.Coverage.Unsupported) != 1 {
 		t.Fatalf("result = %+v", result)
@@ -291,7 +291,7 @@ func TestArchitectureReturnsResolvedRuntimeImportFactsForTheCompleteProjectScope
 	}
 }
 
-func TestArchitectureRejectsComputedImportsUntilDeclarationsAreSupported(t *testing.T) {
+func TestArchitectureRejectsUndeclaredComputedImports(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "architecture", []byte("__import__(name)\n"))
 	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
@@ -304,11 +304,106 @@ func TestArchitectureRejectsComputedImportsUntilDeclarationsAreSupported(t *test
 	}
 }
 
+func TestArchitectureResolvesDeclaredComputedImportsAsProvenDynamicFacts(t *testing.T) {
+	root := t.TempDir()
+	source := []byte("import importlib\nimportlib.import_module(name)\n")
+	request := pythonTestRequest(t, root, "architecture", source)
+	target := []byte("value = 1\n")
+	writePythonTestInput(t, root, &request, "src/app/plugins/first.py", target)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/app/plugins/first.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/app/plugins/first.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/app/plugins/first.py")
+	digest := sha256.Sum256(source)
+	declaration := computedImportDeclaration{
+		Project: "pyproject.toml", Importer: "src/app.py", Module: "app", ModuleScope: true,
+		Callee: "importlib.import_module", Line: 2, Column: 1, Shape: "call", Argument: "name",
+		SourceSHA256: hex.EncodeToString(digest[:]), Namespace: "app.plugins", Targets: []string{"app.plugins.first"},
+	}
+	setPythonComputedImportPolicy(t, &request, declaration)
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	graph := ruffGraph{"src/app.py": {}, "src/app/plugins/first.py": {}}
+	dynamic := dynamicImport{Path: "src/app.py", Line: 2, Column: 1, Callee: "importlib.import_module"}
+	result := (adapter{ruff: fakeRuff{completeGraph: graph, runtimeGraph: graph}, facts: fakeFacts{result: factResult{DynamicImports: []dynamicImport{dynamic}, Failures: map[string]string{}}}}).run(context.Background(), request)
+	want := importFact{Path: "src/app.py", Line: 2, Column: 1, Specifier: "app.plugins.first", Resolved: "src/app/plugins/first.py", Kind: "proven-dynamic"}
+	if result.Status != "pass" || result.Facts == nil || result.Facts.Imports == nil || !slices.Equal(*result.Facts.Imports, []importFact{want}) {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestArchitectureReadsDigestBoundComputedImportConfiguration(t *testing.T) {
+	root := t.TempDir()
+	source := []byte("from importlib import import_module\nimport_module(name)\n")
+	request := pythonTestRequest(t, root, "architecture", source)
+	target := []byte("value = 1\n")
+	configuration := []byte(`{"enabled":["app.plugins.first"]}`)
+	writePythonTestInput(t, root, &request, "src/app/plugins/first.py", target)
+	writePythonTestInput(t, root, &request, "plugins.json", configuration)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/app/plugins/first.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/app/plugins/first.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/app/plugins/first.py")
+	sourceDigest := sha256.Sum256(source)
+	configurationDigest := sha256.Sum256(configuration)
+	declaration := computedImportDeclaration{
+		Project: "pyproject.toml", Importer: "src/app.py", Module: "app", ModuleScope: true,
+		Callee: "importlib.import_module", Line: 2, Column: 1, Shape: "call", Argument: "name",
+		SourceSHA256: hex.EncodeToString(sourceDigest[:]), Namespace: "app.plugins",
+		Configuration: []computedImportInput{{Path: "plugins.json", JSONPointer: "/enabled", SHA256: hex.EncodeToString(configurationDigest[:])}},
+	}
+	setPythonComputedImportPolicy(t, &request, declaration)
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	graph := ruffGraph{"src/app.py": {}, "src/app/plugins/first.py": {}}
+	dynamic := dynamicImport{Path: "src/app.py", Line: 2, Column: 1, Callee: "importlib.import_module"}
+	result := (adapter{ruff: fakeRuff{completeGraph: graph, runtimeGraph: graph}, facts: fakeFacts{result: factResult{DynamicImports: []dynamicImport{dynamic}, Failures: map[string]string{}}}}).run(context.Background(), request)
+	if result.Status != "pass" || result.Facts == nil || result.Facts.Imports == nil || len(*result.Facts.Imports) != 1 || !slices.ContainsFunc(result.Inputs, func(input inputFile) bool { return input.Path == "plugins.json" }) {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestArchitectureRejectsStaleComputedImportDeclarations(t *testing.T) {
+	root := t.TempDir()
+	source := []byte("import importlib\nimportlib.import_module(name)\n")
+	request := pythonTestRequest(t, root, "architecture", source)
+	declaration := computedImportDeclaration{
+		Project: "pyproject.toml", Importer: "src/app.py", Module: "app", ModuleScope: true,
+		Callee: "importlib.import_module", Line: 2, Column: 1, Shape: "call", Argument: "name",
+		SourceSHA256: strings.Repeat("0", 64), Namespace: "app.plugins", Targets: []string{"app.plugins.first"},
+	}
+	setPythonComputedImportPolicy(t, &request, declaration)
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	dynamic := dynamicImport{Path: "src/app.py", Line: 2, Column: 1, Callee: "importlib.import_module"}
+	result := (adapter{ruff: fakeRuff{}, facts: fakeFacts{result: factResult{DynamicImports: []dynamicImport{dynamic}, Failures: map[string]string{}}}}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Coverage.Unsupported) != 1 || !strings.Contains(result.Coverage.Unsupported[0].Reason, "source digest is stale") {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestComputedImportTargetsUseEntryPointsAndObjectRegistries(t *testing.T) {
+	configuration := []byte(`{"plugins":{"first":"app.plugins.first:Plugin"}}`)
+	digest := sha256.Sum256(configuration)
+	input := computedImportInput{Path: "plugins.json", JSONPointer: "/plugins", SHA256: hex.EncodeToString(digest[:])}
+	objectTargets, reason := computedImportTargets(pythonScopeData{}, map[string][]byte{"plugins.json": configuration}, computedImportDeclaration{
+		Callee: "pkgutil.resolve_name", Namespace: "app.plugins", Configuration: []computedImportInput{input},
+	})
+	if reason != "" || !slices.Equal(objectTargets, []string{"app.plugins.first"}) {
+		t.Fatalf("object targets = %v, reason = %q", objectTargets, reason)
+	}
+	entryTargets, reason := computedImportTargets(pythonScopeData{EntryPoints: []projectEntryPoint{{Group: "app.plugins", Module: "app.plugins.first"}}}, nil, computedImportDeclaration{EntryPointGroup: "app.plugins"})
+	if reason != "" || !slices.Equal(entryTargets, []string{"app.plugins.first"}) {
+		t.Fatalf("entry targets = %v, reason = %q", entryTargets, reason)
+	}
+	if _, err := decodeComputedJSON([]byte(`{"value":1,"value":2}`)); err == nil {
+		t.Fatal("duplicate configuration key passed")
+	}
+}
+
 func TestPythonImportResolutionPreservesTypeOnlyAndReExportKinds(t *testing.T) {
 	t.Parallel()
 	scope := analysisScope{
 		Root: ".", Members: []string{"src/pkg/__init__.py", "src/pkg/model.py", "src/pkg/types.py"},
-		Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"problems":[]}`),
+		Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[],"problems":[]}`),
 	}
 	imports := []authoredImport{
 		{Path: "src/pkg/__init__.py", Module: ".types", Names: []string{"Thing"}, Line: 1, Column: 1, Kind: "re-export"},
@@ -397,9 +492,10 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 		Files: []string{"src/app.py"}, DiagnosticFiles: []string{"src/app.py"}, Mode: "check",
 		Scopes: []analysisScope{{
 			Handle: "scope-1", Language: "python", Root: ".", Members: []string{"src/app.py"}, Context: []string{"pyproject.toml", "src/app.py"},
-			Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"problems":[]}`),
+			Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"entryPoints":[],"problems":[]}`),
 		}},
-		Context: context, Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true}}, Tools: tools,
+		Context: context, Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true}},
+		Policy: json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[]}`), Tools: tools,
 	}
 }
 
@@ -414,6 +510,26 @@ func writePythonTestInput(t *testing.T, root string, request *request, name stri
 	}
 	digest := sha256.Sum256(data)
 	request.Context = append(request.Context, inputFile{Path: name, SHA256: hex.EncodeToString(digest[:])})
+}
+
+func setPythonComputedImportPolicy(t *testing.T, request *request, declaration computedImportDeclaration) {
+	t.Helper()
+	data, err := json.Marshal(declaration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs := []string{declaration.Project, declaration.Importer}
+	for _, configuration := range declaration.Configuration {
+		inputs = append(inputs, configuration.Path)
+	}
+	policy, err := json.Marshal(policyInput{
+		Quality: json.RawMessage(`{}`), Modules: []json.RawMessage{}, Files: []json.RawMessage{},
+		Declarations: []policyDeclarationInput{{Kind: "python.computed-import", Version: 1, Scopes: []string{"scope-1"}, Inputs: uniqueSorted(inputs), Data: data}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Policy = policy
 }
 
 func mustJSON(t *testing.T, value string) string {

@@ -590,18 +590,24 @@ inputs and all existing dynamic-reference and provenance limits.
 
 Status (2026-09-22): the executable quality slice owns nearest-`pyproject.toml`
 static discovery, isolated Ruff format/lint/complexity, `ty` type checking, and
-CPython comment/docstring/function facts. Discovery now derives Python 3.7–3.12
-targets and source roots from authenticated project metadata, validates locked
-Ruff line length, and withholds only an invalid scope. Ruff uses no cache, format
-writes return only core-authorized edits, type checking covers unchanged scope
-members, and the pack now returns authored static import facts reconciled with
-Ruff's complete and runtime project graphs. Core retains module direction,
-cycle, and coverage enforcement. Twelve built-pack fixtures include
+CPython comment/docstring/function facts. The implementation branch is locked to
+`v0.27.10`. Discovery now derives Python 3.7–3.12 targets and source roots from
+authenticated project metadata, validates locked Ruff line length, and withholds
+only an invalid scope. Ruff uses no cache, format writes return only
+core-authorized edits, type checking covers unchanged scope members, and the pack
+now returns authored static import facts reconciled with Ruff's complete and
+runtime project graphs. Core retains module direction, cycle, and coverage
+enforcement. Thirteen built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
-ambiguous-module evidence. Known computed-import calls fail incomplete instead
-of being guessed. Dead code, computed-import declarations, runtime loaders,
-dependency evidence, environment resolution, framework contracts, focused graph
-closure, and the shared conformance matrix remain open.
+ambiguous-module evidence, plus an exact entry-point-backed computed import
+through the installed adapter. Recognized computed-import declarations now bind
+current source and configuration digests, resolve direct, strict JSON, PEP 621
+entry-point, and module-object registry targets, and return ordinary
+`proven-dynamic` facts. Undeclared, stale, escaping, malformed, or ambiguous
+evidence fails incomplete instead of being guessed. Dead code, remaining
+cross-module loader-alias parity, runtime loaders, dependency evidence,
+environment resolution, framework contracts, focused graph closure, and the
+shared conformance matrix remain open.
 
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python

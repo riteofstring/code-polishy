@@ -490,6 +490,13 @@ func authorizedInputPaths(request request) ([]string, error) {
 			authorized[file] = true
 		}
 	}
+	declarationPaths, err := policyDeclarationPaths(request)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range declarationPaths {
+		authorized[file] = true
+	}
 	if len(authorized) == 0 || len(authorized) > maximumInputs {
 		return nil, fmt.Errorf("authorized Python context must contain 1 to %d files", maximumInputs)
 	}

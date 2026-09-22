@@ -221,7 +221,7 @@ func validatedDynamicImports(values []dynamicImport, allowed map[string]bool, fa
 		if !allowed[value.Path] || failures[value.Path] != "" {
 			continue
 		}
-		if value.Line < 1 || value.Column < 1 || !slices.Contains([]string{"__import__", "importlib.import_module"}, value.Callee) {
+		if value.Line < 1 || value.Column < 1 || !slices.Contains([]string{"builtins.__import__", "importlib.import_module", "pkgutil.resolve_name"}, value.Callee) {
 			return nil, errors.New("python source facts contain an invalid computed import")
 		}
 		result = append(result, value)

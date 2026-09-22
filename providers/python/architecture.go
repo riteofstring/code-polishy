@@ -45,7 +45,7 @@ func (state *analysisState) architecture(ctx context.Context, ruff ruffExecutor,
 	}
 	sortImportFacts(imports)
 	state.result.Facts = &sourceFacts{Imports: &imports}
-	state.result.Evidence = []string{"Ruff 0.16.0 resolved authenticated Python project imports and CPython 3.12 supplied authored import sites"}
+	state.result.Evidence = []string{"Ruff 0.16.0 resolved authenticated Python project imports and CPython 3.12 supplied authored static and declared computed import sites"}
 	return nil
 }
 
@@ -54,7 +54,11 @@ func (state *analysisState) architectureGroup(ctx context.Context, ruff ruffExec
 	if err != nil {
 		return nil, err
 	}
-	sourceFailures := architectureSourceFailures(result)
+	computed, err := resolvePythonComputedImports(state.request.Policy, group.scope, group.files, state.data, result.DynamicImports)
+	if err != nil {
+		return nil, err
+	}
+	sourceFailures := architectureSourceFailures(result, computed.failures)
 	valid := slices.DeleteFunc(slices.Clone(group.files), func(file string) bool {
 		return sourceFailures[file] != ""
 	})
@@ -75,17 +79,20 @@ func (state *analysisState) architectureGroup(ctx context.Context, ruff ruffExec
 	}
 	state.result.Findings = append(state.result.Findings, resolution.findings...)
 	state.accountArchitectureFiles(group.files, sourceFailures, resolution.failures)
-	return resolution.facts, nil
+	computed.facts = slices.DeleteFunc(computed.facts, func(fact importFact) bool {
+		return resolution.failures[fact.Path] != ""
+	})
+	return append(resolution.facts, computed.facts...), nil
 }
 
-func architectureSourceFailures(result factResult) map[string]string {
+func architectureSourceFailures(result factResult, computed map[string]string) map[string]string {
 	failures := map[string]string{}
 	for file, reason := range result.Failures {
 		failures[file] = reason
 	}
-	for _, dynamic := range result.DynamicImports {
-		if failures[dynamic.Path] == "" {
-			failures[dynamic.Path] = fmt.Sprintf("computed Python import at line %d requires an explicit pack declaration", dynamic.Line)
+	for file, reason := range computed {
+		if failures[file] == "" {
+			failures[file] = reason
 		}
 	}
 	return failures

@@ -22,11 +22,12 @@ type pythonDiscovery struct {
 }
 
 type pythonScopeData struct {
-	Manifest       string           `json:"manifest"`
-	RequiresPython string           `json:"requiresPython"`
-	TargetVersion  string           `json:"targetVersion"`
-	SourceRoots    []string         `json:"sourceRoots"`
-	Problems       []projectProblem `json:"problems"`
+	Manifest       string              `json:"manifest"`
+	RequiresPython string              `json:"requiresPython"`
+	TargetVersion  string              `json:"targetVersion"`
+	SourceRoots    []string            `json:"sourceRoots"`
+	EntryPoints    []projectEntryPoint `json:"entryPoints"`
+	Problems       []projectProblem    `json:"problems"`
 }
 
 func discover(ctx context.Context, request request, executor projectExecutor) response {
@@ -181,7 +182,7 @@ func (value pythonDiscovery) scope(manifest string, project projectFact) (discov
 	}
 	data, err := json.Marshal(pythonScopeData{
 		Manifest: manifest, RequiresPython: project.RequiresPython, TargetVersion: project.TargetVersion,
-		SourceRoots: sourceRoots, Problems: problems,
+		SourceRoots: sourceRoots, EntryPoints: project.EntryPoints, Problems: problems,
 	})
 	if err != nil {
 		return discoveredScope{}, err
@@ -231,8 +232,11 @@ func decodePythonScopeData(data json.RawMessage) (pythonScopeData, error) {
 	if err := requireEnd(decoder); err != nil {
 		return pythonScopeData{}, err
 	}
-	if value.Manifest == "" || len(value.SourceRoots) == 0 || value.Problems == nil {
+	if value.Manifest == "" || len(value.SourceRoots) == 0 || value.EntryPoints == nil || value.Problems == nil {
 		return pythonScopeData{}, errors.New("python scope data is incomplete")
+	}
+	if err := validateProjectEntryPoints(value.EntryPoints); err != nil {
+		return pythonScopeData{}, err
 	}
 	return value, nil
 }

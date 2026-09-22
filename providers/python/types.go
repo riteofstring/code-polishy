@@ -71,6 +71,21 @@ type toolIdentity struct {
 	SHA256  string `json:"sha256"`
 }
 
+type policyInput struct {
+	Quality      json.RawMessage          `json:"quality"`
+	Modules      []json.RawMessage        `json:"modules"`
+	Files        []json.RawMessage        `json:"files"`
+	Declarations []policyDeclarationInput `json:"declarations"`
+}
+
+type policyDeclarationInput struct {
+	Kind    string          `json:"kind"`
+	Version int             `json:"version"`
+	Scopes  []string        `json:"scopes"`
+	Inputs  []string        `json:"inputs"`
+	Data    json.RawMessage `json:"data"`
+}
+
 type response struct {
 	ProtocolVersion int               `json:"protocolVersion"`
 	Status          string            `json:"status"`
@@ -156,6 +171,30 @@ type dynamicImport struct {
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 	Callee string `json:"callee"`
+}
+
+type computedImportDeclaration struct {
+	Project         string                `json:"project"`
+	Importer        string                `json:"importer"`
+	Module          string                `json:"module"`
+	Callable        string                `json:"callable,omitempty"`
+	ModuleScope     bool                  `json:"moduleScope,omitempty"`
+	Callee          string                `json:"callee"`
+	Line            int                   `json:"line"`
+	Column          int                   `json:"column"`
+	Shape           string                `json:"shape"`
+	Argument        string                `json:"argument"`
+	SourceSHA256    string                `json:"sourceSha256"`
+	Namespace       string                `json:"namespace,omitempty"`
+	EntryPointGroup string                `json:"entryPointGroup,omitempty"`
+	Targets         []string              `json:"targets,omitempty"`
+	Configuration   []computedImportInput `json:"configuration,omitempty"`
+}
+
+type computedImportInput struct {
+	Path        string `json:"path"`
+	JSONPointer string `json:"jsonPointer"`
+	SHA256      string `json:"sha256"`
 }
 
 type commentFact struct {

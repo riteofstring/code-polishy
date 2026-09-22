@@ -1,0 +1,44 @@
+{
+  "version": 5,
+  "project": { "kind": "content" },
+  "scope": {
+    "pythonComputedImports": [
+      {
+        "project": "pyproject.toml",
+        "importer": "src/sample/loader.py",
+        "module": "sample.loader",
+        "callable": "load",
+        "callee": "importlib.import_module",
+        "line": 5,
+        "column": 12,
+        "shape": "call",
+        "argument": "name",
+        "sourceSha256": "3d45b50be6b78b1a957e13ced3f9242e40c7bf28f1b58742454d761e9712e29f",
+        "entryPointGroup": "sample.plugins"
+      }
+    ]
+  },
+  "quality": {},
+  "modules": [{ "name": "python", "paths": ["src/**"] }],
+  "checks": [],
+  "tests": {
+    "ownership": [],
+    "suites": [
+      {
+        "name": "python-test",
+        "kind": "content",
+        "scope": "module",
+        "modules": ["python"],
+        "argv": ["go", "test", "./..."]
+      },
+      {
+        "name": "full",
+        "kind": "content",
+        "scope": "repository",
+        "argv": ["go", "test", "./..."]
+      }
+    ]
+  },
+  "supplyChain": {},
+  "exceptions": []
+}

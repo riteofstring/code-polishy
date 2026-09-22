@@ -32,15 +32,23 @@ the authored static import site and distinguishes imports guarded by a bound
 sources, resolves local modules against the most specific authenticated source
 root, and returns runtime, type-only, and re-export facts. Unresolved relative or
 project-local imports remain unresolved facts, and ambiguous module locations
-are findings. Invalid module layouts invalidate their scope. Calls bound to
-`__import__` or `importlib.import_module` remain incomplete until an explicit
-pack declaration can prove their targets; the adapter does not guess from string
-arguments. Core retains module ownership, dependency direction, cycle, and
-coverage enforcement.
+are findings. Invalid module layouts invalidate their scope. Recognized calls
+bound to `__import__`, `importlib.import_module`, or `pkgutil.resolve_name`
+require an exact `python.computed-import` declaration. The adapter binds the
+declaration to its project, importer module, source digest, callsite, and
+authenticated inputs. Finite targets may come from an exact list, a strict
+digest-bound JSON selection, or a validated PEP 621 entry-point group;
+module-object registries retain only their module component. Every target must
+stay in its declared namespace and resolve to exactly one governed project
+module. Valid targets become `proven-dynamic` facts, while missing, stale,
+escaping, ambiguous, or malformed evidence makes the importer incomplete. The
+adapter does not guess from runtime strings. Core retains module ownership,
+dependency direction, cycle, and coverage enforcement.
 
 The executable quality slice claims format, lint, complexity, type checking,
-and static architecture facts. Dead code, computed imports, runtime loaders,
-dependency evidence, project-environment resolution, and runtime contracts
-remain migration work and cannot be inferred from these claims. The pack is not
-eligible for the ownership cutover until every Python ledger row has executable
-evidence.
+static architecture facts, and finite computed-import declarations for its
+recognized callsites. Dead code, cross-module loader-alias parity, runtime
+loaders, dependency evidence, project-environment resolution, and runtime
+contracts remain migration work and cannot be inferred from these claims. The
+pack is not eligible for the ownership cutover until every Python ledger row has
+executable evidence.

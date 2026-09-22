@@ -41,11 +41,17 @@ type projectResponse struct {
 }
 
 type projectFact struct {
-	Manifest       string           `json:"manifest"`
-	RequiresPython string           `json:"requiresPython"`
-	TargetVersion  string           `json:"targetVersion"`
-	BackendPaths   []string         `json:"backendPaths"`
-	Problems       []projectProblem `json:"problems"`
+	Manifest       string              `json:"manifest"`
+	RequiresPython string              `json:"requiresPython"`
+	TargetVersion  string              `json:"targetVersion"`
+	BackendPaths   []string            `json:"backendPaths"`
+	EntryPoints    []projectEntryPoint `json:"entryPoints"`
+	Problems       []projectProblem    `json:"problems"`
+}
+
+type projectEntryPoint struct {
+	Group  string `json:"group"`
+	Module string `json:"module"`
 }
 
 type projectProblem struct {
@@ -176,18 +182,17 @@ func indexProjectFacts(values []projectFact, wanted map[string]bool, allowed map
 }
 
 func validateProjectFact(project projectFact, allowed map[string]bool) error {
-	if project.BackendPaths == nil || project.Problems == nil {
+	if project.BackendPaths == nil || project.EntryPoints == nil || project.Problems == nil {
 		return fmt.Errorf("python project facts for %s omit explicit collections", project.Manifest)
 	}
-	for _, backend := range project.BackendPaths {
-		if err := exactProjectDirectory(backend); err != nil {
-			return fmt.Errorf("python project backend path: %w", err)
-		}
+	if err := validateProjectBackendPaths(project.BackendPaths); err != nil {
+		return err
 	}
-	for _, problem := range project.Problems {
-		if !allowed[problem.Path] || strings.TrimSpace(problem.Message) == "" || len(problem.Message) > 4096 {
-			return errors.New("python project facts contain an invalid problem")
-		}
+	if err := validateProjectEntryPoints(project.EntryPoints); err != nil {
+		return err
+	}
+	if err := validateProjectProblems(project.Problems, allowed); err != nil {
+		return err
 	}
 	if len(project.Problems) != 0 {
 		return nil
@@ -197,6 +202,39 @@ func validateProjectFact(project projectFact, allowed map[string]bool) error {
 	}
 	_, err := pythonVersionForTarget(project.TargetVersion)
 	return err
+}
+
+func validateProjectBackendPaths(paths []string) error {
+	for _, backend := range paths {
+		if err := exactProjectDirectory(backend); err != nil {
+			return fmt.Errorf("python project backend path: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateProjectProblems(problems []projectProblem, allowed map[string]bool) error {
+	for _, problem := range problems {
+		if !allowed[problem.Path] || strings.TrimSpace(problem.Message) == "" || len(problem.Message) > 4096 {
+			return errors.New("python project facts contain an invalid problem")
+		}
+	}
+	return nil
+}
+
+func validateProjectEntryPoints(entries []projectEntryPoint) error {
+	if len(entries) > 4096 {
+		return errors.New("python project facts contain too many entry points")
+	}
+	previous := ""
+	for _, entry := range entries {
+		identity := entry.Group + "\x00" + entry.Module
+		if entry.Group == "" || len(entry.Group) > 256 || !validPythonModuleParts(strings.Split(entry.Module, ".")) || identity <= previous {
+			return errors.New("python project facts contain an invalid entry point")
+		}
+		previous = identity
+	}
+	return nil
 }
 
 func exactProjectDirectory(value string) error {
