@@ -56,17 +56,8 @@ type contractDocument struct {
 }
 
 func ValidateContract(options ContractValidationOptions) (ContractValidationReport, error) {
-	if options.Kind != "manifest" && options.Kind != "request" && options.Kind != "response" {
-		return ContractValidationReport{}, errors.New("kind must be manifest, request, or response")
-	}
-	if strings.TrimSpace(options.InputPath) == "" {
-		return ContractValidationReport{}, errors.New("input path is required")
-	}
-	if options.Kind == "response" && strings.TrimSpace(options.RequestPath) == "" {
-		return ContractValidationReport{}, errors.New("response validation requires a request path")
-	}
-	if options.Kind != "response" && options.RequestPath != "" {
-		return ContractValidationReport{}, errors.New("request path is accepted only for response validation")
+	if err := validateContractOptions(options); err != nil {
+		return ContractValidationReport{}, err
 	}
 	report := ContractValidationReport{
 		Schema: ContractValidationSchema, Protocol: ContractValidationProtocol, Status: "passed",
@@ -77,24 +68,12 @@ func ValidateContract(options ContractValidationOptions) (ContractValidationRepo
 		return ContractValidationReport{}, err
 	}
 	report.Documents = append(report.Documents, input.identity)
-	if options.Kind == "manifest" {
-		report.Errors = append(report.Errors, validateManifestDocument(input.data)...)
+	documents, issues, err := validateContractInput(options, input)
+	if err != nil {
+		return ContractValidationReport{}, err
 	}
-	if options.Kind == "request" {
-		_, report.Errors = validateRequestDocument(input.data, "input")
-	}
-	if options.Kind == "response" {
-		requestDocument, readErr := readContractDocument("request", "request", options.RequestPath, 64<<20)
-		if readErr != nil {
-			return ContractValidationReport{}, readErr
-		}
-		report.Documents = append(report.Documents, requestDocument.identity)
-		request, requestIssues := validateRequestDocument(requestDocument.data, "request")
-		report.Errors = append(report.Errors, requestIssues...)
-		if len(requestIssues) == 0 {
-			report.Errors = append(report.Errors, validateResponseDocument(input.data, request)...)
-		}
-	}
+	report.Documents = append(report.Documents, documents...)
+	report.Errors = append(report.Errors, issues...)
 	if len(report.Errors) != 0 {
 		report.Status = "failed"
 	}
@@ -102,6 +81,46 @@ func ValidateContract(options ContractValidationOptions) (ContractValidationRepo
 		return ContractValidationReport{}, err
 	}
 	return report, nil
+}
+
+func validateContractOptions(options ContractValidationOptions) error {
+	if options.Kind != "manifest" && options.Kind != "request" && options.Kind != "response" {
+		return errors.New("kind must be manifest, request, or response")
+	}
+	if strings.TrimSpace(options.InputPath) == "" {
+		return errors.New("input path is required")
+	}
+	if options.Kind == "response" && strings.TrimSpace(options.RequestPath) == "" {
+		return errors.New("response validation requires a request path")
+	}
+	if options.Kind != "response" && options.RequestPath != "" {
+		return errors.New("request path is accepted only for response validation")
+	}
+	return nil
+}
+
+func validateContractInput(options ContractValidationOptions, input contractDocument) ([]ContractDocumentIdentity, []ContractValidationIssue, error) {
+	switch options.Kind {
+	case "manifest":
+		return nil, validateManifestDocument(input.data), nil
+	case "request":
+		_, issues := validateRequestDocument(input.data, "input")
+		return nil, issues, nil
+	default:
+		return validateResponseContract(options.RequestPath, input.data)
+	}
+}
+
+func validateResponseContract(requestPath string, responseData []byte) ([]ContractDocumentIdentity, []ContractValidationIssue, error) {
+	requestDocument, err := readContractDocument("request", "request", requestPath, 64<<20)
+	if err != nil {
+		return nil, nil, err
+	}
+	request, issues := validateRequestDocument(requestDocument.data, "request")
+	if len(issues) == 0 {
+		issues = validateResponseDocument(responseData, request)
+	}
+	return []ContractDocumentIdentity{requestDocument.identity}, issues, nil
 }
 
 func contractDocumentLimit(kind string) int64 {

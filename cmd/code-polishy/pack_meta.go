@@ -25,10 +25,8 @@ func handlePackMeta(invocation invocation) int {
 		return updatePack(invocation, arguments)
 	case "remove":
 		return removePack(arguments)
-	case "verify":
-		return verifyPack(arguments, invocation.policyRoot)
-	case "validate":
-		return validatePackContract(arguments)
+	case "verify", "validate":
+		return handlePackAuthoring(action, arguments, invocation.policyRoot)
 	case "list":
 		return listPacks(invocation, arguments)
 	case "migration":
@@ -40,6 +38,13 @@ func handlePackMeta(invocation invocation) int {
 	default:
 		return commandUsageError("pack", "unknown pack action "+action)
 	}
+}
+
+func handlePackAuthoring(action string, arguments []string, policyRoot string) int {
+	if action == "verify" {
+		return verifyPack(arguments, policyRoot)
+	}
+	return validatePackContract(arguments)
 }
 
 func validatePackContract(arguments []string) int {
