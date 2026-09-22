@@ -346,15 +346,16 @@ type Command struct {
 const OSVVulnerabilityReportProtocol = "osv-vulnerability-json/v1"
 
 type PackAdapter struct {
-	PackName        string
-	PackVersion     string
-	PackDigest      string
-	PackRoot        string
-	ProtocolVersion int
-	Capability      string
-	Languages       []LanguageRule
-	Discovery       []PackDiscovery
-	Tools           []PackTool
+	PackName          string
+	PackVersion       string
+	PackDigest        string
+	PackRoot          string
+	ProtocolVersion   int
+	Capability        string
+	Languages         []LanguageRule
+	LanguageDetectors []PackLanguageDetector
+	Discovery         []PackDiscovery
+	Tools             []PackTool
 }
 
 type PackDiscovery struct {

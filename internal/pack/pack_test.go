@@ -151,6 +151,33 @@ func TestManifestOwnedShebangAndTestRulesDriveRepositoryClassification(t *testin
 	}
 }
 
+func TestManifestCommandOwnsPatternsAndShebangsWithoutBroadeningEitherClaim(t *testing.T) {
+	manifest, err := ParseManifest(testManifest(t), "manifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Languages[0].Shebangs = []string{"#!/usr/bin/env fixture"}
+	resolution := Resolution{}
+	compileManifest("/packs/fixture", policy.PackSelection{Name: manifest.Name, Version: manifest.Version, Digest: strings.Repeat("a", 64)}, manifest, &resolution)
+	root := t.TempDir()
+	writeTestFile(t, root, "src/pattern.fixture", "value\n", 0o600)
+	writeTestFile(t, root, "scripts/tool", "#!/usr/bin/env fixture\n", 0o700)
+	writeTestFile(t, root, "scripts/other", "#!/usr/bin/env other\n", 0o700)
+	config := policy.Config{}
+	Apply(&config, resolution)
+	repo, err := repository.Open(root, root, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := resolution.Commands[0]
+	if !repo.CommandOwnsPath(command, "src/pattern.fixture") || !repo.CommandOwnsPath(command, "scripts/tool") {
+		t.Fatal("manifest command did not retain both source recognition forms")
+	}
+	if repo.CommandOwnsPath(command, "scripts/other") {
+		t.Fatal("manifest command claimed an undeclared shebang")
+	}
+}
+
 func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
 	root := filepath.Join("..", "..")
 	manifestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", ManifestFilename))

@@ -111,30 +111,34 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 	}
 	for _, declared := range manifest.Commands {
 		for _, capability := range declared.Capabilities {
-			paths := []string{}
-			for _, language := range declared.Languages {
-				paths = append(paths, languagePatterns[language]...)
-			}
-			paths = sortedUnique(paths)
+			paths := slices.Clone(declared.Paths)
 			if slices.Contains([]string{"dependency-policy", "lock-sync", "release-age", "security"}, capability) {
-				paths = nil
-				for _, language := range declared.Languages {
-					paths = append(paths, manifestPatterns[language]...)
+				if len(paths) == 0 {
+					for _, language := range declared.Languages {
+						paths = append(paths, manifestPatterns[language]...)
+					}
+					paths = sortedUnique(paths)
 				}
-				paths = sortedUnique(paths)
-			}
-			if len(declared.Paths) > 0 {
-				paths = slices.Clone(declared.Paths)
 			}
 			resolution.Commands = append(resolution.Commands, policy.Command{
 				Name:     "pack." + selection.Name + "." + declared.Name + "." + capability,
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Tools: slices.Clone(declared.Execution.Tools)},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), LanguageDetectors: manifestLanguageDetectors(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Tools: slices.Clone(declared.Execution.Tools)},
 			})
 		}
 	}
+}
+
+func manifestLanguageDetectors(manifest Manifest, selected []string) []policy.PackLanguageDetector {
+	detectors := []policy.PackLanguageDetector{}
+	for _, language := range manifest.Languages {
+		if slices.Contains(selected, language.ID) && len(language.Shebangs) > 0 {
+			detectors = append(detectors, policy.PackLanguageDetector{Language: language.ID, Shebangs: slices.Clone(language.Shebangs)})
+		}
+	}
+	return detectors
 }
 
 func manifestDiscoveryRules(manifest Manifest, selected []string) []policy.PackDiscovery {
