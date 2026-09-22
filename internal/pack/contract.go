@@ -183,6 +183,9 @@ func validateRequestDocument(data []byte, document string) (Request, []ContractV
 	if err := decodeContractDocument(data, &request); err != nil {
 		return Request{}, contractIssues(document, "decode", err)
 	}
+	if err := validatePolicyDeclarations(&request.Policy, request); err != nil {
+		return Request{}, contractIssues(document, "semantic", err)
+	}
 	encoded, err := json.Marshal(request)
 	if err != nil {
 		return Request{}, contractIssues(document, "semantic", err)

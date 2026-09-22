@@ -108,6 +108,15 @@
       "maxTestParams": 8
     },
     "modules": [],
+    "declarations": [
+      {
+        "kind": "example.framework",
+        "version": 1,
+        "scopes": ["scope-1"],
+        "inputs": ["package.json"],
+        "data": { "enabled": true }
+      }
+    ],
     "files": [
       {
         "scopes": ["scope-1"],

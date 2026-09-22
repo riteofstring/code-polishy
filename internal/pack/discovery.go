@@ -31,7 +31,11 @@ func prepareDiscoveryRequest(repo repository.Repository, request Request, comman
 	request.Scopes = []AnalysisScope{}
 	request.DiagnosticFiles = []string{}
 	request.WriteFiles = []string{}
-	request.Policy = policyInput(repo, request)
+	policyValue, err := policyInput(repo, request)
+	if err != nil {
+		return Request{}, err
+	}
+	request.Policy = policyValue
 	contextPaths := []string{}
 	for _, entry := range request.Inventory {
 		if entry.Metadata || entry.Dependency || entry.Control || slices.Contains(request.Files, entry.Path) {

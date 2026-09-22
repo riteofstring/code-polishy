@@ -50,12 +50,24 @@ They carry only validated scopes. A `scope.sourceContexts` mapping binds generat
 source to a contained non-generated ecosystem context while preserving its physical
 path for reads, findings, and write protection.
 
+Effective repository declarations cross the provider boundary as bounded,
+versioned opaque objects. Core selects them for the exact pack and capability and
+binds each declaration to invocation-local scope handles. The namespaced kind and
+version select a pack-owned data contract. Exact declaration inputs may add
+governed non-source paths within those scopes to read context; source inputs must
+already be scope members. Core validates those paths, generic JSON bounds, and
+scope authority without interpreting the ecosystem contract. Opaque data cannot
+expand inventory, diagnostics, or writes. Python architecture receives
+only computed-import, external-plug-in, and runtime-loader declarations; Python
+dead-code receives only contract, dynamic-reference, and external-attribute
+declarations for its active project scopes.
+
 Discovery receives hashes for selected sources and relevant metadata, dependency,
 and control inputs. Capability execution receives hashes only for diagnostic files,
-scope context, controls, and validated symbolic asset links required by the
-operation. Providers report every input they actually read. Core verifies initial
-context and reported identities afterward; unrelated regular assets neither consume
-context limits nor become mandatory analyzer inputs.
+scope context, declaration inputs, controls, and validated symbolic asset links
+required by the operation. Providers report every input they actually read. Core
+verifies initial context and reported identities afterward; unrelated regular
+assets neither consume context limits nor become mandatory analyzer inputs.
 
 Coordinates are one-based UTF-8 byte positions in original source. Comment bytes
 must match that position; truncated comments remain bounded facts marked

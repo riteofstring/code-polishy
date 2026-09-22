@@ -162,6 +162,95 @@ func TestStaticProviderSelectionIncludesMetadataAndExcludesForeignSource(t *test
 	}
 }
 
+func TestPythonPolicyDeclarationsAreCapabilityAndScopeBound(t *testing.T) {
+	project := "apps/api/pyproject.toml"
+	importer := "apps/api/src/loader.py"
+	configuration := "apps/api/plugins.json"
+	repo := repository.Repository{Config: policy.Config{Scope: policy.Scope{
+		PythonComputedImports:       []policy.PythonComputedImport{{Project: project, Importer: importer, Configuration: []policy.PythonComputedImportInput{{Path: configuration}}}},
+		PythonExternalPluginImports: []policy.PythonExternalPluginImport{{Project: project, Consumer: policy.PythonDynamicConsumer{Importer: importer}}},
+		PythonRuntimeLoaders:        []policy.PythonRuntimeLoader{{Project: project, Consumer: policy.PythonDynamicConsumer{Importer: importer}}},
+		PythonContracts:             []policy.PythonContract{{Project: project}, {Project: "apps/other/pyproject.toml"}},
+		PythonDynamicReferences:     []policy.PythonDynamicReference{{Project: project, Consumer: policy.PythonDynamicConsumer{Importer: importer}, Registry: &policy.PythonDynamicRegistry{Path: configuration}}},
+		PythonExternalAttributes:    []policy.PythonExternalAttribute{{Project: project}},
+	}}}
+	request := Request{
+		Capability: "architecture", Pack: policy.PackSelection{Name: "python"},
+		Inventory: []InventoryEntry{
+			{Path: project, Metadata: true},
+			{Path: importer, Source: true},
+			{Path: configuration, Data: true},
+		},
+		Scopes: []AnalysisScope{{Handle: "scope-1", Root: "apps/api", Members: []string{importer}, Context: []string{project}}},
+	}
+	input, err := policyInput(repo, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantArchitecture := []string{"python.computed-import", "python.external-plugin-import", "python.runtime-loader"}
+	if got := policyDeclarationKinds(input.Declarations); !slices.Equal(got, wantArchitecture) {
+		t.Fatalf("architecture declarations = %v", got)
+	}
+	for _, declaration := range input.Declarations {
+		if !slices.Equal(declaration.Scopes, []string{"scope-1"}) || !strings.Contains(string(declaration.Data), `"project":"apps/api/pyproject.toml"`) {
+			t.Fatalf("declaration = %+v", declaration)
+		}
+	}
+	if !slices.Contains(input.Declarations[0].Inputs, configuration) {
+		t.Fatalf("declaration inputs = %v", input.Declarations[0].Inputs)
+	}
+	request.Policy = input
+	if !slices.Contains(analysisContextPaths(request), configuration) {
+		t.Fatal("declared configuration input was not added to read context")
+	}
+
+	request.Capability = "dead-code"
+	input, err = policyInput(repo, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDeadCode := []string{"python.contract", "python.dynamic-reference", "python.external-attribute"}
+	if got := policyDeclarationKinds(input.Declarations); !slices.Equal(got, wantDeadCode) {
+		t.Fatalf("dead-code declarations = %v", got)
+	}
+
+	request.Pack.Name = "shell"
+	input, err = policyInput(repo, request)
+	if err != nil || len(input.Declarations) != 0 {
+		t.Fatalf("foreign pack declarations = %+v: %v", input.Declarations, err)
+	}
+}
+
+func TestPolicyDeclarationsRejectUnboundAndNonObjectData(t *testing.T) {
+	request := Request{Scopes: []AnalysisScope{{Handle: "scope-1"}}}
+	for name, declaration := range map[string]PolicyDeclarationInput{
+		"unbound scope": {Kind: "python.contract", Version: 1, Scopes: []string{"scope-2"}, Inputs: []string{}, Data: json.RawMessage(`{}`)},
+		"scalar data":   {Kind: "python.contract", Version: 1, Scopes: []string{"scope-1"}, Inputs: []string{}, Data: json.RawMessage(`true`)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := PolicyInput{Declarations: []PolicyDeclarationInput{declaration}}
+			if err := validatePolicyDeclarations(&input, request); err == nil || !strings.Contains(err.Error(), "policy.declarations[0]") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+	request.Inventory = []InventoryEntry{{Path: "foreign/source.py", Source: true}}
+	input := PolicyInput{Declarations: []PolicyDeclarationInput{{
+		Kind: "python.contract", Version: 1, Scopes: []string{"scope-1"}, Inputs: []string{"foreign/source.py"}, Data: json.RawMessage(`{}`),
+	}}}
+	if err := validatePolicyDeclarations(&input, request); err == nil || !strings.Contains(err.Error(), "policy.declarations[0].inputs[0]") {
+		t.Fatalf("foreign source input error = %v", err)
+	}
+}
+
+func policyDeclarationKinds(declarations []PolicyDeclarationInput) []string {
+	result := make([]string, 0, len(declarations))
+	for _, declaration := range declarations {
+		result = append(result, declaration.Kind)
+	}
+	return result
+}
+
 func TestFormatRejectsInvalidOriginalUTF8BeforeApplyingAnyEdits(t *testing.T) {
 	repo, command := providerUnitRepository(t, "format")
 	writeTestFile(t, repo.Root, "frontend/invalid.js", string([]byte{0xff}), 0o644)

@@ -100,6 +100,36 @@ and each additional dependency or configuration read in `inputs`, using containe
 repository-relative paths and SHA-256 digests. The engine verifies identities after
 execution, including import targets. Changed inputs invalidate analysis.
 
+`policy.declarations` is always an explicit array. Each item has a namespaced
+`kind`, positive contract `version`, one or more invocation `scopes`, exact
+governed `inputs`, and bounded object `data`. Declaration inputs add only exact
+non-source paths contained by a bound scope or source paths already in its members;
+they grant read context, never findings or writes. Core includes only declarations
+selected for the exact pack, capability, and validated scopes. The owning pack
+interprets the versioned data; core treats it as opaque. An author must reject an
+unsupported kind or version instead of guessing another shape. For example:
+
+```json
+{
+  "kind": "python.contract",
+  "version": 1,
+  "scopes": ["scope-1"],
+  "inputs": ["pyproject.toml"],
+  "data": {
+    "project": "pyproject.toml",
+    "kind": "entry-point",
+    "target": "app.main:run",
+    "reason": "The host invokes this entry point."
+  }
+}
+```
+
+Requests allow at most 4,096 declarations, 10,000 inputs per declaration,
+100,000 declaration inputs in aggregate, 64 KiB per declaration data object, and
+2 MiB of declaration data in aggregate. The production validator rejects unknown scope
+handles, duplicate handles or declarations, scalar data, excessive depth, and
+invalid names at their exact indexed fields.
+
 Return exactly one JSON response with `protocolVersion: 4` and one status:
 
 - `pass`: nonempty evidence, no findings, complete coverage.

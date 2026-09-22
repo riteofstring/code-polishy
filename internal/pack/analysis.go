@@ -18,9 +18,18 @@ type InputFile struct {
 }
 
 type PolicyInput struct {
-	Quality policy.Quality      `json:"quality"`
-	Modules []PolicyModuleInput `json:"modules"`
-	Files   []SourceInput       `json:"files"`
+	Quality      policy.Quality           `json:"quality"`
+	Modules      []PolicyModuleInput      `json:"modules"`
+	Files        []SourceInput            `json:"files"`
+	Declarations []PolicyDeclarationInput `json:"declarations"`
+}
+
+type PolicyDeclarationInput struct {
+	Kind    string          `json:"kind"`
+	Version int             `json:"version"`
+	Scopes  []string        `json:"scopes"`
+	Inputs  []string        `json:"inputs"`
+	Data    json.RawMessage `json:"data"`
 }
 
 type PolicyModuleInput struct {

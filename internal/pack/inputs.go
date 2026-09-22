@@ -39,7 +39,11 @@ func prepareInputPaths(repo repository.Repository, request *Request, command pol
 	if err := validateAnalysisScopes(*request); err != nil {
 		return err
 	}
-	request.Policy = policyInput(repo, *request)
+	policyValue, err := policyInput(repo, *request)
+	if err != nil {
+		return err
+	}
+	request.Policy = policyValue
 	paths = analysisContextPaths(*request)
 	assetLinks := validatedAssetLinkInputs(repo, paths)
 	for path := range assetLinks {
@@ -89,8 +93,8 @@ func prepareFileScopes(repo repository.Repository, request *Request) {
 	})
 }
 
-func policyInput(repo repository.Repository, request Request) PolicyInput {
-	input := PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Modules: []PolicyModuleInput{}, Files: []SourceInput{}}
+func policyInput(repo repository.Repository, request Request) (PolicyInput, error) {
+	input := PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Modules: []PolicyModuleInput{}, Files: []SourceInput{}, Declarations: []PolicyDeclarationInput{}}
 	for _, active := range repo.Config.ActivePolicyModules {
 		input.Modules = append(input.Modules, PolicyModuleInput{Name: active.Name, Root: active.Root})
 	}
@@ -105,11 +109,22 @@ func policyInput(repo repository.Repository, request Request) PolicyInput {
 			input.Files = append(input.Files, sourceInput(entry, scopes))
 		}
 	}
-	return input
+	declarations, err := policyDeclarations(repo.Config.Scope, request)
+	if err != nil {
+		return PolicyInput{}, err
+	}
+	input.Declarations = declarations
+	if err := validatePolicyDeclarations(&input, request); err != nil {
+		return PolicyInput{}, err
+	}
+	return input, nil
 }
 
 func analysisContextPaths(request Request) []string {
 	paths := slices.Clone(request.DiagnosticFiles)
+	for _, declaration := range request.Policy.Declarations {
+		paths = append(paths, declaration.Inputs...)
+	}
 	for _, scope := range request.Scopes {
 		paths = append(paths, scope.Context...)
 	}
