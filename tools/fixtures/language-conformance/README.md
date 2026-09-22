@@ -35,3 +35,11 @@ two repositories with the same commit and working state, records the exact Git
 binary and version, and rejects commands that change HEAD, the branch, or the
 index. Filesystem and Git evidence are compared independently so an index-only
 mutation cannot pass as behavioral parity.
+
+The common `expected` outcome applies to both lanes. A fixture may replace the
+candidate outcome with `expected.candidate` when the extraction deliberately
+changes observable behavior. Every resulting reference/candidate difference
+must also appear in `acceptedDifferences` with its exact normalized JSON
+pointer and exact canonical JSON values. Wildcards, path-only allowances, and
+undeclared differences fail the fixture. Repository, policy, and isolated pack
+data roots are the only filesystem values normalized for this comparison.

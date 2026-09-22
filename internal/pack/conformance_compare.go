@@ -14,25 +14,36 @@ import (
 const maximumConformanceDifferences = 128
 const maximumConformanceDifferenceBytes = 1024
 
-func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoot, referencePolicyRoot string, candidate ConformanceRunEvidence, candidateRoot, candidatePolicyRoot string, variantPaths ...map[string]bool) ([]ConformanceDifference, error) {
+type conformanceDifferenceCollector struct {
+	differences []ConformanceDifference
+	err         error
+}
+
+type conformanceComparisonRoots struct {
+	repository string
+	policy     string
+	data       string
+}
+
+func compareConformanceRuns(reference ConformanceRunEvidence, referenceRoots conformanceComparisonRoots, candidate ConformanceRunEvidence, candidateRoots conformanceComparisonRoots, variantPaths ...map[string]bool) ([]ConformanceDifference, error) {
 	variants := map[string]bool{}
 	if len(variantPaths) > 0 {
 		variants = variantPaths[0]
 	}
-	referenceValue, err := conformanceComparableValue(reference, referenceRoot, referencePolicyRoot, variants)
+	referenceValue, err := conformanceComparableValue(reference, referenceRoots, variants)
 	if err != nil {
 		return nil, fmt.Errorf("normalize reference: %w", err)
 	}
-	candidateValue, err := conformanceComparableValue(candidate, candidateRoot, candidatePolicyRoot, variants)
+	candidateValue, err := conformanceComparableValue(candidate, candidateRoots, variants)
 	if err != nil {
 		return nil, fmt.Errorf("normalize candidate: %w", err)
 	}
-	differences := []ConformanceDifference{}
-	appendConformanceDifferences("", referenceValue, candidateValue, &differences)
-	return differences, nil
+	collector := conformanceDifferenceCollector{differences: []ConformanceDifference{}}
+	collector.compare("", referenceValue, candidateValue)
+	return collector.differences, collector.err
 }
 
-func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot string, variantPaths map[string]bool) (any, error) {
+func conformanceComparableValue(run ConformanceRunEvidence, roots conformanceComparisonRoots, variantPaths map[string]bool) (any, error) {
 	report, err := decodeConformanceValue(run.Report)
 	if err != nil {
 		return nil, err
@@ -41,7 +52,7 @@ func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot str
 	if len(variantPaths) > 0 {
 		head = run.BeforeGit.Head
 	}
-	report = normalizeConformanceValue(report, root, policyRoot, head, "")
+	report = normalizeConformanceValue(report, roots, head, "")
 	beforeFiles := normalizeConformanceFileIdentities(run.Before, variantPaths)
 	afterFiles := normalizeConformanceFileIdentities(run.After, variantPaths)
 	beforeGitIdentity := normalizeConformanceGitIdentity(run.BeforeGit, len(variantPaths) > 0)
@@ -65,7 +76,7 @@ func conformanceComparableValue(run ConformanceRunEvidence, root, policyRoot str
 	return map[string]any{
 		"exitStatus": run.ExitStatus,
 		"report":     report,
-		"stderr":     normalizeConformanceString(run.Stderr, root, policyRoot, head),
+		"stderr":     normalizeConformanceString(run.Stderr, roots, head),
 		"before":     before,
 		"after":      after,
 		"beforeGit":  beforeGit,
@@ -108,7 +119,7 @@ func encodeConformanceValue(value any) (any, error) {
 	return decodeConformanceValue(data)
 }
 
-func normalizeConformanceValue(value any, root, policyRoot, head, path string) any {
+func normalizeConformanceValue(value any, roots conformanceComparisonRoots, head, path string) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
@@ -117,13 +128,13 @@ func normalizeConformanceValue(value any, root, policyRoot, head, path string) a
 			if dropConformanceField(path, key) {
 				continue
 			}
-			result[key] = normalizeConformanceValue(child, root, policyRoot, head, childPath)
+			result[key] = normalizeConformanceValue(child, roots, head, childPath)
 		}
 		return result
 	case []any:
 		result := make([]any, 0, len(typed))
 		for index, child := range typed {
-			result = append(result, normalizeConformanceValue(child, root, policyRoot, head, path+"/"+strconv.Itoa(index)))
+			result = append(result, normalizeConformanceValue(child, roots, head, path+"/"+strconv.Itoa(index)))
 		}
 		if sortConformanceArray(path) {
 			slices.SortFunc(result, func(left, right any) int {
@@ -134,7 +145,7 @@ func normalizeConformanceValue(value any, root, policyRoot, head, path string) a
 		}
 		return result
 	case string:
-		return normalizeConformanceString(typed, root, policyRoot, head)
+		return normalizeConformanceString(typed, roots, head)
 	default:
 		return value
 	}
@@ -176,12 +187,12 @@ func conformancePointerShape(path string) string {
 	return strings.Join(parts, "/")
 }
 
-func normalizeConformanceString(value, root, policyRoot string, heads ...string) string {
+func normalizeConformanceString(value string, roots conformanceComparisonRoots, heads ...string) string {
 	result := value
 	for _, item := range []struct {
 		value       string
 		replacement string
-	}{{root, "$REPOSITORY_ROOT"}, {policyRoot, "$POLICY_ROOT"}} {
+	}{{roots.repository, "$REPOSITORY_ROOT"}, {roots.policy, "$POLICY_ROOT"}, {roots.data, "$PACK_DATA_ROOT"}} {
 		for _, replacement := range []string{item.value, filepath.ToSlash(item.value)} {
 			if replacement != "" {
 				result = strings.ReplaceAll(result, replacement, item.replacement)
@@ -196,8 +207,12 @@ func normalizeConformanceString(value, root, policyRoot string, heads ...string)
 	return result
 }
 
-func appendConformanceDifferences(path string, reference, candidate any, differences *[]ConformanceDifference) {
-	if len(*differences) >= maximumConformanceDifferences || reflect.DeepEqual(reference, candidate) {
+func (collector *conformanceDifferenceCollector) compare(path string, reference, candidate any) {
+	if collector.err != nil || reflect.DeepEqual(reference, candidate) {
+		return
+	}
+	if len(collector.differences) >= maximumConformanceDifferences {
+		collector.err = fmt.Errorf("comparison exceeds %d differences", maximumConformanceDifferences)
 		return
 	}
 	referenceMap, referenceIsMap := reference.(map[string]any)
@@ -220,10 +235,10 @@ func appendConformanceDifferences(path string, reference, candidate any, differe
 			right, rightExists := candidateMap[key]
 			childPath := path + "/" + escapeConformancePointer(key)
 			if !leftExists || !rightExists {
-				appendConformanceDifference(childPath, conformanceMissing(left, leftExists), conformanceMissing(right, rightExists), differences)
+				collector.add(childPath, conformanceMissing(left, leftExists), conformanceMissing(right, rightExists))
 				continue
 			}
-			appendConformanceDifferences(childPath, left, right, differences)
+			collector.compare(childPath, left, right)
 		}
 		return
 	}
@@ -241,14 +256,14 @@ func appendConformanceDifferences(path string, reference, candidate any, differe
 				if index < len(candidateArray) {
 					right = candidateArray[index]
 				}
-				appendConformanceDifference(childPath, left, right, differences)
+				collector.add(childPath, left, right)
 				continue
 			}
-			appendConformanceDifferences(childPath, referenceArray[index], candidateArray[index], differences)
+			collector.compare(childPath, referenceArray[index], candidateArray[index])
 		}
 		return
 	}
-	appendConformanceDifference(path, reference, candidate, differences)
+	collector.add(path, reference, candidate)
 }
 
 func conformanceMissing(value any, exists bool) any {
@@ -258,25 +273,38 @@ func conformanceMissing(value any, exists bool) any {
 	return value
 }
 
-func appendConformanceDifference(path string, reference, candidate any, differences *[]ConformanceDifference) {
-	if len(*differences) >= maximumConformanceDifferences {
+func (collector *conformanceDifferenceCollector) add(path string, reference, candidate any) {
+	if collector.err != nil {
 		return
 	}
 	if path == "" {
 		path = "/"
 	}
-	*differences = append(*differences, ConformanceDifference{Path: path, Reference: conformanceDifferenceValue(reference), Candidate: conformanceDifferenceValue(candidate)})
+	left, err := conformanceDifferenceValue(reference)
+	if err != nil {
+		collector.err = err
+		return
+	}
+	right, err := conformanceDifferenceValue(candidate)
+	if err != nil {
+		collector.err = err
+		return
+	}
+	collector.differences = append(collector.differences, ConformanceDifference{Path: path, Reference: left, Candidate: right})
 }
 
-func conformanceDifferenceValue(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "<unavailable>"
+func conformanceDifferenceValue(value any) (string, error) {
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return "", err
 	}
+	data := bytes.TrimSuffix(buffer.Bytes(), []byte("\n"))
 	if len(data) > maximumConformanceDifferenceBytes {
-		return string(data[:maximumConformanceDifferenceBytes]) + "..."
+		return "", fmt.Errorf("comparison value at a differing path exceeds %d bytes", maximumConformanceDifferenceBytes)
 	}
-	return string(data)
+	return string(data), nil
 }
 
 func escapeConformancePointer(value string) string {

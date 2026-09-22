@@ -104,12 +104,6 @@ type ConformanceFileIdentity struct {
 	SHA256 string `json:"sha256"`
 }
 
-type ConformanceDifference struct {
-	Path      string `json:"path"`
-	Reference string `json:"reference"`
-	Candidate string `json:"candidate"`
-}
-
 type ConformanceReportSummary struct {
 	Status    string                     `json:"status"`
 	Passed    int                        `json:"passed"`
@@ -198,7 +192,20 @@ func runConformance(ctx context.Context, options ConformanceOptions, executor co
 			report.Summary.Skipped++
 			continue
 		}
-		evidence, runErr := runConformanceFixture(ctx, fixture, reference.Path, reference.PolicyRoot, candidate.Path, candidate.PolicyRoot, git.Path, referenceEnvironment, candidateEnvironment, executor)
+		evidence, runErr := runConformanceFixture(
+			ctx,
+			fixture,
+			reference.Path,
+			reference.PolicyRoot,
+			conformanceDataRoot(filepath.Join(environmentRoot, "reference")),
+			candidate.Path,
+			candidate.PolicyRoot,
+			conformanceDataRoot(candidateHome),
+			git.Path,
+			referenceEnvironment,
+			candidateEnvironment,
+			executor,
+		)
 		if runErr != nil {
 			return ConformanceReport{}, fmt.Errorf("fixture %s: %w", fixture.ID, runErr)
 		}
@@ -362,7 +369,7 @@ func conformancePolicyRoot(executable string) (string, error) {
 	}
 }
 
-func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, referencePolicyRoot, candidateExecutable, candidatePolicyRoot, gitExecutable string, referenceEnvironment, candidateEnvironment []string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
+func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, referenceExecutable, referencePolicyRoot, referenceDataRoot, candidateExecutable, candidatePolicyRoot, candidateDataRoot, gitExecutable string, referenceEnvironment, candidateEnvironment []string, executor conformanceExecutor) (ConformanceFixtureEvidence, error) {
 	temporary, err := conformanceTemporary("code-polishy-conformance-")
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
@@ -407,11 +414,20 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 	if err != nil {
 		return ConformanceFixtureEvidence{}, fmt.Errorf("candidate: %w", err)
 	}
-	differences, err := compareConformanceRuns(referenceRun, referenceRoot, referencePolicyRoot, candidateRun, candidateRoot, candidatePolicyRoot, variantPaths)
+	differences, err := compareConformanceRuns(
+		referenceRun,
+		conformanceComparisonRoots{repository: referenceRoot, policy: referencePolicyRoot, data: referenceDataRoot},
+		candidateRun,
+		conformanceComparisonRoots{repository: candidateRoot, policy: candidatePolicyRoot, data: candidateDataRoot},
+		variantPaths,
+	)
 	if err != nil {
 		return ConformanceFixtureEvidence{}, err
 	}
-	failures := append(assertConformanceOutcome("reference", fixture.Expected, referenceRun), assertConformanceOutcome("candidate", fixture.Expected, candidateRun)...)
+	referenceExpected, candidateExpected := conformanceLaneExpectations(fixture.Expected)
+	failures := assertConformanceOutcome("reference", referenceExpected, referenceRun)
+	failures = append(failures, assertConformanceOutcome("candidate", candidateExpected, candidateRun)...)
+	failures = append(failures, assertConformanceDifferences(fixture.AcceptedDifferences, differences)...)
 	evidence := ConformanceFixtureEvidence{
 		ID:                fixture.ID,
 		BehaviorIDs:       slices.Clone(fixture.BehaviorIDs),
@@ -421,10 +437,47 @@ func runConformanceFixture(ctx context.Context, fixture ConformanceFixture, refe
 		Differences:       differences,
 		AssertionFailures: failures,
 	}
-	if len(differences) != 0 || len(failures) != 0 {
+	if len(failures) != 0 {
 		evidence.Status = "failed"
 	}
 	return evidence, nil
+}
+
+func conformanceLaneExpectations(expected ConformanceExpectedOutcome) (ConformanceExpectedOutcome, ConformanceExpectedOutcome) {
+	candidate := expected
+	candidate.Candidate = nil
+	reference := candidate
+	if expected.Candidate != nil {
+		candidate = *expected.Candidate
+		candidate.Candidate = nil
+	}
+	return reference, candidate
+}
+
+func assertConformanceDifferences(expected, actual []ConformanceDifference) []string {
+	failures := []string{}
+	expectedByPath := make(map[string]ConformanceDifference, len(expected))
+	for _, difference := range expected {
+		expectedByPath[difference.Path] = difference
+	}
+	seen := make(map[string]bool, len(actual))
+	for _, difference := range actual {
+		declared, exists := expectedByPath[difference.Path]
+		if !exists {
+			failures = append(failures, fmt.Sprintf("comparison[%s]: difference was not declared", difference.Path))
+			continue
+		}
+		seen[difference.Path] = true
+		if difference.Reference != declared.Reference || difference.Candidate != declared.Candidate {
+			failures = append(failures, fmt.Sprintf("comparison[%s]: values did not match the declared difference", difference.Path))
+		}
+	}
+	for _, difference := range expected {
+		if !seen[difference.Path] {
+			failures = append(failures, fmt.Sprintf("acceptedDifferences[%s]: declared difference was absent", difference.Path))
+		}
+	}
+	return failures
 }
 
 func conformanceLaneOverridePaths(overrides *ConformanceLaneOverrides) map[string]bool {

@@ -160,6 +160,13 @@ enclosing checkout's tracked files or ignore rules. Fixture language
 classification uses the same verified installed manifest declarations as product
 analysis. Operational fixture failures retain the analyzer's reason.
 
+Fixtures assert reference and candidate outcomes separately. An intentional
+transition may pass only when every normalized difference matches an exact
+fixture-declared JSON pointer, reference value, and candidate value; wildcard
+ignores and path-only allowances are not accepted. Comparison normalizes only
+the recorded repository, policy, and isolated pack-data roots while the evidence
+report retains the real executable, pack, tool, and filesystem identities.
+
 Function facts are interpreted once when the core constructs adapter findings.
 Conformance uses that same interpretation: its expected status and rule include
 the resulting core policy finding, even when the provider successfully returns

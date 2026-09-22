@@ -78,19 +78,20 @@ type ConformanceBehavior struct {
 }
 
 type ConformanceFixture struct {
-	Schema         string                     `json:"$schema,omitempty"`
-	Protocol       string                     `json:"protocol"`
-	ID             string                     `json:"id"`
-	Maturity       string                     `json:"maturity"`
-	Gap            string                     `json:"gap,omitempty"`
-	BehaviorIDs    []string                   `json:"behaviorIds"`
-	Files          []ConformanceFixtureFile   `json:"files"`
-	LaneOverrides  *ConformanceLaneOverrides  `json:"laneOverrides,omitempty"`
-	Git            ConformanceFixtureGit      `json:"git"`
-	Arguments      []string                   `json:"arguments"`
-	TimeoutSeconds int                        `json:"timeoutSeconds"`
-	Platforms      []string                   `json:"platforms"`
-	Expected       ConformanceExpectedOutcome `json:"expected"`
+	Schema              string                     `json:"$schema,omitempty"`
+	Protocol            string                     `json:"protocol"`
+	ID                  string                     `json:"id"`
+	Maturity            string                     `json:"maturity"`
+	Gap                 string                     `json:"gap,omitempty"`
+	BehaviorIDs         []string                   `json:"behaviorIds"`
+	Files               []ConformanceFixtureFile   `json:"files"`
+	LaneOverrides       *ConformanceLaneOverrides  `json:"laneOverrides,omitempty"`
+	Git                 ConformanceFixtureGit      `json:"git"`
+	Arguments           []string                   `json:"arguments"`
+	TimeoutSeconds      int                        `json:"timeoutSeconds"`
+	Platforms           []string                   `json:"platforms"`
+	Expected            ConformanceExpectedOutcome `json:"expected"`
+	AcceptedDifferences []ConformanceDifference    `json:"acceptedDifferences,omitempty"`
 }
 
 type ConformanceLaneOverrides struct {
@@ -121,12 +122,19 @@ type ConformanceGitChange struct {
 }
 
 type ConformanceExpectedOutcome struct {
-	ExitStatus       int                       `json:"exitStatus"`
-	ReportStatus     string                    `json:"reportStatus"`
-	RequiredRules    []string                  `json:"requiredRules"`
-	RequiredCoverage []string                  `json:"requiredCoverage"`
-	Writes           []ConformanceExpectedFile `json:"writes"`
-	Protected        []string                  `json:"protected"`
+	ExitStatus       int                         `json:"exitStatus"`
+	ReportStatus     string                      `json:"reportStatus"`
+	RequiredRules    []string                    `json:"requiredRules"`
+	RequiredCoverage []string                    `json:"requiredCoverage"`
+	Writes           []ConformanceExpectedFile   `json:"writes"`
+	Protected        []string                    `json:"protected"`
+	Candidate        *ConformanceExpectedOutcome `json:"candidate,omitempty"`
+}
+
+type ConformanceDifference struct {
+	Path      string `json:"path"`
+	Reference string `json:"reference"`
+	Candidate string `json:"candidate"`
 }
 
 type ConformanceExpectedFile struct {
@@ -460,7 +468,10 @@ func validateConformanceFixture(fixture ConformanceFixture, index int) error {
 	if err := validateConformanceStrings(fixture.Platforms, label+".platforms", true); err != nil {
 		return err
 	}
-	return validateConformanceExpected(fixture.Expected, label+".expected", paths)
+	if err := validateConformanceExpectations(fixture.Expected, label+".expected", paths); err != nil {
+		return err
+	}
+	return validateConformanceAcceptedDifferences(fixture.AcceptedDifferences, label+".acceptedDifferences")
 }
 
 func validateConformanceLaneOverrides(overrides *ConformanceLaneOverrides, label string, paths, portablePaths map[string]bool, changes []ConformanceGitChange) (int, error) {
@@ -645,6 +656,21 @@ func conformanceRequestsJSON(arguments []string) bool {
 	return false
 }
 
+func validateConformanceExpectations(outcome ConformanceExpectedOutcome, label string, fixturePaths map[string]bool) error {
+	candidate := outcome.Candidate
+	outcome.Candidate = nil
+	if err := validateConformanceExpected(outcome, label, fixturePaths); err != nil {
+		return err
+	}
+	if candidate == nil {
+		return nil
+	}
+	if candidate.Candidate != nil {
+		return expected(label+".candidate.candidate", "absent")
+	}
+	return validateConformanceExpected(*candidate, label+".candidate", fixturePaths)
+}
+
 func validateConformanceExpected(outcome ConformanceExpectedOutcome, label string, fixturePaths map[string]bool) error {
 	if outcome.ExitStatus < 0 || outcome.ExitStatus > 2 {
 		return expected(label+".exitStatus", "0, 1, or 2")
@@ -676,6 +702,59 @@ func validateConformanceExpected(outcome ConformanceExpectedOutcome, label strin
 		if !fixturePaths[path] || writes[path] {
 			return expected(indexed(label+".protected", index), "an existing fixture path not listed in writes")
 		}
+	}
+	return nil
+}
+
+func validateConformanceAcceptedDifferences(differences []ConformanceDifference, label string) error {
+	if len(differences) > maximumConformanceDifferences {
+		return expected(label, fmt.Sprintf("at most %d items", maximumConformanceDifferences))
+	}
+	paths := map[string]bool{}
+	for index, difference := range differences {
+		item := indexed(label, index)
+		if !validConformancePointer(difference.Path) || paths[difference.Path] {
+			return expected(item+".path", "a unique canonical JSON pointer")
+		}
+		paths[difference.Path] = true
+		for _, value := range []struct {
+			name  string
+			value string
+		}{{"reference", difference.Reference}, {"candidate", difference.Candidate}} {
+			if err := validateConformanceDifferenceValue(value.value); err != nil {
+				return expected(item+"."+value.name, "canonical JSON of at most 1024 bytes")
+			}
+		}
+	}
+	return nil
+}
+
+func validConformancePointer(value string) bool {
+	if value == "" || value[0] != '/' || len(value) > 1024 || strings.ContainsRune(value, 0) {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] == '~' && (index+1 >= len(value) || value[index+1] != '0' && value[index+1] != '1') {
+			return false
+		}
+		if value[index] == '~' {
+			index++
+		}
+	}
+	return true
+}
+
+func validateConformanceDifferenceValue(value string) error {
+	if value == "" || len(value) > maximumConformanceDifferenceBytes {
+		return errors.New("difference value is empty or exceeds its limit")
+	}
+	decoded, err := decodeConformanceValue([]byte(value))
+	if err != nil {
+		return err
+	}
+	canonical, err := conformanceDifferenceValue(decoded)
+	if err != nil || canonical != value {
+		return errors.New("difference value is not canonical JSON")
 	}
 	return nil
 }

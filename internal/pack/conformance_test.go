@@ -195,6 +195,67 @@ func TestConformanceRunnerProvesReproducibilityAndDetectsSemanticLoss(t *testing
 	}
 }
 
+func TestConformanceRunnerAcceptsOnlyExactDeclaredTransition(t *testing.T) {
+	ledgerPath := writeConformanceTestLedger(t)
+	reference := writeConformanceTestExecutable(t, "reference")
+	candidate := writeConformanceTestExecutable(t, "candidate")
+	executor := conformanceTestExecutor{reference: reference, candidate: candidate, mutation: "diagnostic"}
+	options := ConformanceOptions{LedgerPath: ledgerPath, ReferenceExecutable: reference, CandidateExecutable: candidate}
+
+	baseline, err := runConformance(context.Background(), options, executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(baseline.Fixtures) != 1 || len(baseline.Fixtures[0].Differences) == 0 {
+		t.Fatalf("baseline evidence = %+v", baseline.Fixtures)
+	}
+
+	ledger, err := LoadConformanceLedger(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := ledger.Fixtures[0]
+	candidateExpected := fixture.Expected
+	candidateExpected.RequiredRules = []string{}
+	candidateExpected.Candidate = nil
+	fixture.Expected.Candidate = &candidateExpected
+	fixture.AcceptedDifferences = slices.Clone(baseline.Fixtures[0].Differences)
+	fixturePath := filepath.Join(filepath.Dir(ledgerPath), "fixtures", "seeded.json")
+	data, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixturePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	accepted, err := runConformance(context.Background(), options, executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted.Summary.Status != "passed" || accepted.Fixtures[0].Status != "passed" || len(accepted.Fixtures[0].AssertionFailures) != 0 {
+		t.Fatalf("declared transition = %+v", accepted)
+	}
+
+	fixture.AcceptedDifferences[0].Candidate = `"wrong"`
+	data, err = json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixturePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mismatched, err := runConformance(context.Background(), options, executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mismatched.Summary.Status != "failed" || !slices.ContainsFunc(mismatched.Fixtures[0].AssertionFailures, func(failure string) bool {
+		return strings.Contains(failure, "values did not match")
+	}) {
+		t.Fatalf("mismatched transition = %+v", mismatched)
+	}
+}
+
 func TestConformanceMaterializerSeedsReproducibleGitState(t *testing.T) {
 	configuration := "{\"version\":5}\n"
 	baseSource := "package sample\n"
@@ -316,8 +377,10 @@ func TestConformanceLaneOverridesPreserveComparableEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	differences, err := compareConformanceRuns(
-		ConformanceRunEvidence{Report: referenceReport, Before: referenceFiles, After: referenceFiles, BeforeGit: referenceGit, AfterGit: referenceGit}, referenceRoot, "/reference-policy",
-		ConformanceRunEvidence{Report: candidateReport, Before: candidateFiles, After: candidateFiles, BeforeGit: candidateGit, AfterGit: candidateGit}, candidateRoot, "/candidate-policy",
+		ConformanceRunEvidence{Report: referenceReport, Before: referenceFiles, After: referenceFiles, BeforeGit: referenceGit, AfterGit: referenceGit},
+		conformanceComparisonRoots{repository: referenceRoot, policy: "/reference-policy", data: "/reference-data"},
+		ConformanceRunEvidence{Report: candidateReport, Before: candidateFiles, After: candidateFiles, BeforeGit: candidateGit, AfterGit: candidateGit},
+		conformanceComparisonRoots{repository: candidateRoot, policy: "/candidate-policy", data: "/candidate-data"},
 		variants,
 	)
 	if err != nil || len(differences) != 0 {
@@ -341,8 +404,8 @@ func TestConformanceCoverageAcceptsNativeGraphNodes(t *testing.T) {
 func TestConformanceComparisonNormalizesOnlyBoundRoots(t *testing.T) {
 	referenceReport := conformanceTestReport("/reference-repository", []map[string]any{conformanceTestFinding()}, []string{"src/main.go"}, false)
 	candidateReport := conformanceTestReport("/candidate-repository", []map[string]any{conformanceTestFinding()}, []string{"src/main.go"}, false)
-	referenceReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/reference-policy/.tools/bin/tool"}}}
-	candidateReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/candidate-policy/.tools/bin/tool"}}}
+	referenceReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/reference-policy/.tools/bin/tool", "/reference-data/shell/1.0.0/tool"}}}
+	candidateReport["execution"].(map[string]any)["commands"] = []map[string]any{{"argv": []string{"/candidate-policy/.tools/bin/tool", "/candidate-data/shell/1.0.0/tool"}}}
 	referenceData, err := json.Marshal(referenceReport)
 	if err != nil {
 		t.Fatal(err)
@@ -352,12 +415,54 @@ func TestConformanceComparisonNormalizesOnlyBoundRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	differences, err := compareConformanceRuns(
-		ConformanceRunEvidence{ExitStatus: 1, Report: referenceData}, "/reference-repository", "/reference-policy",
-		ConformanceRunEvidence{ExitStatus: 1, Report: candidateData}, "/candidate-repository", "/candidate-policy",
+		ConformanceRunEvidence{ExitStatus: 1, Report: referenceData},
+		conformanceComparisonRoots{repository: "/reference-repository", policy: "/reference-policy", data: "/reference-data"},
+		ConformanceRunEvidence{ExitStatus: 1, Report: candidateData},
+		conformanceComparisonRoots{repository: "/candidate-repository", policy: "/candidate-policy", data: "/candidate-data"},
 	)
 	if err != nil || len(differences) != 0 {
 		t.Fatalf("normalized differences=%+v err=%v", differences, err)
 	}
+}
+
+func TestConformanceComparisonRejectsUnboundedDifferenceEvidence(t *testing.T) {
+	t.Run("count", func(t *testing.T) {
+		reference := map[string]any{}
+		candidate := map[string]any{}
+		for index := 0; index <= maximumConformanceDifferences; index++ {
+			key := fmt.Sprintf("value-%03d", index)
+			reference[key] = 0
+			candidate[key] = 1
+		}
+		_, err := compareConformanceTestReports(t, reference, candidate)
+		if err == nil || !strings.Contains(err.Error(), "exceeds 128 differences") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+	t.Run("value size", func(t *testing.T) {
+		_, err := compareConformanceTestReports(t, map[string]any{"value": strings.Repeat("a", maximumConformanceDifferenceBytes)}, map[string]any{"value": "short"})
+		if err == nil || !strings.Contains(err.Error(), "exceeds 1024 bytes") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func compareConformanceTestReports(t *testing.T, reference, candidate any) ([]ConformanceDifference, error) {
+	t.Helper()
+	referenceData, err := json.Marshal(reference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateData, err := json.Marshal(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return compareConformanceRuns(
+		ConformanceRunEvidence{Report: referenceData},
+		conformanceComparisonRoots{},
+		ConformanceRunEvidence{Report: candidateData},
+		conformanceComparisonRoots{},
+	)
 }
 
 func TestConformanceGitValidationIdentifiesUnsafeFields(t *testing.T) {

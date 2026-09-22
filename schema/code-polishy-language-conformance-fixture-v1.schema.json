@@ -39,7 +39,13 @@
     },
     "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
     "platforms": { "$ref": "#/$defs/requiredStrings" },
-    "expected": { "$ref": "#/$defs/expected" }
+    "expected": { "$ref": "#/$defs/expected" },
+    "acceptedDifferences": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/difference" }
+    }
   },
   "allOf": [
     {
@@ -188,7 +194,7 @@
         "sha256": { "$ref": "#/$defs/digest" }
       }
     },
-    "expected": {
+    "expectedOutcome": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -209,6 +215,53 @@
           "items": { "$ref": "#/$defs/expectedFile" }
         },
         "protected": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exitStatus",
+        "reportStatus",
+        "requiredRules",
+        "requiredCoverage",
+        "writes",
+        "protected"
+      ],
+      "properties": {
+        "exitStatus": { "enum": [0, 1, 2] },
+        "reportStatus": { "enum": ["passed", "failed"] },
+        "requiredRules": { "$ref": "#/$defs/strings" },
+        "requiredCoverage": { "$ref": "#/$defs/strings" },
+        "writes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedFile" }
+        },
+        "protected": { "$ref": "#/$defs/strings" },
+        "candidate": { "$ref": "#/$defs/expectedOutcome" }
+      }
+    },
+    "difference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "reference", "candidate"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^/"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "candidate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
       }
     }
   }
