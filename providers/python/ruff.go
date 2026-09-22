@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -18,9 +20,12 @@ const maximumToolOutput = 8 << 20
 const maximumToolError = 64 << 10
 const ruffBaselineSelection = "B,C4,E,F,I,PIE,RUF,SIM,UP"
 
+var ruffComplexityMessage = regexp.MustCompile("^`([^`]+)` is too complex \\(([0-9]+) > 0\\)$")
+
 type ruffExecutor interface {
 	format(context.Context, string, analysisScope, string, []byte) ([]byte, error)
 	lint(context.Context, string, analysisScope, []string, map[string]bool) ([]responseFinding, error)
+	complexity(context.Context, string, analysisScope, []string) ([]functionFact, error)
 }
 
 type osRuff struct {
@@ -100,6 +105,26 @@ func (runner osRuff) lint(ctx context.Context, workspace string, scope analysisS
 		outputs = append(outputs, output)
 	}
 	return parseRuffFindings(workspace, scope, files, generated, outputs)
+}
+
+func (runner osRuff) complexity(ctx context.Context, workspace string, scope analysisScope, files []string) ([]functionFact, error) {
+	if err := runner.validate(); err != nil {
+		return nil, err
+	}
+	directory, relative, target, err := ruffFiles(workspace, scope, files)
+	if err != nil {
+		return nil, err
+	}
+	arguments := []string{
+		"check", "--no-cache", "--no-fix", "--isolated", "--target-version", target,
+		"--select", "C901", "--ignore-noqa", "--config", "lint.mccabe.max-complexity = 0",
+		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
+	}
+	output, err := executeTool(ctx, runner.executable, directory, append(arguments, relative...), nil)
+	if err != nil {
+		return nil, err
+	}
+	return parseRuffComplexities(workspace, scope, files, output)
 }
 
 func (runner osRuff) validate() error {
@@ -210,6 +235,48 @@ func parseRuffFindings(workspace string, scope analysisScope, files []string, ge
 	}
 	sortFindings(findings)
 	return findings, nil
+}
+
+func parseRuffComplexities(workspace string, scope analysisScope, files []string, data []byte) ([]functionFact, error) {
+	diagnostics, err := decodeRuffDiagnostics(data)
+	if err != nil {
+		return nil, err
+	}
+	allowed := map[string]bool{}
+	for _, file := range files {
+		allowed[file] = true
+	}
+	functions := make([]functionFact, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		function, err := ruffComplexity(workspace, scope, diagnostic, allowed)
+		if err != nil {
+			return nil, err
+		}
+		functions = append(functions, function)
+	}
+	return functions, nil
+}
+
+func ruffComplexity(workspace string, scope analysisScope, diagnostic ruffDiagnostic, allowed map[string]bool) (functionFact, error) {
+	if diagnostic.Code != "C901" || diagnostic.Location.Row < 1 || diagnostic.Location.Column < 1 {
+		return functionFact{}, errors.New("ruff returned an invalid complexity diagnostic")
+	}
+	match := ruffComplexityMessage.FindStringSubmatch(strings.TrimSpace(diagnostic.Message))
+	if len(match) != 3 {
+		return functionFact{}, errors.New("ruff returned an unrecognized complexity measurement")
+	}
+	complexity, err := strconv.Atoi(match[2])
+	if err != nil || complexity < 1 {
+		return functionFact{}, errors.New("ruff returned an invalid complexity measurement")
+	}
+	file, err := ruffResultPath(workspace, scope, diagnostic.Filename)
+	if err != nil {
+		return functionFact{}, err
+	}
+	if !allowed[file] {
+		return functionFact{}, fmt.Errorf("ruff returned complexity for unselected source %s", file)
+	}
+	return functionFact{Path: file, Line: diagnostic.Location.Row, Column: diagnostic.Location.Column, Name: match[1], Complexity: complexity}, nil
 }
 
 func decodeRuffDiagnostics(data []byte) ([]ruffDiagnostic, error) {

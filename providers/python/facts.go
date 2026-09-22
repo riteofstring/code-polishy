@@ -15,6 +15,7 @@ import (
 
 type factExecutor interface {
 	comments(context.Context, string, []string) (factResult, error)
+	functions(context.Context, string, []string) (factResult, error)
 }
 
 type osPythonFacts struct {
@@ -23,8 +24,9 @@ type osPythonFacts struct {
 }
 
 type factResult struct {
-	Comments []commentFact
-	Failures map[string]string
+	Comments  []commentFact
+	Functions []functionFact
+	Failures  map[string]string
 }
 
 type factRequest struct {
@@ -32,8 +34,9 @@ type factRequest struct {
 }
 
 type factResponse struct {
-	Comments []commentFact `json:"comments"`
-	Failures []factFailure `json:"failures"`
+	Comments  []commentFact  `json:"comments"`
+	Functions []functionFact `json:"functions"`
+	Failures  []factFailure  `json:"failures"`
 }
 
 type factFailure struct {
@@ -42,6 +45,14 @@ type factFailure struct {
 }
 
 func (runner osPythonFacts) comments(ctx context.Context, workspace string, files []string) (factResult, error) {
+	return runner.inspect(ctx, workspace, files)
+}
+
+func (runner osPythonFacts) functions(ctx context.Context, workspace string, files []string) (factResult, error) {
+	return runner.inspect(ctx, workspace, files)
+}
+
+func (runner osPythonFacts) inspect(ctx context.Context, workspace string, files []string) (factResult, error) {
 	if err := runner.validate(); err != nil {
 		return factResult{}, err
 	}
@@ -98,7 +109,11 @@ func parseFactResponse(data []byte, files []string) (factResult, error) {
 	if err != nil {
 		return factResult{}, err
 	}
-	return factResult{Comments: comments, Failures: failures}, nil
+	functions, err := validatedFactFunctions(value.Functions, allowed, failures)
+	if err != nil {
+		return factResult{}, err
+	}
+	return factResult{Comments: comments, Functions: functions, Failures: failures}, nil
 }
 
 func decodeFactResponse(data []byte) (factResponse, error) {
@@ -146,4 +161,18 @@ func validatedFactComments(values []commentFact, allowed map[string]bool, failur
 		comments = append(comments, comment)
 	}
 	return comments, nil
+}
+
+func validatedFactFunctions(values []functionFact, allowed map[string]bool, failures map[string]string) ([]functionFact, error) {
+	functions := []functionFact{}
+	for _, function := range values {
+		if !allowed[function.Path] || failures[function.Path] != "" {
+			continue
+		}
+		if function.Line < 1 || function.Column < 1 || strings.TrimSpace(function.Name) == "" || len(function.Name) > 1024 || function.Depth < 0 || function.Parameters < 0 {
+			return nil, errors.New("python source facts contain an invalid function")
+		}
+		functions = append(functions, function)
+	}
+	return functions, nil
 }

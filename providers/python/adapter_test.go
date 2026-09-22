@@ -15,6 +15,7 @@ import (
 type fakeRuff struct {
 	formatted map[string][]byte
 	findings  []responseFinding
+	functions []functionFact
 	err       error
 }
 
@@ -32,12 +33,33 @@ func (ruff fakeRuff) lint(context.Context, string, analysisScope, []string, map[
 	return slices.Clone(ruff.findings), ruff.err
 }
 
+func (ruff fakeRuff) complexity(context.Context, string, analysisScope, []string) ([]functionFact, error) {
+	return slices.Clone(ruff.functions), ruff.err
+}
+
 type fakeFacts struct {
 	result factResult
 	err    error
 }
 
+type fakeTy struct {
+	findings []responseFinding
+	files    *[]string
+	err      error
+}
+
+func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files []string) ([]responseFinding, error) {
+	if ty.files != nil {
+		*ty.files = slices.Clone(files)
+	}
+	return slices.Clone(ty.findings), ty.err
+}
+
 func (facts fakeFacts) comments(context.Context, string, []string) (factResult, error) {
+	return facts.result, facts.err
+}
+
+func (facts fakeFacts) functions(context.Context, string, []string) (factResult, error) {
 	return facts.result, facts.err
 }
 
@@ -122,6 +144,48 @@ func TestLintReturnsRuffFindingAndPythonCommentFacts(t *testing.T) {
 	}
 }
 
+func TestComplexityCombinesRuffAndPythonFunctionMeasurements(t *testing.T) {
+	root := t.TempDir()
+	source := []byte("def branch(value):\n    if value:\n        return 1\n    return 0\n")
+	request := pythonTestRequest(t, root, "complexity", source)
+	t.Setenv("CODE_POLISHY_TOOL_RUFF", filepath.Join(root, "ruff"))
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	location := functionFact{Path: "src/app.py", Line: 1, Column: 5, Name: "branch"}
+	metric := location
+	metric.Complexity = 2
+	shape := location
+	shape.Depth = 1
+	shape.Parameters = 1
+	adapter := adapter{
+		ruff:  fakeRuff{functions: []functionFact{metric}},
+		facts: fakeFacts{result: factResult{Functions: []functionFact{shape}, Failures: map[string]string{}}},
+	}
+	result := adapter.run(context.Background(), request)
+	want := shape
+	want.Complexity = 2
+	if result.Status != "pass" || result.Facts == nil || result.Facts.Functions == nil || !slices.Equal(*result.Facts.Functions, []functionFact{want}) {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestTypecheckAnalyzesTheCompleteSelectedProjectScope(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "typecheck", []byte("from .other import value\n"))
+	other := []byte("value: int = 'wrong'\n")
+	writePythonTestInput(t, root, &request, "src/other.py", other)
+	request.Scopes[0].Members = append(request.Scopes[0].Members, "src/other.py")
+	request.Scopes[0].Context = append(request.Scopes[0].Context, "src/other.py")
+	request.DiagnosticFiles = append(request.DiagnosticFiles, "src/other.py")
+	t.Setenv("CODE_POLISHY_TOOL_TY", filepath.Join(root, "ty"))
+	finding := responseFinding{Capability: "typecheck", Path: "src/other.py", Line: 1, Column: 14, Subject: "invalid-assignment", Message: "wrong type", Rule: "ty.invalid-assignment"}
+	checked := []string{}
+	adapter := adapter{ty: fakeTy{findings: []responseFinding{finding}, files: &checked}}
+	result := adapter.run(context.Background(), request)
+	if result.Status != "findings" || !slices.Equal(checked, []string{"src/app.py", "src/other.py"}) || !slices.Equal(result.Coverage.Analyzed, checked) {
+		t.Fatalf("result = %+v, checked = %v", result, checked)
+	}
+}
+
 func TestDecodeRequestRejectsUnknownFieldsAndTrailingDocuments(t *testing.T) {
 	t.Parallel()
 	if _, err := decodeRequest(strings.NewReader(`{"protocolVersion":4,"operation":"discover","unknown":true}`)); err == nil {
@@ -173,11 +237,18 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 	}
 	slices.SortFunc(context, func(left, right inputFile) int { return strings.Compare(left.Path, right.Path) })
 	operation := "check"
-	tools := []toolIdentity{{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)}}
-	if capability == "format" {
+	tools := []toolIdentity{}
+	switch capability {
+	case "format":
 		operation = "format"
-	} else {
-		tools = append(tools, toolIdentity{ID: "python", Name: "python", Version: "3.12.13+20260728", SHA256: strings.Repeat("b", 64)})
+		tools = append(tools, toolIdentity{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)})
+	case "lint", "complexity":
+		tools = append(tools,
+			toolIdentity{ID: "ruff", Name: "ruff", Version: "0.16.0", SHA256: strings.Repeat("a", 64)},
+			toolIdentity{ID: "python", Name: "python", Version: "3.12.13+20260728", SHA256: strings.Repeat("b", 64)},
+		)
+	case "typecheck":
+		tools = append(tools, toolIdentity{ID: "ty", Name: "ty", Version: "0.0.65", SHA256: strings.Repeat("c", 64)})
 	}
 	return request{
 		ProtocolVersion: protocolVersion, Operation: operation, Capability: capability, ProjectRoot: root,
@@ -185,6 +256,19 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 		Scopes:  []analysisScope{{Handle: "scope-1", Language: "python", Root: ".", Members: []string{"src/app.py"}, Context: []string{"pyproject.toml", "src/app.py"}, Data: json.RawMessage(`{"manifest":"pyproject.toml","targetVersion":"py312"}`)}},
 		Context: context, Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true}}, Tools: tools,
 	}
+}
+
+func writePythonTestInput(t *testing.T, root string, request *request, name string, data []byte) {
+	t.Helper()
+	target := filepath.Join(root, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	request.Context = append(request.Context, inputFile{Path: name, SHA256: hex.EncodeToString(digest[:])})
 }
 
 func mustJSON(t *testing.T, value string) string {

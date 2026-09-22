@@ -118,6 +118,57 @@ def docstrings(path, data, tree, line_starts, first_code):
     return result
 
 
+def function_depth(function):
+    boundaries = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+    controls = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith, ast.Match)
+    maximum = 0
+
+    def visit(node, depth):
+        nonlocal maximum
+        if node is not function and isinstance(node, boundaries):
+            return
+        current = depth + 1 if isinstance(node, controls) else depth
+        maximum = max(maximum, current)
+        for child in ast.iter_child_nodes(node):
+            visit(child, current)
+
+    for statement in function.body:
+        visit(statement, 0)
+    return maximum
+
+
+def function_parameters(function):
+    arguments = function.args
+    return len(arguments.posonlyargs) + len(arguments.args) + len(arguments.kwonlyargs) + int(arguments.vararg is not None) + int(arguments.kwarg is not None)
+
+
+def functions(path, data, tree, line_starts):
+    result = []
+    for function in ast.walk(tree):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        start = line_starts[function.lineno - 1] + function.col_offset
+        end = data.find(b"\n", start)
+        if end < 0:
+            end = len(data)
+        name_offset = data.find(function.name.encode("utf-8"), start, end)
+        if name_offset < 0:
+            raise SyntaxError(f"cannot locate function {function.name}")
+        result.append(
+            {
+                "path": path,
+                "line": function.lineno,
+                "column": name_offset - line_starts[function.lineno - 1] + 1,
+                "name": function.name,
+                "complexity": 0,
+                "depth": function_depth(function),
+                "parameters": function_parameters(function),
+            }
+        )
+    result.sort(key=lambda item: (item["line"], item["column"], item["name"]))
+    return result
+
+
 def inspect(path):
     data = pathlib.Path(path).read_bytes()
     text = data.decode("utf-8")
@@ -129,14 +180,16 @@ def inspect(path):
     for index, item in enumerate(comments):
         item["preamble"] = index == 0 and not data[: item["_offset"]].strip()
         del item["_offset"]
-    return comments
+    return comments, functions(path, data, tree, line_starts)
 
 
 request = json.load(sys.stdin)
-response = {"comments": [], "failures": []}
+response = {"comments": [], "functions": [], "failures": []}
 for source in request["files"]:
     try:
-        response["comments"].extend(inspect(source))
+        comments, metrics = inspect(source)
+        response["comments"].extend(comments)
+        response["functions"].extend(metrics)
     except (OSError, UnicodeError, SyntaxError, tokenize.TokenError) as error:
         response["failures"].append({"path": source, "reason": f"Python source facts require valid syntax: {error}"})
 json.dump(response, sys.stdout, sort_keys=True, separators=(",", ":"))

@@ -16,10 +16,13 @@ materialized source, the target repository, or a cache. Ruff lint runs with
 `--no-cache` in both a sealed baseline lane and a target-configuration lane.
 The adapter deduplicates their findings while preserving the release-owned
 baseline. The carried CPython runtime tokenizes comments and resolves
-docstrings without importing target modules.
+docstrings without importing target modules. Ruff also supplies McCabe
+measurements while CPython supplies matching function depth and parameter
+facts for core-owned limits. `ty` checks every authenticated member of a
+selected project scope and may report diagnostics on unchanged members.
 
-The initial executable slice claims only format and lint. Type checking,
-complexity, dead code, architecture, dependency evidence, and runtime contracts
-remain migration work and cannot be inferred from these claims. The pack is not
-eligible for the ownership cutover until every Python ledger row has executable
-evidence.
+The executable quality slice claims format, lint, complexity, and type checking.
+Dead code, architecture, dependency evidence, project-environment resolution,
+and runtime contracts remain migration work and cannot be inferred from these
+claims. The pack is not eligible for the ownership cutover until every Python
+ledger row has executable evidence.

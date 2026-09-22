@@ -27,6 +27,7 @@ const maximumInputs = 10000
 type adapter struct {
 	ruff  ruffExecutor
 	facts factExecutor
+	ty    tyExecutor
 }
 
 func newAdapter() adapter {
@@ -38,6 +39,7 @@ func newAdapter() adapter {
 			executable: os.Getenv("CODE_POLISHY_TOOL_PYTHON"),
 			script:     filepath.Join(packRoot, "lib", "facts.py"),
 		},
+		ty: osTy{executable: os.Getenv("CODE_POLISHY_TOOL_TY"), config: filepath.Join(packRoot, "config", "ty.toml")},
 	}
 }
 
@@ -79,7 +81,7 @@ func validateRequest(value request) error {
 	if value.Operation == "discover" {
 		return nil
 	}
-	if value.Capability == "lint" && value.Operation == "check" {
+	if slices.Contains([]string{"lint", "complexity", "typecheck"}, value.Capability) && value.Operation == "check" {
 		return nil
 	}
 	if value.Capability == "format" && value.Operation == "format" {
@@ -133,12 +135,13 @@ func (adapter adapter) analyze(ctx context.Context, request request) (response, 
 	if err != nil {
 		return response{}, err
 	}
-	if request.Capability == "format" {
-		err = state.format(ctx, adapter.ruff, workspace, groups)
-	} else {
-		err = state.lint(ctx, adapter.ruff, adapter.facts, workspace, groups)
+	if request.Capability == "typecheck" {
+		groups, err = state.scopeMemberGroups()
+		if err != nil {
+			return response{}, err
+		}
 	}
-	if err != nil {
+	if err := state.executeCapability(ctx, adapter, workspace, groups); err != nil {
 		return response{}, err
 	}
 	return state.finish(), nil
@@ -153,6 +156,21 @@ type analysisState struct {
 type analysisGroup struct {
 	scope analysisScope
 	files []string
+}
+
+func (state *analysisState) executeCapability(ctx context.Context, adapter adapter, workspace string, groups []analysisGroup) error {
+	switch state.request.Capability {
+	case "format":
+		return state.format(ctx, adapter.ruff, workspace, groups)
+	case "lint":
+		return state.lint(ctx, adapter.ruff, adapter.facts, workspace, groups)
+	case "complexity":
+		return state.complexity(ctx, adapter.ruff, adapter.facts, workspace, groups)
+	case "typecheck":
+		return state.typecheck(ctx, adapter.ty, workspace, groups)
+	default:
+		return fmt.Errorf("unsupported Python capability %s", state.request.Capability)
+	}
 }
 
 func (state *analysisState) analysisGroups() ([]analysisGroup, error) {
@@ -171,6 +189,24 @@ func (state *analysisState) analysisGroups() ([]analysisGroup, error) {
 			return nil, fmt.Errorf("selected Python source %s has no authorized scope", file)
 		}
 		groups[index].files = append(groups[index].files, file)
+	}
+	return groups, nil
+}
+
+func (state *analysisState) scopeMemberGroups() ([]analysisGroup, error) {
+	groups := make([]analysisGroup, len(state.request.Scopes))
+	seen := map[string]bool{}
+	for index, scope := range state.request.Scopes {
+		groups[index].scope = scope
+		for _, file := range scope.Members {
+			if seen[file] {
+				return nil, fmt.Errorf("python typecheck scopes repeat member %s", file)
+			}
+			seen[file] = true
+			if state.usable(file) {
+				groups[index].files = append(groups[index].files, file)
+			}
+		}
 	}
 	return groups, nil
 }
@@ -248,6 +284,94 @@ func (state *analysisState) lint(ctx context.Context, ruff ruffExecutor, facts f
 	return nil
 }
 
+func (state *analysisState) complexity(ctx context.Context, ruff ruffExecutor, facts factExecutor, workspace string, groups []analysisGroup) error {
+	functions := []functionFact{}
+	for _, group := range groups {
+		if len(group.files) == 0 {
+			continue
+		}
+		ruffFunctions, err := ruff.complexity(ctx, workspace, group.scope, group.files)
+		if err != nil {
+			return err
+		}
+		result, err := facts.functions(ctx, workspace, group.files)
+		if err != nil {
+			return err
+		}
+		merged, err := mergeFunctionFacts(result.Functions, ruffFunctions)
+		if err != nil {
+			return err
+		}
+		functions = append(functions, merged...)
+		state.accountFactFiles(group.files, result.Failures)
+	}
+	if len(functions) > 20000 {
+		return errors.New("python function facts exceed the protocol collection limit")
+	}
+	sortFunctions(functions)
+	state.result.Facts = &sourceFacts{Functions: &functions}
+	state.result.Evidence = []string{"Ruff 0.16.0 supplied McCabe measurements and CPython supplied function depth and parameter facts"}
+	return nil
+}
+
+func (state *analysisState) typecheck(ctx context.Context, ty tyExecutor, workspace string, groups []analysisGroup) error {
+	for _, group := range groups {
+		if len(group.files) == 0 {
+			continue
+		}
+		findings, err := ty.typecheck(ctx, workspace, group.scope, group.files)
+		if err != nil {
+			return err
+		}
+		state.result.Findings = append(state.result.Findings, findings...)
+		state.result.Coverage.Analyzed = append(state.result.Coverage.Analyzed, group.files...)
+	}
+	if len(state.result.Findings) > 4096 {
+		return errors.New("python type diagnostics exceed the protocol collection limit")
+	}
+	state.result.Evidence = []string{"ty 0.0.65 checked every member of the selected Python project scope"}
+	return nil
+}
+
+func (state *analysisState) accountFactFiles(files []string, failures map[string]string) {
+	for _, file := range files {
+		if reason := failures[file]; reason != "" {
+			state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: reason})
+			continue
+		}
+		state.result.Coverage.Analyzed = append(state.result.Coverage.Analyzed, file)
+	}
+}
+
+func mergeFunctionFacts(functions, complexities []functionFact) ([]functionFact, error) {
+	byIdentity := map[string]int{}
+	for _, function := range complexities {
+		identity := functionIdentity(function)
+		if _, found := byIdentity[identity]; found {
+			return nil, errors.New("ruff repeated a function complexity measurement")
+		}
+		byIdentity[identity] = function.Complexity
+	}
+	merged := make([]functionFact, 0, len(functions))
+	for _, function := range functions {
+		complexity, found := byIdentity[functionIdentity(function)]
+		if !found {
+			return nil, fmt.Errorf("ruff omitted complexity for function %s in %s", function.Name, function.Path)
+		}
+		function.Complexity = complexity
+		delete(byIdentity, functionIdentity(function))
+		merged = append(merged, function)
+	}
+	if len(byIdentity) != 0 {
+		return nil, errors.New("ruff returned complexity for an unknown function")
+	}
+	return merged, nil
+}
+
+func functionIdentity(function functionFact) string {
+	return fmt.Sprintf("%s\x00%d\x00%d\x00%s", function.Path, function.Line, function.Column, function.Name)
+}
+
 func (state *analysisState) generatedFiles() map[string]bool {
 	generated := map[string]bool{}
 	for _, entry := range state.request.Inventory {
@@ -273,11 +397,14 @@ func (state *analysisState) finish() response {
 }
 
 func validateTools(request request) error {
-	if !hasTool(request.Tools, "ruff", "ruff", "0.16.0") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_RUFF")) == "" {
+	if slices.Contains([]string{"format", "lint", "complexity"}, request.Capability) && (!hasTool(request.Tools, "ruff", "ruff", "0.16.0") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_RUFF")) == "") {
 		return errors.New("request does not bind an available Ruff 0.16.0 executable")
 	}
-	if request.Capability == "lint" && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
+	if slices.Contains([]string{"lint", "complexity"}, request.Capability) && (!hasTool(request.Tools, "python", "python", "3.12.13+20260728") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_PYTHON")) == "") {
 		return errors.New("request does not bind an available CPython 3.12.13+20260728 executable")
+	}
+	if request.Capability == "typecheck" && (!hasTool(request.Tools, "ty", "ty", "0.0.65") || strings.TrimSpace(os.Getenv("CODE_POLISHY_TOOL_TY")) == "") {
+		return errors.New("request does not bind an available ty 0.0.65 executable")
 	}
 	return nil
 }
@@ -472,5 +599,11 @@ func sortComments(comments []commentFact) {
 		first := comments[left]
 		second := comments[right]
 		return fmt.Sprintf("%s\x00%09d\x00%09d", first.Path, first.Line, first.Column) < fmt.Sprintf("%s\x00%09d\x00%09d", second.Path, second.Line, second.Column)
+	})
+}
+
+func sortFunctions(functions []functionFact) {
+	sort.SliceStable(functions, func(left, right int) bool {
+		return functionIdentity(functions[left]) < functionIdentity(functions[right])
 	})
 }

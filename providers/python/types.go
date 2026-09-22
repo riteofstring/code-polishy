@@ -127,7 +127,8 @@ type unsupported struct {
 }
 
 type sourceFacts struct {
-	Comments *[]commentFact `json:"comments,omitempty"`
+	Comments  *[]commentFact  `json:"comments,omitempty"`
+	Functions *[]functionFact `json:"functions,omitempty"`
 }
 
 type commentFact struct {
@@ -141,6 +142,16 @@ type commentFact struct {
 	Preamble         bool   `json:"preamble"`
 	ByteZero         bool   `json:"byteZero"`
 	MachineDirective bool   `json:"machineDirective,omitempty"`
+}
+
+type functionFact struct {
+	Path       string `json:"path"`
+	Line       int    `json:"line"`
+	Column     int    `json:"column"`
+	Name       string `json:"name"`
+	Complexity int    `json:"complexity"`
+	Depth      int    `json:"depth"`
+	Parameters int    `json:"parameters"`
 }
 
 type edit struct {
