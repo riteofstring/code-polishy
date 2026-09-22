@@ -14,13 +14,14 @@ import (
 )
 
 type Resolution struct {
-	Commands          []policy.Command
-	Languages         []policy.LanguageRule
-	LanguageDetectors []policy.PackLanguageDetector
-	TestPatterns      []policy.LanguageRule
-	Manifests         []policy.PackDependencyRule
-	Findings          []policy.Finding
-	Notes             []string
+	Commands           []policy.Command
+	Languages          []policy.LanguageRule
+	LanguageDetectors  []policy.PackLanguageDetector
+	TestPatterns       []policy.LanguageRule
+	CapabilityAbsences []policy.PackCapabilityAbsence
+	Manifests          []policy.PackDependencyRule
+	Findings           []policy.Finding
+	Notes              []string
 }
 
 func Unavailable(selected []policy.PackSelection, err error) Resolution {
@@ -80,6 +81,7 @@ func Apply(config *policy.Config, resolution Resolution) {
 	config.Scope.Languages = append(config.Scope.Languages, resolution.Languages...)
 	config.PackLanguageDetectors = append(config.PackLanguageDetectors, resolution.LanguageDetectors...)
 	config.PackTestPatterns = append(config.PackTestPatterns, resolution.TestPatterns...)
+	config.PackCapabilityAbsences = append(config.PackCapabilityAbsences, resolution.CapabilityAbsences...)
 	config.PackManifests = append(config.PackManifests, resolution.Manifests...)
 	config.Checks = append(config.Checks, resolution.Commands...)
 }
@@ -97,6 +99,9 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 		}
 		if len(language.TestPatterns) > 0 {
 			resolution.TestPatterns = append(resolution.TestPatterns, policy.LanguageRule{Name: language.ID, Paths: slices.Clone(language.TestPatterns)})
+		}
+		for _, unsupported := range language.Unsupported {
+			resolution.CapabilityAbsences = append(resolution.CapabilityAbsences, policy.PackCapabilityAbsence{Pack: selection.Name, Language: language.ID, Capability: unsupported.Capability, Reason: unsupported.Reason})
 		}
 		languagePatterns[language.ID] = source
 		manifestPatterns[language.ID] = append(manifestPatterns[language.ID], language.DependencyManifests...)

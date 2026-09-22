@@ -3,14 +3,20 @@
   "manifestVersion": 3,
   "name": "sqlite-syntax-proof",
   "version": "1.0.0",
-  "engineVersion": "0.27.8",
+  "engineVersion": "0.27.10",
   "protocolVersion": 4,
   "platforms": ["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"],
   "languages": [
     {
       "id": "sql",
       "sourcePatterns": ["**/*.fixture"],
-      "discoveryMode": "file-scoped"
+      "discoveryMode": "file-scoped",
+      "unsupportedCapabilities": [
+        {
+          "capability": "format",
+          "reason": "this syntax proof does not specify a formatter"
+        }
+      ]
     }
   ],
   "commands": [

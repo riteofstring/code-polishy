@@ -8,7 +8,8 @@
     "unsupported": []
   },
   "facts": {
-    "comments": []
+    "comments": [],
+    "literals": []
   },
   "inputs": [
     {

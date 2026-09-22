@@ -76,8 +76,28 @@ func TestAdvisoriesPreserveLocationsAndCanonicalOrder(t *testing.T) {
 	if advisories[0].Path != "src/z.mjs" || advisories[0].Subject != "2" {
 		t.Fatalf("first advisory = %+v", advisories[0])
 	}
+	if advisories[0].Line != 2 || advisories[0].Column != 14 || advisories[1].Line != 1 || advisories[1].Column != 41 {
+		t.Fatalf("literal locations = %+v", advisories)
+	}
 	if advisories[1].Path != "src/a.mjs" || advisories[1].Subject != "1" {
 		t.Fatalf("second advisory = %+v", advisories[1])
+	}
+}
+
+func TestLiteralFactsRetainCorePortabilityPolicy(t *testing.T) {
+	t.Parallel()
+	repo := portabilityRepository(t)
+	literals := []Literal{
+		{Path: "src/config.sh", Line: 2, Column: 7, Value: "/home/alice/project"},
+		{Path: "src/config.sh", Line: 3, Column: 18, Value: "../catalog", RootContext: true},
+	}
+	advisories := LiteralAdvisories(repo, literals)
+	if len(advisories) != 2 || advisories[0].Check != "portability.machinePath" || advisories[1].Check != "portability.siblingReference" {
+		t.Fatalf("literal advisories = %+v", advisories)
+	}
+	repo.Config.Portability.ExternalInputs = []policy.ExternalInput{{Name: "catalog", SourcePaths: []string{"src/config.sh"}, SiblingFallback: "../catalog"}}
+	if governed := LiteralAdvisories(repo, literals); len(governed) != 1 || governed[0].Check != "portability.machinePath" {
+		t.Fatalf("declared sibling fallback was not governed: %+v", governed)
 	}
 }
 

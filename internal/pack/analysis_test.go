@@ -92,6 +92,8 @@ func TestCommentFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
 		{"column", func(fact *CommentFact) { fact.Column = 0 }, "facts.comments[0].column: expected a one-based UTF-8 byte column"},
 		{"kind", func(fact *CommentFact) { fact.Kind = "line" }, "facts.comments[0].kind: expected Line, Block, Docstring, HTML, or Shebang"},
 		{"raw", func(fact *CommentFact) { fact.Raw = "" }, "facts.comments[0].raw: expected 1 to 65536 bytes"},
+		{"machine directive kind", func(fact *CommentFact) { fact.MachineDirective = true; fact.Kind = "Block" }, "facts.comments[0].machineDirective: expected true only for complete Line or Shebang facts"},
+		{"machine directive completeness", func(fact *CommentFact) { fact.MachineDirective = true; fact.Complete = false }, "facts.comments[0].machineDirective: expected true only for complete Line or Shebang facts"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -105,6 +107,32 @@ func TestCommentFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
 				Coverage:        &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}},
 				Facts:           &SourceFacts{Comments: &comments},
 			}
+			if err := validateResponse(response, request); err == nil || err.Error() != test.want {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestLiteralFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
+	request := Request{Capability: "lint", Files: []string{"src/a.fixture"}, DiagnosticFiles: []string{"src/a.fixture"}}
+	valid := LiteralFact{Path: "src/a.fixture", Line: 1, Column: 1, Value: "/home/alice/project"}
+	tests := []struct {
+		name   string
+		change func(*LiteralFact)
+		want   string
+	}{
+		{"path", func(fact *LiteralFact) { fact.Path = "src/other.fixture" }, "facts.literals[0].path: expected a path from coverage.analyzed"},
+		{"line", func(fact *LiteralFact) { fact.Line = 0 }, "facts.literals[0].line: expected a one-based line"},
+		{"column", func(fact *LiteralFact) { fact.Column = 0 }, "facts.literals[0].column: expected a one-based UTF-8 byte column"},
+		{"value", func(fact *LiteralFact) { fact.Value = "bad\nvalue" }, "facts.literals[0].value: expected 1 to 4096 bytes without NUL or newlines"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fact := valid
+			test.change(&fact)
+			literals := []LiteralFact{fact}
+			response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"lint completed"}, Coverage: &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}}, Facts: &SourceFacts{Literals: &literals}}
 			if err := validateResponse(response, request); err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}

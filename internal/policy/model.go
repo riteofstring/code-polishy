@@ -76,11 +76,12 @@ type Config struct {
 	ModuleByName        map[string]int       `json:"-"`
 	ActivePolicyModules []ActivePolicyModule `json:"-"`
 
-	JavaScriptLintScopes  []JavaScriptLintScope  `json:"-"`
-	PackManifests         []PackDependencyRule   `json:"-"`
-	PackLanguageDetectors []PackLanguageDetector `json:"-"`
-	PackTestPatterns      []LanguageRule         `json:"-"`
-	UnavailablePacks      []string               `json:"-"`
+	JavaScriptLintScopes   []JavaScriptLintScope   `json:"-"`
+	PackManifests          []PackDependencyRule    `json:"-"`
+	PackLanguageDetectors  []PackLanguageDetector  `json:"-"`
+	PackTestPatterns       []LanguageRule          `json:"-"`
+	PackCapabilityAbsences []PackCapabilityAbsence `json:"-"`
+	UnavailablePacks       []string                `json:"-"`
 }
 
 type PackSelection struct {
@@ -98,6 +99,13 @@ type PackDependencyRule struct {
 type PackLanguageDetector struct {
 	Language string
 	Shebangs []string
+}
+
+type PackCapabilityAbsence struct {
+	Pack       string
+	Language   string
+	Capability string
+	Reason     string
 }
 
 type Verification struct {
@@ -703,6 +711,8 @@ type FindingCommand struct {
 type Advisory struct {
 	Check   string
 	Path    string
+	Line    int
+	Column  int
 	Subject string
 	Message string
 }

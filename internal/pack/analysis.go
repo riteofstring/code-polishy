@@ -61,6 +61,7 @@ type SourceFacts struct {
 	Imports   *[]ImportFact   `json:"imports,omitempty"`
 	Comments  *[]CommentFact  `json:"comments,omitempty"`
 	Functions *[]FunctionFact `json:"functions,omitempty"`
+	Literals  *[]LiteralFact  `json:"literals,omitempty"`
 }
 
 type ImportFact struct {
@@ -74,15 +75,24 @@ type ImportFact struct {
 }
 
 type CommentFact struct {
-	Path       string `json:"path"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column"`
-	Kind       string `json:"kind"`
-	Raw        string `json:"raw"`
-	Complete   bool   `json:"complete"`
-	BeforeCode bool   `json:"beforeCode"`
-	Preamble   bool   `json:"preamble"`
-	ByteZero   bool   `json:"byteZero"`
+	Path             string `json:"path"`
+	Line             int    `json:"line"`
+	Column           int    `json:"column"`
+	Kind             string `json:"kind"`
+	Raw              string `json:"raw"`
+	Complete         bool   `json:"complete"`
+	BeforeCode       bool   `json:"beforeCode"`
+	Preamble         bool   `json:"preamble"`
+	ByteZero         bool   `json:"byteZero"`
+	MachineDirective bool   `json:"machineDirective,omitempty"`
+}
+
+type LiteralFact struct {
+	Path        string `json:"path"`
+	Line        int    `json:"line"`
+	Column      int    `json:"column"`
+	Value       string `json:"value"`
+	RootContext bool   `json:"rootContext"`
 }
 
 type FunctionFact struct {
@@ -193,6 +203,9 @@ func validateFactCollections(facts SourceFacts, request Request, analyzed []stri
 	if err := validateCommentFacts(facts.Comments, request.Capability, analyzed); err != nil {
 		return err
 	}
+	if err := validateLiteralFacts(facts.Literals, request.Capability, analyzed); err != nil {
+		return err
+	}
 	return validateFunctionFacts(facts.Functions, request.Capability, analyzed)
 }
 
@@ -241,6 +254,31 @@ func validateCommentFact(fact CommentFact, analyzed []string, label string) erro
 	}
 	if len(fact.Raw) == 0 || len(fact.Raw) > 65536 {
 		return expected(label+".raw", "1 to 65536 bytes")
+	}
+	if fact.MachineDirective && (!fact.Complete || !slices.Contains([]string{"Line", "Shebang"}, fact.Kind)) {
+		return expected(label+".machineDirective", "true only for complete Line or Shebang facts")
+	}
+	return nil
+}
+
+func validateLiteralFacts(facts *[]LiteralFact, capability string, analyzed []string) error {
+	if facts == nil {
+		return nil
+	}
+	if capability != "lint" {
+		return expected("facts.literals", "literals only for the lint capability")
+	}
+	if len(*facts) > 20000 {
+		return expected("facts.literals", "at most 20000 items")
+	}
+	for index, fact := range *facts {
+		label := indexed("facts.literals", index)
+		if err := validateFactLocation(fact.Path, fact.Line, fact.Column, analyzed, label); err != nil {
+			return err
+		}
+		if fact.Value == "" || len(fact.Value) > 4096 || strings.ContainsAny(fact.Value, "\x00\r\n") {
+			return expected(label+".value", "1 to 4096 bytes without NUL or newlines")
+		}
 	}
 	return nil
 }

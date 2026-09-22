@@ -10,5 +10,6 @@ The `examples` directory contains protocol v4 request and response documents.
 The pack unit suite checks those examples against the published schemas and the
 same production encoder, decoder, and semantic validator used during execution.
 
-The pack supplies lint only. It cannot satisfy formatting, type checking,
-complexity, architecture, or unused-code requirements and is not a full SQL pack.
+The pack supplies lint only. It explicitly records formatting as unsupported and
+cannot satisfy type checking, complexity, architecture, or unused-code requirements,
+so it is not a full SQL pack.

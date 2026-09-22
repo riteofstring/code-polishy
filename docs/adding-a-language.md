@@ -20,7 +20,7 @@ The complete `tools/fixtures/language-pack` proof pack ships with every release,
 so authors can run and modify the same verified example without a source checkout.
 Declare an exact pack version, the one exact `engineVersion` that may load it,
 supported platforms, languages with source patterns and/or exact shebang prefixes,
-optional language-specific test patterns, one discovery mode, dependency and
+optional language-specific test patterns and explicit capability absences, one discovery mode, dependency and
 metadata patterns, command languages,
 capabilities, execution profiles and type, timeouts, network authority, and
 permitted environment names. `file-scoped` discovery accepts no metadata patterns;
@@ -115,7 +115,11 @@ Architecture returns authored imports with original locations, resolved targets,
 package identity when applicable, and runtime/type-only/re-export/proven-dynamic
 edge kinds. Lint supplies lexical comment facts when comments are
 forbidden; raw text is capped at 65,536 UTF-8 bytes and truncation sets `complete`
-to false. Complexity supplies function complexity, depth, and parameter counts.
+to false. Set `machineDirective` only for a complete line or shebang whose syntax
+is a machine directive. Lint may supply static `literals` with path, one-based
+line and UTF-8 byte column, decoded value, and `rootContext`; core retains the
+machine-path, sibling-reference, and external-input policy decision. Complexity
+supplies function complexity, depth, and parameter counts.
 Explicit empty fact collections distinguish an inspected file without those facts
 from omitted evidence. The core derives ownership and classifications and applies
 its existing dependency, cycle, directive, and metric policies.
@@ -150,6 +154,24 @@ partial handoffs cannot imply whole-project coverage. Ordinary configured comman
 still run, but their successful exit does not establish structured source coverage.
 Architecture providers run through the architecture command so graph policy is
 always evaluated.
+
+When the absence itself is intentional, declare it on the language instead of
+shipping a no-op command:
+
+```json
+{
+  "unsupportedCapabilities": [
+    {
+      "capability": "format",
+      "reason": "this language pack does not specify a formatter"
+    }
+  ]
+}
+```
+
+The declared absence satisfies inventory checks but makes an actual format request
+fail with that reason. A language cannot both provide and mark the same capability
+unsupported.
 
 For a local source pack, obtain and review it through a trusted channel, then run:
 

@@ -44,13 +44,19 @@ type Manifest struct {
 }
 
 type Language struct {
-	ID                  string   `json:"id"`
-	SourcePatterns      []string `json:"sourcePatterns,omitempty"`
-	TestPatterns        []string `json:"testPatterns,omitempty"`
-	Shebangs            []string `json:"shebangs,omitempty"`
-	DependencyManifests []string `json:"dependencyManifests,omitempty"`
-	DiscoveryMode       string   `json:"discoveryMode"`
-	MetadataPatterns    []string `json:"metadataPatterns,omitempty"`
+	ID                  string                  `json:"id"`
+	SourcePatterns      []string                `json:"sourcePatterns,omitempty"`
+	TestPatterns        []string                `json:"testPatterns,omitempty"`
+	Shebangs            []string                `json:"shebangs,omitempty"`
+	DependencyManifests []string                `json:"dependencyManifests,omitempty"`
+	DiscoveryMode       string                  `json:"discoveryMode"`
+	MetadataPatterns    []string                `json:"metadataPatterns,omitempty"`
+	Unsupported         []UnsupportedCapability `json:"unsupportedCapabilities,omitempty"`
+}
+
+type UnsupportedCapability struct {
+	Capability string `json:"capability"`
+	Reason     string `json:"reason"`
 }
 
 type Command struct {
@@ -115,6 +121,9 @@ func validateManifest(manifest Manifest) error {
 		return err
 	}
 	if err := validateCommands(manifest.Commands, manifest.Languages); err != nil {
+		return err
+	}
+	if err := validateCapabilityClaims(manifest.Languages, manifest.Commands); err != nil {
 		return err
 	}
 	return validateFixtures(manifest.Commands, manifest.Fixtures)
@@ -205,7 +214,24 @@ func validateLanguage(language Language, index int, seen map[string]bool) error 
 	if err := validatePatterns(language.DependencyManifests, fmt.Sprintf("languages[%d].dependencyManifests", index)); err != nil {
 		return err
 	}
-	return validatePatterns(language.MetadataPatterns, fmt.Sprintf("languages[%d].metadataPatterns", index))
+	if err := validatePatterns(language.MetadataPatterns, fmt.Sprintf("languages[%d].metadataPatterns", index)); err != nil {
+		return err
+	}
+	if language.Unsupported != nil && len(language.Unsupported) == 0 {
+		return expected(fmt.Sprintf("languages[%d].unsupportedCapabilities", index), "one or more explicit capability absences or omission")
+	}
+	unsupported := map[string]bool{}
+	for unsupportedIndex, declaration := range language.Unsupported {
+		label := fmt.Sprintf("languages[%d].unsupportedCapabilities[%d]", index, unsupportedIndex)
+		if !slices.Contains(packCapabilities, declaration.Capability) || unsupported[declaration.Capability] {
+			return expected(label+".capability", "a unique standard capability")
+		}
+		if strings.TrimSpace(declaration.Reason) == "" || len(declaration.Reason) > 4096 {
+			return expected(label+".reason", "1 to 4096 non-whitespace bytes")
+		}
+		unsupported[declaration.Capability] = true
+	}
+	return nil
 }
 
 func validateShebangs(shebangs []string, label string) error {
@@ -215,6 +241,19 @@ func validateShebangs(shebangs []string, label string) error {
 	for _, shebang := range shebangs {
 		if len(shebang) > 128 || !shebangPattern.MatchString(shebang) || strings.ContainsRune(shebang, 0) {
 			return expected(label, "unique canonical shebang prefixes of at most 128 bytes")
+		}
+	}
+	return nil
+}
+
+func validateCapabilityClaims(languages []Language, commands []Command) error {
+	for languageIndex, language := range languages {
+		for unsupportedIndex, declaration := range language.Unsupported {
+			for _, command := range commands {
+				if slices.Contains(command.Languages, language.ID) && slices.Contains(command.Capabilities, declaration.Capability) {
+					return expected(fmt.Sprintf("languages[%d].unsupportedCapabilities[%d].capability", languageIndex, unsupportedIndex), "a capability not provided for this language")
+				}
+			}
 		}
 	}
 	return nil

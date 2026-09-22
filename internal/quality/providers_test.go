@@ -20,6 +20,27 @@ func TestProviderCommentsRemainCorePolicyDecisions(t *testing.T) {
 	if findings := packCommentFindings(repo, comments); len(findings) != 0 {
 		t.Fatalf("supported machine directive failed: %+v", findings)
 	}
+	comments[0].Kind, comments[0].Raw, comments[0].MachineDirective = "Line", "#SBATCH --time=00:05:00", true
+	if findings := packCommentFindings(repo, comments); len(findings) != 0 {
+		t.Fatalf("provider-classified machine directive failed: %+v", findings)
+	}
+}
+
+func TestExplicitFormatAbsencePassesCoverageAndFailsFormatRequests(t *testing.T) {
+	repo := qualityRepository(t)
+	writeQualityFile(t, repo.Root, "scripts/run.sh", "#!/usr/bin/env bash\n")
+	command := policy.Command{Name: "pack.shell.lint", Provides: []string{"lint"}, RunOn: []string{"check", "gate"}, Paths: []string{"scripts/**"}, Adapter: &policy.PackAdapter{PackName: "shell", Capability: "lint", Languages: []policy.LanguageRule{{Name: "shell", Paths: []string{"**/*.sh"}}}}}
+	repo.Config.Checks = []policy.Command{command}
+	repo.Config.PackCapabilityAbsences = []policy.PackCapabilityAbsence{{Pack: "shell", Language: "shell", Capability: "format", Reason: "shell formatting is not specified"}}
+	for _, finding := range analysisCoverageFindings(repo, []string{"scripts/run.sh"}) {
+		if finding.Subject == "format:check" || finding.Subject == "format:gate" {
+			t.Fatalf("declared absence became a coverage gap: %+v", finding)
+		}
+	}
+	findings := unsupportedFormatFindings(repo, []string{"scripts/run.sh"})
+	if len(findings) != 1 || findings[0].Check != "policy.packCoverage" || findings[0].Message != "shell formatting is not specified" {
+		t.Fatalf("format request did not expose declared absence: %+v", findings)
+	}
 }
 
 func TestProviderCoverageDoesNotCreditUnexaminedModuleFiles(t *testing.T) {

@@ -44,6 +44,15 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"invalid shebang", func(value map[string]any) {
 			value["languages"].([]any)[0].(map[string]any)["shebangs"] = []any{"#! /usr/bin/fixture"}
 		}, "canonical shebang"},
+		{"invalid unsupported capability", func(value map[string]any) {
+			value["languages"].([]any)[0].(map[string]any)["unsupportedCapabilities"] = []any{map[string]any{"capability": "unknown", "reason": "not implemented"}}
+		}, "unique standard capability"},
+		{"empty unsupported reason", func(value map[string]any) {
+			value["languages"].([]any)[0].(map[string]any)["unsupportedCapabilities"] = []any{map[string]any{"capability": "format", "reason": " "}}
+		}, "non-whitespace"},
+		{"provided capability marked unsupported", func(value map[string]any) {
+			value["languages"].([]any)[0].(map[string]any)["unsupportedCapabilities"] = []any{map[string]any{"capability": "lint", "reason": "not implemented"}}
+		}, "not provided"},
 		{"ambiguous shebang", func(value map[string]any) {
 			language := value["languages"].([]any)[0].(map[string]any)
 			language["shebangs"] = []any{"#!/usr/bin/env"}
@@ -105,6 +114,7 @@ func TestManifestOwnedShebangAndTestRulesDriveRepositoryClassification(t *testin
 	manifest.Languages[0].SourcePatterns = nil
 	manifest.Languages[0].Shebangs = []string{"#!/usr/bin/env fixture"}
 	manifest.Languages[0].TestPatterns = []string{"verification/**"}
+	manifest.Languages[0].Unsupported = []UnsupportedCapability{{Capability: "format", Reason: "this language has no specified formatter"}}
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -134,6 +144,10 @@ func TestManifestOwnedShebangAndTestRulesDriveRepositoryClassification(t *testin
 	}
 	if len(resolution.Commands) != 1 || !repo.CommandOwnsPath(resolution.Commands[0], "verification/tool") {
 		t.Fatal("shebang-only source was not owned by its pack command")
+	}
+	owner := repo.AnalysisOwner("verification/tool", "format", "format")
+	if !owner.Unsupported || owner.Pack != manifest.Name || owner.Problem != "this language has no specified formatter" {
+		t.Fatalf("explicit capability absence was lost: %+v", owner)
 	}
 }
 

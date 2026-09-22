@@ -17,7 +17,10 @@ source recognition comes only from its declared source patterns and canonical
 shebang prefixes, and optional test patterns extend core test scheduling for that
 language. Built-in language names do not acquire implicit patterns. Every command
 names its exact languages and declares self-contained or host-toolchain
-execution with explicit network authority. A response
+execution with explicit network authority. A language may declare an unsupported
+capability with a bounded reason only when none of its commands provides that
+capability. Core accepts that declaration as complete inventory without restoring
+native ownership and reports the reason when the operation is requested. A response
 accounts for every requested file exactly once as analyzed or unsupported, retains
 a stable namespaced rule identifier, and returns facts needed for core decisions.
 Unsupported work blocks a required capability. An operational failure establishes
@@ -56,7 +59,12 @@ context limits nor become mandatory analyzer inputs.
 
 Coordinates are one-based UTF-8 byte positions in original source. Comment bytes
 must match that position; truncated comments remain bounded facts marked
-incomplete and cannot establish a permitted directive. Format writes require
+incomplete and cannot establish a permitted directive. A provider may identify a
+complete line or shebang fact as a machine directive; core continues to decide
+whether prose is forbidden. Lint may also return bounded static literal facts with
+their source positions and whether syntax places them in repository-root context.
+Core applies portability policy, including declared external-input exceptions,
+without delegating that decision to the provider. Format writes require
 valid UTF-8 in both original and replacement bytes. Core validates every target
 before applying any edit. Generated source and declared data remain non-writable.
 
@@ -120,9 +128,9 @@ tool-ID-specific environment variable. It never resolves a tool from the target
 project or ambient PATH. Providers carry their own pinned dependencies in the
 integrity-checked installed pack tree.
 
-The core interprets source-comment and function facts. JavaScript machine
-directives use the existing policy grammar. Unsupported directive grammars do not
-establish permission to include prose. Function complexity uses the language's
+The core interprets source-comment, literal, and function facts. JavaScript machine
+directives use the existing policy grammar. Provider-classified machine directives
+must be complete line or shebang facts; all other facts remain prose. Function complexity uses the language's
 effective limit; new languages use the shared TypeScript limit until a distinct
 language policy is justified. Depth and parameter limits retain the existing
 production/test distinction. Generated source retains correctness checks while

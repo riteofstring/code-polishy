@@ -10,10 +10,11 @@ import (
 )
 
 type AnalysisOwner struct {
-	Name    string
-	Pack    string
-	Native  bool
-	Problem string
+	Name        string
+	Pack        string
+	Native      bool
+	Unsupported bool
+	Problem     string
 }
 
 func (repo Repository) AnalysisOwner(path, capability, profile string) AnalysisOwner {
@@ -49,12 +50,25 @@ func (repo Repository) AnalysisOwner(path, capability, profile string) AnalysisO
 		return AnalysisOwner{Problem: fmt.Sprintf("selected language packs %s ambiguously own %s", strings.Join(packOwners, " and "), path)}
 	}
 	if len(packOwners) == 1 {
+		if reason, found := repo.packCapabilityAbsence(packOwners[0], path, capability); found {
+			return AnalysisOwner{Pack: packOwners[0], Unsupported: true, Problem: reason}
+		}
 		return AnalysisOwner{Problem: fmt.Sprintf("selected language pack %s has no %s operation for %s", packOwners[0], capability, path)}
 	}
 	if repo.NativeCapability(path, capability) {
 		return AnalysisOwner{Name: "native:" + repo.Language(path), Native: true}
 	}
 	return AnalysisOwner{Problem: fmt.Sprintf("no provider analyzes %s for %s", capability, path)}
+}
+
+func (repo Repository) packCapabilityAbsence(pack, path, capability string) (string, bool) {
+	language := repo.Language(path)
+	for _, absence := range repo.Config.PackCapabilityAbsences {
+		if absence.Pack == pack && absence.Language == language && absence.Capability == capability {
+			return absence.Reason, true
+		}
+	}
+	return "", false
 }
 
 func (repo Repository) selectedPackLanguageOwners(path string) []string {

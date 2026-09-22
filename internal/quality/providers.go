@@ -29,6 +29,9 @@ func packCommentFindings(repo repository.Repository, comments []pack.CommentFact
 		if repo.IsGenerated(comment.Path) {
 			continue
 		}
+		if comment.MachineDirective {
+			continue
+		}
 		if repo.Language(comment.Path) == "typescript" && javascriptSourceCommentAllowed(repo, javascript.LintComment{
 			Path: comment.Path, Kind: comment.Kind, Raw: comment.Raw, Complete: comment.Complete, Line: comment.Line, Column: comment.Column,
 			BeforeCode: comment.BeforeCode, Preamble: comment.Preamble, ByteZero: comment.ByteZero,

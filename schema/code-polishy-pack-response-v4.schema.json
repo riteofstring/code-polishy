@@ -219,7 +219,25 @@
         "complete": { "type": "boolean" },
         "beforeCode": { "type": "boolean" },
         "preamble": { "type": "boolean" },
-        "byteZero": { "type": "boolean" }
+        "byteZero": { "type": "boolean" },
+        "machineDirective": { "type": "boolean" }
+      }
+    },
+    "literal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "line", "column", "value", "rootContext"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000\\r\\n]+$"
+        },
+        "rootContext": { "type": "boolean" }
       }
     },
     "function": {
@@ -267,6 +285,11 @@
           "type": "array",
           "maxItems": 20000,
           "items": { "$ref": "#/$defs/function" }
+        },
+        "literals": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "$ref": "#/$defs/literal" }
         }
       }
     },

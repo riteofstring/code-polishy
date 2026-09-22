@@ -20,7 +20,7 @@ func advisoryFindings(advisories []policy.Advisory) []policy.Finding {
 	findings := make([]policy.Finding, 0, len(advisories))
 	for _, advisory := range advisories {
 		findings = append(findings, policy.Finding{
-			Check: advisory.Check, Path: advisory.Path, Subject: advisory.Subject, Message: advisory.Message,
+			Check: advisory.Check, Path: advisory.Path, Line: advisory.Line, Column: advisory.Column, Subject: advisory.Subject, Message: advisory.Message,
 			Severity: policy.FindingWarning,
 		})
 	}

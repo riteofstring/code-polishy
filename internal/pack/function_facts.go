@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/portability"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -14,6 +15,15 @@ func analysisFindings(repo repository.Repository, adapter *policy.PackAdapter, r
 	}
 	if response.Facts != nil && response.Facts.Functions != nil {
 		findings = append(findings, functionFindings(repo, *response.Facts.Functions)...)
+	}
+	if response.Facts != nil && response.Facts.Literals != nil {
+		literals := make([]portability.Literal, 0, len(*response.Facts.Literals))
+		for _, literal := range *response.Facts.Literals {
+			literals = append(literals, portability.Literal{Path: literal.Path, Line: literal.Line, Column: literal.Column, Value: literal.Value, RootContext: literal.RootContext})
+		}
+		for _, advisory := range portability.LiteralAdvisories(repo, literals) {
+			findings = append(findings, policy.Finding{Check: advisory.Check, Path: advisory.Path, Line: advisory.Line, Column: advisory.Column, Subject: advisory.Subject, Message: advisory.Message, Severity: policy.FindingWarning})
+		}
 	}
 	return findings
 }

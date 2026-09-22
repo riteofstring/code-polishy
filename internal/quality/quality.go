@@ -68,7 +68,7 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 	if repo.ClassifyDocumentationCandidate(selection).Ordinary {
 		return DocumentationFormatWrite(ctx, repo, selection.Candidate.AddedOrModified)
 	}
-	findings := []policy.Finding{}
+	findings := unsupportedFormatFindings(repo, selection.Files)
 	goFiles := editableFiles(repo, languageFiles(repo, repo.NativeAnalysisFiles(selection.Files, "format", ""), "go"))
 	if len(goFiles) > 0 {
 		arguments := []string{"-w"}
@@ -82,6 +82,17 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 	}
 	findings = append(findings, JavaScriptFormatWrite(ctx, repo, selection.Files)...)
 	findings = append(findings, RunCommands(ctx, repo, selection, commandRunner, "format")...)
+	return findings
+}
+
+func unsupportedFormatFindings(repo repository.Repository, files []string) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, path := range files {
+		owner := repo.AnalysisOwner(path, "format", "format")
+		if owner.Unsupported {
+			findings = append(findings, policy.Finding{Check: "policy.packCoverage", Path: path, Subject: "format", Message: owner.Problem})
+		}
+	}
 	return findings
 }
 
@@ -386,6 +397,9 @@ func analysisCoverageFindings(repo repository.Repository, files []string) []poli
 			}
 			for _, profile := range []string{"check", "gate"} {
 				owner := repo.AnalysisOwner(path, capability, profile)
+				if owner.Unsupported {
+					continue
+				}
 				if owner.Problem != "" {
 					findings = append(findings, policy.Finding{Check: "policy.checkCoverage", Path: path, Subject: capability + ":" + profile, Message: owner.Problem})
 				}

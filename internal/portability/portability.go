@@ -16,6 +16,14 @@ var unixHomePattern = regexp.MustCompile(`^/(?:Users|home)/[^/]+(?:/|$)`)
 var windowsHomePattern = regexp.MustCompile(`^[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/][^\\/]+(?:[\\/]|$)`)
 var siblingSegmentPattern = regexp.MustCompile(`^(?:\.\.[\\/])+[A-Za-z0-9][A-Za-z0-9._-]*(?:[\\/]|$)`)
 
+type Literal struct {
+	Path        string
+	Line        int
+	Column      int
+	Value       string
+	RootContext bool
+}
+
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, input := range repo.Config.Portability.ExternalInputs {
@@ -63,30 +71,56 @@ func Advisories(repo repository.Repository, files []string) []policy.Advisory {
 }
 
 func fileAdvisories(repo repository.Repository, path string, data []byte) []policy.Advisory {
-	advisories := []policy.Advisory{}
+	literals := []Literal{}
 	for lineIndex, rawLine := range bytes.Split(data, []byte("\n")) {
-		lineNumber := lineIndex + 1
 		line := string(rawLine)
-		for _, value := range quotedLiterals(line, hashCommentLanguage(repo.Language(path))) {
-			if machinePath(value) {
-				advisories = append(advisories, policy.Advisory{
-					Check: "portability.machinePath", Path: path, Subject: strconv.Itoa(lineNumber),
-					Message: fmt.Sprintf("line %d contains a machine-specific home path; resolve it from explicit configuration or a runtime-owned location", lineNumber),
-				})
-			}
-			if siblingReference(line, value) && !governedSiblingReference(repo.Config.Portability.ExternalInputs, path, value) {
-				advisories = append(advisories, policy.Advisory{
-					Check: "portability.siblingReference", Path: path, Subject: strconv.Itoa(lineNumber),
-					Message: fmt.Sprintf("line %d contains an implicit sibling-folder reference; declare and test the external input or use explicit configuration", lineNumber),
-				})
-			}
+		for _, literal := range scannedLiterals(line, hashCommentLanguage(repo.Language(path))) {
+			literals = append(literals, Literal{Path: path, Line: lineIndex + 1, Column: literal.column, Value: literal.value, RootContext: siblingReference(line, literal.value)})
 		}
 	}
+	return LiteralAdvisories(repo, literals)
+}
+
+func LiteralAdvisories(repo repository.Repository, literals []Literal) []policy.Advisory {
+	advisories := []policy.Advisory{}
+	for _, literal := range literals {
+		if repo.IsGenerated(literal.Path) || repo.IsTest(literal.Path) {
+			continue
+		}
+		if machinePath(literal.Value) {
+			advisories = append(advisories, policy.Advisory{
+				Check: "portability.machinePath", Path: literal.Path, Line: literal.Line, Column: literal.Column, Subject: strconv.Itoa(literal.Line),
+				Message: fmt.Sprintf("line %d contains a machine-specific home path; resolve it from explicit configuration or a runtime-owned location", literal.Line),
+			})
+		}
+		if literal.RootContext && siblingSegmentPattern.MatchString(literal.Value) && !strings.ContainsAny(literal.Value, "*$\n\r") && !governedSiblingReference(repo.Config.Portability.ExternalInputs, literal.Path, literal.Value) {
+			advisories = append(advisories, policy.Advisory{
+				Check: "portability.siblingReference", Path: literal.Path, Line: literal.Line, Column: literal.Column, Subject: strconv.Itoa(literal.Line),
+				Message: fmt.Sprintf("line %d contains an implicit sibling-folder reference; declare and test the external input or use explicit configuration", literal.Line),
+			})
+		}
+	}
+	slices.SortFunc(advisories, func(left, right policy.Advisory) int {
+		return strings.Compare(advisoryKey(left), advisoryKey(right))
+	})
 	return uniqueAdvisories(advisories)
+}
+
+type scannedLiteral struct {
+	value  string
+	column int
 }
 
 func quotedLiterals(line string, hashComments bool) []string {
 	values := []string{}
+	for _, literal := range scannedLiterals(line, hashComments) {
+		values = append(values, literal.value)
+	}
+	return values
+}
+
+func scannedLiterals(line string, hashComments bool) []scannedLiteral {
+	values := []scannedLiteral{}
 	for index := 0; index < len(line); index++ {
 		if lineCommentAt(line, index, hashComments) {
 			break
@@ -96,9 +130,10 @@ func quotedLiterals(line string, hashComments bool) []string {
 			continue
 		}
 		value, end, closed := consumeQuotedLiteral(line, index, quote)
+		column := index + 1
 		index = end
 		if closed {
-			values = append(values, value)
+			values = append(values, scannedLiteral{value: value, column: column})
 		}
 	}
 	return values
@@ -188,5 +223,5 @@ func uniqueAdvisories(advisories []policy.Advisory) []policy.Advisory {
 }
 
 func advisoryKey(advisory policy.Advisory) string {
-	return advisory.Check + "\x00" + advisory.Path + "\x00" + advisory.Subject + "\x00" + advisory.Message
+	return fmt.Sprintf("%s\x00%s\x00%09d\x00%09d\x00%s\x00%s", advisory.Check, advisory.Path, advisory.Line, advisory.Column, advisory.Subject, advisory.Message)
 }

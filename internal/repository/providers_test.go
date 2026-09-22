@@ -65,3 +65,12 @@ func TestUnavailablePackBlocksOnlyItsDeclaredClaims(t *testing.T) {
 		t.Fatalf("unavailable partial pack fell back for an unclaimed capability: %+v", owner)
 	}
 }
+
+func TestSelectedPackCanDeclareCapabilityAbsenceWithoutNativeFallback(t *testing.T) {
+	command := policy.Command{Name: "pack.shell.lint", Provides: []string{"lint"}, RunOn: []string{"check", "gate"}, Paths: []string{"scripts/**"}, Adapter: &policy.PackAdapter{PackName: "shell", Capability: "lint", Languages: []policy.LanguageRule{{Name: "shell", Paths: []string{"**/*.sh"}}}}}
+	repo := Repository{Config: policy.Config{Checks: []policy.Command{command}, PackCapabilityAbsences: []policy.PackCapabilityAbsence{{Pack: "shell", Language: "shell", Capability: "format", Reason: "no formatter is specified"}}}}
+	owner := repo.AnalysisOwner("scripts/run.sh", "format", "format")
+	if !owner.Unsupported || owner.Native || owner.Pack != "shell" || owner.Problem != "no formatter is specified" {
+		t.Fatalf("capability absence was not authoritative: %+v", owner)
+	}
+}

@@ -314,8 +314,20 @@ func verifyLocations(root *os.Root, request Request, response Response) error {
 	if response.Facts == nil {
 		return nil
 	}
-	for _, err := range []error{verifyImportLocations(root, request, response), verifyCommentLocations(root, response.Facts.Comments), verifyFunctionLocations(root, response.Facts.Functions)} {
+	for _, err := range []error{verifyImportLocations(root, request, response), verifyCommentLocations(root, response.Facts.Comments), verifyLiteralLocations(root, response.Facts.Literals), verifyFunctionLocations(root, response.Facts.Functions)} {
 		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func verifyLiteralLocations(root *os.Root, facts *[]LiteralFact) error {
+	if facts == nil {
+		return nil
+	}
+	for _, fact := range *facts {
+		if err := verifyLocation(root, fact.Path, fact.Line, fact.Column, ""); err != nil {
 			return err
 		}
 	}
