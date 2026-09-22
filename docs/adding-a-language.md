@@ -141,6 +141,23 @@ identifies the exact JSON field and collection index with its expected constrain
 for example
 `facts.comments[0].kind: expected Line, Block, Docstring, HTML, or Shebang`.
 
+Validate a document without installing or executing a pack. Response validation
+requires the exact request because coverage, scope handles, findings, facts, and
+edits are request-bound:
+
+```sh
+code-polishy pack validate --kind manifest --input code-polishy-pack.json
+code-polishy pack validate --kind request --input request-v4.json
+code-polishy pack validate \
+  --kind response \
+  --input response-v4.json \
+  --request request-v4.json
+```
+
+The command always emits `code-polishy-pack-validation/v1` JSON and exits 1 for
+an invalid contract. Its report records document digests and bounded schema,
+decode, or semantic issues without printing request or environment contents.
+
 ## Ownership, verification, and installation
 
 An explicitly selected pack owns the complete language boundary within its declared

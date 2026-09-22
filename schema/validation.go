@@ -56,6 +56,7 @@ func (shippedLoader) Load(url string) (any, error) {
 		ConfigurationBase + "code-polishy-pack-migration-v1.schema.json":               CodePolishyPackMigrationV1,
 		ConfigurationBase + "code-polishy-pack-request-v4.schema.json":                 CodePolishyPackRequestV4,
 		ConfigurationBase + "code-polishy-pack-response-v4.schema.json":                CodePolishyPackResponseV4,
+		ConfigurationBase + "code-polishy-pack-validation-v1.schema.json":              CodePolishyPackValidationV1,
 		ConfigurationBase + "code-polishy-language-conformance-ledger-v1.schema.json":  CodePolishyLanguageConformanceLedgerV1,
 		ConfigurationBase + "code-polishy-language-conformance-fixture-v1.schema.json": CodePolishyLanguageConformanceFixtureV1,
 		ConfigurationBase + "code-polishy-language-conformance-report-v1.schema.json":  CodePolishyLanguageConformanceReportV1,

@@ -52,6 +52,17 @@ func TestPublishedLocalCatalogAuthenticatesTheShippedProofPack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tree, err := readSourceTree(filepath.Join(root, "tools", "fixtures", "language-pack"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactBytes := int64(0)
+	for _, file := range tree.Files {
+		artifactBytes += int64(len(file.Data))
+	}
+	if entry.Digest != tree.Receipt.Digest || entry.ArtifactBytes != artifactBytes {
+		t.Fatalf("published pack identity digest=%s bytes=%d; catalog digest=%s bytes=%d", tree.Receipt.Digest, artifactBytes, entry.Digest, entry.ArtifactBytes)
+	}
 	if !slices.Contains(entry.Platforms, CurrentPlatform()) {
 		return
 	}

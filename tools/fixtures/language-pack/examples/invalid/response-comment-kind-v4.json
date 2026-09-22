@@ -1,0 +1,32 @@
+{
+  "protocolVersion": 4,
+  "status": "pass",
+  "scopeHandles": ["scope-1"],
+  "evidence": ["lint parsed every selected source"],
+  "coverage": {
+    "analyzed": ["src/main.ts"],
+    "unsupported": []
+  },
+  "facts": {
+    "comments": [
+      {
+        "path": "src/main.ts",
+        "line": 1,
+        "column": 1,
+        "kind": "line",
+        "raw": "// invalid casing",
+        "complete": true,
+        "beforeCode": true,
+        "preamble": true,
+        "byteZero": true
+      }
+    ],
+    "literals": []
+  },
+  "inputs": [
+    {
+      "path": "src/main.ts",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}

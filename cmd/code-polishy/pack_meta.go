@@ -13,7 +13,7 @@ import (
 
 func handlePackMeta(invocation invocation) int {
 	if len(invocation.arguments) == 0 {
-		return commandUsageError("pack", "pack requires catalog, install, update, remove, verify, list, migration, conformance, or root")
+		return commandUsageError("pack", "pack requires catalog, install, update, remove, verify, validate, list, migration, conformance, or root")
 	}
 	action, arguments := invocation.arguments[0], invocation.arguments[1:]
 	switch action {
@@ -27,6 +27,8 @@ func handlePackMeta(invocation invocation) int {
 		return removePack(arguments)
 	case "verify":
 		return verifyPack(arguments, invocation.policyRoot)
+	case "validate":
+		return validatePackContract(arguments)
 	case "list":
 		return listPacks(invocation, arguments)
 	case "migration":
@@ -38,6 +40,33 @@ func handlePackMeta(invocation invocation) int {
 	default:
 		return commandUsageError("pack", "unknown pack action "+action)
 	}
+}
+
+func validatePackContract(arguments []string) int {
+	flags := flag.NewFlagSet("pack validate", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	kind := flags.String("kind", "", "manifest, request, or response")
+	input := flags.String("input", "", "contract document path")
+	request := flags.String("request", "", "request document required for response validation")
+	if err := flags.Parse(arguments); err != nil {
+		return commandUsageError("pack", err.Error())
+	}
+	if flags.NArg() != 0 || *kind == "" || *input == "" {
+		return commandUsageError("pack", "pack validate requires --kind manifest|request|response --input PATH and no positional arguments")
+	}
+	report, err := pack.ValidateContract(pack.ContractValidationOptions{Kind: *kind, InputPath: *input, RequestPath: *request})
+	if err != nil {
+		return commandUsageError("pack", err.Error())
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(report); err != nil {
+		return operationalError(err)
+	}
+	if report.Status == "failed" {
+		return 1
+	}
+	return 0
 }
 
 func verifyPack(arguments []string, policyRoot string) int {

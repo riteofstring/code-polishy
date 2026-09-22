@@ -44,6 +44,9 @@ var CodePolishyPackRequestV4 []byte
 //go:embed code-polishy-pack-response-v4.schema.json
 var CodePolishyPackResponseV4 []byte
 
+//go:embed code-polishy-pack-validation-v1.schema.json
+var CodePolishyPackValidationV1 []byte
+
 //go:embed code-polishy-language-conformance-ledger-v1.schema.json
 var CodePolishyLanguageConformanceLedgerV1 []byte
 
