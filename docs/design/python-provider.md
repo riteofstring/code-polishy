@@ -68,17 +68,19 @@ from APIs beneath the exact unshadowed import target. Member-only type contracts
 use contained Astroid inference and synthetic external anchors to retain named
 methods only on the configured type and proven subclasses. The same exact type
 evidence retains annotated class fields when requested, except direct
-`typing.ClassVar` and `typing_extensions.ClassVar` declarations. The adapter
-never runs a reduced analysis and presents it as complete.
+`typing.ClassVar` and `typing_extensions.ClassVar` declarations. Configured
+decorators retain methods on those proven types only when the decorator resolves
+through an exact unshadowed import. The adapter never runs a reduced analysis
+and presents it as complete.
 
 The executable quality slice claims format, lint, complexity, type checking,
 plain complete-project dead code, static architecture facts, and finite
 computed-import declarations for its recognized callsites. Repository-local
 entry-point contracts and exact imported decorator contracts are interpreted
 for dead-code reachability, as are exact imported module-binding contracts.
-TypedDict and framework retention, type-contract attributes and decorated
-members, dynamic references, external attributes, cross-module loader-alias
-parity, runtime loaders, dependency evidence, and
+TypedDict and framework retention, type-contract attributes, dynamic references,
+external attributes, cross-module loader-alias parity, runtime loaders,
+dependency evidence, and
 project-environment resolution remain migration work and cannot be inferred from
 these claims. The pack is not eligible for the ownership cutover until every
 Python ledger row has executable evidence.

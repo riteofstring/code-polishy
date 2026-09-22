@@ -1,0 +1,39 @@
+python-pack-fixture
+{
+  "version": 5,
+  "project": { "kind": "content" },
+  "scope": {
+    "pythonContracts": [
+      {
+        "project": "pyproject.toml",
+        "kind": "type",
+        "target": "vendor.api.Model",
+        "decorators": ["vendor.api.validator"],
+        "reason": "The framework calls decorated validators."
+      }
+    ]
+  },
+  "quality": {},
+  "modules": [{ "name": "python", "paths": ["src/**"] }],
+  "checks": [],
+  "tests": {
+    "ownership": [],
+    "suites": [
+      {
+        "name": "python-test",
+        "kind": "content",
+        "scope": "module",
+        "modules": ["python"],
+        "argv": ["go", "test", "./..."]
+      },
+      {
+        "name": "full",
+        "kind": "content",
+        "scope": "repository",
+        "argv": ["go", "test", "./..."]
+      }
+    ]
+  },
+  "supplyChain": {},
+  "exceptions": []
+}

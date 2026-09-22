@@ -379,6 +379,19 @@ func TestDeadCodeCarriesRepositoryAnnotatedTypeContracts(t *testing.T) {
 	}
 }
 
+func TestDeadCodeCarriesRepositoryDecoratedTypeContracts(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "dead-code", []byte("class Model:\n    def validate(self):\n        return 1\n"))
+	request.Policy = json.RawMessage(`{"quality":{},"modules":[],"files":[],"declarations":[{"kind":"python.contract","version":1,"scopes":["scope-1"],"inputs":["pyproject.toml"],"data":{"project":"pyproject.toml","kind":"type","target":"vendor.Model","decorators":["vendor.validator"],"reason":"Runtime calls decorated validators."}}]}`)
+	t.Setenv("CODE_POLISHY_TOOL_PYTHON", filepath.Join(root, "python"))
+	contracts := []vultureContract{}
+	result := (adapter{vulture: fakeVulture{contracts: &contracts}}).run(context.Background(), request)
+	want := []vultureContract{{ID: "config:python.contract:type:vendor.Model", Kind: "type", Target: "vendor.Model", Members: []string{}, Attributes: []string{}, Decorators: []string{"vendor.validator"}, Keywords: map[string]bool{}}}
+	if result.Status != "pass" || !reflect.DeepEqual(contracts, want) {
+		t.Fatalf("result = %+v, contracts = %+v", result, contracts)
+	}
+}
+
 func TestDeadCodeAcceptsManifestEntryPointReachability(t *testing.T) {
 	root := t.TempDir()
 	request := pythonTestRequest(t, root, "dead-code", []byte("value = 1\n"))

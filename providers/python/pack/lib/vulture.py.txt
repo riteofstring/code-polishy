@@ -440,12 +440,16 @@ def root_name(node):
     return node.id if isinstance(node, ast.Name) else ""
 
 
-def decorator_matches(node, contract, bindings, blocked):
+def decorator_target_matches(node, expected, bindings, blocked):
     target = node.func if isinstance(node, ast.Call) else node
     root = root_name(target)
     if not root or root in blocked or root not in bindings:
         return False
-    if expanded_name(target, bindings) != contract["target"]:
+    return expanded_name(target, bindings) == expected
+
+
+def decorator_matches(node, contract, bindings, blocked):
+    if not decorator_target_matches(node, contract["target"], bindings, blocked):
         return False
     keywords = contract["keywords"]
     if not keywords:
@@ -518,6 +522,7 @@ def class_var_annotation(annotation, bindings):
 def type_contract_locations(files, contract, resolver):
     applicable = resolver.type_classes(contract)
     members = set(contract["members"])
+    decorators = set(contract["decorators"])
     result = set()
     for file in files:
         classes = {
@@ -532,10 +537,20 @@ def type_contract_locations(files, contract, resolver):
                 or (node.lineno, node.name) not in classes
             ):
                 continue
+            blocked = set()
+            for statement in node.body:
+                blocked.update(statement_binding_names(statement))
             for statement in node.body:
                 for item in class_scope_nodes(statement):
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        if item.name in members:
+                        decorated = any(
+                            decorator_target_matches(
+                                decorator, expected, bindings, blocked
+                            )
+                            for decorator in item.decorator_list
+                            for expected in decorators
+                        )
+                        if item.name in members or decorated:
                             result.add(
                                 definition_location(file["path"], item, item.name)
                             )
@@ -794,8 +809,12 @@ def exact_contract(contract, index, identifiers):
         valid = valid and not keywords
     else:
         valid = valid and identifier_chain(contract["target"])
-        valid = valid and (bool(contract["members"]) or contract["annotatedFields"])
-        valid = valid and not contract["attributes"] and not contract["decorators"]
+        valid = valid and (
+            bool(contract["members"])
+            or contract["annotatedFields"]
+            or bool(contract["decorators"])
+        )
+        valid = valid and not contract["attributes"]
         valid = valid and not keywords
     if not valid:
         raise ValueError(f"contract {index} is invalid")

@@ -1,0 +1,15 @@
+python-pack-fixture
+from vendor.api import Model, validator
+
+
+class Item(Model):
+    @validator()
+    def validate(self):
+        return "item"
+
+
+def build():
+    return Item()
+
+
+build()
