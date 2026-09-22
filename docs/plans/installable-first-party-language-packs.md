@@ -597,7 +597,7 @@ only an invalid scope. Ruff uses no cache, format writes return only
 core-authorized edits, type checking covers unchanged scope members, and the pack
 now returns authored static import facts reconciled with Ruff's complete and
 runtime project graphs. Core retains module direction, cycle, and coverage
-enforcement. Twenty-six built-pack fixtures include
+enforcement. Twenty-eight built-pack fixtures include
 target-version, incomplete-config, runtime/type-only/re-export architecture, and
 ambiguous-module evidence, plus an exact entry-point-backed computed import
 through the installed adapter. Recognized computed-import declarations now bind
@@ -620,11 +620,14 @@ decorated definitions satisfying their declared literal boolean keyword
 constraints; unmatched or shadowed declarations fail incomplete. Module-binding
 contracts now retain only their declared module-level names when a nonempty
 value is wholly constructed from APIs below the exact imported target; partial
-and empty registries fail incomplete. TypedDict retention, framework contracts,
-type contracts, dynamic references, external attributes, remaining cross-module
-loader-alias parity, runtime loaders, dependency evidence, environment
-resolution, focused graph closure, and the shared conformance matrix remain
-open.
+and empty registries fail incomplete. Member-only type contracts now use
+contained Astroid inference and synthetic external anchors to retain named
+methods only on the exact configured type and proven subclasses; unrelated
+same-named methods do not satisfy the contract. TypedDict retention, framework
+contracts, type attributes, annotated fields, decorated type members, dynamic
+references, external attributes, remaining cross-module loader-alias parity,
+runtime loaders, dependency evidence, environment resolution, focused graph
+closure, and the shared conformance matrix remain open.
 
 The generic response contract accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and

@@ -21,6 +21,7 @@ MAX_FACTS = 10000
 MAX_REFERENCES = 4096
 MAX_CONTRACT_NAMES = 128
 MAX_CONTRACT_KEYWORDS = 32
+MAX_ASTROID_DEPTH = 128
 MAX_STRING_BYTES = 4096
 KINDS = {
     "attribute",
@@ -165,7 +166,7 @@ def module_reference(modules, module, parts, seen):
 
 
 class ContainedAstroidReferences:
-    def __init__(self, files):
+    def __init__(self, files, contracts):
         from astroid import AstroidError, AstroidImportError
         from astroid.builder import AstroidBuilder
         from astroid.manager import AstroidManager
@@ -183,6 +184,18 @@ class ContainedAstroidReferences:
         self.builder = AstroidBuilder(self.manager, apply_transforms=False)
         self.cache = {}
         self.paths = {}
+        self.declared_roots = {
+            contract["target"] for contract in contracts if contract["kind"] == "type"
+        }
+        model_names = defaultdict(set)
+        for target in self.declared_roots:
+            module, separator, name = target.rpartition(".")
+            if separator:
+                model_names[module].add(name)
+        self.models = {
+            module: "\n".join(f"class {name}: pass" for name in sorted(names))
+            for module, names in model_names.items()
+        }
         self.override = patch.object(
             self.manager_type, "ast_from_module_name", self.load
         )
@@ -196,7 +209,7 @@ class ContainedAstroidReferences:
 
     def load(self, name, context_file=None, use_cache=True):
         if context_file is not None and context_file not in self.sources:
-            raise self.import_error("entry-point inference requested external source")
+            raise self.import_error("contract inference requested external source")
         if use_cache and name in self.cache:
             return self.cache[name]
         candidates = self.modules.get(name, [])
@@ -209,9 +222,14 @@ class ContainedAstroidReferences:
             )
             self.paths[name] = source["path"]
         elif candidates or name.split(".")[0] in self.module_roots:
-            raise self.import_error(f"unresolved contained entry-point module: {name}")
+            raise self.import_error(f"unresolved contained contract module: {name}")
+        elif name in self.models:
+            module = self.builder.string_build(self.models[name], name)
+        elif any(model.startswith(name + ".") for model in self.models):
+            module = self.builder.string_build("", name)
+            module.package = True
         else:
-            raise self.import_error(f"unadmitted entry-point module: {name}")
+            raise self.import_error(f"unadmitted contract module: {name}")
         self.cache[name] = module
         return module
 
@@ -220,6 +238,71 @@ class ContainedAstroidReferences:
             return self.resolve_entry_point(contract)
         except self.errors as error:
             raise ValueError(str(error)) from error
+
+    def type_contract(self, contract):
+        try:
+            return self.resolve_type_contract(contract)
+        except self.errors as error:
+            raise ValueError(str(error)) from error
+
+    def resolve_type_contract(self, contract):
+        from astroid import nodes
+
+        for name in sorted(self.modules):
+            self.load(name)
+        roots = {contract["target"]}
+        members = set(contract["members"])
+        kept = set()
+        for name, path in sorted(self.paths.items()):
+            module = self.cache[name]
+            for node in module.nodes_of_class(nodes.ClassDef):
+                if not self.has_base(node, roots, set()):
+                    continue
+                for method in node.nodes_of_class(nodes.FunctionDef):
+                    if method.name in members and self.method_owner(method) is node:
+                        kept.add(
+                            (path, method.fromlineno, method.tolineno, method.name)
+                        )
+        return kept
+
+    def method_owner(self, node):
+        from astroid import nodes
+
+        current = node.parent
+        while current is not None:
+            if isinstance(current, (nodes.ClassDef, nodes.Module)):
+                return current
+            current = current.parent
+        return None
+
+    def has_base(self, node, roots, seen):
+        from astroid import nodes
+
+        if node in seen or len(seen) >= MAX_ASTROID_DEPTH:
+            return False
+        seen = seen | {node}
+        if node.qname() in roots & self.declared_roots:
+            return True
+        for base in node.bases:
+            names = list(base.nodes_of_class(nodes.Name))
+            if any(not self.unique_binding(name) for name in names):
+                continue
+            inferred = list(base.infer())
+            if len(inferred) != 1 or not isinstance(inferred[0], nodes.ClassDef):
+                continue
+            parent = inferred[0]
+            if parent.root().name not in self.paths and parent.qname() in roots:
+                return True
+            if self.has_base(parent, roots, seen):
+                return True
+        return False
+
+    def unique_binding(self, node):
+        definitions = node.lookup(node.name)[1]
+        return len(definitions) == 1 and (
+            definitions[0].root() is not node.root()
+            or definitions[0].lineno <= node.lineno
+        )
 
     def resolve_entry_point(self, contract):
         module_name, symbol = contract["target"].split(":", 1)
@@ -636,7 +719,7 @@ def exact_contract(contract, index, identifiers):
     valid = (
         exact_text(contract["id"])
         and contract["id"] not in identifiers
-        and contract["kind"] in {"entry-point", "decorator", "module-binding"}
+        and contract["kind"] in {"entry-point", "decorator", "module-binding", "type"}
         and exact_text(contract["target"])
         and exact_contract_names(contract["members"])
         and exact_contract_names(contract["attributes"])
@@ -660,6 +743,11 @@ def exact_contract(contract, index, identifiers):
         valid = valid and identifier_chain(contract["target"])
         valid = valid and not contract["members"] and not contract["attributes"]
         valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+    elif contract["kind"] == "module-binding":
+        valid = valid and identifier_chain(contract["target"])
+        valid = valid and bool(contract["members"]) and not contract["attributes"]
+        valid = valid and not contract["decorators"] and not contract["annotatedFields"]
+        valid = valid and not keywords
     else:
         valid = valid and identifier_chain(contract["target"])
         valid = valid and bool(contract["members"]) and not contract["attributes"]
@@ -783,10 +871,16 @@ def reachability_locations(files, references, backends, contracts):
             modules.setdefault(file["module"], []).append(file)
     keep = set()
     problems = []
-    entry_points = [
-        contract for contract in contracts if contract["kind"] == "entry-point"
+    semantic_contracts = [
+        contract
+        for contract in contracts
+        if contract["kind"] in {"entry-point", "type"}
     ]
-    context = ContainedAstroidReferences(files) if entry_points else nullcontext()
+    context = (
+        ContainedAstroidReferences(files, contracts)
+        if semantic_contracts
+        else nullcontext()
+    )
     with context as resolver:
         for reference in references:
             try:
@@ -808,6 +902,8 @@ def reachability_locations(files, references, backends, contracts):
             try:
                 if contract["kind"] == "entry-point":
                     locations = resolver.entry_point(contract)
+                elif contract["kind"] == "type":
+                    locations = resolver.type_contract(contract)
                 elif contract["kind"] == "decorator":
                     locations = decorator_locations(files, contract)
                 else:
@@ -852,7 +948,7 @@ def analyze(request):
     installed_version = importlib.metadata.version("vulture")
     if installed_version != TOOL_VERSION:
         raise ValueError(f"Python dead-code analysis requires Vulture {TOOL_VERSION}")
-    if any(contract["kind"] == "entry-point" for contract in contracts):
+    if any(contract["kind"] in {"entry-point", "type"} for contract in contracts):
         installed_astroid = importlib.metadata.version("astroid")
         if installed_astroid != ASTROID_VERSION:
             raise ValueError(

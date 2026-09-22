@@ -1,0 +1,11 @@
+python-pack-fixture
+class Unrelated:
+    def serialize(self):
+        return "item"
+
+
+def build():
+    return Unrelated()
+
+
+build()

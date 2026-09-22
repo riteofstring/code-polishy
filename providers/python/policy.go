@@ -158,14 +158,28 @@ func pythonContractInput(declaration policyDeclarationInput, manifest string, in
 	if err != nil {
 		return vultureContract{}, "", fmt.Errorf("policy declaration %d: %w", index, err)
 	}
-	if contract.Kind != "entry-point" && contract.Kind != "decorator" && contract.Kind != "module-binding" {
-		return vultureContract{}, "Python contract kind " + contract.Kind + " is not yet supported by the pack dead-code analyzer", nil
+	if reason := unsupportedPythonContractReason(contract); reason != "" {
+		return vultureContract{}, reason, nil
 	}
 	input, err := newVultureContract(manifest, contract)
 	if err != nil {
 		return vultureContract{}, "", fmt.Errorf("policy declaration %d: %w", index, err)
 	}
 	return input, "", nil
+}
+
+func unsupportedPythonContractReason(contract pythonContractDeclaration) string {
+	switch contract.Kind {
+	case "entry-point", "decorator", "module-binding":
+		return ""
+	case "type":
+		if len(contract.Attributes) == 0 && len(contract.Decorators) == 0 && !contract.AnnotatedFields {
+			return ""
+		}
+		return "Python type contract attributes, decorators, and annotated fields are not yet supported by the pack dead-code analyzer"
+	default:
+		return "Python contract kind " + contract.Kind + " is not yet supported by the pack dead-code analyzer"
+	}
 }
 
 func decodePythonContractDeclaration(data json.RawMessage) (pythonContractDeclaration, error) {
@@ -230,7 +244,7 @@ func validPythonContractShape(contract pythonContractDeclaration, members []stri
 	if contract.Kind == "decorator" {
 		return len(members) == 0
 	}
-	return contract.Kind == "module-binding" && len(members) > 0 && len(contract.Keywords) == 0
+	return (contract.Kind == "module-binding" || contract.Kind == "type") && len(members) > 0 && len(contract.Keywords) == 0
 }
 
 func pythonContractMembers(values []string) ([]string, error) {

@@ -1,0 +1,14 @@
+python-pack-fixture
+from vendor.api import Model
+
+
+class Item(Model):
+    def serialize(self):
+        return "item"
+
+
+def build():
+    return Item()
+
+
+build()
