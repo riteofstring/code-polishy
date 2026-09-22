@@ -48,6 +48,7 @@
       "languages": ["shell"],
       "capabilities": ["lint", "typecheck"],
       "profiles": ["check", "gate"],
+      "activation": "selected",
       "timeoutSeconds": 300,
       "execution": {
         "type": "host-toolchain",

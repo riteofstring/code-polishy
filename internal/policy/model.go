@@ -352,6 +352,7 @@ type PackAdapter struct {
 	PackRoot          string
 	ProtocolVersion   int
 	Capability        string
+	Activation        string
 	Languages         []LanguageRule
 	LanguageDetectors []PackLanguageDetector
 	Discovery         []PackDiscovery

@@ -45,11 +45,16 @@ marks at most one as the adapter launcher:
   },
   "capabilities": ["lint"],
   "profiles": ["check", "gate"],
+  "activation": "selected",
   "timeoutSeconds": 60
 }
 ```
 
-Every command declares `self-contained` or `host-toolchain` execution and currently
+Every command declares when it activates. `selected` runs for an applicable
+selection. `complete-or-gate` defers focused checks and runs only for an explicit
+complete selection or the `gate` profile; use it only when a global conclusion
+cannot be bounded to focused work. Every command also declares `self-contained`
+or `host-toolchain` execution and currently
 declares `network: none`. A self-contained command omits `tools`; a host-toolchain
 command requires one or more exact tool identities. Tool executables and SHA-256
 identities come from the verified engine installation's governed inventory. The

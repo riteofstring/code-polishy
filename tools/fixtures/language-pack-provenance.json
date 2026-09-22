@@ -2,7 +2,7 @@
   "protocol": "code-polishy-pack-provenance/v1",
   "name": "sqlite-syntax-proof",
   "version": "1.0.0",
-  "digest": "b8bbc08564571228bc6d95766f895022e6dcd5cebcefd4076e3005764d7ea95a",
+  "digest": "ebe640bb7c18b8083cab07e57f366197388fb077401f1b1ccc02c461dfecbe18",
   "sourceRevision": "0d5b78b061c5355704914c7e9a236e21983f33bf",
   "builder": "code-polishy"
 }

@@ -35,43 +35,55 @@ func Unavailable(selected []policy.PackSelection, err error) Resolution {
 func Resolve(selected []policy.PackSelection, dataRoot, engineVersion string) Resolution {
 	resolution := Resolution{}
 	for _, selection := range selected {
-		root := InstalledRoot(dataRoot, selection.Name, selection.Version, selection.Digest)
-		receipt, err := VerifyInstalled(root)
-		if err != nil {
-			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
-			retainUnavailableClaims(root, selection, engineVersion, &resolution)
-			continue
-		}
-		if receipt.Name != selection.Name || receipt.Version != selection.Version || receipt.Digest != selection.Digest {
-			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, errors.New("installation receipt does not match the selected identity")))
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(root, ManifestFilename))
-		if err != nil {
-			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
-			continue
-		}
-		manifest, err := ParseManifest(data, filepath.Join(root, ManifestFilename))
-		if err != nil || manifest.EngineVersion != engineVersion || !slices.Contains(manifest.Platforms, CurrentPlatform()) {
-			if err == nil {
-				compileManifest(root, selection, manifest, &resolution)
-				if manifest.EngineVersion != engineVersion {
-					err = fmt.Errorf("installed pack requires Code Polishy %s, not %s", manifest.EngineVersion, engineVersion)
-				} else {
-					err = fmt.Errorf("installed pack does not support %s", CurrentPlatform())
-				}
-			}
-			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
-			continue
-		}
-		if _, err := VerifyInstalled(root); err != nil {
-			resolution.Findings = append(resolution.Findings, unavailableFinding(selection, fmt.Errorf("pack changed during resolution: %w", err)))
-			continue
-		}
-		compileManifest(root, selection, manifest, &resolution)
-		resolution.Notes = append(resolution.Notes, fmt.Sprintf("language pack: %s %s %s", selection.Name, selection.Version, selection.Digest))
+		resolveSelection(selection, dataRoot, engineVersion, &resolution)
 	}
 	return resolution
+}
+
+func resolveSelection(selection policy.PackSelection, dataRoot, engineVersion string, resolution *Resolution) {
+	root := InstalledRoot(dataRoot, selection.Name, selection.Version, selection.Digest)
+	receipt, err := VerifyInstalled(root)
+	if err != nil {
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
+		retainUnavailableClaims(root, selection, engineVersion, resolution)
+		return
+	}
+	resolveVerifiedSelection(root, selection, engineVersion, receipt, resolution)
+}
+
+func resolveVerifiedSelection(root string, selection policy.PackSelection, engineVersion string, receipt Receipt, resolution *Resolution) {
+	if receipt.Name != selection.Name || receipt.Version != selection.Version || receipt.Digest != selection.Digest {
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, errors.New("installation receipt does not match the selected identity")))
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(root, ManifestFilename))
+	if err != nil {
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
+		return
+	}
+	manifest, err := ParseManifest(data, filepath.Join(root, ManifestFilename))
+	if err != nil {
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, err))
+		return
+	}
+	if manifest.EngineVersion != engineVersion || !slices.Contains(manifest.Platforms, CurrentPlatform()) {
+		compileManifest(root, selection, manifest, resolution)
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, incompatiblePackError(manifest, engineVersion)))
+		return
+	}
+	if _, err := VerifyInstalled(root); err != nil {
+		resolution.Findings = append(resolution.Findings, unavailableFinding(selection, fmt.Errorf("pack changed during resolution: %w", err)))
+		return
+	}
+	compileManifest(root, selection, manifest, resolution)
+	resolution.Notes = append(resolution.Notes, fmt.Sprintf("language pack: %s %s %s", selection.Name, selection.Version, selection.Digest))
+}
+
+func incompatiblePackError(manifest Manifest, engineVersion string) error {
+	if manifest.EngineVersion != engineVersion {
+		return fmt.Errorf("installed pack requires Code Polishy %s, not %s", manifest.EngineVersion, engineVersion)
+	}
+	return fmt.Errorf("installed pack does not support %s", CurrentPlatform())
 }
 
 func Apply(config *policy.Config, resolution Resolution) {
@@ -87,9 +99,13 @@ func Apply(config *policy.Config, resolution Resolution) {
 }
 
 func compileManifest(root string, selection policy.PackSelection, manifest Manifest, resolution *Resolution) {
-	languagePatterns := map[string][]string{}
+	manifestPatterns := compileManifestLanguages(selection, manifest.Languages, resolution)
+	compileManifestCommands(root, selection, manifest, manifestPatterns, resolution)
+}
+
+func compileManifestLanguages(selection policy.PackSelection, languages []Language, resolution *Resolution) map[string][]string {
 	manifestPatterns := map[string][]string{}
-	for _, language := range manifest.Languages {
+	for _, language := range languages {
 		source := slices.Clone(language.SourcePatterns)
 		if len(source) > 0 {
 			resolution.Languages = append(resolution.Languages, policy.LanguageRule{Name: language.ID, Paths: source})
@@ -103,12 +119,15 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 		for _, unsupported := range language.Unsupported {
 			resolution.CapabilityAbsences = append(resolution.CapabilityAbsences, policy.PackCapabilityAbsence{Pack: selection.Name, Language: language.ID, Capability: unsupported.Capability, Reason: unsupported.Reason})
 		}
-		languagePatterns[language.ID] = source
 		manifestPatterns[language.ID] = append(manifestPatterns[language.ID], language.DependencyManifests...)
 		if len(language.DependencyManifests) > 0 {
 			resolution.Manifests = append(resolution.Manifests, policy.PackDependencyRule{Pack: selection.Name, Language: language.ID, Paths: slices.Clone(language.DependencyManifests)})
 		}
 	}
+	return manifestPatterns
+}
+
+func compileManifestCommands(root string, selection policy.PackSelection, manifest Manifest, manifestPatterns map[string][]string, resolution *Resolution) {
 	for _, declared := range manifest.Commands {
 		for _, capability := range declared.Capabilities {
 			paths := slices.Clone(declared.Paths)
@@ -125,7 +144,7 @@ func compileManifest(root string, selection policy.PackSelection, manifest Manif
 				Provides: []string{capability}, Argv: slices.Clone(declared.Argv), Cwd: ".", Paths: paths,
 				RunOn: slices.Clone(declared.Profiles), Environment: slices.Clone(declared.Environment), ExclusiveResources: []string{},
 				TimeoutSeconds: declared.TimeoutSeconds, Managed: true, SealedEnvironment: true,
-				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Languages: manifestLanguageRules(manifest, declared.Languages), LanguageDetectors: manifestLanguageDetectors(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Tools: slices.Clone(declared.Execution.Tools)},
+				Adapter: &policy.PackAdapter{PackName: selection.Name, PackVersion: selection.Version, PackDigest: selection.Digest, PackRoot: root, ProtocolVersion: manifest.ProtocolVersion, Capability: capability, Activation: declared.Activation, Languages: manifestLanguageRules(manifest, declared.Languages), LanguageDetectors: manifestLanguageDetectors(manifest, declared.Languages), Discovery: manifestDiscoveryRules(manifest, declared.Languages), Tools: slices.Clone(declared.Execution.Tools)},
 			})
 		}
 	}

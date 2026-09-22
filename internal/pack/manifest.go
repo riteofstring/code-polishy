@@ -66,6 +66,7 @@ type Command struct {
 	Languages      []string         `json:"languages"`
 	Capabilities   []string         `json:"capabilities"`
 	Profiles       []string         `json:"profiles"`
+	Activation     string           `json:"activation"`
 	TimeoutSeconds int              `json:"timeoutSeconds"`
 	Environment    []string         `json:"environment,omitempty"`
 	Paths          []string         `json:"paths,omitempty"`
@@ -349,8 +350,8 @@ func validateCommand(command Command, index int, seen map[string]bool, languages
 	if err := validateAllowed(command.Profiles, profiles, label+".profiles"); err != nil {
 		return err
 	}
-	if command.TimeoutSeconds < 1 || command.TimeoutSeconds > 3600 {
-		return fmt.Errorf("%s.timeoutSeconds must be between 1 and 3600", label)
+	if err := validateCommandSchedule(command, label); err != nil {
+		return err
 	}
 	if err := validatePatterns(command.Paths, label+".paths"); err != nil {
 		return err
@@ -359,6 +360,16 @@ func validateCommand(command Command, index int, seen map[string]bool, languages
 		return err
 	}
 	return validateCommandEnvironment(command.Environment, label)
+}
+
+func validateCommandSchedule(command Command, label string) error {
+	if !slices.Contains([]string{"selected", "complete-or-gate"}, command.Activation) {
+		return expected(label+".activation", "selected or complete-or-gate")
+	}
+	if command.TimeoutSeconds < 1 || command.TimeoutSeconds > 3600 {
+		return fmt.Errorf("%s.timeoutSeconds must be between 1 and 3600", label)
+	}
+	return nil
 }
 
 func validateCommandExecution(command Command, label string) error {

@@ -26,6 +26,7 @@
       "languages": ["sql"],
       "capabilities": ["lint"],
       "profiles": ["check", "gate"],
+      "activation": "selected",
       "timeoutSeconds": 30,
       "execution": {
         "type": "host-toolchain",

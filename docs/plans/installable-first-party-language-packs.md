@@ -613,6 +613,9 @@ The generic response contract now accepts bounded dead-code facts and has core
 produce the existing `quality.deadCode` identity, diagnostic shape, and
 remediation. Python still needs to execute Vulture and interpret its contract and
 reachability declarations before that capability is claimed by the pack.
+Command activation now distinguishes ordinary selected work from
+`complete-or-gate` whole-project analysis so Python can retain its current focused
+check deferral without a language-specific core branch.
 
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python

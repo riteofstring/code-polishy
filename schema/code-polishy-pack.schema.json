@@ -222,6 +222,7 @@
         "languages",
         "capabilities",
         "profiles",
+        "activation",
         "timeoutSeconds",
         "execution"
       ],
@@ -283,6 +284,9 @@
               "security"
             ]
           }
+        },
+        "activation": {
+          "enum": ["selected", "complete-or-gate"]
         },
         "timeoutSeconds": {
           "type": "integer",

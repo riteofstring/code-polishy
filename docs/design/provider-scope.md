@@ -23,6 +23,11 @@ retains package-wide reachability across actual package trees, including when
 only package metadata or entry policy changed. These diagnostic scopes never
 expand format-write authority.
 
+A provider command that cannot make a sound focused conclusion declares
+`complete-or-gate` activation. Python dead-code analysis uses that activation;
+its complete-project semantic model is not run or approximated during a focused
+check.
+
 Provider architecture starts with selected scopes and follows resolved imports
 to connected scopes. Core validates the reported closure, then adds
 native targets to native graph discovery. Unrelated provider projects cannot

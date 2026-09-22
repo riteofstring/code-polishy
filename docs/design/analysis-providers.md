@@ -10,6 +10,12 @@ selected pack boundary retains its existing route until the coordinated native-r
 cutover. Configured project commands retain their execution profiles; a build
 command cannot establish structured source-analysis coverage.
 
+Command activation is explicit. `selected` commands run for applicable focused
+or complete work. `complete-or-gate` commands defer focused checks and run only
+when the caller selects the complete repository or the gate profile. This keeps
+whole-project conclusions out of bounded iteration without teaching core which
+language tools require them.
+
 Pack manifest version 3 and protocol version 4 form one breaking contract.
 Version 2 manifests and protocol 3 messages are rejected without decoding or
 translation. Every language declares file-scoped, static, or evaluated discovery;

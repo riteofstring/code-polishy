@@ -70,6 +70,12 @@ func TestManifestRequiresExactSafeCompleteContract(t *testing.T) {
 		{"unknown command language", func(value map[string]any) {
 			value["commands"].([]any)[0].(map[string]any)["languages"] = []any{"other"}
 		}, "languages"},
+		{"missing activation", func(value map[string]any) {
+			delete(value["commands"].([]any)[0].(map[string]any), "activation")
+		}, "activation"},
+		{"invalid activation", func(value map[string]any) {
+			value["commands"].([]any)[0].(map[string]any)["activation"] = "focused"
+		}, "selected or complete-or-gate"},
 		{"missing execution", func(value map[string]any) {
 			delete(value["commands"].([]any)[0].(map[string]any), "execution")
 		}, "execution.type"},
@@ -411,6 +417,35 @@ func TestFormattingRequestSeparatesCheckAndWriteModes(t *testing.T) {
 	}
 }
 
+func TestPackCommandActivationDefersFocusedWholeProjectAnalysis(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "src/main.py", "value = 1\n", 0o644)
+	repo, err := repository.Open(root, root, policy.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := policy.Command{
+		Name: "pack.python.dead-code.dead-code", Paths: []string{"**/*.py"},
+		Adapter: &policy.PackAdapter{Capability: "dead-code", Activation: "complete-or-gate"},
+	}
+	focused := repository.Selection{Files: []string{"src/main.py"}}
+	if AdapterSelected(repo, focused, command, "check") {
+		t.Fatal("complete-or-gate command ran for a focused check")
+	}
+	complete := focused
+	complete.All = true
+	if !AdapterSelected(repo, complete, command, "check") {
+		t.Fatal("complete-or-gate command skipped a complete check")
+	}
+	if !AdapterSelected(repo, focused, command, "gate") {
+		t.Fatal("complete-or-gate command skipped the gate profile")
+	}
+	command.Adapter.Activation = "selected"
+	if !AdapterSelected(repo, focused, command, "check") {
+		t.Fatal("selected command skipped a focused check")
+	}
+}
+
 func TestPackRequestsKeepGeneratedExecutableSourceAndProtectDeclaredData(t *testing.T) {
 	root := t.TempDir()
 	for _, path := range []string{"src/main.ts", "src/client.generated.ts", "data/identity.json"} {
@@ -470,7 +505,7 @@ func TestResolveCompilesExactPackProvidersIntoManagedProfiles(t *testing.T) {
 		t.Fatalf("unexpected resolution: %+v", resolution)
 	}
 	command := resolution.Commands[0]
-	if command.Adapter == nil || !command.Managed || !command.SealedEnvironment || !slices.Equal(command.Provides, []string{"lint"}) || !slices.Equal(command.RunOn, []string{"check", "gate"}) {
+	if command.Adapter == nil || command.Adapter.Activation != "selected" || !command.Managed || !command.SealedEnvironment || !slices.Equal(command.Provides, []string{"lint"}) || !slices.Equal(command.RunOn, []string{"check", "gate"}) {
 		t.Fatalf("pack command did not compile into the managed model: %+v", command)
 	}
 }
@@ -679,7 +714,7 @@ func testManifest(t *testing.T) []byte {
 		Schema: "../../schema/code-polishy-pack.schema.json", ManifestVersion: ManifestVersion,
 		Name: "fixture-language", Version: "1.0.0", EngineVersion: testEngineVersion, ProtocolVersion: ProtocolVersion, Platforms: []string{CurrentPlatform()},
 		Languages: []Language{{ID: "fixture", SourcePatterns: []string{"**/*.fixture"}, DiscoveryMode: "file-scoped"}},
-		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, TimeoutSeconds: 30, Execution: CommandExecution{Type: "self-contained", Network: "none"}}},
+		Commands:  []Command{{Name: "adapter", Argv: []string{"bin/adapter"}, Languages: []string{"fixture"}, Capabilities: []string{"lint"}, Profiles: []string{"check", "gate"}, Activation: "selected", TimeoutSeconds: 30, Execution: CommandExecution{Type: "self-contained", Network: "none"}}},
 		Fixtures: []Fixture{
 			{Name: "lint-pass", Command: "adapter", Capability: "lint", Project: "fixtures/pass", Files: []string{"src/main.fixture"}, ExpectedStatus: "pass"},
 			{Name: "lint-fail", Command: "adapter", Capability: "lint", Project: "fixtures/fail", Files: []string{"src/main.fixture"}, ExpectedStatus: "findings", ExpectedRules: []string{"invalid-source"}},

@@ -24,6 +24,9 @@ func SelectedFiles(repo repository.Repository, selection repository.Selection, c
 }
 
 func AdapterSelected(repo repository.Repository, selection repository.Selection, command policy.Command, profile string) bool {
+	if command.Adapter.Activation == "complete-or-gate" && !selection.All && profile != "gate" {
+		return false
+	}
 	if len(SelectedFiles(repo, selection, command, profile)) > 0 {
 		return true
 	}

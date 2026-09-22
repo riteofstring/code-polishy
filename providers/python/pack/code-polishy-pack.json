@@ -35,6 +35,7 @@
       "languages": ["python"],
       "capabilities": ["format"],
       "profiles": ["check", "gate", "format"],
+      "activation": "selected",
       "timeoutSeconds": 300,
       "execution": {
         "type": "host-toolchain",
@@ -65,6 +66,7 @@
       "languages": ["python"],
       "capabilities": ["lint", "complexity", "architecture"],
       "profiles": ["check", "gate"],
+      "activation": "selected",
       "timeoutSeconds": 300,
       "execution": {
         "type": "host-toolchain",
@@ -95,6 +97,7 @@
       "languages": ["python"],
       "capabilities": ["typecheck"],
       "profiles": ["check", "gate"],
+      "activation": "selected",
       "timeoutSeconds": 300,
       "execution": {
         "type": "host-toolchain",
