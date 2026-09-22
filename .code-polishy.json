@@ -393,7 +393,7 @@
     {
       "name": "pack",
       "paths": ["internal/pack/**"],
-      "dependsOn": ["policy", "repository", "runner", "release"]
+      "dependsOn": ["policy", "portability", "repository", "runner", "release"]
     },
     {
       "name": "portability",

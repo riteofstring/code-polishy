@@ -71,6 +71,7 @@ type SourceFacts struct {
 	Comments  *[]CommentFact  `json:"comments,omitempty"`
 	Functions *[]FunctionFact `json:"functions,omitempty"`
 	Literals  *[]LiteralFact  `json:"literals,omitempty"`
+	DeadCode  *[]DeadCodeFact `json:"deadCode,omitempty"`
 }
 
 type ImportFact struct {
@@ -112,6 +113,17 @@ type FunctionFact struct {
 	Complexity int    `json:"complexity"`
 	Depth      int    `json:"depth"`
 	Parameters int    `json:"parameters"`
+}
+
+type DeadCodeFact struct {
+	Analyzer   string `json:"analyzer"`
+	Path       string `json:"path"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Confidence int    `json:"confidence"`
+	Message    string `json:"message"`
 }
 
 func validateAnalysisResponse(response Response, request Request) error {
@@ -199,6 +211,8 @@ func requiredFactsMissing(facts SourceFacts, request Request) bool {
 		return facts.Imports == nil
 	case "complexity":
 		return facts.Functions == nil
+	case "dead-code":
+		return facts.DeadCode == nil
 	case "lint":
 		return !request.Policy.Quality.CommentsAllowed() && facts.Comments == nil
 	}
@@ -215,7 +229,10 @@ func validateFactCollections(facts SourceFacts, request Request, analyzed []stri
 	if err := validateLiteralFacts(facts.Literals, request.Capability, analyzed); err != nil {
 		return err
 	}
-	return validateFunctionFacts(facts.Functions, request.Capability, analyzed)
+	if err := validateFunctionFacts(facts.Functions, request.Capability, analyzed); err != nil {
+		return err
+	}
+	return validateDeadCodeFacts(facts.DeadCode, request.Capability, analyzed)
 }
 
 func validateImportFacts(facts *[]ImportFact, capability string, analyzed []string) error {
@@ -327,6 +344,63 @@ func validateFunctionFact(fact FunctionFact, analyzed []string, label string) er
 		return expected(label+".parameters", "a non-negative integer")
 	}
 	return nil
+}
+
+func validateDeadCodeFacts(facts *[]DeadCodeFact, capability string, analyzed []string) error {
+	if facts == nil {
+		return nil
+	}
+	if capability != "dead-code" {
+		return expected("facts.deadCode", "dead-code facts only for the dead-code capability")
+	}
+	if len(*facts) > 10000 {
+		return expected("facts.deadCode", "at most 10000 items")
+	}
+	seen := map[string]bool{}
+	for index, fact := range *facts {
+		label := indexed("facts.deadCode", index)
+		identity, err := validateDeadCodeFact(fact, analyzed, label)
+		if err != nil {
+			return err
+		}
+		if seen[identity] {
+			return expected(label, "a dead-code fact listed only once")
+		}
+		seen[identity] = true
+	}
+	return nil
+}
+
+func validateDeadCodeFact(fact DeadCodeFact, analyzed []string, label string) (string, error) {
+	if !validRule(fact.Analyzer) {
+		return "", expected(label+".analyzer", "1 to 256 non-whitespace bytes without whitespace, backslash, or NUL")
+	}
+	if err := validateFactLocation(fact.Path, fact.Line, 1, analyzed, label); err != nil {
+		return "", err
+	}
+	if fact.EndLine < fact.Line {
+		return "", expected(label+".endLine", "a line at or after line")
+	}
+	if strings.TrimSpace(fact.Name) == "" || len(fact.Name) > 4096 {
+		return "", expected(label+".name", "1 to 4096 non-whitespace bytes")
+	}
+	if !validRule(fact.Kind) {
+		return "", expected(label+".kind", "1 to 256 non-whitespace bytes without whitespace, backslash, or NUL")
+	}
+	if fact.Confidence < 60 || fact.Confidence > 100 {
+		return "", expected(label+".confidence", "an integer from 60 to 100")
+	}
+	if strings.TrimSpace(fact.Message) == "" || len(fact.Message) > 4096 {
+		return "", expected(label+".message", "1 to 4096 non-whitespace bytes")
+	}
+	return deadCodeFactIdentity(fact), nil
+}
+
+func deadCodeFactIdentity(fact DeadCodeFact) string {
+	return strings.Join([]string{
+		fact.Analyzer, fact.Path, fmt.Sprint(fact.Line), fmt.Sprint(fact.EndLine), fact.Name, fact.Kind,
+		fmt.Sprint(fact.Confidence), fact.Message,
+	}, "\x00")
 }
 
 func validateImportFact(fact ImportFact, analyzed []string, label string) error {

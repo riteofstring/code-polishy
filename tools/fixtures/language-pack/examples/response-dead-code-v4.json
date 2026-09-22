@@ -1,0 +1,30 @@
+{
+  "protocolVersion": 4,
+  "status": "pass",
+  "scopeHandles": ["scope-1"],
+  "evidence": ["unused definitions analyzed across the complete scope"],
+  "coverage": {
+    "analyzed": ["src/main.ts"],
+    "unsupported": []
+  },
+  "facts": {
+    "deadCode": [
+      {
+        "analyzer": "example-unused",
+        "path": "src/main.ts",
+        "line": 1,
+        "endLine": 2,
+        "name": "unusedValue",
+        "kind": "function",
+        "confidence": 100,
+        "message": "unused function 'unusedValue'"
+      }
+    ]
+  },
+  "inputs": [
+    {
+      "path": "src/main.ts",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

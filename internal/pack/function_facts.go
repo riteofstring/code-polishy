@@ -25,6 +25,9 @@ func analysisFindings(repo repository.Repository, adapter *policy.PackAdapter, r
 			findings = append(findings, policy.Finding{Check: advisory.Check, Path: advisory.Path, Line: advisory.Line, Column: advisory.Column, Subject: advisory.Subject, Message: advisory.Message, Severity: policy.FindingWarning})
 		}
 	}
+	if response.Facts != nil && response.Facts.DeadCode != nil {
+		findings = append(findings, deadCodeFindings(*response.Facts.DeadCode)...)
+	}
 	return findings
 }
 

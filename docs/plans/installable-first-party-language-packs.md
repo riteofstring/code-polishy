@@ -609,6 +609,11 @@ cross-module loader-alias parity, runtime loaders, dependency evidence,
 environment resolution, framework contracts, focused graph closure, and the
 shared conformance matrix remain open.
 
+The generic response contract now accepts bounded dead-code facts and has core
+produce the existing `quality.deadCode` identity, diagnostic shape, and
+remediation. Python still needs to execute Vulture and interpret its contract and
+reachability declarations before that capability is claimed by the pack.
+
 Exit: every Python ledger row passes, including adoption, nested/generated
 projects, framework contracts, dependency failures, and focused scopes. Python
 semantics and tool setup have one selected pack owner, unrelated packs keep

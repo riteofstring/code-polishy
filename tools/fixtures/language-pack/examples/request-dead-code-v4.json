@@ -1,0 +1,84 @@
+{
+  "provider": "pack.example.adapter.dead-code",
+  "inventory": [
+    {
+      "path": "src/main.ts",
+      "language": "typescript",
+      "context": "src/main.ts",
+      "owner": "pack.example.adapter.dead-code",
+      "modules": ["application"],
+      "source": true,
+      "metadata": false,
+      "dependency": false,
+      "asset": false,
+      "test": false,
+      "generated": false,
+      "data": false,
+      "development": false,
+      "control": false
+    }
+  ],
+  "selection": {
+    "paths": ["src/main.ts"],
+    "deleted": [],
+    "complete": true
+  },
+  "scopes": [
+    {
+      "handle": "scope-1",
+      "language": "typescript",
+      "root": ".",
+      "members": ["src/main.ts"],
+      "entryFiles": ["src/main.ts"],
+      "context": [],
+      "data": {}
+    }
+  ],
+  "diagnosticFiles": ["src/main.ts"],
+  "writeFiles": [],
+  "protocolVersion": 4,
+  "operation": "check",
+  "capability": "dead-code",
+  "projectRoot": "/example/project",
+  "files": ["src/main.ts"],
+  "modules": [
+    {
+      "name": "application",
+      "paths": ["src/**"],
+      "dependsOn": []
+    }
+  ],
+  "mode": "check",
+  "profile": "check",
+  "context": [
+    {
+      "path": "src/main.ts",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "policy": {
+    "quality": {},
+    "modules": [],
+    "declarations": [],
+    "files": [
+      {
+        "scopes": ["scope-1"],
+        "owner": "pack.example.adapter.dead-code",
+        "context": "src/main.ts",
+        "path": "src/main.ts",
+        "language": "typescript",
+        "test": false,
+        "generated": false,
+        "data": false,
+        "development": false
+      }
+    ]
+  },
+  "tools": [],
+  "complete": true,
+  "pack": {
+    "name": "example",
+    "version": "1.0.0",
+    "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}

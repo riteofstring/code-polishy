@@ -142,13 +142,17 @@ integrity-checked installed pack tree. When a pack launcher delegates to contain
 runtime binaries, the manifest names each exact executable path and the immutable
 installation receipt authenticates both its bytes and executable mode.
 
-The core interprets source-comment, literal, and function facts. JavaScript machine
+The core interprets source-comment, literal, function, and dead-code facts. JavaScript machine
 directives use the existing policy grammar. Provider-classified machine directives
 must be complete line or shebang facts; all other facts remain prose. Function complexity uses the language's
 effective limit; new languages use the shared TypeScript limit until a distinct
 language policy is justified. Depth and parameter limits retain the existing
 production/test distinction. Generated source retains correctness checks while
-remaining exempt from handwritten style limits.
+remaining exempt from handwritten style limits. A dead-code fact binds the exact
+analyzer, governed path, line range, symbol, kind, confidence, and diagnostic.
+Core validates the range and produces the stable `quality.deadCode` identity,
+message shape, and remediation. Explicit empty facts prove the analyzed scope had
+no reportable unused definitions.
 
 Providers contribute imports to the common source graph. The core derives node
 ownership and classification and retains dependency-direction and cycle checks.
@@ -179,7 +183,7 @@ ignores and path-only allowances are not accepted. Comparison normalizes only
 the recorded repository, policy, and isolated pack-data roots while the evidence
 report retains the real executable, pack, tool, and filesystem identities.
 
-Function facts are interpreted once when the core constructs adapter findings.
+Function and dead-code facts are interpreted once when the core constructs adapter findings.
 Conformance uses that same interpretation: its expected status and rule include
 the resulting core policy finding, even when the provider successfully returns
 measurements without judging them. Provider rules retain their pack namespace;

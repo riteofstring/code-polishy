@@ -17,11 +17,29 @@ func TestContractValidatorUsesPublishedDocumentsAndRuntimeSemantics(t *testing.T
 		{Kind: "manifest", InputPath: manifest},
 		{Kind: "request", InputPath: request},
 		{Kind: "response", InputPath: response, RequestPath: request},
+		{Kind: "request", InputPath: filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-dead-code-v4.json")},
+		{Kind: "response", InputPath: filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "response-dead-code-v4.json"), RequestPath: filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-dead-code-v4.json")},
 	} {
 		report, err := ValidateContract(options)
 		if err != nil || report.Status != "passed" || len(report.Errors) != 0 {
 			t.Fatalf("validation %+v = %+v: %v", options, report, err)
 		}
+	}
+}
+
+func TestContractValidatorReportsTheExactInvalidDeadCodeRange(t *testing.T) {
+	root := filepath.Join("..", "..", "tools", "fixtures", "language-pack", "examples")
+	report, err := ValidateContract(ContractValidationOptions{
+		Kind: "response", InputPath: filepath.Join(root, "invalid", "response-dead-code-range-v4.json"),
+		RequestPath: filepath.Join(root, "request-dead-code-v4.json"),
+	})
+	if err != nil || report.Status != "failed" {
+		t.Fatalf("report = %+v: %v", report, err)
+	}
+	if !slices.ContainsFunc(report.Errors, func(issue ContractValidationIssue) bool {
+		return issue.Document == "input" && issue.Path == "facts.deadCode[0].endLine"
+	}) {
+		t.Fatalf("issues = %+v", report.Errors)
 	}
 }
 

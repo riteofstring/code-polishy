@@ -145,6 +145,18 @@ type sourceFacts struct {
 	Imports   *[]importFact   `json:"imports,omitempty"`
 	Comments  *[]commentFact  `json:"comments,omitempty"`
 	Functions *[]functionFact `json:"functions,omitempty"`
+	DeadCode  *[]deadCodeFact `json:"deadCode,omitempty"`
+}
+
+type deadCodeFact struct {
+	Analyzer   string `json:"analyzer"`
+	Path       string `json:"path"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Confidence int    `json:"confidence"`
+	Message    string `json:"message"`
 }
 
 type importFact struct {

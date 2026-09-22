@@ -267,6 +267,40 @@
         "parameters": { "type": "integer", "minimum": 0 }
       }
     },
+    "deadCode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analyzer",
+        "path",
+        "line",
+        "endLine",
+        "name",
+        "kind",
+        "confidence",
+        "message"
+      ],
+      "properties": {
+        "analyzer": { "$ref": "#/$defs/rule" },
+        "path": { "$ref": "#/$defs/path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "kind": { "$ref": "#/$defs/rule" },
+        "confidence": { "type": "integer", "minimum": 60, "maximum": 100 },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        }
+      }
+    },
     "facts": {
       "type": "object",
       "additionalProperties": false,
@@ -290,6 +324,11 @@
           "type": "array",
           "maxItems": 20000,
           "items": { "$ref": "#/$defs/literal" }
+        },
+        "deadCode": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/deadCode" }
         }
       }
     },

@@ -154,7 +154,11 @@ to false. Set `machineDirective` only for a complete line or shebang whose synta
 is a machine directive. Lint may supply static `literals` with path, one-based
 line and UTF-8 byte column, decoded value, and `rootContext`; core retains the
 machine-path, sibling-reference, and external-input policy decision. Complexity
-supplies function complexity, depth, and parameter counts.
+supplies function complexity, depth, and parameter counts. Dead-code analysis
+supplies `deadCode` facts with an analyzer identifier, source line range, symbol,
+kind, 60–100 confidence, and analyzer message. Core validates those facts and
+emits the stable `quality.deadCode` policy finding, including its remediation;
+the provider cannot replace it with a pack-namespaced rule.
 Explicit empty fact collections distinguish an inspected file without those facts
 from omitted evidence. The core derives ownership and classifications and applies
 its existing dependency, cycle, directive, and metric policies.

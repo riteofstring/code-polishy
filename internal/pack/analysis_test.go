@@ -47,7 +47,7 @@ func TestAnalysisCoverageCannotOmitOrInventWork(t *testing.T) {
 }
 
 func TestFactsRequiredByPolicyAreNotOptional(t *testing.T) {
-	for _, capability := range []string{"lint", "architecture", "complexity"} {
+	for _, capability := range []string{"lint", "architecture", "complexity", "dead-code"} {
 		t.Run(capability, func(t *testing.T) {
 			forbidden := false
 			request := Request{Capability: capability, Files: []string{"src/a.fixture"}, DiagnosticFiles: []string{"src/a.fixture"}, WriteFiles: []string{"src/a.fixture"}, Policy: PolicyInput{Quality: policy.Quality{AllowComments: &forbidden}}}
@@ -55,7 +55,7 @@ func TestFactsRequiredByPolicyAreNotOptional(t *testing.T) {
 			if err := validateResponse(response, request); err == nil {
 				t.Fatal("missing policy facts passed")
 			}
-			comments, imports, functions := []CommentFact{}, []ImportFact{}, []FunctionFact{}
+			comments, imports, functions, deadCode := []CommentFact{}, []ImportFact{}, []FunctionFact{}, []DeadCodeFact{}
 			response.Facts = &SourceFacts{}
 			switch capability {
 			case "lint":
@@ -64,6 +64,8 @@ func TestFactsRequiredByPolicyAreNotOptional(t *testing.T) {
 				response.Facts.Imports = &imports
 			case "complexity":
 				response.Facts.Functions = &functions
+			case "dead-code":
+				response.Facts.DeadCode = &deadCode
 			}
 			if err := validateResponse(response, request); err != nil {
 				t.Fatal(err)
@@ -137,6 +139,41 @@ func TestLiteralFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestDeadCodeFactDiagnosticsIdentifyTheExactConstraint(t *testing.T) {
+	request := Request{Capability: "dead-code", Files: []string{"src/a.py"}, DiagnosticFiles: []string{"src/a.py"}}
+	valid := DeadCodeFact{Analyzer: "vulture", Path: "src/a.py", Line: 1, EndLine: 2, Name: "unused", Kind: "function", Confidence: 100, Message: "unused function unused"}
+	tests := []struct {
+		name   string
+		change func(*DeadCodeFact)
+		want   string
+	}{
+		{"analyzer", func(fact *DeadCodeFact) { fact.Analyzer = "bad analyzer" }, "facts.deadCode[0].analyzer: expected 1 to 256 non-whitespace bytes without whitespace, backslash, or NUL"},
+		{"path", func(fact *DeadCodeFact) { fact.Path = "src/other.py" }, "facts.deadCode[0].path: expected a path from coverage.analyzed"},
+		{"line", func(fact *DeadCodeFact) { fact.Line = 0 }, "facts.deadCode[0].line: expected a one-based line"},
+		{"end line", func(fact *DeadCodeFact) { fact.EndLine = 0 }, "facts.deadCode[0].endLine: expected a line at or after line"},
+		{"name", func(fact *DeadCodeFact) { fact.Name = "" }, "facts.deadCode[0].name: expected 1 to 4096 non-whitespace bytes"},
+		{"kind", func(fact *DeadCodeFact) { fact.Kind = "unused function" }, "facts.deadCode[0].kind: expected 1 to 256 non-whitespace bytes without whitespace, backslash, or NUL"},
+		{"confidence", func(fact *DeadCodeFact) { fact.Confidence = 59 }, "facts.deadCode[0].confidence: expected an integer from 60 to 100"},
+		{"message", func(fact *DeadCodeFact) { fact.Message = "" }, "facts.deadCode[0].message: expected 1 to 4096 non-whitespace bytes"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fact := valid
+			test.change(&fact)
+			deadCode := []DeadCodeFact{fact}
+			response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"dead-code analysis completed"}, Coverage: &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}}, Facts: &SourceFacts{DeadCode: &deadCode}}
+			if err := validateResponse(response, request); err == nil || err.Error() != test.want {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+	deadCode := []DeadCodeFact{valid, valid}
+	response := Response{ProtocolVersion: ProtocolVersion, Status: "pass", Evidence: []string{"dead-code analysis completed"}, Coverage: &Coverage{Analyzed: request.Files, Unsupported: []Unsupported{}}, Facts: &SourceFacts{DeadCode: &deadCode}}
+	if err := validateResponse(response, request); err == nil || err.Error() != "facts.deadCode[1]: expected a dead-code fact listed only once" {
+		t.Fatalf("duplicate error = %v", err)
 	}
 }
 

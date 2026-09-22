@@ -6,13 +6,14 @@ policy-owned toolchain's SQLite parser to prepare comment-free SELECT statements
 in an in-memory database, without executing them. The two fixtures distinguish
 valid SQL from a real syntax error. Other SQL constructs remain unsupported.
 
-The `examples` directory contains protocol v4 request and response documents.
+The `examples` directory contains protocol v4 request and response documents,
+including a dead-code fact translated into the core-owned policy rule.
 The request includes one versioned opaque policy declaration bound to a validated
 scope and governed read input.
 The pack unit suite checks those examples against the published schemas and the
 same production encoder, decoder, and semantic validator used during execution.
-The `invalid` directory contains bounded counterexamples. Validate the casing
-counterexample and inspect its exact field with:
+The `invalid` directory contains bounded counterexamples. Validate the comment
+casing counterexample and inspect its exact field with:
 
 ```sh
 code-polishy pack validate \

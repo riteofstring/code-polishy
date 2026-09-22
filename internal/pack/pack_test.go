@@ -200,40 +200,47 @@ func TestPublishedPackSchemasAndExamplesMatchProductionContracts(t *testing.T) {
 	if _, err := ParseManifest(manifestData, ManifestFilename); err != nil {
 		t.Fatalf("manifest decoder: %v", err)
 	}
-	requestData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "request-v4.json"))
+	assertPackExampleContract(t, root, "request-v4.json", "response-v4.json")
+	assertPackExampleContract(t, root, "request-dead-code-v4.json", "response-dead-code-v4.json")
+}
+
+func assertPackExampleContract(t *testing.T, root, requestName, responseName string) {
+	t.Helper()
+	examples := filepath.Join(root, "tools", "fixtures", "language-pack", "examples")
+	requestData, err := os.ReadFile(filepath.Join(examples, requestName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	requestValidator := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-request-v4.schema.json")
 	if err := requestValidator.Validate(requestData); err != nil {
-		t.Fatalf("request schema: %v", err)
+		t.Fatalf("%s schema: %v", requestName, err)
 	}
 	requestDecoder := json.NewDecoder(bytes.NewReader(requestData))
 	requestDecoder.DisallowUnknownFields()
 	request := Request{}
 	if err := requestDecoder.Decode(&request); err != nil {
-		t.Fatalf("request decoder: %v", err)
+		t.Fatalf("%s decoder: %v", requestName, err)
 	}
 	encodedRequest, err := json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := requestValidator.Validate(encodedRequest); err != nil {
-		t.Fatalf("production request encoder: %v", err)
+		t.Fatalf("%s production encoder: %v", requestName, err)
 	}
-	responseData, err := os.ReadFile(filepath.Join(root, "tools", "fixtures", "language-pack", "examples", "response-v4.json"))
+	responseData, err := os.ReadFile(filepath.Join(examples, responseName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := schema.NewValidator(schema.ConfigurationBase + "code-polishy-pack-response-v4.schema.json").Validate(responseData); err != nil {
-		t.Fatalf("response schema: %v", err)
+		t.Fatalf("%s schema: %v", responseName, err)
 	}
 	response, err := decodeResponse(responseData)
 	if err != nil {
-		t.Fatalf("response decoder: %v", err)
+		t.Fatalf("%s decoder: %v", responseName, err)
 	}
 	if err := validateResponse(response, request); err != nil {
-		t.Fatalf("response contract: %v", err)
+		t.Fatalf("%s contract: %v", responseName, err)
 	}
 }
 
