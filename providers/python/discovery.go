@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
 	"slices"
 	"sort"
+	"strings"
 )
 
 type pythonDiscovery struct {
@@ -19,16 +22,23 @@ type pythonDiscovery struct {
 }
 
 type pythonScopeData struct {
-	Manifest      string `json:"manifest"`
-	TargetVersion string `json:"targetVersion"`
+	Manifest       string           `json:"manifest"`
+	RequiresPython string           `json:"requiresPython"`
+	TargetVersion  string           `json:"targetVersion"`
+	SourceRoots    []string         `json:"sourceRoots"`
+	Problems       []projectProblem `json:"problems"`
 }
 
-func discover(request request) response {
+func discover(ctx context.Context, request request, executor projectExecutor) response {
 	discovery, err := newPythonDiscovery(request)
 	if err != nil {
 		return response{ProtocolVersion: protocolVersion, Status: "operational-failure", Failure: boundedFailure(err)}
 	}
-	scopes, err := discovery.scopes()
+	projects, inputs, err := executor.inspect(ctx, request, discovery.selectedProjectInputs())
+	if err != nil {
+		return response{ProtocolVersion: protocolVersion, Status: "operational-failure", Failure: boundedFailure(err)}
+	}
+	scopes, err := discovery.scopes(projects)
 	if err != nil {
 		return response{ProtocolVersion: protocolVersion, Status: "operational-failure", Failure: boundedFailure(err)}
 	}
@@ -37,7 +47,7 @@ func discover(request request) response {
 		Status:          "pass",
 		Evidence:        []string{"static Python discovery grouped governed source by its nearest pyproject.toml"},
 		Discovery:       &discoveryResult{Scopes: scopes},
-		Inputs:          []inputFile{},
+		Inputs:          inputs,
 	}
 }
 
@@ -99,7 +109,26 @@ func (value *pythonDiscovery) selectManifests() error {
 	return nil
 }
 
-func (value pythonDiscovery) scopes() ([]discoveredScope, error) {
+func (value pythonDiscovery) selectedProjectInputs() []projectInput {
+	inputs := []projectInput{}
+	for manifest := range value.selectedManifest {
+		inputs = append(inputs, projectInput{Path: manifest, Manifest: manifest, Kind: "manifest"})
+		for _, metadata := range value.metadata {
+			if metadata == manifest || nearestManifest(metadata, value.manifests) != manifest {
+				continue
+			}
+			if slices.Contains([]string{"ruff.toml", ".ruff.toml"}, path.Base(metadata)) {
+				inputs = append(inputs, projectInput{Path: metadata, Manifest: manifest, Kind: "ruff"})
+			}
+		}
+	}
+	sort.Slice(inputs, func(left, right int) bool {
+		return inputs[left].Path+"\x00"+inputs[left].Kind < inputs[right].Path+"\x00"+inputs[right].Kind
+	})
+	return inputs
+}
+
+func (value pythonDiscovery) scopes(projects map[string]projectFact) ([]discoveredScope, error) {
 	manifests := make([]string, 0, len(value.selectedManifest))
 	for manifest := range value.selectedManifest {
 		manifests = append(manifests, manifest)
@@ -107,7 +136,7 @@ func (value pythonDiscovery) scopes() ([]discoveredScope, error) {
 	sort.Strings(manifests)
 	scopes := make([]discoveredScope, 0, len(manifests))
 	for _, manifest := range manifests {
-		scope, err := value.scope(manifest)
+		scope, err := value.scope(manifest, projects[manifest])
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +148,7 @@ func (value pythonDiscovery) scopes() ([]discoveredScope, error) {
 	return scopes, nil
 }
 
-func (value pythonDiscovery) scope(manifest string) (discoveredScope, error) {
+func (value pythonDiscovery) scope(manifest string, project projectFact) (discoveredScope, error) {
 	members := []string{}
 	for source, owner := range value.sourceManifests {
 		if owner == manifest {
@@ -142,7 +171,13 @@ func (value pythonDiscovery) scope(manifest string) (discoveredScope, error) {
 			context = append(context, metadata)
 		}
 	}
-	data, err := json.Marshal(pythonScopeData{Manifest: manifest, TargetVersion: "py312"})
+	if project.Manifest != manifest {
+		return discoveredScope{}, fmt.Errorf("python project facts omitted %s", manifest)
+	}
+	data, err := json.Marshal(pythonScopeData{
+		Manifest: manifest, RequiresPython: project.RequiresPython, TargetVersion: project.TargetVersion,
+		SourceRoots: pythonSourceRoots(projectRoot(manifest), members, project.BackendPaths), Problems: project.Problems,
+	})
 	if err != nil {
 		return discoveredScope{}, err
 	}
@@ -150,6 +185,42 @@ func (value pythonDiscovery) scope(manifest string) (discoveredScope, error) {
 		ID: "python:" + manifest, Language: "python", Root: projectRoot(manifest), Members: members,
 		EntryFiles: pythonEntryFiles(members, selected), Context: uniqueSorted(context), Selected: uniqueSorted(selected), Data: data,
 	}, nil
+}
+
+func pythonSourceRoots(root string, members, backendPaths []string) []string {
+	roots := []string{root}
+	candidates := append(slices.Clone(backendPaths), "src")
+	for _, candidate := range candidates {
+		contained := candidate
+		if root != "." {
+			contained = path.Join(root, candidate)
+		}
+		if candidate == "." {
+			contained = root
+		}
+		if slices.ContainsFunc(members, func(member string) bool {
+			return member == contained || strings.HasPrefix(member, contained+"/")
+		}) {
+			roots = append(roots, contained)
+		}
+	}
+	return uniqueSorted(roots)
+}
+
+func decodePythonScopeData(data json.RawMessage) (pythonScopeData, error) {
+	value := pythonScopeData{}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return pythonScopeData{}, fmt.Errorf("decode python scope data: %w", err)
+	}
+	if err := requireEnd(decoder); err != nil {
+		return pythonScopeData{}, err
+	}
+	if value.Manifest == "" || len(value.SourceRoots) == 0 || value.Problems == nil {
+		return pythonScopeData{}, errors.New("python scope data is incomplete")
+	}
+	return value, nil
 }
 
 func nearestManifest(file string, manifests map[string]bool) string {

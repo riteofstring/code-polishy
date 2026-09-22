@@ -64,14 +64,16 @@ func (runner osRuff) format(ctx context.Context, workspace string, scope analysi
 	if err := runner.validate(); err != nil {
 		return nil, err
 	}
-	directory, relative, target, err := ruffLocation(workspace, scope, file)
+	directory, relative, _, err := ruffLocation(workspace, scope, file)
 	if err != nil {
 		return nil, err
 	}
-	arguments := []string{
-		"format", "--no-cache", "--target-version", target, "--line-length", "88",
-		"--stdin-filename", relative, "-",
+	options, err := ruffOptions(scope)
+	if err != nil {
+		return nil, err
 	}
+	arguments := append([]string{"format", "--no-cache"}, options...)
+	arguments = append(arguments, "--stdin-filename", relative, "-")
 	return executeTool(ctx, runner.executable, directory, arguments, source)
 }
 
@@ -79,21 +81,29 @@ func (runner osRuff) lint(ctx context.Context, workspace string, scope analysisS
 	if err := runner.validate(); err != nil {
 		return nil, err
 	}
-	directory, relative, target, err := ruffFiles(workspace, scope, files)
+	directory, relative, _, err := ruffFiles(workspace, scope, files)
+	if err != nil {
+		return nil, err
+	}
+	options, err := ruffOptions(scope)
 	if err != nil {
 		return nil, err
 	}
 	baseline := []string{
-		"check", "--no-cache", "--no-fix", "--isolated", "--target-version", target,
-		"--config", "line-length = 88", "--config", "lint.pycodestyle.max-line-length = 88",
+		"check", "--no-cache", "--no-fix", "--isolated",
+	}
+	baseline = append(baseline, options...)
+	baseline = append(baseline,
 		"--select", ruffBaselineSelection, "--ignore-noqa", "--no-respect-gitignore", "--no-force-exclude",
 		"--output-format", "json", "--exit-zero", "--",
-	}
+	)
 	targetRules := []string{
-		"check", "--no-cache", "--no-fix", "--target-version", target,
-		"--config", "line-length = 88", "--config", "lint.pycodestyle.max-line-length = 88",
-		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
+		"check", "--no-cache", "--no-fix",
 	}
+	targetRules = append(targetRules, options...)
+	targetRules = append(targetRules,
+		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
+	)
 	baseline = append(baseline, relative...)
 	targetRules = append(targetRules, relative...)
 	outputs := make([][]byte, 0, 2)
@@ -111,15 +121,20 @@ func (runner osRuff) complexity(ctx context.Context, workspace string, scope ana
 	if err := runner.validate(); err != nil {
 		return nil, err
 	}
-	directory, relative, target, err := ruffFiles(workspace, scope, files)
+	directory, relative, _, err := ruffFiles(workspace, scope, files)
 	if err != nil {
 		return nil, err
 	}
-	arguments := []string{
-		"check", "--no-cache", "--no-fix", "--isolated", "--target-version", target,
+	options, err := ruffOptions(scope)
+	if err != nil {
+		return nil, err
+	}
+	arguments := []string{"check", "--no-cache", "--no-fix", "--isolated"}
+	arguments = append(arguments, options...)
+	arguments = append(arguments,
 		"--select", "C901", "--ignore-noqa", "--config", "lint.mccabe.max-complexity = 0",
 		"--no-respect-gitignore", "--no-force-exclude", "--output-format", "json", "--exit-zero", "--",
-	}
+	)
 	output, err := executeTool(ctx, runner.executable, directory, append(arguments, relative...), nil)
 	if err != nil {
 		return nil, err
@@ -168,15 +183,67 @@ func ruffLocation(workspace string, scope analysisScope, file string) (string, s
 	return directory, relative, target, nil
 }
 
-func ruffTarget(data json.RawMessage) (string, error) {
-	value := pythonScopeData{}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&value); err != nil {
-		return "", fmt.Errorf("decode python scope data: %w", err)
+func ruffOptions(scope analysisScope) ([]string, error) {
+	data, err := decodePythonScopeData(scope.Data)
+	if err != nil {
+		return nil, err
 	}
-	if value.TargetVersion != "py312" {
-		return "", errors.New("python scope does not bind the supported Ruff target py312")
+	if _, err := pythonVersionForTarget(data.TargetVersion); err != nil {
+		return nil, err
+	}
+	relativeRoots, err := pythonRelativeSourceRoots(scope, data)
+	if err != nil {
+		return nil, err
+	}
+	roots := make([]string, 0, len(relativeRoots))
+	for _, root := range relativeRoots {
+		roots = append(roots, strconv.Quote(root))
+	}
+	return []string{
+		"--target-version", data.TargetVersion,
+		"--config", "line-length = 88",
+		"--config", "lint.pycodestyle.max-line-length = 88",
+		"--config", "src = [" + strings.Join(roots, ", ") + "]",
+	}, nil
+}
+
+func pythonRelativeSourceRoots(scope analysisScope, data pythonScopeData) ([]string, error) {
+	roots := make([]string, 0, len(data.SourceRoots))
+	for _, root := range data.SourceRoots {
+		relative, err := filepath.Rel(filepath.FromSlash(scope.Root), filepath.FromSlash(root))
+		if err != nil {
+			return nil, err
+		}
+		relative = filepath.ToSlash(relative)
+		if relative == "" {
+			relative = "."
+		}
+		if relative == ".." || strings.HasPrefix(relative, "../") || filepath.IsAbs(filepath.FromSlash(relative)) {
+			return nil, fmt.Errorf("python source root %s escapes scope root %s", root, scope.Root)
+		}
+		roots = append(roots, relative)
+	}
+	return roots, nil
+}
+
+func pythonVersionForTarget(target string) (string, error) {
+	if !strings.HasPrefix(target, "py3") {
+		return "", errors.New("python scope does not bind a supported Ruff target")
+	}
+	minor, err := strconv.Atoi(strings.TrimPrefix(target, "py3"))
+	if err != nil || minor < 7 || minor > 12 {
+		return "", errors.New("python scope does not bind a supported Ruff target")
+	}
+	return fmt.Sprintf("3.%d", minor), nil
+}
+
+func ruffTarget(data json.RawMessage) (string, error) {
+	value, err := decodePythonScopeData(data)
+	if err != nil {
+		return "", err
+	}
+	if value.TargetVersion == "" {
+		return "", errors.New("python scope does not bind a supported Ruff target")
 	}
 	return value.TargetVersion, nil
 }

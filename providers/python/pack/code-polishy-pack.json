@@ -47,6 +47,11 @@
             "launcher": true
           },
           {
+            "id": "python",
+            "name": "python",
+            "version": "3.12.13+20260728"
+          },
+          {
             "id": "ruff",
             "name": "ruff",
             "version": "0.16.0"
@@ -100,6 +105,11 @@
             "name": "node",
             "version": "24.18.0",
             "launcher": true
+          },
+          {
+            "id": "python",
+            "name": "python",
+            "version": "3.12.13+20260728"
           },
           {
             "id": "ty",
@@ -178,6 +188,23 @@
       "files": ["src/sample/__init__.py"],
       "expectedStatus": "findings",
       "expectedRules": ["ty.invalid-assignment"]
+    },
+    {
+      "name": "target-version-pass",
+      "command": "analyze",
+      "capability": "lint",
+      "project": "fixtures/target-version-pass",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "pass"
+    },
+    {
+      "name": "configuration-fail",
+      "command": "analyze",
+      "capability": "lint",
+      "project": "fixtures/configuration-fail",
+      "files": ["src/sample/__init__.py"],
+      "expectedStatus": "incomplete",
+      "expectedRules": ["project.configuration"]
     }
   ]
 }

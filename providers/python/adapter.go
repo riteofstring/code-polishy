@@ -25,9 +25,10 @@ const maximumPythonBytes = 4 << 20
 const maximumInputs = 10000
 
 type adapter struct {
-	ruff  ruffExecutor
-	facts factExecutor
-	ty    tyExecutor
+	ruff    ruffExecutor
+	facts   factExecutor
+	project projectExecutor
+	ty      tyExecutor
 }
 
 func newAdapter() adapter {
@@ -38,6 +39,10 @@ func newAdapter() adapter {
 		facts: osPythonFacts{
 			executable: os.Getenv("CODE_POLISHY_TOOL_PYTHON"),
 			script:     filepath.Join(packRoot, "lib", "facts.py"),
+		},
+		project: osPythonProject{
+			executable: os.Getenv("CODE_POLISHY_TOOL_PYTHON"),
+			script:     filepath.Join(packRoot, "lib", "project.py"),
 		},
 		ty: osTy{executable: os.Getenv("CODE_POLISHY_TOOL_TY"), config: filepath.Join(packRoot, "config", "ty.toml")},
 	}
@@ -92,7 +97,7 @@ func validateRequest(value request) error {
 
 func (adapter adapter) run(ctx context.Context, request request) response {
 	if request.Operation == "discover" {
-		return discover(request)
+		return discover(ctx, request, adapter.project)
 	}
 	result, err := adapter.analyze(ctx, request)
 	if err == nil {
@@ -107,9 +112,6 @@ func (adapter adapter) run(ctx context.Context, request request) response {
 }
 
 func (adapter adapter) analyze(ctx context.Context, request request) (response, error) {
-	if err := validateTools(request); err != nil {
-		return response{}, err
-	}
 	data, inputs, err := readAuthorizedInputs(request)
 	if err != nil {
 		return response{}, err
@@ -141,10 +143,44 @@ func (adapter adapter) analyze(ctx context.Context, request request) (response, 
 			return response{}, err
 		}
 	}
+	groups, err = state.rejectInvalidProjects(groups)
+	if err != nil {
+		return response{}, err
+	}
+	if len(groups) == 0 {
+		return state.finish(), nil
+	}
+	if err := validateTools(request); err != nil {
+		return response{}, err
+	}
 	if err := state.executeCapability(ctx, adapter, workspace, groups); err != nil {
 		return response{}, err
 	}
 	return state.finish(), nil
+}
+
+func (state *analysisState) rejectInvalidProjects(groups []analysisGroup) ([]analysisGroup, error) {
+	valid := make([]analysisGroup, 0, len(groups))
+	for _, group := range groups {
+		data, err := decodePythonScopeData(group.scope.Data)
+		if err != nil {
+			return nil, err
+		}
+		if len(data.Problems) == 0 {
+			valid = append(valid, group)
+			continue
+		}
+		for _, file := range group.files {
+			state.result.Coverage.Unsupported = append(state.result.Coverage.Unsupported, unsupported{Path: file, Reason: "Python project metadata is invalid"})
+		}
+		for _, problem := range data.Problems {
+			state.result.Findings = append(state.result.Findings, responseFinding{
+				Capability: state.request.Capability, Path: "repository", Subject: problem.Path,
+				Message: problem.Message, Rule: "project.configuration",
+			})
+		}
+	}
+	return valid, nil
 }
 
 type analysisState struct {

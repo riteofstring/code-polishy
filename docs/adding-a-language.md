@@ -69,6 +69,9 @@ function rule. Operational failure does not count as
 defect detection. Fixtures select nonempty, distinct source paths. The SQLite
 syntax proof under `tools/fixtures/language-pack` demonstrates a non-native
 language using a real parser; it deliberately supplies lint only.
+Additional fixtures may expect `incomplete` to prove fail-closed coverage and
+may name the associated rules. They supplement rather than replace the required
+passing and seeded-`findings` pair.
 
 ## Requests and responses
 

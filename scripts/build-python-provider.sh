@@ -20,7 +20,7 @@ while IFS= read -r -d '' template; do
   target="${template%.txt}"
   tail -n +2 "${template}" >"${target}"
   rm "${template}"
-done < <(find "${candidate_root}" -type f -name '*.py.txt' -print0)
+done < <(find "${candidate_root}" -type f \( -name '*.py.txt' -o -name '*.toml.txt' \) -print0)
 targets=(
   darwin:amd64
   darwin:arm64

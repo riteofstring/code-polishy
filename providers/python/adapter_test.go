@@ -48,6 +48,32 @@ type fakeTy struct {
 	err      error
 }
 
+type fakeProject struct {
+	facts map[string]projectFact
+	err   error
+}
+
+func (project fakeProject) inspect(_ context.Context, _ request, inputs []projectInput) (map[string]projectFact, []inputFile, error) {
+	if project.err != nil {
+		return nil, nil, project.err
+	}
+	result := map[string]projectFact{}
+	for _, input := range inputs {
+		if input.Kind != "manifest" {
+			continue
+		}
+		fact, found := project.facts[input.Manifest]
+		if !found {
+			fact = projectFact{
+				Manifest: input.Manifest, RequiresPython: "==3.12.*", TargetVersion: "py312",
+				BackendPaths: []string{}, Problems: []projectProblem{},
+			}
+		}
+		result[input.Manifest] = fact
+	}
+	return result, []inputFile{}, nil
+}
+
 func (ty fakeTy) typecheck(_ context.Context, _ string, _ analysisScope, files []string) ([]responseFinding, error) {
 	if ty.files != nil {
 		*ty.files = slices.Clone(files)
@@ -76,7 +102,7 @@ func TestDiscoverySelectsTheNearestPythonProject(t *testing.T) {
 			{Path: "services/api/src/other.py", Language: "python", Source: true, Owner: "pack.python.analyze.lint"},
 		},
 	}
-	result := discover(request)
+	result := discover(context.Background(), request, fakeProject{})
 	if result.Status != "pass" || result.Discovery == nil || len(result.Discovery.Scopes) != 1 {
 		t.Fatalf("result = %+v", result)
 	}
@@ -87,14 +113,18 @@ func TestDiscoverySelectsTheNearestPythonProject(t *testing.T) {
 	if !slices.Equal(scope.Selected, []string{"services/api/src/api.py"}) || !slices.Contains(scope.Context, "services/api/ruff.toml") || slices.Contains(scope.Context, "src/root.py") {
 		t.Fatalf("scope context = %+v", scope)
 	}
+	data, err := decodePythonScopeData(scope.Data)
+	if err != nil || data.TargetVersion != "py312" || !slices.Equal(data.SourceRoots, []string{"services/api", "services/api/src"}) {
+		t.Fatalf("scope data = %+v, %v", data, err)
+	}
 }
 
 func TestDiscoveryRejectsSelectedSourceWithoutAProject(t *testing.T) {
 	t.Parallel()
-	result := discover(request{
+	result := discover(context.Background(), request{
 		Provider: "pack.python.format.format", Files: []string{"src/app.py"},
 		Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true, Owner: "pack.python.format.format"}},
-	})
+	}, fakeProject{})
 	if result.Status != "operational-failure" || !strings.Contains(result.Failure, "no contained pyproject.toml") {
 		t.Fatalf("result = %+v", result)
 	}
@@ -120,6 +150,17 @@ func TestFormatReturnsFindingOrAuthorizedEditWithoutWritingSource(t *testing.T) 
 	current, err := os.ReadFile(filepath.Join(root, "src", "app.py"))
 	if err != nil || !slices.Equal(current, source) {
 		t.Fatalf("source changed: %q, %v", current, err)
+	}
+}
+
+func TestInvalidProjectMetadataStopsOnlyItsScopeWithoutRequiringTools(t *testing.T) {
+	root := t.TempDir()
+	request := pythonTestRequest(t, root, "lint", []byte("value = 1\n"))
+	request.Tools = nil
+	request.Scopes[0].Data = json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"","targetVersion":"","sourceRoots":[".","src"],"problems":[{"path":"pyproject.toml","message":"project.requires-python is required"}]}`)
+	result := (adapter{}).run(context.Background(), request)
+	if result.Status != "incomplete" || len(result.Findings) != 1 || result.Findings[0].Rule != "project.configuration" || len(result.Coverage.Unsupported) != 1 {
+		t.Fatalf("result = %+v", result)
 	}
 }
 
@@ -253,7 +294,10 @@ func pythonTestRequest(t *testing.T, root, capability string, source []byte) req
 	return request{
 		ProtocolVersion: protocolVersion, Operation: operation, Capability: capability, ProjectRoot: root,
 		Files: []string{"src/app.py"}, DiagnosticFiles: []string{"src/app.py"}, Mode: "check",
-		Scopes:  []analysisScope{{Handle: "scope-1", Language: "python", Root: ".", Members: []string{"src/app.py"}, Context: []string{"pyproject.toml", "src/app.py"}, Data: json.RawMessage(`{"manifest":"pyproject.toml","targetVersion":"py312"}`)}},
+		Scopes: []analysisScope{{
+			Handle: "scope-1", Language: "python", Root: ".", Members: []string{"src/app.py"}, Context: []string{"pyproject.toml", "src/app.py"},
+			Data: json.RawMessage(`{"manifest":"pyproject.toml","requiresPython":"==3.12.*","targetVersion":"py312","sourceRoots":[".","src"],"problems":[]}`),
+		}},
 		Context: context, Inventory: []inventoryEntry{{Path: "src/app.py", Language: "python", Source: true}}, Tools: tools,
 	}
 }

@@ -388,7 +388,7 @@
           "minItems": 1
         },
         "expectedStatus": {
-          "enum": ["pass", "findings", "operational-failure"]
+          "enum": ["pass", "findings", "incomplete", "operational-failure"]
         },
         "expectedRules": {
           "type": "array",
@@ -416,8 +416,17 @@
                 "minItems": 1
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "expectedStatus": {
+                "enum": ["pass", "operational-failure"]
+              }
+            }
           },
-          "else": {
+          "then": {
             "properties": {
               "expectedRules": {
                 "maxItems": 0

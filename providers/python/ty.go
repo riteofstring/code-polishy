@@ -42,15 +42,33 @@ func (runner osTy) typecheck(ctx context.Context, workspace string, scope analys
 	if err := runner.validate(); err != nil {
 		return nil, err
 	}
-	directory, relative, _, err := ruffFiles(workspace, scope, files)
+	directory, relative, target, err := ruffFiles(workspace, scope, files)
+	if err != nil {
+		return nil, err
+	}
+	version, err := pythonVersionForTarget(target)
+	if err != nil {
+		return nil, err
+	}
+	data, err := decodePythonScopeData(scope.Data)
+	if err != nil {
+		return nil, err
+	}
+	searchPaths, err := pythonRelativeSourceRoots(scope, data)
 	if err != nil {
 		return nil, err
 	}
 	arguments := []string{
-		"check", "--config-file", runner.config, "--project", ".", "--python-version", "3.12",
+		"check", "--config-file", runner.config, "--project", ".", "--python-version", version,
 		"--output-format", "gitlab", "--exit-zero", "--no-progress", "--color", "never",
-		"--no-respect-ignore-files", "--no-force-exclude", "--include-scripts", "--",
+		"--no-respect-ignore-files", "--no-force-exclude", "--include-scripts",
 	}
+	for _, searchPath := range searchPaths {
+		if searchPath != "." {
+			arguments = append(arguments, "--extra-search-path", searchPath)
+		}
+	}
+	arguments = append(arguments, "--")
 	output, err := executeTool(ctx, runner.executable, directory, append(arguments, relative...), nil)
 	if err != nil {
 		return nil, err

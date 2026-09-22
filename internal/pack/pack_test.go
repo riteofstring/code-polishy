@@ -685,6 +685,13 @@ func testManifest(t *testing.T) []byte {
 	return data
 }
 
+func TestFixtureExpectationAllowsIncompleteCoverageEvidence(t *testing.T) {
+	fixture := Fixture{ExpectedStatus: "incomplete", ExpectedRules: []string{"project.configuration"}}
+	if err := validateFixtureExpectation(fixture, "fixtures[0]"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeTestFile(t *testing.T, root, relative, content string, mode os.FileMode) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(relative))

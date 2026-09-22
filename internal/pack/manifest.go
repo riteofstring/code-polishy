@@ -205,48 +205,64 @@ func validateLanguages(languages []Language) error {
 }
 
 func validateLanguage(language Language, index int, seen map[string]bool) error {
+	label := fmt.Sprintf("languages[%d]", index)
 	if !identifierPattern.MatchString(language.ID) || seen[language.ID] {
-		return fmt.Errorf("languages[%d].id is invalid or duplicated", index)
+		return fmt.Errorf("%s.id is invalid or duplicated", label)
 	}
 	seen[language.ID] = true
+	if err := validateLanguageDiscovery(language, label); err != nil {
+		return err
+	}
+	if err := validateLanguagePatterns(language, label); err != nil {
+		return err
+	}
+	return validateUnsupportedCapabilities(language.Unsupported, label)
+}
+
+func validateLanguageDiscovery(language Language, label string) error {
 	if len(language.SourcePatterns) == 0 && len(language.Shebangs) == 0 {
-		return fmt.Errorf("languages[%d] requires sourcePatterns or shebangs", index)
+		return fmt.Errorf("%s requires sourcePatterns or shebangs", label)
 	}
 	if !slices.Contains(packDiscoveryModes, language.DiscoveryMode) {
-		return expected(fmt.Sprintf("languages[%d].discoveryMode", index), "file-scoped, static, or evaluated")
+		return expected(label+".discoveryMode", "file-scoped, static, or evaluated")
 	}
 	if language.DiscoveryMode == "file-scoped" && len(language.MetadataPatterns) != 0 {
-		return expected(fmt.Sprintf("languages[%d].metadataPatterns", index), "empty for file-scoped discovery")
+		return expected(label+".metadataPatterns", "empty for file-scoped discovery")
 	}
 	if language.DiscoveryMode != "file-scoped" && len(language.MetadataPatterns) == 0 {
-		return expected(fmt.Sprintf("languages[%d].metadataPatterns", index), "at least one pattern for static or evaluated discovery")
+		return expected(label+".metadataPatterns", "at least one pattern for static or evaluated discovery")
 	}
-	if err := validatePatterns(language.SourcePatterns, fmt.Sprintf("languages[%d].sourcePatterns", index)); err != nil {
+	return nil
+}
+
+func validateLanguagePatterns(language Language, label string) error {
+	if err := validatePatterns(language.SourcePatterns, label+".sourcePatterns"); err != nil {
 		return err
 	}
-	if err := validatePatterns(language.TestPatterns, fmt.Sprintf("languages[%d].testPatterns", index)); err != nil {
+	if err := validatePatterns(language.TestPatterns, label+".testPatterns"); err != nil {
 		return err
 	}
-	if err := validateShebangs(language.Shebangs, fmt.Sprintf("languages[%d].shebangs", index)); err != nil {
+	if err := validateShebangs(language.Shebangs, label+".shebangs"); err != nil {
 		return err
 	}
-	if err := validatePatterns(language.DependencyManifests, fmt.Sprintf("languages[%d].dependencyManifests", index)); err != nil {
+	if err := validatePatterns(language.DependencyManifests, label+".dependencyManifests"); err != nil {
 		return err
 	}
-	if err := validatePatterns(language.MetadataPatterns, fmt.Sprintf("languages[%d].metadataPatterns", index)); err != nil {
-		return err
-	}
-	if language.Unsupported != nil && len(language.Unsupported) == 0 {
-		return expected(fmt.Sprintf("languages[%d].unsupportedCapabilities", index), "one or more explicit capability absences or omission")
+	return validatePatterns(language.MetadataPatterns, label+".metadataPatterns")
+}
+
+func validateUnsupportedCapabilities(declarations []UnsupportedCapability, label string) error {
+	if declarations != nil && len(declarations) == 0 {
+		return expected(label+".unsupportedCapabilities", "one or more explicit capability absences or omission")
 	}
 	unsupported := map[string]bool{}
-	for unsupportedIndex, declaration := range language.Unsupported {
-		label := fmt.Sprintf("languages[%d].unsupportedCapabilities[%d]", index, unsupportedIndex)
+	for unsupportedIndex, declaration := range declarations {
+		itemLabel := fmt.Sprintf("%s.unsupportedCapabilities[%d]", label, unsupportedIndex)
 		if !slices.Contains(packCapabilities, declaration.Capability) || unsupported[declaration.Capability] {
-			return expected(label+".capability", "a unique standard capability")
+			return expected(itemLabel+".capability", "a unique standard capability")
 		}
 		if strings.TrimSpace(declaration.Reason) == "" || len(declaration.Reason) > 4096 {
-			return expected(label+".reason", "1 to 4096 non-whitespace bytes")
+			return expected(itemLabel+".reason", "1 to 4096 non-whitespace bytes")
 		}
 		unsupported[declaration.Capability] = true
 	}
@@ -443,14 +459,14 @@ func validateFixture(fixture Fixture, index int, provided map[string]map[string]
 }
 
 func validateFixtureExpectation(fixture Fixture, label string) error {
-	if !slices.Contains([]string{"pass", "findings", "operational-failure"}, fixture.ExpectedStatus) {
+	if !slices.Contains([]string{"pass", "findings", "incomplete", "operational-failure"}, fixture.ExpectedStatus) {
 		return fmt.Errorf("%s.expectedStatus is invalid", label)
 	}
 	if fixture.ExpectedStatus == "findings" && len(fixture.ExpectedRules) == 0 {
 		return fmt.Errorf("%s requires expectedRules for the seeded defect", label)
 	}
-	if fixture.ExpectedStatus != "findings" && len(fixture.ExpectedRules) > 0 {
-		return fmt.Errorf("%s expectedRules require findings status", label)
+	if slices.Contains([]string{"pass", "operational-failure"}, fixture.ExpectedStatus) && len(fixture.ExpectedRules) > 0 {
+		return fmt.Errorf("%s expectedRules require findings or incomplete status", label)
 	}
 	for _, rule := range fixture.ExpectedRules {
 		if !validRule(rule) {

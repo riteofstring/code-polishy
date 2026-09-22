@@ -1,0 +1,188 @@
+python-pack-library
+import importlib.metadata
+import json
+import sys
+import tomllib
+
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+
+
+PROTOCOL = "code-polishy-python-project/v1"
+PACKAGING_VERSION = "26.3"
+MAX_INPUT_BYTES = 8 * 1024 * 1024
+MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+MAX_ITEMS = 4096
+
+
+def exact_object(value, keys, name):
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise ValueError(f"{name} has invalid fields")
+
+
+def stable_public_version(version):
+    return not version.is_prerelease and not version.is_devrelease and version.local is None
+
+
+def specifier_version(value):
+    try:
+        return Version(value.removesuffix(".*"))
+    except InvalidVersion:
+        return None
+
+
+def lower_bound(current, operator, version):
+    if operator not in {">=", ">", "~=", "=="}:
+        return current
+    if current is None or version > current:
+        return version
+    return current
+
+
+def version_patches(version):
+    if len(version.release) < 3:
+        return set()
+    patch = version.release[2]
+    return {max(0, patch - 1), patch, patch + 1}
+
+
+def target_version(value):
+    try:
+        specifiers = SpecifierSet(value)
+    except InvalidSpecifier as error:
+        return "", str(error)
+    candidates = {0, 1, 2, 100, 1000000}
+    lower = None
+    for specifier in specifiers:
+        parsed = specifier_version(specifier.version)
+        if parsed is None:
+            continue
+        if not stable_public_version(parsed):
+            return "", "specifier must use stable public Python releases"
+        lower = lower_bound(lower, specifier.operator, parsed)
+        candidates.update(version_patches(parsed))
+    if lower is None or len(lower.release) < 2:
+        return "", "specifier has no minimum supported Python version"
+    if lower.release[:2] < (3, 7) or lower.release[:2] > (3, 12):
+        return "", "minimum Python version is outside the carried parser range of 3.7 through 3.12"
+    for minor in range(lower.release[1], 13):
+        for patch in sorted(candidates):
+            candidate = Version(f"3.{minor}.{patch}")
+            if specifiers.contains(candidate, prereleases=False):
+                return f"py3{minor}", ""
+    return "", "specifier has no stable Python version supported by the carried CPython 3.12 parser"
+
+
+def line_length_problems(path, document, prefix):
+    problems = []
+    current = document
+    for part in prefix:
+        if not isinstance(current, dict):
+            return problems
+        current = current.get(part, {})
+    if not isinstance(current, dict):
+        return problems
+    values = []
+    if "line-length" in current:
+        values.append(("line-length", current["line-length"]))
+    lint = current.get("lint", {})
+    if isinstance(lint, dict):
+        pycodestyle = lint.get("pycodestyle", {})
+        if isinstance(pycodestyle, dict) and "max-line-length" in pycodestyle:
+            values.append(("lint.pycodestyle.max-line-length", pycodestyle["max-line-length"]))
+    for name, value in values:
+        if type(value) is not int or value != 88:
+            problems.append({"path": path, "message": f"{name} must be the policy-owned line length 88"})
+    return problems
+
+
+def manifest_fact(item):
+    path = item["path"]
+    problems = []
+    target = ""
+    requires_python = ""
+    backend_paths = []
+    try:
+        document = tomllib.loads(item["source"])
+        project = document.get("project", {})
+        build_system = document.get("build-system", {})
+        if not isinstance(project, dict):
+            project = {}
+        if not isinstance(build_system, dict):
+            build_system = {}
+        requires_python = project.get("requires-python", "")
+        if not isinstance(requires_python, str) or not requires_python:
+            problems.append({"path": path, "message": "project.requires-python is required for policy-owned Python analysis"})
+            requires_python = ""
+        else:
+            target, error = target_version(requires_python)
+            if error:
+                problems.append({"path": path, "message": f"project.requires-python cannot select Python analyzers: {error}"})
+        backend_paths = build_system.get("backend-path", [])
+        if not isinstance(backend_paths, list) or any(not isinstance(value, str) or not value for value in backend_paths):
+            problems.append({"path": path, "message": "build-system.backend-path must contain relative directory strings"})
+            backend_paths = []
+        problems.extend(line_length_problems(path, document, ["tool", "ruff"]))
+    except (TypeError, ValueError, tomllib.TOMLDecodeError) as error:
+        problems.append({"path": path, "message": f"pyproject.toml is malformed: {error}"})
+    return {
+        "manifest": item["manifest"],
+        "requiresPython": requires_python,
+        "targetVersion": target,
+        "backendPaths": sorted(set(backend_paths)),
+        "problems": problems,
+    }
+
+
+def add_ruff_problem(project, item):
+    try:
+        document = tomllib.loads(item["source"])
+        project["problems"].extend(line_length_problems(item["path"], document, []))
+    except (TypeError, ValueError, tomllib.TOMLDecodeError) as error:
+        project["problems"].append({"path": item["path"], "message": f"Ruff configuration is malformed: {error}"})
+
+
+def analyze(request):
+    exact_object(request, {"protocol", "inputs"}, "request")
+    if request["protocol"] != PROTOCOL or not isinstance(request["inputs"], list) or not 1 <= len(request["inputs"]) <= MAX_ITEMS:
+        raise ValueError("request has an invalid protocol identity or input count")
+    projects = {}
+    for index, item in enumerate(request["inputs"]):
+        exact_object(item, {"path", "manifest", "kind", "source"}, f"input {index}")
+        if item["kind"] not in {"manifest", "ruff"}:
+            raise ValueError(f"input {index} has an invalid kind")
+        if not all(isinstance(item[field], str) and item[field] for field in ("path", "manifest", "source")):
+            raise ValueError(f"input {index} has an invalid value")
+        if item["kind"] == "manifest":
+            if item["path"] != item["manifest"] or item["manifest"] in projects:
+                raise ValueError("request has an invalid manifest identity")
+            projects[item["manifest"]] = manifest_fact(item)
+    for item in request["inputs"]:
+        if item["kind"] == "ruff":
+            if item["manifest"] not in projects:
+                raise ValueError("Ruff configuration has no requested project")
+            add_ruff_problem(projects[item["manifest"]], item)
+    for project in projects.values():
+        project["problems"].sort(key=lambda value: (value["path"], value["message"]))
+    return {"protocol": PROTOCOL, "projects": [projects[key] for key in sorted(projects)]}
+
+
+def main():
+    if sys.version_info[:2] != (3, 12):
+        raise ValueError("Python project discovery requires CPython 3.12")
+    if importlib.metadata.version("packaging") != PACKAGING_VERSION:
+        raise ValueError(f"Python project discovery requires packaging {PACKAGING_VERSION}")
+    data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+    if len(data) > MAX_INPUT_BYTES:
+        raise ValueError("request exceeds the byte limit")
+    response = json.dumps(analyze(json.loads(data)), ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8") + b"\n"
+    if len(response) > MAX_OUTPUT_BYTES:
+        raise ValueError("response exceeds the byte limit")
+    sys.stdout.buffer.write(response)
+
+
+try:
+    main()
+except (ImportError, OSError, TypeError, ValueError) as error:
+    sys.stderr.write(str(error) + "\n")
+    raise SystemExit(2) from None

@@ -1,0 +1,2 @@
+python-pack-fixture
+line-length = 100

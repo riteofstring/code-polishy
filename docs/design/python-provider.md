@@ -8,8 +8,12 @@ authentication, diagnostics, and coverage decisions.
 Static discovery assigns selected source to its nearest governed
 `pyproject.toml`. Nested projects remain independent, and a focused operation
 materializes only the authenticated members and metadata of selected scopes.
-Ruff and CPython run against that isolated tree. They cannot enumerate the
-target repository or observe an ambient project environment.
+The exact carried CPython and packaging parser derive the supported target from
+`project.requires-python`, validate policy-owned Ruff settings, and bind root,
+`src`, and in-tree backend source roots into opaque scope data. Invalid metadata
+withholds only its project scope while unrelated projects remain analyzable.
+Ruff and CPython run against the isolated tree. They cannot enumerate the target
+repository or observe an ambient project environment.
 
 Ruff format uses stdin and returns proposed edits; it never changes the
 materialized source, the target repository, or a cache. Ruff lint runs with
