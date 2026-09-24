@@ -24,6 +24,44 @@ diagnostics without discarding successfully parsed siblings or inspecting
 unrelated projects during a focused check. This inventory is not a resolved
 workspace, target, feature or dependency graph; those facts belong to Cargo.
 
+## Dependency declarations
+
+The same data-only reader preserves registry versions, renamed packages, local
+paths, Git selectors and workspace inheritance across ordinary, optional, build,
+development and target-specific dependency tables. Workspace definitions and
+patch/replace tables are inventoried too. Source identity comes from declaration
+fields, not directory names or a guessed Cargo package ID. Inherited declarations
+retain the inheritance marker until Cargo establishes their effective workspace;
+the reader never fills in a guessed version.
+
+Native pin policy requires exact `=major.minor.patch` registry requirements,
+including prereleases when selected. Cargo ignores build metadata in requirements,
+so it cannot provide an exact artifact pin. Version constraints accompanying a
+path or Git dependency must also be exact because they govern registry resolution
+when the crate is published. Local dependency manifests must be contained regular
+inputs; Git declarations need a full immutable revision and the existing validated
+Git repository identity. Pin checks do not authenticate Git contents or invent a
+publication date. Cargo follows the shared [optional Git assessment
+policy](git-evidence-policy.md); signed evidence is required only when selected.
+
+Source substitutions, unsupported dependency fields and alternate registries need
+explicit source governance. Static manifest checks neither install dependencies
+nor run build scripts. They do not establish lock agreement, vulnerability, license
+or release-age coverage; those remain separate dependency-policy operations.
+
+Lock inventory supports Cargo's version-3 and version-4 records. A package
+identity retains its name, complete version and exact source; different versions
+or sources are not collapsed. Registry records must carry their archive checksum,
+which is authoritative artifact identity rather than a local change detector.
+Dependency-edge strings remain opaque until Cargo supplies resolved graph facts.
+The version-bound source decoder recognizes the pinned Cargo release's public
+crates.io identity and immutable Git source encoding. Unknown sources fail
+explicitly and never become public registry queries. Git packages sharing a name
+and version with a registry crate remain separate coordinates. Parsing this
+inventory alone does not prove that it agrees with the selected manifests.
+
+## Shader inputs
+
 WGSL is executable shader source with its own built-in language identifier,
 `wgsl`. It participates in module ownership, source-comment coverage and the
 existing required analysis capabilities. A shader cannot be protected as data

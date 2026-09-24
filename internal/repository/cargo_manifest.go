@@ -10,10 +10,11 @@ import (
 )
 
 type CargoManifest struct {
-	Path      string
-	Root      string
-	Package   *CargoPackageManifest
-	Workspace *CargoWorkspaceManifest
+	Path         string
+	Root         string
+	Package      *CargoPackageManifest
+	Workspace    *CargoWorkspaceManifest
+	Dependencies []CargoDependencyDeclaration
 }
 
 type CargoPackageManifest struct {
@@ -75,25 +76,42 @@ func (repo Repository) readCargoManifest(root *os.Root, path string) (CargoManif
 	if err != nil {
 		return CargoManifest{}, err
 	}
-	var document struct {
-		Package   *CargoPackageManifest   `toml:"package"`
-		Workspace *CargoWorkspaceManifest `toml:"workspace"`
+	return ParseCargoManifest(path, data)
+}
+
+func ParseCargoManifest(path string, data []byte) (CargoManifest, error) {
+	if len(data) > 8<<20 {
+		return CargoManifest{}, errors.New("cargo manifest exceeds 8388608 bytes")
 	}
+	var document cargoManifestDocument
 	if err := toml.Unmarshal(data, &document); err != nil {
 		return CargoManifest{}, err
 	}
+	if err := validateCargoManifestDocument(document); err != nil {
+		return CargoManifest{}, err
+	}
+	dependencies, err := cargoDependencyDeclarations(document)
+	if err != nil {
+		return CargoManifest{}, err
+	}
+	manifest := CargoManifest{Path: path, Root: filepath.ToSlash(filepath.Dir(path)), Package: document.Package, Dependencies: dependencies}
+	if document.Workspace != nil {
+		manifest.Workspace = &document.Workspace.CargoWorkspaceManifest
+	}
+	return manifest, nil
+}
+
+func validateCargoManifestDocument(document cargoManifestDocument) error {
 	if document.Package == nil && document.Workspace == nil {
-		return CargoManifest{}, errors.New("manifest must declare a package or workspace")
+		return errors.New("manifest must declare a package or workspace")
 	}
 	if document.Package != nil && strings.TrimSpace(document.Package.Name) == "" {
-		return CargoManifest{}, errors.New("package must declare its name")
+		return errors.New("package must declare its name")
 	}
 	if document.Package != nil && document.Package.Workspace != "" && document.Workspace != nil {
-		return CargoManifest{}, errors.New("a package cannot declare both package.workspace and a workspace table")
+		return errors.New("a package cannot declare both package.workspace and a workspace table")
 	}
-	return CargoManifest{
-		Path: path, Root: filepath.ToSlash(filepath.Dir(path)), Package: document.Package, Workspace: document.Workspace,
-	}, nil
+	return nil
 }
 
 func cargoManifestProblem(path string, err error) CargoManifestProblem {

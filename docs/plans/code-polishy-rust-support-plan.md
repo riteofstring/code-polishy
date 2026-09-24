@@ -118,6 +118,14 @@ changed modules; add a quick suite when a new module is introduced.
   unfinished. Project Clippy overrides and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
 
+Cargo dependency-input governance now parses ordinary, build, development,
+target-specific and workspace declaration tables, checks exact registry and Git
+pins, contains local paths, and validates versioned lock identities/checksums.
+It keeps Git and registry coordinates separate and retains explicit failures for
+unsupported source substitutions. This is data-only preparation: resolved lock
+agreement, dependency-review comparison, age, vulnerability and license integration
+remain in progress.
+
 ## Phase 0: define the complete coverage contract
 
 - [x] Audit current Go/Python owners and Rust gaps against the recorded base;

@@ -82,6 +82,10 @@ func staticPathFindings(repo repository.Repository, path string) []policy.Findin
 		return checkGoModule(repo, path)
 	case name == "go.work":
 		return checkGoWorkspace(repo, path)
+	case name == "Cargo.toml":
+		return checkCargoManifest(repo, path)
+	case name == "Cargo.lock":
+		return checkCargoLock(repo, path)
 	case name == "pyproject.toml":
 		return checkPythonProject(repo, path)
 	case name == "osv-scanner.toml":
@@ -89,7 +93,7 @@ func staticPathFindings(repo repository.Repository, path string) []policy.Findin
 			Check: "supplyChain.auditIgnore", Path: path, Subject: "osv-scanner configuration",
 			Message: "repository OSV configuration is forbidden because scanner ignores bypass governed vulnerability assessments",
 		}}
-	case strings.HasPrefix(path, ".github/workflows/") && (strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")):
+	case strings.HasPrefix(path, ".github/workflows/") && slices.Contains([]string{".yml", ".yaml"}, filepath.Ext(path)):
 		return checkWorkflowPins(repo, path)
 	case isDockerfile(path):
 		return checkContainerPins(repo, path)
@@ -109,6 +113,8 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"lock-sync", "release-age"})...)
 		case "python-uv":
 			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"lock-sync"})...)
+		case "cargo":
+			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"lock-sync", "release-age", "security"})...)
 		case "unsupported":
 			capabilities := []string{"dependency-policy", "lock-sync", "release-age", "security"}
 			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, capabilities)...)
@@ -151,7 +157,9 @@ func dependencyEcosystem(repo repository.Repository, path string) string {
 		return "unsupported"
 	case "go.mod", "go.work":
 		return "go"
-	case "Cargo.toml", "Pipfile", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Package.swift", "pubspec.yaml":
+	case "Cargo.toml":
+		return "cargo"
+	case "Pipfile", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Package.swift", "pubspec.yaml":
 		return "unsupported"
 	default:
 		if strings.HasPrefix(name, "requirements") && strings.HasSuffix(name, ".txt") {
