@@ -15,5 +15,6 @@ func cargoDiscoveryFindings(ctx context.Context, repo repository.Repository, fil
 		return []policy.Finding{{Check: "policy.rustProject", Path: "repository", Subject: "inventory", Message: err.Error()}}
 	}
 	plan := rustfacts.PlanDiscovery(repo, files, allFiles)
-	return rustfacts.Discover(ctx, repo, plan, commandRunner).Findings
+	discovery := rustfacts.Discover(ctx, repo, plan, commandRunner)
+	return append(discovery.Findings, rustFormatFindings(ctx, repo, files, discovery.Workspaces)...)
 }

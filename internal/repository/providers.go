@@ -126,6 +126,8 @@ func (repo Repository) NativeCapability(path, capability string) bool {
 	switch language {
 	case "go", "python":
 		return slices.Contains([]string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, capability)
+	case "rust":
+		return capability == "format"
 	case "shell":
 		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
 	case "typescript":

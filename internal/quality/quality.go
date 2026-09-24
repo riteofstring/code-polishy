@@ -46,9 +46,9 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	repo = repo.WithAnalysisProfile(profile)
 	commands := []policy.Command{}
 	if allFiles, err := repo.AllFiles(); err == nil {
+		commands = append(commands, rustfacts.PlanDiscovery(repo, selection.Files, allFiles).Commands...)
 		goCommands, _ := nativeGoToolCommands(repo, selection.Files, allFiles)
 		commands = append(commands, goCommands...)
-		commands = append(commands, rustfacts.PlanDiscovery(repo, selection.Files, allFiles).Commands...)
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
@@ -84,6 +84,7 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 		}
 	}
 	findings = append(findings, JavaScriptFormatWrite(ctx, repo, selection.Files)...)
+	findings = append(findings, rustFormatWrite(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, RunCommands(ctx, repo, selection, commandRunner, "format")...)
 	return findings
 }
@@ -506,7 +507,7 @@ func ToolFindings(repo repository.Repository, files []string) []policy.Finding {
 	if shellLint {
 		findings = append(findings, shellToolFindings(repo)...)
 	}
-	return findings
+	return append(findings, rustToolFindings(repo, files)...)
 }
 
 func goToolFindings(repo repository.Repository, capabilities map[string]bool) []policy.Finding {
@@ -921,6 +922,8 @@ func builtInCapability(language, capability string) bool {
 	switch language {
 	case "go", "typescript", "python":
 		return slices.Contains(builtInCapabilities, capability)
+	case "rust":
+		return capability == "format"
 	case "shell":
 		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
 	}

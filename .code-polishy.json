@@ -41,6 +41,8 @@
           "internal/quality/cargo_manifest_test.go",
           "internal/quality/cargo.go",
           "internal/quality/cargo_test.go",
+          "internal/quality/rust_format.go",
+          "internal/quality/rust_format_test.go",
           "internal/quality/wgsl_test.go",
           "tools/install-rust.sh",
           "tools/install-rust.ps1",
