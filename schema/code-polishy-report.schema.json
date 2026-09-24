@@ -36,6 +36,9 @@
     "sourceDependencyGraph": { "$ref": "#/$defs/sourceDependencyGraph" },
     "repositoryContext": { "$ref": "#/$defs/repositoryContext" },
     "repositorySize": { "$ref": "#/$defs/repositorySize" },
+    "reliabilityReminder": {
+      "$ref": "#/$defs/reliabilityReminder"
+    },
     "architectureReview": { "$ref": "#/$defs/architectureReview" },
     "architecturePreparation": {
       "type": "object",
@@ -558,6 +561,43 @@
         }
       },
       "additionalProperties": false
+    },
+    "reliabilityReminder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyDocument",
+        "principle",
+        "questions",
+        "matchedModules",
+        "matchedPaths"
+      ],
+      "properties": {
+        "policyDocument": {
+          "const": "docs/policies/end-to-end-reliability.md"
+        },
+        "principle": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "questions": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        },
+        "matchedModules": {
+          "$ref": "#/$defs/stringArray",
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "matchedPaths": {
+          "$ref": "#/$defs/stringArray",
+          "maxItems": 128,
+          "uniqueItems": true
+        }
+      },
+      "anyOf": [
+        { "properties": { "matchedModules": { "minItems": 1 } } },
+        { "properties": { "matchedPaths": { "minItems": 1 } } }
+      ]
     },
     "stringArray": { "type": "array", "items": { "type": "string" } },
     "requestedSelection": {

@@ -234,16 +234,22 @@ type LanguageRule struct {
 }
 
 type Quality struct {
-	ReviewFileLines     int        `json:"reviewFileLines,omitempty"`
-	ReviewTestFileLines int        `json:"reviewTestFileLines,omitempty"`
-	MaxFileLines        int        `json:"maxFileLines,omitempty"`
-	MaxTestFileLines    int        `json:"maxTestFileLines,omitempty"`
-	Complexity          Complexity `json:"complexity,omitempty"`
-	AllowComments       *bool      `json:"allowComments,omitempty"`
-	MaxDepth            int        `json:"maxDepth,omitempty"`
-	MaxTestDepth        int        `json:"maxTestDepth,omitempty"`
-	MaxParams           int        `json:"maxParams,omitempty"`
-	MaxTestParams       int        `json:"maxTestParams,omitempty"`
+	ReviewFileLines     int                  `json:"reviewFileLines,omitempty"`
+	ReviewTestFileLines int                  `json:"reviewTestFileLines,omitempty"`
+	MaxFileLines        int                  `json:"maxFileLines,omitempty"`
+	MaxTestFileLines    int                  `json:"maxTestFileLines,omitempty"`
+	Complexity          Complexity           `json:"complexity,omitempty"`
+	AllowComments       *bool                `json:"allowComments,omitempty"`
+	ReliabilityReminder *ReliabilityReminder `json:"reliabilityReminder,omitempty"`
+	MaxDepth            int                  `json:"maxDepth,omitempty"`
+	MaxTestDepth        int                  `json:"maxTestDepth,omitempty"`
+	MaxParams           int                  `json:"maxParams,omitempty"`
+	MaxTestParams       int                  `json:"maxTestParams,omitempty"`
+}
+
+type ReliabilityReminder struct {
+	Modules     []string `json:"modules,omitempty"`
+	SourcePaths []string `json:"sourcePaths,omitempty"`
 }
 
 type Complexity struct {

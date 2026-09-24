@@ -32,6 +32,7 @@ type Report struct {
 	ChangeBoundary          *ChangeBoundary                           `json:"changeBoundary,omitempty"`
 	ChangedTestScope        *ChangedTestScope                         `json:"changedTestScope,omitempty"`
 	TestQualityReminder     *TestQualityReminder                      `json:"testQualityReminder,omitempty"`
+	ReliabilityReminder     *ReliabilityReminder                      `json:"reliabilityReminder,omitempty"`
 	TestCommands            []TestCommandEvidence                     `json:"testCommands"`
 	TestDiagnostics         []TestFailureDiagnostic                   `json:"testDiagnostics"`
 	TestAggregations        []testpolicy.SuiteAggregation             `json:"testAggregations"`

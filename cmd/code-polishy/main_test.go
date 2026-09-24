@@ -100,6 +100,33 @@ func TestPrintReportShowsTestQualityReminderBeforeOrdinaryDetails(t *testing.T) 
 	}
 }
 
+func TestPrintReportShowsReliabilityReminderWithoutChangingOutcome(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	report := engine.Report{
+		MergePolicy: &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
+		ReliabilityReminder: &engine.ReliabilityReminder{
+			PolicyDocument: engine.ReliabilityReminderPolicyDocument,
+			Principle:      "Improve end-to-end reliability.",
+			Questions:      []string{"First?", "Second?", "Third?", "Fourth?"},
+			MatchedModules: []string{"jobs"},
+			MatchedPaths:   []string{"src/retry.go"},
+		},
+	}
+	printReportTo(stdout, stderr, report)
+	output := stdout.String()
+	for _, fact := range []string{"END-TO-END RELIABILITY REMINDER", "MATCHED MODULES: jobs", "MATCHED PATHS: src/retry.go", "First?", engine.ReliabilityReminderPolicyDocument} {
+		if !strings.Contains(output, fact) {
+			t.Fatalf("reliability reminder omitted %q: %q", fact, output)
+		}
+	}
+	if strings.Index(output, "END-TO-END RELIABILITY REMINDER") > strings.Index(output, "MERGE GATE") ||
+		!strings.Contains(output, "PASS errors=0 warnings=0 information=0") || engine.HasFindings(report) || stderr.Len() != 0 {
+		t.Fatalf("reminder changed report behavior: stdout=%q stderr=%q report=%+v", output, stderr.String(), report)
+	}
+}
+
 func TestPrintReportLabelsReleaseAgeAssessmentSeparately(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}

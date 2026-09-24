@@ -71,6 +71,12 @@ func (engine *Engine) normalizeReport(report Report) Report {
 			report.Execution.Commands[index].Phases = reportArray(report.Execution.Commands[index].Phases)
 		}
 	}
+	if report.ReliabilityReminder != nil {
+		reminder := report.ReliabilityReminder
+		reminder.Questions = reportArray(reminder.Questions)
+		reminder.MatchedModules = reportArray(reminder.MatchedModules)
+		reminder.MatchedPaths = reportArray(reminder.MatchedPaths)
+	}
 	report.TestCommands = reportArray(report.TestCommands)
 	report.TestDiagnostics = reportArray(report.TestDiagnostics)
 	report.TestAggregations = reportArray(report.TestAggregations)

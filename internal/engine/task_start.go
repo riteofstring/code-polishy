@@ -23,18 +23,19 @@ type TaskStartRequest struct {
 }
 
 type TaskStartPacket struct {
-	Protocol           string                        `json:"protocol"`
-	TaskBase           string                        `json:"taskBase"`
-	LockedRelease      release.Lock                  `json:"lockedRelease"`
-	CatalogSHA256      string                        `json:"catalogSha256"`
-	Intent             TaskStartIntent               `json:"intent"`
-	RequestedSelection repository.RequestedSelection `json:"requestedSelection"`
-	RepositoryContext  *RepositoryContext            `json:"repositoryContext"`
-	WorkflowDocuments  []string                      `json:"workflowDocuments"`
-	ConfiguredGuards   []CapabilityEntry             `json:"configuredGuards"`
-	Verification       policy.Verification           `json:"verification"`
-	FinalGateOwner     string                        `json:"finalGateOwner"`
-	NextActions        []TaskStartAction             `json:"nextActions"`
+	Protocol            string                        `json:"protocol"`
+	TaskBase            string                        `json:"taskBase"`
+	LockedRelease       release.Lock                  `json:"lockedRelease"`
+	CatalogSHA256       string                        `json:"catalogSha256"`
+	Intent              TaskStartIntent               `json:"intent"`
+	RequestedSelection  repository.RequestedSelection `json:"requestedSelection"`
+	RepositoryContext   *RepositoryContext            `json:"repositoryContext"`
+	WorkflowDocuments   []string                      `json:"workflowDocuments"`
+	ConfiguredGuards    []CapabilityEntry             `json:"configuredGuards"`
+	ReliabilityReminder *ReliabilityReminder          `json:"reliabilityReminder,omitempty"`
+	Verification        policy.Verification           `json:"verification"`
+	FinalGateOwner      string                        `json:"finalGateOwner"`
+	NextActions         []TaskStartAction             `json:"nextActions"`
 }
 
 type TaskStartIntent struct {
@@ -170,8 +171,9 @@ func (engine *Engine) taskStartPacket(request ContextRequest, requestedFeatures 
 		Protocol: "task-start/v2", TaskBase: taskBase, LockedRelease: *inventory.LockedRelease, CatalogSHA256: inventory.ReleaseCatalog.SHA256,
 		Intent: engine.taskStartIntent(selection, features), RequestedSelection: *contextReport.RequestedSelection, RepositoryContext: contextReport.RepositoryContext,
 		WorkflowDocuments: []string{"docs/agent-workflows.md"}, ConfiguredGuards: []CapabilityEntry{},
-		Verification:   engine.Repository.Config.Verification,
-		FinalGateOwner: engine.Repository.Config.Verification.EffectiveFinalGateOwner(),
+		ReliabilityReminder: engine.reliabilityReminder(selection.Candidate),
+		Verification:        engine.Repository.Config.Verification,
+		FinalGateOwner:      engine.Repository.Config.Verification.EffectiveFinalGateOwner(),
 	}
 	packet.collectGuards(inventory.Capabilities)
 	return packet, features, nil
@@ -217,6 +219,9 @@ func (engine *Engine) taskStartRequiresFullCandidate(selection repository.Select
 }
 
 func (packet *TaskStartPacket) collectGuards(entries []CapabilityEntry) {
+	if packet.ReliabilityReminder != nil {
+		packet.WorkflowDocuments = append(packet.WorkflowDocuments, packet.ReliabilityReminder.PolicyDocument)
+	}
 	for _, entry := range entries {
 		if taskStartGuard(entry) {
 			packet.ConfiguredGuards = append(packet.ConfiguredGuards, entry)

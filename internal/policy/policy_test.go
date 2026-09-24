@@ -64,6 +64,46 @@ func TestLoadAppliesCommentPolicyDefault(t *testing.T) {
 	}
 }
 
+func TestLoadAcceptsScopedReliabilityReminder(t *testing.T) {
+	t.Parallel()
+	configured := strings.Replace(
+		minimalConfig(),
+		`"quality":{}`,
+		`"quality":{"reliabilityReminder":{"modules":["content"],"sourcePaths":["content/retry.go"]}}`,
+		1,
+	)
+	config, err := Load(writeConfig(t, configured), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reminder := config.Quality.ReliabilityReminder
+	if reminder == nil || !slices.Equal(reminder.Modules, []string{"content"}) || !slices.Equal(reminder.SourcePaths, []string{"content/retry.go"}) {
+		t.Fatalf("reliability reminder = %+v", reminder)
+	}
+}
+
+func TestLoadRejectsInvalidReliabilityReminderScope(t *testing.T) {
+	t.Parallel()
+	for name, testCase := range map[string]struct {
+		declaration string
+		want        string
+	}{
+		"empty":          {declaration: `{}`, want: schemaRejection},
+		"unknown module": {declaration: `{"modules":["missing"]}`, want: "unknown module"},
+		"glob path":      {declaration: `{"sourcePaths":["content/*.go"]}`, want: schemaRejection},
+		"escaping path":  {declaration: `{"sourcePaths":["../content/retry.go"]}`, want: schemaRejection},
+		"unowned path":   {declaration: `{"sourcePaths":["other/retry.go"]}`, want: "must match exactly one module"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			configured := strings.Replace(minimalConfig(), `"quality":{}`, `"quality":{"reliabilityReminder":`+testCase.declaration+`}`, 1)
+			if _, err := Load(writeConfig(t, configured), ""); err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("error = %v, want %q", err, testCase.want)
+			}
+		})
+	}
+}
+
 func TestDocumentationDesignMappingsResolveOneOwnerPerTarget(t *testing.T) {
 	t.Parallel()
 	documentation := `{"design":[

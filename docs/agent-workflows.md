@@ -59,11 +59,19 @@ allowed module and exact artifact path before the worker starts.
 Optimize for end-to-end simplicity rather than maximum formalism at each local
 boundary. Before adding an abstraction, layer, adapter, generator, state,
 configuration surface, validation path, or evidence mechanism, name the concrete
-current requirement or failure, compare the direct solution, and count the new
-coordination and failure modes across implementation, tests, operation, and
-recovery. Add machinery only when it reduces total complexity and risk. Do not
-generalize for hypothetical reuse, scale, portability, extensibility, or future
-requirements.
+current requirement or failure, compare the direct solution, and assess the
+resulting coordination burden and total failure risk across implementation,
+tests, operation, and recovery. Add machinery only when it reduces total
+complexity and risk. Do not generalize for hypothetical reuse, scale,
+portability, extensibility, or future requirements.
+
+When `quality.reliabilityReminder` matches the planned modules or exact source
+paths, task-start displays the release-owned end-to-end reliability reminder and
+selects its policy document. Apply its four questions before adding or
+tightening defensive machinery. The reminder is advisory: it creates no answer
+artifact, review, receipt, finding, authorization, or command. Checkpoint and
+merge gates repeat it only when the actual candidate matches. See
+[End-to-End Reliability](policies/end-to-end-reliability.md).
 
 When adopting Code Polishy or restructuring architecture, capture the request
 and read its current design context before drafting module ownership. Automated

@@ -204,6 +204,9 @@ func validate(config *Config) error {
 	if err := validateModules(config); err != nil {
 		return err
 	}
+	if err := validateReliabilityReminder(config); err != nil {
+		return err
+	}
 	if err := validatePacks(config.Packs); err != nil {
 		return err
 	}

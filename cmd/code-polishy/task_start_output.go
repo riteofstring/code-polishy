@@ -35,6 +35,7 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 	fmt.Fprintln(&output, "INTENT REASON:", packet.Intent.Reason)
 	fmt.Fprintln(&output, "SELECTED FEATURES:", boundedTaskStartValues(packet.Intent.SelectedFeatures))
 	printTaskStartCapture(&output, packet.Intent.Capture)
+	printReliabilityReminder(&output, packet.ReliabilityReminder)
 	printTaskStartContext(&output, packet.RepositoryContext)
 	fmt.Fprintf(&output, "CONFIGURED GUARDS: %d; use `code-polishy capabilities --format json` for the complete catalog.\n", len(packet.ConfiguredGuards))
 	fmt.Fprintln(&output, "WORKFLOW DOCUMENTS:", boundedTaskStartValues(packet.WorkflowDocuments))

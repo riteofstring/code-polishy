@@ -768,6 +768,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printReportSummaryGroups(stdout, report.Summary)
 	printFormattingOutcome(stdout, report.Formatting)
 	printGitEvidence(stdout, report)
+	printReliabilityReminder(stdout, report.ReliabilityReminder)
 	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
 	printExecutionTelemetry(stdout, report.Execution, verbose)

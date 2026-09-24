@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add scoped end-to-end reliability reminders to task start, checkpoint, and
+  merge output without changing review selection, execution, or gate status.
+
 ## 0.27.10 - 2026-09-21
 
 - Let failed tag publications resume from the exact retained native artifacts,

@@ -43,6 +43,7 @@ and aliases. Search is local, bounded, and deterministic.
   experimental opt-in feature policy and task requests
 - [Code quality](policies/code-quality.md)
 - [Conditional modules](policies/conditional-modules.md)
+- [End-to-end reliability](policies/end-to-end-reliability.md)
 - [Exceptions](policies/exceptions.md)
 - [Portability and external inputs](policies/portability.md)
 - [Security](policies/security.md)
@@ -62,6 +63,8 @@ and aliases. Search is local, bounded, and deterministic.
   conditional request capture, stdin transport, and explicit evidence cleanup.
 - [Repository Size Analysis](design/repository-size-analysis.md) defines safe,
   bounded footprint measurement and its human/agent interpretation boundary.
+- [Reliability Reminder](design/reliability-reminder.md) defines
+  scoped advisory selection, rendering, and its non-enforcement boundary.
 - [Policy Engine Architecture](policy-engine-architecture.md) maps the runtime
   ownership boundaries and execution model.
 - [Source Comment Policy Design](design/source-comment-policy.md) explains the

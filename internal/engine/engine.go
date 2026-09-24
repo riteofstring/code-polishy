@@ -860,6 +860,7 @@ func (engine *Engine) combine(left, right Report) Report {
 		GateRunPolicy:         combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
 		ChangedTestScope:      combineChangedTestScope(left.ChangedTestScope, right.ChangedTestScope),
 		TestQualityReminder:   combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
+		ReliabilityReminder:   combineReliabilityReminders(left.ReliabilityReminder, right.ReliabilityReminder),
 		SourceDependencyGraph: combineSourceDependencyGraph(left.SourceDependencyGraph, right.SourceDependencyGraph),
 		ArchitectureReview:    combineArchitectureReview(left.ArchitectureReview, right.ArchitectureReview),
 		Formatting:            combineFormatting(left.Formatting, right.Formatting),

@@ -11,8 +11,14 @@ func taskStartActions(packet TaskStartPacket) []TaskStartAction {
 	if len(resolution.UnmappedModules)+len(resolution.UnmappedPaths) > 0 {
 		actions = append(actions, TaskStartAction{Name: "review-design-coverage", Description: "Inspect the reported design mapping gaps and existing rationale. During adoption or consequential design changes, create or update useful rationale and mappings; empty coverage alone does not block routine edits."})
 	}
+	if packet.ReliabilityReminder != nil {
+		actions = append(actions, TaskStartAction{
+			Name: "review-reliability", Description: "Apply the matched end-to-end reliability questions before adding or tightening defensive machinery.",
+			Argv: []string{"code-polishy", "docs", "read", "end-to-end-reliability"},
+		})
+	}
 	actions = append(actions,
-		TaskStartAction{Name: "implement", Description: "Implement the least-complex end-to-end solution that meets current needs; add machinery only when it reduces total complexity and failure modes. Stay within the selected scope and checkpoint task-owned progress during long work."},
+		TaskStartAction{Name: "implement", Description: "Implement the least-complex end-to-end solution that meets current needs; add machinery only when it reduces total complexity and lowers total failure risk. Stay within the selected scope and checkpoint task-owned progress during long work."},
 		TaskStartAction{Name: "inspect-verification", Description: "After a coherent change, inspect affected verification without running suites.", Argv: []string{"code-polishy", "test-plan", "--base", packet.TaskBase}},
 		TaskStartAction{Name: "verify", Description: "Follow the workflow's event rules: ordinary Markdown needs formatting; source changes need affected exact checks. Supplemental suites require explicit selection."},
 		TaskStartAction{Name: "commit", Description: "After required verification, commit remaining task-owned changes unless the caller requested an uncommitted handoff."},

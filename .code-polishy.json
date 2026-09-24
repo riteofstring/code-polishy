@@ -202,6 +202,14 @@
         ]
       },
       {
+        "path": "docs/design/reliability-reminder.md",
+        "sourcePaths": [
+          "internal/policy/reliability_reminder.go",
+          "internal/engine/reliability_reminder.go",
+          "cmd/code-polishy/reliability_reminder_output.go"
+        ]
+      },
+      {
         "path": "docs/design/analysis-providers.md",
         "module": "pack"
       },

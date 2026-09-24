@@ -135,6 +135,14 @@
       "public": true
     },
     {
+      "id": "end-to-end-reliability",
+      "path": "docs/policies/end-to-end-reliability.md",
+      "title": "End-to-End Reliability",
+      "summary": "Configure scoped reminders that keep defensive machinery tied to demonstrated system-wide improvements.",
+      "aliases": ["reliability", "robustness"],
+      "public": true
+    },
+    {
       "id": "exceptions",
       "path": "docs/policies/exceptions.md",
       "title": "Exception Policy",
@@ -260,6 +268,14 @@
       "title": "Release Checklist",
       "summary": "Cut and verify an immutable Code Polishy release.",
       "aliases": ["release"],
+      "public": true
+    },
+    {
+      "id": "reliability-reminder-design",
+      "path": "docs/design/reliability-reminder.md",
+      "title": "Reliability Reminder",
+      "summary": "Understand scoped advisory selection, rendering, and the non-enforcement boundary.",
+      "aliases": [],
       "public": true
     },
     {

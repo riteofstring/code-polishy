@@ -16,6 +16,7 @@ import (
 
 type checkpointGateState struct {
 	Base, Candidate, Scope, ExactBase, ReviewID string
+	ReliabilityReminder                         *ReliabilityReminder
 }
 
 type checkpointGateExecution struct {
@@ -266,6 +267,7 @@ func (engine *Engine) checkpointGatePreparation(ctx context.Context, base string
 	}
 	commands = append(commands, mergeGateSuiteCommands(tests.Suites)...)
 	state, plan := checkpointGateStateAndPlan(base, candidate, selection, documentation, decision, tests, commands)
+	state.ReliabilityReminder = engine.reliabilityReminder(selection.Candidate)
 	return checkpointGatePreparation{
 		state: state, plan: plan, workingTreeCandidate: workingTreeCandidate, documentation: documentation,
 	}, nil
@@ -382,6 +384,7 @@ func checkpointPlannedRunnerError(commandRunner *mergeGatePlannedRunner, report 
 }
 
 func checkpointGateReport(report Report, state checkpointGateState) Report {
+	report.ReliabilityReminder = state.ReliabilityReminder
 	return withCheckpointPolicy(report, state.Scope, state.Base, state.Candidate, "")
 }
 

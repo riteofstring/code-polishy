@@ -167,6 +167,62 @@ func TestTaskStartOptionalSelectionCreatesNoIntentJournalOrReviewActions(t *test
 	}
 }
 
+func TestTaskStartEmitsScopedReliabilityReminderWithoutSelectingReview(t *testing.T) {
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["quality"].(map[string]any)["reliabilityReminder"] = map[string]any{
+		"sourcePaths": []string{"value.go"},
+	}
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
+	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename)
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "Configure reliability reminder")
+
+	status, stdout, stderr := captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "value.go"))
+	var packet engine.TaskStartPacket
+	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || stderr != "" {
+		t.Fatalf("task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)
+	}
+	reminder := packet.ReliabilityReminder
+	if reminder == nil || len(reminder.MatchedModules) != 0 || !slices.Equal(reminder.MatchedPaths, []string{"value.go"}) ||
+		len(reminder.Questions) != 4 || !slices.Contains(packet.WorkflowDocuments, engine.ReliabilityReminderPolicyDocument) || packet.Intent.WillBeUsed {
+		t.Fatalf("packet = %+v", packet)
+	}
+	if !slices.ContainsFunc(packet.NextActions, func(action engine.TaskStartAction) bool {
+		return action.Name == "review-reliability" && slices.Contains(action.Argv, "end-to-end-reliability")
+	}) {
+		t.Fatalf("reliability action missing: %+v", packet.NextActions)
+	}
+
+	humanArguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "value.go"}
+	status, stdout, stderr = captureRunOutput(t, humanArguments)
+	for _, expected := range []string{"END-TO-END RELIABILITY REMINDER", "MATCHED MODULES: none", "MATCHED PATHS: value.go", "What demonstrated failure or requirement"} {
+		if !strings.Contains(stdout, expected) {
+			t.Fatalf("human reminder omitted %q: %s", expected, stdout)
+		}
+	}
+	if status != 0 || stderr != "" {
+		t.Fatalf("human task start: status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+
+	status, stdout, stderr = captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "docs/design/current.md"))
+	packet = engine.TaskStartPacket{}
+	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || stderr != "" || packet.ReliabilityReminder != nil {
+		t.Fatalf("unmatched task start: status=%d error=%v packet=%+v stderr=%q", status, err, packet, stderr)
+	}
+}
+
 func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
 	root, policyRoot, _ := newTaskStartCLIRepository(t)
 	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "value.go"}
@@ -206,7 +262,7 @@ func assertTaskStartDeliveryBoundary(t *testing.T, actions []engine.TaskStartAct
 	t.Helper()
 	if !slices.ContainsFunc(actions, func(action engine.TaskStartAction) bool {
 		return action.Name == "implement" && strings.Contains(action.Description, "least-complex end-to-end solution") &&
-			strings.Contains(action.Description, "reduces total complexity and failure modes")
+			strings.Contains(action.Description, "reduces total complexity and lowers total failure risk")
 	}) {
 		t.Fatalf("task implementation simplicity boundary is missing: %+v", actions)
 	}

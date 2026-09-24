@@ -92,12 +92,18 @@ state or repeat a digest already produced within one trusted operation create
 maintenance and runtime cost without adding authority.
 
 The end-to-end simplicity rule addresses another recurring failure: individually
-defensible boundaries that collectively add more machinery and failure modes than
-the current problem warrants. Canonical guidance states the default, the agent
-workflow and task-start output repeat it when a solution is chosen, architecture
-policy supplies the decision test, and an explicitly requested architecture
-review examines material violations. Those surfaces serve different decisions;
-the repetition is deliberate rather than a substitute for enforcement.
+defensible boundaries that collectively add machinery and total failure risk
+disproportionate to the current problem. Canonical guidance states the default,
+the agent workflow and task-start output repeat it when a solution is chosen,
+architecture policy supplies the decision test, and an explicitly requested
+architecture review examines material violations. Those surfaces serve different
+decisions; the repetition is deliberate rather than a substitute for enforcement.
+
+The reliability clause makes the same system-level concern concrete for
+defensive controls. Managed guidance supplies the always-visible default;
+repository selectors keep the detailed task-start and gate reminder salient;
+mapped design documents and boundary tests own domain-specific invariants. The
+reminder stays advisory so it does not become more reliability machinery.
 
 ## Size budget
 
