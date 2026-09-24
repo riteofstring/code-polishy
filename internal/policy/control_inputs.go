@@ -12,6 +12,8 @@ var sensitiveControlPatterns = []string{
 	"**/package.json", "**/package-lock.json", "**/npm-shrinkwrap.json", "**/pnpm-lock.yaml", "**/pnpm-workspace.yaml", "**/pnpm-workspace.yml", "**/bun.lockb",
 	"**/pyproject.toml", "**/requirements*.txt", "**/uv.lock", "**/Pipfile",
 	"**/Cargo.toml", "**/pom.xml", "**/build.gradle", "**/build.gradle.kts", "**/Gemfile", "**/composer.json", "**/Package.swift", "**/Package.resolved", "**/pubspec.yaml",
+	"**/.cargo/config", "**/.cargo/config.toml", "**/rust-toolchain", "**/rust-toolchain.toml",
+	"**/rustfmt.toml", "**/.rustfmt.toml", "**/clippy.toml", "**/.clippy.toml",
 	"**/*.lock", "**/*-lock.*",
 	"**/eslint.config.*", "**/.eslintrc*", "**/knip.*", "**/.knip.*", "**/prettier.config.*", "**/.prettierrc*", "**/tsconfig*.json",
 	"**/ruff.toml", "**/.ruff.toml", "**/ty.toml", "**/osv-scanner.toml",

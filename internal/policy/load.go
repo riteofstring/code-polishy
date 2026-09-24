@@ -352,7 +352,7 @@ func validateScope(config *Config) error {
 }
 
 func validateLanguageRules(rules []LanguageRule) error {
-	reserved := []string{"go", "typescript", "python", "shell", "rust", "jvm", "ruby", "php", "swift", "native", "protobuf", "sql", "dart"}
+	reserved := []string{"go", "typescript", "python", "shell", "rust", "wgsl", "jvm", "ruby", "php", "swift", "native", "protobuf", "sql", "dart"}
 	seen := map[string]bool{}
 	for index, rule := range rules {
 		label := fmt.Sprintf("scope.languages[%d]", index)

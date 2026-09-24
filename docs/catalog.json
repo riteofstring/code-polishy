@@ -295,6 +295,14 @@
       "public": true
     },
     {
+      "id": "rust-inputs",
+      "path": "docs/design/rust-inputs.md",
+      "title": "Rust and Shader Input Coverage",
+      "summary": "Understand Rust control inputs, WGSL source ownership, selection, and unavailable analysis.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "security",
       "path": "docs/policies/security.md",
       "title": "Security Policy",

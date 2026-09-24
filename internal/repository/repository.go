@@ -601,7 +601,7 @@ func builtInExtensionLanguage(path string) string {
 		".go": "go", ".ts": "typescript", ".tsx": "typescript", ".js": "typescript",
 		".jsx": "typescript", ".mjs": "typescript", ".cjs": "typescript", ".mts": "typescript",
 		".cts": "typescript", ".vue": "typescript", ".svelte": "typescript", ".astro": "typescript",
-		".py": "python", ".pyi": "python", ".sh": "shell", ".bash": "shell", ".rs": "rust",
+		".py": "python", ".pyi": "python", ".sh": "shell", ".bash": "shell", ".rs": "rust", ".wgsl": "wgsl",
 		".java": "jvm", ".kt": "jvm", ".kts": "jvm", ".rb": "ruby", ".php": "php",
 		".swift": "swift", ".c": "native", ".h": "native", ".cc": "native", ".cpp": "native",
 		".cxx": "native", ".hpp": "native", ".proto": "protobuf", ".sql": "sql", ".dart": "dart",

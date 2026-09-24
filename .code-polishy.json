@@ -24,6 +24,15 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/rust-inputs.md",
+        "sourcePaths": [
+          "internal/policy/data.go",
+          "internal/policy/rust_inputs_test.go",
+          "internal/repository/rust_inputs_test.go",
+          "internal/quality/wgsl_test.go"
+        ]
+      },
+      {
         "path": "docs/design/provider-scope.md",
         "sourcePaths": [
           "internal/repository/providers.go",

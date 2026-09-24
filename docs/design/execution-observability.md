@@ -39,6 +39,10 @@ within one command after configuration composition. Cross-process analyzer
 results are reused only through an existing digest-bound receipt mechanism;
 ordinary files are never trusted from a timestamp-only persistent cache.
 
+[Rust and shader input coverage](rust-inputs.md) defines the Rust settings that
+expand policy selection and WGSL's source classification. Language recognition
+does not establish analyzer availability or Cargo workspace resolution.
+
 Candidate test retries are outcome-bearing attempts, not baseline diagnostics.
 The first full attempt establishes all tests except the observed failures; an
 optional repository-declared retry command can establish those failures at a

@@ -70,6 +70,10 @@ and aliases. Search is local, bounded, and deterministic.
 - [Source Comment Policy Design](design/source-comment-policy.md) explains the
   default-preserving switch and the rationale for repositories that select the
   strict no-comment boundary.
+- [Rust and Shader Input Coverage](design/rust-inputs.md) defines Rust control
+  inputs, WGSL ownership, and the current analysis boundary.
+- [Rust Support Plan](plans/code-polishy-rust-support-plan.md) tracks the beta
+  implementation and the remaining requirements for first-class Rust support.
 - [Source Provenance](source-provenance.md) records public design references,
   toolchain origins, and implementation boundaries.
 - [Release Checklist](release-checklist.md) defines immutable tags and the
