@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.11 - 2026-09-23
+
 - Add scoped end-to-end reliability reminders to task start, checkpoint, and
   merge output without changing review selection, execution, or gate status.
 
