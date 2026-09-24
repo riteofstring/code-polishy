@@ -1,4 +1,4 @@
-# Rust and shader input coverage
+# Rust and Shader Input Coverage
 
 Rust compilation settings affect which code and diagnostics exist. Cargo
 configuration can change source registries, rustflags, wrappers, linkers and
