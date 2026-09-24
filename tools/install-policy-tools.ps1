@@ -7,6 +7,7 @@ $PolicyRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
   throw 'Code Polishy Windows releases currently require x64.'
 }
+& (Join-Path $PSScriptRoot 'install-rust.ps1')
 
 function Read-Pin([string]$Relative) {
   return (Get-Content -Raw (Join-Path $PolicyRoot $Relative)).Trim()

@@ -303,6 +303,14 @@
       "public": true
     },
     {
+      "id": "cargo-facts",
+      "path": "docs/design/cargo-facts.md",
+      "title": "Cargo Project Facts",
+      "summary": "Understand governed Cargo discovery, workspace facts, and dependency-resolution boundaries.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "security",
       "path": "docs/policies/security.md",
       "title": "Security Policy",

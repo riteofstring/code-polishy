@@ -19,12 +19,14 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/rustfacts"
 )
 
 func Check(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
 	repo = repo.WithAnalysisProfile(profile)
 	findings := sourceChecks(repo, selection.Files)
 	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
+	findings = append(findings, cargoDiscoveryFindings(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, goToolChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, shellChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, JavaScriptFormatFindings(ctx, repo, selection.Files)...)
@@ -46,6 +48,7 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	if allFiles, err := repo.AllFiles(); err == nil {
 		goCommands, _ := nativeGoToolCommands(repo, selection.Files, allFiles)
 		commands = append(commands, goCommands...)
+		commands = append(commands, rustfacts.PlanDiscovery(repo, selection.Files, allFiles).Commands...)
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
@@ -312,6 +315,7 @@ func commandFileArgument(cwd, path string) string {
 
 func CoverageFindings(repo repository.Repository, files []string) []policy.Finding {
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
+	findings = append(findings, cargoManifestFindings(repo, files)...)
 	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
 	findings = append(findings, repo.InspectGeneration(files).Findings...)
 	findings = append(findings, generatedStyleCoverageFindings(repo, files)...)

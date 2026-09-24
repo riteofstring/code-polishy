@@ -22,6 +22,14 @@ compiler/parser facts through a bounded child-process protocol. Do not embed
 language-specific heuristics in unrelated engine modules or reimplement Rust
 resolution with regular expressions.
 
+Parity means the same ordinary user-facing commands and policy outcomes as Go,
+with Rust-native compilation units, Cargo conventions and honest scope. Features,
+targets, build scripts, procedural macros, tests and generated source need their
+own semantics. Validate the selected supported configuration, not every possible
+feature and target combination. Reuse existing execution controls and expose
+their limits; a new Rust-only operating-system sandbox is not a prerequisite for
+the capabilities already delivered through equivalent Go execution.
+
 ## Current baseline and architectural decisions
 
 The implementation base includes the accepted changes through `0.27.11`.
@@ -99,12 +107,12 @@ changed modules; add a quick suite when a new module is introduced.
       establish the parity inventory above.
 - [ ] Turn each acceptance cell into executable evidence, preserving explicit
       unavailable/incomplete states and original-path diagnostics.
-- [ ] Choose the supported Rust editions, compiler/MSRV relationship, target
-      triples, and feature configurations. Select exact versions at implementation
-      time; do not invent pins in this plan. Target editions 2015, 2018, 2021 and
-      2024 subject to that toolchain's supported grammar. Code Polishy installation
-      hosts remain Linux/macOS on x64/arm64 and Windows x64; a host install does not
-      prove every Rust compilation target or feature combination.
+- [x] Choose the initial toolchain boundary: Rust 1.97.1 with its matching Cargo,
+      rustfmt and Clippy; editions 2015, 2018, 2021 and 2024; project minimum Rust
+      versions may not exceed the governed compiler. Compilation initially uses
+      the native host and default features. Additional feature/target selections
+      need explicit analysis evidence. Installation hosts remain Linux/macOS on
+      x64/arm64 and Windows x64; installation does not prove cross-compilation.
 - [ ] Define a first-class Rust conditional module activated by governed Rust
       source/Cargo workspaces. Unsupported or missing required analysis must block
       completion rather than fall back to a successful generic command.
@@ -124,6 +132,12 @@ changed modules; add a quick suite when a new module is introduced.
 
 ## Phase 1: discovery and Cargo model
 
+- [x] Discover workspace members, declared dependencies, inherited package
+      metadata, features and targets using bounded, versioned, frozen Cargo
+      metadata. Expose discovery failures through the normal check path and
+      include its commands in execution planning. Preserve null resolution as
+      absent dependency-graph evidence. Test real Cargo without executing build
+      scripts or materializing dependencies.
 - [ ] Parse manifests as data, then use versioned Cargo metadata for resolved
       facts. Model virtual workspaces, members/excludes/default members, inheritance,
       renamed/path/git/registry dependencies, target-specific dependencies, features,
@@ -158,10 +172,13 @@ changed modules; add a quick suite when a new module is introduced.
 - [ ] Separate non-executing source/manifest analysis from compilation. Cargo
       checking can execute build scripts and procedural macros; `--offline`,
       `--locked`, and `--frozen` do not make that execution safe by themselves.
-- [ ] Contain authorized compilation with no credentials, bounded resources,
-      controlled network/filesystem access, dedicated caches and output directories,
-      and process-tree cancellation. Inventory generated `OUT_DIR` inputs and native
-      tool invocations. Do not run target code merely to discover its policy.
+- [ ] Run authorized compilation through the common governed runner, with a
+      controlled environment, bounded resources, dedicated caches/output and
+      process-tree cancellation. Govern dependency network access explicitly.
+      Inventory generated `OUT_DIR` inputs and native tool invocations. Document
+      build-script and procedural-macro execution and the actual containment
+      provided; do not describe environment controls as an OS sandbox. Do not run
+      target code merely to discover its policy.
 - [ ] Govern Cargo aliases, runners, wrappers, linkers, rustflags, environment,
       source replacement, and local/user configs. Separate necessary build settings
       from attempts to weaken analysis or execute unrelated commands. Account for
@@ -253,11 +270,25 @@ ownership. Temporary-repository fixtures cover changed/deleted settings, shader
 dependency impact, data rejection, and missing structured analysis. Current
 behavior is documented in [Rust and shader input coverage](../design/rust-inputs.md).
 
-The next milestone is Cargo facts and sealed discovery. Workspace resolution,
-Rust tool installation, semantic analysis, supply-chain checks, structured Rust
-test results and release parity remain open. The existing Rust coverage failures
-remain until their implementations and evidence exist. This beta foundation is
-not yet usable as first-class Rust support for Masterbrainer.
+Cargo discovery now runs through the existing check path and command planning.
+Bounded TOML inspection reports malformed manifests at their original locations;
+Cargo supplies workspace membership, inherited metadata, declared dependencies,
+features and targets. Discovery uses a sealed environment and does not execute
+build scripts or resolve dependencies. Tests preserve valid sibling projects and
+reject unsupported configuration, escaping paths, malformed metadata and missing
+tools. [Cargo project facts](../design/cargo-facts.md) owns that boundary.
+
+Developer setup installs authenticated Rust 1.97.1 components without rustup or
+installation scripts. Linux runtime execution and installer integrity/recovery
+fixtures pass. macOS/Windows installers and checksums are present but host execution
+and release packaging still require verification.
+
+The next milestone is one complete crate path: selected-file formatting, compiler
+diagnostics, source facts, architecture, dependencies and nonempty test evidence.
+Resolved dependency graphs, semantic analysis, supply-chain checks, structured Rust
+test results and installed-release parity remain open. Existing missing-capability
+findings remain until those implementations and evidence exist. This beta is not
+yet usable as first-class Rust support for Masterbrainer.
 
 Primary references: [Cargo metadata](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html),
 [Cargo dependency semantics](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html),

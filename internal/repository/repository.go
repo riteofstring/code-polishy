@@ -491,6 +491,15 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 		{directory: shellcheckDirectory, tools: []GovernedTool{{Name: "shellcheck", Path: filepath.Join(shellcheckDirectory, executableName("shellcheck")), Version: repo.ToolPin("shellcheck")}}},
 		{directory: nodeDirectory, tools: []GovernedTool{{Name: "node", Path: filepath.Join(nodeDirectory, executableName("node")), Version: repo.ToolPin("node")}}},
 		{directory: bundleBin},
+		{directory: filepath.Dir(repo.RustTool("cargo")), tools: []GovernedTool{
+			{Name: "cargo", Path: repo.RustTool("cargo"), Version: repo.ToolPin("rust")},
+			{Name: "rustc", Path: repo.RustTool("rustc"), Version: repo.ToolPin("rust")},
+			{Name: "rustdoc", Path: repo.RustTool("rustdoc"), Version: repo.ToolPin("rust")},
+			{Name: "rustfmt", Path: repo.RustTool("rustfmt"), Version: repo.ToolPin("rust")},
+			{Name: "cargo-fmt", Path: repo.RustTool("cargo-fmt"), Version: repo.ToolPin("rust")},
+			{Name: "cargo-clippy", Path: repo.RustTool("cargo-clippy"), Version: repo.ToolPin("rust")},
+			{Name: "clippy-driver", Path: repo.RustTool("clippy-driver"), Version: repo.ToolPin("rust")},
+		}},
 	} {
 		if !isDirectory(optional.directory) {
 			continue

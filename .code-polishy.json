@@ -24,12 +24,27 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/cargo-facts.md",
+        "module": "rustfacts"
+      },
+      {
         "path": "docs/design/rust-inputs.md",
         "sourcePaths": [
           "internal/policy/data.go",
           "internal/policy/rust_inputs_test.go",
+          "internal/repository/cargo_manifest.go",
+          "internal/repository/cargo_manifest_test.go",
+          "internal/repository/rust_tools.go",
+          "internal/repository/rust_tools_test.go",
           "internal/repository/rust_inputs_test.go",
-          "internal/quality/wgsl_test.go"
+          "internal/quality/cargo_manifest.go",
+          "internal/quality/cargo_manifest_test.go",
+          "internal/quality/cargo.go",
+          "internal/quality/cargo_test.go",
+          "internal/quality/wgsl_test.go",
+          "tools/install-rust.sh",
+          "tools/install-rust.ps1",
+          "scripts/test-rust-runtime.sh"
         ]
       },
       {
@@ -281,6 +296,11 @@
       "dependsOn": ["policy", "pythonfacts"]
     },
     {
+      "name": "rustfacts",
+      "paths": ["internal/rustfacts/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
       "name": "runner",
       "paths": ["internal/runner/**"],
       "dependsOn": ["policy"]
@@ -351,7 +371,8 @@
         "policy",
         "pythonfacts",
         "repository",
-        "runner"
+        "runner",
+        "rustfacts"
       ]
     },
     {
@@ -484,6 +505,7 @@
         "policy",
         "spdx",
         "pythonfacts",
+        "rustfacts",
         "repository",
         "runner",
         "gaterun",
@@ -567,6 +589,15 @@
         "modules": ["repository"],
         "argv": ["go", "test", "-count=1", "./internal/repository/..."],
         "paths": ["internal/repository/**/*_test.go"]
+      },
+      {
+        "name": "rustfacts-unit",
+        "kind": "unit",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["rustfacts"],
+        "argv": ["go", "test", "-count=1", "./internal/rustfacts/..."],
+        "paths": ["internal/rustfacts/**/*_test.go"]
       },
       {
         "name": "runner-unit",
@@ -790,6 +821,22 @@
           "scripts/test-release-preflight.sh"
         ],
         "argv": ["./scripts/test-release-preflight.sh"],
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
+      },
+      {
+        "name": "rust-runtime-contract",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "paths": [
+          "scripts/test-rust-runtime.sh",
+          "tools/install-rust.*",
+          "tools/rust-version.txt",
+          "tools/rust_checksums.txt",
+          "tools/verify-sha256.sh"
+        ],
+        "argv": ["./scripts/test-rust-runtime.sh"],
         "runOn": ["focused", "recommended", "full"],
         "modules": ["tooling"]
       },
@@ -1334,6 +1381,7 @@
       "scripts/test-mutation-wrapper.sh",
       "scripts/test-install.sh",
       "scripts/test-release-preflight.sh",
+      "scripts/test-rust-runtime.sh",
       "scripts/test-javascript-runtime.sh",
       "scripts/test-javascript-bundle.sh",
       "scripts/test-javascript-runner.sh",
@@ -1363,6 +1411,11 @@
         "paths": ["internal/repository/**/*_test.go"],
         "module": "repository",
         "focusedSuite": "repository-unit"
+      },
+      {
+        "paths": ["internal/rustfacts/**/*_test.go"],
+        "module": "rustfacts",
+        "focusedSuite": "rustfacts-unit"
       },
       {
         "paths": ["internal/runner/**/*_test.go"],
@@ -1490,6 +1543,11 @@
         "focusedSuite": "release-preflight-contract"
       },
       {
+        "paths": ["scripts/test-rust-runtime.sh"],
+        "module": "tooling",
+        "focusedSuite": "rust-runtime-contract"
+      },
+      {
         "paths": ["scripts/test-javascript-runtime.sh"],
         "module": "tooling",
         "focusedSuite": "javascript-runtime-contract"
@@ -1585,6 +1643,12 @@
         "source": "github-release",
         "locator": "koalaman/shellcheck",
         "tagPrefix": "v"
+      },
+      {
+        "name": "rust",
+        "versionFile": "tools/rust-version.txt",
+        "source": "github-release",
+        "locator": "rust-lang/rust"
       },
       {
         "name": "staticcheck",

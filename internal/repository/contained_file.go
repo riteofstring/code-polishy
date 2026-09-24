@@ -8,6 +8,22 @@ import (
 	"strings"
 )
 
+func (repo Repository) ReadContainedFile(path string, limit int) ([]byte, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("input byte limit must be positive")
+	}
+	root, err := os.OpenRoot(repo.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	info, err := repo.containedRegularFileInfo(root, path)
+	if err != nil {
+		return nil, err
+	}
+	return readContainedFile(root, path, info, limit)
+}
+
 func (repo Repository) containedRegularFileInfo(root *os.Root, path string) (os.FileInfo, error) {
 	normalized, err := repo.NormalizePath(path)
 	if err != nil || normalized != path || strings.ContainsAny(path, "\\\x00:") {
