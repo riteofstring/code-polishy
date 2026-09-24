@@ -26,7 +26,7 @@ func validateModules(config *Config) error {
 	if cycle := moduleCycle(*config); len(cycle) > 0 {
 		return fmt.Errorf("module dependency graph must be acyclic: %s", strings.Join(cycle, " -> "))
 	}
-	return nil
+	return validateReliabilityReminder(config)
 }
 
 func validateModuleDefinition(module Module, index int, existing map[string]int) error {
