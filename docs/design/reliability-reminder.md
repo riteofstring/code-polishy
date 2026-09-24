@@ -22,11 +22,12 @@ complete packet, adds the policy document to workflow documents, and schedules
 one read-only next action before implementation. The ordinary design-context
 payload continues to carry repository-specific rationale.
 
-Checkpoint and merge gates evaluate their actual candidate paths. Checkpoint
-state retains the derived reminder only long enough to cover every success and
-failure return path. Merge metadata derives it for executed, failed, and
-already-passed candidates. The reminder is part of the normal report model and
-pinned report schema, not gate-run acceptance evidence.
+Checkpoint and merge gates evaluate their actual candidate paths. Normal gate
+reports include the reminder for matching candidates, including passed,
+finding-bearing, and already-passed results. Operational errors retain the
+existing minimal gate and review headers rather than rendering advisory
+reminders. The reminder is part of the normal report model and pinned report
+schema, not gate-run acceptance evidence.
 
 ## Advisory boundary
 
