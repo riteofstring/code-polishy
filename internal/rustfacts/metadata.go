@@ -158,8 +158,8 @@ func validatePackage(repo repository.Repository, pkg *Package) error {
 	if !supportedEdition(pkg.Edition) {
 		return fmt.Errorf("unsupported Rust edition %q", pkg.Edition)
 	}
-	if pkg.RustVersion != "" && (!semver.IsValid("v"+pkg.RustVersion) || semver.Compare("v"+pkg.RustVersion, "v"+repo.ToolPin("rust")) > 0) {
-		return fmt.Errorf("minimum Rust version %q is not supported by pinned Rust %s", pkg.RustVersion, repo.ToolPin("rust"))
+	if pkg.RustVersion != "" && !semver.IsValid("v"+pkg.RustVersion) {
+		return fmt.Errorf("invalid minimum Rust version %q", pkg.RustVersion)
 	}
 	for index := range pkg.Targets {
 		if err := validateTarget(repo, &pkg.Targets[index]); err != nil {

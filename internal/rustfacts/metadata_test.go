@@ -44,7 +44,7 @@ func TestCargoMetadataRejectsIncompleteOrEscapingFacts(t *testing.T) {
 		"relative manifest":    func(wire *workspaceWire) { wire.Packages[0].Manifest = "Cargo.toml" },
 		"missing target":       func(wire *workspaceWire) { wire.Packages[0].Targets[0].Path += ".missing" },
 		"edition":              func(wire *workspaceWire) { wire.Packages[0].Edition = "future" },
-		"MSRV":                 func(wire *workspaceWire) { wire.Packages[0].RustVersion = "1.99" },
+		"MSRV":                 func(wire *workspaceWire) { wire.Packages[0].RustVersion = "not-a-version" },
 		"unknown output":       func(wire *workspaceWire) { wire.TargetDir = t.TempDir() },
 	} {
 		t.Run(name, func(t *testing.T) {

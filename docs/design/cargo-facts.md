@@ -14,6 +14,11 @@ code nor proves that dependencies or any target configuration have been checked.
 The selected manifest and Cargo's actual workspace membership determine scope;
 directory naming is never a package identifier.
 
+Discovery retains each package's minimum Rust version as a fact. Cargo enforces
+compiler compatibility when the selected package/feature/target configuration is
+checked. An unselected member with a newer minimum version must not prevent
+discovery, selected formatting or a compatible default-member build.
+
 Cargo runs from the repository root with a sealed environment, absolute pinned
 compiler paths and repository-local Cargo home and target output under `.tools`.
 Ambient rustup selection, wrappers and user Cargo home are not inherited. Ancestor

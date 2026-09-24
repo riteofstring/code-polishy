@@ -197,6 +197,30 @@ func TestRustCompilationReportsUnavailableNativeLinker(t *testing.T) {
 	}
 }
 
+func TestRustCompilationScopesMinimumVersionToSelectedPackages(t *testing.T) {
+	t.Parallel()
+	for _, selected := range []string{"Cargo.toml", "current/src/lib.rs"} {
+		t.Run(selected, func(t *testing.T) {
+			repo := rustRepository(t)
+			write(t, repo.Root, "Cargo.toml", "[workspace]\nmembers=['current', 'future']\ndefault-members=['current']\nresolver='3'\n")
+			write(t, repo.Root, "Cargo.lock", "version=4\n[[package]]\nname='current'\nversion='1.0.0'\n[[package]]\nname='future'\nversion='1.0.0'\n")
+			write(t, repo.Root, "current/Cargo.toml", "[package]\nname='current'\nversion='1.0.0'\nedition='2024'\nrust-version='1.85'\n")
+			write(t, repo.Root, "current/src/lib.rs", "pub fn current() {}\n")
+			write(t, repo.Root, "future/Cargo.toml", "[package]\nname='future'\nversion='1.0.0'\nedition='2024'\nrust-version='1.99'\n")
+			write(t, repo.Root, "future/src/lib.rs", "pub fn future() {}\n")
+			plan, discovery := compilationDiscovery(t, repo, selected)
+			if findings := Compile(t.Context(), repo, plan, discovery, runner.OSRunner{}); len(findings) != 0 {
+				t.Fatalf("unselected workspace MSRV blocked the selected build: %+v", findings)
+			}
+			plan, discovery = compilationDiscovery(t, repo, "future/src/lib.rs")
+			findings := Compile(t.Context(), repo, plan, discovery, runner.OSRunner{})
+			if !slices.ContainsFunc(findings, func(finding policy.Finding) bool { return strings.Contains(finding.Message, "rustc 1.99") }) {
+				t.Fatalf("selected incompatible package did not fail: %+v", findings)
+			}
+		})
+	}
+}
+
 func TestRustCompilationRejectsSettingsAndSplitProviderUnits(t *testing.T) {
 	t.Parallel()
 	for name, configure := range map[string]func(repository.Repository) repository.Repository{

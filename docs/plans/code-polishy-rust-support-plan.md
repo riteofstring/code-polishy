@@ -133,8 +133,10 @@ remain in progress.
 - [ ] Turn each acceptance cell into executable evidence, preserving explicit
       unavailable/incomplete states and original-path diagnostics.
 - [x] Choose the initial toolchain boundary: Rust 1.97.1 with its matching Cargo,
-      rustfmt and Clippy; editions 2015, 2018, 2021 and 2024; project minimum Rust
-      versions may not exceed the governed compiler. Compilation initially uses
+      rustfmt and Clippy; editions 2015, 2018, 2021 and 2024; minimum Rust versions
+      in the compiled configuration may not exceed the governed compiler.
+      Unselected workspace members retain their declared requirements without
+      blocking compatible selected builds. Compilation initially uses
       the native host and default features. Additional feature/target selections
       need explicit analysis evidence. Installation hosts remain Linux/macOS on
       x64/arm64 and Windows x64; installation does not prove cross-compilation.
