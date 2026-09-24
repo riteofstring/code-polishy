@@ -9,18 +9,18 @@
 - `.code-polishy.json` declares modules, dependency direction, capabilities,
   commands, test suites, artifacts, and exceptions; it cannot weaken the locked
   baseline.
-- Keep updates outcome-first and under 100 words; add detail only for action or
-  safety.
+- Keep updates outcome-first and under 100 words; omit detail unless action or
+  safety needs it.
 
 ## Implementation
 
-- Preserve unrelated work. Reliability machinery must address demonstrated
-  needs, preserve valid results and ordinary recovery, reduce end-to-end
-  complexity, and lower total failure risk.
+- Preserve unrelated work. Prefer the simplest end-to-end root-cause fix; add
+  machinery only when it reduces total complexity and failure modes.
 - Hash only for trust-boundary authentication, immutable identity, or reusable
   evidence. Never hash local state for change detection, mirror an authoritative
   digest, or rehash within one trusted operation.
-- Add compatibility or migration code only when requested.
+- Add compatibility, migrations, or transitional code only when explicitly
+  requested.
 - Before governed source changes, retrieve `code-polishy design-context` for
   the planned scope. Reuse it until scope, mappings, or documents change. Follow
   `agent-workflows` for missing rationale and design updates.
