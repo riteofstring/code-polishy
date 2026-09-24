@@ -73,6 +73,37 @@ func validateSettings(settings map[string]any) error {
 	return nil
 }
 
+func compilationTargetConfiguration(repo repository.Repository) error {
+	for _, name := range []string{".cargo/config", ".cargo/config.toml"} {
+		if _, err := os.Lstat(filepath.Join(repo.Root, filepath.FromSlash(name))); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		data, err := repo.ReadContainedFile(name, 1<<20)
+		if err != nil {
+			return err
+		}
+		var settings struct {
+			Build struct {
+				Target any `toml:"target"`
+			} `toml:"build"`
+		}
+		if err := toml.Unmarshal(data, &settings); err != nil {
+			return err
+		}
+		if target := settings.Build.Target; target != nil && !nativeTargetSetting(target) {
+			return fmt.Errorf("cargo configuration %s requests target %v; governed compilation currently supports only native target %s", name, target, HostTarget())
+		}
+	}
+	return nil
+}
+
+func nativeTargetSetting(value any) bool {
+	if list, ok := value.([]any); ok {
+		return len(list) == 1 && list[0] == HostTarget()
+	}
+	return value == HostTarget()
+}
+
 func manifestPathProblem(repo repository.Repository, manifest repository.CargoManifest) error {
 	paths := []string{}
 	if manifest.Package != nil && manifest.Package.Workspace != "" {

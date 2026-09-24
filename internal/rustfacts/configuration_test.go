@@ -38,6 +38,17 @@ func TestCargoConfigurationAcceptsNonExecutableSettings(t *testing.T) {
 	}
 }
 
+func TestCargoCompilationAdmitsOnlyMatchingNativeTarget(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"'" + HostTarget() + "'", "['" + HostTarget() + "']"} {
+		repo := repository.Repository{Root: t.TempDir()}
+		write(t, repo.Root, ".cargo/config.toml", "[build]\ntarget="+target+"\n")
+		if err := compilationTargetConfiguration(repo); err != nil {
+			t.Fatalf("native target declaration was rejected: %v", err)
+		}
+	}
+}
+
 func TestCargoConfigurationRejectsAncestorAndCargoHomeInputs(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"ancestor", "cargo-home"} {

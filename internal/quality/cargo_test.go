@@ -54,6 +54,7 @@ func TestCargoAndGoCheckPlanMatchesObservedCommandOrder(t *testing.T) {
 	t.Parallel()
 	repo := cargoQualityRepository(t)
 	writeQualityFile(t, repo.Root, "Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\n")
+	writeQualityFile(t, repo.Root, "Cargo.lock", "version=4\n[[package]]\nname='app'\nversion='1.0.0'\n")
 	writeQualityFile(t, repo.Root, "src/lib.rs", "pub fn app() {}\n")
 	writeQualityFile(t, repo.Root, "go.mod", "module example.test/mixed\n\ngo 1.26.6\n")
 	writeQualityFile(t, repo.Root, "main.go", "package main\n\nfunc main() {}\n")

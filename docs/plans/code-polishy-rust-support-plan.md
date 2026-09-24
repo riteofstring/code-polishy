@@ -101,6 +101,23 @@ precede tool execution, but resolved metadata cannot be admitted before the
 tool/configuration boundary is ready. Reuse existing exact test suites for
 changed modules; add a quick suite when a new module is introduced.
 
+### Implemented beta slices
+
+- Pinned toolchain installation and Cargo workspace discovery are connected to
+  the normal check path and command plan. Discovery does not execute build scripts
+  or materialize dependencies.
+- Selected-file rustfmt uses Cargo editions and bounded project configuration;
+  generated files, unselected child modules and concurrent edits remain protected.
+- Frozen native-host compiler/Clippy checks preserve original-path diagnostics,
+  default feature selection and gated-target behavior. Real fixtures cover type
+  errors, lint defects, attempted suppression, absent/drifting locks, unavailable
+  linkers, cancellation and build-script configuration output. Public CLI checks
+  retain the remaining coverage failures instead of declaring full Rust support.
+- Parser-backed source rules, architecture, Cargo supply-chain governance,
+  structured Rust test evidence, WGSL and installed-release integration remain
+  unfinished. Project Clippy overrides and non-native targets currently fail
+  explicitly rather than weakening the supported compiler configuration.
+
 ## Phase 0: define the complete coverage contract
 
 - [x] Audit current Go/Python owners and Rust gaps against the recorded base;

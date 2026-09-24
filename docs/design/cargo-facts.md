@@ -39,6 +39,39 @@ local-state digest. Read-only formatting, like Go's gofmt check, is an internal
 source operation; Cargo discovery and compilation use the check execution plan.
 The public format operation routes all child processes through its supplied runner.
 
+## Compiler checks
+
+Compilation uses the matching pinned cargo-clippy executable directly, with an
+absolute Cargo path. This bypasses Cargo's ambient external-subcommand lookup.
+The common runner captures Cargo's JSON events with bounded output and process
+tree cancellation. Cargo must retain its reviewed lock and available dependency
+cache through `--frozen`; a missing lock is a preparation failure, never an
+invitation for the check to resolve dependencies.
+
+Checks select the manifest's ordinary Cargo packages, default features and all
+enabled targets, using the governed native host explicitly. They do not enable
+every feature or establish coverage of other target configurations. Compiler
+warnings, Clippy's default lint group and unused-code lints are forbidden at the
+invocation boundary. Parser-backed attribute governance and complete dead-code
+coverage remain separate requirements. Project Clippy settings currently fail
+with an explicit unsupported-configuration diagnostic; they cannot silently
+override the release-owned defaults.
+
+The compiler receives the host SDK's executable and library search environment,
+but no ambient Cargo/rustup flags, wrappers or Rust compiler selection. Build
+scripts and procedural macros may execute during checking. Their output
+directories, emitted configuration and native linkage are compiler evidence,
+not a claim of filesystem or network sandboxing. Native SDK failures remain
+ordinary failed checks; the Rust distribution does not supply every native SDK.
+
+Structured success requires a final Cargo outcome and a compiled target for
+every selected package. An empty stream, unrecognized output, partial compilation
+or missing target is not a pass. Findings retain package/target/compiler context
+and contained original source locations, including available macro call sites.
+Diagnostics outside available source remain attached to the selected manifest
+with the reported source identified; they are not discarded or assigned an
+invented line. Workspace metadata, not parsed package-ID strings, owns identity.
+
 [Rust input coverage](rust-inputs.md) defines control input selection and the
 governed toolchain. The [implementation plan](../plans/code-polishy-rust-support-plan.md)
 records the remaining Rust capabilities and acceptance work.

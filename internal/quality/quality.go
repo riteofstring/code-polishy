@@ -46,7 +46,9 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 	repo = repo.WithAnalysisProfile(profile)
 	commands := []policy.Command{}
 	if allFiles, err := repo.AllFiles(); err == nil {
-		commands = append(commands, rustfacts.PlanDiscovery(repo, selection.Files, allFiles).Commands...)
+		discovery := rustfacts.PlanDiscovery(repo, selection.Files, allFiles)
+		commands = append(commands, discovery.Commands...)
+		commands = append(commands, rustfacts.PlanCompilation(repo, discovery, allFiles).Commands...)
 		goCommands, _ := nativeGoToolCommands(repo, selection.Files, allFiles)
 		commands = append(commands, goCommands...)
 	}
@@ -923,7 +925,7 @@ func builtInCapability(language, capability string) bool {
 	case "go", "typescript", "python":
 		return slices.Contains(builtInCapabilities, capability)
 	case "rust":
-		return capability == "format"
+		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
 	case "shell":
 		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
 	}

@@ -16,5 +16,7 @@ func cargoDiscoveryFindings(ctx context.Context, repo repository.Repository, fil
 	}
 	plan := rustfacts.PlanDiscovery(repo, files, allFiles)
 	discovery := rustfacts.Discover(ctx, repo, plan, commandRunner)
-	return append(discovery.Findings, rustFormatFindings(ctx, repo, files, discovery.Workspaces)...)
+	findings := append(discovery.Findings, rustFormatFindings(ctx, repo, files, discovery.Workspaces)...)
+	compilation := rustfacts.PlanCompilation(repo, plan, allFiles)
+	return append(findings, rustfacts.Compile(ctx, repo, compilation, discovery, commandRunner)...)
 }
