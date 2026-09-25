@@ -44,6 +44,15 @@ in the reviewed lock inventory. Cargo owns resolution; this validation does not
 reimplement its resolver. Remote manifests and source targets must remain in the
 governed Cargo home. Local path packages retain contained checkout paths.
 
+Published dependencies can retain Cargo metadata for tests, benches, examples or
+binaries that their archives intentionally omit. These targets do not build when
+the package is consumed as a library dependency. Their declared identities and
+contained paths remain facts, but missing files do not invalidate dependency
+resolution. Library, procedural-macro and build-script sources must still exist,
+as must every local package target. Existing non-regular inputs, symlinks and
+escaping paths remain invalid even for inactive remote targets. This distinction
+does not authorize executing a dependency's absent development targets.
+
 Metadata uses default features and retains target-specific edges for all
 platforms. It is not evidence that every feature or target was compiled. The lock
 may also include inactive optional dependencies absent from this resolved graph;
@@ -153,6 +162,27 @@ reference introduced entirely by generated syntax. A successful navigation index
 therefore cannot establish complete macro dependency coverage. General expansion
 remains a required semantic-provider milestone; the written graph does not silently
 admit those missing edges.
+
+The initial semantic helper source is in `internal/rustfacts/semantic/`. It uses
+Rust Analyzer's HIR library to visit expanded syntax, resolve names with macro
+hygiene and map references back to physical source. An explicit Cargo manifest,
+native target and frozen build command establish its intended input boundary;
+partial metadata and failed build-script collection are errors. Its draft
+protocol is internal and has no active Go consumer or installed executable.
+Standard-library loading, attribute/derive expansion, selected configuration
+coverage, complete bounded source ownership, execution integration and distribution
+remain unfinished. Its fixtures have not run: dependency admission currently
+prevents building this helper. It supplies no architecture coverage yet.
+
+The candidate uses Rust Analyzer crates `0.0.346`, the first inspected published
+line using Salsa `0.28`, with Salsa and its macro crates locked to `0.28.5`.
+Earlier candidates depend on the affected Salsa series in
+[RUSTSEC-2026-0308](https://rustsec.org/advisories/RUSTSEC-2026-0308.html).
+The fixed release was published on 2026-09-24 and needs exact security-fix age
+admission. The currently locked `0.27.11` schema does not support `crates.io`
+release-age assessments. A separately authorized local beta policy upgrade is
+required before admitting and compiling this candidate; no out-of-band age
+waiver or alternate policy file replaces the locked assessment contract.
 
 ## Compiler checks
 

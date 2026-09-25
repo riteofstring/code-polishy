@@ -167,6 +167,12 @@ changed modules; add a quick suite when a new module is introduced.
   package/features, frozen locks, cancellation, empty/ignored runs, crate and
   build-script failures, direct/gate execution, regression proofs and receipts.
   A doctest result never substitutes for unit/integration evidence.
+- Real dependency preparation exposed published packages whose unused test,
+  example, bench or binary metadata points to files excluded from their archives.
+  Resolution now retains those remote target facts without requiring absent
+  inactive files. Local targets and dependency library/proc-macro/build sources
+  remain mandatory; escaping and linked paths still fail. The complete Rust-facts
+  suite passes this change, including the new red/green missing-target regression.
 
 Cargo dependency-input governance now parses ordinary, build, development,
 target-specific and workspace declaration tables, checks exact registry and Git
@@ -219,6 +225,35 @@ Missing, corrupt, linked, ambiguous and oversized inputs fail coverage. Pre-inst
 dependency review defers installed-license checks, matching the Node workflow;
 normal verification uses prepared archives without downloading or executing code.
 Pinned Cargo packaging fixtures cover inherited workspace license metadata.
+
+### Semantic helper admission checkpoint
+
+`internal/rustfacts/semantic/` contains an initial, uncompiled Rust Analyzer
+helper and fixtures for generated-only dependencies, nested expansion, `$crate`
+hygiene and original call-site locations. It is not connected to public commands,
+shipped in releases or evidence of completed macro support. No helper build or
+fixture execution has been authorized by successful dependency admission yet.
+
+The candidate pins Rust Analyzer `0.0.346` and locks Salsa, `salsa-macros` and
+`salsa-macro-rules` to `0.28.5`. Earlier candidate Salsa releases fail
+[RUSTSEC-2026-0308](https://rustsec.org/advisories/RUSTSEC-2026-0308.html), reported
+2026-09-24. The fixed release is younger than the 30-day baseline. Registry lock
+generation executed no build scripts, and the rejected vulnerable library was
+not compiled. Review and data-only preparation do not grant executable admission.
+
+The outgoing `0.27.11` schema accepts release-age assessments only for
+`artifact`, `go`, `npm`, `pnpm` and `pypi`, not `crates.io`. Its source checks also
+lack Rust analysis. A local beta policy-lock upgrade needs separate caller
+authorization before the native Cargo security-fix assessment and helper build
+can proceed. Target providers cannot replace the locked assessment contract.
+Keep the current lock unchanged meanwhile. An upgrade would neither authorize
+publication nor constitute completed Rust support.
+
+After admission, compile and test the helper before integrating it. Complete
+standard-library and attribute/derive expansion, source/configuration ownership,
+the common command runner and release packaging; then replace the superseded
+written graph at one coherent cutover. The full Rust objective and remaining
+acceptance matrix are unchanged.
 
 ## Phase 0: define the complete coverage contract
 

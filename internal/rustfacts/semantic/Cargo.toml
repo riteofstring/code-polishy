@@ -1,0 +1,23 @@
+[package]
+name = "code-polishy-rust-semantic"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+ra_ap_hir = "=0.0.346"
+ra_ap_ide_db = "=0.0.346"
+ra_ap_load-cargo = "=0.0.346"
+ra_ap_project_model = "=0.0.346"
+ra_ap_syntax = "=0.0.346"
+ra_ap_vfs = "=0.0.346"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+strip = "debuginfo"
