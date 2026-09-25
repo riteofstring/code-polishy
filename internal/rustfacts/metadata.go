@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -178,23 +179,29 @@ func validatePackage(repo repository.Repository, pkg *Package) error {
 		return fmt.Errorf("invalid minimum Rust version %q", pkg.RustVersion)
 	}
 	for index := range pkg.Targets {
-		if err := validateTarget(repo, &pkg.Targets[index]); err != nil {
+		if err := validateTarget(repo, &pkg.Targets[index], pkg.Source != nil); err != nil {
 			return err
 		}
 	}
 	return validateDependencies(repo, pkg.Dependencies)
 }
 
-func validateTarget(repo repository.Repository, target *Target) error {
+func validateTarget(repo repository.Repository, target *Target, remote bool) error {
 	if target.Name == "" || len(target.Kinds) == 0 || len(target.CrateTypes) == 0 || !supportedEdition(target.Edition) {
 		return fmt.Errorf("target %q has incomplete or unsupported facts", target.Name)
 	}
 	path, err := containedPath(repo, target.Path)
-	if err != nil {
+	if err != nil && !(remote && inactiveDependencyTarget(*target) && errors.Is(err, fs.ErrNotExist)) {
 		return fmt.Errorf("target %q: %w", target.Name, err)
 	}
 	target.Path = path
 	return nil
+}
+
+func inactiveDependencyTarget(target Target) bool {
+	return len(target.Kinds) > 0 && !slices.ContainsFunc(target.Kinds, func(kind string) bool {
+		return !slices.Contains([]string{"bin", "example", "test", "bench"}, kind)
+	})
 }
 
 func validateDependencies(repo repository.Repository, dependencies []Dependency) error {
@@ -228,7 +235,7 @@ func containedPath(repo repository.Repository, absolute string) (string, error) 
 	}
 	path := filepath.ToSlash(relative)
 	if _, err := repo.ReadContainedFile(path, 8<<20); err != nil {
-		return "", fmt.Errorf("cargo input %q: %w", path, err)
+		return path, fmt.Errorf("cargo input %q: %w", path, err)
 	}
 	return path, nil
 }

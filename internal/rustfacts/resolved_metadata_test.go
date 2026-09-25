@@ -2,7 +2,9 @@ package rustfacts
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,6 +79,70 @@ func TestResolvedCargoMetadataRequiresExplicitResolution(t *testing.T) {
 		if _, err := ParseResolution(repo, "Cargo.toml", data); err == nil {
 			t.Fatalf("missing resolution accepted: %s", graph)
 		}
+	}
+}
+
+func TestResolvedCargoMetadataAllowsUnpackagedInactiveRemoteTargets(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"test", "bench", "example", "bin"} {
+		t.Run(kind, func(t *testing.T) {
+			repo, wire, graph := resolvedMetadataFixture(t)
+			pkg := &wire.Packages[1]
+			target := Target{Name: "unpackaged", Kinds: []string{kind}, CrateTypes: []string{"bin"}, Edition: "2021", Path: filepath.Join(filepath.Dir(pkg.Manifest), "missing", "target.rs")}
+			pkg.Targets = append(pkg.Targets, target)
+			resolution, err := ParseResolution(repo, "Cargo.toml", resolvedMetadataJSON(t, wire, graph))
+			if err != nil {
+				t.Fatal(err)
+			}
+			retained := resolution.Packages[1].Targets[1]
+			if !slices.Equal(retained.Kinds, []string{kind}) || !strings.HasSuffix(retained.Path, "/missing/target.rs") {
+				t.Fatalf("inactive target facts were lost: %+v", retained)
+			}
+		})
+	}
+}
+
+func TestResolvedCargoMetadataStillRequiresDependencyBuildSources(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"lib", "rlib", "proc-macro", "custom-build"} {
+		t.Run(kind, func(t *testing.T) {
+			repo, wire, graph := resolvedMetadataFixture(t)
+			target := &wire.Packages[1].Targets[0]
+			target.Kinds, target.Path = []string{kind}, target.Path+".missing"
+			if _, err := ParseResolution(repo, "Cargo.toml", resolvedMetadataJSON(t, wire, graph)); err == nil {
+				t.Fatal("missing dependency build input passed")
+			}
+		})
+	}
+}
+
+func TestResolvedCargoMetadataRejectsUnsafeInactiveTargetsAndMissingLocalTests(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"local", "escape", "symlink", "directory"} {
+		t.Run(mode, func(t *testing.T) {
+			repo, wire, graph := resolvedMetadataFixture(t)
+			pkg := &wire.Packages[1]
+			if mode == "local" {
+				pkg = &wire.Packages[0]
+			}
+			path := filepath.Join(filepath.Dir(pkg.Manifest), "missing.rs")
+			switch mode {
+			case "escape":
+				path = filepath.Join(repo.Root, "..", "missing.rs")
+			case "symlink":
+				if err := os.Symlink("absent.rs", path); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(path, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pkg.Targets = append(pkg.Targets, Target{Name: "test", Kinds: []string{"test"}, CrateTypes: []string{"bin"}, Edition: "2021", Path: path})
+			if _, err := ParseResolution(repo, "Cargo.toml", resolvedMetadataJSON(t, wire, graph)); err == nil {
+				t.Fatal("unsafe or missing owned target passed")
+			}
+		})
 	}
 }
 
