@@ -276,7 +276,7 @@ func TestSourceGraphAndCycleEvidenceValidateAgainstPinnedReportSchema(t *testing
 func TestNativeGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T) {
 	for _, test := range []struct{ language, path, analyzer, protocol, manifest string }{
 		{"python", "app.py", "python-facts", "python-facts/v3", "pyproject.toml"},
-		{"rust", "src/lib.rs", "rust-facts", "rust-source/v1", "Cargo.toml"},
+		{"rust", "src/lib.rs", "rust-facts", "rust-source/v2", "Cargo.toml"},
 	} {
 		t.Run(test.language, func(t *testing.T) {
 			graph, err := sourcegraph.New([]sourcegraph.Node{{Path: test.path, Language: test.language, Root: ".", Module: "app", Resolution: "file:" + test.path}}, nil,

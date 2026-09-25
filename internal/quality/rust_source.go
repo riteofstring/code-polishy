@@ -22,6 +22,9 @@ func rustSourceFindings(ctx context.Context, repo repository.Repository, files [
 				findings = append(findings, rustCommentFinding(source.Path, comment))
 			}
 		}
+		if repo.NativeAnalysis(source.Path, "lint") {
+			findings = append(findings, rustTestEvidenceFindings(source)...)
+		}
 		findings = append(findings, rustAttributeFindings(repo, source.Path, source.Attributes)...)
 		if repo.NativeAnalysis(source.Path, "complexity") {
 			findings = append(findings, rustComplexityFindings(repo, source)...)
@@ -85,7 +88,7 @@ func rustComplexityFindings(repo repository.Repository, source rustfacts.Source)
 	findings := []policy.Finding{}
 	for _, function := range source.Functions {
 		limit := limits.Rust
-		if function.Test {
+		if function.Context == rustfacts.TestContext {
 			limit = limits.RustTest
 		}
 		if function.Complexity < limit {
@@ -96,6 +99,18 @@ func rustComplexityFindings(repo repository.Repository, source rustfacts.Source)
 		finding := rustLocatedFinding("quality.rustComplexity", source.Path, subject, message, function.SourceLocation)
 		finding.Fields = map[string]string{"complexity": strconv.Itoa(function.Complexity), "limit": strconv.Itoa(limit), "measurementScope": "unexpanded-written-source"}
 		findings = append(findings, finding)
+	}
+	return findings
+}
+
+func rustTestEvidenceFindings(source rustfacts.Source) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, function := range source.Functions {
+		if function.TestEntry == rustfacts.NotATest || function.Body != "empty" {
+			continue
+		}
+		subject := fmt.Sprintf("%s:%d:%d", function.Name, function.Line, function.Column)
+		findings = append(findings, rustLocatedFinding("quality.testEvidence", source.Path, subject, "test body is empty and provides no behavior evidence", function.SourceLocation))
 	}
 	return findings
 }

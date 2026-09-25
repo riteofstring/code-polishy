@@ -47,10 +47,11 @@ fn direct_test() { let check = || if true { 1 } else { 0 }; }
 	for _, expected := range []struct {
 		name                   string
 		complexity, parameters int
-		test                   bool
-	}{{"choose", 3, 1, false}, {"<closure>", 3, 1, false}, {"test_it", 1, 0, true}, {"helper", 1, 0, true}, {"inner_helper", 1, 0, true}, {"direct_test", 1, 0, true}, {"<closure>", 2, 0, true}} {
+		context                FunctionContext
+		entry                  TestEntryKind
+	}{{"choose", 3, 1, ProductionContext, NotATest}, {"<closure>", 3, 1, ProductionContext, NotATest}, {"test_it", 1, 0, TestContext, BuiltinTest}, {"helper", 1, 0, TestContext, NotATest}, {"inner_helper", 1, 0, TestContext, NotATest}, {"direct_test", 1, 0, TestContext, BuiltinTest}, {"<closure>", 2, 0, TestContext, NotATest}} {
 		if !slices.ContainsFunc(source.Functions, func(function SourceFunction) bool {
-			return function.Name == expected.name && function.Complexity == expected.complexity && function.Parameters == expected.parameters && function.Test == expected.test
+			return function.Name == expected.name && function.Complexity == expected.complexity && function.Parameters == expected.parameters && function.Context == expected.context && function.TestEntry == expected.entry
 		}) {
 			t.Errorf("missing scoped function measurement %+v: %+v", expected, source.Functions)
 		}
@@ -114,11 +115,30 @@ func TestRustSourceFactsRejectFabricatedOrIncompleteResponses(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, corrupt := range map[string]func(map[string]any){
+		"old protocol":  func(value map[string]any) { value["protocol"] = "rust-source/v1" },
 		"runtime":       func(value map[string]any) { value["parserVersion"] = "0.0.0" },
 		"empty":         func(value map[string]any) { value["sources"] = []any{} },
 		"foreign path":  func(value map[string]any) { wireSource(value)["path"] = "outside.rs" },
 		"missing facts": func(value map[string]any) { delete(wireSource(value), "comments") },
 		"partial":       func(value map[string]any) { wireSource(value)["complete"] = false },
+		"missing test context": func(value map[string]any) {
+			delete(wireSource(value)["functions"].([]any)[0].(map[string]any), "context")
+		},
+		"unknown test context": func(value map[string]any) {
+			wireSource(value)["functions"].([]any)[0].(map[string]any)["context"] = "unknown"
+		},
+		"missing test entry": func(value map[string]any) {
+			delete(wireSource(value)["functions"].([]any)[0].(map[string]any), "testEntry")
+		},
+		"unknown test entry": func(value map[string]any) {
+			wireSource(value)["functions"].([]any)[0].(map[string]any)["testEntry"] = "unknown"
+		},
+		"missing body evidence": func(value map[string]any) {
+			delete(wireSource(value)["functions"].([]any)[0].(map[string]any), "body")
+		},
+		"unknown body evidence": func(value map[string]any) {
+			wireSource(value)["functions"].([]any)[0].(map[string]any)["body"] = "unknown"
+		},
 		"coordinates": func(value map[string]any) {
 			wireSource(value)["functions"].([]any)[0].(map[string]any)["column"] = 999
 		},

@@ -1021,7 +1021,7 @@
         {
           "properties": {
             "analyzer": { "const": "rust-facts" },
-            "protocol": { "const": "rust-source/v1" },
+            "protocol": { "const": "rust-source/v2" },
             "provider": false
           }
         },
@@ -1051,7 +1051,7 @@
           "enum": [
             "python-facts/v3",
             "ruff-graph-facts/v2",
-            "rust-source/v1",
+            "rust-source/v2",
             "code-polishy-pack/v3"
           ]
         },

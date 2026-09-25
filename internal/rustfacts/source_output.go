@@ -32,12 +32,29 @@ type SourceAttribute struct {
 
 type SourceFunction struct {
 	SourceLocation
-	Name       string `json:"name"`
-	Test       bool   `json:"test"`
-	Parameters int    `json:"parameters"`
-	Complexity int    `json:"complexity"`
-	Depth      int    `json:"depth"`
+	Name       string          `json:"name"`
+	Context    FunctionContext `json:"context"`
+	TestEntry  TestEntryKind   `json:"testEntry"`
+	Body       string          `json:"body"`
+	Parameters int             `json:"parameters"`
+	Complexity int             `json:"complexity"`
+	Depth      int             `json:"depth"`
 }
+
+type FunctionContext string
+
+const (
+	ProductionContext FunctionContext = "production"
+	TestContext       FunctionContext = "test"
+)
+
+type TestEntryKind string
+
+const (
+	NotATest               TestEntryKind = "none"
+	BuiltinTest            TestEntryKind = "builtin"
+	ConditionalBuiltinTest TestEntryKind = "conditional-builtin"
+)
 
 type SourceMacro struct {
 	SourceLocation
@@ -122,9 +139,6 @@ func validateSourceInventory(inputs []SourceInput, sources []Source) error {
 }
 
 func validateSourceFacts(source Source, text string) error {
-	if source.Comments == nil || source.Attributes == nil || source.Functions == nil || source.Macros == nil || source.Graph == nil || source.Complete == (source.Error != "") {
-		return errors.New("rust source omitted complete facts or its coverage failure")
-	}
 	locations, err := sourceFactLocations(source)
 	if err != nil {
 		return err
@@ -145,10 +159,13 @@ func validateSourceFacts(source Source, text string) error {
 }
 
 func sourceFactLocations(source Source) ([]SourceLocation, error) {
+	if source.Comments == nil || source.Attributes == nil || source.Functions == nil || source.Macros == nil || source.Graph == nil || source.Complete == (source.Error != "") {
+		return nil, errors.New("rust source omitted complete facts or its coverage failure")
+	}
 	locations := append([]SourceLocation{}, source.Comments...)
 	for _, function := range source.Functions {
-		if function.Name == "" || function.Complexity < 1 || function.Parameters < 0 || function.Depth < 0 {
-			return nil, errors.New("rust function omitted its identity or structural measurements")
+		if err := validateSourceFunction(function); err != nil {
+			return nil, err
 		}
 		locations = append(locations, function.SourceLocation)
 	}
@@ -159,6 +176,24 @@ func sourceFactLocations(source Source) ([]SourceLocation, error) {
 		locations = append(locations, macro.SourceLocation)
 	}
 	return locations, nil
+}
+
+func validateSourceFunction(function SourceFunction) error {
+	if function.Name == "" || function.Complexity < 1 || function.Parameters < 0 || function.Depth < 0 {
+		return errors.New("rust function omitted its identity or structural measurements")
+	}
+	if function.Context != ProductionContext && function.Context != TestContext {
+		return errors.New("rust function omitted its production or test context")
+	}
+	switch function.TestEntry {
+	case NotATest, BuiltinTest, ConditionalBuiltinTest:
+	default:
+		return errors.New("rust function omitted its test entry classification")
+	}
+	if function.Body != "empty" && function.Body != "nonempty" {
+		return errors.New("rust function omitted its body evidence")
+	}
+	return nil
 }
 
 func validateSourceAttributes(attributes []SourceAttribute, coordinates sourceCoordinates, depth int) error {

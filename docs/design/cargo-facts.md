@@ -121,9 +121,28 @@ Rust owns separate `quality.complexity.rust` and `rustTest` limits, initially 12
 and 20 with the same strict-below comparison as Go. Projects may tighten them.
 Built-in test functions and exact `cfg(test)` scopes receive the test limit;
 file-level test ownership alone cannot relax production functions co-located
-with inline tests. Custom test attributes and exclusive Cargo test-target scope
+with inline tests. A conditional test attribute does not establish test-only
+ownership: its function still receives the production limit unless an enclosing
+test-only scope already excludes production builds. Custom test attributes and exclusive Cargo test-target scope
 need further test-context evidence. Depth and parameter measurements are retained
 as facts; TypeScript's thresholds do not silently become Rust restrictions.
+
+The `rust-source/v2` contract separates production/test context from built-in
+test-entry classification. Helpers and closures inside a test scope retain test
+complexity limits without becoming runnable test functions. Direct `test`
+attributes and nested `cfg_attr` test declarations retain distinct entry facts;
+compiler execution separately establishes which configuration actually ran.
+Missing context, entry classification or body evidence invalidates syntax facts.
+Graph validation and the public report schema require the same protocol.
+
+Native Rust lint rejects a declared built-in test whose body contains no
+statements other than comments, attributes and empty semicolons. The finding uses
+the existing `quality.testEvidence` rule and the original function location.
+Ignored or conditionally enabled tests cannot conceal empty bodies. Ordinary
+functions, helpers and closures are not test entries merely because their file
+or enclosing scope contains tests. This is the same high-confidence vacuity
+boundary as Go's empty-test checks, not proof of assertion strength, nontrivial
+helper behavior, custom framework expansion or runtime execution.
 
 Comment policy uses parsed line/block comments and value-bearing doc attributes,
 not text searches. Metadata such as `doc(hidden)` is not prose. Inline `allow`,

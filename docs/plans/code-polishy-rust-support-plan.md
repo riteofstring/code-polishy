@@ -457,6 +457,13 @@ dependency change. Actual workspace-lock containment before native test
 compilation remains a separate test-runner milestone, including its command-plan
 and reusable-view boundaries.
 
+Native test-source checks now reject empty built-in Rust tests, including ignored
+and conditional declarations, without classifying helpers or closures as test
+entries. Conditional test attributes retain production complexity limits outside
+test-only scopes. The version-2 syntax contract, graph validation and report schema
+carry the corresponding context and entry evidence. Nonempty bodies alone still
+do not establish assertion strength or custom test-framework coverage.
+
 Native unit/integration and separate doctest suites now retain nonempty structured results through
 ordinary commands, gate artifacts, regression proofs and reusable receipts. The
 [Rust test contract](../design/rust-tests.md) documents selectors and boundaries.

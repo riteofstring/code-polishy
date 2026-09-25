@@ -76,6 +76,16 @@ and [rustdoc execution](https://github.com/rust-lang/rust/blob/8bab26f4f68e0e26f
 A successful build, benchmark invocation or live app probe alone is not test
 evidence.
 
+## Source evidence
+
+Native source checks separately reject empty built-in Rust test bodies, including
+ignored and conditionally declared tests. Parsed entry attributes distinguish
+test functions from helpers and closures in a `cfg(test)` scope. Production code
+co-located with tests retains production complexity limits; a conditional test
+attribute alone cannot relax them. The [source-facts contract](cargo-facts.md#parsed-source-facts)
+owns these checks. A nonempty body is not proof of meaningful assertions or a
+substitute for the nonempty structured execution evidence above.
+
 ## Suite configuration
 
 A module suite uses ordinary ownership and profile declarations, for example:

@@ -78,7 +78,7 @@ func validFactAnalyzer(analyzer, protocol string) bool {
 	case "ruff":
 		return protocol == "ruff-graph-facts/v2"
 	case "rust-facts":
-		return protocol == "rust-source/v1"
+		return protocol == "rust-source/v2"
 	default:
 		return false
 	}

@@ -70,11 +70,12 @@ func TestRustGraphFactsCannotReplacePythonOrForeignProjectEvidence(t *testing.T)
 	t.Parallel()
 	node := Node{Path: "crate/src/lib.rs", Language: "rust", Root: "crate", Module: "app", Resolution: "file:crate/src/lib.rs"}
 	input := graphTestFactInput("crate", node.Path)
-	input.Analyzer, input.Protocol, input.Project = "rust-facts", "rust-source/v1", "crate/Cargo.toml"
+	input.Analyzer, input.Protocol, input.Project = "rust-facts", "rust-source/v2", "crate/Cargo.toml"
 	if graph, err := New([]Node{node}, nil, []FactInput{input}, nil); err != nil || Validate(graph) != nil {
 		t.Fatalf("valid native Rust evidence failed: %+v, %v", graph, err)
 	}
 	for _, corrupt := range []func(*FactInput){
+		func(input *FactInput) { input.Protocol = "rust-source/v1" },
 		func(input *FactInput) { input.Project = "crate/pyproject.toml" },
 		func(input *FactInput) { input.Protocol = "python-facts/v3" },
 		func(input *FactInput) { input.Paths = []string{"other/src/lib.rs"} },

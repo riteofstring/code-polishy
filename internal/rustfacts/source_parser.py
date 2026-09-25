@@ -6,7 +6,7 @@ import sys
 import tree_sitter_rust
 from tree_sitter import Language, Parser
 
-PROTOCOL = "rust-source/v1"
+PROTOCOL = "rust-source/v2"
 MAXIMUM_REQUEST = 8 * 1024 * 1024
 MAXIMUM_NODES = 500_000
 COMMENTS = {"line_comment", "block_comment"}
@@ -217,10 +217,15 @@ def function_fact(node, source, test_context):
     name = node.child_by_field_name("name")
     parameters = node.child_by_field_name("parameters")
     attributes = item_attributes(node, source)
+    entry = (
+        test_entry_attributes(attributes) if node.type == "function_item" else "none"
+    )
     return {
         **location(node, source),
         "name": name.text.decode() if name is not None else "<closure>",
-        "test": test_context or any(value["name"] == "test" for value in attributes),
+        "context": "test" if test_context or entry == "builtin" else "production",
+        "testEntry": entry,
+        "body": function_body(node),
         "parameters": sum(
             child.type not in COMMENTS | {"attribute_item"}
             for child in parameters.named_children
@@ -230,6 +235,36 @@ def function_fact(node, source, test_context):
         "complexity": 1,
         "depth": 0,
     }
+
+
+def test_entry_attributes(attributes):
+    if any(value["name"] == "test" for value in attributes):
+        return "builtin"
+    if any(
+        value["name"] == "cfg_attr"
+        and test_entry_attributes(value["children"]) != "none"
+        for value in attributes
+    ):
+        return "conditional-builtin"
+    return "none"
+
+
+def function_body(node):
+    body = node.child_by_field_name("body")
+    if body is None:
+        raise ValueError("Rust function omitted its body")
+    if body.type != "block":
+        return "nonempty"
+    non_behavior = COMMENTS | {
+        "attribute_item",
+        "inner_attribute_item",
+        "empty_statement",
+    }
+    return (
+        "nonempty"
+        if any(child.type not in non_behavior for child in body.named_children)
+        else "empty"
+    )
 
 
 def decisions(node):
@@ -673,7 +708,7 @@ class SyntaxCollector:
             body = node.child_by_field_name("body")
             function = function_fact(node, self.source, test_context)
             self.result["functions"].append(function)
-            test_context = function["test"]
+            test_context = function["context"] == "test"
             depth = 0
         elif function is not None:
             function["complexity"] += decisions(node)

@@ -865,8 +865,11 @@ formatted, linted, typechecked, and tested.
 ## Test source quality
 
 Ordinary code health rejects only high-confidence vacuity: obvious no-op or
-pass-with-no-tests suite commands, empty Go test/subtest bodies, and Go tests
-that unconditionally skip without other behavior. It intentionally does not
+pass-with-no-tests suite commands, empty Go test/subtest bodies, empty built-in
+Rust test bodies, and Go tests that unconditionally skip without other behavior.
+Rust checks use parsed test attributes, including conditional declarations, rather
+than treating every helper in a `cfg(test)` scope as a test. Comments and empty
+semicolons do not make an empty test meaningful. These checks intentionally do not
 count assertions or infer meaning from test-framework keywords.
 
 Targets may address semantic weakness with an isolated supplemental mutation

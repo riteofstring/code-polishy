@@ -15,7 +15,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-const SourceProtocol = "rust-source/v1"
+const SourceProtocol = "rust-source/v2"
 
 const sourceRequestPrefix = `{"protocol":"` + SourceProtocol + `","sources":[`
 
