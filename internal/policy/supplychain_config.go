@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/spdx"
+	"golang.org/x/mod/semver"
 )
 
 var (
@@ -285,6 +286,8 @@ func exactReleaseAssessmentVersion(ecosystem, version string) bool {
 		return goReleaseVersionPattern.MatchString(version)
 	case "npm", "pnpm":
 		return nodeReleaseVersionPattern.MatchString(version)
+	case "crates.io":
+		return nodeReleaseVersionPattern.MatchString(version) && semver.IsValid("v"+version)
 	case "pypi":
 		return pypiReleaseVersionPattern.MatchString(version)
 	default:

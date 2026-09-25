@@ -114,7 +114,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 		case "python-uv":
 			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"lock-sync"})...)
 		case "cargo":
-			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"release-age", "security"})...)
+			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, []string{"security"})...)
 		case "unsupported":
 			capabilities := []string{"dependency-policy", "lock-sync", "release-age", "security"}
 			findings = append(findings, manifestCapabilityFindings(repo, files, path, ecosystem, capabilities)...)

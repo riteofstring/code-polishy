@@ -65,6 +65,33 @@ and the existing supply-chain runner. Pre-install review may fetch locked source
 data; offline verification may not. Age, security and license coverage still
 require their respective evidence, not merely successful Cargo resolution.
 
+## Registry release age
+
+Online age checks cover every public crates.io package in the complete Cargo
+lock, including inactive optional and platform-specific dependencies. Requests
+include the authoritative workspace locks returned by Cargo even when a selected
+file list only names member manifests. Existing resolved lock facts are reused
+within the operation; independently inventoried locks are read through the same
+contained boundary. Requests batch exact versions by crate across lock scopes
+and use crates.io's publication
+timestamps. The sparse index does not provide those timestamps; downloading the
+entire registry database is disproportionate for a project-sized inventory.
+The [crates.io API](https://crates.io/api/openapi.json) supplies this evidence.
+
+The client follows the registry's [data-access policy](https://crates.io/data-access):
+identified requests, at most one request per second within the process, bounded
+responses and no metadata redirects. Waiting callers honor cancellation without
+reserving future request slots. Missing timestamps, unexpected identities,
+malformed responses and request failures remain missing evidence, never age passes.
+The existing exact release-age assessment policy supports the `crates.io`
+ecosystem and the actual Cargo.lock scope. It cannot fill missing observations.
+
+Git, local paths and alternate registries never become public crates.io queries.
+Optional Git assessment policy retains its visible coverage warning; required
+Cargo Git evidence currently fails explicitly until the signed inventory protocol
+supports Cargo locks. Registry age evidence does not establish vulnerability or
+license coverage and is not collected by the offline profile.
+
 ## Shader inputs
 
 WGSL is executable shader source with its own built-in language identifier,

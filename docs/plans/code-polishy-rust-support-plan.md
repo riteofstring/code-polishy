@@ -123,8 +123,8 @@ target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
 unsupported source substitutions. These declaration and lock readers are
-data-only. Dependency-review comparison, age, vulnerability and license
-integration remain in progress.
+data-only. Dependency-review comparison, complete Git evidence, vulnerability and
+license integration remain in progress.
 
 Native Cargo lock verification now uses bounded, complete resolved metadata through
 the ordinary supply-chain runner. Online verification may fetch already locked
@@ -133,6 +133,13 @@ sources with `--locked`; offline verification requires prepared sources with
 renamed edges, dependency kinds, target predicates and default-feature selection;
 inactive optional packages remain in the full lock inventory for supply-chain
 policy even when absent from the active graph.
+
+Public crates.io minimum-age checks cover complete lock inventories, batch exact
+versions by crate, and follow the registry's identified one-request-per-second
+API limit. Missing metadata cannot pass or be filled by an assessment. Existing
+exact release-age assessments now support `crates.io` and Cargo.lock scopes;
+Git/private sources are not sent to the public registry. New-dependency preferred-age
+advisories and signed Cargo Git inventory support remain unfinished.
 
 ## Phase 0: define the complete coverage contract
 

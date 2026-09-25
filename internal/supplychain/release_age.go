@@ -188,6 +188,9 @@ func groupReleasePackages(packages []resolvedPackage) []releaseGroup {
 		if item.Ecosystem == "pypi" {
 			kind = "pypi"
 		}
+		if item.Ecosystem == "crates.io" {
+			kind = "crates.io"
+		}
 		key := kind + "\x00" + strings.ToLower(item.Name)
 		if groups[key] == nil {
 			groups[key] = &releaseGroup{Kind: kind, Name: item.Name}
@@ -213,6 +216,8 @@ func lookupReleaseGroup(ctx context.Context, client *http.Client, repo repositor
 		endpoint = strings.TrimSuffix(repo.Config.SupplyChain.NPMRegistryURL, "/") + "/" + url.PathEscape(group.Name)
 	case "pypi":
 		endpoint = "https://pypi.org/pypi/" + url.PathEscape(group.Name) + "/json"
+	case "crates.io":
+		return lookupCargoReleaseGroup(ctx, client, group)
 	default:
 		return nil, fmt.Errorf("unsupported release metadata ecosystem %q", group.Kind)
 	}

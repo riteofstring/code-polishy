@@ -23,5 +23,11 @@ func onlineCargoFindings(ctx context.Context, repo repository.Repository, files 
 	count := len(plan.Commands)
 	plan.Commands = commands[index : index+count]
 	result := rustfacts.Resolve(ctx, repo, plan, commandRunner)
-	return append(findings, result.Findings...), index + count
+	findings = append(findings, result.Findings...)
+	locks := []repository.CargoLock{}
+	for _, resolution := range result.Resolutions {
+		locks = append(locks, resolution.Lock)
+	}
+	findings = append(findings, cargoReleaseAgeFindings(ctx, repo, files, locks)...)
+	return findings, index + count
 }

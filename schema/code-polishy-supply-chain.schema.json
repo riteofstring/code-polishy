@@ -208,7 +208,9 @@
       "required": ["id", "ecosystem", "package", "version"],
       "properties": {
         "id": { "$ref": "code-polishy.schema.json#/$defs/identifier" },
-        "ecosystem": { "enum": ["artifact", "go", "npm", "pnpm", "pypi"] },
+        "ecosystem": {
+          "enum": ["artifact", "go", "npm", "pnpm", "pypi", "crates.io"]
+        },
         "package": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "version": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "scope": { "$ref": "code-polishy.schema.json#/$defs/concretePath" },
