@@ -11,6 +11,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/rustfacts"
 )
 
+const rustFormatExclusionMessage = "Rust attributes must not exclude governed source from formatting"
+
 func rustSourceFindings(ctx context.Context, repo repository.Repository, files []string, boundary runner.Runner) []policy.Finding {
 	result := rustfacts.ReadSources(ctx, repo, rustfacts.PlanSources(repo, files), boundary)
 	findings := result.Findings
@@ -36,27 +38,46 @@ func rustAttributeFindings(repo repository.Repository, path string, attributes [
 	findings := []policy.Finding{}
 	for _, attribute := range attributes {
 		message := ""
-		switch attribute.Name {
-		case "allow", "expect":
+		switch {
+		case attribute.Name == "allow", attribute.Name == "expect":
 			if repo.NativeAnalysis(path, "lint") {
 				message = "inline Rust lint suppression must be replaced by an exact Code Polishy exception for the underlying finding"
 			}
-		case "rustfmt::skip":
+		case rustFormatExclusion(attribute.Name):
 			if repo.NativeAnalysis(path, "format") {
-				message = "Rust attributes must not exclude governed source from formatting"
+				message = rustFormatExclusionMessage
 			}
-		case "doc":
+		case attribute.Name == "doc":
 			if attribute.HasValue && repo.NativeAnalysis(path, "lint") && !repo.Config.Quality.CommentsAllowed() {
 				findings = append(findings, rustCommentFinding(path, attribute.SourceLocation))
 			}
 		}
 		if message != "" {
-			subject := fmt.Sprintf("%s:%d:%d", attribute.Name, attribute.Line, attribute.Column)
-			findings = append(findings, rustLocatedFinding("policy.rustAttribute", path, subject, message, attribute.SourceLocation))
+			findings = append(findings, rustAttributeFinding(path, attribute, message))
 		}
 		findings = append(findings, rustAttributeFindings(repo, path, attribute.Children)...)
 	}
 	return findings
+}
+
+func rustAttributeFinding(path string, attribute rustfacts.SourceAttribute, message string) policy.Finding {
+	subject := fmt.Sprintf("%s:%d:%d", attribute.Name, attribute.Line, attribute.Column)
+	return rustLocatedFinding("policy.rustAttribute", path, subject, message, attribute.SourceLocation)
+}
+
+func rustFormatExclusionFindings(path string, attributes []rustfacts.SourceAttribute) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, attribute := range attributes {
+		if rustFormatExclusion(attribute.Name) {
+			findings = append(findings, rustAttributeFinding(path, attribute, rustFormatExclusionMessage))
+		}
+		findings = append(findings, rustFormatExclusionFindings(path, attribute.Children)...)
+	}
+	return findings
+}
+
+func rustFormatExclusion(name string) bool {
+	return name == "rustfmt::skip" || name == "rustfmt::skip::macros" || name == "rustfmt::skip::attributes"
 }
 
 func rustComplexityFindings(repo repository.Repository, source rustfacts.Source) []policy.Finding {

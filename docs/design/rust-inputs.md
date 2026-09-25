@@ -219,6 +219,16 @@ Staged packages must pass a real Rust parse before replacing the previous exact
 distributions. Replacement retains recoverable backups until the installed
 parser passes that same check. Wheel metadata and licenses remain installed.
 
+Native formatting parses the selected handwritten source before invoking rustfmt.
+Direct and nested conditional `rustfmt::skip` attributes, including the
+upstream [macro and attribute exclusion forms](https://github.com/rust-lang/rustfmt#tips),
+fail at their original locations and their files remain untouched. Raw-string contents are data, not
+attributes. The formatter consumes the same captured bytes that were parsed and
+compares those bytes with the current file before writing; a concurrent edit
+cannot introduce an unchecked exclusion or be overwritten. Invalid or missing
+syntax evidence does not authorize a write. Generated and unselected inputs remain
+outside this operation, and valid selected siblings can still be formatted.
+
 Rust unit and integration execution uses the independent pinned cargo-nextest
 0.9.138 release, published 2026-06-21. Its stable JUnit output supplies actual
 test-case outcomes on the stable compiler, whose built-in libtest JSON interface

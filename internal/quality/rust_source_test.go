@@ -34,9 +34,9 @@ func TestRustSourcePolicyDistinguishesProseFromStringsAndDocMetadata(t *testing.
 func TestRustSourcePolicyRejectsConditionalLintAndFormatSuppression(t *testing.T) {
 	t.Parallel()
 	repo := cargoQualityRepository(t)
-	writeQualityFile(t, repo.Root, "src/lib.rs", "#[cfg_attr(feature = \"maybe\", r#allow(dead_code), rustfmt::skip)]\n#[expect(dead_code)]\nfn value() {}\n")
+	writeQualityFile(t, repo.Root, "src/lib.rs", "#[cfg_attr(feature = \"maybe\", r#allow(dead_code), rustfmt::skip, rustfmt::skip::macros(println))]\n#[expect(dead_code)]\n#[rustfmt::skip::attributes(custom)]\nfn value() {}\n")
 	findings := rustSourceFindings(t.Context(), repo, []string{"src/lib.rs"}, runner.OSRunner{})
-	for _, name := range []string{"allow", "expect", "rustfmt::skip"} {
+	for _, name := range []string{"allow", "expect", "rustfmt::skip", "rustfmt::skip::macros", "rustfmt::skip::attributes"} {
 		if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
 			return finding.Check == "policy.rustAttribute" && strings.HasPrefix(finding.Subject, name+":") && finding.Path == "src/lib.rs" && finding.Line > 0
 		}) {

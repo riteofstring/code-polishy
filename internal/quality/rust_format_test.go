@@ -2,6 +2,7 @@ package quality
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -99,28 +100,116 @@ func TestRustFormatRejectsInvalidSourceAndWeakenedConfiguration(t *testing.T) {
 
 func TestRustFormatPreservesConcurrentSourceEdit(t *testing.T) {
 	t.Parallel()
+	for _, before := range []string{"policy-rustfmt-", "policy-rust-source-facts"} {
+		t.Run(before, func(t *testing.T) {
+			for _, source := range []string{"pub fn value()->u32{42}\n", "pub fn value() -> u32 {\n    42\n}\n"} {
+				repo := rustFormatRepository(t)
+				writeQualityFile(t, repo.Root, "src/lib.rs", source)
+				concurrent := "#[rustfmt::skip]\npub fn value() -> u32 { 99 }\n"
+				boundary := rustEditingRunner{OSRunner: runner.OSRunner{}, before: before, edit: func() { writeQualityFile(t, repo.Root, "src/lib.rs", concurrent) }}
+				findings := rustFormatWrite(t.Context(), repo, []string{"src/lib.rs"}, boundary)
+				if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+					return strings.Contains(finding.Message, "changed during formatting")
+				}) {
+					t.Fatalf("concurrent edit was not reported: %+v", findings)
+				}
+				if got := rustFormatFileText(t, repo, "src/lib.rs"); got != concurrent {
+					t.Fatalf("concurrent source edit was overwritten: %q", got)
+				}
+			}
+		})
+	}
+}
+
+func TestRustFormatRejectsParsedExclusionsWithoutRewritingThem(t *testing.T) {
+	t.Parallel()
+	for _, attribute := range []string{
+		"#[rustfmt::skip]", "#[cfg_attr(any(), rustfmt::skip)]", "#[cfg_attr(all(), cfg_attr(any(), rustfmt::skip))]",
+		"#[rustfmt::skip::macros(println)]", "#![rustfmt::skip::attributes(custom)]", "#[r#rustfmt::r#skip]",
+		"#[cfg_attr(any(), rustfmt::skip::macros(println))]",
+	} {
+		t.Run(attribute, func(t *testing.T) {
+			repo := rustFormatRepository(t)
+			dirty := attribute + "\npub fn value()->u32{42}\n"
+			writeQualityFile(t, repo.Root, "src/lib.rs", dirty)
+			findings := Format(t.Context(), repo, repository.Selection{Files: []string{"src/lib.rs"}}, runner.OSRunner{})
+			if len(findings) != 1 || findings[0].Check != "policy.rustAttribute" || findings[0].Path != "src/lib.rs" || findings[0].Line != 1 {
+				t.Fatalf("format exclusion did not fail at its original attribute: %+v", findings)
+			}
+			if got := rustFormatFileText(t, repo, "src/lib.rs"); got != dirty {
+				t.Fatalf("format exclusion was rewritten or removed: %q", got)
+			}
+		})
+	}
+}
+
+func TestRustFormatDoesNotTreatRawStringContentsAsAnExclusion(t *testing.T) {
+	t.Parallel()
 	repo := rustFormatRepository(t)
-	writeQualityFile(t, repo.Root, "src/lib.rs", "pub fn value()->u32{42}\n")
-	concurrent := "pub fn value() -> u32 { 99 }\n"
-	boundary := rustEditingRunner{OSRunner: runner.OSRunner{}, edit: func() { writeQualityFile(t, repo.Root, "src/lib.rs", concurrent) }}
-	findings := rustFormatWrite(t.Context(), repo, []string{"src/lib.rs"}, boundary)
-	if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-		return strings.Contains(finding.Message, "changed during formatting")
-	}) {
-		t.Fatalf("concurrent edit was not reported: %+v", findings)
+	writeQualityFile(t, repo.Root, "src/lib.rs", "pub fn text()->&'static str{r#\"#[rustfmt::skip]\"#}\n")
+	findings := Format(t.Context(), repo, repository.Selection{Files: []string{"src/lib.rs"}}, runner.OSRunner{})
+	wanted := "pub fn text() -> &'static str {\n    r#\"#[rustfmt::skip]\"#\n}\n"
+	if len(findings) != 0 || rustFormatFileText(t, repo, "src/lib.rs") != wanted {
+		t.Fatalf("ordinary string data blocked formatting: %+v", findings)
 	}
-	if got := rustFormatFileText(t, repo, "src/lib.rs"); got != concurrent {
-		t.Fatalf("concurrent source edit was overwritten: %q", got)
+}
+
+func TestRustFormatPreservesExcludedSourceAndFormatsValidSelectedSiblings(t *testing.T) {
+	t.Parallel()
+	repo := rustFormatRepository(t)
+	excluded := "mod child;\n#[rustfmt::skip]\npub fn value()->u32{42}\n"
+	writeQualityFile(t, repo.Root, "src/lib.rs", excluded)
+	writeQualityFile(t, repo.Root, "src/child.rs", "pub fn value()->u32{99}\n")
+	findings := Format(t.Context(), repo, repository.Selection{Files: []string{"src/lib.rs", "src/child.rs"}}, runner.OSRunner{})
+	if len(findings) != 1 || findings[0].Path != "src/lib.rs" || findings[0].Check != "policy.rustAttribute" {
+		t.Fatalf("format exclusion lost selected-file scope: %+v", findings)
 	}
+	if rustFormatFileText(t, repo, "src/lib.rs") != excluded || rustFormatFileText(t, repo, "src/child.rs") != "pub fn value() -> u32 {\n    99\n}\n" {
+		t.Fatal("rejected formatting changed excluded source or skipped a valid selected sibling")
+	}
+}
+
+func TestRustFormatRequiresCompleteSyntaxEvidenceBeforeWriting(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{errors.New("syntax tool unavailable"), nil} {
+		repo := rustFormatRepository(t)
+		dirty := "pub fn value()->u32{42}\n"
+		writeQualityFile(t, repo.Root, "src/lib.rs", dirty)
+		boundary := &rustSyntaxFailureRunner{failure: failure}
+		findings := Format(t.Context(), repo, repository.Selection{Files: []string{"src/lib.rs"}}, boundary)
+		if len(findings) != 1 || findings[0].Check != "policy.rustSource" || boundary.formatted != 0 {
+			t.Fatalf("missing or invalid syntax evidence authorized rustfmt: %+v, %d formatter calls", findings, boundary.formatted)
+		}
+		if rustFormatFileText(t, repo, "src/lib.rs") != dirty {
+			t.Fatal("missing syntax evidence authorized a source write")
+		}
+	}
+}
+
+type rustSyntaxFailureRunner struct {
+	runner.OSRunner
+	failure   error
+	formatted int
+}
+
+func (boundary *rustSyntaxFailureRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	if command.Name == "policy-rust-source-facts" {
+		return runner.Result{}, runner.Output{Stdout: []byte("{}")}, boundary.failure
+	}
+	if strings.HasPrefix(command.Name, "policy-rustfmt-") {
+		boundary.formatted++
+	}
+	return boundary.OSRunner.RunStructured(ctx, root, command)
 }
 
 type rustEditingRunner struct {
 	runner.OSRunner
-	edit func()
+	before string
+	edit   func()
 }
 
 func (boundary rustEditingRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if strings.HasPrefix(command.Name, "policy-rustfmt-") {
+	if strings.HasPrefix(command.Name, boundary.before) {
 		boundary.edit()
 	}
 	return boundary.OSRunner.RunStructured(ctx, root, command)
