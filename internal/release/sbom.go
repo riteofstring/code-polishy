@@ -40,6 +40,10 @@ func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDiges
 	rootRef := "pkg:generic/code-polishy@" + manifest.CodePolishyVersion
 	inventory := releaseSBOMInventory{components: map[string]cdx.Component{}, dependencies: map[string]map[string]bool{rootRef: {}}}
 	toolRefs := releaseSBOMTools(manifest)
+	compositions, err := rustReleaseSBOMEvidence(releaseRoot, manifest, toolRefs)
+	if err != nil {
+		return nil, err
+	}
 	for name, component := range toolRefs {
 		inventory.add(component)
 		inventory.edge(rootRef, component.BOMRef)
@@ -75,6 +79,7 @@ func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDiges
 	}}
 	document.Components = &components
 	document.Dependencies = &dependencies
+	document.Compositions = &compositions
 	buffer := &bytes.Buffer{}
 	if err := cdx.NewBOMEncoder(buffer, cdx.BOMFileFormatJSON).SetPretty(true).SetEscapeHTML(false).EncodeVersion(document, cdx.SpecVersion1_6); err != nil {
 		return nil, fmt.Errorf("encode CycloneDX release SBOM: %w", err)

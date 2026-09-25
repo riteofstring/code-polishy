@@ -246,6 +246,8 @@
           "internal/release/manifest_writer.go",
           "internal/release/launcher_manifest.go",
           "internal/release/sbom.go",
+          "internal/release/rust_sbom.go",
+          "internal/release/rust_sbom_test.go",
           "scripts/release-manifest.sh",
           "scripts/build-release.ps1",
           "scripts/build-oci-image.sh",

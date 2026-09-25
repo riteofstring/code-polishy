@@ -323,6 +323,17 @@ func foreignRelease(t *testing.T, host string) (string, Manifest) {
 			}
 		}
 	}
+	if host != manifest.Host {
+		before, after := ".tools/rust/"+manifest.Host, ".tools/rust/"+host
+		if err := os.Rename(filepath.Join(root, filepath.FromSlash(before)), filepath.Join(root, filepath.FromSlash(after))); err != nil {
+			t.Fatal(err)
+		}
+		for index := range manifest.Entries {
+			if rest, found := strings.CutPrefix(manifest.Entries[index].Path, before+"/"); found {
+				manifest.Entries[index].Path = after + "/" + rest
+			}
+		}
+	}
 	manifest.Host = host
 	slices.SortFunc(manifest.Entries, func(first, second Entry) int { return strings.Compare(first.Path, second.Path) })
 	manifest.ContentDigest = releaseEntriesDigest(manifest.Entries)

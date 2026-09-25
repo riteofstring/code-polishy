@@ -90,6 +90,19 @@ with the corresponding source revision. That top-level notice does not establish
 complete third-party notices or an exact linked-dependency inventory for Nextest;
 those remain a publication requirement alongside native installed-Rust evidence.
 
+The SBOM links each Rust tool to the selected host's reviewed upstream archive
+URLs and SHA-256 identities, reusing the installer's checksum inventory. Archive
+digests describe those downloads, not the extracted executable. Missing,
+duplicate, foreign-version or malformed archive rows fail composition. The
+selected SDK's primary licenses and upstream copyright inventories must remain
+nonempty regular files in the sealed manifest; Nextest's primary notice must name
+its exact version and immutable source revision. Notice locations are recorded
+on their components. CycloneDX compositions explicitly mark both native tools'
+transitive inventories incomplete until linked-dependency evidence exists.
+An upstream source lock is not an exact linked graph, and a dependency's declared
+license expression is not its copyright notice. These references authenticate
+reviewed inputs, not the upstream builder's identity.
+
 The installed Rust adoption fixture uses a dependency-free Cargo library in a
 temporary repository. Every policy operation enters through the exact installed
 launcher and lock. It exercises selected formatting, compiler diagnostics in JSON

@@ -414,6 +414,17 @@ rejection, and recovery through the verified launcher. All-host installed eviden
 and complete bundled dependency notices/inventory remain publication requirements.
 No beta release has been published or adopted.
 
+The Nextest source audit at `fc97e97bbe0a3927482a694247da00c099f4269e`
+found 580 locked packages: 571 crates.io archives and 9 workspace packages,
+including upstream test fixtures. All 571 archive checksums matched on
+2026-09-25. A recursive notice-filename inventory found 979 files, but 45 crates
+had no packaged license/notice/copyright files under those names. This is a
+source-inventory observation, not proof of the linked binary graph or license
+compliance. Completing the notice set requires exact upstream source evidence;
+copying the lock or substituting generic license text does not resolve it.
+Rust and Nextest SBOM entries retain explicit incomplete native compositions,
+host-specific authenticated download references and carried notice locations.
+
 The next milestones extend ordinary macro/module and doctest coverage and
 complete installed-release integration. Existing coverage failures remain until
 their implementations and evidence exist. This beta does not yet establish
