@@ -1,0 +1,4 @@
+cargo-nextest-0.9.138-aarch64-unknown-linux-gnu.tar.gz e1c85dbe02dcf5b963803b3f96f4f561757f5c37cab68c932411dea20d57284e
+cargo-nextest-0.9.138-universal-apple-darwin.tar.gz 124baa34d160355fa8a8bed053856270cfcf132659e76a0bc8bbcdfc093266b7
+cargo-nextest-0.9.138-x86_64-pc-windows-msvc.zip 6597c6ddbd4157df9a8363c55817dd98ed4905a505225aefa726bc55bf984be7
+cargo-nextest-0.9.138-x86_64-unknown-linux-gnu.tar.gz 3793bf0c27607b196f502c39b2108f571de89fcda7586ae6beefa11ee177b216

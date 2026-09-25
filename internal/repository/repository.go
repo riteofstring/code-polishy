@@ -487,6 +487,7 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 			{Name: "osv-scanner", Path: repo.PolicyTool("osv-scanner"), Version: repo.ToolPin("osv-scanner")},
 			{Name: "ruff", Path: repo.PolicyTool("ruff"), Version: repo.ToolPin("ruff")},
 			{Name: "ty", Path: repo.PolicyTool("ty"), Version: repo.ToolPin("ty")},
+			{Name: "cargo-nextest", Path: repo.PolicyTool("cargo-nextest"), Version: repo.ToolPin("cargo-nextest")},
 		}},
 		{directory: shellcheckDirectory, tools: []GovernedTool{{Name: "shellcheck", Path: filepath.Join(shellcheckDirectory, executableName("shellcheck")), Version: repo.ToolPin("shellcheck")}}},
 		{directory: nodeDirectory, tools: []GovernedTool{{Name: "node", Path: filepath.Join(nodeDirectory, executableName("node")), Version: repo.ToolPin("node")}}},

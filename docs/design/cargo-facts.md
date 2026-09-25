@@ -200,3 +200,14 @@ invented line. Workspace metadata, not parsed package-ID strings, owns identity.
 [Rust input coverage](rust-inputs.md) defines control input selection and the
 governed toolchain. The [implementation plan](../plans/code-polishy-rust-support-plan.md)
 records the remaining Rust capabilities and acceptance work.
+
+## Test runner provisioning
+
+The already governed Python runtime installs the exact cargo-nextest binary on
+all supported hosts, using one cross-platform implementation. Checked-in archive
+identities are authenticated before reading the executable payload. The installer
+extracts only that regular member, with bounded bytes, and runs a staged version
+probe before atomic replacement. Corrupt downloads, invalid payloads, failed
+probes and replacement failures preserve a previous working executable. Reuse
+checks the installed release; it does not hash local state. This provisions a
+runner, not test evidence or doctest execution.

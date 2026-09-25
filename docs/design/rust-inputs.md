@@ -216,3 +216,13 @@ each download once, and never runs package installation scripts or source builds
 Staged packages must pass a real Rust parse before replacing the previous exact
 distributions. Replacement retains recoverable backups until the installed
 parser passes that same check. Wheel metadata and licenses remain installed.
+
+Rust unit and integration execution uses the independent pinned cargo-nextest
+0.9.138 release, published 2026-06-21. Its stable JUnit output supplies actual
+test-case outcomes on the stable compiler, whose built-in libtest JSON interface
+still requires unstable options. The binary archives cover the same five hosts;
+the macOS archive is universal. Checked-in identities come from the exact
+[upstream release](https://github.com/nextest-rs/nextest/releases/tag/cargo-nextest-0.9.138).
+Installation must authenticate archives and verify the staged executable before
+replacing a working tool. No Cargo source build, install script or self-update
+participates. Nextest does not run doctests; it cannot supply doctest coverage.

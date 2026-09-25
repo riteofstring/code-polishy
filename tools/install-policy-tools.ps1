@@ -429,6 +429,8 @@ with zipfile.ZipFile(wheel) as archive:
 
   & $Python -I -B (Join-Path $PolicyRoot 'internal/rustfacts/install.py') $PolicyRoot
   if ($LASTEXITCODE -ne 0) { throw 'Rust syntax distribution installation failed.' }
+  & $Python -I -B (Join-Path $PolicyRoot 'internal/rustfacts/install_nextest.py') $PolicyRoot
+  if ($LASTEXITCODE -ne 0) { throw 'Rust test runner installation failed.' }
   function Test-PythonFactsEnvironment {
     if (-not (Test-Path -LiteralPath (Join-Path $FactsEnvironment 'pyvenv.cfg') -PathType Leaf) -or
         -not (Test-Path -LiteralPath $FactsPython -PathType Leaf) -or

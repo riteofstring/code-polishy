@@ -28,6 +28,7 @@ case "$(uname -m)" in
 esac
 python_bin="${policy_root}/.tools/python/${python_os}-${python_arch}/bin/python3.12"
 "${python_bin}" -I -B "${policy_root}/internal/rustfacts/install.py" "${policy_root}"
+"${python_bin}" -I -B "${policy_root}/internal/rustfacts/install_nextest.py" "${policy_root}"
 facts_environment_valid() {
   [[ -f "${facts_environment}/pyvenv.cfg" ]] && [[ -x "${facts_python}" ]] &&
     [[ "$("${facts_python}" -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))' 2>/dev/null || true)" == "${python_release%%+*}" ]] &&

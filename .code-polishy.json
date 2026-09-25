@@ -1650,6 +1650,13 @@
   "supplyChain": {
     "releaseArtifacts": [
       {
+        "name": "cargo-nextest",
+        "versionFile": "tools/cargo-nextest-version.txt",
+        "source": "github-release",
+        "locator": "nextest-rs/nextest",
+        "tagPrefix": "cargo-nextest-"
+      },
+      {
         "name": "astroid",
         "versionFile": "tools/astroid-version.txt",
         "source": "pypi",
