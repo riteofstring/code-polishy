@@ -69,6 +69,9 @@ func static(ctx context.Context, repo repository.Repository, files []string, inc
 	}
 	findings = append(findings, pnpmGovernanceFindings(ctx, repo, files)...)
 	findings = append(findings, pnpmProjectFindings(ctx, repo, files, includeInstalledLicenses)...)
+	if includeInstalledLicenses {
+		findings = append(findings, cargoLicenseFindings(ctx, repo, files)...)
+	}
 	return uniqueFindings(findings)
 }
 

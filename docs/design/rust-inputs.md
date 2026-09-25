@@ -131,6 +131,40 @@ use the `crates.io` ecosystem and cannot approve a different lock or version.
 The pinned runtime contract is exercised against a temporary synthetic offline
 advisory database, without querying a live provider.
 
+## Configured license policy
+
+When `supplyChain.allowedLicenses` is configured, installed-license verification
+checks every public crates.io package in each complete lock, including inactive
+optional and platform dependencies. It reads the published Cargo.toml from cached
+`.crate` archives under the governed Cargo home. The lock's authoritative archive
+checksum authenticates the exact bytes; opaque registry directory names never
+establish source identity. Each candidate archive is read and authenticated once
+per operation, and only observations matching the requested lock checksum can
+satisfy that lock. Separate lock scopes retain separate findings.
+
+This follows the pinned Cargo cache layout described by [Cargo Home](https://doc.rust-lang.org/cargo/guide/cargo-home.html),
+whose internal layout is version-bound rather than a stable public API. Inputs
+must be contained regular files beneath physical cache directories. Reads and
+decompression are bounded: 256 registry directories, 128 MiB per archive, 1 GiB of
+archive input per operation, 512 MiB per decompressed stream, 65,536 entries and
+8 MiB per manifest. The shared license-facts timeout also applies. Missing,
+corrupt, ambiguous or mismatched manifests are missing license coverage, not
+permission to use an installed directory's unverified metadata.
+
+The common SPDX evaluator decides declared expressions, including `OR`, `AND` and
+`WITH`. It does not guess a license from `license-file` names or infer one from
+text. Cargo resolves workspace inheritance when it produces the published
+manifest; a real pinned-Cargo packaging fixture verifies that boundary without
+running build scripts. Local packages and Git contents do not become public
+registry license claims; Git follows its separate optional assessment policy.
+
+Like Node, dependency review defers installed-license evidence until after the
+candidate has been prepared. No license policy means no license scan. Ordinary
+supply-chain verification reads prepared archives without downloading, unpacking
+or executing them. Missing archives can be prepared with the pinned Cargo's
+[`fetch --locked`](https://doc.rust-lang.org/cargo/commands/cargo-fetch.html) using
+the governed Cargo home; this includes all lock targets without compiling code.
+
 ## Shader inputs
 
 WGSL is executable shader source with its own built-in language identifier,

@@ -123,7 +123,7 @@ target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
 unsupported source substitutions. These declaration and lock readers are
-data-only. Complete Git evidence and license integration remain in progress.
+data-only. Signed Cargo Git evidence remains in progress.
 
 Native Cargo lock verification now uses bounded, complete resolved metadata through
 the ordinary supply-chain runner. Online verification may fetch already locked
@@ -155,7 +155,16 @@ compiler call analysis are disabled. The report must account for every projected
 version, and exact `crates.io` vulnerability assessments preserve the original
 lock scope. Tests cover source isolation, incomplete reports, scanner exits,
 assessment identity and the real pinned scanner with a temporary offline advisory
-database. Signed Cargo Git inventories and license integration remain unfinished.
+database. Signed Cargo Git inventories remain unfinished.
+
+Configured Cargo license policy now authenticates cached `.crate` archives against
+the complete lock inventory and applies the common SPDX evaluator to their
+published manifests. It covers inactive optional/platform releases, preserves lock
+scopes, and never substitutes Git or local metadata for public crate evidence.
+Missing, corrupt, linked, ambiguous and oversized inputs fail coverage. Pre-install
+dependency review defers installed-license checks, matching the Node workflow;
+normal verification uses prepared archives without downloading or executing code.
+Pinned Cargo packaging fixtures cover inherited workspace license metadata.
 
 ## Phase 0: define the complete coverage contract
 

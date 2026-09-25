@@ -83,3 +83,10 @@ inputs while remaining in the protected outcome inventory. Ordinary content read
 and all provider edit targets retain the strict regular-file boundary, including
 every parent component; a link cannot become an authorized write route. No new
 asset-link configuration is required.
+
+Bounded directory inventory uses the same canonical, contained, non-linked parent
+checks as regular-file reads. Opening must retain the inspected directory's
+identity. It returns direct entries only and fails if the selected entry budget
+is exceeded; callers still validate each selected file through the regular-file
+boundary. Cargo's archive-license reader uses this to discover physical cache
+directories without interpreting their opaque names as registry authority.
