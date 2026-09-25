@@ -90,8 +90,9 @@ ecosystem and the actual Cargo.lock scope. It cannot fill missing observations.
 
 Git, local paths and alternate registries never become public crates.io queries.
 Optional Git assessment policy retains its visible coverage warning; required
-Cargo Git evidence currently fails explicitly until the signed inventory protocol
-supports Cargo locks. Registry age evidence does not establish vulnerability or
+Cargo Git evidence uses the shared signed inventory protocol for complete Cargo
+locks, with exact repository/commit/package identity and no guessed subdirectory.
+Registry age evidence does not establish vulnerability or
 license coverage and is not collected by the offline profile.
 
 The [historical dependency comparison policy](historical-review-policy.md#cargo-dependency-comparison)

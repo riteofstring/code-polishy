@@ -166,7 +166,8 @@ target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
 unsupported source substitutions. These declaration and lock readers are
-data-only. Signed Cargo Git evidence remains in progress.
+data-only. Required signed Cargo Git assessments use the existing optional
+Git-evidence protocol, with complete remote inventories and exact lock scope.
 
 Native Cargo lock verification now uses bounded, complete resolved metadata through
 the ordinary supply-chain runner. Online verification may fetch already locked
@@ -198,7 +199,10 @@ compiler call analysis are disabled. The report must account for every projected
 version, and exact `crates.io` vulnerability assessments preserve the original
 lock scope. Tests cover source isolation, incomplete reports, scanner exits,
 assessment identity and the real pinned scanner with a temporary offline advisory
-database. Signed Cargo Git inventories remain unfinished.
+database. Signed Cargo Git inventories retain separate Git and crates.io
+identities, including same-name/version packages and multiple crates from one
+repository. They share signature/trust/expiry checks and gate receipt identity
+with Python without sending private coordinates to public registries.
 
 Configured Cargo license policy now authenticates cached `.crate` archives against
 the complete lock inventory and applies the common SPDX evaluator to their

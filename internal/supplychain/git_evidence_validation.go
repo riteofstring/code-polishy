@@ -13,8 +13,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func validateGitEvidenceStatement(statement gitEvidenceStatement, provider policy.GitEvidenceProvider, scope, lockDigest string, packages []resolvedPackage, now time.Time) error {
-	if statement.Scope != scope || statement.LockSHA256 != lockDigest || statement.InventorySHA256 != gitEvidenceInventoryDigest(packages) {
+func validateGitEvidenceStatement(statement gitEvidenceStatement, provider policy.GitEvidenceProvider, scope, lockDigest, inventoryDigest string, packages []resolvedPackage, now time.Time) error {
+	if statement.Scope != scope || statement.LockSHA256 != lockDigest || statement.InventorySHA256 != inventoryDigest {
 		return gitEvidenceFailure("stale", "Git evidence does not bind the current lockfile and complete resolved dependency inventory")
 	}
 	if err := validateGitEvidenceTimes(statement, now); err != nil {

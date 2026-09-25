@@ -21,31 +21,55 @@ type gitEvidencePackage struct {
 	Source    string `json:"source"`
 }
 
+type gitLockAssessment struct {
+	Findings        []policy.Finding
+	Receipt         *GitEvidenceReceipt
+	InventorySHA256 string
+	ArtifactSHA256  string
+	ArtifactStatus  string
+}
+
 func verifyGitLockEvidence(repo repository.Repository, scope string, packages []resolvedPackage, now time.Time) ([]policy.Finding, *GitEvidenceReceipt) {
 	if !repo.Config.SupplyChain.GitEvidence.Required {
 		return []policy.Finding{{Check: "supplyChain.gitSourceCoverage", Path: scope, Severity: policy.FindingWarning, Message: "Git-source vulnerability, license, integrity, and authenticated release-age coverage is unverified; public registry checks do not assess Git contents", Remediation: policy.FindingRemediation{Summary: "Review Git sources with a suitable scanner; optionally require signed CI assessments with supplyChain.gitEvidence.required."}}}, nil
 	}
+	assessment := assessRequiredGitLock(repo, scope, packages, now)
+	return assessment.Findings, assessment.Receipt
+}
+
+func assessRequiredGitLock(repo repository.Repository, scope string, packages []resolvedPackage, now time.Time) gitLockAssessment {
+	result := gitLockAssessment{InventorySHA256: gitEvidenceInventoryDigest(packages), ArtifactStatus: "unavailable"}
 	declaration, provider, err := configuredGitEvidence(repo.Config.SupplyChain.GitEvidence, scope)
 	if err != nil {
-		return []policy.Finding{gitEvidenceFinding(scope, err)}, nil
+		result.Findings = []policy.Finding{gitEvidenceFinding(scope, err)}
+		return result
 	}
 	statement, digest, err := readSignedGitEvidence(repo, declaration, provider)
+	result.ArtifactSHA256 = digest
+	if digest != "" {
+		result.ArtifactStatus = "read"
+	} else if err != nil {
+		result.ArtifactStatus = gitEvidenceFinding(scope, err).Subject
+	}
 	if err != nil {
-		return []policy.Finding{gitEvidenceFinding(scope, err)}, nil
+		result.Findings = []policy.Finding{gitEvidenceFinding(scope, err)}
+		return result
 	}
 	lock, err := readGitEvidenceFile(repo, scope, 16<<20)
 	if err == nil {
-		err = validateGitEvidenceStatement(statement, provider, scope, gitEvidenceDigest(lock), packages, now)
+		err = validateGitEvidenceStatement(statement, provider, scope, gitEvidenceDigest(lock), result.InventorySHA256, packages, now)
 	}
 	if err != nil {
-		return []policy.Finding{gitEvidenceFinding(scope, err)}, nil
+		result.Findings = []policy.Finding{gitEvidenceFinding(scope, err)}
+		return result
 	}
-	receipt := &GitEvidenceReceipt{
+	result.Receipt = &GitEvidenceReceipt{
 		Scope: scope, Provider: provider.Name, Path: declaration.Path, SHA256: digest,
 		PolicySHA256: provider.PolicySHA256, LockSHA256: statement.LockSHA256,
 		InventorySHA256: statement.InventorySHA256, RetrievedAt: now.UTC(), ExpiresAt: statement.ExpiresAt.UTC(),
 	}
-	return gitEvidencePolicyFindings(repo, statement, now), receipt
+	result.Findings = gitEvidencePolicyFindings(repo, statement, now)
+	return result
 }
 
 func configuredGitEvidence(configuration policy.GitEvidence, scope string) (policy.GitEvidenceAttestation, policy.GitEvidenceProvider, error) {

@@ -151,7 +151,11 @@
         "sourcePaths": [
           "internal/policy/git_evidence.go",
           "internal/supplychain/git_evidence.go",
+          "internal/supplychain/git_evidence_validation.go",
           "internal/supplychain/git_evidence_state.go",
+          "internal/supplychain/cargo_git_evidence_test.go",
+          "internal/supplychain/cargo_git_state_test.go",
+          "internal/engine/supplychain_evidence_test.go",
           "internal/supplychain/osv_uv.go"
         ]
       },

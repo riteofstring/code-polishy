@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -30,18 +31,24 @@ func onlineUVInputs(repo repository.Repository) ([]osvLockInput, error) {
 }
 
 func osvLockInputs(repo repository.Repository, name string, parse func([]byte, string) ([]resolvedPackage, error)) ([]osvLockInput, error) {
+	return resolvedLockInputs(repo, map[string]func([]byte, string) ([]resolvedPackage, error){name: parse})
+}
+
+func resolvedLockInputs(repo repository.Repository, parsers map[string]func([]byte, string) ([]resolvedPackage, error)) ([]osvLockInput, error) {
 	files, err := repo.RawFiles()
 	if err != nil {
-		return nil, fmt.Errorf("enumerate resolved %s inventory: %w", name, err)
+		return nil, fmt.Errorf("enumerate resolved lock inventory: %w", err)
 	}
+	slices.Sort(files)
 	inputs := []osvLockInput{}
 	remaining := 32 << 20
 	for _, scope := range files {
-		if filepath.Base(scope) != name || repo.IsExcluded(scope) {
+		parse, selected := parsers[filepath.Base(scope)]
+		if !selected || repo.IsExcluded(scope) {
 			continue
 		}
 		if len(inputs) >= 512 || remaining <= 0 {
-			return nil, fmt.Errorf("resolved %s inventory exceeds its input limit", name)
+			return nil, fmt.Errorf("resolved lock inventory exceeds its input limit")
 		}
 		data, err := readGitEvidenceFile(repo, scope, int64(min(16<<20, remaining)))
 		if err != nil {

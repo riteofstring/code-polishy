@@ -25,7 +25,12 @@ func cargoReleaseAgeFindings(ctx context.Context, repo repository.Repository, fi
 		locked, problems := resolvedCargoPackages(lock)
 		findings = append(findings, problems...)
 		if gitLockPackages(locked) {
-			findings = append(findings, cargoGitAgeFindings(repo, lock.Path, locked)...)
+			if len(problems) != 0 && repo.Config.SupplyChain.GitEvidence.Required {
+				findings = append(findings, gitEvidenceFinding(lock.Path, gitEvidenceFailure("coverage", "Cargo Git evidence requires a complete supported lock inventory")))
+			} else {
+				assessment, _ := verifyGitLockEvidence(repo, lock.Path, locked, time.Now().UTC())
+				findings = append(findings, assessment...)
+			}
 		}
 		packages = append(packages, registryReleasePackages(locked)...)
 	}
@@ -54,14 +59,6 @@ func cargoAgeLocks(repo repository.Repository, files []string, resolved []reposi
 		ordered = append(ordered, locks[path])
 	}
 	return ordered, findings
-}
-
-func cargoGitAgeFindings(repo repository.Repository, path string, packages []resolvedPackage) []policy.Finding {
-	if repo.Config.SupplyChain.GitEvidence.Required {
-		return []policy.Finding{{Check: "supplyChain.gitEvidence", Path: path, Subject: "cargo-source", Message: "Required Cargo Git assessments need Cargo lock inventory support; a Python lock attestation cannot establish evidence for this Cargo lockfile"}}
-	}
-	findings, _ := verifyGitLockEvidence(repo, path, packages, time.Now().UTC())
-	return findings
 }
 
 func lookupCargoReleaseGroup(ctx context.Context, client *http.Client, group releaseGroup) (map[string]time.Time, error) {
