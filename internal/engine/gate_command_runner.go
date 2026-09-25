@@ -402,7 +402,7 @@ func runGateCommand(ctx context.Context, commandRunner runner.Runner, root strin
 		result, err := streamed.RunWithWriters(ctx, root, command, io.MultiWriter(stdout, capturedStdout), io.MultiWriter(stderr, capturedStderr))
 		if capturedStdout.truncated || capturedStderr.truncated {
 			err = errors.Join(err, fmt.Errorf("captured command output exceeds its structured output limit"))
-			result.FailureCategory = runner.FailureOperational
+			result.FailureCategory = runner.CaptureFailureCategory(ctx, result, err)
 		}
 		return result, runner.Output{Stdout: capturedStdout.Bytes(), Stderr: capturedStderr.Bytes()}, err
 	}

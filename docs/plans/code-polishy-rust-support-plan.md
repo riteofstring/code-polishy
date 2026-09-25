@@ -413,15 +413,18 @@ dependency governance now have runnable beta implementations. Source parsing use
 exact authenticated binary wheels in the existing governed Python runtime; it
 requires neither target package installation scripts nor a new Rust bootstrap.
 
-Native unit/integration suites now retain nonempty structured results through
+Native unit/integration and separate doctest suites now retain nonempty structured results through
 ordinary commands, gate artifacts, regression proofs and reusable receipts. The
 [Rust test contract](../design/rust-tests.md) documents selectors and boundaries.
 Native release builders now carry the Rust SDK, Nextest and parser dependencies.
 Manifest version 7 binds the executable pins; the SBOM includes both parser
 distributions and the top-level Rust tools. The installed Rust fixture passes on
-Linux x64 against committed source `1e57580`: selected formatting, JSON/SARIF
+Linux x64 against committed source `3fafe17`: selected formatting, JSON/SARIF
 compiler diagnostics, nonempty native tests, assertion failure, zero-test
-rejection, and recovery through the verified launcher. All-host installed evidence
+rejection, doctest example semantics and failures, and recovery through the
+verified launcher. The private installed artifact has release digest
+`5f4452b4fb01bdc396e948c761210c9e965f5246a377856213a89915c2fdc476`.
+All-host installed evidence
 and complete bundled dependency notices/inventory remain publication requirements.
 No beta release has been published or adopted.
 
