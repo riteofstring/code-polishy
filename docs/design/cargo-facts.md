@@ -27,6 +27,30 @@ Repository configuration is parsed before execution; unsupported execution-alter
 settings produce a diagnostic. This controls discovery inputs, not operating-system
 access by future build scripts or procedural macros.
 
+## Locked resolution
+
+Dependency verification uses full version-1 Cargo metadata separately from
+workspace-only discovery. Online supply-chain checks and pre-install review use
+`--locked`: Cargo may fetch the already locked sources into its governed home,
+but cannot update the lock or execute build scripts and procedural macros.
+Offline verification uses `--frozen` and requires that cache to be prepared.
+Both modes require a contained, parsed workspace lock before resolution runs.
+Neither repairs a missing or stale lockfile.
+
+Resolved facts preserve opaque package IDs, source identities, renamed edges,
+dependency kinds, target predicates and enabled features. Every graph node and
+edge must refer to a real package, and resolved package coordinates must occur
+in the reviewed lock inventory. Cargo owns resolution; this validation does not
+reimplement its resolver. Remote manifests and source targets must remain in the
+governed Cargo home. Local path packages retain contained checkout paths.
+
+Metadata uses default features and retains target-specific edges for all
+platforms. It is not evidence that every feature or target was compiled. The lock
+may also include inactive optional dependencies absent from this resolved graph;
+dependency age and advisory inventories must not drop those locked packages.
+Commands belong to the existing supply-chain execution plan, including offline
+gates, so receipts and cancellation have the same owner as other languages.
+
 ## Selected formatting
 
 The pinned rustfmt receives one selected source through stdin, with the edition

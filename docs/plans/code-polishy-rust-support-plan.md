@@ -122,9 +122,17 @@ Cargo dependency-input governance now parses ordinary, build, development,
 target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
-unsupported source substitutions. This is data-only preparation: resolved lock
-agreement, dependency-review comparison, age, vulnerability and license integration
-remain in progress.
+unsupported source substitutions. These declaration and lock readers are
+data-only. Dependency-review comparison, age, vulnerability and license
+integration remain in progress.
+
+Native Cargo lock verification now uses bounded, complete resolved metadata through
+the ordinary supply-chain runner. Online verification may fetch already locked
+sources with `--locked`; offline verification requires prepared sources with
+`--frozen`. Neither mode updates the lock or compiles project code. Facts retain
+renamed edges, dependency kinds, target predicates and default-feature selection;
+inactive optional packages remain in the full lock inventory for supply-chain
+policy even when absent from the active graph.
 
 ## Phase 0: define the complete coverage contract
 
@@ -182,8 +190,10 @@ remain in progress.
 - [ ] Reject path escapes and ambiguous ownership. Do not infer package names
       from directory basenames. Record incomplete dependency metadata as unavailable.
 - [ ] Keep discovery offline/read-only after controlled dependency preparation;
-      resolution must not silently refresh a lockfile or download dependencies.
-      Use frozen resolution after dependency preparation. The data-only bootstrap
+      normal checks use frozen resolution and never refresh a lockfile or fetch
+      dependencies. Online supply-chain review may fetch already locked source
+      data without compiling it; offline verification requires prepared sources.
+      The data-only bootstrap
       path must still explain missing locks/dependencies without invoking a build.
 - [ ] Propagate manifest, lockfile, feature, toolchain, shader and build-input
       changes to affected modules and evidence invalidation.

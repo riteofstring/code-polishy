@@ -52,7 +52,11 @@
           "internal/supplychain/cargo_test.go",
           "internal/supplychain/cargo_lock.go",
           "internal/supplychain/cargo_lock_test.go",
+          "internal/supplychain/cargo_resolution.go",
+          "internal/supplychain/cargo_resolution_test.go",
+          "internal/supplychain/online_profile.go",
           "internal/supplychain/supplychain.go",
+          "internal/engine/cargo_supplychain_test.go",
           "tools/install-rust.sh",
           "tools/install-rust.ps1",
           "scripts/test-rust-runtime.sh"
@@ -411,6 +415,7 @@
         "policy",
         "repository",
         "runner",
+        "rustfacts",
         "spdx",
         "workflow"
       ]

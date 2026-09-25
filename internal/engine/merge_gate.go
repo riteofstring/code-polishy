@@ -340,6 +340,7 @@ func (engine *Engine) appendMergeGateSupplyChainCommands(plan MergeGateExecution
 		return MergeGateExecutionPlan{}, err
 	}
 	if plan.Level != testpolicy.MergeLevelFull {
+		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, supplychain.CargoResolutionCommands(engine.Repository, supplySelection.Files, true))...)
 		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain"))...)
 		return plan, nil
 	}

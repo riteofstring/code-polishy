@@ -59,6 +59,11 @@ crates.io identity and immutable Git source encoding. Unknown sources fail
 explicitly and never become public registry queries. Git packages sharing a name
 and version with a registry crate remain separate coordinates. Parsing this
 inventory alone does not prove that it agrees with the selected manifests.
+Native lock agreement is established separately through [governed Cargo
+resolution](cargo-facts.md#locked-resolution), using the actual workspace lock
+and the existing supply-chain runner. Pre-install review may fetch locked source
+data; offline verification may not. Age, security and license coverage still
+require their respective evidence, not merely successful Cargo resolution.
 
 ## Shader inputs
 

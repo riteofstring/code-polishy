@@ -74,6 +74,10 @@ func ParseWorkspace(repo repository.Repository, manifest string, data []byte) (W
 	if err != nil {
 		return Workspace{}, err
 	}
+	return workspaceFromWire(repo, manifest, wire)
+}
+
+func workspaceFromWire(repo repository.Repository, manifest string, wire workspaceWire) (Workspace, error) {
 	root, err := containedPath(repo, filepath.Join(wire.Root, "Cargo.toml"))
 	if err != nil {
 		return Workspace{}, fmt.Errorf("cargo workspace root: %w", err)
@@ -89,6 +93,17 @@ func ParseWorkspace(repo repository.Repository, manifest string, data []byte) (W
 }
 
 func decodeWorkspace(data []byte) (workspaceWire, error) {
+	wire, err := decodeMetadata(data)
+	if err != nil {
+		return workspaceWire{}, err
+	}
+	if !bytes.Equal(bytes.TrimSpace(wire.Resolve), []byte("null")) {
+		return workspaceWire{}, errors.New("workspace-only discovery must not claim a resolved dependency graph")
+	}
+	return wire, nil
+}
+
+func decodeMetadata(data []byte) (workspaceWire, error) {
 	if len(data) > 8<<20 {
 		return workspaceWire{}, errors.New("cargo metadata exceeds 8388608 bytes")
 	}
@@ -103,9 +118,6 @@ func decodeWorkspace(data []byte) (workspaceWire, error) {
 	}
 	if wire.Version != 1 || len(wire.Packages) == 0 || len(wire.Members) == 0 || wire.DefaultMembers == nil {
 		return workspaceWire{}, errors.New("cargo metadata is missing version-1 workspace facts")
-	}
-	if !bytes.Equal(bytes.TrimSpace(wire.Resolve), []byte("null")) {
-		return workspaceWire{}, errors.New("workspace-only discovery must not claim a resolved dependency graph")
 	}
 	return wire, nil
 }
@@ -134,7 +146,11 @@ func validateWorkspace(repo repository.Repository, manifest string, workspace *W
 }
 
 func completeWorkspacePackage(pkg Package) bool {
-	return pkg.ID != "" && pkg.Name != "" && pkg.Version != "" && pkg.Source == nil &&
+	return pkg.Source == nil && completePackage(pkg)
+}
+
+func completePackage(pkg Package) bool {
+	return pkg.ID != "" && pkg.Name != "" && pkg.Version != "" &&
 		len(pkg.Targets) > 0 && pkg.Features != nil && pkg.Dependencies != nil
 }
 

@@ -106,12 +106,14 @@ func TestCargoNativePinsDoNotClaimUnimplementedSupplyCoverage(t *testing.T) {
 		t.Fatalf("generated classification hid an unpinned dependency: %+v", findings)
 	}
 	findings := CoverageFindings(repo, []string{"Cargo.toml"})
-	for _, missing := range []string{"lock-sync", "release-age", "security"} {
+	for _, missing := range []string{"release-age", "security"} {
 		if !slices.ContainsFunc(findings, func(finding policy.Finding) bool { return finding.Subject == "repository:"+missing }) {
 			t.Errorf("unimplemented %s received native coverage: %+v", missing, findings)
 		}
 	}
-	if slices.ContainsFunc(findings, func(finding policy.Finding) bool { return finding.Subject == "repository:dependency-policy" }) {
-		t.Fatal("implemented Cargo pin policy still required a custom provider")
+	if slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return slices.Contains([]string{"repository:dependency-policy", "repository:lock-sync"}, finding.Subject)
+	}) {
+		t.Fatal("implemented Cargo pin or lock policy still required a custom provider")
 	}
 }

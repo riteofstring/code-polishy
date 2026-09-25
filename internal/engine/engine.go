@@ -643,6 +643,7 @@ func (engine *Engine) supplyChain(ctx context.Context, offline, includeInstalled
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
 	if offline {
 		mode = "offline"
+		findings = append(findings, supplychain.CheckCargoResolution(ctx, engine.Repository, files, true, engine.Runner)...)
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
 	if !offline {

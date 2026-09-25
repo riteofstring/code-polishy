@@ -27,6 +27,7 @@ func OnlineCommands(repo repository.Repository, files []string) ([]policy.Comman
 	for _, module := range repo.GoModules(files) {
 		commands = append(commands, goOnlineCommands(repo, module)...)
 	}
+	commands = append(commands, CargoResolutionCommands(repo, files, false)...)
 	auditCommands, err := pnpmAuditCommands(repo, files)
 	if err != nil {
 		return nil, err
@@ -52,6 +53,7 @@ func OnlineWithCommands(ctx context.Context, repo repository.Repository, files [
 	}
 	findings := releaseArtifactAgeFindings(ctx, repo, registryClient(), time.Now().UTC())
 	findings, commandIndex := onlineGoModuleFindings(ctx, repo, files, commands, commandRunner, findings)
+	findings, commandIndex = onlineCargoFindings(ctx, repo, files, commands, commandRunner, findings, commandIndex)
 	findings, commandIndex = onlineNodeFindings(ctx, repo, files, commands, commandRunner, findings, commandIndex)
 	findings = append(findings, onlinePythonFindings(ctx, repo)...)
 	if activePolicyModule(repo.Config, "osv") {
@@ -135,13 +137,15 @@ func sameOnlineCommand(left, right policy.Command) bool {
 
 func sameOnlineCommandIdentity(left, right policy.Command) bool {
 	return left.Name == right.Name && left.Cwd == right.Cwd && left.TimeoutSeconds == right.TimeoutSeconds &&
-		left.Managed == right.Managed && left.PassFiles == right.PassFiles && left.ReportProtocol == right.ReportProtocol
+		left.Managed == right.Managed && left.PassFiles == right.PassFiles && left.ReportProtocol == right.ReportProtocol &&
+		left.SealedEnvironment == right.SealedEnvironment
 }
 
 func sameOnlineCommandCollections(left, right policy.Command) bool {
 	return slices.Equal(left.Argv, right.Argv) && slices.Equal(left.Provides, right.Provides) &&
 		slices.Equal(left.Paths, right.Paths) && slices.Equal(left.Modules, right.Modules) &&
 		slices.Equal(left.RunOn, right.RunOn) && slices.Equal(left.Environment, right.Environment) &&
+		slices.Equal(left.EnvironmentOverrides, right.EnvironmentOverrides) &&
 		slices.Equal(left.ExclusiveResources, right.ExclusiveResources) && slices.Equal(left.PassFilePaths, right.PassFilePaths)
 }
 
