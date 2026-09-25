@@ -51,7 +51,8 @@ or release-age coverage; those remain separate dependency-policy operations.
 
 Lock inventory supports Cargo's version-3 and version-4 records. A package
 identity retains its name, complete version and exact source; different versions
-or sources are not collapsed. Registry records must carry their archive checksum,
+or sources are not collapsed. Git-index and sparse registry records must carry
+their archive checksum,
 which is authoritative artifact identity rather than a local change detector.
 Dependency-edge strings remain opaque until Cargo supplies resolved graph facts.
 The version-bound source decoder recognizes the pinned Cargo release's public
@@ -91,6 +92,12 @@ Optional Git assessment policy retains its visible coverage warning; required
 Cargo Git evidence currently fails explicitly until the signed inventory protocol
 supports Cargo locks. Registry age evidence does not establish vulnerability or
 license coverage and is not collected by the offline profile.
+
+The [historical dependency comparison policy](historical-review-policy.md#cargo-dependency-comparison)
+keeps declaration changes separate from effective Cargo resolution. Git lock
+entries may record a commit without a declared ref; that commit is preserved
+without inventing a branch or treating the commit as a declaration from the
+manifest. Historical moving refs remain reviewable but do not become exact pins.
 
 ## Shader inputs
 

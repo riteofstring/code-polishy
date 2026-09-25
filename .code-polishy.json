@@ -38,6 +38,8 @@
           "internal/repository/cargo_manifest_test.go",
           "internal/repository/cargo_dependencies.go",
           "internal/repository/cargo_dependencies_test.go",
+          "internal/repository/cargo_git.go",
+          "internal/repository/cargo_git_test.go",
           "internal/repository/cargo_lock.go",
           "internal/repository/cargo_lock_test.go",
           "internal/repository/rust_tools.go",
@@ -208,7 +210,12 @@
         "sourcePaths": [
           "internal/policy/review_snapshot.go",
           "internal/engine/behavior_review_decision.go",
-          "internal/engine/merge_gate.go"
+          "internal/engine/merge_gate.go",
+          "internal/supplychain/review.go",
+          "internal/supplychain/review_inventory.go",
+          "internal/supplychain/cargo_review.go",
+          "internal/supplychain/cargo_review_lock.go",
+          "internal/supplychain/cargo_review_test.go"
         ]
       },
       {

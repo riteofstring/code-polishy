@@ -28,7 +28,7 @@ func resolvedCargoPackages(lock repository.CargoLock) ([]resolvedPackage, []poli
 		case pkg.Source == repository.CargoCratesIOSource:
 			item.Source = resolvedSource{Kind: "registry", Registry: "https://crates.io"}
 		case strings.HasPrefix(pkg.Source, "git+"):
-			source, err := repository.ParsePythonGitInventorySource(pkg.Source, "", "")
+			source, err := repository.ParseCargoGitLockSource(pkg.Source)
 			if err != nil {
 				findings = append(findings, cargoLockSourceFinding(lock.Path, pkg, err.Error()))
 				continue

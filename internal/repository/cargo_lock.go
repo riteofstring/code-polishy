@@ -71,7 +71,7 @@ func validateCargoLockedPackage(pkg CargoLockedPackage) error {
 	if strings.TrimSpace(pkg.Name) == "" || !semver.IsValid("v"+pkg.Version) || strings.Count(core, ".") != 2 {
 		return errors.New("package must have a name and complete semantic version")
 	}
-	if strings.HasPrefix(pkg.Source, "registry+") {
+	if strings.HasPrefix(pkg.Source, "registry+") || strings.HasPrefix(pkg.Source, "sparse+") {
 		checksum, err := hex.DecodeString(pkg.Checksum)
 		if err != nil || len(checksum) != 32 {
 			return errors.New("registry package must carry its complete SHA-256 archive checksum")

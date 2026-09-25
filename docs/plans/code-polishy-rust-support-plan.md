@@ -123,8 +123,8 @@ target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
 unsupported source substitutions. These declaration and lock readers are
-data-only. Dependency-review comparison, complete Git evidence, vulnerability and
-license integration remain in progress.
+data-only. Complete Git evidence, vulnerability and license integration remain
+in progress.
 
 Native Cargo lock verification now uses bounded, complete resolved metadata through
 the ordinary supply-chain runner. Online verification may fetch already locked
@@ -138,8 +138,17 @@ Public crates.io minimum-age checks cover complete lock inventories, batch exact
 versions by crate, and follow the registry's identified one-request-per-second
 API limit. Missing metadata cannot pass or be filled by an assessment. Existing
 exact release-age assessments now support `crates.io` and Cargo.lock scopes;
-Git/private sources are not sent to the public registry. New-dependency preferred-age
-advisories and signed Cargo Git inventory support remain unfinished.
+Git/private sources are not sent to the public registry. Exact new direct runtime
+and optional declarations receive preferred-age advice; workspace definitions do
+not receive direct-dependency advice without a proven consumer.
+
+Cargo dependency review compares declarations and complete external lock
+inventories without invoking Cargo. Rows preserve direct, workspace-definition,
+inherited, override and resolved roles; renamed packages and source changes retain
+their identity across lock scopes. Bare Cargo version requirements remain ranges.
+Historical branch, tag, alternate-registry and override declarations can be
+reviewed for removal without admitting them into current dependency policy.
+Credential-bearing, malformed or escaping inputs fail before comparison.
 
 ## Phase 0: define the complete coverage contract
 

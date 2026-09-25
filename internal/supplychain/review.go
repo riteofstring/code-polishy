@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -86,6 +87,8 @@ func dependencyInventory(ctx context.Context, repo repository.Repository, source
 			records, err = directPythonRecords(source, path)
 		case "go.mod":
 			records, err = directGoRecords(source, path)
+		case "Cargo.toml":
+			records, err = directCargoRecords(source, path)
 		}
 		if err != nil {
 			return nil, err
@@ -228,8 +231,12 @@ func resolvedLockRecords(ctx context.Context, repo repository.Repository, source
 			return nil, err
 		}
 		ecosystem, version := resolvedDependencyReviewIdentity(item)
+		directness := "transitive"
+		if filepath.Base(path) == "Cargo.lock" {
+			directness = "resolved"
+		}
 		records = append(records, dependencyRecord{
-			Ecosystem: ecosystem, Scope: path, Directness: "transitive", Usage: "resolved",
+			Ecosystem: ecosystem, Scope: path, Directness: directness, Usage: "resolved",
 			Name: item.Name, Version: version,
 		})
 	}
@@ -238,7 +245,7 @@ func resolvedLockRecords(ctx context.Context, repo repository.Repository, source
 
 func readResolvedLockInventory(ctx context.Context, repo repository.Repository, source inventorySource, path string) ([]resolvedPackage, error) {
 	name := filepath.Base(path)
-	if name != "package-lock.json" && name != "npm-shrinkwrap.json" && name != pnpmLockName && name != "uv.lock" {
+	if !slices.Contains([]string{"package-lock.json", "npm-shrinkwrap.json", pnpmLockName, "uv.lock", "Cargo.lock"}, name) {
 		return nil, nil
 	}
 	data, err := source.read(path)
@@ -253,6 +260,8 @@ func readResolvedLockInventory(ctx context.Context, repo repository.Repository, 
 		packages, err = revisionPNPMPackages(ctx, repo, data, path)
 	case "uv.lock":
 		packages, err = parseUVLockWith(data, path, parseUVInventorySourceFields)
+	case "Cargo.lock":
+		packages, err = cargoReviewLock(data, path)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: resolved dependency inventory is malformed, ambiguous, or unsupported: %w", path, err)
@@ -409,7 +418,7 @@ func newDependencyAgeCandidate(change DependencyChange) bool {
 		strings.Contains(" runtime optional ", " "+change.Usage+" ") &&
 		change.To != "-" &&
 		dependencyAgeVersion(change) &&
-		strings.Contains(" go npm pnpm pypi ", " "+change.Ecosystem+" ")
+		strings.Contains(" go npm pnpm pypi crates.io ", " "+change.Ecosystem+" ")
 }
 
 func dependencyAgeVersion(change DependencyChange) bool {

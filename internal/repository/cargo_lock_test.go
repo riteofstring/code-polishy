@@ -53,3 +53,16 @@ func TestCargoLockAllowsDifferentVersionsAndSourcesOfOnePackage(t *testing.T) {
 		t.Fatalf("distinct immutable package identities were collapsed: %+v, %v", lock, err)
 	}
 }
+
+func TestCargoLockRequiresChecksumsForSparseRegistries(t *testing.T) {
+	t.Parallel()
+	data := "version=4\n[[package]]\nname='private'\nversion='1.0.0'\nsource='sparse+https://private.example.test/index/'\n"
+	if _, err := ParseCargoLock("Cargo.lock", []byte(data)); err == nil {
+		t.Fatal("sparse registry package without its archive identity was accepted")
+	}
+	data += "checksum='" + strings.Repeat("a", 64) + "'\n"
+	lock, err := ParseCargoLock("Cargo.lock", []byte(data))
+	if err != nil || len(lock.Packages) != 1 || lock.Packages[0].Source != "sparse+https://private.example.test/index/" {
+		t.Fatalf("sparse registry identity = %+v, %v", lock, err)
+	}
+}
