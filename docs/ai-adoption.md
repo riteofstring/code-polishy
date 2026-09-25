@@ -358,13 +358,13 @@ ordinary full behavior suite as described in
 
 ## 5. Reuse policy-owned tools and add only project-specific providers
 
-Allow source and dependency evidence to activate the shared Go, Shell, Ruff,
+Allow source and dependency evidence to activate the shared Go, Rust, Shell, Ruff,
 Vulture, `ty`, Node/TypeScript, React, Electron, and OSV behavior. Do not copy
 equivalent commands into target JSON.
 
 Add target `checks` only for facts that cannot be shared safely, such as:
 
-- an alias-aware non-Go architecture graph;
+- architecture facts beyond native or installed language-pack analysis;
 - a production build;
 - a frozen workspace install or generated-lock consistency check;
 - a domain-specific content/schema validator;
@@ -376,11 +376,18 @@ the modules and capability it covers, have a bounded timeout, and fail when its
 evidence is missing. It must not auto-install packages during a policy check.
 
 The installed release supplies the Go toolchain, ShellCheck, staticcheck,
-govulncheck, Ruff, Vulture, its carried CPython runtime, `ty`, OSV-Scanner, and
+govulncheck, Rust/Cargo/rustfmt/Clippy, Nextest, Ruff, Vulture, its carried CPython runtime, `ty`, OSV-Scanner, and
 the sealed JavaScript tooling. Do not add target-local copies of those tools or
 ask a target dependency to satisfy shared coverage. A missing or corrupted
 shared tool means the locked release must be installed or repaired; it is not a
 target dependency gap.
+
+For Rust unit and integration suites, use the native `rust` selector described in
+[Rust test evidence](design/rust-tests.md). Preserve Cargo workspace default
+members and features unless the suite deliberately selects alternatives. Prepare
+the reviewed Cargo lock and dependency cache before frozen checks or tests. Native
+unit/integration evidence does not establish doctest, benchmark or live-provider
+coverage; those workflows need their own explicit evidence and authorization.
 
 Use existing target tools where honest for genuinely project-specific
 providers. If such a provider requires a new or updated target dependency,

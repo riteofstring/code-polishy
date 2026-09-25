@@ -393,8 +393,9 @@ tools. [Cargo project facts](../design/cargo-facts.md) owns that boundary.
 
 Developer setup installs authenticated Rust 1.97.1 components without rustup or
 installation scripts. Linux runtime execution and installer integrity/recovery
-fixtures pass. macOS/Windows installers and checksums are present but host execution
-and release packaging still require verification.
+fixtures pass. Native release packaging and a dependency-free installed Cargo
+workflow are verified on Linux x64. The remaining host executions still require
+verification; macOS/Windows installers and pinned archives alone are not proof.
 
 Selected-file formatting, compiler diagnostics, parsed source policy and Cargo
 dependency governance now have runnable beta implementations. Source parsing uses
@@ -406,9 +407,12 @@ ordinary commands, gate artifacts, regression proofs and reusable receipts. The
 [Rust test contract](../design/rust-tests.md) documents selectors and boundaries.
 Native release builders now carry the Rust SDK, Nextest and parser dependencies.
 Manifest version 7 binds the executable pins; the SBOM includes both parser
-distributions and the top-level Rust tools. Native installed-Rust fixtures and
-complete bundled dependency notices/inventory remain unverified publication
-requirements. No beta release has been published or adopted.
+distributions and the top-level Rust tools. The installed Rust fixture passes on
+Linux x64 against committed source `1e57580`: selected formatting, JSON/SARIF
+compiler diagnostics, nonempty native tests, assertion failure, zero-test
+rejection, and recovery through the verified launcher. All-host installed evidence
+and complete bundled dependency notices/inventory remain publication requirements.
+No beta release has been published or adopted.
 
 The next milestones extend ordinary macro/module and doctest coverage and
 complete installed-release integration. Existing coverage failures remain until
