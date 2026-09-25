@@ -51,21 +51,57 @@ func TestRustCompilationReportsOriginalTypeAndLintLocations(t *testing.T) {
 	}
 }
 
-func TestRustCompilationRejectsLintAttributeSuppression(t *testing.T) {
+func TestRustCompilationCollectsLintsDespiteSourceLevels(t *testing.T) {
 	t.Parallel()
-	for name, source := range map[string]string{
-		"allow clippy":  "#[allow(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n",
-		"expect clippy": "#[expect(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n",
-		"allow unused":  "#[allow(dead_code)]\nfn unused() {}\npub fn answer() {}\n",
+	for name, test := range map[string]struct{ source, subject string }{
+		"allow clippy":  {"#[allow(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
+		"expect clippy": {"#[expect(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
+		"deny clippy":   {"#[deny(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
+		"forbid clippy": {"#[forbid(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
+		"allow unused":  {"#[allow(dead_code)]\nfn unused() {}\npub fn answer() {}\n", "dead_code"},
+		"expect unused": {"#[expect(dead_code)]\nfn unused() {}\npub fn answer() {}\n", "dead_code"},
+		"allow warning": {"#[allow(unreachable_code)]\npub fn answer() { return; println!(\"unreachable\"); }\n", "unreachable_code"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			repo := compilationRepository(t, source)
+			repo := compilationRepository(t, test.source)
+			plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
+			result, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+			if err != nil || result.ExitStatus != 0 {
+				t.Fatalf("lint collection failed compilation: %+v, %v; %s", result, err, output.Stderr)
+			}
+			report, err := ParseCompilation(repo, "Cargo.toml", discovery.Workspaces[0], output.Stdout)
+			if err != nil || !report.Success {
+				t.Fatalf("lint report lacks successful compilation evidence: %+v, %v", report, err)
+			}
+			if !slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
+				return finding.Subject == test.subject && finding.Path == "src/lib.rs" && finding.Line > 0
+			}) {
+				t.Fatalf("source levels hid the governed lint: %+v", report.Findings)
+			}
+		})
+	}
+}
+
+func TestRustCompilationFailureCannotBecomeAnExceptableLint(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct{ source, build, subject string }{
+		"type error":   {source: "pub fn answer() -> u32 { \"wrong\" }\n", subject: "E0308"},
+		"denied lint":  {source: "pub fn answer() { let mutex = std::sync::Mutex::new(0); let _ = mutex.lock().unwrap(); }\n", subject: "let_underscore_lock"},
+		"build script": {source: "pub fn answer() {}\n", build: "fn main() { let unused = 1; panic!(\"deliberate build failure\"); }\n", subject: "unused_variables"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := compilationRepository(t, test.source)
+			if test.build != "" {
+				write(t, repo.Root, "build.rs", test.build)
+			}
 			plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
 			findings := Compile(t.Context(), repo, plan, discovery, runner.OSRunner{})
-			if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-				return finding.Check == "quality.rustCompiler" && strings.Contains(finding.Message, "incompatible with previous forbid") && finding.Path == "src/lib.rs"
-			}) {
-				t.Fatalf("suppression did not conflict with governed lint policy: %+v", findings)
+			for _, expected := range []struct{ check, subject string }{{"quality.rustCompiler", test.subject}, {"policy.rustProject", "compilation"}} {
+				if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+					return finding.Check == expected.check && finding.Subject == expected.subject
+				}) {
+					t.Errorf("failed compilation lost %s/%s: %+v", expected.check, expected.subject, findings)
+				}
 			}
 		})
 	}

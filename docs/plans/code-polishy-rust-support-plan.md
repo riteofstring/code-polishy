@@ -113,9 +113,13 @@ changed modules; add a quick suite when a new module is introduced.
   errors, lint defects, attempted suppression, absent/drifting locks, unavailable
   linkers, cancellation and build-script configuration output. Public CLI checks
   retain the remaining coverage failures instead of declaring full Rust support.
-- Parser-backed source rules, architecture, Cargo supply-chain governance,
-  structured Rust test evidence, WGSL and installed-release integration remain
-  unfinished. Project Clippy overrides and non-native targets currently fail
+- Compiler warnings and the selected Clippy/unused groups use forced warning
+  collection so typed policy findings remain independent of process failure.
+  Real compiler tests prove source lint levels cannot hide those findings and
+  type errors, default-denied compiler lints and build-script failures still fail.
+- Parser-backed source rules, architecture, structured Rust test evidence, WGSL
+  and installed-release integration remain unfinished. Project Clippy overrides
+  and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
 
 Cargo dependency-input governance now parses ordinary, build, development,

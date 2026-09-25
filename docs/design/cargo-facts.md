@@ -80,9 +80,24 @@ invitation for the check to resolve dependencies.
 Checks select the manifest's ordinary Cargo packages, default features and all
 enabled targets, using the governed native host explicitly. They do not enable
 every feature or establish coverage of other target configurations. Compiler
-warnings, Clippy's default lint group and unused-code lints are forbidden at the
-invocation boundary. Parser-backed attribute governance and complete dead-code
-coverage remain separate requirements. Project Clippy settings currently fail
+warnings, Clippy's default lint group and unused-code lints use `--force-warn` at
+the invocation boundary. Source `allow`, `expect`, `deny` and `forbid` attributes
+cannot hide these diagnostics or turn policy lint collection into a compiler
+failure. Code Polishy treats the resulting typed findings as blocking errors,
+subject to its existing exact exception policy. Failed compilation always adds
+a project failure, even when the compiler also reports typed source diagnostics;
+an excepted lint cannot make a failed build or operational invocation pass.
+Rust does not support forcing the aggregate `warnings` group. The release owns
+the concrete warning-by-default lint inventory for its pinned compiler, checked
+against that compiler's advertised lint interface during toolchain tests. Rust
+compiler lints that default to deny retain their failure semantics; the policy does
+not lower them to warnings or enable every opt-in restriction lint.
+The advertised `tail-call-track-caller` warning requires unstable explicit tail
+calls in this release and is not selectable on the supported stable toolchain.
+Its exclusion is verified against the real compiler, not silently ignored at
+runtime.
+Parser-backed attribute governance and complete dead-code coverage remain
+separate requirements. Project Clippy settings currently fail
 with an explicit unsupported-configuration diagnostic; they cannot silently
 override the release-owned defaults.
 

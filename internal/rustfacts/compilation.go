@@ -58,7 +58,10 @@ func compilationSources(repo repository.Repository, manifest string, allFiles []
 }
 
 func compilationCommand(repo repository.Repository, manifest string) policy.Command {
-	command := Command(repo, "policy-clippy-"+manifest, "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "-F", "warnings", "-F", "clippy::all", "-F", "unused")
+	command := Command(repo, "policy-clippy-"+manifest, "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--force-warn", "clippy::all", "--force-warn", "unused")
+	for _, lint := range strings.Fields(compilerWarningLints) {
+		command.Argv = append(command.Argv, "--force-warn", lint)
+	}
 	command.Environment = append(command.Environment, "PATH", "LIB", "INCLUDE", "LIBPATH", "SDKROOT", "DEVELOPER_DIR")
 	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"), "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
 	return command
@@ -106,24 +109,19 @@ func compileManifest(ctx context.Context, repo repository.Repository, manifest s
 	if !ok {
 		return []policy.Finding{projectFinding(manifest, "compilation", "the runner cannot capture bounded Cargo compiler output")}
 	}
-	result, output, runErr := structured.RunStructured(ctx, repo.Root, command)
+	_, output, runErr := structured.RunStructured(ctx, repo.Root, command)
 	report, parseErr := ParseCompilation(repo, manifest, workspace, output.Stdout)
 	findings := report.Findings
 	if parseErr != nil {
 		findings = append(findings, projectFinding(manifest, "compiler-output", fmt.Sprintf("invalid Cargo compiler evidence: %v; %s", parseErr, diagnosticOutput(output.Stderr))))
 	}
-	if runErr != nil && !compilerDiagnosticExit(ctx, result, report, parseErr, runErr) {
+	if runErr != nil {
 		findings = append(findings, projectFinding(manifest, "compilation", fmt.Sprintf("Cargo compilation failed: %v; %s", runErr, diagnosticOutput(output.Stderr))))
 	}
 	if parseErr == nil && runErr == nil && !report.Success {
 		findings = append(findings, projectFinding(manifest, "compilation", "Cargo reported an unsuccessful build without a failing process exit"))
 	}
 	return findings
-}
-
-func compilerDiagnosticExit(ctx context.Context, result runner.Result, report Compilation, parseErr, runErr error) bool {
-	return runErr != nil && parseErr == nil && !report.Success && len(report.Findings) > 0 &&
-		result.ExitStatus == 101 && runner.FailureCategoryFor(ctx, result, runErr) == runner.FailureCommandExit
 }
 
 func compilationConfiguration(repo repository.Repository, manifest string) error {
