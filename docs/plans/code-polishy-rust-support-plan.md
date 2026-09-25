@@ -448,6 +448,15 @@ dependency governance now have runnable beta implementations. Source parsing use
 exact authenticated binary wheels in the existing governed Python runtime; it
 requires neither target package installation scripts nor a new Rust bootstrap.
 
+Syntax requests are now batched by encoded bytes and source count, with each batch
+visible in command planning. Valid siblings survive a failed or oversized input;
+cancellation leaves unstarted sources explicitly uncovered. Large-input fixtures
+also exposed unsafe coordinate-property access in the pinned Python binding.
+Using its tuple interface preserves long-line and Unicode coordinates without a
+dependency change. Actual workspace-lock containment before native test
+compilation remains a separate test-runner milestone, including its command-plan
+and reusable-view boundaries.
+
 Native unit/integration and separate doctest suites now retain nonempty structured results through
 ordinary commands, gate artifacts, regression proofs and reusable receipts. The
 [Rust test contract](../design/rust-tests.md) documents selectors and boundaries.

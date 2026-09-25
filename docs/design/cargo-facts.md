@@ -93,6 +93,22 @@ and macros. Error-recovered or incomplete syntax cannot establish complete
 source coverage. Parsed comments are distinct from comment-like raw strings;
 attributes and macro token trees retain their original source locations.
 
+Source selection is partitioned in order into requests of at most 4096 files and
+8388608 encoded bytes, including JSON escaping and envelope overhead. These are
+per-command limits, not a repository-size ceiling. Each batch is part of the
+ordinary command plan and validates its exact source inventory. An individually
+oversized source or a failed batch produces coverage findings for the affected
+paths without discarding valid siblings. Cancellation prevents later batches
+from starting and leaves their files explicitly uncovered.
+
+Locations unpack Tree-sitter's point tuples and translate byte columns into
+original Unicode coordinates. The pinned Python binding's
+[point attribute getters](https://github.com/tree-sitter/py-tree-sitter/blob/v0.26.0/tree_sitter/binding/point.c)
+return borrowed integer references, which can corrupt memory when rows or columns
+exceed CPython's small-integer cache. Tuple unpacking uses the normal owned-reference
+sequence interface; large-file and Unicode-coordinate fixtures exercise the real
+parser without modifying its wheel or weakening source coverage.
+
 Source complexity is measured on written syntax, not expanded macro output.
 Functions and closures have independent measurements. Conditions, loops, Boolean
 short circuits, guards, or-patterns, `?` and let-else add decisions; an exhaustive

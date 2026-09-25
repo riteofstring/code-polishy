@@ -89,6 +89,21 @@ func TestRustSourceFactsKeepValidSiblingsAndProtectNonSourceInputs(t *testing.T)
 	}
 }
 
+func TestRustSourceFactsRetainLargeLineAndColumnCoordinates(t *testing.T) {
+	t.Parallel()
+	repo := rustRepository(t)
+	text := strings.Repeat("\n", 300) + strings.Repeat(" ", 300) + "pub fn café() { let _ = \"🦀\"; /* prose */ }\n"
+	write(t, repo.Root, "wide.rs", text)
+	result := ReadSources(t.Context(), repo, PlanSources(repo, []string{"wide.rs"}), runner.OSRunner{})
+	if len(result.Findings) != 0 || len(result.Files) != 1 {
+		t.Fatalf("large original coordinates failed syntax analysis: %+v", result.Findings)
+	}
+	source := result.Files[0]
+	if len(source.Functions) != 1 || source.Functions[0].Line != 301 || source.Functions[0].Column != 301 || source.Functions[0].Name != "café" || len(source.Comments) != 1 {
+		t.Fatalf("original Unicode source coordinates were lost: %+v", source)
+	}
+}
+
 func TestRustSourceFactsRejectFabricatedOrIncompleteResponses(t *testing.T) {
 	t.Parallel()
 	repo := rustRepository(t)

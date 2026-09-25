@@ -115,16 +115,16 @@ LEXICAL_SCOPES = {
 
 
 def location(node, source):
-    start = node.start_point
-    end = node.end_point
+    start_row, start_column = node.start_point
+    end_row, end_column = node.end_point
     return {
         "startByte": node.start_byte,
         "endByte": node.end_byte,
-        "line": start.row + 1,
-        "column": len(source[node.start_byte - start.column : node.start_byte].decode())
+        "line": start_row + 1,
+        "column": len(source[node.start_byte - start_column : node.start_byte].decode())
         + 1,
-        "endLine": end.row + 1,
-        "endColumn": len(source[node.end_byte - end.column : node.end_byte].decode())
+        "endLine": end_row + 1,
+        "endColumn": len(source[node.end_byte - end_column : node.end_byte].decode())
         + 1,
     }
 
