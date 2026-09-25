@@ -118,19 +118,45 @@ try {
     'VERSION','LICENSE','README.md','CHANGELOG.md','docs','schema','templates','artifact-security',
     'scripts/go_version.txt','tools/govulncheck-version.txt','tools/node-version.txt','tools/osv-scanner-version.txt',
     'internal/pythonfacts/pyproject.toml','internal/pythonfacts/uv.lock','tools/packaging-version.txt','tools/packaging_wheel_checksums.txt','tools/astroid-version.txt','tools/astroid_checksums.txt',
+    'internal/rustfacts/pyproject.toml','internal/rustfacts/uv.lock',
+    'tools/rust-version.txt','tools/rust_checksums.txt','tools/cargo-nextest-version.txt','tools/cargo-nextest_checksums.txt',
+    'tools/cargo-nextest-license.txt',
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
     'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',
     'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
-    '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64'
+    '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64',
+    '.tools/rust/windows-x64'
   )) { Copy-ReleasePath $Relative }
   Assert-ReleasePythonCarrier $Stage
 
   $StageBin = Join-Path $Stage '.tools/bin'
   New-Item -ItemType Directory -Force -Path $StageBin | Out-Null
-  foreach ($Tool in @('staticcheck.exe','govulncheck.exe','osv-scanner.exe','ruff.exe','ty.exe')) {
+  foreach ($Tool in @('staticcheck.exe','govulncheck.exe','osv-scanner.exe','ruff.exe','ty.exe','cargo-nextest.exe')) {
     Copy-Item -LiteralPath (Join-Path $PolicyRoot ".tools/bin/$Tool") -Destination (Join-Path $StageBin $Tool)
+  }
+
+  $RustVersion = (Get-Content -Raw -LiteralPath (Join-Path $Stage 'tools/rust-version.txt')).Trim()
+  $RustRoot = Join-Path $Stage '.tools/rust/windows-x64'
+  foreach ($Tool in @('rustc','rustdoc','cargo','rustfmt','cargo-fmt','clippy-driver','cargo-clippy')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $RustRoot "bin/$Tool.exe") -PathType Leaf)) {
+      throw "The carried Rust SDK is missing $Tool."
+    }
+  }
+  if ((Get-Content -Raw -LiteralPath (Join-Path $RustRoot '.code-polishy-rust-release')).Trim() -ne $RustVersion) {
+    throw 'The carried Rust SDK marker does not match its release pin.'
+  }
+  foreach ($Tool in @('rustc','rustdoc','cargo')) {
+    $Reported = @(& (Join-Path $RustRoot "bin/$Tool.exe") --version)
+    if ($LASTEXITCODE -ne 0 -or $Reported.Count -ne 1 -or ($Reported[0] -split '\s+')[1] -cne $RustVersion) {
+      throw "The carried $Tool does not match Rust $RustVersion."
+    }
+  }
+  $NextestVersion = (Get-Content -Raw -LiteralPath (Join-Path $Stage 'tools/cargo-nextest-version.txt')).Trim()
+  $Reported = @(& (Join-Path $StageBin 'cargo-nextest.exe') --version)
+  if ($LASTEXITCODE -ne 0 -or $Reported.Count -eq 0 -or ($Reported[0] -split '\s+')[1] -cne $NextestVersion) {
+    throw "The carried Nextest does not match $NextestVersion."
   }
 
   $Bin = Join-Path $Stage 'bin'

@@ -18,6 +18,9 @@ func TestWriteManifestPublishesAVerifiableImmutableRelease(t *testing.T) {
 	if manifest.Tools.Packaging != "26.3" || manifest.Tools.Python != "3.12.13+20260728" || manifest.Tools.Vulture != "2.16" {
 		t.Fatalf("tools = %+v", manifest.Tools)
 	}
+	if manifest.Tools.Rust != "1.97.1" || manifest.Tools.Nextest != "0.9.138" {
+		t.Fatalf("Rust tools = %+v", manifest.Tools)
+	}
 	read, present, err := ReadManifest(root)
 	if err != nil || !present {
 		t.Fatalf("read present=%v err=%v", present, err)
@@ -43,6 +46,7 @@ func writableReleaseStage(t *testing.T) string {
 		"tools/python-version.txt":    "3.12.13+20260728\n",
 		"tools/ruff-version.txt":      "0.16.0\n", "tools/shellcheck-version.txt": "0.11.0\n",
 		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/ty-version.txt": "0.0.65\n", "tools/vulture-version.txt": "2.16\n",
+		"tools/rust-version.txt": "1.97.1\n", "tools/cargo-nextest-version.txt": "0.9.138\n",
 		BinaryPath: "engine", LauncherBinaryPath: "launcher",
 	}
 	for relative, content := range files {

@@ -323,7 +323,7 @@ swap the code a release runs without changing an installed file.
 
 Each manifest version has an exact schema and identity calculation. The engine
 accepts only its own version. The stable launcher keeps explicit readers for
-installed manifest versions 2 through 5 so installing a newer release does not
+installed manifest versions 2 through 6 so installing a newer release does not
 strand repositories still locked to an older one. It verifies each older
 release using that version's original fields and never invents evidence added
 by a later schema.
@@ -344,6 +344,13 @@ release identity and must match the catalog's regular-file entry. Discovery
 validates the selected catalog against the repository's exact lock; another
 installed release or a modified catalog cannot supply its capabilities. Older
 releases with no authenticated catalog report discovery evidence unavailable.
+
+Manifest version 7 adds `tools.rust` and `tools.cargo-nextest`. Each native release
+carries the pinned Rust SDK, host standard library, and Nextest runner; target
+repositories do not install rustup or a separate language pack. Rust parser
+libraries reside in the carried Python runtime with their exact dependency
+manifest, lock, and distribution metadata. Changing either executable pin changes
+the cross-host release identity.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after

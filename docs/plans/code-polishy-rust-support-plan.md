@@ -404,7 +404,13 @@ requires neither target package installation scripts nor a new Rust bootstrap.
 Native unit/integration suites now retain nonempty structured results through
 ordinary commands, gate artifacts, regression proofs and reusable receipts. The
 [Rust test contract](../design/rust-tests.md) documents selectors and boundaries.
-The next milestones extend ordinary macro/module and doctest coverage, then
+Native release builders now carry the Rust SDK, Nextest and parser dependencies.
+Manifest version 7 binds the executable pins; the SBOM includes both parser
+distributions and the top-level Rust tools. Native installed-Rust fixtures and
+complete bundled dependency notices/inventory remain unverified publication
+requirements. No beta release has been published or adopted.
+
+The next milestones extend ordinary macro/module and doctest coverage and
 complete installed-release integration. Existing coverage failures remain until
 their implementations and evidence exist. This beta does not yet establish
 first-class support for Masterbrainer's full project.

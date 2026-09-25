@@ -67,3 +67,25 @@ LGPL-2.1-or-later license. The library remains a separate Python package
 that recipients can replace; modified installations do not retain the original
 release's verified digest identity. Target project environments are not used
 for analyzer imports.
+
+The Rust syntax helper's Tree-sitter distributions share that carried Python
+runtime. Native builders carry their exact manifest and lock alongside the
+installed wheel metadata and licenses. Release SBOM composition requires both
+parser distributions to match the manifest; missing, duplicate, wrong-version
+or undeclared Python distributions cannot be silently left out of publication.
+
+Rust is a built-in release capability. Each native archive carries the matching
+Rust SDK (Cargo, rustc, rustdoc, rustfmt, Clippy, and host standard library) and
+the pinned Nextest executable. Builders probe these tools before sealing the
+archive; installed commands never acquire a toolchain from rustup or the target
+project. Manifest version 7 binds the Rust and Nextest pins into the cross-host
+release identity. The launcher's existing historical-manifest reader continues
+to interpret versions 2 through 6 with their original tool fields and identity
+rules. An older engine does not execute a version 7 release.
+
+The SDK retains upstream component licenses and copyright inventories; parser
+wheels retain their distribution license files. Nextest's binary-only archive
+requires a separately carried upstream license. Its pinned MIT text is recorded
+with the corresponding source revision. That top-level notice does not establish
+complete third-party notices or an exact linked-dependency inventory for Nextest;
+those remain a publication requirement alongside native installed-Rust evidence.

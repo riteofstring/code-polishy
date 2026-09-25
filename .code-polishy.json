@@ -243,6 +243,11 @@
       {
         "path": "docs/design/installed-release-verification.md",
         "sourcePaths": [
+          "internal/release/manifest_writer.go",
+          "internal/release/launcher_manifest.go",
+          "internal/release/sbom.go",
+          "scripts/release-manifest.sh",
+          "scripts/build-release.ps1",
           "scripts/build-oci-image.sh",
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",

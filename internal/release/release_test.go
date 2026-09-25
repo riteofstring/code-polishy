@@ -42,6 +42,9 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		files["tools/javascript_bundle_inventory.txt"] = "fixture@1.0.0\tMIT\n"
 	}
 	files["tools/astroid-version.txt"] = "4.1.2\n"
+	files["internal/rustfacts/pyproject.toml"] = "[project]\ndependencies=['tree-sitter==0.26.0','tree-sitter-rust==0.24.2']\n"
+	files[".tools/python/fixture/lib/python3.12/site-packages/tree_sitter-0.26.0.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: tree-sitter\nVersion: 0.26.0\nLicense-Expression: MIT\n\n"
+	files[".tools/python/fixture/lib/python3.12/site-packages/tree_sitter_rust-0.24.2.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: tree-sitter-rust\nVersion: 0.24.2\nLicense-Expression: MIT\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/astroid-4.1.2.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: astroid\nVersion: 4.1.2\nLicense-Expression: LGPL-2.1-or-later\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/packaging-26.3.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: packaging\nVersion: 26.3\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/vulture-2.16.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: vulture\nVersion: 2.16\nRequires-Dist: packaging>=25\n\n"
@@ -72,7 +75,7 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
 			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
-			Ty: "0.0.65", Vulture: "2.16",
+			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138",
 		},
 		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
 		CapabilityCatalogSHA256: capabilityContentSHA256([]byte(files[CapabilityCatalogPath])),
@@ -276,6 +279,8 @@ func TestParseManifestRejectsACorruptedRecord(t *testing.T) {
 		"an unrecorded type checker":   func(broken *Manifest) { broken.Tools.Ty = "" },
 		"an unrecorded dead-code tool": func(broken *Manifest) { broken.Tools.Vulture = "" },
 		"another manifest version":     func(broken *Manifest) { broken.ManifestVersion = ManifestVersion + 1 },
+		"missing Rust pin":             func(broken *Manifest) { broken.Tools.Rust = "" },
+		"missing Nextest pin":          func(broken *Manifest) { broken.Tools.Nextest = "" },
 	}
 	for name, corrupt := range cases {
 		broken := manifest
@@ -340,6 +345,8 @@ func TestIdentityNamesTheReleaseTheRecordDescribes(t *testing.T) {
 		func(tools *Tools) { tools.Staticcheck = "0.7.1" },
 		func(tools *Tools) { tools.Ty = "0.0.66" },
 		func(tools *Tools) { tools.Vulture = "2.17" },
+		func(tools *Tools) { tools.Rust = "1.97.2" },
+		func(tools *Tools) { tools.Nextest = "0.9.139" },
 	} {
 		other := manifest
 		carried(&other.Tools)

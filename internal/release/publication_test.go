@@ -119,7 +119,7 @@ func assertReleaseSBOMComponents(t *testing.T, components []cdx.Component) {
 			goModules++
 		}
 	}
-	for _, required := range []string{"pkg:npm/fixture@1.0.0", "pkg:pypi/packaging@26.3", "pkg:pypi/vulture@2.16"} {
+	for _, required := range []string{"pkg:npm/fixture@1.0.0", "pkg:pypi/packaging@26.3", "pkg:pypi/vulture@2.16", "pkg:pypi/tree-sitter@0.26.0", "pkg:pypi/tree-sitter-rust@0.24.2", "pkg:generic/rust@1.97.1", "pkg:generic/cargo-nextest@0.9.138"} {
 		if !seen[required] {
 			t.Fatalf("SBOM omitted %s", required)
 		}

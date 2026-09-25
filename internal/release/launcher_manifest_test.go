@@ -8,7 +8,7 @@ import (
 
 func TestLauncherManifestReadsHistoricalSchemasWithoutReinterpretingThem(t *testing.T) {
 	t.Parallel()
-	for _, version := range []int{2, 3, 4, 5} {
+	for _, version := range []int{2, 3, 4, 5, 6} {
 		data, expected := historicalManifest(t, version)
 		manifest, err := parseLauncherManifest(data, ManifestFilename)
 		if err != nil {
@@ -45,11 +45,28 @@ func TestLauncherManifestRejectsUnsupportedSchemas(t *testing.T) {
 	}
 }
 
+func TestLauncherManifestRejectsRustToolsInHistoricalSchemas(t *testing.T) {
+	t.Parallel()
+	for _, version := range []int{5, 6} {
+		data, _ := historicalManifest(t, version)
+		for _, field := range []string{`"rust":"1.97.1",`, `"cargo-nextest":"0.9.138",`} {
+			changed := strings.Replace(string(data), `"tools":{`, `"tools":{`+field, 1)
+			if _, err := parseLauncherManifest([]byte(changed), ManifestFilename); err == nil {
+				t.Fatalf("version %d accepted the later tool field %s", version, field)
+			}
+		}
+	}
+}
+
 func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 	t.Helper()
 	_, manifest := exampleRelease(t)
 	manifest.ManifestVersion = version
-	manifest.CapabilityCatalogSHA256 = ""
+	if version < 6 {
+		manifest.CapabilityCatalogSHA256 = ""
+	}
+	manifest.Tools.Rust = ""
+	manifest.Tools.Nextest = ""
 	manifest.Tools.Packaging = ""
 	manifest.Tools.Python = ""
 	manifest.Tools.Vulture = ""
@@ -59,7 +76,7 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 		manifest.Tools.Python = "3.12.13+20260728"
 		manifest.Tools.Vulture = "2.16"
 	}
-	if version == 5 {
+	if version >= 5 {
 		manifest.Tools.Packaging = "26.3"
 	}
 	manifest.ReleaseDigest = manifest.Identity()
@@ -68,16 +85,14 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 		ManifestVersion: manifest.ManifestVersion, CodePolishyVersion: manifest.CodePolishyVersion,
 		SourceRevision: manifest.SourceRevision, Host: manifest.Host, Features: manifest.Features, Tools: tools,
 		ReleaseDigest: manifest.ReleaseDigest, ContentDigest: manifest.ContentDigest,
-		EntryCount: manifest.EntryCount, Entries: manifest.Entries,
+		CapabilityCatalogSHA256: manifest.CapabilityCatalogSHA256,
+		EntryCount:              manifest.EntryCount, Entries: manifest.Entries,
 	}
 	return render(t, document), manifest
 }
 
 func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 	t.Helper()
-	if manifest.ManifestVersion == 5 {
-		return render(t, manifest.Tools)
-	}
 	base := manifestToolsV2{
 		Go: manifest.Tools.Go, Govulncheck: manifest.Tools.Govulncheck, Node: manifest.Tools.Node,
 		OSVScanner: manifest.Tools.OSVScanner, PNPM: manifest.Tools.PNPM, Ruff: manifest.Tools.Ruff,
@@ -93,9 +108,13 @@ func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 			Ty: manifest.Tools.Ty,
 		})
 	}
-	return render(t, manifestToolsV4{
+	versionFour := manifestToolsV4{
 		Go: base.Go, Govulncheck: base.Govulncheck, Node: base.Node, OSVScanner: base.OSVScanner,
 		PNPM: base.PNPM, Ruff: base.Ruff, Shellcheck: base.Shellcheck, Staticcheck: base.Staticcheck,
 		Ty: manifest.Tools.Ty, Python: manifest.Tools.Python, Vulture: manifest.Tools.Vulture,
-	})
+	}
+	if manifest.ManifestVersion >= 5 {
+		return render(t, manifestToolsV5{manifestToolsV4: versionFour, Packaging: manifest.Tools.Packaging})
+	}
+	return render(t, versionFour)
 }

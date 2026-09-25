@@ -26,7 +26,7 @@ const (
 	MaximumLockBytes = 32 << 10
 
 	LockVersion     = 2
-	ManifestVersion = 6
+	ManifestVersion = 7
 
 	releasesDirectory = "releases"
 )
@@ -105,6 +105,8 @@ type Tools struct {
 	Packaging   string `json:"packaging"`
 	Python      string `json:"python"`
 	Ruff        string `json:"ruff"`
+	Rust        string `json:"rust"`
+	Nextest     string `json:"cargo-nextest"`
 	Shellcheck  string `json:"shellcheck"`
 	Staticcheck string `json:"staticcheck"`
 	Ty          string `json:"ty"`
@@ -309,6 +311,10 @@ func (manifest Manifest) Identity() string {
 	if manifest.ManifestVersion >= 4 {
 		fmt.Fprintf(identity, "tool.vulture=%s\n", manifest.Tools.Vulture)
 	}
+	if manifest.ManifestVersion >= 7 {
+		fmt.Fprintf(identity, "tool.rust=%s\n", manifest.Tools.Rust)
+		fmt.Fprintf(identity, "tool.cargo-nextest=%s\n", manifest.Tools.Nextest)
+	}
 	digest := sha256.Sum256([]byte(identity.String()))
 	return hex.EncodeToString(digest[:])
 }
@@ -475,6 +481,12 @@ func validateManifestToolPins(manifest Manifest, source string) error {
 	}
 	if manifest.ManifestVersion >= 5 {
 		pins = append(pins, struct{ tool, version string }{"packaging", manifest.Tools.Packaging})
+	}
+	if manifest.ManifestVersion >= 7 {
+		pins = append(pins,
+			struct{ tool, version string }{"Rust", manifest.Tools.Rust},
+			struct{ tool, version string }{"Nextest", manifest.Tools.Nextest},
+		)
 	}
 	for _, pin := range pins {
 		if !versionPattern.MatchString(pin.version) {

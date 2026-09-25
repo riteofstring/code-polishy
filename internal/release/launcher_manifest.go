@@ -61,6 +61,11 @@ type manifestToolsV4 struct {
 	Vulture     string `json:"vulture"`
 }
 
+type manifestToolsV5 struct {
+	manifestToolsV4
+	Packaging string `json:"packaging"`
+}
+
 func ReadLauncherManifest(releaseDir string) (Manifest, bool, error) {
 	return readManifest(releaseDir, parseLauncherManifest)
 }
@@ -107,12 +112,14 @@ func parseLauncherManifest(data []byte, source string) (Manifest, error) {
 }
 
 func parseHistoricalManifestTools(data []byte, source string, version int) (Tools, error) {
-	if version == 5 {
-		wire := Tools{}
+	if version >= 5 {
+		wire := manifestToolsV5{}
 		if err := decodeExactly(data, source+" tools", &wire); err != nil {
 			return Tools{}, err
 		}
-		return wire, nil
+		result := wire.manifestToolsV4.tools()
+		result.Packaging = wire.Packaging
+		return result, nil
 	}
 	if version == 2 {
 		wire := manifestToolsV2{}
