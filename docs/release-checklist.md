@@ -73,7 +73,10 @@ manual dispatch authorizes the same operation for an existing tag.
    source-install contracts, or supplemental suites already owned by normal
    CI. Each host only verifies the generated manifest, installs its archive into
    a fresh prefix through the recorded SHA-256, and checks the installed
-   version. The retained publication contains the archive, internal manifest,
+   version. It then runs the dependency-free installed Rust fixture against that
+   same native installation, covering formatter/compiler/parser execution,
+   structured test outcomes, zero-test rejection and recovery. The retained
+   publication contains the archive, internal manifest,
    CycloneDX SBOM, deterministic in-toto/SLSA metadata, and release descriptor.
 
 7. After every host succeeds, the publish job restores the five publication

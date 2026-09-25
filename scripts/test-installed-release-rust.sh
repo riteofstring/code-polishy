@@ -21,6 +21,26 @@ def write(path, content):
     destination.write_text(content, encoding="utf-8")
 
 
+def install_fixture_lock():
+    if lock:
+        shutil.copyfile(lock, root / ".code-polishy.lock.json")
+        return
+    manifest = json.loads((pathlib.Path(release) / "release-manifest.json").read_text(encoding="utf-8"))
+    hosts = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"]
+    value = {
+        "lockVersion": 2,
+        "codePolishyVersion": manifest["codePolishyVersion"],
+        "releaseDigest": manifest["releaseDigest"],
+        "features": manifest["features"],
+        "publication": {
+            "indexUrl": "https://example.invalid/release-index.json",
+            "indexSha256": "a" * 64,
+            "archives": [{"host": host, "url": f"https://example.invalid/{host}.zip", "sha256": "b" * 64, "size": 1} for host in hosts],
+        },
+    }
+    write(".code-polishy.lock.json", json.dumps(value) + "\n")
+
+
 def policy(*arguments, status=0, output="json"):
     result = subprocess.run(
         [launcher, "--repo-root", str(root), *arguments, "--format", output],
@@ -76,7 +96,7 @@ write(".gitignore", "/.tools/\n/.code-polishy-artifacts/\n")
 write("Cargo.toml", '[package]\nname="installed-rust"\nversion="1.0.0"\nedition="2024"\n[workspace]\n')
 write("Cargo.lock", 'version=4\n[[package]]\nname="installed-rust"\nversion="1.0.0"\n')
 write("src/lib.rs", rust_source(42))
-shutil.copyfile(lock, root / ".code-polishy.lock.json")
+install_fixture_lock()
 subprocess.run([git, "-C", str(root), "init", "--quiet"], check=True)
 subprocess.run([launcher, "--repo-root", str(root), "agents", "install"], check=True)
 policy("format", "--all")
@@ -106,3 +126,17 @@ assert_native_outcome(policy("test", "--suite", "rust-unit"), 0)
 print("Installed Rust formatting, compiler diagnostics, native evidence, failures, and recovery passed.")
 PY
 }
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  set -euo pipefail
+  if [[ "$#" -ne 2 || ! -d "$1" || ! -x "$2" ]]; then
+    echo 'usage: test-installed-release-rust.sh RELEASE_ROOT LAUNCHER' >&2
+    exit 2
+  fi
+  policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+  source "${policy_root}/scripts/test-installed-release-architecture.sh"
+  fail() { echo "installed Rust fixture failure: $1" >&2; exit 1; }
+  fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-installed-rust.XXXXXX")"
+  trap 'rm -rf -- "${fixture_root}"' EXIT
+  exercise_rust_adoption_fixture "${fixture_root}" "$(command -v git)" "$1" "$2" ""
+fi

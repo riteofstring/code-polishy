@@ -1479,6 +1479,7 @@
       "scripts/test-javascript-project.sh",
       "scripts/test-installed-release.sh",
       "scripts/test-installed-release-contract.sh",
+      "scripts/test-installed-release-rust.sh",
       "scripts/test-build-oci-image.sh",
       "scripts/test-javascript-provider.sh"
     ],
@@ -1661,7 +1662,8 @@
       {
         "paths": [
           "scripts/test-installed-release.sh",
-          "scripts/test-installed-release-contract.sh"
+          "scripts/test-installed-release-contract.sh",
+          "scripts/test-installed-release-rust.sh"
         ],
         "module": "tooling",
         "focusedSuite": "installed-release-contract"

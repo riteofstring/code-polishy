@@ -97,3 +97,10 @@ and SARIF, a passing native suite, an assertion failure, and an empty selection.
 The fixture checks the retained structured test outcome rather than treating the
 CLI's nonzero exit as sufficient evidence. It never downloads target packages or
 changes the caller's repository authority.
+
+Each native release job also invokes this fixture against its freshly installed
+archive. The standalone fixture constructs an inert publication-shaped lock from
+the selected manifest, uses the installed Python and launcher, and keeps target
+state in a temporary directory. The same scenario runs on all five native hosts;
+it does not rebuild the archive or repeat the ordinary source gate. The fixture's
+URLs cannot acquire a release and never replace a consuming repository's lock.
