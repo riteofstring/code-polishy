@@ -142,6 +142,10 @@ changed modules; add a quick suite when a new module is introduced.
   dependency-direction and cycle policy. Real Cargo fixtures cover forbidden
   edges, source cycles, renamed workspace dependencies, unrelated invalid crates
   and command-plan agreement. Native graph evidence survives the report schema.
+- Standard macros retain dependencies from parsed written arguments, including
+  nested assertions, formatting, vectors and match guards. Locations remain in
+  original source. Lexical imports/generics and edition-specific standard/core
+  preludes preserve scope and shadowing; unknown expansion remains explicit.
   Macro expansion and other unresolved syntax still fail coverage explicitly.
   A plain crate passes the complete public CLI `check`; this is a usable subset,
   not evidence that macro-heavy or arbitrary target configurations are supported.

@@ -35,12 +35,16 @@ func validateSourceGraphFacts(facts []SourceGraphFact, coordinates sourceCoordin
 
 func validGraphFactIdentity(fact SourceGraphFact) bool {
 	switch fact.Kind {
-	case "module", "item", "unsupported":
+	case "module", "item", "unsupported", "scope":
 		return fact.Name != ""
-	case "use":
+	case "use", "extern":
 		return len(fact.Path) > 0 && fact.Alias != ""
 	case "reference":
 		return len(fact.Path) > 0
+	case "macro":
+		return len(fact.Path) > 0 && slices.Contains([]string{"std", "core", "alloc"}, fact.Name)
+	case "prelude":
+		return fact.Name == "no_std" || fact.Name == "no_implicit_prelude"
 	}
 	return false
 }

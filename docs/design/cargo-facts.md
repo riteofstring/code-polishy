@@ -122,12 +122,26 @@ generated imports, ambiguous bindings and missing source facts make graph
 coverage incomplete rather than selecting a convenient edge or reporting an
 empty graph. Compiler checks separately validate the selected Cargo configuration.
 
-The initial graph handles conventional external/inline modules, literal external
-module paths, nested use trees, renamed workspace dependencies and local aliases
-and re-exports. Standard-library derives are syntax-known. Macro invocations,
-non-builtin attribute expansion, conditional/inline path overrides, absolute
-external-prelude paths and unresolved external glob bindings currently fail
-coverage explicitly. These are beta limitations, not optional exemptions.
+The graph handles conventional external/inline modules, literal external module
+paths, nested use trees, renamed workspace dependencies and local aliases and
+re-exports. Function, block, closure, implementation and generic bindings retain
+lexical scope; they cannot leak into sibling scopes or substitute for a module's
+members. Prelude lookup respects edition, `no_std`, `no_implicit_prelude` and
+local shadowing. Qualified module members never inherit the implicit prelude.
+
+Known standard macro arguments are parsed using the same upstream Rust grammar
+with their original byte locations retained. This includes assertion/formatting
+expressions, vector element/repeat expressions and match patterns/guards.
+Nested invocations keep the same resolution checks. Stringified tokens are data,
+not guessed imports. Standard derives and macros must retain standard-library
+identity; imports, glob ambiguity or macro-use expansion cannot silently stand
+in for that identity. This analyzes written arguments, not macro-expanded code
+or expanded complexity.
+
+Custom macro definitions/invocations, non-builtin attribute expansion,
+conditional/inline path overrides, absolute external-prelude paths and unresolved
+external glob bindings currently fail coverage explicitly. These are beta
+limitations, not optional exemptions.
 
 ## Compiler checks
 

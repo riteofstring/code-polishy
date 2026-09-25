@@ -26,6 +26,7 @@ func (inventory *moduleInventory) readModuleFile(root *rustModule, ancestry []st
 	for _, fact := range source.Graph {
 		module := scopes[strings.Join(fact.Scope, "::")]
 		if module == nil {
+			root.crate.findings = append(root.crate.findings, moduleCoverage(root.file, fact, "syntax fact has no established containing scope"))
 			continue
 		}
 		module.facts = append(module.facts, fact)
@@ -37,29 +38,45 @@ func (inventory *moduleInventory) readModuleFile(root *rustModule, ancestry []st
 
 func (inventory *moduleInventory) addModuleFact(module *rustModule, fact SourceGraphFact, scopes map[string]*rustModule, ancestry []string) error {
 	switch fact.Kind {
-	case "module":
-		child, err := inventory.moduleChild(module, fact)
-		if err != nil {
-			return err
-		}
-		if err := bindRustName(module, fact.Name, rustBinding{module: child}); err != nil {
-			return err
-		}
-		if fact.Inline {
-			key := strings.Join(append(slices.Clone(fact.Scope), fact.Name), "::")
-			scopes[key] = child
+	case "scope":
+		child := newRustModule(module.crate, module, module.file, module.directory, module.inline)
+		child.lexical = true
+		key := strings.Join(append(slices.Clone(fact.Scope), fact.Name), "::")
+		scopes[key] = child
+	case "prelude":
+		if fact.Name == "no_std" {
+			module.crate.noStd = true
 		} else {
-			inventory.readModuleFile(child, ancestry)
+			module.noPrelude = true
 		}
+	case "module":
+		return inventory.addDeclaredModule(module, fact, scopes, ancestry)
 	case "item":
 		return bindRustName(module, fact.Name, rustBinding{file: module.file, scope: module})
-	case "use":
-		binding := rustBinding{alias: fact.Path, scope: module}
+	case "use", "extern":
+		binding := rustBinding{alias: fact.Path, scope: module, extern: fact.Kind == "extern"}
 		if fact.Alias == "*" {
 			module.globs = append(module.globs, binding)
 		} else if fact.Alias != "_" {
 			return bindRustName(module, fact.Alias, binding)
 		}
+	}
+	return nil
+}
+
+func (inventory *moduleInventory) addDeclaredModule(module *rustModule, fact SourceGraphFact, scopes map[string]*rustModule, ancestry []string) error {
+	child, err := inventory.moduleChild(module, fact)
+	if err != nil {
+		return err
+	}
+	if err := bindRustName(module, fact.Name, rustBinding{module: child}); err != nil {
+		return err
+	}
+	if fact.Inline {
+		key := strings.Join(append(slices.Clone(fact.Scope), fact.Name), "::")
+		scopes[key] = child
+	} else {
+		inventory.readModuleFile(child, ancestry)
 	}
 	return nil
 }

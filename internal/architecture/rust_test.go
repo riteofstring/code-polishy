@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
@@ -134,6 +135,138 @@ func TestRustArchitectureCommandPlanMatchesRealExecution(t *testing.T) {
 	}
 	if !slices.Equal(expected, boundary.names) || len(expected) < 4 {
 		t.Fatalf("execution %v differs from plan %v", boundary.names, expected)
+	}
+}
+
+func TestRustArchitectureTracksStandardMacroArgumentsAtOriginalLocations(t *testing.T) {
+	t.Parallel()
+	repo := rustArchitectureRepository(t)
+	writeArchitectureFile(t, repo.Root, "src/lib.rs", "pub mod api;\npub mod domain;\n")
+	writeArchitectureFile(t, repo.Root, "src/domain.rs", "pub fn value() -> u8 { 1 }\npub enum Value { Present }\n")
+	writeArchitectureFile(t, repo.Root, "src/api.rs", `pub fn check() {
+    let crab = "🦀";
+    assert_eq!(crate::domain::value(), 1, "{crab}");
+    let values = vec![dbg!(crate::domain::value()); 2];
+    assert!(matches!(crate::domain::Value::Present, crate::domain::Value::Present if crate::domain::value() > 0));
+    println!("{}", format!("{}", crate::domain::value()));
+    let _ = stringify!(crate::absent::not_a_dependency);
+    let _ = Vec::<String>::new();
+    let _ = Option::<u8>::None;
+    assert!(!values.is_empty());
+}
+`)
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/api.rs"}, runner.OSRunner{})
+	if analysis.Graph == nil {
+		t.Fatalf("standard macro or prelude syntax blocked Rust graph: %+v", analysis.Findings)
+	}
+	for _, line := range []int{3, 4, 5, 6} {
+		if !slices.ContainsFunc(analysis.Findings, func(finding policy.Finding) bool {
+			return finding.Check == "architecture.moduleDependency" && finding.Path == "src/api.rs" && finding.Subject == "domain" && finding.Line == line && finding.Column > 1
+		}) {
+			t.Errorf("macro argument on original line %d lost dependency evidence: %+v", line, analysis.Findings)
+		}
+	}
+	repo.Config.Modules[1].DependsOn = []string{"domain"}
+	analysis = AnalyzeWithRunner(t.Context(), repo, []string{"src/api.rs"}, runner.OSRunner{})
+	if analysis.Graph == nil || len(analysis.Findings) != 0 {
+		t.Fatalf("declared macro argument dependencies failed: %+v", analysis)
+	}
+}
+
+func TestRustArchitectureRespectsPreludeAndMacroShadowing(t *testing.T) {
+	t.Parallel()
+	for name, source := range map[string]string{
+		"local macro":         "macro_rules! assert_eq { () => { use crate::missing; }; }\npub fn f() { assert_eq!(); }\n",
+		"external macro":      "use external::assert_eq;\npub fn f() { assert_eq!(1, 1); }\n",
+		"macro use":           "#[macro_use]\nextern crate external;\npub fn f() { assert_eq!(1, 1); }\n",
+		"qualified shadow":    "mod std {}\npub fn f() { std::assert_eq!(1, 1); }\n",
+		"nested macro":        "pub fn f() { assert_eq!(unknown!(), 1); }\n",
+		"no std type":         "#![no_std]\npub fn f() { let _ = Vec::<u8>::new(); }\n",
+		"no std macro":        "#![no_std]\npub fn f() { let _ = vec![1]; }\n",
+		"no implicit type":    "#![no_implicit_prelude]\npub fn f() { let _ = Option::<u8>::None; }\n",
+		"no implicit macro":   "#![no_implicit_prelude]\npub fn f() { assert_eq!(1, 1); }\n",
+		"conditional prelude": "#![cfg_attr(feature = \"bare\", no_std)]\npub fn f() {}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := rustArchitectureRepository(t)
+			writeArchitectureFile(t, repo.Root, "src/lib.rs", source)
+			analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/lib.rs"}, runner.OSRunner{})
+			if analysis.Graph != nil || !slices.ContainsFunc(analysis.Findings, func(finding policy.Finding) bool { return finding.Check == "architecture.importCoverage" }) {
+				t.Fatalf("unresolved Rust prelude/expansion passed: %+v", analysis)
+			}
+		})
+	}
+}
+
+func TestRustArchitectureSupportsCorePreludeAndExplicitStandardMacroImports(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{
+		"#![no_std]\npub fn f() { let _ = Option::<u8>::None; assert_eq!(1, 1); }\n",
+		"use std::assert_eq;\npub fn f() { assert_eq!(1, 1); }\n",
+		"use std::fmt::Debug;\n#[derive(Debug)]\npub struct Value;\n",
+		"pub fn f() { std::assert_eq!(1, 1); core::assert!(true); }\n",
+		"mod tests { use super::*; #[test] fn f() { assert_eq!(value(), 1); } }\npub fn value() -> u8 { 1 }\n",
+	} {
+		t.Run(strings.Split(source, "\n")[0], func(t *testing.T) {
+			repo := rustArchitectureRepository(t)
+			writeArchitectureFile(t, repo.Root, "src/lib.rs", source)
+			analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/lib.rs"}, runner.OSRunner{})
+			if analysis.Graph == nil || len(analysis.Findings) != 0 {
+				t.Fatalf("valid standard/core prelude failed: %+v", analysis)
+			}
+		})
+	}
+}
+
+func TestRustArchitectureKeepsFunctionBlockAndGenericBindingsLexical(t *testing.T) {
+	t.Parallel()
+	repo := rustArchitectureRepository(t)
+	writeArchitectureFile(t, repo.Root, "src/lib.rs", "pub mod api;\npub mod domain;\n")
+	writeArchitectureFile(t, repo.Root, "src/domain.rs", "pub struct Value;\nimpl Value { pub fn value() -> u8 { 1 } }\n")
+	writeArchitectureFile(t, repo.Root, "src/api.rs", `pub fn first() {
+    use crate::domain::Value as Alias;
+    assert_eq!({ use crate::domain::Value as Local; Local::value() }, 1);
+    let _ = Alias::value();
+}
+pub fn second() {
+    use std::string::String as Alias;
+    let _ = Alias::new();
+    { use crate::domain::Value as Alias; let _ = Alias::value(); }
+    let _ = Alias::new();
+}
+pub fn generic<T: Default>() -> T { T::default() }
+`)
+	analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/api.rs"}, runner.OSRunner{})
+	if analysis.Graph == nil {
+		t.Fatalf("block-local bindings leaked into other scopes: %+v", analysis.Findings)
+	}
+	for _, finding := range analysis.Findings {
+		if finding.Check != "architecture.moduleDependency" || finding.Path != "src/api.rs" || !slices.Contains([]int{2, 3, 4, 9}, finding.Line) {
+			t.Errorf("lexical binding produced an incorrect dependency: %+v", finding)
+		}
+	}
+	repo.Config.Modules[1].DependsOn = []string{"domain"}
+	analysis = AnalyzeWithRunner(t.Context(), repo, []string{"src/api.rs"}, runner.OSRunner{})
+	if analysis.Graph == nil || len(analysis.Findings) != 0 {
+		t.Fatalf("declared lexical dependencies failed: %+v", analysis)
+	}
+}
+
+func TestRustArchitectureCannotResolveModuleMembersThroughThePrelude(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{
+		"pub fn f() { let _ = crate::String::new(); }\n",
+		"mod empty {}\npub fn f() { let _ = empty::Option::<u8>::None; }\n",
+		"pub fn first<T: Default>() -> T { T::default() }\npub fn second() { let _ = T::default(); }\n",
+	} {
+		t.Run(source, func(t *testing.T) {
+			repo := rustArchitectureRepository(t)
+			writeArchitectureFile(t, repo.Root, "src/lib.rs", source)
+			analysis := AnalyzeWithRunner(t.Context(), repo, []string{"src/lib.rs"}, runner.OSRunner{})
+			if analysis.Graph != nil || len(analysis.Findings) == 0 {
+				t.Fatalf("unavailable member acquired an implicit binding: %+v", analysis)
+			}
+		})
 	}
 }
 

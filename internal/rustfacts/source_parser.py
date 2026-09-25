@@ -37,7 +37,6 @@ BUILTIN_ATTRIBUTES = {
     "repr",
     "no_std",
     "no_main",
-    "macro_use",
     "macro_export",
     "unsafe",
     "deprecated",
@@ -74,6 +73,44 @@ BUILTIN_DERIVES = {
     "Ord",
     "PartialOrd",
     "Hash",
+}
+EXPRESSION_MACROS = {
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
+    "format_args",
+    "panic",
+    "todo",
+    "unimplemented",
+    "unreachable",
+    "write",
+    "writeln",
+    "concat",
+    "env",
+    "option_env",
+    "compile_error",
+    "include_bytes",
+    "include_str",
+    "file",
+    "line",
+    "column",
+    "module_path",
+}
+STANDARD_MACROS = {"dbg", "print", "println", "eprint", "eprintln", "format"}
+LEXICAL_SCOPES = {
+    "function_item",
+    "function_signature_item",
+    "closure_expression",
+    "block",
+    "impl_item",
+    "trait_item",
+    "struct_item",
+    "enum_item",
+    "type_item",
+    "union_item",
 }
 
 
@@ -362,21 +399,27 @@ def collect_graph_node(node, source, result, scope):
                 node,
                 source,
                 scope,
-                "use",
+                "extern",
                 path=[name],
                 alias=alias.text.decode() if alias is not None else name,
             )
         )
     elif node.type in {"macro_invocation", "macro_definition"}:
-        facts.append(
-            graph_fact(
-                node,
-                source,
-                scope,
-                "unsupported",
-                name="macro expansion requires resolved import evidence",
-            )
+        facts.extend(expansion_graph_facts(node, source, scope))
+
+
+def expansion_graph_facts(node, source, scope):
+    if node.type == "macro_invocation":
+        return macro_graph_facts(node, source, scope)
+    return [
+        graph_fact(
+            node,
+            source,
+            scope,
+            "unsupported",
+            name="macro expansion requires resolved import evidence",
         )
+    ]
 
 
 def use_graph_facts(node, source, scope):
@@ -405,6 +448,7 @@ def reference_graph_facts(node, source, scope):
         "attribute_item",
         "inner_attribute_item",
         "visibility_modifier",
+        "macro_invocation",
     }
     if any(parent.type in excluded for parent in node_ancestors(node)):
         return []
@@ -424,6 +468,8 @@ def reference_graph_facts(node, source, scope):
 
 def attribute_graph_facts(node, source, scope):
     parsed = attribute(node, source)
+    if parsed["name"] in {"no_std", "no_implicit_prelude"}:
+        return [graph_fact(node, source, scope, "prelude", name=parsed["name"])]
     if parsed["name"] == "derive":
         arguments = node.named_children[0].child_by_field_name("arguments")
         groups = token_groups(arguments) if arguments is not None else []
@@ -431,7 +477,17 @@ def attribute_graph_facts(node, source, scope):
             len(group) == 1 and group[0].text.decode() in BUILTIN_DERIVES
             for group in groups
         ):
-            return []
+            return [
+                graph_fact(
+                    group[0],
+                    source,
+                    scope,
+                    "macro",
+                    name="core",
+                    path=[group[0].text.decode()],
+                )
+                for group in groups
+            ]
     elif known_graph_attribute(parsed):
         return []
     return [
@@ -446,9 +502,144 @@ def attribute_graph_facts(node, source, scope):
 
 
 def known_graph_attribute(parsed):
-    return parsed["name"] in BUILTIN_ATTRIBUTES and all(
+    return parsed["name"] in BUILTIN_ATTRIBUTES - {"no_std"} and all(
         known_graph_attribute(child) for child in parsed["children"]
     )
+
+
+def macro_graph_facts(node, source, scope, depth=0):
+    macro = node.child_by_field_name("macro")
+    path = syntax_path(macro)
+    if not path or depth >= 64:
+        raise ValueError("Rust macro syntax is missing or exceeds 64 levels")
+    name = path[-1]
+    tokens = next(child for child in node.named_children if child.type == "token_tree")
+    facts = [
+        graph_fact(
+            node,
+            source,
+            scope,
+            "macro",
+            path=path,
+            name="std"
+            if name in STANDARD_MACROS
+            else "alloc"
+            if name == "vec"
+            else "core",
+        )
+    ]
+    try:
+        if macro.text.startswith(b"::"):
+            raise ValueError("Absolute macro paths need external-prelude resolution")
+        for prefix, start, end, suffix in macro_fragments(name, tokens):
+            facts.extend(
+                parse_graph_fragment(prefix, start, end, suffix, source, scope, depth)
+            )
+    except ValueError:
+        return [
+            graph_fact(
+                node,
+                source,
+                scope,
+                "unsupported",
+                name="macro arguments or expansion require resolved import evidence",
+            )
+        ]
+    return facts
+
+
+def macro_fragments(name, tokens):
+    start, end = tokens.start_byte + 1, tokens.end_byte - 1
+    if name in EXPRESSION_MACROS | STANDARD_MACROS:
+        return [(b"fn cp(){cp(", start, end, b");}")]
+    if name == "vec":
+        return [(b"fn cp(){let _=[", start, end, b"];}")]
+    if name in {"stringify", "cfg"}:
+        return []
+    if name != "matches":
+        raise ValueError("Unsupported macro syntax")
+    children = [child for child in tokens.children[1:-1] if child.type not in COMMENTS]
+    comma = next((child for child in children if child.type == ","), None)
+    if comma is None:
+        raise ValueError("matches requires an expression and a pattern")
+    if children[-1].type == ",":
+        end = children[-1].start_byte
+    return [
+        (b"fn cp(){cp(", start, comma.start_byte, b");}"),
+        (b"fn cp(){match (){", comma.end_byte, end, b" => ()}}"),
+    ]
+
+
+def parse_graph_fragment(prefix, start, end, suffix, source, scope, depth):
+    fragment = prefix + source[start:end] + suffix
+    tree = Parser(Language(tree_sitter_rust.language())).parse(fragment)
+    if tree.root_node.has_error:
+        raise ValueError("Macro arguments do not match supported Rust syntax")
+    facts = {"graph": []}
+    pending = [(tree.root_node, scope)]
+    visited = 0
+    while pending:
+        current, current_scope = pending.pop()
+        visited += 1
+        if visited > MAXIMUM_NODES:
+            raise ValueError("Rust macro arguments exceed 500000 syntax nodes")
+        within = current.start_byte >= len(prefix) and current.end_byte <= len(
+            fragment
+        ) - len(suffix)
+        if within:
+            if current.type == "macro_invocation":
+                facts["graph"].extend(
+                    macro_graph_facts(current, fragment, current_scope, depth + 1)
+                )
+                continue
+            current_scope = collect_graph_scope(current, fragment, facts, current_scope)
+        pending.extend(
+            (child, current_scope) for child in reversed(current.named_children)
+        )
+    for fact in facts["graph"]:
+        fact["scope"] = fact["scope"][: len(scope)] + [
+            shifted_scope(value, start - len(prefix))
+            for value in fact["scope"][len(scope) :]
+        ]
+        if fact["kind"] == "scope":
+            fact["name"] = shifted_scope(fact["name"], start - len(prefix))
+        fact.update(
+            offset_location(
+                source,
+                fact["startByte"] + start - len(prefix),
+                fact["endByte"] + start - len(prefix),
+            )
+        )
+    return facts["graph"]
+
+
+def shifted_scope(name, offset):
+    return "@" + str(int(name[1:]) + offset) if name.startswith("@") else name
+
+
+def collect_graph_scope(node, source, result, scope):
+    collect_graph_node(node, source, result, scope)
+    if node.type in LEXICAL_SCOPES:
+        name = "@" + str(node.start_byte)
+        result["graph"].append(graph_fact(node, source, scope, "scope", name=name))
+        return [*scope, name]
+    if node.type == "mod_item" and node.child_by_field_name("body") is not None:
+        return [
+            *scope,
+            node.child_by_field_name("name").text.decode().removeprefix("r#"),
+        ]
+    return scope
+
+
+def offset_location(source, start, end):
+    return {
+        "startByte": start,
+        "endByte": end,
+        "line": source.count(b"\n", 0, start) + 1,
+        "column": len(source[source.rfind(b"\n", 0, start) + 1 : start].decode()) + 1,
+        "endLine": source.count(b"\n", 0, end) + 1,
+        "endColumn": len(source[source.rfind(b"\n", 0, end) + 1 : end].decode()) + 1,
+    }
 
 
 def node_ancestors(node):
@@ -476,12 +667,7 @@ class SyntaxCollector:
         if node.type in {"source_file", "mod_item", "function_item"}:
             test_context = test_context or test_configuration(node, self.source)
         collect_node(node, self.source, self.result)
-        collect_graph_node(node, self.source, self.result, scope)
-        if node.type == "mod_item" and node.child_by_field_name("body") is not None:
-            scope = [
-                *scope,
-                node.child_by_field_name("name").text.decode().removeprefix("r#"),
-            ]
+        scope = collect_graph_scope(node, self.source, self.result, scope)
         body = None
         if node.type in CALLABLES:
             body = node.child_by_field_name("body")

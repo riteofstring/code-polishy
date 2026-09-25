@@ -35,6 +35,8 @@ type rustModule struct {
 	file      string
 	directory string
 	inline    bool
+	lexical   bool
+	noPrelude bool
 	bindings  map[string]rustBinding
 	globs     []rustBinding
 	facts     []SourceGraphFact
@@ -44,6 +46,8 @@ type rustBinding struct {
 	module   *rustModule
 	file     string
 	external bool
+	standard bool
+	extern   bool
 	alias    []string
 	scope    *rustModule
 }
@@ -55,6 +59,7 @@ type rustCrate struct {
 	modules  []*rustModule
 	files    map[string]bool
 	findings []policy.Finding
+	noStd    bool
 }
 
 type moduleInventory struct {
@@ -153,16 +158,12 @@ func (inventory *moduleInventory) resolveCrate(crate *rustCrate, result *ModuleG
 func (inventory *moduleInventory) resolveModule(module *rustModule, result *ModuleGraph) []*rustCrate {
 	connected := []*rustCrate{}
 	for _, fact := range module.facts {
-		if fact.Kind == "unsupported" {
-			result.Findings = append(result.Findings, moduleCoverage(module.file, fact, fact.Name))
-			continue
-		}
-		if fact.Kind != "use" && fact.Kind != "reference" {
-			continue
-		}
-		binding, err := inventory.resolvePath(module, fact.Path, fact.Kind == "use", 0)
+		binding, resolved, err := inventory.resolveFact(module, fact)
 		if err != nil {
 			result.Findings = append(result.Findings, moduleCoverage(module.file, fact, err.Error()))
+			continue
+		}
+		if !resolved {
 			continue
 		}
 		if binding.module != nil {
@@ -177,6 +178,19 @@ func (inventory *moduleInventory) resolveModule(module *rustModule, result *Modu
 		}
 	}
 	return connected
+}
+
+func (inventory *moduleInventory) resolveFact(module *rustModule, fact SourceGraphFact) (rustBinding, bool, error) {
+	switch fact.Kind {
+	case "macro":
+		return rustBinding{}, false, inventory.resolveMacro(module, fact.Path, fact.Name, 0)
+	case "unsupported":
+		return rustBinding{}, false, fmt.Errorf("%s", fact.Name)
+	case "use", "extern", "reference":
+		binding, err := inventory.resolvePath(module, fact.Path, fact.Kind == "use", 0)
+		return binding, true, err
+	}
+	return rustBinding{}, false, nil
 }
 
 func moduleCoverage(path string, fact SourceGraphFact, reason string) policy.Finding {
