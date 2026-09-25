@@ -143,6 +143,17 @@ conditional/inline path overrides, absolute external-prelude paths and unresolve
 external glob bindings currently fail coverage explicitly. These are beta
 limitations, not optional exemptions.
 
+A future compiler-semantic provider must retain generated references, hygiene
+and original locations as well as written tokens. The Rust Analyzer revision
+carried by Rust 1.97.1 builds its LSIF and SCIP indexes by iterating tokens in
+physical source files and skipping unresolved classifications. Its
+[static index](https://github.com/rust-lang/rust/blob/8bab26f4f68e0e26f0bb7960be334d5b520ea452/src/tools/rust-analyzer/crates/ide/src/static_index.rs)
+can resolve written tokens through expansion, but does not enumerate every
+reference introduced entirely by generated syntax. A successful navigation index
+therefore cannot establish complete macro dependency coverage. General expansion
+remains a required semantic-provider milestone; the written graph does not silently
+admit those missing edges.
+
 ## Compiler checks
 
 Compilation uses the matching pinned cargo-clippy executable directly, with an

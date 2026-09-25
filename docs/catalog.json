@@ -314,7 +314,7 @@
       "id": "rust-tests",
       "path": "docs/design/rust-tests.md",
       "title": "Native Rust Test Evidence",
-      "summary": "Understand native Cargo test selection, structured Nextest outcomes, artifact authority and doctest boundaries.",
+      "summary": "Understand native Cargo test selection, structured Nextest and doctest outcomes, artifact authority and compiler-specific boundaries.",
       "aliases": [],
       "public": true
     },

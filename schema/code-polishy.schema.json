@@ -846,6 +846,7 @@
           }
         },
         "noDefaultFeatures": { "type": "boolean" },
+        "doctests": { "type": "boolean", "default": false },
         "filter": { "type": "string", "minLength": 1, "maxLength": 4096 }
       }
     },

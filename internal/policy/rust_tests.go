@@ -8,6 +8,8 @@ import (
 )
 
 const NextestJUnitArtifact = "nextest-junit"
+const RustdocArtifact = "rustdoc"
+const RustdocToolVersion = "1.97.1"
 
 func validateSuiteRunner(suite TestSuite, label string) error {
 	if suite.Rust == nil {
@@ -29,6 +31,9 @@ func validateSuiteRunner(suite TestSuite, label string) error {
 }
 
 func validateRustTestSelection(settings RustTestSuite, label string) error {
+	if settings.Doctests && settings.Filter != "" {
+		return fmt.Errorf("%s.rust.filter is a Nextest expression and cannot select doctests", label)
+	}
 	if path.Base(settings.Manifest) != "Cargo.toml" {
 		return fmt.Errorf("%s.rust.manifest must identify a Cargo.toml", label)
 	}
@@ -69,8 +74,8 @@ func rustExecutionVariable(name string) bool {
 
 func validateRustTestArtifacts(artifacts []TestArtifact, label string) error {
 	for _, artifact := range artifacts {
-		if artifact.Path == "nextest.xml" || artifact.Path == ".code-polishy-nextest.toml" || artifact.Type == NextestJUnitArtifact {
-			return fmt.Errorf("%s.rust owns its required Nextest report and configuration", label)
+		if artifact.Path == "nextest.xml" || artifact.Path == "rustdoc.json" || artifact.Path == ".code-polishy-nextest.toml" || artifact.Type == NextestJUnitArtifact || artifact.Type == RustdocArtifact {
+			return fmt.Errorf("%s.rust owns its required native test reports and configuration", label)
 		}
 	}
 	return nil
@@ -78,7 +83,9 @@ func validateRustTestArtifacts(artifacts []TestArtifact, label string) error {
 
 func (suite TestSuite) ArtifactDeclarations() []TestArtifact {
 	result := append([]TestArtifact{}, suite.Artifacts...)
-	if suite.Rust != nil {
+	if suite.Rust != nil && suite.Rust.Doctests {
+		result = append(result, TestArtifact{Path: "rustdoc.json", Type: RustdocArtifact, Required: true})
+	} else if suite.Rust != nil {
 		result = append(result, TestArtifact{Path: "nextest.xml", Type: NextestJUnitArtifact, Required: true})
 	}
 	return result
@@ -94,7 +101,7 @@ func (settings *RustTestSuite) Equal(other *RustTestSuite) bool {
 	if settings == nil || other == nil {
 		return settings == other
 	}
-	return settings.Manifest == other.Manifest && settings.Filter == other.Filter && settings.NoDefaultFeatures == other.NoDefaultFeatures &&
+	return settings.Manifest == other.Manifest && settings.Doctests == other.Doctests && settings.Filter == other.Filter && settings.NoDefaultFeatures == other.NoDefaultFeatures &&
 		slices.Equal(settings.Packages, other.Packages) && slices.Equal(settings.Features, other.Features)
 }
 

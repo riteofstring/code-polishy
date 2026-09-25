@@ -254,7 +254,7 @@ func validateArtifactSpecs(artifacts []ArtifactSpec) error {
 }
 
 func validArtifactType(value string) bool {
-	return value == "junit" || value == "cobertura" || value == policy.NextestJUnitArtifact
+	return value == "junit" || value == "cobertura" || value == policy.NextestJUnitArtifact || value == policy.RustdocArtifact
 }
 
 func validCommandIdentity(command CommandSpec) bool {

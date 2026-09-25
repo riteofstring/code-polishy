@@ -683,6 +683,9 @@ type resultRunner interface {
 }
 
 func runSuite(ctx context.Context, root string, commandRunner runner.Runner, command policy.Command) (runner.Result, bool, error) {
+	if testartifact.NeedsCommandOutput(command) && !runnerManagesTestArtifacts(commandRunner) {
+		return runCapturedSuite(ctx, root, commandRunner, command)
+	}
 	if observed, ok := commandRunner.(resultRunner); ok {
 		result, err := observed.RunWithResult(ctx, root, command)
 		return result, true, err
@@ -698,6 +701,9 @@ func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {
 		argv := slices.Clone(suite.Argv)
 		if suite.Rust != nil {
 			argv = append([]string{"cargo-nextest"}, rustTestArguments(*suite.Rust)...)
+			if suite.Rust.Doctests {
+				argv[0] = "cargo"
+			}
 		}
 		commands = append(commands, ExecutionCommand{
 			Name: suite.Name, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost,

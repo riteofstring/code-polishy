@@ -22,6 +22,9 @@ func SuiteCommand(repo repository.Repository, suite policy.TestSuite) policy.Com
 	}
 	native := rustfacts.Command(repo, suite.Name, "cargo")
 	command.Argv = append([]string{repo.PolicyTool("cargo-nextest")}, rustTestArguments(*suite.Rust)...)
+	if suite.Rust.Doctests {
+		command.Argv[0] = repo.RustTool("cargo")
+	}
 	command.Managed = true
 	command.SealedEnvironment = true
 	command.EnvironmentOverrides = append(native.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"))
@@ -39,6 +42,9 @@ func rustTestArguments(settings policy.RustTestSuite) []string {
 		"--config-file", testartifact.DirectoryToken + "/" + testartifact.NextestConfigName,
 		"--user-config-file", "none", "--profile", "code-polishy", "--retries", "0", "--no-fail-fast", "--no-tests", "fail",
 	}
+	if settings.Doctests {
+		arguments = []string{"test", "--doc", "--frozen", "--manifest-path", settings.Manifest, "--target", rustfacts.HostTarget(), "--message-format=json", "--no-fail-fast"}
+	}
 	for _, name := range settings.Packages {
 		arguments = append(arguments, "--package", name)
 	}
@@ -50,6 +56,9 @@ func rustTestArguments(settings policy.RustTestSuite) []string {
 	}
 	if settings.Filter != "" {
 		arguments = append(arguments, "--filter-expr", settings.Filter)
+	}
+	if settings.Doctests {
+		arguments = append(arguments, "--", "--format=pretty", "--color=never", "--test-threads=1")
 	}
 	return arguments
 }

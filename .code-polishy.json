@@ -35,7 +35,10 @@
           "internal/rustfacts/tests.go",
           "internal/testing/rust.go",
           "internal/testing/rust_test.go",
+          "internal/testing/rust_output.go",
+          "internal/testing/rust_doctest_test.go",
           "internal/engine/test_receipts.go",
+          "internal/engine/test_receipt_runner.go",
           "internal/engine/test_execution_view.go",
           "internal/engine/rust_tests_test.go",
           "internal/behaviorreview/proof.go",
@@ -44,6 +47,9 @@
           "internal/testartifact/nextest.go",
           "internal/testartifact/nextest_config.go",
           "internal/testartifact/nextest_test.go",
+          "internal/testartifact/rustdoc.go",
+          "internal/testartifact/rustdoc_output.go",
+          "internal/testartifact/rustdoc_test.go",
           "internal/testartifact/xml.go"
         ]
       },

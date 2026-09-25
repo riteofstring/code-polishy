@@ -28,6 +28,10 @@ identifies both scope and cost.
 The observation wrapper forwards structured process results unchanged to suite
 execution. Recording an exit status while discarding it from the caller would
 make native test-artifact validation disagree with the command that produced it.
+Bounded capture overflow is an operational failure even when the child exits with
+a normal test-failure code. A partial stream cannot establish native outcome
+evidence or a regression-proof red result. Cancellation and timeout retain their
+more specific failure categories.
 
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;

@@ -19,7 +19,22 @@ import (
 
 func TestRustNativeGateRetainsRealValidatedEvidence(t *testing.T) {
 	t.Parallel()
+	testRustNativeGate(t, false)
+}
+
+func TestRustDoctestGateRetainsRealValidatedEvidence(t *testing.T) {
+	t.Parallel()
+	testRustNativeGate(t, true)
+}
+
+func testRustNativeGate(t *testing.T, doctests bool) {
+	t.Helper()
 	root := nativeRustEngineRepository(t)
+	artifactType := policy.NextestJUnitArtifact
+	if doctests {
+		enableRustDoctests(t, root)
+		artifactType = policy.RustdocArtifact
+	}
 	installBehaviorReviewTestGuidance(t, root)
 	initializeEngineGitRepository(t, root)
 	writeEngineFile(t, root, "content/data.json", "{\"changed\":true}\n", 0o600)
@@ -45,14 +60,27 @@ func TestRustNativeGateRetainsRealValidatedEvidence(t *testing.T) {
 	if err := json.Unmarshal(data, &published); err != nil {
 		t.Fatal(err)
 	}
-	if len(published.TestEvidence) == 0 || len(published.TestEvidence[0].Artifacts) != 1 || published.TestEvidence[0].Artifacts[0].Type != policy.NextestJUnitArtifact {
+	if len(published.TestEvidence) == 0 || len(published.TestEvidence[0].Artifacts) != 1 || published.TestEvidence[0].Artifacts[0].Type != artifactType {
 		t.Fatalf("missing native evidence: %+v", published.TestEvidence)
 	}
 }
 
 func TestRustNativeReceiptsReuseOnlyTheSameSelectionAndInputs(t *testing.T) {
 	t.Parallel()
+	testRustNativeReceipt(t, false)
+}
+
+func TestRustDoctestReceiptsReuseOnlyTheSameSelectionAndInputs(t *testing.T) {
+	t.Parallel()
+	testRustNativeReceipt(t, true)
+}
+
+func testRustNativeReceipt(t *testing.T, doctests bool) {
+	t.Helper()
 	root := nativeRustEngineRepository(t)
+	if doctests {
+		enableRustDoctests(t, root)
+	}
 	engine, err := Open(root, enginePolicyRoot(t), "")
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +103,7 @@ func TestRustNativeReceiptsReuseOnlyTheSameSelectionAndInputs(t *testing.T) {
 	if err != nil || !hit || !reused.Reused || len(reused.Artifacts) != 1 {
 		t.Fatalf("native receipt reuse: %+v, %v, %v", reused, hit, err)
 	}
-	suite.Rust.Filter = "test(=other)"
+	suite.Rust.Doctests = !doctests
 	changed, err := newTestReceiptController(engine, []policy.TestSuite{suite}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +111,7 @@ func TestRustNativeReceiptsReuseOnlyTheSameSelectionAndInputs(t *testing.T) {
 	if _, hit, err := changed.ReuseSuite(suite, 1); err != nil || hit {
 		t.Fatalf("changed selector reused evidence: hit=%v, %v", hit, err)
 	}
-	suite.Rust.Filter = ""
+	suite.Rust.Doctests = doctests
 	writeEngineFile(t, root, "content/lib.rs", "#[test]\nfn behavior() { assert_eq!(2 + 2, 5); }\n", 0o600)
 	changed, err = newTestReceiptController(engine, []policy.TestSuite{suite}, true)
 	if err != nil {
@@ -103,6 +131,7 @@ func TestRustHistoricalSuiteComparisonKeepsTypedSelectors(t *testing.T) {
 		func(value *policy.RustTestSuite) { value.Features[0] = "optional" },
 		func(value *policy.RustTestSuite) { value.Filter = "test(selected)" },
 		func(value *policy.RustTestSuite) { value.NoDefaultFeatures = true },
+		func(value *policy.RustTestSuite) { value.Doctests = true },
 	} {
 		changed := cloneReceiptSuite(original)
 		alter(changed.Rust)
@@ -110,6 +139,16 @@ func TestRustHistoricalSuiteComparisonKeepsTypedSelectors(t *testing.T) {
 			t.Fatal("historical suite comparison lost native Cargo selection")
 		}
 	}
+}
+
+func enableRustDoctests(t *testing.T, root string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, policy.ConfigFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, policy.ConfigFilename, strings.Replace(string(data), `"rust":{}`, `"rust":{"doctests":true}`, 1), 0o600)
+	writeEngineFile(t, root, "content/lib.rs", "/// ```\n/// assert_eq!(2 + 2, 4);\n/// ```\npub fn answer() {}\n", 0o600)
 }
 
 func TestRustDirectTestTelemetryPreservesNativeExitStatus(t *testing.T) {

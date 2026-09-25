@@ -39,10 +39,42 @@ operational failures. Cancellation and timeouts never become report-bearing
 success. Required artifacts remain contained regular files, bounded and hashed
 once for reusable evidence by the existing artifact owner.
 
-Doctests are not Nextest tests. Their compiler behavior, including compile-fail,
-no-run and ignored examples, requires separate version-bound evidence before
-doctest coverage can be claimed. This native suite contract does not turn a
-successful build, a benchmark invocation or a live app probe into test evidence.
+## Doctest evidence
+
+A separate suite with `rust.doctests: true` runs frozen `cargo test --doc` with
+the same manifest, package and feature selection. It does not run Nextest or
+import Nextest's project settings. Its `filter` field is forbidden because a
+Nextest expression is not a rustdoc selector. Ignored examples remain ignored;
+the runner never opts into them or into live-provider execution implicitly.
+
+The stable compiler's JSON and JUnit test formats still require unstable
+options. Instead, the adapter is bound to Rust 1.97.1's Cargo JSON and captured,
+uncolored libtest `pretty` output. It requires a successful final Cargo build,
+every announced case, matching terminal counts and a complete test run. Compiler
+upgrades must validate this exact output contract before doctests can execute;
+no nightly flags, bootstrap override or deprecated logfile is used.
+
+The managed `rustdoc.json` artifact records each compiler-emitted batch and case.
+Batch identity is execution-local, not an invented package identity. This retains
+multiple workspace crates and Rust 2024's merged and standalone doctest batches,
+including repeated display names in different batches. Cases distinguish runtime,
+expected-panic, compile-only and compile-fail checks from ignored examples.
+Compile-only checks do not claim runtime execution. A suite must check at least
+one example; an empty or wholly ignored run fails.
+
+Ordinary example failures, including examples that fail to compile unexpectedly,
+are doctest failures. A crate/build-script compilation failure has no successful
+Cargo build and cannot establish a regression-proof red result. Truncated,
+partial or inconsistent output, cancellation, timeout and artifact failures
+remain operational outcomes. The original Cargo exit is retained. Direct tests,
+gate execution, regression proofs and receipt reuse share the adapter and fresh
+artifact boundary. Capturing output cannot replace a previous attempt's report.
+
+This contract follows the pinned
+[libtest formatter](https://github.com/rust-lang/rust/blob/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/test/src/formatters/pretty.rs)
+and [rustdoc execution](https://github.com/rust-lang/rust/blob/8bab26f4f68e0e26f0bb7960be334d5b520ea452/src/librustdoc/doctest.rs).
+A successful build, benchmark invocation or live app probe alone is not test
+evidence.
 
 ## Suite configuration
 
@@ -75,3 +107,8 @@ Do not supply `argv`, `retryArgv`, a non-root `cwd` or a replacement `nextest.xm
 artifact for a native Rust suite. Native execution owns those fields and requires
 its result report. Frozen testing requires a reviewed lock and a prepared Cargo
 cache; it never installs dependencies or repairs resolution.
+
+Declare a distinct doctest suite using `"rust": {"manifest": "Cargo.toml",
+"doctests": true}`. Its required `rustdoc.json` artifact is also native-owned.
+Unit/integration and doctest results do not substitute for each other or schedule
+each other; ordinary suite ownership, profiles and explicit selection still apply.

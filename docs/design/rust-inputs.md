@@ -238,3 +238,5 @@ the macOS archive is universal. Checked-in identities come from the exact
 Installation must authenticate archives and verify the staged executable before
 replacing a working tool. No Cargo source build, install script or self-update
 participates. Nextest does not run doctests; it cannot supply doctest coverage.
+Separate native doctest suites use the same pinned Cargo and rustdoc, with the
+version-bound evidence adapter defined in [Rust test evidence](rust-tests.md).

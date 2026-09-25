@@ -55,6 +55,9 @@ func validateOne(directory, suite string, declaration policy.TestArtifact, exitS
 	if declaration.Type == policy.NextestJUnitArtifact {
 		return record, true, validateNextest(data, suite, exitStatus)
 	}
+	if declaration.Type == policy.RustdocArtifact {
+		return record, true, validateRustdoc(data, suite, exitStatus)
+	}
 	if err := validateXML(data, declaration.Type); err != nil {
 		return Record{}, false, fmt.Errorf("test artifact %q: %w", declaration.Path, err)
 	}

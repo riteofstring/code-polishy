@@ -399,6 +399,7 @@ type TestArtifact struct {
 
 type RustTestSuite struct {
 	Manifest          string   `json:"manifest,omitempty"`
+	Doctests          bool     `json:"doctests,omitempty"`
 	Packages          []string `json:"packages,omitempty"`
 	Features          []string `json:"features,omitempty"`
 	NoDefaultFeatures bool     `json:"noDefaultFeatures,omitempty"`

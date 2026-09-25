@@ -245,7 +245,8 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.err = err
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
-	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput)
+	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput || testartifact.NeedsCommandOutput(actual))
+	runErr = captureGateTestOutput(ctx, actual, &result, output, runErr)
 	artifacts, artifactErr := commandRunner.validateTestArtifacts(index, actual, &result)
 	runErr = errors.Join(runErr, artifactErr)
 	logResult, logErr := commandLog.Close()
@@ -276,6 +277,18 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.artifacts[testLogKey{name: command.Name, attempt: attempt.Number}] = append([]testartifact.Record{}, artifacts...)
 	}
 	return commandRunner.finishCommand(command, result, output, runErr, category, reportBearing, logResult, attempt.LogPath)
+}
+
+func captureGateTestOutput(ctx context.Context, command policy.Command, result *runner.Result, output runner.Output, runErr error) error {
+	category := runner.FailureCategoryFor(ctx, *result, runErr)
+	if category != "" && category != runner.FailureCommandExit {
+		return runErr
+	}
+	if err := testartifact.CaptureCommandOutput(command, output.Stdout); err != nil {
+		result.FailureCategory = runner.FailureOperational
+		return errors.Join(runErr, err)
+	}
+	return runErr
 }
 
 func (commandRunner *gateArtifactRunner) validateTestArtifacts(index int, command policy.Command, result *runner.Result) ([]testartifact.Record, error) {

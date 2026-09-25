@@ -22,6 +22,12 @@ func TestProblem(repo repository.Repository, settings policy.RustTestSuite) erro
 	if err := compilationTargetConfiguration(repo); err != nil {
 		return err
 	}
+	if settings.Doctests {
+		if repo.ToolPin("rust") != policy.RustdocToolVersion {
+			return errors.New("doctest evidence requires its matching pinned Rust compiler")
+		}
+		return nil
+	}
 	info, err := os.Stat(repo.PolicyTool("cargo-nextest"))
 	if err != nil || !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode()&0o111 == 0 || repo.ToolPin("cargo-nextest") == "" {
 		return errors.New("pinned cargo-nextest is unavailable; install the policy-owned test runner")

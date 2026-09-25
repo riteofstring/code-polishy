@@ -107,6 +107,9 @@ The installed Rust adoption fixture uses a dependency-free Cargo library in a
 temporary repository. Every policy operation enters through the exact installed
 launcher and lock. It exercises selected formatting, compiler diagnostics in JSON
 and SARIF, a passing native suite, an assertion failure, and an empty selection.
+Separate doctest cases cover runtime, expected-panic, compile-only, compile-fail
+and ignored examples, assertion failure, empty evidence, crate compilation failure
+and recovery through the installed compiler and result adapter.
 The fixture checks the retained structured test outcome rather than treating the
 CLI's nonzero exit as sufficient evidence. It never downloads target packages or
 changes the caller's repository authority.

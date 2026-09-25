@@ -66,16 +66,16 @@ mod tests {{
 """
 
 
-def assert_native_outcome(report, exit_status, category=""):
+def assert_native_outcome(report, exit_status, category="", suite="rust-unit", artifact_type="nextest-junit"):
     commands = report["testCommands"]
     assert len(commands) == 1, commands
     command = commands[0]
-    assert command["name"] == "rust-unit", command
+    assert command["name"] == suite, command
     assert command["result"]["exitStatus"] == exit_status, command
     assert command.get("failureCategory", "") == category, command
     if category != "operational":
         artifacts = command["artifacts"]
-        assert len(artifacts) == 1 and artifacts[0]["type"] == "nextest-junit", command
+        assert len(artifacts) == 1 and artifacts[0]["type"] == artifact_type, command
         assert artifacts[0]["size"] > 0 and len(artifacts[0]["sha256"]) == 64, command
     executed = report["execution"]["commands"]
     assert len(executed) == 1, executed
@@ -88,6 +88,7 @@ config = {
     "modules": [{"name": "library", "paths": ["Cargo.toml", "src/**"]}],
     "tests": {"ownership": [], "suites": [
         {"name": "rust-unit", "kind": "unit", "scope": "module", "modules": ["library"], "rust": {}},
+        {"name": "rust-docs", "kind": "unit", "scope": "module", "modules": ["library"], "rust": {"doctests": True}},
         {"name": "full", "kind": "unit", "scope": "repository", "rust": {}},
     ]},
 }
@@ -123,7 +124,34 @@ sarif = policy("check", "--files", "src/lib.rs", status=1, output="sarif")
 assert any(result["ruleId"] == "quality.rustCompiler" for result in sarif["runs"][0]["results"]), sarif
 write("src/lib.rs", rust_source(42))
 assert_native_outcome(policy("test", "--suite", "rust-unit"), 0)
-print("Installed Rust formatting, compiler diagnostics, native evidence, failures, and recovery passed.")
+
+documentation = """/// ```
+/// assert_eq!(installed_rust::answer(), 42);
+/// ```
+/// ```compile_fail
+/// let _value: u8 = "wrong";
+/// ```
+/// ```no_run
+/// panic!("must not execute");
+/// ```
+/// ```ignore
+/// unavailable_live_provider();
+/// ```
+/// ```should_panic
+/// panic!("expected");
+/// ```
+"""
+write("src/lib.rs", documentation + rust_source(42))
+assert_native_outcome(policy("test", "--suite", "rust-docs"), 0, suite="rust-docs", artifact_type="rustdoc")
+write("src/lib.rs", documentation.replace("answer(), 42", "answer(), 41") + rust_source(42))
+assert_native_outcome(policy("test", "--suite", "rust-docs", status=1), 101, "command-exit", "rust-docs", "rustdoc")
+write("src/lib.rs", rust_source(42))
+assert_native_outcome(policy("test", "--suite", "rust-docs", status=1), 0, "operational", "rust-docs", "rustdoc")
+write("src/lib.rs", 'pub fn answer() -> u32 { "not an integer" }\n')
+assert_native_outcome(policy("test", "--suite", "rust-docs", status=1), 101, "operational", "rust-docs", "rustdoc")
+write("src/lib.rs", documentation + rust_source(42))
+assert_native_outcome(policy("test", "--suite", "rust-docs"), 0, suite="rust-docs", artifact_type="rustdoc")
+print("Installed Rust formatting, compiler diagnostics, native tests and doctests, failures, and recovery passed.")
 PY
 }
 

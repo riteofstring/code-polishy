@@ -129,7 +129,7 @@ changed modules; add a quick suite when a new module is introduced.
   function/closure measurements. Inline tests do not relax production limits.
   The pinned Tree-sitter Rust grammar supplies written-source facts; it does not
   pretend to resolve macro expansion or compiler configuration.
-- Doctest evidence, general macro/module resolution, WGSL and
+- General macro/module resolution, WGSL and
   installed-release integration remain unfinished. Project Clippy overrides
   and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
@@ -159,7 +159,14 @@ changed modules; add a quick suite when a new module is introduced.
   Cargo/compiler/Nextest controls do not replace governed execution. Nextest state
   stays outside reusable read-only source views. Project Nextest settings require
   explicit support rather than silently dropping their default filters or scripts.
-  Doctests and ordinary macro-heavy project coverage remain unfinished.
+  Ordinary macro-heavy project coverage remains unfinished.
+- Separate native doctest suites run the pinned stable Cargo/rustdoc without
+  unstable flags. Version-bound output becomes a required structured artifact
+  with complete case/count checks and distinct runtime, expected-panic,
+  compile-only, compile-fail and ignored outcomes. Real fixtures cover workspaces,
+  package/features, frozen locks, cancellation, empty/ignored runs, crate and
+  build-script failures, direct/gate execution, regression proofs and receipts.
+  A doctest result never substitutes for unit/integration evidence.
 
 Cargo dependency-input governance now parses ordinary, build, development,
 target-specific and workspace declaration tables, checks exact registry and Git
@@ -429,7 +436,7 @@ copying the lock or substituting generic license text does not resolve it.
 Rust and Nextest SBOM entries retain explicit incomplete native compositions,
 host-specific authenticated download references and carried notice locations.
 
-The next milestones extend ordinary macro/module and doctest coverage and
+The next milestones extend ordinary macro/module coverage and
 complete installed-release integration. Existing coverage failures remain until
 their implementations and evidence exist. This beta does not yet establish
 first-class support for Masterbrainer's full project.

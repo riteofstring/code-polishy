@@ -547,9 +547,14 @@ type proofSuiteRunner struct {
 }
 
 func (capture *proofSuiteRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	result, output, err := capture.RunWithOutput(ctx, root, command)
-	capture.output = output
+	result, _, err := capture.RunWithOutput(ctx, root, command)
 	return result, err
+}
+
+func (capture *proofSuiteRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	result, output, err := capture.OutputRunner.RunWithOutput(ctx, root, command)
+	capture.output = output
+	return result, output, err
 }
 
 func cloneCommand(command policy.Command) policy.Command {
