@@ -117,8 +117,13 @@ changed modules; add a quick suite when a new module is introduced.
   collection so typed policy findings remain independent of process failure.
   Real compiler tests prove source lint levels cannot hide those findings and
   type errors, default-denied compiler lints and build-script failures still fail.
-- Parser-backed source rules, architecture, structured Rust test evidence, WGSL
-  and installed-release integration remain unfinished. Project Clippy overrides
+- Parser-backed source rules now enforce comment, lint-attribute, format-skip and
+  Rust-specific complexity policy, with original locations and independent
+  function/closure measurements. Inline tests do not relax production limits.
+  The pinned Tree-sitter Rust grammar supplies written-source facts; it does not
+  pretend to resolve macro expansion or compiler configuration.
+- Architecture, structured Rust test evidence, WGSL and installed-release
+  integration remain unfinished. Project Clippy overrides
   and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
 
@@ -356,10 +361,15 @@ installation scripts. Linux runtime execution and installer integrity/recovery
 fixtures pass. macOS/Windows installers and checksums are present but host execution
 and release packaging still require verification.
 
-The next milestone is one complete crate path: selected-file formatting, compiler
-diagnostics, source facts, architecture, dependencies and nonempty test evidence.
-Resolved dependency graphs, semantic analysis, supply-chain checks, structured Rust
-test results and installed-release parity remain open. Existing missing-capability
+Selected-file formatting, compiler diagnostics, parsed source policy and Cargo
+dependency governance now have runnable beta implementations. Source parsing uses
+exact authenticated binary wheels in the existing governed Python runtime; it
+requires neither target package installation scripts nor a new Rust bootstrap.
+
+The next milestone completes architecture and nonempty test evidence for one crate
+path, then extends workspace coverage and installed-release integration. Semantic
+module resolution, structured Rust test results and installed-release parity
+remain open. Existing missing-capability
 findings remain until those implementations and evidence exist. This beta is not
 yet usable as first-class Rust support for Masterbrainer.
 

@@ -23,6 +23,8 @@ const (
 	MaxTestFileLines                        = 2500
 	MaxGoComplexity                         = 12
 	MaxGoTestComplexity                     = 20
+	MaxRustComplexity                       = 12
+	MaxRustTestComplexity                   = 20
 	MaxPythonComplexity                     = 10
 	MaxTypeScriptComplexity                 = 10
 	MaxTypeScriptTestComplexity             = 10
@@ -255,6 +257,8 @@ type ReliabilityReminder struct {
 type Complexity struct {
 	Go             int `json:"go,omitempty"`
 	GoTest         int `json:"goTest,omitempty"`
+	Rust           int `json:"rust,omitempty"`
+	RustTest       int `json:"rustTest,omitempty"`
 	Python         int `json:"python,omitempty"`
 	TypeScript     int `json:"typescript,omitempty"`
 	TypeScriptTest int `json:"typescriptTest,omitempty"`

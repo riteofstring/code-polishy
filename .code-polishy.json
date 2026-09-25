@@ -32,6 +32,7 @@
         "sourcePaths": [
           "internal/policy/data.go",
           "internal/policy/rust_inputs_test.go",
+          "internal/policy/rust_quality_test.go",
           "internal/policy/supplychain_config.go",
           "internal/policy/cargo_release_age_test.go",
           "internal/policy/cargo_vulnerability_test.go",
@@ -52,6 +53,9 @@
           "internal/quality/cargo_test.go",
           "internal/quality/rust_format.go",
           "internal/quality/rust_format_test.go",
+          "internal/quality/rust_source.go",
+          "internal/quality/rust_source_test.go",
+          "internal/quality/comments.go",
           "internal/quality/wgsl_test.go",
           "internal/supplychain/cargo.go",
           "internal/supplychain/cargo_test.go",
@@ -77,6 +81,8 @@
           "internal/engine/cargo_supplychain_test.go",
           "tools/install-rust.sh",
           "tools/install-rust.ps1",
+          "tools/install-policy-tools.sh",
+          "tools/install-policy-tools.ps1",
           "scripts/test-rust-runtime.sh"
         ]
       },

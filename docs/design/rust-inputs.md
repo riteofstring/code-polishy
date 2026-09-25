@@ -205,3 +205,14 @@ the developer installer alone does not establish installed-release coverage.
 
 [Cargo project facts](cargo-facts.md) defines workspace discovery and its execution
 boundary separately from source classification.
+
+The source-facts parser uses Tree-sitter 0.26.0 and its Rust grammar 0.24.2 through
+the existing pinned CPython runtime. Both upstream releases are older than the
+minimum admission age and provide binary wheels for all five supported hosts.
+The Rust facts manifest and `uv.lock` own dependency versions and archive
+identities; the installer reads those lock entries rather than maintaining a
+second checksum inventory. It selects only compatible binary wheels, authenticates
+each download once, and never runs package installation scripts or source builds.
+Staged packages must pass a real Rust parse before replacing the previous exact
+distributions. Replacement retains recoverable backups until the installed
+parser passes that same check. Wheel metadata and licenses remain installed.

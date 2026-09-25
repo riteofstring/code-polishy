@@ -68,6 +68,44 @@ local-state digest. Read-only formatting, like Go's gofmt check, is an internal
 source operation; Cargo discovery and compilation use the check execution plan.
 The public format operation routes all child processes through its supplied runner.
 
+## Parsed source facts
+
+Rust source syntax is parsed by the upstream Tree-sitter Rust grammar in the
+already governed CPython helper runtime. The grammar and its Python binding are
+exact dependencies in this module's manifest and lock. This supplies syntax,
+comments and structural measurements without importing or compiling project
+code. Cargo and rustc remain authoritative for crate identity, resolution,
+conditional compilation, macro expansion and type correctness. Syntax facts
+must not masquerade as a compiler-resolved semantic graph.
+
+Requests carry bounded UTF-8 source bytes through the common structured runner;
+the parser does not choose additional project files or execute Rust attributes
+and macros. Error-recovered or incomplete syntax cannot establish complete
+source coverage. Parsed comments are distinct from comment-like raw strings;
+attributes and macro token trees retain their original source locations.
+
+Source complexity is measured on written syntax, not expanded macro output.
+Functions and closures have independent measurements. Conditions, loops, Boolean
+short circuits, guards, or-patterns, `?` and let-else add decisions; an exhaustive
+match adds one fewer decision than its arm count. Macro sites remain explicit
+facts, and their opaque token trees do not become guessed executable syntax.
+The compiler still checks the selected expansion. Source metrics include written
+configuration branches rather than claiming coverage of every compiled variant.
+
+Rust owns separate `quality.complexity.rust` and `rustTest` limits, initially 12
+and 20 with the same strict-below comparison as Go. Projects may tighten them.
+Built-in test functions and exact `cfg(test)` scopes receive the test limit;
+file-level test ownership alone cannot relax production functions co-located
+with inline tests. Custom test attributes and exclusive Cargo test-target scope
+need further test-context evidence. Depth and parameter measurements are retained
+as facts; TypeScript's thresholds do not silently become Rust restrictions.
+
+Comment policy uses parsed line/block comments and value-bearing doc attributes,
+not text searches. Metadata such as `doc(hidden)` is not prose. Inline `allow`,
+`expect` and `rustfmt::skip`, including nested `cfg_attr` forms, cannot bypass
+native policy ownership. Exceptions belong to the existing exact policy mechanism
+for the underlying finding. Source validation and command failure remain blocking.
+
 ## Compiler checks
 
 Compilation uses the matching pinned cargo-clippy executable directly, with an

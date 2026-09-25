@@ -27,8 +27,7 @@ case "$(uname -m)" in
   *) echo "Unsupported architecture for the Python facts environment: $(uname -m)" >&2; exit 1 ;;
 esac
 python_bin="${policy_root}/.tools/python/${python_os}-${python_arch}/bin/python3.12"
-facts_environment="${policy_root}/internal/pythonfacts/.venv"
-facts_python="${facts_environment}/bin/python"
+"${python_bin}" -I -B "${policy_root}/internal/rustfacts/install.py" "${policy_root}"
 facts_environment_valid() {
   [[ -f "${facts_environment}/pyvenv.cfg" ]] && [[ -x "${facts_python}" ]] &&
     [[ "$("${facts_python}" -I -B -c 'import sys; print(".".join(str(value) for value in sys.version_info[:3]))' 2>/dev/null || true)" == "${python_release%%+*}" ]] &&
@@ -36,20 +35,24 @@ facts_environment_valid() {
     [[ "$("${facts_python}" -I -B -c 'import importlib.metadata; print(importlib.metadata.version("astroid"))' 2>/dev/null || true)" == "${astroid_version}" ]] &&
     [[ ! -e "${facts_environment}/bin/pip" ]]
 }
-if ! facts_environment_valid; then
-  facts_staging="$(mktemp -d "${policy_root}/internal/pythonfacts/.venv.staging.XXXXXX")"
-  if ! "${python_bin}" -I -B -m venv --copies --without-pip --system-site-packages "${facts_staging}"; then
-    rm -rf "${facts_staging}"
-    exit 1
-  fi
-  rm -rf "${facts_environment}"
-  mv "${facts_staging}" "${facts_environment}"
+for facts_module in pythonfacts rustfacts; do
+  facts_environment="${policy_root}/internal/${facts_module}/.venv"
+  facts_python="${facts_environment}/bin/python"
   if ! facts_environment_valid; then
+    facts_staging="$(mktemp -d "${policy_root}/internal/${facts_module}/.venv.staging.XXXXXX")"
+    if ! "${python_bin}" -I -B -m venv --copies --without-pip --system-site-packages "${facts_staging}"; then
+      rm -rf "${facts_staging}"
+      exit 1
+    fi
     rm -rf "${facts_environment}"
-    echo "The contained Python facts environment failed verification." >&2
-    exit 1
+    mv "${facts_staging}" "${facts_environment}"
+    if ! facts_environment_valid; then
+      rm -rf "${facts_environment}"
+      echo "The contained Python facts environment failed verification." >&2
+      exit 1
+    fi
   fi
-fi
+done
 "${policy_root}/tools/install-vulture.sh"
 "${policy_root}/tools/install-osv-scanner.sh"
 "${policy_root}/tools/install-gremlins.sh"

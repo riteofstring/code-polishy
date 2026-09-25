@@ -156,8 +156,8 @@ func TestCoverageRequiresAdaptersForUnknownLanguages(t *testing.T) {
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
-	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
-	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
+	writeQualityFile(t, repo.Root, "internal/sample/lib.dart", "void main() {}\n")
+	findings := CoverageFindings(repo, []string{"internal/sample/lib.dart"})
 	if len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("findings = %+v", findings)
 	}
@@ -169,8 +169,8 @@ func TestGeneratedSourceStillRequiresModuleAndToolCoverage(t *testing.T) {
 	repo.Config.Scope.Generated = []string{"generated/**"}
 	repo.Config.Modules = []policy.Module{{Name: "generated", Paths: []string{"generated/**"}}}
 	repo.Config.ModuleByName = map[string]int{"generated": 0}
-	writeQualityFile(t, repo.Root, "generated/client.rs", "fn generated() {}\n")
-	findings := CoverageFindings(repo, []string{"generated/client.rs"})
+	writeQualityFile(t, repo.Root, "generated/client.dart", "void generated() {}\n")
+	findings := CoverageFindings(repo, []string{"generated/client.dart"})
 	if len(findings) != 9 || !findingChecks(findings)["policy.generationOwnership"] {
 		t.Fatalf("generated executable source cannot bypass adapter coverage: %+v", findings)
 	}
@@ -186,9 +186,9 @@ func TestCoverageRequiresStructuredEvidenceBeyondModuleScopedCommand(t *testing.
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
-	repo.Config.Checks = []policy.Command{{Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check", "gate"}}}
-	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+	repo.Config.Checks = []policy.Command{{Name: "dart", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check", "gate"}}}
+	writeQualityFile(t, repo.Root, "internal/sample/lib.dart", "void main() {}\n")
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.dart"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("an ordinary command cannot establish source coverage: %+v", findings)
 	}
 }
@@ -198,9 +198,9 @@ func TestCoverageRequiresProvidersInLocalAndGateProfiles(t *testing.T) {
 	repo := qualityRepository(t)
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
-	repo.Config.Checks = []policy.Command{{Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check"}}}
-	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
-	findings := CoverageFindings(repo, []string{"internal/sample/lib.rs"})
+	repo.Config.Checks = []policy.Command{{Name: "dart", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, Modules: []string{"sample"}, RunOn: []string{"check"}}}
+	writeQualityFile(t, repo.Root, "internal/sample/lib.dart", "void main() {}\n")
+	findings := CoverageFindings(repo, []string{"internal/sample/lib.dart"})
 	findings = withoutSourceCommentCoverage(findings)
 	if len(findings) != 12 || findings[0].Subject != "format:check" || findings[1].Subject != "format:gate" {
 		t.Fatalf("findings = %+v", findings)
@@ -248,12 +248,13 @@ func TestCoverageKeepsUnknownSourceUncoveredBesideNativeSource(t *testing.T) {
 	repo.Config.Modules = []policy.Module{{Name: "sample", Paths: []string{"internal/sample/**"}}}
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	repo.Config.Checks = []policy.Command{{
-		Name: "rust", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"},
+		Name: "dart", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"},
+		Paths: []string{"internal/sample/**/*.dart"},
 		Modules: []string{"sample"}, RunOn: []string{"check", "gate"},
 	}}
-	writeQualityFile(t, repo.Root, "internal/sample/lib.rs", "fn main() {}\n")
+	writeQualityFile(t, repo.Root, "internal/sample/lib.dart", "void main() {}\n")
 	writeQualityFile(t, repo.Root, "internal/sample/build.ts", "export const build = 1;\n")
-	if findings := CoverageFindings(repo, []string{"internal/sample/lib.rs", "internal/sample/build.ts"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
+	if findings := CoverageFindings(repo, []string{"internal/sample/lib.dart", "internal/sample/build.ts"}); len(withoutSourceCommentCoverage(findings)) != 12 || !findingChecks(findings)["policy.sourceCommentCoverage"] {
 		t.Fatalf("unstructured commands cannot establish unknown-language analysis: %+v", findings)
 	}
 }

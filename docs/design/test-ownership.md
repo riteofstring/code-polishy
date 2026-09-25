@@ -21,6 +21,12 @@ real suite, without invented standalone commands. Suite commands remain
 responsible for executing tests and rejecting empty runs; path declarations
 alone do not prove execution.
 
+Rust files may contain both production items and inline tests. File-level test
+ownership does not relax production complexity limits. Parsed built-in test
+attributes and lexical `cfg(test)` scopes select the separate Rust test limit;
+unproven test contexts retain the production limit. The
+[Cargo source facts](cargo-facts.md) contract defines that syntax-only boundary.
+
 Ownership does not schedule tests. Existing cost, profile, changed-impact,
 required-kind, and gate rules select execution. Changing a test or its helper
 still selects the owner's focused coverage; the full profile retains its

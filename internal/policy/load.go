@@ -83,6 +83,8 @@ func EffectiveQuality(quality Quality) Quality {
 	defaultInt(&quality.MaxTestFileLines, MaxTestFileLines)
 	defaultInt(&quality.Complexity.Go, MaxGoComplexity)
 	defaultInt(&quality.Complexity.GoTest, MaxGoTestComplexity)
+	defaultInt(&quality.Complexity.Rust, MaxRustComplexity)
+	defaultInt(&quality.Complexity.RustTest, MaxRustTestComplexity)
 	defaultInt(&quality.Complexity.Python, MaxPythonComplexity)
 	defaultInt(&quality.Complexity.TypeScript, MaxTypeScriptComplexity)
 	defaultInt(&quality.Complexity.TypeScriptTest, MaxTypeScriptTestComplexity)
