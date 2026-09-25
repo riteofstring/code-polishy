@@ -70,7 +70,7 @@ func sourceAnalysisSelected(repo repository.Repository, path string) bool {
 	if repo.Language(path) != "rust" || repo.IsGenerated(path) || repo.IsData(path) {
 		return false
 	}
-	return repo.NativeAnalysis(path, "lint") || repo.NativeAnalysis(path, "complexity") || repo.NativeAnalysis(path, "format")
+	return repo.NativeAnalysis(path, "lint") || repo.NativeAnalysis(path, "complexity") || repo.NativeAnalysis(path, "format") || repo.NativeAnalysis(path, "architecture")
 }
 
 func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePlan, boundary runner.Runner) Sources {

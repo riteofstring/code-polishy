@@ -320,7 +320,8 @@ func plannedPolicyCheckCommands(repo repository.Repository, selection repository
 
 func plannedArchitectureCommands(repo repository.Repository, files []string) []policy.Command {
 	commands := architecture.ProviderCommands(repo, files)
-	return append(commands, architecture.PythonGraphCommands(repo, files)...)
+	commands = append(commands, architecture.PythonGraphCommands(repo, files)...)
+	return append(commands, architecture.RustGraphCommands(repo, files)...)
 }
 
 func (engine *Engine) mergeGateTestRequest(plan MergeGateExecutionPlan) (repository.Selection, testpolicy.Request, error) {

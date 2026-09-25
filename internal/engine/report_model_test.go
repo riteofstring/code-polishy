@@ -273,18 +273,25 @@ func TestSourceGraphAndCycleEvidenceValidateAgainstPinnedReportSchema(t *testing
 	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
 }
 
-func TestPythonGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T) {
-	graph, err := sourcegraph.New([]sourcegraph.Node{{Path: "app.py", Language: "python", Root: ".", Module: "app", Resolution: "file:app.py"}}, nil,
-		[]sourcegraph.FactInput{{Analyzer: "python-facts", Protocol: "python-facts/v3", Project: "pyproject.toml", Root: ".", Paths: []string{"app.py"}, FactsSHA256: strings.Repeat("a", 64), PartitionsSHA256: strings.Repeat("b", 64), ResolutionSHA256: strings.Repeat("c", 64)}}, nil)
-	if err != nil {
-		t.Fatal(err)
+func TestNativeGraphFactEvidenceValidatesAgainstPinnedReportSchema(t *testing.T) {
+	for _, test := range []struct{ language, path, analyzer, protocol, manifest string }{
+		{"python", "app.py", "python-facts", "python-facts/v3", "pyproject.toml"},
+		{"rust", "src/lib.rs", "rust-facts", "rust-source/v1", "Cargo.toml"},
+	} {
+		t.Run(test.language, func(t *testing.T) {
+			graph, err := sourcegraph.New([]sourcegraph.Node{{Path: test.path, Language: test.language, Root: ".", Module: "app", Resolution: "file:" + test.path}}, nil,
+				[]sourcegraph.FactInput{{Analyzer: test.analyzer, Protocol: test.protocol, Project: test.manifest, Root: ".", Paths: []string{test.path}, FactsSHA256: strings.Repeat("a", 64), PartitionsSHA256: strings.Repeat("b", 64), ResolutionSHA256: strings.Repeat("c", 64)}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report := (&Engine{}).normalizeReport(Report{Command: "architecture", ReportPath: ".code-polishy-reports/architecture/example/report.json", SourceDependencyGraph: &graph})
+			data, err := JSONReport(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
+		})
 	}
-	report := (&Engine{}).normalizeReport(Report{Command: "architecture", ReportPath: ".code-polishy-reports/architecture/example/report.json", SourceDependencyGraph: &graph})
-	data, err := JSONReport(report)
-	if err != nil {
-		t.Fatal(err)
-	}
-	validateSchemaDocument(t, ReportSchemaURL, policyschema.CodePolishyReport, data)
 }
 
 func TestProviderFindingsAndGraphSurviveManagedReports(t *testing.T) {

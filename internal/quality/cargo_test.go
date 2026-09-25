@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -70,6 +71,24 @@ func TestCargoAndGoCheckPlanMatchesObservedCommandOrder(t *testing.T) {
 	}
 	if !reflect.DeepEqual(boundary.names, want) || len(want) < 5 {
 		t.Fatalf("executed commands = %v, planned = %v", boundary.names, want)
+	}
+}
+
+func TestCargoNativeDeadCodePreservesPublicAPIAndChecksSelectedFeatures(t *testing.T) {
+	t.Parallel()
+	repo := cargoQualityRepository(t)
+	manifest := "[package]\nname='app'\nversion='1.0.0'\nedition='2024'\n[features]\nactive=[]\ndefault=[]\n"
+	writeQualityFile(t, repo.Root, "Cargo.toml", manifest)
+	writeQualityFile(t, repo.Root, "Cargo.lock", "version=4\n[[package]]\nname='app'\nversion='1.0.0'\n")
+	writeQualityFile(t, repo.Root, "src/lib.rs", "fn feature_helper() {}\n#[cfg(feature = \"active\")]\npub fn entry() {\n    feature_helper();\n}\npub fn public_api() {}\n")
+	selection := repository.Selection{Files: []string{"src/lib.rs"}}
+	findings := Check(t.Context(), repo, selection, runner.OSRunner{}, "check")
+	if !repo.NativeAnalysis("src/lib.rs", "dead-code") || len(findings) == 0 || slices.ContainsFunc(findings, func(finding policy.Finding) bool { return finding.Subject != "dead_code" || finding.Line != 1 }) {
+		t.Fatalf("native dead-code coverage did not reflect the checked configuration: %+v", findings)
+	}
+	writeQualityFile(t, repo.Root, "Cargo.toml", strings.Replace(manifest, "default=[]", "default=['active']", 1))
+	if findings := Check(t.Context(), repo, selection, runner.OSRunner{}, "check"); len(findings) != 0 {
+		t.Fatalf("enabled private helper or legitimate public API was treated as dead: %+v", findings)
 	}
 }
 

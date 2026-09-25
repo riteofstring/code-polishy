@@ -295,6 +295,14 @@
       "public": true
     },
     {
+      "id": "rust-architecture",
+      "path": "docs/design/rust-architecture.md",
+      "title": "Rust Architecture Integration",
+      "summary": "Understand native Rust module resolution, dependency direction, cycles and explicit coverage limits.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "rust-inputs",
       "path": "docs/design/rust-inputs.md",
       "title": "Rust and Shader Input Coverage",

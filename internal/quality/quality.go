@@ -926,7 +926,7 @@ func builtInCapability(language, capability string) bool {
 	case "go", "typescript", "python":
 		return slices.Contains(builtInCapabilities, capability)
 	case "rust":
-		return slices.Contains([]string{"format", "lint", "typecheck", "complexity"}, capability)
+		return slices.Contains([]string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"}, capability)
 	case "shell":
 		return slices.Contains([]string{"format", "lint", "typecheck"}, capability)
 	}

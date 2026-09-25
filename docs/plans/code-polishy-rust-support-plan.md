@@ -22,6 +22,12 @@ compiler/parser facts through a bounded child-process protocol. Do not embed
 language-specific heuristics in unrelated engine modules or reimplement Rust
 resolution with regular expressions.
 
+Rust follows Go's built-in native routing. A separate conditional-module switch
+is not necessary to activate or disable these baseline capabilities. WGSL remains
+a distinct follow-on language capability for graphics projects, not a prerequisite
+for ordinary Rust parity. Its existing source classification and unavailable
+analysis findings remain honest until that validator is delivered.
+
 Parity means the same ordinary user-facing commands and policy outcomes as Go,
 with Rust-native compilation units, Cargo conventions and honest scope. Features,
 targets, build scripts, procedural macros, tests and generated source need their
@@ -91,8 +97,9 @@ Package paths below are under `internal/` in this repository.
    target/features, wire formatting, compiler checks, core quality/architecture,
    dependency policy and actual test evidence into existing commands. Unsupported
    layouts remain explicit failures. This is a beta subset, not general support.
-4. **Workspace and semantic coverage:** expand the supported configuration
-   matrix to the Phase 1–5 cases below, including WGSL and native boundaries.
+4. **Workspace and semantic coverage:** expand the supported Rust configuration
+   matrix to the Phase 1–5 cases below, including native boundaries. WGSL has a
+   separate follow-on acceptance track.
 5. **Installed-release parity:** prove every acceptance cell on the supported
    hosts before advertising first-class support and adopting it in Masterbrainer.
 
@@ -122,10 +129,22 @@ changed modules; add a quick suite when a new module is introduced.
   function/closure measurements. Inline tests do not relax production limits.
   The pinned Tree-sitter Rust grammar supplies written-source facts; it does not
   pretend to resolve macro expansion or compiler configuration.
-- Architecture, structured Rust test evidence, WGSL and installed-release
-  integration remain unfinished. Project Clippy overrides
+- Structured Rust test evidence, general macro/module resolution, WGSL and
+  installed-release integration remain unfinished. Project Clippy overrides
   and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
+- Native dead-code coverage uses the pinned compiler's forced unused diagnostics
+  for the checked configuration, preserving public library entry points. It does
+  not claim whole-program public-API reachability or unused-code proof for
+  configurations that were not compiled.
+- Written-module architecture now connects Cargo targets, conventional and literal
+  module paths, use trees, aliases, re-exports and qualified references to existing
+  dependency-direction and cycle policy. Real Cargo fixtures cover forbidden
+  edges, source cycles, renamed workspace dependencies, unrelated invalid crates
+  and command-plan agreement. Native graph evidence survives the report schema.
+  Macro expansion and other unresolved syntax still fail coverage explicitly.
+  A plain crate passes the complete public CLI `check`; this is a usable subset,
+  not evidence that macro-heavy or arbitrary target configurations are supported.
 
 Cargo dependency-input governance now parses ordinary, build, development,
 target-specific and workspace declaration tables, checks exact registry and Git
@@ -189,9 +208,9 @@ Pinned Cargo packaging fixtures cover inherited workspace license metadata.
       the native host and default features. Additional feature/target selections
       need explicit analysis evidence. Installation hosts remain Linux/macOS on
       x64/arm64 and Windows x64; installation does not prove cross-compilation.
-- [ ] Define a first-class Rust conditional module activated by governed Rust
-      source/Cargo workspaces. Unsupported or missing required analysis must block
-      completion rather than fall back to a successful generic command.
+- [x] Route governed Rust through first-class native capabilities, like Go,
+      without a separate conditional-module switch. Unsupported or missing
+      analysis remains a blocking finding, not a successful generic command.
 
 | Capability   | Required built-in behavior                                                                     |
 | ------------ | ---------------------------------------------------------------------------------------------- |
@@ -283,9 +302,10 @@ Pinned Cargo packaging fixtures cover inherited workspace license metadata.
       a blanket prohibition nor a global exemption is appropriate.
 - [ ] Govern Rust lint attributes and `#[expect]` without blanket allows. Keep
       diagnostic IDs stable; policy exceptions stay exact, justified and expiring.
-- [ ] Validate WGSL with an exact compatible parser/validator, map shader assets
+- [ ] Follow-on WGSL track: validate shaders with an exact compatible parser/validator, map shader assets
       to consumers, and invalidate receipts when shaders change. GPU execution and
-      visual correctness remain project-specific evidence.
+      visual correctness remain project-specific evidence. This is separate from
+      the core Rust delivery gate.
 
 ## Phase 4: Rust supply-chain governance
 
@@ -366,8 +386,8 @@ dependency governance now have runnable beta implementations. Source parsing use
 exact authenticated binary wheels in the existing governed Python runtime; it
 requires neither target package installation scripts nor a new Rust bootstrap.
 
-The next milestone completes architecture and nonempty test evidence for one crate
-path, then extends workspace coverage and installed-release integration. Semantic
+The next milestone extends module/macro resolution and nonempty test evidence,
+then completes workspace coverage and installed-release integration. General
 module resolution, structured Rust test results and installed-release parity
 remain open. Existing missing-capability
 findings remain until those implementations and evidence exist. This beta is not

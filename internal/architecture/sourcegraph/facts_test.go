@@ -66,6 +66,32 @@ func TestGraphFactInputsAcceptRuffArchitectureEvidence(t *testing.T) {
 	}
 }
 
+func TestRustGraphFactsCannotReplacePythonOrForeignProjectEvidence(t *testing.T) {
+	t.Parallel()
+	node := Node{Path: "crate/src/lib.rs", Language: "rust", Root: "crate", Module: "app", Resolution: "file:crate/src/lib.rs"}
+	input := graphTestFactInput("crate", node.Path)
+	input.Analyzer, input.Protocol, input.Project = "rust-facts", "rust-source/v1", "crate/Cargo.toml"
+	if graph, err := New([]Node{node}, nil, []FactInput{input}, nil); err != nil || Validate(graph) != nil {
+		t.Fatalf("valid native Rust evidence failed: %+v, %v", graph, err)
+	}
+	for _, corrupt := range []func(*FactInput){
+		func(input *FactInput) { input.Project = "crate/pyproject.toml" },
+		func(input *FactInput) { input.Protocol = "python-facts/v3" },
+		func(input *FactInput) { input.Paths = []string{"other/src/lib.rs"} },
+		func(input *FactInput) {
+			input.Analyzer = "python-facts"
+			input.Protocol = "python-facts/v3"
+			input.Project = "crate/pyproject.toml"
+		},
+	} {
+		changed := input
+		corrupt(&changed)
+		if _, err := New([]Node{node}, nil, []FactInput{changed}, nil); err == nil {
+			t.Fatalf("mismatched Rust graph evidence passed: %+v", changed)
+		}
+	}
+}
+
 func TestGraphFactEvidenceChangesIdentityWithoutChangingCycles(t *testing.T) {
 	t.Parallel()
 	node := Node{Path: "a.py", Language: "python", Root: ".", Module: "app", Resolution: "file:a.py"}

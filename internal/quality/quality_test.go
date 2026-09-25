@@ -249,7 +249,7 @@ func TestCoverageKeepsUnknownSourceUncoveredBesideNativeSource(t *testing.T) {
 	repo.Config.ModuleByName = map[string]int{"sample": 0}
 	repo.Config.Checks = []policy.Command{{
 		Name: "dart", Provides: []string{"format", "lint", "typecheck", "complexity", "dead-code", "architecture"},
-		Paths: []string{"internal/sample/**/*.dart"},
+		Paths:   []string{"internal/sample/**/*.dart"},
 		Modules: []string{"sample"}, RunOn: []string{"check", "gate"},
 	}}
 	writeQualityFile(t, repo.Root, "internal/sample/lib.dart", "void main() {}\n")

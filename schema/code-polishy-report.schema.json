@@ -1019,6 +1019,13 @@
           }
         },
         {
+          "properties": {
+            "analyzer": { "const": "rust-facts" },
+            "protocol": { "const": "rust-source/v1" },
+            "provider": false
+          }
+        },
+        {
           "required": ["provider"],
           "properties": {
             "analyzer": { "const": "pack" },
@@ -1038,12 +1045,13 @@
       ],
       "properties": {
         "analyzer": {
-          "enum": ["python-facts", "ruff", "pack"]
+          "enum": ["python-facts", "ruff", "rust-facts", "pack"]
         },
         "protocol": {
           "enum": [
             "python-facts/v3",
             "ruff-graph-facts/v2",
+            "rust-source/v1",
             "code-polishy-pack/v3"
           ]
         },

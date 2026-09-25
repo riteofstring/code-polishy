@@ -156,7 +156,7 @@ func TestRustSourceFactsRespectConfiguredProviderOwnership(t *testing.T) {
 	t.Parallel()
 	repo := rustRepository(t)
 	write(t, repo.Root, "owned.rs", "not valid Rust but owned by the provider\n")
-	for _, capability := range []string{"format", "lint", "complexity"} {
+	for _, capability := range []string{"format", "lint", "complexity", "architecture"} {
 		repo.Config.Checks = append(repo.Config.Checks, policy.Command{Name: capability, Paths: []string{"owned.rs"}, RunOn: []string{"check"}, Provides: []string{capability}, Adapter: &policy.PackAdapter{PackName: "owner", Capability: capability}})
 	}
 	plan := PlanSources(repo.WithAnalysisProfile("check"), []string{"owned.rs"})

@@ -106,6 +106,29 @@ not text searches. Metadata such as `doc(hidden)` is not prose. Inline `allow`,
 native policy ownership. Exceptions belong to the existing exact policy mechanism
 for the underlying finding. Source validation and command failure remain blocking.
 
+## Written module dependencies
+
+Rust architecture consumes parsed module declarations, use trees, aliases,
+re-exports and qualified paths. Cargo target roots establish crate identity;
+directory names do not. Conventional `mod` paths and literal `#[path]` attributes
+must resolve to contained governed source. Imports resolve through module and
+item bindings, not a text search for names. The core retains physical source
+paths and applies its existing module-direction and source-cycle policy.
+
+This graph describes potential dependencies in written source, including
+conditional branches, as native Go import analysis does. It is not a claim that
+every branch was compiled. Conflicting conditional module identities, opaque
+generated imports, ambiguous bindings and missing source facts make graph
+coverage incomplete rather than selecting a convenient edge or reporting an
+empty graph. Compiler checks separately validate the selected Cargo configuration.
+
+The initial graph handles conventional external/inline modules, literal external
+module paths, nested use trees, renamed workspace dependencies and local aliases
+and re-exports. Standard-library derives are syntax-known. Macro invocations,
+non-builtin attribute expansion, conditional/inline path overrides, absolute
+external-prelude paths and unresolved external glob bindings currently fail
+coverage explicitly. These are beta limitations, not optional exemptions.
+
 ## Compiler checks
 
 Compilation uses the matching pinned cargo-clippy executable directly, with an
@@ -134,8 +157,14 @@ The advertised `tail-call-track-caller` warning requires unstable explicit tail
 calls in this release and is not selectable on the supported stable toolchain.
 Its exclusion is verified against the real compiler, not silently ignored at
 runtime.
-Parser-backed attribute governance and complete dead-code coverage remain
-separate requirements. Project Clippy settings currently fail
+Native dead-code coverage uses rustc's forced unused-item/import/macro diagnostics
+for the selected Cargo configuration. Public library APIs remain legitimate
+entry points; a private item used only by a disabled feature is unused in the
+checked configuration. This is compiler reachability, not a claim that every
+public API, configuration or macro expansion is globally live. Lint, type-check
+and dead-code providers cannot split one native compilation unit. Parsed
+attribute policy remains independent of compiler collection.
+Project Clippy settings currently fail
 with an explicit unsupported-configuration diagnostic; they cannot silently
 override the release-owned defaults.
 

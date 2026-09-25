@@ -28,6 +28,15 @@
         "module": "rustfacts"
       },
       {
+        "path": "docs/design/rust-architecture.md",
+        "sourcePaths": [
+          "internal/architecture/rust.go",
+          "internal/architecture/rust_evidence.go",
+          "internal/architecture/rust_test.go",
+          "internal/architecture/architecture.go"
+        ]
+      },
+      {
         "path": "docs/design/rust-inputs.md",
         "sourcePaths": [
           "internal/policy/data.go",
@@ -428,6 +437,7 @@
         "javascript",
         "policy",
         "pythonfacts",
+        "rustfacts",
         "repository",
         "runner",
         "pack"

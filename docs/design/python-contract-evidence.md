@@ -65,6 +65,11 @@ read set; an empty external-consumer set performs no dependency scan.
 The public declaration shapes and supported consumer syntax are documented in
 [Code Quality](../policies/code-quality.md#python-ruff-vulture-and-ty).
 
+Canonical graph evidence validates each native analyzer's protocol, manifest and
+language independently. Rust facts bind Cargo projects and Rust source; they
+cannot stand in for Python project evidence. The
+[Rust graph integration](rust-architecture.md) describes that additional consumer.
+
 ## Repository-owned contracts and bundled integrations
 
 `scope.pythonContracts` is repository authority for runtime consumption that

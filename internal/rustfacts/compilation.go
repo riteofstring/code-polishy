@@ -28,7 +28,7 @@ func PlanCompilation(repo repository.Repository, discovery DiscoveryPlan, allFil
 	}
 	for _, manifest := range discovery.Manifests {
 		files := compilationSources(repo, manifest, allFiles)
-		native, err := repo.NativeUnit(files, "lint", "typecheck")
+		native, err := repo.NativeUnit(files, "lint", "typecheck", "dead-code")
 		if err != nil {
 			plan.Findings = append(plan.Findings, projectFinding(manifest, "compilation-unit", err.Error()))
 			continue

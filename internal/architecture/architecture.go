@@ -43,6 +43,7 @@ func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected
 		goSourceGraph(repo, nativeSelected, allFiles, goInventory),
 		javascriptSourceGraph(ctx, repo, nativeSelected, allFiles),
 		pythonSourceGraph(ctx, repo, nativeSelected, allFiles, commandRunner),
+		rustSourceGraph(ctx, repo, nativeSelected, allFiles, commandRunner),
 	)
 	connectProviderImports(repo, allFiles, &part)
 	if !part.incomplete {

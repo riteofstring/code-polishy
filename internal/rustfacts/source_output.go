@@ -53,6 +53,7 @@ type Source struct {
 	Attributes []SourceAttribute `json:"attributes"`
 	Functions  []SourceFunction  `json:"functions"`
 	Macros     []SourceMacro     `json:"macros"`
+	Graph      []SourceGraphFact `json:"graph"`
 }
 
 type sourceCoordinates struct {
@@ -121,7 +122,7 @@ func validateSourceInventory(inputs []SourceInput, sources []Source) error {
 }
 
 func validateSourceFacts(source Source, text string) error {
-	if source.Comments == nil || source.Attributes == nil || source.Functions == nil || source.Macros == nil || source.Complete == (source.Error != "") {
+	if source.Comments == nil || source.Attributes == nil || source.Functions == nil || source.Macros == nil || source.Graph == nil || source.Complete == (source.Error != "") {
 		return errors.New("rust source omitted complete facts or its coverage failure")
 	}
 	locations, err := sourceFactLocations(source)
@@ -129,6 +130,9 @@ func validateSourceFacts(source Source, text string) error {
 		return err
 	}
 	coordinates := indexSource(text)
+	if err := validateSourceGraphFacts(source.Graph, coordinates); err != nil {
+		return err
+	}
 	if err := validateSourceAttributes(source.Attributes, coordinates, 0); err != nil {
 		return err
 	}
