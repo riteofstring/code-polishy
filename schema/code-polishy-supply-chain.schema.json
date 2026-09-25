@@ -157,7 +157,7 @@
       "required": ["id", "ecosystem", "advisory", "package"],
       "properties": {
         "id": { "$ref": "code-polishy.schema.json#/$defs/identifier" },
-        "ecosystem": { "enum": ["go", "npm", "pnpm", "pypi"] },
+        "ecosystem": { "enum": ["go", "npm", "pnpm", "pypi", "crates.io"] },
         "advisory": {
           "$ref": "code-polishy.schema.json#/$defs/nonemptyString"
         },

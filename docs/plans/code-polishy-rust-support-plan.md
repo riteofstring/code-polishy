@@ -123,8 +123,7 @@ target-specific and workspace declaration tables, checks exact registry and Git
 pins, contains local paths, and validates versioned lock identities/checksums.
 It keeps Git and registry coordinates separate and retains explicit failures for
 unsupported source substitutions. These declaration and lock readers are
-data-only. Complete Git evidence, vulnerability and license integration remain
-in progress.
+data-only. Complete Git evidence and license integration remain in progress.
 
 Native Cargo lock verification now uses bounded, complete resolved metadata through
 the ordinary supply-chain runner. Online verification may fetch already locked
@@ -149,6 +148,14 @@ their identity across lock scopes. Bare Cargo version requirements remain ranges
 Historical branch, tag, alternate-registry and override declarations can be
 reviewed for removal without admitting them into current dependency policy.
 Credential-bearing, malformed or escaping inputs fail before comparison.
+
+Native Cargo advisory coverage now uses the pinned OSV-Scanner through a
+public-crates-only projection of the complete lock. Raw Cargo extraction and
+compiler call analysis are disabled. The report must account for every projected
+version, and exact `crates.io` vulnerability assessments preserve the original
+lock scope. Tests cover source isolation, incomplete reports, scanner exits,
+assessment identity and the real pinned scanner with a temporary offline advisory
+database. Signed Cargo Git inventories and license integration remain unfinished.
 
 ## Phase 0: define the complete coverage contract
 

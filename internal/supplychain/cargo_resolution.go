@@ -27,7 +27,26 @@ func onlineCargoFindings(ctx context.Context, repo repository.Repository, files 
 	locks := []repository.CargoLock{}
 	for _, resolution := range result.Resolutions {
 		locks = append(locks, resolution.Lock)
+		findings = append(findings, cargoAdvisoryScopeFindings(repo, files, resolution)...)
 	}
 	findings = append(findings, cargoReleaseAgeFindings(ctx, repo, files, locks)...)
 	return findings, index + count
+}
+
+func cargoAdvisoryScopeFindings(repo repository.Repository, files []string, resolution rustfacts.Resolution) []policy.Finding {
+	if !osvCoversScope(repo.Config, resolution.Manifest) || osvCoversScope(repo.Config, resolution.Lock.Path) {
+		return nil
+	}
+	for _, pkg := range resolution.Lock.Packages {
+		if pkg.Source != repository.CargoCratesIOSource {
+			continue
+		}
+		findings := manifestCapabilityFindings(repo, files, resolution.Manifest, "cargo", []string{"security"})
+		for index := range findings {
+			findings[index].Path = resolution.Lock.Path
+			findings[index].Message = "the resolved Cargo workspace lock is outside the active OSV scope; cover the workspace lock with OSV or a governed security provider"
+		}
+		return findings
+	}
+	return nil
 }

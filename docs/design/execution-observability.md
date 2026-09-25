@@ -68,6 +68,9 @@ in evidence, while malformed, empty, timed-out, canceled, and operational
 results remain failed commands. OSV-Scanner's exit status 1 is the first such
 protocol; vulnerability assessment policy, not process status, decides whether
 its accepted report permits the gate to pass.
+Standalone scanner calls use the same exit conditions. A timeout or operational
+failure remains a scanner finding even when an advisory was emitted before the
+failure; assessing that advisory cannot erase the failed scan.
 
 Contained asset links have a read-only identity shared by formatting snapshots
 and provider context. It binds link text, canonical target, and bounded target-file

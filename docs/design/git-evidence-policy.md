@@ -13,6 +13,12 @@ public registry vulnerability and minimum-age checks even in mixed Git and
 registry locks. Public scan projections omit Git coordinates and never invent
 registry versions or publication dates for them.
 
+Cargo uses the same contained public-projection boundary, with its own complete
+locked-package report checks described in [Rust registry advisories](rust-inputs.md#registry-advisories).
+Its native lock extractor is disabled because the pinned scanner does not retain
+Cargo source identity. This does not extend the signed Python inventory protocol
+to Cargo or substitute registry evidence for Git contents.
+
 Opting in retains complete inventory binding, signature verification, scanner
 trust, expiry, license, vulnerability, and authenticated-age requirements.
 Missing or invalid evidence blocks the selected policy. Its receipt remains

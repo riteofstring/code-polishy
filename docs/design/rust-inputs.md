@@ -99,6 +99,38 @@ entries may record a commit without a declared ref; that commit is preserved
 without inventing a branch or treating the commit as a declaration from the
 manifest. Historical moving refs remain reviewable but do not become exact pins.
 
+## Registry advisories
+
+The pinned OSV-Scanner provides native advisory coverage for complete public
+Cargo lock inventories, independent of the currently enabled features or host.
+Its [version-bound Cargo extractor](https://github.com/google/osv-scalibr/blob/164402d9140e/extractor/filesystem/language/rust/cargolock/cargolock.go)
+does not preserve source identity. Recursive scans therefore disable both Cargo
+manifest and Cargo lock extraction. A bounded, data-only projection supplies
+only exact public crates.io coordinates from the governed lock reader. Private
+registries and unsupported source encodings fail before public scan planning;
+local and Git packages never become registry requests. Optional Git policy keeps
+its visible warning, and requiring Git evidence does not hide public registry
+advisories from a mixed Cargo lock.
+
+Cargo reuses the existing immutable projection artifacts and common scanner
+runner. Separate locks preserve their own original finding scopes. Planning does
+not write artifacts; execution verifies their regular-file containment and exact
+planned bytes. No transitive resolution or Rust call analysis is enabled, so an
+advisory scan does not execute build scripts or procedural macros.
+
+Scanner scope must contain the actual workspace lock established by Cargo. A
+member-only scope cannot claim an ancestor lock's public dependencies; it needs
+workspace-level OSV coverage or a governed security provider.
+
+Projected Cargo scans request every package in the result. Missing, repeated,
+foreign or wrong-version coordinates fail coverage, including an empty result for
+a nonempty input. Scanner errors do not become clean reports. Complete advisory
+reports retain aliases, exact versions, severity and Cargo.lock scope through the
+existing report-bearing exit and vulnerability-assessment policies. Assessments
+use the `crates.io` ecosystem and cannot approve a different lock or version.
+The pinned runtime contract is exercised against a temporary synthetic offline
+advisory database, without querying a live provider.
+
 ## Shader inputs
 
 WGSL is executable shader source with its own built-in language identifier,
