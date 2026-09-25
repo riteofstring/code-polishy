@@ -251,7 +251,8 @@
           "scripts/build-oci-image.sh",
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
-          "scripts/test-installed-release-architecture.sh"
+          "scripts/test-installed-release-architecture.sh",
+          "scripts/test-installed-release-rust.sh"
         ]
       },
       {
@@ -1430,6 +1431,7 @@
         "paths": [
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
+          "scripts/test-installed-release-rust.sh",
           "cmd/code-polishy/**",
           "internal/pack/**",
           "tools/fixtures/language-pack/**"

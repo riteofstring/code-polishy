@@ -121,6 +121,7 @@ try {
     'internal/rustfacts/pyproject.toml','internal/rustfacts/uv.lock',
     'tools/rust-version.txt','tools/rust_checksums.txt','tools/cargo-nextest-version.txt','tools/cargo-nextest_checksums.txt',
     'tools/cargo-nextest-license.txt',
+    'tools/rustfmt.toml','tools/clippy.toml',
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
     'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',

@@ -89,3 +89,11 @@ requires a separately carried upstream license. Its pinned MIT text is recorded
 with the corresponding source revision. That top-level notice does not establish
 complete third-party notices or an exact linked-dependency inventory for Nextest;
 those remain a publication requirement alongside native installed-Rust evidence.
+
+The installed Rust adoption fixture uses a dependency-free Cargo library in a
+temporary repository. Every policy operation enters through the exact installed
+launcher and lock. It exercises selected formatting, compiler diagnostics in JSON
+and SARIF, a passing native suite, an assertion failure, and an empty selection.
+The fixture checks the retained structured test outcome rather than treating the
+CLI's nonzero exit as sufficient evidence. It never downloads target packages or
+changes the caller's repository authority.

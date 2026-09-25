@@ -209,7 +209,7 @@ EOF
   printf 'version = 1\nrevision = 3\n' >"${source_root}/internal/pythonfacts/uv.lock"
   copy_file "${policy_root}/internal/rustfacts/pyproject.toml" "${source_root}/internal/rustfacts/pyproject.toml"
   copy_file "${policy_root}/internal/rustfacts/uv.lock" "${source_root}/internal/rustfacts/uv.lock"
-  for rust_pin in rust-version.txt rust_checksums.txt cargo-nextest-version.txt cargo-nextest_checksums.txt cargo-nextest-license.txt; do
+  for rust_pin in rust-version.txt rust_checksums.txt rustfmt.toml clippy.toml cargo-nextest-version.txt cargo-nextest_checksums.txt cargo-nextest-license.txt; do
     copy_file "${policy_root}/tools/${rust_pin}" "${source_root}/tools/${rust_pin}"
   done
   printf '3.12.13+20260728\n' >"${source_root}/tools/python-version.txt"
@@ -552,6 +552,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   internal/rustfacts/pyproject.toml internal/rustfacts/uv.lock \
   tools/rust-version.txt tools/rust_checksums.txt tools/cargo-nextest-version.txt tools/cargo-nextest_checksums.txt \
   tools/cargo-nextest-license.txt \
+  tools/rustfmt.toml tools/clippy.toml \
   tools/packaging-version.txt tools/packaging_wheel_checksums.txt \
   tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \

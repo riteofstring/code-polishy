@@ -7,7 +7,7 @@ lock="${policy_root}/.code-polishy.lock.json"
 fixture=""
 
 usage() {
-  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|scoped-analysis|python-adoption|python-reachability|python-pydantic]" >&2
+  echo "usage: test-installed-release.sh [--prefix DIR] [--lock FILE] [--fixture first-adoption|scoped-analysis|python-adoption|python-reachability|python-pydantic|rust-adoption]" >&2
   exit 2
 }
 
@@ -50,7 +50,7 @@ while (($#)); do
   esac
 done
 case "${fixture}" in
-  "" | first-adoption | scoped-analysis | python-adoption | python-reachability | python-pydantic) ;;
+  "" | first-adoption | scoped-analysis | python-adoption | python-reachability | python-pydantic | rust-adoption) ;;
   *) usage ;;
 esac
 
@@ -260,8 +260,13 @@ source "${policy_root}/scripts/test-installed-release-scoped-analysis.sh"
 source "${policy_root}/scripts/test-installed-release-python-adoption.sh"
 source "${policy_root}/scripts/test-installed-release-python-reachability.sh"
 source "${policy_root}/scripts/test-installed-release-python-pydantic.sh"
+source "${policy_root}/scripts/test-installed-release-rust.sh"
 
 case "${fixture}" in
+  rust-adoption)
+    exercise_rust_adoption_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}"
+    exit 0
+    ;;
   scoped-analysis)
     exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
     echo "The installed release passed the scoped-analysis fixture."
@@ -984,5 +989,6 @@ expect_finding "react" "quality.lint" "src/conditional.tsx" "react-hooks/rules-o
 exercise_python_adoption_fixture "${fixture_root}" "${real_git}" "${release}"
 exercise_python_reachability_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}"
 exercise_python_pydantic_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}" "${policy_root}"
+exercise_rust_adoption_fixture "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}"
 
 echo "The installed release governed every disposable target shape."

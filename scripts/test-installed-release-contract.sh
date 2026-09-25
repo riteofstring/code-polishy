@@ -43,3 +43,7 @@ EOF
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \
   --fixture first-adoption
+"${policy_root}/scripts/test-installed-release.sh" \
+  --prefix "${fixture_root}/prefix" \
+  --lock "${fixture_root}/target/.code-polishy.lock.json" \
+  --fixture rust-adoption

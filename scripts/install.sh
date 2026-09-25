@@ -309,6 +309,8 @@ release_contents=(
   "internal/rustfacts/uv.lock"
   "tools/rust-version.txt"
   "tools/rust_checksums.txt"
+  "tools/rustfmt.toml"
+  "tools/clippy.toml"
   "tools/cargo-nextest-version.txt"
   "tools/cargo-nextest_checksums.txt"
   "tools/cargo-nextest-license.txt"
