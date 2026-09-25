@@ -691,13 +691,15 @@
     "testSuite": {
       "type": "object",
       "unevaluatedProperties": false,
-      "required": ["name", "kind", "scope", "argv"],
+      "required": ["name", "kind", "scope"],
+      "oneOf": [{ "required": ["argv"] }, { "required": ["rust"] }],
       "properties": {
         "kind": { "$ref": "#/$defs/identifier" },
         "scope": { "enum": ["module", "repository"] },
         "reusable": { "type": "boolean" },
         "cost": { "enum": ["quick", "standard", "expensive"] },
         "retryArgv": { "$ref": "#/$defs/argv" },
+        "rust": { "$ref": "#/$defs/rustTestSuite" },
         "extraInputs": { "$ref": "#/$defs/paths" },
         "covers": { "$ref": "#/$defs/identifierArray" },
         "artifacts": {
@@ -822,13 +824,38 @@
         "executionSuite": { "$ref": "#/$defs/identifier" }
       }
     },
+    "rustTestSuite": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manifest": { "$ref": "#/$defs/concretePath" },
+        "packages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[^-\\s\\u0000][^\\s\\u0000]*$"
+          }
+        },
+        "features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[^-\\s\\u0000][^\\s\\u0000]*$"
+          }
+        },
+        "noDefaultFeatures": { "type": "boolean" },
+        "filter": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
     "testArtifact": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "type"],
       "properties": {
         "path": { "$ref": "#/$defs/exactPath", "pattern": "\\.[xX][mM][lL]$" },
-        "type": { "enum": ["junit", "cobertura"] },
+        "type": { "enum": ["junit", "cobertura", "nextest-junit"] },
         "required": { "type": "boolean", "default": false }
       }
     },

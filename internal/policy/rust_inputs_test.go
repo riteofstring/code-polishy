@@ -9,7 +9,7 @@ func TestRustConfigurationPathsAreSensitive(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{
 		"Cargo.toml", "Cargo.lock", ".cargo/config", ".cargo/config.toml",
-		"rust-toolchain", "rust-toolchain.toml", "rustfmt.toml", ".rustfmt.toml", "clippy.toml", ".clippy.toml",
+		"rust-toolchain", "rust-toolchain.toml", "rustfmt.toml", ".rustfmt.toml", "clippy.toml", ".clippy.toml", ".config/nextest.toml",
 	} {
 		for _, prefix := range []string{"", "crates/graphics/", "./crates/graphics/", `crates\graphics\`} {
 			if !IsSensitiveControlInput(prefix + path) {

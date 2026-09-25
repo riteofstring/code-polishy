@@ -265,7 +265,7 @@ func (engine *Engine) checkpointGatePreparation(ctx context.Context, base string
 	if err != nil {
 		return checkpointGatePreparation{}, err
 	}
-	commands = append(commands, mergeGateSuiteCommands(tests.Suites)...)
+	commands = append(commands, mergeGateSuiteCommands(engine.Repository, tests.Suites)...)
 	state, plan := checkpointGateStateAndPlan(base, candidate, selection, documentation, decision, tests, commands)
 	state.ReliabilityReminder = engine.reliabilityReminder(selection.Candidate)
 	return checkpointGatePreparation{
@@ -327,7 +327,7 @@ func (engine *Engine) executeCheckpointGate(ctx context.Context, execution check
 func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
 	report, gateErr := engine.documentationMergeGate(ctx, execution.selection)
 	if gateErr == nil && !HasFindings(report) && len(execution.plan.Tests.Suites) > 0 {
-		plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
+		plannedRunner := &mergeGatePlannedRunner{repo: engine.Repository, root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
 		plannedEngine := *engine
 		plannedEngine.Runner = plannedRunner
 		tested, testErr := plannedEngine.testExactPlan(ctx, execution.plan.Tests, execution.selection, true)
@@ -353,7 +353,7 @@ func (engine *Engine) finalizeCheckpointReplayFailure(ctx context.Context, execu
 }
 
 func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, execution checkpointGateExecution) (Report, error) {
-	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
+	plannedRunner := &mergeGatePlannedRunner{repo: engine.Repository, root: engine.Repository.Root, delegate: execution.controller.runner, expected: execution.commands}
 	plannedEngine := *engine
 	plannedEngine.Runner = plannedRunner
 	report, testErr := engine.checkpointChecksAndTests(ctx, plannedEngine, execution.selection, execution.plan.Tests)

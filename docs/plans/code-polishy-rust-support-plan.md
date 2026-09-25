@@ -129,7 +129,7 @@ changed modules; add a quick suite when a new module is introduced.
   function/closure measurements. Inline tests do not relax production limits.
   The pinned Tree-sitter Rust grammar supplies written-source facts; it does not
   pretend to resolve macro expansion or compiler configuration.
-- Structured Rust test evidence, general macro/module resolution, WGSL and
+- Doctest evidence, general macro/module resolution, WGSL and
   installed-release integration remain unfinished. Project Clippy overrides
   and non-native targets currently fail
   explicitly rather than weakening the supported compiler configuration.
@@ -149,6 +149,17 @@ changed modules; add a quick suite when a new module is introduced.
   Macro expansion and other unresolved syntax still fail coverage explicitly.
   A plain crate passes the complete public CLI `check`; this is a usable subset,
   not evidence that macro-heavy or arbitrary target configurations are supported.
+- Typed Rust suites now use the pinned Nextest runner through ordinary suite
+  selection, direct execution, gate plans and regression proofs. Structured
+  JUnit evidence requires nonempty executed tests, complete counts and unique
+  identities; assertions remain distinct from compiler/build/operational failures.
+  Cargo workspace defaults, package and feature selection, integration targets,
+  filters, cancellation, frozen locks and receipt invalidation have real runtime
+  fixtures. Application logging variables remain valid explicit inputs; ambient
+  Cargo/compiler/Nextest controls do not replace governed execution. Nextest state
+  stays outside reusable read-only source views. Project Nextest settings require
+  explicit support rather than silently dropping their default filters or scripts.
+  Doctests and ordinary macro-heavy project coverage remain unfinished.
 
 Cargo dependency-input governance now parses ordinary, build, development,
 target-specific and workspace declaration tables, checks exact registry and Git
@@ -334,7 +345,7 @@ Pinned Cargo packaging fixtures cover inherited workspace license metadata.
 
 - [ ] Map Rust suites to focused/recommended/full/supplemental profiles. Support
       unit, integration, doctest, benchmark and native app workflows distinctly.
-- [ ] Reject a required suite that selects zero tests, skips every test, or only
+- [x] Reject a required native Rust suite that selects zero tests, skips every test, or only
       builds. Use structured, version-bound runner evidence; do not parse arbitrary
       terminal prose as authoritative results. Choose a supported structured runner
       deliberately if stable Cargo output cannot satisfy the evidence contract.
@@ -390,12 +401,13 @@ dependency governance now have runnable beta implementations. Source parsing use
 exact authenticated binary wheels in the existing governed Python runtime; it
 requires neither target package installation scripts nor a new Rust bootstrap.
 
-The next milestone extends module/macro resolution and nonempty test evidence,
-then completes workspace coverage and installed-release integration. General
-module resolution, structured Rust test results and installed-release parity
-remain open. Existing missing-capability
-findings remain until those implementations and evidence exist. This beta is not
-yet usable as first-class Rust support for Masterbrainer.
+Native unit/integration suites now retain nonempty structured results through
+ordinary commands, gate artifacts, regression proofs and reusable receipts. The
+[Rust test contract](../design/rust-tests.md) documents selectors and boundaries.
+The next milestones extend ordinary macro/module and doctest coverage, then
+complete installed-release integration. Existing coverage failures remain until
+their implementations and evidence exist. This beta does not yet establish
+first-class support for Masterbrainer's full project.
 
 Primary references: [Cargo metadata](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html),
 [Cargo dependency semantics](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html),

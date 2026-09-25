@@ -540,6 +540,7 @@ func TestRepositoryPolicySelectsOwningModuleToolingContracts(t *testing.T) {
 	repo := repository.Repository{Root: root, Config: config}
 	toolingSuites := []string{
 		"mutation-wrapper-contract", "install-contract", "release-preflight-contract",
+		"rust-runtime-contract",
 		"javascript-runtime-contract", "javascript-bundle-contract", "javascript-runner-contract",
 		"javascript-project-contract", "installed-release-contract", "oci-image-contract", "javascript-provider-boundary",
 	}

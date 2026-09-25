@@ -15,21 +15,21 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
-func validateDeclared(directory, suite string, declarations []policy.TestArtifact) ([]Record, error) {
+func validateDeclared(directory, suite string, declarations []policy.TestArtifact, exitStatus int) ([]Record, error) {
 	records := []Record{}
 	for _, declaration := range declarations {
-		record, present, err := validateOne(directory, suite, declaration)
-		if err != nil {
-			return records, err
-		}
+		record, present, err := validateOne(directory, suite, declaration, exitStatus)
 		if present {
 			records = append(records, record)
+		}
+		if err != nil {
+			return records, err
 		}
 	}
 	return records, nil
 }
 
-func validateOne(directory, suite string, declaration policy.TestArtifact) (Record, bool, error) {
+func validateOne(directory, suite string, declaration policy.TestArtifact, exitStatus int) (Record, bool, error) {
 	path, err := containedArtifactPath(directory, declaration.Path)
 	if err != nil {
 		return Record{}, false, err
@@ -48,13 +48,17 @@ func validateOne(directory, suite string, declaration policy.TestArtifact) (Reco
 	if err != nil {
 		return Record{}, false, err
 	}
+	record := Record{
+		Suite: suite, Path: filepath.Base(directory) + "/" + declaration.Path, Type: declaration.Type,
+		Required: declaration.Required, Size: int64(len(data)), SHA256: digest,
+	}
+	if declaration.Type == policy.NextestJUnitArtifact {
+		return record, true, validateNextest(data, suite, exitStatus)
+	}
 	if err := validateXML(data, declaration.Type); err != nil {
 		return Record{}, false, fmt.Errorf("test artifact %q: %w", declaration.Path, err)
 	}
-	return Record{
-		Suite: suite, Path: filepath.Base(directory) + "/" + declaration.Path, Type: declaration.Type,
-		Required: declaration.Required, Size: int64(len(data)), SHA256: digest,
-	}, true, nil
+	return record, true, nil
 }
 
 func regularArtifactInfo(path string, declaration policy.TestArtifact) (os.FileInfo, bool, error) {

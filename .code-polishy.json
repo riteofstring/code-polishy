@@ -28,6 +28,26 @@
         "module": "rustfacts"
       },
       {
+        "path": "docs/design/rust-tests.md",
+        "sourcePaths": [
+          "internal/policy/rust_tests.go",
+          "internal/policy/rust_tests_test.go",
+          "internal/rustfacts/tests.go",
+          "internal/testing/rust.go",
+          "internal/testing/rust_test.go",
+          "internal/engine/test_receipts.go",
+          "internal/engine/test_execution_view.go",
+          "internal/engine/rust_tests_test.go",
+          "internal/behaviorreview/proof.go",
+          "internal/behaviorreview/rust_proof_test.go",
+          "internal/testartifact/execution.go",
+          "internal/testartifact/nextest.go",
+          "internal/testartifact/nextest_config.go",
+          "internal/testartifact/nextest_test.go",
+          "internal/testartifact/xml.go"
+        ]
+      },
+      {
         "path": "docs/design/rust-architecture.md",
         "sourcePaths": [
           "internal/architecture/rust.go",
@@ -388,7 +408,8 @@
         "gaterun",
         "policy",
         "repository",
-        "runner"
+        "runner",
+        "testing"
       ]
     },
     {
@@ -446,7 +467,13 @@
     {
       "name": "testing",
       "paths": ["internal/testing/**"],
-      "dependsOn": ["policy", "repository", "runner", "testartifact"]
+      "dependsOn": [
+        "policy",
+        "repository",
+        "runner",
+        "rustfacts",
+        "testartifact"
+      ]
     },
     {
       "name": "supplychain",

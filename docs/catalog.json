@@ -311,6 +311,14 @@
       "public": true
     },
     {
+      "id": "rust-tests",
+      "path": "docs/design/rust-tests.md",
+      "title": "Native Rust Test Evidence",
+      "summary": "Understand native Cargo test selection, structured Nextest outcomes, artifact authority and doctest boundaries.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "cargo-facts",
       "path": "docs/design/cargo-facts.md",
       "title": "Cargo Project Facts",

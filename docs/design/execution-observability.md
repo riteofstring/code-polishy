@@ -25,6 +25,9 @@ Reports expose requested and expanded paths, analysis-context paths, graph
 size, total evaluation time, phase durations, exact analyzer commands, resource
 wait, analyzer-owned Vulture subphases, and cache activity so retained evidence
 identifies both scope and cost.
+The observation wrapper forwards structured process results unchanged to suite
+execution. Recording an exit status while discarding it from the caller would
+make native test-artifact validation disagree with the command that produced it.
 
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;

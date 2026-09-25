@@ -143,15 +143,24 @@ func (commandRunner *executionRunner) RecordCommandPhases(ctx context.Context, c
 }
 
 func (commandRunner *executionRunner) Run(ctx context.Context, root string, command policy.Command) error {
+	_, err := commandRunner.RunWithResult(ctx, root, command)
+	return err
+}
+
+func (commandRunner *executionRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
 	started := time.Now()
 	if delegate, ok := commandRunner.delegate.(resultRunner); ok {
 		result, err := delegate.RunWithResult(ctx, root, command)
 		commandRunner.recorder.addCommand(ctx, command, result, time.Since(started), err)
-		return err
+		return result, err
 	}
 	err := commandRunner.delegate.Run(ctx, root, command)
-	commandRunner.recorder.addCommand(ctx, command, runner.Result{}, time.Since(started), err)
-	return err
+	result := runner.Result{ExecutionDuration: time.Since(started)}
+	if err != nil {
+		result.ExitStatus = -1
+	}
+	commandRunner.recorder.addCommand(ctx, command, result, result.ExecutionDuration, err)
+	return result, err
 }
 
 func (commandRunner *executionRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {

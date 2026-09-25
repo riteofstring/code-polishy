@@ -7,7 +7,8 @@ settings change analysis. Their standard filenames are therefore sensitive
 control inputs at every repository depth, alongside Cargo manifests and locks.
 This includes both `.cargo/config` and `.cargo/config.toml`, `rust-toolchain`
 and `rust-toolchain.toml`, `rustfmt.toml` and `.rustfmt.toml`, and `clippy.toml`
-and `.clippy.toml`.
+and `.clippy.toml`. `.config/nextest.toml` is also a control input because its
+profiles can change test selection and execution.
 
 The existing repository selection boundary expands changed or deleted control
 inputs to full governed scope. This is deliberately conservative until Cargo

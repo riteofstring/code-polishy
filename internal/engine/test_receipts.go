@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 	"github.com/riteofstring/code-polishy/internal/testreceipt"
 )
 
@@ -23,7 +24,8 @@ func (engine *Engine) suiteReceiptIdentity(suite policy.TestSuite) (testreceipt.
 	if !suite.Reusable {
 		return testreceipt.Identity{}, "suite is not explicitly reusable", nil
 	}
-	if err := validateReusableArguments(suite.Argv); err != nil {
+	command := testpolicy.SuiteCommand(engine.Repository, suite)
+	if err := validateReusableArguments(command.Argv); err != nil {
 		return testreceipt.Identity{}, err.Error(), nil
 	}
 	configurationSHA256, releaseIdentity, err := suiteReceiptReleaseIdentity(engine.Repository)
@@ -34,9 +36,9 @@ func (engine *Engine) suiteReceiptIdentity(suite policy.TestSuite) (testreceipt.
 	if err != nil || reason != "" {
 		return testreceipt.Identity{}, reason, err
 	}
-	environment := suiteReceiptEnvironment(generationReceiptEnvironment(engine.Repository, suite, selected))
+	environment := suiteReceiptEnvironment(append(generationReceiptEnvironment(engine.Repository, suite, selected), command.Environment...))
 	tools := suiteReceiptTools(engine.Repository)
-	if reason := unboundedSuiteTool(suite.Argv, tools, selected); reason != "" {
+	if reason := unboundedSuiteTool(command.Argv, tools, selected); reason != "" {
 		return testreceipt.Identity{}, reason, nil
 	}
 	identity := testreceipt.Identity{
@@ -278,6 +280,9 @@ func intersectsStrings(left, right []string) bool {
 }
 
 func cloneReceiptSuite(suite policy.TestSuite) policy.TestSuite {
+	if suite.Rust != nil {
+		suite.Rust = suite.Rust.Clone()
+	}
 	suite.Modules = append([]string{}, suite.Modules...)
 	suite.Argv = append([]string{}, suite.Argv...)
 	suite.RetryArgv = append([]string{}, suite.RetryArgv...)

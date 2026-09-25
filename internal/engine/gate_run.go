@@ -167,7 +167,7 @@ func newGateArtifactRunner(engine *Engine, run *gaterun.Run, commands []MergeGat
 	receipts.RenderPlan()
 	retryCommands := map[string]policy.Command{}
 	for _, suite := range engine.Repository.Config.Tests.Suites {
-		retryCommands[suite.Name] = suiteCommand(testpolicy.RetrySuite(suite))
+		retryCommands[suite.Name] = testpolicy.SuiteCommand(engine.Repository, testpolicy.RetrySuite(suite))
 	}
 	return &gateArtifactRunner{
 		delegate: engine.Runner, run: run, expected: commands, reusable: reusable,

@@ -146,6 +146,9 @@ func defaultStrings(target *[]string, value []string) {
 }
 
 func suiteDefaults(suite *TestSuite) {
+	if suite.Rust != nil {
+		defaultString(&suite.Rust.Manifest, "Cargo.toml")
+	}
 
 	if suite.Kind == "performance" && !slices.Contains(suite.ExclusiveResources, "performance") {
 		suite.ExclusiveResources = append(suite.ExclusiveResources, "performance")
@@ -395,10 +398,10 @@ func validateTests(config *Config) error {
 func validateTestSuite(config *Config, suite *TestSuite, index int, names map[string]bool) error {
 	label := fmt.Sprintf("tests.suites[%d]", index)
 	command := Command{Name: suite.Name, Argv: suite.Argv, Cwd: suite.Cwd, Paths: suite.Paths, Modules: suite.Modules, Environment: suite.Environment, ExclusiveResources: suite.ExclusiveResources, TimeoutSeconds: suite.TimeoutSeconds}
-	if err := validateCommand(config, &command, label, names); err != nil {
+	if err := validateCommandMetadata(config, &command, label, names); err != nil {
 		return err
 	}
-	if err := validateTestCommandArgv(suite.Argv, label); err != nil {
+	if err := validateSuiteRunner(*suite, label); err != nil {
 		return err
 	}
 	if err := validateTestRetry(suite, label); err != nil {
@@ -550,10 +553,14 @@ func validateTestCommandArgv(argv []string, label string) error {
 }
 
 func validateCommand(config *Config, command *Command, label string, names map[string]bool) error {
-	if err := validateCommandIdentity(command, label, names); err != nil {
+	if err := validateCommandArgv(command.Argv, label); err != nil {
 		return err
 	}
-	if err := validateCommandArgv(command.Argv, label); err != nil {
+	return validateCommandMetadata(config, command, label, names)
+}
+
+func validateCommandMetadata(config *Config, command *Command, label string, names map[string]bool) error {
+	if err := validateCommandIdentity(command, label, names); err != nil {
 		return err
 	}
 	if err := ValidateExclusiveResources(command.ExclusiveResources); err != nil {
@@ -586,6 +593,9 @@ func validateCommandIdentity(command *Command, label string, names map[string]bo
 }
 
 func validateCommandArgv(argv []string, label string) error {
+	if len(argv) == 0 {
+		return fmt.Errorf("%s.argv must identify an executable", label)
+	}
 	if shellEvaluation(argv) {
 		return fmt.Errorf("%s.argv must call a checked-in script instead of shell -c", label)
 	}

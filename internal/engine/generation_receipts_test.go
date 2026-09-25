@@ -22,7 +22,7 @@ func TestGenerationVerificationRejectsDriftAndInvalidatesProducerEvidence(t *tes
 			identity := generationReceiptIdentity(t, policyEngine, suite)
 			var output bytes.Buffer
 			commandRunner := runner.OSRunner{Stdout: &output, Stderr: &output}
-			execution := testpolicy.ExecuteSuite(t.Context(), policyEngine.Repository.Root, commandRunner, suite, 1)
+			execution := testpolicy.ExecuteSuite(t.Context(), policyEngine.Repository, commandRunner, suite, 1)
 			if execution.Failed() {
 				t.Fatalf("initial generation verification failed: %+v\n%s", execution, output.String())
 			}
@@ -49,7 +49,7 @@ func TestGenerationVerificationRejectsDriftAndInvalidatesProducerEvidence(t *tes
 				t.Fatalf("changed %s retained verification evidence: %v", change, err)
 			}
 			if change == "input" || change == "output" {
-				execution := testpolicy.ExecuteSuite(t.Context(), policyEngine.Repository.Root, runner.OSRunner{}, suite, 1)
+				execution := testpolicy.ExecuteSuite(t.Context(), policyEngine.Repository, runner.OSRunner{}, suite, 1)
 				if !execution.Failed() {
 					t.Fatal("generation drift passed declared verification")
 				}

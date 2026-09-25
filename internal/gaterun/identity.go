@@ -245,12 +245,16 @@ func validateCommandSuiteIdentity(command CommandSpec) error {
 func validateArtifactSpecs(artifacts []ArtifactSpec) error {
 	seen := map[string]bool{}
 	for _, artifact := range artifacts {
-		if !validArtifactRelativePath(artifact.Path) || artifact.Type != "junit" && artifact.Type != "cobertura" || seen[artifact.Path] {
+		if !validArtifactRelativePath(artifact.Path) || !validArtifactType(artifact.Type) || seen[artifact.Path] {
 			return fmt.Errorf("command artifact declaration is invalid")
 		}
 		seen[artifact.Path] = true
 	}
 	return nil
+}
+
+func validArtifactType(value string) bool {
+	return value == "junit" || value == "cobertura" || value == policy.NextestJUnitArtifact
 }
 
 func validCommandIdentity(command CommandSpec) bool {

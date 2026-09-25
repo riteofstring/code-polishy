@@ -377,7 +377,8 @@ type TestSuite struct {
 	Reusable           bool           `json:"reusable,omitempty"`
 	Cost               string         `json:"cost,omitempty"`
 	Modules            []string       `json:"modules,omitempty"`
-	Argv               []string       `json:"argv"`
+	Argv               []string       `json:"argv,omitempty"`
+	Rust               *RustTestSuite `json:"rust,omitempty"`
 	RetryArgv          []string       `json:"retryArgv,omitempty"`
 	Cwd                string         `json:"cwd,omitempty"`
 	Paths              []string       `json:"paths,omitempty"`
@@ -394,6 +395,14 @@ type TestArtifact struct {
 	Path     string `json:"path"`
 	Type     string `json:"type"`
 	Required bool   `json:"required,omitempty"`
+}
+
+type RustTestSuite struct {
+	Manifest          string   `json:"manifest,omitempty"`
+	Packages          []string `json:"packages,omitempty"`
+	Features          []string `json:"features,omitempty"`
+	NoDefaultFeatures bool     `json:"noDefaultFeatures,omitempty"`
+	Filter            string   `json:"filter,omitempty"`
 }
 
 type SupplyChain struct {
