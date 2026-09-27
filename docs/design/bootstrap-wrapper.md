@@ -84,11 +84,14 @@ repository lock mode.
 ## Upgrade boundary
 
 Upgrade is deliberately two phase. `upgrade plan` accepts a verified publication
-index, installs the current-host candidate without changing repository
-authority, authenticates the capability delta, and runs the outgoing and
-incoming engines against the same repository. The durable plan identifies
-added, removed, and changed diagnostics so a policy bump cannot disguise
-application cleanup as a simple version edit.
+index and reuses a matching current-host candidate only after verifying its
+manifest identity and complete installed tree. Otherwise it downloads and
+installs the candidate without changing repository authority. Connection, TLS,
+and response-header setup remain bounded, while an exact-size, digest-checked
+archive transfer has no fixed whole-body deadline. The planner authenticates the
+capability delta and runs the outgoing and incoming engines against the same
+repository. The durable plan identifies added, removed, and changed diagnostics
+so a policy bump cannot disguise application cleanup as a simple version edit.
 
 `upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a

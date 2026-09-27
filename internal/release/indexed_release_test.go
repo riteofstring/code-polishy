@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,6 +62,114 @@ func TestInstallIndexedReleaseDownloadsAndLocksTheExactHostArchive(t *testing.T)
 		t.Fatal(err)
 	}
 	assertWrittenHostArchive(t, installed.Lock, host, server.URL+"/"+artifact.Archive.Name, archiveSHA, int64(len(archiveData)))
+}
+
+func TestInstallIndexedReleaseReusesTheVerifiedInstalledHost(t *testing.T) {
+	releaseRoot, manifest := installedRelease(t, map[string]string{BinaryPath: "engine", LauncherBinaryPath: "launcher"}, nil)
+	index := publicationIndexFixture(manifest, exampleDigest, 1)
+	indexData, err := renderJSON(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexDigest := sha256.Sum256(indexData)
+	prefix := filepath.Join(t.TempDir(), "prefix")
+	installPublicationFixture(t, releaseRoot, prefix, manifest)
+	archiveRequests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release-index.json" {
+			_, _ = response.Write(indexData)
+			return
+		}
+		archiveRequests++
+		http.Error(response, "archive must not be requested", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	installed, err := installIndexedRelease(context.Background(), server.Client(), server.URL+"/release-index.json", hex.EncodeToString(indexDigest[:]), prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalPrefix, err := filepath.EvalSymlinks(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archiveRequests != 0 || installed.Root != DirectoryForManifest(canonicalPrefix, manifest) {
+		t.Fatalf("archive requests = %d, installed root = %s", archiveRequests, installed.Root)
+	}
+	if err := installed.Manifest.Verify(installed.Root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallIndexedReleaseRejectsCorruptInstalledHostWithoutDownloading(t *testing.T) {
+	releaseRoot, manifest := installedRelease(t, map[string]string{BinaryPath: "engine", LauncherBinaryPath: "launcher"}, nil)
+	index := publicationIndexFixture(manifest, exampleDigest, 1)
+	indexData, err := renderJSON(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexDigest := sha256.Sum256(indexData)
+	prefix := filepath.Join(t.TempDir(), "prefix")
+	target := installPublicationFixture(t, releaseRoot, prefix, manifest)
+	if err := os.WriteFile(filepath.Join(target, filepath.FromSlash(BinaryPath)), []byte("changed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	archiveRequests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/release-index.json" {
+			_, _ = response.Write(indexData)
+			return
+		}
+		archiveRequests++
+		http.Error(response, "archive must not be requested", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	_, err = installIndexedRelease(context.Background(), server.Client(), server.URL+"/release-index.json", hex.EncodeToString(indexDigest[:]), prefix)
+	if err == nil || !strings.Contains(err.Error(), "is not the file") || archiveRequests != 0 {
+		t.Fatalf("corrupt installed release: archive requests=%d err=%v", archiveRequests, err)
+	}
+}
+
+func TestReleaseHTTPClientDoesNotImposeAWholeTransferDeadline(t *testing.T) {
+	client := releaseHTTPClient()
+	deadline := false
+	client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		_, deadline = request.Context().Deadline()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Request:    request,
+			Body:       io.NopCloser(strings.NewReader("release")),
+		}, nil
+	})
+	source, err := parseReleaseHTTPSURL("https://example.invalid/release.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := requestRelease(context.Background(), client, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if deadline {
+		t.Fatal("release transfer received a whole-request deadline")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func installPublicationFixture(t *testing.T, releaseRoot, prefix string, manifest Manifest) string {
+	t.Helper()
+	target := DirectoryForManifest(prefix, manifest)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(releaseRoot, target); err != nil {
+		t.Fatal(err)
+	}
+	return target
 }
 
 func assertWrittenHostArchive(t *testing.T, lock Lock, host, archiveURL, archiveSHA string, archiveSize int64) {

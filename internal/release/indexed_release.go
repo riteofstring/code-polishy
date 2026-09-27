@@ -31,8 +31,10 @@ func InstallIndexedRelease(ctx context.Context, indexURL, indexSHA256, prefix st
 }
 
 func releaseHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = time.Minute
 	return &http.Client{
-		Timeout: 10 * time.Minute,
+		Transport: transport,
 		CheckRedirect: func(request *http.Request, _ []*http.Request) error {
 			_, err := parseReleaseHTTPSURL(request.URL.String())
 			return err
@@ -103,16 +105,53 @@ func installPublicationHost(ctx context.Context, client *http.Client, indexURL *
 	if err != nil {
 		return Manifest{}, "", err
 	}
+	manifest, installed, err := installedPublicationHost(canonicalPrefix, artifact)
+	if err != nil {
+		return Manifest{}, "", err
+	}
+	if installed {
+		return manifest, canonicalPrefix, nil
+	}
 	archive, err := downloadReleaseArchive(ctx, client, archiveURL, artifact.Archive, canonicalPrefix)
 	if err != nil {
 		return Manifest{}, "", err
 	}
 	defer os.Remove(archive)
-	manifest, err := InstallLocalBundle(archive, artifact.Archive.SHA256, canonicalPrefix)
+	manifest, err = InstallLocalBundle(archive, artifact.Archive.SHA256, canonicalPrefix)
 	if err != nil {
 		return Manifest{}, "", err
 	}
 	return manifest, canonicalPrefix, nil
+}
+
+func installedPublicationHost(prefix string, artifact PublicationArtifact) (Manifest, bool, error) {
+	target := Directory(prefix, Lock{
+		CodePolishyVersion: artifact.CodePolishyVersion,
+		ReleaseDigest:      artifact.Manifest.ReleaseDigest,
+	})
+	info, err := os.Lstat(target)
+	if errors.Is(err, os.ErrNotExist) {
+		return Manifest{}, false, nil
+	}
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return Manifest{}, false, errors.New("installed release target is occupied by different bytes")
+	}
+	manifest, _, err := verifyStagedBundle(target)
+	if err != nil {
+		return Manifest{}, false, err
+	}
+	expected := Lock{CodePolishyVersion: artifact.CodePolishyVersion, ReleaseDigest: artifact.Manifest.ReleaseDigest}
+	if err := manifest.Satisfies(expected); err != nil {
+		return Manifest{}, false, err
+	}
+	if manifest.SourceRevision != artifact.SourceRevision || manifest.Host != artifact.Host ||
+		manifest.ContentDigest != artifact.Manifest.ContentDigest {
+		return Manifest{}, false, errors.New("installed release target is occupied by different bytes")
+	}
+	return manifest, true, nil
 }
 
 func ParsePublicationIndex(data []byte, source string) (PublicationIndex, error) {

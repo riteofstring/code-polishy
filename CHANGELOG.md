@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.27.13 - 2026-09-27
+
+- Preserve declared Python contract attributes after comprehensions by isolating
+  comprehension targets without hiding enclosing-scope receiver rebinding.
+- Reuse a fully verified installed release during upgrade planning and remove
+  the fixed whole-transfer deadline from digest-bounded release downloads.
+
 ## 0.27.12 - 2026-09-27
 
 - Preserve declared Python contract attributes written through proven type

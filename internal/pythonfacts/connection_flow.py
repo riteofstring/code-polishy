@@ -8,6 +8,16 @@ def _path(node):
     return tuple(name.split(".")) if name else ()
 
 
+def _local_target_names(node):
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Starred):
+        return _local_target_names(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return {name for item in node.elts for name in _local_target_names(item)}
+    return set()
+
+
 class _ConnectionFlow(ast.NodeVisitor):
     def __init__(self, connection_factory):
         self.connections = set()
@@ -174,9 +184,36 @@ class _ConnectionFlow(ast.NodeVisitor):
     def visit_Lambda(self, node):
         return
 
-    def visit_ListComp(self, node):
-        self.connections.clear()
+    def comprehension(self, node, outputs):
+        self.visit(node.generators[0].iter)
+        initial = self.connections.copy()
+        previous_scope = self.scope
+        self.scope = f"{self.scope}/comprehension:{node.lineno}:{node.col_offset + 1}"
+        local_names = set()
+        for index, generator in enumerate(node.generators):
+            if index:
+                self.visit(generator.iter)
+            local_names.update(_local_target_names(generator.target))
+            self.visit(generator.target)
+            self.bind(generator.target)
+            for condition in generator.ifs:
+                self.visit(condition)
+        for output in outputs:
+            self.visit(output)
+        completed = self.connections
+        self.scope = previous_scope
+        self.connections = {
+            path for path in initial if path in completed or path[0] in local_names
+        }
 
-    visit_SetComp = visit_ListComp
-    visit_DictComp = visit_ListComp
-    visit_GeneratorExp = visit_ListComp
+    def visit_ListComp(self, node):
+        self.comprehension(node, [node.elt])
+
+    def visit_SetComp(self, node):
+        self.comprehension(node, [node.elt])
+
+    def visit_DictComp(self, node):
+        self.comprehension(node, [node.key, node.value])
+
+    def visit_GeneratorExp(self, node):
+        self.comprehension(node, [node.elt])

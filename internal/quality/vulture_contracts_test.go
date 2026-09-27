@@ -140,6 +140,42 @@ def process_branch_merge(value: Base, remaining, replace):
 	}
 }
 
+func TestPythonRepositoryContractPreservesReceiversAcrossComprehensionScopes(t *testing.T) {
+	source := `from vendor.api import Base
+class Handler(Base):
+    def collect(self, values):
+        listed = [value for value in values]
+        self._after_list = False
+        mapped = {value: value for value in values}
+        self._after_dict = False
+        unique = {value for value in values}
+        self._after_set = False
+        total = sum(value for value in values)
+        self._after_generator = False
+        shadowed = [self for self in values]
+        self._after_shadow = False
+        return listed, mapped, unique, total, shadowed
+    def rebound(self, values):
+        selected = [value for value in values if (self := value)]
+        self._after_rebind = False
+        return selected
+`
+	preserved := []string{"_after_list", "_after_dict", "_after_set", "_after_generator", "_after_shadow"}
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Attributes: append(preserved, "_after_rebind"), Reason: "The framework reads state written by handler subclasses."}
+	_, _, response, _ := runContractVulture(t, map[string]string{"src/handler.py": source}, []policy.PythonContract{contract})
+	if response.Error != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+		t.Fatalf("contract resolution failed: %+v", response)
+	}
+	for _, name := range preserved {
+		if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == name }) {
+			t.Fatalf("declared attribute %s after a comprehension was reported dead: %+v", name, response.Diagnostics)
+		}
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_after_rebind" }) {
+		t.Fatalf("rebound comprehension receiver retained contract evidence: %+v", response.Diagnostics)
+	}
+}
+
 func TestPythonRepositoryContractNestedEntryPoints(t *testing.T) {
 	source := `class Adapter:
     def execute(self):

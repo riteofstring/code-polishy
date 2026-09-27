@@ -107,8 +107,10 @@ bindings and names writable by closures. Unknown context managers, exception
 handlers, and ordinary constructed or aliased receivers entering repeated loop
 bodies begin conservatively. Still-bound parameters proven to satisfy a declared
 type contract remain available at loop entry; loop targets and assignments
-invalidate them normally. Ambiguous same-line writes receive no positive
-evidence.
+invalidate them normally. Comprehension targets remain isolated from enclosing
+receiver bindings, while assignment expressions and other effects on enclosing
+names still participate in conservative flow joins. Ambiguous same-line writes
+receive no positive evidence.
 
 The Go-owned Vulture adapter combines contract locations with TypedDict schemas,
 standard-library protocols, and explicit external-consumer evidence. Complete
