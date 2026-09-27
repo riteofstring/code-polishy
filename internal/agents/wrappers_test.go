@@ -3,6 +3,7 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -54,6 +55,47 @@ func TestSyncReplacesStaleManagedWrappersAndRestoresModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCanonicalWrappers(t, repoRoot, policyRoot)
+}
+
+func TestCheckAcceptsUmaskAdjustedManagedWrapperModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose POSIX wrapper modes")
+	}
+	t.Parallel()
+	policyRoot := policyFixture(t, canonicalAgentsText)
+	repoRoot := t.TempDir()
+	if _, err := Install(repoRoot, policyRoot); err != nil {
+		t.Fatal(err)
+	}
+	posixPath := filepath.Join(repoRoot, posixWrapperTargetFilename)
+	powerShellPath := filepath.Join(repoRoot, powerShellWrapperTargetFilename)
+	if err := os.Chmod(posixPath, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(powerShellPath, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	status := Check(repoRoot, policyRoot)
+	if !status.Current {
+		t.Fatalf("umask-adjusted wrappers status = %+v", status)
+	}
+	if err := os.Chmod(powerShellPath, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	status = Check(repoRoot, policyRoot)
+	if status.Current || !strings.Contains(status.Message, "code-polishyw.ps1 is stale") {
+		t.Fatalf("executable PowerShell wrapper status = %+v", status)
+	}
+	if err := os.Chmod(powerShellPath, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(posixPath, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	status = Check(repoRoot, policyRoot)
+	if status.Current || !strings.Contains(status.Message, "code-polishyw is stale") {
+		t.Fatalf("non-executable wrapper status = %+v", status)
+	}
 }
 
 func TestCheckReportsMissingAndConflictingWrappers(t *testing.T) {

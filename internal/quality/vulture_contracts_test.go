@@ -60,6 +60,86 @@ def configure():
 	}
 }
 
+func TestPythonRepositoryContractPreservesSubclassAttributeWritesInLoops(t *testing.T) {
+	source := `from vendor.api import Base
+class Timed(Base):
+    def _run(self, remaining):
+        while remaining:
+            self._downloaded = False
+            self._unrelated = False
+            remaining -= 1
+    def _rebound(self, remaining):
+        while remaining:
+            self = object()
+            self._downloaded = False
+            remaining -= 1
+    def _constructed(self, remaining):
+        self = Timed()
+        while remaining:
+            self._downloaded = False
+            remaining -= 1
+def process(value: Base, remaining):
+    for _ in range(remaining):
+        value._downloaded = False
+def process_rebound(value: Base, remaining):
+    value = Timed()
+    while remaining:
+        value._downloaded = False
+        remaining -= 1
+def process_branch_assignment_first(value: Base, remaining, replace):
+    if replace:
+        value = Timed()
+    else:
+        while remaining:
+            value._branch_assignment_first = False
+            remaining -= 1
+def process_branch_loop_first(value: Base, remaining, replace):
+    if replace:
+        while remaining:
+            value._branch_loop_first = False
+            remaining -= 1
+    else:
+        value = Timed()
+def process_branch_merge(value: Base, remaining, replace):
+    if replace:
+        value = Timed()
+    while remaining:
+        value._branch_merge = False
+        remaining -= 1
+`
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"_run"}, Attributes: []string{"_downloaded", "_branch_assignment_first", "_branch_loop_first", "_branch_merge"}, Reason: "The framework reads the download state after running each trial."}
+	_, _, response, _ := runContractVulture(t, map[string]string{"src/trial.py": source}, []policy.PythonContract{contract})
+	if response.Error != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+		t.Fatalf("contract resolution failed: %+v", response)
+	}
+	if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_downloaded" && d.Line == 5 }) {
+		t.Fatalf("declared loop attribute was reported dead: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_unrelated" }) {
+		t.Fatalf("unrelated loop attribute was hidden: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_downloaded" && d.Line == 11 }) {
+		t.Fatalf("rebound loop receiver was treated as the contracted type: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_downloaded" && d.Line == 16 }) {
+		t.Fatalf("constructed loop receiver inherited parameter evidence: %+v", response.Diagnostics)
+	}
+	if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_downloaded" && d.Line == 20 }) {
+		t.Fatalf("declared typed-parameter loop attribute was reported dead: %+v", response.Diagnostics)
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_downloaded" && d.Line == 24 }) {
+		t.Fatalf("rebound typed-parameter loop receiver retained parameter evidence: %+v", response.Diagnostics)
+	}
+	for _, name := range []string{"_branch_assignment_first", "_branch_loop_first"} {
+		if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == name }) {
+			t.Fatalf("still-bound branch receiver %s was reported dead: %+v", name, response.Diagnostics)
+		}
+	}
+	if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_branch_merge" }) {
+		t.Fatalf("possibly rebound branch receiver retained parameter evidence: %+v", response.Diagnostics)
+	}
+}
+
 func TestPythonRepositoryContractNestedEntryPoints(t *testing.T) {
 	source := `class Adapter:
     def execute(self):

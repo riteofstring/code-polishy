@@ -104,8 +104,11 @@ inside `try` blocks can establish receiver evidence after `None` initialization.
 Reassignment invalidates prior evidence; branch joins retain only bindings
 proven on every incoming path. Unknown calls invalidate instance-attribute
 bindings and names writable by closures. Unknown context managers, exception
-handlers, and repeated loop bodies begin conservatively. Ambiguous same-line
-writes receive no positive evidence.
+handlers, and ordinary constructed or aliased receivers entering repeated loop
+bodies begin conservatively. Still-bound parameters proven to satisfy a declared
+type contract remain available at loop entry; loop targets and assignments
+invalidate them normally. Ambiguous same-line writes receive no positive
+evidence.
 
 The Go-owned Vulture adapter combines contract locations with TypedDict schemas,
 standard-library protocols, and explicit external-consumer evidence. Complete

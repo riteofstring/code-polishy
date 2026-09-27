@@ -6,12 +6,20 @@ from type_facts import _reference_name
 
 __all__ = ["framework_members"]
 
+_PARAMETER_INPUT = object()
+
 
 class _ContractVisitor(_FrameworkVisitor):
     def __init__(self, resolver, source, contract, writes):
         super().__init__(resolver, source, writes)
         self.contract = contract
         self.roots = {contract["target"]}
+
+    def parameter_input(self, path):
+        return len(path) == 2 and path[1] is _PARAMETER_INPUT
+
+    def persistent_connection(self, path):
+        return super().persistent_connection(path) or self.parameter_input(path)
 
     def applies(self, reference):
         return self.contract["kind"] == "type" and self.resolver.derives(
@@ -91,7 +99,7 @@ class _ContractVisitor(_FrameworkVisitor):
             and not decorators & {"staticmethod", "classmethod"}
         ):
             result.add((arguments[0].arg,))
-        return result
+        return result | {(*path, _PARAMETER_INPUT) for path in result}
 
     def visit_FunctionDef(self, node):
         previous = getattr(self, "method_owner", None)
@@ -100,6 +108,20 @@ class _ContractVisitor(_FrameworkVisitor):
         self.method_owner = previous
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+    def loop_entry(self, node, initial):
+        entry = {
+            path
+            for path in initial
+            if self.parameter_input(path) or (*path, _PARAMETER_INPUT) in initial
+        }
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            previous = self.connections
+            self.connections = entry
+            self.bind(node.target)
+            entry = self.connections.copy()
+            self.connections = previous
+        return entry
 
     def class_attribute(self, target, annotation=None):
         if not isinstance(target, ast.Name) or not self.applies(self.owner):

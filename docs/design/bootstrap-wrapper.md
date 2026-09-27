@@ -45,9 +45,12 @@ replace the separately planned provenance work.
 The agent-guidance transaction owns both wrappers alongside `AGENTS.md`,
 `CLAUDE.md`, and the report-artifact ignore rules. Installation creates missing
 wrappers; synchronization replaces only files carrying the managed marker and
-restores the canonical mode. An unrelated pre-existing wrapper is a conflict,
-so the entire transaction preserves every target. `agents check` reports
-missing, stale, non-regular, or conflicting wrappers.
+writes canonical modes when it creates or replaces a wrapper. Freshness compares
+exact bytes and Git-representable executable status, so group and other write
+bits applied by a checkout umask do not create perpetual drift. An unrelated
+pre-existing wrapper is a conflict, so the entire transaction preserves every
+target. `agents check` reports missing, stale, non-regular, or conflicting
+wrappers.
 
 The root wrapper paths are built-in sensitive control inputs. A byte-identical
 copy of the locked release's canonical template is a managed control artifact,

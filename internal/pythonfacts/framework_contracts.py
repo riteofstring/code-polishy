@@ -72,7 +72,9 @@ class _FrameworkVisitor(_ConnectionFlow):
         self.connections = self.block(node.body, set())
         self.scope, self.owner, self.connections, self.mutable_names = previous
         self.bind(ast.Name(id=node.name))
-        self.connections = {path for path in self.connections if len(path) == 1}
+        self.connections = {
+            path for path in self.connections if self.persistent_connection(path)
+        }
 
     def visit_FunctionDef(self, node):
         if self.callback(node) or self.pytest_autouse(node):
@@ -92,7 +94,9 @@ class _FrameworkVisitor(_ConnectionFlow):
             self.visit(statement)
         self.scope, self.owner, self.connections, self.mutable_names = previous
         self.bind(ast.Name(id=node.name))
-        self.connections = {path for path in self.connections if len(path) == 1}
+        self.connections = {
+            path for path in self.connections if self.persistent_connection(path)
+        }
 
     visit_AsyncFunctionDef = visit_FunctionDef
 

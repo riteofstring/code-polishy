@@ -20,6 +20,9 @@ class _ConnectionFlow(ast.NodeVisitor):
             return self.connection_factory(node, self.scope)
         return _path(node) in self.connections
 
+    def persistent_connection(self, path):
+        return len(path) == 1
+
     def bind(self, target, connected=False):
         if isinstance(target, (ast.Tuple, ast.List)):
             for item in target.elts:
@@ -69,7 +72,7 @@ class _ConnectionFlow(ast.NodeVisitor):
         self.connections = {
             path
             for path in self.connections
-            if len(path) == 1
+            if self.persistent_connection(path)
             and path[0] not in self.mutable_names
             and self.scope != "module"
         }
@@ -125,9 +128,12 @@ class _ConnectionFlow(ast.NodeVisitor):
         self.visit(node.test)
         self.loop(node)
 
+    def loop_entry(self, node, initial):
+        return set()
+
     def loop(self, node):
         initial = self.connections.copy()
-        body = self.block(node.body, set())
+        body = self.block(node.body, self.loop_entry(node, initial))
         self.connections = self.block(node.orelse, initial & body)
 
     def visit_With(self, node):

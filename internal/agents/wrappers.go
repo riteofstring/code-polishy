@@ -109,7 +109,9 @@ func checkWrapper(existing targetState, readErr error, template wrapperTemplate)
 }
 
 func wrapperCurrent(existing targetState, template wrapperTemplate) bool {
-	modeCurrent := runtime.GOOS == "windows" || existing.mode == template.mode
+	executableCurrent := existing.mode&0o111 != 0
+	executableCanonical := template.mode&0o111 != 0
+	modeCurrent := runtime.GOOS == "windows" || executableCurrent == executableCanonical
 	return existing.exists && modeCurrent && bytes.Equal(existing.contents, template.contents)
 }
 

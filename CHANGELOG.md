@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.27.12 - 2026-09-27
+
+- Preserve declared Python contract attributes written through proven type
+  parameters inside loops while keeping rebound and unrelated attributes under
+  dead-code analysis.
+- Treat managed-wrapper freshness according to Git-representable executability
+  so checkout umasks do not make byte-identical wrappers perpetually stale.
+
 ## 0.27.11 - 2026-09-23
 
 - Add scoped end-to-end reliability reminders to task start, checkpoint, and
