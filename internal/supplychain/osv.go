@@ -43,12 +43,16 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	if err != nil {
 		return nil, err
 	}
-	emptyPNPMRoots := dependencyFreePNPMRoots(repo)
+	files, err := repo.RawFiles()
+	if err != nil {
+		return nil, fmt.Errorf("enumerate dependency inputs: %w", err)
+	}
+	emptyPNPMProjects := dependencyFreePNPMProjects(repo, files)
 	scans := []osvScan{}
 	for _, root := range activeOSVRoots(repo.Config) {
 		command := osvCommand(repo, "osv-scan-"+safeName(root), root)
 		command.Argv = append(command.Argv, "--recursive", "--experimental-disable-plugins", "python/uvlock", "--experimental-exclude", "g:**/.code-polishy-reports")
-		if rootHasUVInput(root, inputs) || rootHasDependencyFreePNPMInput(root, emptyPNPMRoots) {
+		if rootHasOnlyCoveredDependencyInputs(repo, root, files, inputs, emptyPNPMProjects) {
 			command.Argv = append(command.Argv, "--allow-no-lockfiles")
 		}
 		command.Argv = append(command.Argv, ".")
@@ -58,53 +62,93 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	return append(scans, uv...), err
 }
 
-func dependencyFreePNPMRoots(repo repository.Repository) map[string]bool {
-	files, err := repo.RawFiles()
-	if err != nil {
-		return nil
-	}
-	candidates := dependencyFreePNPMCandidates(repo, files)
-	empty := map[string]bool{}
-	for root, candidate := range candidates {
-		if candidate && dependencyFreePNPMLock(repo, root) {
-			empty[root] = true
-		}
-	}
-	return empty
-}
-
-func dependencyFreePNPMCandidates(repo repository.Repository, files []string) map[string]bool {
-	candidates := map[string]bool{}
+func dependencyFreePNPMProjects(repo repository.Repository, files []string) map[string]map[string]bool {
+	candidates := map[string][]nodeManifest{}
+	rejected := map[string]bool{}
 	for _, manifest := range validNodeManifests(repo, files) {
 		if manifest.Manager != "pnpm" {
 			continue
 		}
-		if _, found := candidates[manifest.Root]; !found {
-			candidates[manifest.Root] = true
-		}
+		candidates[manifest.Root] = append(candidates[manifest.Root], manifest)
 		if len(manifest.Dependencies) != 0 {
-			candidates[manifest.Root] = false
+			rejected[manifest.Root] = true
 		}
 	}
-	return candidates
+	available := map[string]bool{}
+	for _, path := range files {
+		available[path] = true
+	}
+	empty := map[string]map[string]bool{}
+	for root, manifests := range candidates {
+		lock := lockPath(root)
+		if rejected[root] || !available[lock] || !dependencyFreePNPMLock(repo, root, manifests) {
+			continue
+		}
+		inputs := map[string]bool{lock: true}
+		for _, manifest := range manifests {
+			inputs[manifest.Path] = true
+		}
+		empty[root] = inputs
+	}
+	return empty
 }
 
-func dependencyFreePNPMLock(repo repository.Repository, root string) bool {
+func dependencyFreePNPMLock(repo repository.Repository, root string, manifests []nodeManifest) bool {
 	result, err := pnpmFacts(context.Background(), repo, root)
 	if err != nil || unreadableLock(result, lockPath(root)) != nil || len(result.Unsupported) != 0 || len(result.Importers) == 0 || len(result.Packages) != 0 {
 		return false
 	}
+	expected := map[string]bool{}
+	for _, manifest := range manifests {
+		expected[manifest.Path] = true
+	}
+	if len(result.Importers) != len(expected) {
+		return false
+	}
 	for _, importer := range result.Importers {
-		if len(importer.Dependencies) != 0 {
+		if len(importer.Dependencies) != 0 || !expected[importer.Manifest] {
 			return false
 		}
+		delete(expected, importer.Manifest)
 	}
-	return true
+	return len(expected) == 0
 }
 
-func rootHasDependencyFreePNPMInput(root string, inputs map[string]bool) bool {
-	for input := range inputs {
-		if scopeInsideOSVRoot(lockPath(input), root) {
+func rootHasOnlyCoveredDependencyInputs(repo repository.Repository, root string, files []string, uvInputs []onlineUVInput, pnpmProjects map[string]map[string]bool) bool {
+	allowed := coveredDependencyInputs(root, files, uvInputs, pnpmProjects)
+	return len(allowed) != 0 && !hasUncoveredDependencyInput(repo, root, files, allowed)
+}
+
+func coveredDependencyInputs(root string, files []string, uvInputs []onlineUVInput, pnpmProjects map[string]map[string]bool) map[string]bool {
+	allowed := map[string]bool{}
+	available := map[string]bool{}
+	for _, path := range files {
+		available[path] = true
+	}
+	for _, input := range uvInputs {
+		if !scopeInsideOSVRoot(input.Scope, root) {
+			continue
+		}
+		allowed[input.Scope] = true
+		manifest := filepath.ToSlash(filepath.Join(filepath.Dir(input.Scope), "pyproject.toml"))
+		if available[manifest] {
+			allowed[manifest] = true
+		}
+	}
+	for project, inputs := range pnpmProjects {
+		if !scopeInsideOSVRoot(lockPath(project), root) {
+			continue
+		}
+		for input := range inputs {
+			allowed[input] = true
+		}
+	}
+	return allowed
+}
+
+func hasUncoveredDependencyInput(repo repository.Repository, root string, files []string, allowed map[string]bool) bool {
+	for _, path := range files {
+		if scopeInsideOSVRoot(path, root) && repo.IsDependencyInput(path) && !allowed[path] {
 			return true
 		}
 	}

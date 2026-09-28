@@ -20,6 +20,9 @@ func TestOSVPartitionsGitEvidenceAndPublicRegistryCoverage(t *testing.T) {
 	if err != nil || len(commands) != 2 {
 		t.Fatalf("public scan plan = %+v, %v", commands, err)
 	}
+	if !slices.Contains(commands[0].Argv, "--allow-no-lockfiles") {
+		t.Fatalf("projected-only root remained a required native scan: %+v", commands[0])
+	}
 	if _, err := os.Stat(filepath.Join(fixture.repo.Root, osvInputDirectory)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("planning wrote a scan input: %v", err)
 	}
@@ -34,7 +37,7 @@ func TestOSVPartitionsGitEvidenceAndPublicRegistryCoverage(t *testing.T) {
 	}
 }
 
-func TestOSVPreservesMissingNativeInputFailureOutsideUVRoots(t *testing.T) {
+func TestOSVPreservesMissingNativeInputFailureInMixedAndIndependentRoots(t *testing.T) {
 	t.Parallel()
 	fixture := currentGitOnlineFixture(t)
 	writeSupplyFile(t, fixture.repo.Root, "native/go.mod", "module example.test/native\n")
@@ -43,8 +46,8 @@ func TestOSVPreservesMissingNativeInputFailureOutsideUVRoots(t *testing.T) {
 	if err != nil || len(commands) != 2 {
 		t.Fatalf("native scan plan = %+v, %v", commands, err)
 	}
-	if !slices.Contains(commands[0].Argv, "--allow-no-lockfiles") || slices.Contains(commands[1].Argv, "--allow-no-lockfiles") {
-		t.Fatalf("independent native coverage was relaxed: %+v", commands)
+	if slices.Contains(commands[0].Argv, "--allow-no-lockfiles") || slices.Contains(commands[1].Argv, "--allow-no-lockfiles") {
+		t.Fatalf("mixed or independent native coverage was relaxed: %+v", commands)
 	}
 }
 

@@ -745,6 +745,13 @@ function lockImporters(request, lock, unsupportedPaths) {
   const importers = [];
   let dependencies = 0;
   for (const key of keys) {
+    const entry = entries[key];
+    if (!isMap(entry)) {
+      unsupportedPaths.push(
+        unsupported(lock.path, `importer '${key}' is not a YAML map`),
+      );
+      continue;
+    }
     const importer = join(request.directory, key);
     if (escapes(importer)) {
       unsupportedPaths.push(
@@ -755,7 +762,7 @@ function lockImporters(request, lock, unsupportedPaths) {
     const reported = importerDependencies(
       request,
       importer,
-      entries[key],
+      entry,
       lock,
       unsupportedPaths,
     );

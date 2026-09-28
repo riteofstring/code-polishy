@@ -93,15 +93,6 @@ func osvCoversScope(config policy.Config, scope string) bool {
 	return false
 }
 
-func rootHasUVInput(root string, inputs []onlineUVInput) bool {
-	for _, input := range inputs {
-		if scopeInsideOSVRoot(input.Scope, root) {
-			return true
-		}
-	}
-	return false
-}
-
 func scopeInsideOSVRoot(scope, root string) bool {
 	return root == "." || strings.HasPrefix(scope, strings.TrimSuffix(root, "/")+"/")
 }

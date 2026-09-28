@@ -3,7 +3,6 @@ package policymodule
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -234,30 +233,9 @@ func hasDependencyGraph(repo repository.Repository, files []string) bool {
 
 func hasDependencyGraphAt(repo repository.Repository, files []string, root string) bool {
 	for _, path := range files {
-		if insideRoot(path, root) && dependencyInput(repo, path) {
+		if insideRoot(path, root) && repo.IsDependencyInput(path) {
 			return true
 		}
 	}
 	return false
-}
-
-func dependencyInput(repo repository.Repository, path string) bool {
-	name := filepath.Base(path)
-	if name == "pyproject.toml" {
-		data, err := repo.Read(path)
-		return err == nil && (strings.Contains(string(data), "[project]") || strings.Contains(string(data), "[dependency-groups]"))
-	}
-	if strings.HasPrefix(name, "requirements") && strings.HasSuffix(name, ".txt") {
-		return true
-	}
-	if strings.HasSuffix(strings.ToLower(name), ".lock") || strings.Contains(strings.ToLower(name), "-lock.") {
-		return true
-	}
-	switch name {
-	case "go.mod", "go.sum", "go.work", "package.json", "pnpm-lock.yaml", "bun.lockb", "uv.lock",
-		"Cargo.toml", "Pipfile", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Package.swift", "Package.resolved", "pubspec.yaml":
-		return true
-	default:
-		return false
-	}
 }

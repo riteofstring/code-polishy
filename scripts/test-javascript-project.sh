@@ -283,6 +283,10 @@ expect_lock_unsupported "a lockfile that is not a map" "- one
 " "the lockfile is not a YAML map"
 expect_lock_unsupported "a lockfile with no importers" "lockfileVersion: '9.0'
 " "the lockfile declares no importers"
+expect_lock_unsupported "an importer that is not a map" "lockfileVersion: '9.0'
+importers:
+  .: scalar
+" "importer '.' is not a YAML map"
 expect_lock_unsupported "an importer outside the repository" "lockfileVersion: '9.0'
 importers:
   ../../elsewhere: {}
