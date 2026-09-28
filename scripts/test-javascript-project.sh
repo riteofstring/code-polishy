@@ -287,6 +287,16 @@ expect_lock_unsupported "an importer that is not a map" "lockfileVersion: '9.0'
 importers:
   .: scalar
 " "importer '.' is not a YAML map"
+expect_lock_unsupported "a packages field that is not a map" "lockfileVersion: '9.0'
+importers:
+  .: {}
+packages: scalar
+" "the lockfile has field 'packages' that is not a YAML map"
+expect_lock_unsupported "an importer dependency group that is not a map" "lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies: scalar
+" "has field 'dependencies' that is not a YAML map"
 expect_lock_unsupported "an importer outside the repository" "lockfileVersion: '9.0'
 importers:
   ../../elsewhere: {}

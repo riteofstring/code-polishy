@@ -93,6 +93,8 @@ func TestOSVEmptyPNPMDoesNotRelaxMixedDependencyRoots(t *testing.T) {
 		{name: ".NET project", path: "example.csproj", data: "<Project />\n"},
 		{name: "CycloneDX inventory", path: "inventory.cdx.json", data: "{}\n"},
 		{name: "vendored source", path: "vendor/library/source.c", data: "int example;\n"},
+		{name: "default-excluded lock", path: "dist/Cargo.lock", data: ""},
+		{name: "default-excluded SBOM", path: "build/inventory.cdx.json", data: "{}\n"},
 	} {
 		t.Run(input.name, func(t *testing.T) {
 			repo := supplyRepository(t)

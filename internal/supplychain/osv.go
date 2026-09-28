@@ -43,7 +43,7 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	if err != nil {
 		return nil, err
 	}
-	files, err := repo.RawFiles()
+	files, err := repo.RecursiveScanFiles()
 	if err != nil {
 		return nil, fmt.Errorf("enumerate dependency inputs: %w", err)
 	}

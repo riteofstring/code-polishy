@@ -79,13 +79,21 @@ func Open(root, policyRoot string, config policy.Config) (Repository, error) {
 }
 
 func (repo Repository) RawFiles() ([]string, error) {
-	if repo.hasGit() {
-		return repo.rawGitFiles()
-	}
-	return repo.rawWalkFiles()
+	return repo.inventoryFiles(policy.DefaultExcludes)
 }
 
-func (repo Repository) rawGitFiles() ([]string, error) {
+func (repo Repository) RecursiveScanFiles() ([]string, error) {
+	return repo.inventoryFiles([]string{".git/**", "**/.git/**", ".code-polishy-reports/**", "**/.code-polishy-reports/**"})
+}
+
+func (repo Repository) inventoryFiles(excludes []string) ([]string, error) {
+	if repo.hasGit() {
+		return repo.rawGitFiles(excludes)
+	}
+	return repo.rawWalkFiles(excludes)
+}
+
+func (repo Repository) rawGitFiles(excludes []string) ([]string, error) {
 	tracked, err := repo.gitLines("ls-files", "-z")
 	if err != nil {
 		return nil, err
@@ -96,14 +104,14 @@ func (repo Repository) rawGitFiles() ([]string, error) {
 	}
 	result := []string{}
 	for _, path := range append(tracked, untracked...) {
-		if !policy.MatchesAny(path, policy.DefaultExcludes) && isRegularOrSymlink(filepath.Join(repo.Root, filepath.FromSlash(path))) {
+		if !policy.MatchesAny(path, excludes) && isRegularOrSymlink(filepath.Join(repo.Root, filepath.FromSlash(path))) {
 			result = append(result, path)
 		}
 	}
 	return uniqueSorted(result), nil
 }
 
-func (repo Repository) rawWalkFiles() ([]string, error) {
+func (repo Repository) rawWalkFiles(excludes []string) ([]string, error) {
 	result := []string{}
 	err := filepath.WalkDir(repo.Root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -115,12 +123,12 @@ func (repo Repository) rawWalkFiles() ([]string, error) {
 		}
 		normalized := filepath.ToSlash(relative)
 		if entry.IsDir() {
-			if normalized != "." && policy.MatchesAny(normalized+"/placeholder", policy.DefaultExcludes) {
+			if normalized != "." && policy.MatchesAny(normalized+"/placeholder", excludes) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if isRegularOrSymlink(path) && !policy.MatchesAny(normalized, policy.DefaultExcludes) {
+		if isRegularOrSymlink(path) && !policy.MatchesAny(normalized, excludes) {
 			result = append(result, normalized)
 		}
 		return nil

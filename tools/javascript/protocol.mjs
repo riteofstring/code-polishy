@@ -1,5 +1,17 @@
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute as isHostAbsolute,
+  join,
+  normalize as normalizeHostPath,
+  relative,
+  sep,
+} from "node:path";
+import {
+  isAbsolute as isPosixAbsolute,
+  normalize as normalizeRepositoryPath,
+} from "node:path/posix";
+import { isAbsolute as isWindowsAbsolute } from "node:path/win32";
 import { fileURLToPath } from "node:url";
 
 export const PROTOCOL_VERSION = 3;
@@ -116,7 +128,7 @@ function insideTree(tree, path) {
   const difference = relative(tree, path);
   return (
     difference === "" ||
-    (!isAbsolute(difference) &&
+    (!isHostAbsolute(difference) &&
       difference !== ".." &&
       !difference.startsWith(`..${sep}`))
   );
@@ -185,8 +197,8 @@ export function readTargetFile(absolute, path, unsupportedPaths) {
 export function requireContainedRoot(root) {
   if (
     typeof root !== "string" ||
-    !isAbsolute(root) ||
-    normalize(root) !== root
+    !isHostAbsolute(root) ||
+    normalizeHostPath(root) !== root
   ) {
     fail(
       `the request declares root ${JSON.stringify(root)}, not a normal absolute path`,
@@ -222,8 +234,9 @@ export function requireContainedPath(path) {
     );
   }
   if (
-    isAbsolute(path) ||
-    normalize(path) !== path ||
+    isPosixAbsolute(path) ||
+    isWindowsAbsolute(path) ||
+    normalizeRepositoryPath(path) !== path ||
     path.split("/").includes("..")
   ) {
     fail(

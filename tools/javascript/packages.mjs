@@ -51,6 +51,23 @@ function stringAt(value, key) {
   return typeof found === "string" ? found : "";
 }
 
+function lockMapAt(lock, value, key, owner, unsupportedPaths) {
+  if (!Object.hasOwn(value, key)) {
+    return {};
+  }
+  const found = mapAt(value, key);
+  if (found !== null) {
+    return found;
+  }
+  unsupportedPaths.push(
+    unsupported(
+      lock.path,
+      `${owner} has field '${key}' that is not a YAML map`,
+    ),
+  );
+  return {};
+}
+
 function escapes(path) {
   return path === ".." || path.startsWith("../");
 }
@@ -620,7 +637,13 @@ function licenseMetadataByPackage(lock, entries, snapshots, unsupportedPaths) {
 }
 
 function resolvedPackages(lock, unsupportedPaths) {
-  const entries = mapAt(lock.document, "packages") ?? {};
+  const entries = lockMapAt(
+    lock,
+    lock.document,
+    "packages",
+    "the lockfile",
+    unsupportedPaths,
+  );
   const snapshots = packageSnapshots(lock, unsupportedPaths);
   const metadata = licenseMetadataByPackage(
     lock,
@@ -706,7 +729,13 @@ function importerDependencies(
   );
   const dependencies = [];
   for (const { field, scope } of SCOPES) {
-    const locked = mapAt(entry, field) ?? {};
+    const locked = lockMapAt(
+      lock,
+      entry,
+      field,
+      `importer '${importer}'`,
+      unsupportedPaths,
+    );
     const written = mapAt(declared, field) ?? {};
     const names = new Set([...Object.keys(written), ...Object.keys(locked)]);
     for (const name of [...names].sort()) {
