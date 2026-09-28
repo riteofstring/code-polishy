@@ -82,10 +82,6 @@ func (repo Repository) RawFiles() ([]string, error) {
 	return repo.inventoryFiles(policy.DefaultExcludes)
 }
 
-func (repo Repository) RecursiveScanFiles() ([]string, error) {
-	return repo.inventoryFiles([]string{".git/**", "**/.git/**", ".code-polishy-reports/**", "**/.code-polishy-reports/**"})
-}
-
 func (repo Repository) inventoryFiles(excludes []string) ([]string, error) {
 	if repo.hasGit() {
 		return repo.rawGitFiles(excludes)
@@ -112,18 +108,22 @@ func (repo Repository) rawGitFiles(excludes []string) ([]string, error) {
 }
 
 func (repo Repository) rawWalkFiles(excludes []string) ([]string, error) {
+	return walkFiles(repo.Root, "", excludes)
+}
+
+func walkFiles(root, prefix string, excludes []string) ([]string, error) {
 	result := []string{}
-	err := filepath.WalkDir(repo.Root, func(path string, entry os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		relative, relErr := filepath.Rel(repo.Root, path)
+		relative, relErr := filepath.Rel(root, path)
 		if relErr != nil {
 			return relErr
 		}
-		normalized := filepath.ToSlash(relative)
+		normalized := filepath.ToSlash(filepath.Join(filepath.FromSlash(prefix), relative))
 		if entry.IsDir() {
-			if normalized != "." && policy.MatchesAny(normalized+"/placeholder", excludes) {
+			if relative != "." && policy.MatchesAny(normalized+"/placeholder", excludes) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -882,7 +882,11 @@ func (repo Repository) git(arguments ...string) error {
 }
 
 func (repo Repository) gitLines(arguments ...string) ([]string, error) {
-	command := exec.Command("git", append([]string{"-C", repo.Root}, arguments...)...)
+	return gitLinesAt(repo.Root, arguments...)
+}
+
+func gitLinesAt(root string, arguments ...string) ([]string, error) {
+	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
 	output, err := command.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git %s: %w", strings.Join(arguments, " "), err)

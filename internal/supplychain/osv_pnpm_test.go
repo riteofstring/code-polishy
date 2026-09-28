@@ -2,6 +2,7 @@ package supplychain
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -111,6 +112,47 @@ func TestOSVEmptyPNPMDoesNotRelaxMixedDependencyRoots(t *testing.T) {
 			findings := scanOSVWithCommands(t.Context(), repo, commands, runner.OSRunner{})
 			if len(findings) != 1 || findings[0].Check != "policy.securityScanner" {
 				t.Fatalf("mixed no-source scan findings = %+v", findings)
+			}
+		})
+	}
+}
+
+func TestOSVEmptyPNPMDoesNotRelaxScannerVisibleGitInputs(t *testing.T) {
+	for _, variant := range []string{"info exclude", "global exclude", "nested repository", "gitlink"} {
+		t.Run(variant, func(t *testing.T) {
+			repo := supplyRepository(t)
+			repo.PolicyRoot = installPackagesBundle(t, packagesResult(`{"path":".","manifest":"package.json","dependencies":[]}`, ""))
+			repo.Config.ActivePolicyModules = []policy.ActivePolicyModule{{Name: "osv", Root: "."}}
+			installNoSourcesOSV(t, repo.PolicyRoot)
+			writeSupplyFile(t, repo.Root, "package.json", `{"packageManager":"pnpm@11.13.0"}`+"\n")
+			writeSupplyFile(t, repo.Root, "pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
+			gitSupply(t, repo.Root, "init", "-b", "main")
+			switch variant {
+			case "info exclude":
+				writeSupplyFile(t, repo.Root, ".git/info/exclude", "dist/\n")
+				writeSupplyFile(t, repo.Root, "dist/go.mod", "module example.test/info\n")
+			case "global exclude":
+				writeSupplyFile(t, repo.Root, "global-ignore", "dist/\n")
+				writeSupplyFile(t, repo.Root, "dist/go.mod", "module example.test/global\n")
+				gitSupply(t, repo.Root, "config", "core.excludesFile", filepath.Join(repo.Root, "global-ignore"))
+			case "nested repository", "gitlink":
+				nested := filepath.Join(repo.Root, "nested")
+				writeSupplyFile(t, nested, "Cargo.lock", "")
+				gitSupply(t, nested, "init", "-b", "main")
+				gitSupply(t, nested, "config", "user.email", "tests@example.test")
+				gitSupply(t, nested, "config", "user.name", "Code Polishy Tests")
+				gitSupply(t, nested, "add", "Cargo.lock")
+				gitSupply(t, nested, "commit", "-m", "fixture")
+				if variant == "gitlink" {
+					gitSupply(t, repo.Root, "add", "nested")
+				}
+			}
+			commands, err := osvCommands(repo)
+			if err != nil || len(commands) != 1 {
+				t.Fatalf("commands = %+v, err = %v", commands, err)
+			}
+			if slices.Contains(commands[0].Argv, "--allow-no-lockfiles") {
+				t.Fatalf("scanner-visible %s input relaxed no-source handling: %v", variant, commands[0].Argv)
 			}
 		})
 	}
