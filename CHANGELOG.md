@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.27.14 - 2026-09-27
+
+- Let OSV vulnerability scans accept validated dependency-free pnpm projects
+  while remaining fail-closed for malformed, mixed, ignored, nested, and
+  submodule package sources.
+
 ## 0.27.13 - 2026-09-27
 
 - Preserve declared Python contract attributes after comprehensions by isolating
