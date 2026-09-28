@@ -43,11 +43,12 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	if err != nil {
 		return nil, err
 	}
+	emptyPNPMRoots := dependencyFreePNPMRoots(repo)
 	scans := []osvScan{}
 	for _, root := range activeOSVRoots(repo.Config) {
 		command := osvCommand(repo, "osv-scan-"+safeName(root), root)
 		command.Argv = append(command.Argv, "--recursive", "--experimental-disable-plugins", "python/uvlock", "--experimental-exclude", "g:**/.code-polishy-reports")
-		if rootHasUVInput(root, inputs) {
+		if rootHasUVInput(root, inputs) || rootHasDependencyFreePNPMInput(root, emptyPNPMRoots) {
 			command.Argv = append(command.Argv, "--allow-no-lockfiles")
 		}
 		command.Argv = append(command.Argv, ".")
@@ -55,6 +56,59 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	}
 	uv, err := osvUVScans(repo, inputs)
 	return append(scans, uv...), err
+}
+
+func dependencyFreePNPMRoots(repo repository.Repository) map[string]bool {
+	files, err := repo.RawFiles()
+	if err != nil {
+		return nil
+	}
+	candidates := dependencyFreePNPMCandidates(repo, files)
+	empty := map[string]bool{}
+	for root, candidate := range candidates {
+		if candidate && dependencyFreePNPMLock(repo, root) {
+			empty[root] = true
+		}
+	}
+	return empty
+}
+
+func dependencyFreePNPMCandidates(repo repository.Repository, files []string) map[string]bool {
+	candidates := map[string]bool{}
+	for _, manifest := range validNodeManifests(repo, files) {
+		if manifest.Manager != "pnpm" {
+			continue
+		}
+		if _, found := candidates[manifest.Root]; !found {
+			candidates[manifest.Root] = true
+		}
+		if len(manifest.Dependencies) != 0 {
+			candidates[manifest.Root] = false
+		}
+	}
+	return candidates
+}
+
+func dependencyFreePNPMLock(repo repository.Repository, root string) bool {
+	result, err := pnpmFacts(context.Background(), repo, root)
+	if err != nil || unreadableLock(result, lockPath(root)) != nil || len(result.Unsupported) != 0 || len(result.Importers) == 0 || len(result.Packages) != 0 {
+		return false
+	}
+	for _, importer := range result.Importers {
+		if len(importer.Dependencies) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func rootHasDependencyFreePNPMInput(root string, inputs map[string]bool) bool {
+	for input := range inputs {
+		if scopeInsideOSVRoot(lockPath(input), root) {
+			return true
+		}
+	}
+	return false
 }
 
 func scanOSVWithCommands(ctx context.Context, repo repository.Repository, commands []policy.Command, commandRunner runner.Runner) []policy.Finding {
