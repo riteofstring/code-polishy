@@ -148,7 +148,7 @@ func coveredDependencyInputs(root string, files []string, uvInputs []onlineUVInp
 
 func hasUncoveredDependencyInput(repo repository.Repository, root string, files []string, allowed map[string]bool) bool {
 	for _, path := range files {
-		if scopeInsideOSVRoot(path, root) && repo.IsDependencyInput(path) && !allowed[path] {
+		if scopeInsideOSVRoot(path, root) && isOSVPackageSourceInput(repo, path) && !allowed[path] {
 			return true
 		}
 	}

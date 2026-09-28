@@ -1,4 +1,5 @@
 import { basename, join } from "node:path";
+import { join as joinRepositoryPath } from "node:path/posix";
 
 import yaml from "js-yaml";
 
@@ -55,7 +56,7 @@ function escapes(path) {
 }
 
 function readLock(root, directory, unsupportedPaths) {
-  const path = join(directory, LOCKFILE_NAME);
+  const path = joinRepositoryPath(directory, LOCKFILE_NAME);
   const text = readTargetFile(join(root, path), path, unsupportedPaths);
   if (text === null) {
     return null;
@@ -657,7 +658,7 @@ function dependencyResolution(name, version, importer, lock, unsupportedPaths) {
     return empty;
   }
   if (version.startsWith("link:")) {
-    const target = join(importer, version.slice(5));
+    const target = joinRepositoryPath(importer, version.slice(5));
     if (escapes(target)) {
       unsupportedPaths.push(
         unsupported(
@@ -697,7 +698,7 @@ function importerDependencies(
   lock,
   unsupportedPaths,
 ) {
-  const manifest = join(importer, "package.json");
+  const manifest = joinRepositoryPath(importer, "package.json");
   const declared = declaredDependencies(
     request.root,
     manifest,
@@ -752,7 +753,7 @@ function lockImporters(request, lock, unsupportedPaths) {
       );
       continue;
     }
-    const importer = join(request.directory, key);
+    const importer = joinRepositoryPath(request.directory, key);
     if (escapes(importer)) {
       unsupportedPaths.push(
         unsupported(lock.path, `importer '${key}' is outside the repository`),

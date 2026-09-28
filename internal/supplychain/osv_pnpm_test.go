@@ -87,6 +87,12 @@ func TestOSVEmptyPNPMDoesNotRelaxMixedDependencyRoots(t *testing.T) {
 	}{
 		{name: "Cargo manifest", path: "Cargo.toml", data: "[package]\nname = \"example\"\nversion = \"0.1.0\"\n"},
 		{name: "npm lock", path: "package-lock.json", data: "{}\n"},
+		{name: "npm shrinkwrap", path: "npm-shrinkwrap.json", data: "{}\n"},
+		{name: "Gradle lock", path: "gradle.lockfile", data: ""},
+		{name: "NuGet lock", path: "packages.lock.json", data: "{}\n"},
+		{name: ".NET project", path: "example.csproj", data: "<Project />\n"},
+		{name: "CycloneDX inventory", path: "inventory.cdx.json", data: "{}\n"},
+		{name: "vendored source", path: "vendor/library/source.c", data: "int example;\n"},
 	} {
 		t.Run(input.name, func(t *testing.T) {
 			repo := supplyRepository(t)
