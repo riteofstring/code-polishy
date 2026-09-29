@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.15 - 2026-09-28
+
 - Add `trends`, a weekly report of how new code holds up on the branch being
   worked on: the share rewritten within 14 days (adjustable with
   `--rewrite-days`) and the changes whose lines were most often rewritten,
