@@ -19,6 +19,7 @@ Code Polishy keeps today's agent code from becoming tomorrow's cleanup.
 - Protects your software supply chain from surprise dependency changes and
   known vulnerabilities.
 - Shows where repository space goes and what caused its growth.
+- Shows week by week how new code holds up after it lands.
 
 Agents catch problems while the change is still fresh, and one final gate stops
 unresolved issues before merge.
@@ -111,6 +112,7 @@ Your prompts can stay focused on what you want built.
 - [All docs](docs/README.md)
 - [Agent workflows](docs/agent-workflows.md)
 - [Repository size](docs/repository-size.md)
+- [Repository trends](docs/repository-trends.md)
 - [Architecture rules](docs/policies/architecture.md)
 - [Test rules](docs/policies/verification.md)
 - [Dependency rules](docs/policies/supply-chain.md)

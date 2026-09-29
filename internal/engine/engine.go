@@ -854,6 +854,7 @@ func (engine *Engine) combine(left, right Report) Report {
 		RequestedSelection:    combineRequestedSelection(left.RequestedSelection, right.RequestedSelection),
 		AnalysisContext:       append(append([]AnalysisContext{}, left.AnalysisContext...), right.AnalysisContext...),
 		RepositorySize:        combineRepositorySize(left.RepositorySize, right.RepositorySize),
+		RepositoryTrends:      combineRepositoryTrends(left.RepositoryTrends, right.RepositoryTrends),
 		BehaviorReview:        combineBehaviorReview(left.BehaviorReview, right.BehaviorReview),
 		MergePolicy:           combineMergePolicy(left.MergePolicy, right.MergePolicy),
 		CheckpointPolicy:      combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
@@ -879,6 +880,13 @@ func (engine *Engine) combine(left, right Report) Report {
 }
 
 func combineRepositorySize(left, right *repository.SizeAnalysis) *repository.SizeAnalysis {
+	if right != nil {
+		return right
+	}
+	return left
+}
+
+func combineRepositoryTrends(left, right *RepositoryTrends) *RepositoryTrends {
 	if right != nil {
 		return right
 	}

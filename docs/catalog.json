@@ -295,6 +295,22 @@
       "public": true
     },
     {
+      "id": "repository-trends",
+      "path": "docs/repository-trends.md",
+      "title": "Repository Trends",
+      "summary": "Track weekly rewrite, copied-code, change-spread, revert, and flaky-test trends along the branch being worked on.",
+      "aliases": ["quality-trends", "repository-history"],
+      "public": true
+    },
+    {
+      "id": "repository-trends-design",
+      "path": "docs/design/repository-trends.md",
+      "title": "Repository Trends Design",
+      "summary": "Understand history replay, landing semantics, gate-record reading, and why trends exclude enforced measures.",
+      "aliases": ["trends-design"],
+      "public": true
+    },
+    {
       "id": "security",
       "path": "docs/policies/security.md",
       "title": "Security Policy",

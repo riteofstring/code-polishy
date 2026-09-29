@@ -35,6 +35,8 @@ and aliases. Search is local, bounded, and deterministic.
   producer contracts, OpenVEX, and optional behavior-review evidence custody.
 - [Repository Size](repository-size.md) explains workspace and governed-content
   footprint reports, Git-base comparisons, and agent interpretation.
+- [Repository Trends](repository-trends.md) explains weekly rewrite, copy,
+  change-spread, revert, and flaky-test trends.
 
 ## Policy reference
 
@@ -63,6 +65,9 @@ and aliases. Search is local, bounded, and deterministic.
   conditional request capture, stdin transport, and explicit evidence cleanup.
 - [Repository Size Analysis](design/repository-size-analysis.md) defines safe,
   bounded footprint measurement and its human/agent interpretation boundary.
+- [Repository Trends Design](design/repository-trends.md) explains history replay,
+  landing semantics, gate-record reading, and why trends exclude enforced
+  measures.
 - [Reliability Reminder](design/reliability-reminder.md) defines
   scoped advisory selection, rendering, and its non-enforcement boundary.
 - [Policy Engine Architecture](policy-engine-architecture.md) maps the runtime

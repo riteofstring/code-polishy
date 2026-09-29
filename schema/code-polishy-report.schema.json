@@ -36,6 +36,7 @@
     "sourceDependencyGraph": { "$ref": "#/$defs/sourceDependencyGraph" },
     "repositoryContext": { "$ref": "#/$defs/repositoryContext" },
     "repositorySize": { "$ref": "#/$defs/repositorySize" },
+    "repositoryTrends": { "$ref": "#/$defs/repositoryTrends" },
     "reliabilityReminder": {
       "$ref": "#/$defs/reliabilityReminder"
     },
@@ -497,6 +498,226 @@
         "baseBytes": { "type": "integer", "minimum": 0 },
         "currentBytes": { "type": "integer", "minimum": 0 },
         "deltaBytes": { "type": "integer" }
+      }
+    },
+    "repositoryTrends": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["history", "flakyTests"],
+      "properties": {
+        "history": { "$ref": "#/$defs/trendsHistory" },
+        "flakyTests": { "$ref": "#/$defs/flakyTestTrends" }
+      }
+    },
+    "trendsHistory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "head",
+        "since",
+        "asOf",
+        "rewriteDays",
+        "changes",
+        "skippedChanges",
+        "weeks",
+        "rewrites",
+        "reverts",
+        "copies",
+        "lockChanges"
+      ],
+      "properties": {
+        "branch": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "head": { "$ref": "#/$defs/trendsCommit" },
+        "since": { "$ref": "#/$defs/trendsDate" },
+        "asOf": { "type": "string", "minLength": 20, "maxLength": 64 },
+        "rewriteDays": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "changes": { "type": "integer", "minimum": 0 },
+        "skippedChanges": { "type": "integer", "minimum": 0 },
+        "weeks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 104,
+          "items": { "$ref": "#/$defs/trendsWeek" }
+        },
+        "rewrites": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/trendsRewrite" }
+        },
+        "reverts": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/trendsRevert" }
+        },
+        "copies": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/trendsCopy" }
+        },
+        "lockChanges": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/trendsLockChange" }
+        }
+      }
+    },
+    "trendsCommit": {
+      "type": "string",
+      "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "trendsDate": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "trendsWeek": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "week",
+        "changes",
+        "linesLanded",
+        "linesRewritten",
+        "rewriteComplete",
+        "linesCopied",
+        "moduleChanges",
+        "modulesTouched",
+        "reverts",
+        "codePolishyVersion"
+      ],
+      "properties": {
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "changes": { "type": "integer", "minimum": 0 },
+        "linesLanded": { "type": "integer", "minimum": 0 },
+        "linesRewritten": { "type": "integer", "minimum": 0 },
+        "rewriteComplete": { "type": "boolean" },
+        "linesCopied": { "type": "integer", "minimum": 0 },
+        "moduleChanges": { "type": "integer", "minimum": 0 },
+        "modulesTouched": { "type": "integer", "minimum": 0 },
+        "reverts": { "type": "integer", "minimum": 0 },
+        "codePolishyVersion": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "trendsRewrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "week",
+        "subject",
+        "linesLanded",
+        "linesRewritten"
+      ],
+      "properties": {
+        "commit": { "$ref": "#/$defs/trendsCommit" },
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "subject": { "type": "string", "maxLength": 200 },
+        "linesLanded": { "type": "integer", "minimum": 1 },
+        "linesRewritten": { "type": "integer", "minimum": 1 },
+        "codePolishy": { "$ref": "#/$defs/trendsVersionChange" }
+      }
+    },
+    "trendsVersionChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "version"],
+      "properties": {
+        "kind": {
+          "enum": ["adopted", "upgraded", "downgraded", "changed", "removed"]
+        },
+        "version": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "trendsRevert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "reverted", "week", "subject"],
+      "properties": {
+        "commit": { "$ref": "#/$defs/trendsCommit" },
+        "reverted": { "$ref": "#/$defs/trendsCommit" },
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "subject": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "trendsCopy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "week", "lines"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "lines": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "trendsLockChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "date",
+        "week",
+        "kind",
+        "version",
+        "linesLanded",
+        "linesRewritten"
+      ],
+      "properties": {
+        "commit": { "$ref": "#/$defs/trendsCommit" },
+        "date": { "$ref": "#/$defs/trendsDate" },
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "kind": {
+          "enum": ["adopted", "upgraded", "downgraded", "changed", "removed"]
+        },
+        "version": { "type": "string", "maxLength": 128 },
+        "linesLanded": { "type": "integer", "minimum": 0 },
+        "linesRewritten": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "flakyTestTrends": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worktrees",
+        "suiteRuns",
+        "otherFormatRecords",
+        "invalidRecords",
+        "weeks",
+        "suites"
+      ],
+      "properties": {
+        "worktrees": { "type": "integer", "minimum": 1 },
+        "suiteRuns": { "type": "integer", "minimum": 0 },
+        "otherFormatRecords": { "type": "integer", "minimum": 0 },
+        "invalidRecords": { "type": "integer", "minimum": 0 },
+        "weeks": {
+          "type": "array",
+          "maxItems": 104,
+          "items": { "$ref": "#/$defs/flakyTestWeek" }
+        },
+        "suites": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/flakyTestSuite" }
+        }
+      }
+    },
+    "flakyTestWeek": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["week", "suiteRuns", "flaky"],
+      "properties": {
+        "week": { "$ref": "#/$defs/trendsDate" },
+        "suiteRuns": { "type": "integer", "minimum": 0 },
+        "flaky": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "flakyTestSuite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "flaky"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "flaky": { "type": "integer", "minimum": 1 }
       }
     },
     "contextDocument": {

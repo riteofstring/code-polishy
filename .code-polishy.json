@@ -193,6 +193,18 @@
         ]
       },
       {
+        "path": "docs/design/repository-trends.md",
+        "sourcePaths": [
+          "internal/repository/trends.go",
+          "internal/repository/trends_history.go",
+          "internal/repository/trends_lines.go",
+          "internal/repository/worktrees.go",
+          "internal/gaterun/history.go",
+          "internal/engine/repository_trends.go",
+          "cmd/code-polishy/trends.go"
+        ]
+      },
+      {
         "path": "docs/design/repository-size-analysis.md",
         "sourcePaths": [
           "internal/repository/size.go",

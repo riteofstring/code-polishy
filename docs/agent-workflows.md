@@ -14,6 +14,7 @@ Use `code-polishy docs find QUERY...` to locate another exact policy reference.
 | -------------------------------------- | ------------------------------------------------------------------------- |
 | Read-only capability question          | `code-polishy capabilities --query "QUERY"`                               |
 | Repository footprint question          | `code-polishy size [--base MERGE_TARGET]`                                 |
+| Repository quality trend question      | `code-polishy trends [--since DATE] [--branch NAME]`                      |
 | Ordinary implementation                | `code-polishy task-start --module NAME`                                   |
 | Explicit behavior-sensitive change     | `code-polishy task-start --intent-file - --module NAME --feature FEATURE` |
 | Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`               |
@@ -49,6 +50,12 @@ question concerns growth or a candidate change. Treat its composition and delta
 as evidence; project context determines whether the result is reasonable. The
 command neither sends repository facts to an AI provider nor includes file
 contents in its report.
+
+For a question about how the repository's code is holding up over time, use
+`code-polishy trends`. Add `--branch` when work happens on a long-lived branch
+instead of the default branch. Treat its weekly values as trends: they describe
+change but do not show what caused it. The command reads Git history and local
+gate records only, and its report includes no file contents.
 
 Use `code-polishy task-session` when the caller requests isolation or when an
 unattended bounded task benefits from a disposable worktree. Select every

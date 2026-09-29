@@ -17,13 +17,19 @@ func TestSizeBuildsHumanAndSchemaValidatedMachineEvidence(t *testing.T) {
 	writeEngineFile(t, root, "src/app.go", string(make([]byte, 2048)), 0o600)
 	writeEngineFile(t, root, "docs/guide.md", string(make([]byte, 1024)), 0o600)
 	policyEngine := &Engine{Repository: repository.Repository{
-		Root:   root,
-		Config: policy.Config{Modules: []policy.Module{{Name: "application", Paths: []string{"src/**"}}}},
+		Root: root,
+		Config: policy.Config{
+			Modules:    []policy.Module{{Name: "application", Paths: []string{"src/**"}}},
+			Exceptions: []policy.Exception{expiredEngineException()},
+		},
 	}}
 
 	report, err := policyEngine.Size("")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || report.Summary.Status != "passed" {
+		t.Fatalf("unrelated policy status changed the size outcome: %+v", report.Findings)
 	}
 	if report.RepositorySize == nil || report.RepositorySize.Governed.Files != 2 || report.RepositorySize.Governed.Bytes != 3072 {
 		t.Fatalf("repository size = %+v", report.RepositorySize)

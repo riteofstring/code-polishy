@@ -78,8 +78,9 @@ Framework interpretation belongs in separately installed providers. The optional
 JS/TS provider reads existing package metadata and configuration as data and uses
 sealed parsers and checkers. It does not execute target check scripts, compiler
 plugins, or lint configurations. Framework-specific parsers and mappings stay
-inside that provider. Local reports and diagnostics remain part of Code Polishy;
-dashboards, remote telemetry, and aggregate analytics are outside its product scope.
+inside that provider. Local reports, diagnostics, and single-repository trends
+remain part of Code Polishy; dashboards, remote telemetry, and cross-repository
+analytics are outside its product scope.
 
 Conformance context comes from the verified pack inventory beneath each declared
 fixture project. It never depends on an enclosing checkout's tracked files or

@@ -22,7 +22,7 @@ func (engine *Engine) Size(base string) (Report, error) {
 	if analysis.Comparison != nil {
 		notes = append(notes, "base comparison uses canonical Git blob sizes for both revisions")
 	}
-	report := engine.finish(nil, notes)
+	report := engine.normalizeReport(Report{Notes: notes})
 	report.RepositorySize = &analysis
 	report.Tables = repositorySizeTables(analysis)
 	return engine.normalizeReport(report), nil

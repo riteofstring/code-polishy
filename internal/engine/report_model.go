@@ -62,6 +62,9 @@ func (engine *Engine) normalizeReport(report Report) Report {
 	if report.RepositorySize != nil {
 		normalizeRepositorySize(report.RepositorySize)
 	}
+	if report.RepositoryTrends != nil {
+		normalizeRepositoryTrends(report.RepositoryTrends)
+	}
 	if report.Execution != nil {
 		report.Execution.Phases = reportArray(report.Execution.Phases)
 		report.Execution.Commands = reportArray(report.Execution.Commands)
@@ -106,6 +109,16 @@ func normalizeRepositorySize(analysis *repository.SizeAnalysis) {
 		analysis.Comparison.Languages = reportArray(analysis.Comparison.Languages)
 		analysis.Comparison.LargestChanges = reportArray(analysis.Comparison.LargestChanges)
 	}
+}
+
+func normalizeRepositoryTrends(trends *RepositoryTrends) {
+	trends.History.Weeks = reportArray(trends.History.Weeks)
+	trends.History.Rewrites = reportArray(trends.History.Rewrites)
+	trends.History.Reverts = reportArray(trends.History.Reverts)
+	trends.History.Copies = reportArray(trends.History.Copies)
+	trends.History.LockChanges = reportArray(trends.History.LockChanges)
+	trends.FlakyTests.Weeks = reportArray(trends.FlakyTests.Weeks)
+	trends.FlakyTests.Suites = reportArray(trends.FlakyTests.Suites)
 }
 
 func normalizeGitEvidence(receipts []supplychain.GitEvidenceReceipt) []supplychain.GitEvidenceReceipt {

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add `trends`, a weekly report of how new code holds up on the branch being
+  worked on: the share rewritten within 14 days (adjustable with
+  `--rewrite-days`) and the changes whose lines were most often rewritten,
+  rework in commits that change the Code Polishy version, copied blocks,
+  modules touched per change, reverts, flaky test suites from local gate
+  records, and the Code Polishy version in effect each week.
+- Keep `size` from failing because of unrelated policy status, such as an
+  expired exception or assessment.
+
 ## 0.27.14 - 2026-09-27
 
 - Let OSV vulnerability scans accept validated dependency-free pnpm projects

@@ -19,6 +19,7 @@ type Report struct {
 	AnalysisContext         []AnalysisContext                         `json:"analysisContext"`
 	RepositoryContext       *RepositoryContext                        `json:"repositoryContext,omitempty"`
 	RepositorySize          *repository.SizeAnalysis                  `json:"repositorySize,omitempty"`
+	RepositoryTrends        *RepositoryTrends                         `json:"repositoryTrends,omitempty"`
 	SourceDependencyGraph   *sourcegraph.Graph                        `json:"sourceDependencyGraph,omitempty"`
 	ArchitectureReview      *behaviorreview.ArchitectureReviewStatus  `json:"architectureReview,omitempty"`
 	ArchitecturePreparation *behaviorreview.ArchitecturePrepareResult `json:"architecturePreparation,omitempty"`

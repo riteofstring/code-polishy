@@ -56,6 +56,7 @@ Commands:
   artifact-security
   doctor [--strict]
   size [--base REF]
+  trends [--since DATE] [--branch NAME] [--rewrite-days N]
   design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...]) [--situation NAME...]
   format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
@@ -388,6 +389,7 @@ func commandHandlers() map[string]commandHandler {
 		"dependency-review":   handleDependencyReview,
 		"artifact-security":   handleArtifactSecurity,
 		"size":                handleSize,
+		"trends":              handleTrends,
 		"design-context":      handleDesignContext,
 	}
 }

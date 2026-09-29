@@ -545,6 +545,21 @@ var commandHelpPages = []commandHelpPage{
 		exits:       []string{"0 analysis completed", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy size", "code-polishy size --base origin/main --format json"},
 	},
+	{
+		name:    "trends",
+		summary: "Report weekly repository quality trends from Git history and local gate records.",
+		syntax:  []string{"code-polishy trends [--since DATE] [--branch NAME] [--rewrite-days N]"},
+		selectors: []string{
+			"Without --since, covers the current week and the 11 weeks before it; --since YYYY-MM-DD starts at the week containing that date.",
+			"Without --branch, follows the first-parent history of HEAD; --branch follows another branch or commit, such as a long-lived branch that main has not received yet.",
+			"--rewrite-days N counts a new line as rewritten when it changes within N days of landing; the default is 14 and the maximum is 365.",
+			"Rewrite rate, copied code, change spread, and reverts come from landed changes; flaky tests come from this machine's gate records in every working copy of the repository.",
+			"The report describes change over time; it does not measure what caused a change or assign a quality score.",
+		},
+		sideEffects: []string{"Reads Git history and local gate records; source contents are not included in the report."},
+		exits:       []string{"0 analysis completed", "2 invalid usage or operational failure"},
+		examples:    []string{"code-polishy trends", "code-polishy trends --rewrite-days 30", "code-polishy trends --since 2026-06-01 --branch main --format json"},
+	},
 }
 
 func commandHelpFor(command string) (commandHelpPage, bool) {

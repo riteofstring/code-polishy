@@ -160,14 +160,22 @@ func readStoredReport(directory artifactDirectory, expected Identity, executionI
 }
 
 func readExecutionEvidenceReport(directory artifactDirectory, executionID string) (Report, error) {
+	data, err := readExecutionReportBytes(directory)
+	if err != nil {
+		return Report{}, err
+	}
+	return decodeExecutionEvidenceReport(data, executionID)
+}
+
+func readExecutionReportBytes(directory artifactDirectory) ([]byte, error) {
 	file, _, err := artifactFilePath(directory, reportFilename)
 	if err != nil {
-		return Report{}, err
+		return nil, err
 	}
-	data, err := readArtifact(file, maximumReportBytes, "gate run report")
-	if err != nil {
-		return Report{}, err
-	}
+	return readArtifact(file, maximumReportBytes, "gate run report")
+}
+
+func decodeExecutionEvidenceReport(data []byte, executionID string) (Report, error) {
 	var report Report
 	if err := decodeStrict(data, &report, "gate run report"); err != nil {
 		return Report{}, err

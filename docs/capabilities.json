@@ -306,6 +306,16 @@
       "workflows": ["docs/agent-workflows.md"]
     },
     {
+      "name": "trends",
+      "kind": "command",
+      "description": "Report weekly rewrite, copied-code, change-spread, revert, and flaky-test trends for the branch being worked on.",
+      "aliases": ["code quality over time", "repository trends"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/repository-trends.md", "docs/agent-workflows.md"]
+    },
+    {
       "name": "upgrade",
       "kind": "command",
       "description": "Plan and apply a publication-backed or local-source release change without editing application source or running a gate.",

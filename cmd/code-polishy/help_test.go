@@ -20,7 +20,7 @@ func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
 		"test", "test-plan", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
-		"architecture-review", "capabilities", "task-start", "size",
+		"architecture-review", "capabilities", "task-start", "size", "trends",
 	}
 	for _, command := range publicCommands {
 		t.Run(command, func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestReportCommandHelpDistinguishesEvaluationAndDisplayOptions(t *testing.T)
 	t.Parallel()
 	for _, command := range []string{
 		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-plan", "test-levels", "verify", "architecture",
-		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix", "size",
+		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix", "size", "trends",
 	} {
 		page, found := commandHelpFor(command)
 		if !found {
