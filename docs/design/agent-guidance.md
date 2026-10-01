@@ -2,10 +2,11 @@
 
 ## Purpose
 
-`templates/AGENTS.md` is installed verbatim into managed repositories. This
-repository's root `AGENTS.md` mirrors it so the project follows the same contract
-it publishes. The canonical file is a small, always-on control plane, not a
-repository manual or a substitute for enforcement.
+`templates/AGENTS.md` is installed as the managed prefix of repository
+`AGENTS.md` files. This repository's root file mirrors that prefix so the
+project follows the same contract it publishes. The canonical prefix is a
+small, always-on control plane, not a repository manual or a substitute for
+enforcement.
 
 Use code, configuration validation, permissions, tests, and CI for controls
 whose violation would be costly. Keep a prose instruction when seeing it before
@@ -50,6 +51,40 @@ retrieves it for the exact affected module. Use nested guidance for durable
 directory-specific rules. Enforce critical restrictions mechanically; prose is
 an aid, not proof of compliance.
 
+## Project principles
+
+A repository may append one final `## Project principles` section after one
+blank line. The visible heading is the ownership boundary: the locked release
+owns the preceding prefix, while the repository owns the heading through end of
+file. Synchronization replaces a stale prefix and preserves a valid principles
+section byte-for-byte. A recognized but malformed section blocks the complete
+transaction so synchronization cannot erase or normalize repository decisions.
+
+The section has one flat, consecutively numbered list with at most 12 items.
+Each item begins with one bold title of at most eight whitespace-delimited words
+and continues as one paragraph. The complete repository-owned suffix, including
+its required leading blank line and heading, is at most 5 KiB, and each complete
+item, including its Markdown and line endings, is at most 400 UTF-8 bytes.
+Nested lists, extra headings, tables, code blocks, images, and links are invalid.
+These deterministic limits keep the persistent prompt bounded, the list
+scannable, and each principle focused on one decision.
+
+Titles use imperative phrasing. Principles state durable, testable repository
+decisions and ownership boundaries, not aspirations. They omit paths, commands,
+versions, dated notes, current bugs, and process rules about tests, commits, or
+delivery. They do not duplicate the canonical procedure or replace mapped
+design rationale. Agents edit the section only on the caller's explicit
+request. Treat item numbers as stable references: append new principles and
+renumber only when explicitly requested. Nested guidance may specialize project
+principles for its scope but cannot weaken either the principles or the locked
+baseline.
+
+Code Polishy does not create or require `CLAUDE.md` because supported agents
+read `AGENTS.md` directly. Install and sync transactionally remove only the two
+exact historical managed stubs: the `@AGENTS.md` import and its former prose
+redirect. Any custom or non-regular `CLAUDE.md` remains repository-owned and is
+ignored by agent-guidance status.
+
 ## Updating the canonical file
 
 1. Start from an observed failure, a hidden operational fact, or a deliberate
@@ -58,13 +93,13 @@ an aid, not proof of compliance.
    correctness-critical.
 3. Remove superseded and redundant wording in the same change. Review deletions
    as seriously as additions.
-4. During ordinary development, update `templates/AGENTS.md` and the root
-   `AGENTS.md` together and keep them byte-identical. During release development,
-   change only the template while the root remains governed by the outgoing
-   lock. After the incoming release's `lock` command performs the atomic
-   cutover, run that release's `agents sync` and commit the root update with the
-   self-hosting lock. Never use the outgoing release's sync command to author
-   the incoming template.
+4. During ordinary development, update `templates/AGENTS.md` and the managed
+   prefix of root `AGENTS.md` together. Keep them byte-identical when the root
+   has no project principles. During release development, change only the
+   template while the root remains governed by the outgoing lock. After the
+   incoming release's `lock` command performs the atomic cutover, run that
+   release's `agents sync` and commit the root update with the self-hosting lock.
+   Never use the outgoing release's sync command to author the incoming template.
 5. Format both files and run the focused `internal/agents` tests. Keep tests
    focused on durable behavior rather than complete prose snapshots.
 6. Record a user-visible contract change in the changelog.
@@ -107,9 +142,10 @@ reminder stays advisory so it does not become more reliability machinery.
 
 ## Size budget
 
-The focused agents test caps canonical guidance at 5 KiB. The number is an
-engineering budget that catches accidental growth and reserves instruction
-space for repository-owned nested guidance; it is not an empirical performance
-threshold. Do not game the budget with cryptic prose. Remove lower-value or
-duplicated material first. Raise the budget only through a deliberate reviewed
-change when a valuable broadly applicable rule cannot fit clearly.
+The focused agents test caps the canonical prefix and optional project
+principles at 5 KiB each. The resulting root file is at most 10 KiB. These are
+engineering budgets that catch accidental growth and reserve instruction space
+for repository-owned guidance; they are not empirical performance thresholds.
+Do not game either budget with cryptic prose. Remove lower-value or duplicated
+material first. Raise a budget only through a deliberate reviewed change when a
+valuable broadly applicable rule cannot fit clearly.

@@ -349,18 +349,18 @@ the lock:
 code-polishy agents install
 ```
 
-The locked release owns the entire `AGENTS.md`. Installation creates a missing
-canonical file or accepts an exact existing copy idempotently; it preserves and
-reports a conflict for any existing noncanonical file. It also installs the
-release's exact one-line `CLAUDE.md` import (`@AGENTS.md`) when absent and
-appends the exact `/.code-polishy-reports/` rule to the root `.gitignore` when
-needed, preserving all existing rules, line endings, and file mode. A differing
-import or a non-regular target is preserved as an explicit conflict, so no
-planned adoption change is written. On policy upgrades, run `agents sync`; it
-requires an existing `AGENTS.md`, replaces all stale guidance bytes, upgrades
-the exact former managed Claude redirect, and repairs a missing report-artifact
-rule in the same transaction. `doctor --strict` rejects a missing, stale, or
-conflicting adoption surface.
+The locked release owns the canonical `AGENTS.md` prefix. Installation creates
+a missing file or accepts the exact prefix with an optional valid final
+`## Project principles` section. A noncanonical existing prefix or malformed
+principles section is preserved as an explicit conflict. The transaction also
+appends the exact report and test-artifact rules to the root `.gitignore` when
+needed, preserving existing rules, line endings, and file mode. It creates no
+`CLAUDE.md`; an exact obsolete managed import or redirect is removed, while any
+custom file is left untouched. On policy upgrades, `agents sync` requires an
+existing `AGENTS.md`, replaces only a stale canonical prefix, preserves valid
+project principles byte-for-byte, and repairs the other managed adoption files
+in the same transaction. `doctor --strict` rejects a missing, stale, malformed,
+or conflicting adoption surface.
 
 ## 6. Inspect conditional policy modules
 

@@ -12,7 +12,6 @@ import (
 
 const (
 	agentsTemplateRelativePath = "templates/AGENTS.md"
-	claudeTemplateRelativePath = "templates/CLAUDE.md"
 	agentsTargetFilename       = "AGENTS.md"
 	claudeTargetFilename       = "CLAUDE.md"
 	ignoreTargetFilename       = ".gitignore"
@@ -20,7 +19,7 @@ const (
 	testArtifactsIgnorePattern = "/.code-polishy-artifacts/"
 	reportsDirectoryPath       = ".code-polishy-reports/"
 	testArtifactsDirectoryPath = ".code-polishy-artifacts/"
-	claudeImport               = "@AGENTS.md\n"
+	legacyClaudeImport         = "@AGENTS.md\n"
 	legacyClaudeRedirect       = "Read and follow `AGENTS.md` in the repository root for all project guidelines and workflows.\n"
 )
 
@@ -46,7 +45,7 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
+	agentsTarget, ignoreTarget, err := readTargets(repoRoot)
 	if err != nil {
 		return "", err
 	}
@@ -62,10 +61,7 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	claudeMutation, writesClaude, claudeMessage, err := planClaude(claudeTarget, guidance.claude)
-	if err != nil {
-		return "", err
-	}
+	claudeMutation, removesClaude, claudeMessage := planClaudeCleanup(readClaudeCleanupTarget(repoRoot))
 	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
 	if err != nil {
 		return "", err
@@ -73,14 +69,14 @@ func install(repoRoot, policyRoot string, replace replacement) (string, error) {
 	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
 	mutations := adoptionMutations(
 		optionalMutation{agentsMutation, writesAgents},
-		optionalMutation{claudeMutation, writesClaude},
+		optionalMutation{claudeMutation, removesClaude},
 		wrapperMutations,
 		optionalMutation{ignoreMutation, writesIgnore},
 	)
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage, nil
+	return joinOperationMessages(agentsMessage, claudeMessage, wrapperMessage, ignoreMessage), nil
 }
 
 func Sync(repoRoot, policyRoot string) (string, error) {
@@ -100,7 +96,7 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
+	agentsTarget, ignoreTarget, err := readTargets(repoRoot)
 	if err != nil {
 		return "", err
 	}
@@ -112,10 +108,7 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	claudeMutation, writesClaude, claudeMessage, err := planClaude(claudeTarget, guidance.claude)
-	if err != nil {
-		return "", err
-	}
+	claudeMutation, removesClaude, claudeMessage := planClaudeCleanup(readClaudeCleanupTarget(repoRoot))
 	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
 	if err != nil {
 		return "", err
@@ -123,14 +116,14 @@ func sync(repoRoot, policyRoot string, replace replacement) (string, error) {
 	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
 	mutations := adoptionMutations(
 		optionalMutation{agentsMutation, writesAgents},
-		optionalMutation{claudeMutation, writesClaude},
+		optionalMutation{claudeMutation, removesClaude},
 		wrapperMutations,
 		optionalMutation{ignoreMutation, writesIgnore},
 	)
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage, nil
+	return joinOperationMessages(agentsMessage, claudeMessage, wrapperMessage, ignoreMessage), nil
 }
 
 func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte, replace replacement) (string, error) {
@@ -142,7 +135,7 @@ func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte
 	if err != nil {
 		return "", err
 	}
-	agentsTarget, claudeTarget, ignoreTarget, err := readTargets(repoRoot)
+	agentsTarget, ignoreTarget, err := readTargets(repoRoot)
 	if err != nil {
 		return "", err
 	}
@@ -158,10 +151,7 @@ func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte
 	if err != nil {
 		return "", err
 	}
-	claudeMutation, writesClaude, claudeMessage, err := planClaude(claudeTarget, guidance.claude)
-	if err != nil {
-		return "", err
-	}
+	claudeMutation, removesClaude, claudeMessage := planClaudeCleanup(readClaudeCleanupTarget(repoRoot))
 	ignoreCurrent, err := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
 	if err != nil {
 		return "", err
@@ -169,7 +159,7 @@ func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte
 	ignoreMutation, writesIgnore, ignoreMessage := planReportIgnore(ignoreTarget, ignoreCurrent)
 	mutations := adoptionMutations(
 		optionalMutation{agentsMutation, writesAgents},
-		optionalMutation{claudeMutation, writesClaude},
+		optionalMutation{claudeMutation, removesClaude},
 		wrapperMutations,
 		optionalMutation{ignoreMutation, writesIgnore},
 	)
@@ -177,7 +167,7 @@ func syncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte
 	if err := commitMutations(repoRoot, mutations, replace); err != nil {
 		return "", err
 	}
-	return agentsMessage + "; " + claudeMessage + "; " + wrapperMessage + "; " + ignoreMessage + "; updated repository lock", nil
+	return joinOperationMessages(agentsMessage, claudeMessage, wrapperMessage, ignoreMessage, "updated repository lock"), nil
 }
 
 func planUpgradeLock(repoRoot string, expected, incoming []byte) (mutation, error) {
@@ -204,14 +194,12 @@ func Check(repoRoot, policyRoot string) Status {
 		}}}
 	}
 	agentsTarget, agentsErr := readTarget(filepath.Join(repoRoot, agentsTargetFilename), agentsTargetFilename)
-	claudeTarget, claudeErr := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
 	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
 	wrapperTargets, wrapperErrors := checkWrapperTargets(repoRoot)
 	agentsStatus := checkAgents(agentsTarget, agentsErr, guidance.agents)
-	claudeStatus := checkClaude(claudeTarget, claudeErr, guidance.claude)
 	ignoreCurrent, ignoreMatchErr := reportArtifactsIgnored(repoRoot, ignoreTarget.contents)
 	ignoreStatus := checkReportIgnore(ignoreTarget, ignoreErr, ignoreCurrent, ignoreMatchErr)
-	statuses := []checkStatus{agentsStatus, claudeStatus}
+	statuses := []checkStatus{agentsStatus}
 	for index, template := range guidance.wrappers {
 		statuses = append(statuses, checkWrapper(wrapperTargets[index], wrapperErrors[index], template))
 	}
@@ -238,26 +226,17 @@ func Check(repoRoot, policyRoot string) Status {
 
 type canonicalGuidance struct {
 	agents   []byte
-	claude   []byte
 	wrappers []wrapperTemplate
 }
 
 func canonical(policyRoot string) (canonicalGuidance, error) {
 	agentsPath := filepath.Join(policyRoot, filepath.FromSlash(agentsTemplateRelativePath))
-	claudePath := filepath.Join(policyRoot, filepath.FromSlash(claudeTemplateRelativePath))
 	agentsTemplate, agentsErr := os.ReadFile(agentsPath)
-	claudeTemplate, claudeErr := os.ReadFile(claudePath)
 	if agentsErr != nil {
 		return canonicalGuidance{}, fmt.Errorf("read canonical AGENTS.md: %w", agentsErr)
 	}
-	if claudeErr != nil {
-		return canonicalGuidance{}, fmt.Errorf("read canonical CLAUDE.md: %w", claudeErr)
-	}
-	if len(agentsTemplate) == 0 {
-		return canonicalGuidance{}, errors.New("canonical AGENTS.md must not be empty")
-	}
-	if !bytes.Equal(claudeTemplate, []byte(claudeImport)) {
-		return canonicalGuidance{}, errors.New("canonical CLAUDE.md must contain exactly the required one-line import")
+	if err := validateCanonicalAgents(agentsTemplate); err != nil {
+		return canonicalGuidance{}, err
 	}
 	wrappers, err := canonicalWrappers(policyRoot)
 	if err != nil {
@@ -265,7 +244,6 @@ func canonical(policyRoot string) (canonicalGuidance, error) {
 	}
 	return canonicalGuidance{
 		agents:   append([]byte{}, agentsTemplate...),
-		claude:   append([]byte{}, claudeTemplate...),
 		wrappers: wrappers,
 	}, nil
 }
@@ -276,20 +254,16 @@ type targetState struct {
 	mode     os.FileMode
 }
 
-func readTargets(repoRoot string) (targetState, targetState, targetState, error) {
+func readTargets(repoRoot string) (targetState, targetState, error) {
 	agentsTarget, agentsErr := readTarget(filepath.Join(repoRoot, agentsTargetFilename), agentsTargetFilename)
-	claudeTarget, claudeErr := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
 	ignoreTarget, ignoreErr := readTarget(filepath.Join(repoRoot, ignoreTargetFilename), ignoreTargetFilename)
 	if agentsErr != nil {
-		return targetState{}, targetState{}, targetState{}, agentsErr
-	}
-	if claudeErr != nil {
-		return targetState{}, targetState{}, targetState{}, claudeErr
+		return targetState{}, targetState{}, agentsErr
 	}
 	if ignoreErr != nil {
-		return targetState{}, targetState{}, targetState{}, ignoreErr
+		return targetState{}, targetState{}, ignoreErr
 	}
-	return agentsTarget, claudeTarget, ignoreTarget, nil
+	return agentsTarget, ignoreTarget, nil
 }
 
 func readTarget(path, name string) (targetState, error) {
@@ -315,6 +289,7 @@ type mutation struct {
 	contents []byte
 	mode     os.FileMode
 	previous targetState
+	remove   bool
 }
 
 type optionalMutation struct {
@@ -341,7 +316,15 @@ func planInstallAgents(existing targetState, template []byte) (mutation, bool, s
 	if !existing.exists {
 		return mutation{path: path, contents: template, mode: 0o644, previous: existing}, true, "installed canonical AGENTS.md", nil
 	}
-	if matchesCanonicalGuidance(existing.contents, template) {
+	document, err := splitAgentsDocument(existing.contents)
+	if err != nil {
+		return mutation{}, false, "", fmt.Errorf("AGENTS.md project principles are invalid: %w; its bytes were preserved", err)
+	}
+	managed := document.managed
+	if !document.hasBoundary {
+		managed = existing.contents
+	}
+	if matchesCanonicalGuidance(managed, template) {
 		return mutation{}, false, "AGENTS.md canonical guidance is already current", nil
 	}
 	return mutation{}, false, "", errors.New("AGENTS.md conflicts with canonical guidance; its bytes were preserved")
@@ -351,29 +334,33 @@ func planSyncAgents(existing targetState, template []byte) (mutation, bool, stri
 	if !existing.exists {
 		return mutation{}, false, "", fmt.Errorf("read AGENTS.md: %w", os.ErrNotExist)
 	}
-	if matchesCanonicalGuidance(existing.contents, template) {
+	updated, changed, err := renderSynchronizedAgents(existing.contents, template)
+	if err != nil {
+		return mutation{}, false, "", fmt.Errorf("AGENTS.md project principles are invalid: %w; its bytes were preserved", err)
+	}
+	if !changed {
 		return mutation{}, false, "AGENTS.md canonical guidance is already current", nil
 	}
 	return mutation{
-		path: agentsTargetFilename, contents: template, mode: existing.mode, previous: existing,
+		path: agentsTargetFilename, contents: updated, mode: existing.mode, previous: existing,
 	}, true, "synchronized AGENTS.md canonical guidance", nil
 }
 
-func planClaude(existing targetState, template []byte) (mutation, bool, string, error) {
-	if !existing.exists {
-		return mutation{
-			path: claudeTargetFilename, contents: template, mode: 0o644, previous: existing,
-		}, true, "installed canonical CLAUDE.md import", nil
+func readClaudeCleanupTarget(repoRoot string) targetState {
+	target, err := readTarget(filepath.Join(repoRoot, claudeTargetFilename), claudeTargetFilename)
+	if err != nil {
+		return targetState{}
 	}
-	if matchesCanonicalGuidance(existing.contents, template) {
-		return mutation{}, false, "CLAUDE.md import is already current", nil
+	return target
+}
+
+func planClaudeCleanup(existing targetState) (mutation, bool, string) {
+	managed := matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeImport)) ||
+		matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeRedirect))
+	if !existing.exists || !managed {
+		return mutation{}, false, ""
 	}
-	if matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeRedirect)) {
-		return mutation{
-			path: claudeTargetFilename, contents: template, mode: existing.mode, previous: existing,
-		}, true, "updated canonical CLAUDE.md import", nil
-	}
-	return mutation{}, false, "", errors.New("CLAUDE.md conflicts with the canonical import; its bytes were preserved")
+	return mutation{path: claudeTargetFilename, previous: existing, remove: true}, true, "removed obsolete managed CLAUDE.md"
 }
 
 func planReportIgnore(existing targetState, current bool) (mutation, bool, string) {
@@ -451,26 +438,18 @@ func checkAgents(existing targetState, readErr error, template []byte) checkStat
 	if readErr != nil || !existing.exists {
 		return failedStatus("policy.agentGuidance", agentsTargetFilename, "canonical-guidance", "AGENTS.md is missing or unreadable; run `code-polishy agents install`")
 	}
-	if !matchesCanonicalGuidance(existing.contents, template) {
+	document, err := splitAgentsDocument(existing.contents)
+	if err != nil {
+		return failedStatus("policy.agentGuidance", agentsTargetFilename, "project-principles", "AGENTS.md project principles are invalid: "+err.Error())
+	}
+	managed := document.managed
+	if !document.hasBoundary {
+		managed = existing.contents
+	}
+	if !matchesCanonicalGuidance(managed, template) {
 		return failedStatus("policy.agentGuidance", agentsTargetFilename, "canonical-guidance", "AGENTS.md canonical guidance is stale; run `code-polishy agents sync`")
 	}
 	return checkStatus{current: true, message: "AGENTS.md canonical guidance is current"}
-}
-
-func checkClaude(existing targetState, readErr error, template []byte) checkStatus {
-	if readErr != nil {
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md conflicts with the canonical import or is unreadable; preserve its bytes and resolve the conflict")
-	}
-	if !existing.exists {
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md is missing; run `code-polishy agents sync` after AGENTS.md is current")
-	}
-	if !matchesCanonicalGuidance(existing.contents, template) {
-		if matchesCanonicalGuidance(existing.contents, []byte(legacyClaudeRedirect)) {
-			return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md canonical import is stale; run `code-polishy agents sync`")
-		}
-		return failedStatus("policy.agentGuidance", claudeTargetFilename, "canonical-import", "CLAUDE.md conflicts with the canonical import; preserve its bytes and resolve the conflict")
-	}
-	return checkStatus{current: true, message: "CLAUDE.md import is current"}
 }
 
 func checkReportIgnore(existing targetState, readErr error, current bool, matchErr error) checkStatus {
@@ -498,6 +477,16 @@ func joinStatusMessages(statuses []checkStatus) string {
 	return strings.Join(messages, "; ")
 }
 
+func joinOperationMessages(messages ...string) string {
+	selected := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if message != "" {
+			selected = append(selected, message)
+		}
+	}
+	return strings.Join(selected, "; ")
+}
+
 func matchesCanonicalGuidance(existing, template []byte) bool {
 	if bytes.Equal(existing, template) {
 		return true
@@ -519,16 +508,22 @@ type stagedMutation struct {
 func commitMutations(repoRoot string, mutations []mutation, replace replacement) error {
 	staged := make([]stagedMutation, 0, len(mutations))
 	for _, planned := range mutations {
-		incoming, err := stageTemporary(repoRoot, planned.contents, planned.mode)
-		if err != nil {
-			cleanStaged(staged)
-			return fmt.Errorf("stage %s: %w", planned.path, err)
+		incoming := ""
+		if !planned.remove {
+			var err error
+			incoming, err = stageTemporary(repoRoot, planned.contents, planned.mode)
+			if err != nil {
+				cleanStaged(staged)
+				return fmt.Errorf("stage %s: %w", planned.path, err)
+			}
 		}
 		item := stagedMutation{mutation: planned, incoming: incoming}
 		if planned.previous.exists {
 			backup, err := stageTemporary(repoRoot, planned.previous.contents, planned.previous.mode)
 			if err != nil {
-				_ = os.Remove(incoming)
+				if incoming != "" {
+					_ = os.Remove(incoming)
+				}
 				cleanStaged(staged)
 				return fmt.Errorf("stage rollback for %s: %w", planned.path, err)
 			}
@@ -540,7 +535,13 @@ func commitMutations(repoRoot string, mutations []mutation, replace replacement)
 	for index := range staged {
 		item := &staged[index]
 		target := filepath.Join(repoRoot, item.mutation.path)
-		if err := replace(item.incoming, target); err != nil {
+		var err error
+		if item.mutation.remove {
+			err = os.Remove(target)
+		} else {
+			err = replace(item.incoming, target)
+		}
+		if err != nil {
 			if rollbackErr := rollback(staged[:index], repoRoot, replace); rollbackErr != nil {
 				return fmt.Errorf("replace %s: %w; rollback: %v", item.mutation.path, err, rollbackErr)
 			}

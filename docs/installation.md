@@ -529,12 +529,12 @@ and commit the lock as its own reviewed change — and keep that release install
 for as long as the lock names it, because the launcher resolves that one and no
 other.
 
-Development still runs the source runner. This repository's `AGENTS.md` is the
-same exact canonical file every target receives, so the installed release
+Development still runs the source runner. This repository's `AGENTS.md` uses
+the same canonical prefix every target receives, so the installed release
 governs the checkout without a guidance exception. `agents sync` replaces that
-whole file when a later locked release changes the canonical contract and
-repairs the root `.gitignore` rules that keep report and test artifacts
-workspace-local.
+prefix when a later locked release changes the canonical contract, preserves
+valid project principles, and repairs the root `.gitignore` rules that keep
+report and test artifacts workspace-local.
 
 ## Exercising an installed release
 

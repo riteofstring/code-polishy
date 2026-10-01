@@ -186,9 +186,8 @@ seal_target() {
   if ! cmp -s "${release}/templates/AGENTS.md" "${target}/AGENTS.md"; then
     fail "$(basename "${target}"): AGENTS.md did not come from the locked release"
   fi
-  if ! cmp -s "${release}/templates/CLAUDE.md" "${target}/CLAUDE.md"; then
-    fail "$(basename "${target}"): CLAUDE.md did not come from the locked release"
-  fi
+  [[ ! -e "${target}/CLAUDE.md" ]] ||
+    fail "$(basename "${target}"): fresh adoption created CLAUDE.md"
   if ! grep -Fxq '/.code-polishy-reports/' "${target}/.gitignore"; then
     fail "$(basename "${target}"): report artifacts are not ignored"
   fi

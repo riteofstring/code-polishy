@@ -92,6 +92,21 @@ but must preserve its values. State changes remain explicit source changes so
 reviewers can inspect the exact data shipped by a build.
 EOF
   expect_pass "${target}" "first-adoption guidance install" agents install
+  cat >>"${target}/AGENTS.md" <<'EOF'
+
+## Project principles
+
+1. **Keep state changes explicit.** Preserve reviewable state as repository source.
+EOF
+  write_file "${target}/CLAUDE.md" <<'EOF'
+@AGENTS.md
+EOF
+  cp "${target}/AGENTS.md" "${target}/.git/project-guidance"
+  expect_pass "${target}" "first-adoption guidance sync" agents sync
+  cmp -s "${target}/.git/project-guidance" "${target}/AGENTS.md" ||
+    fail "first-adoption: sync changed project principles"
+  [[ ! -e "${target}/CLAUDE.md" ]] ||
+    fail "first-adoption: sync retained the obsolete managed CLAUDE.md"
   exercise_adopted_design_context "${target}" "${output}"
   write_file "${target}/src/state.json" <<'EOF'
 {

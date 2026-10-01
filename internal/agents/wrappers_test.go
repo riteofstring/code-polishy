@@ -103,7 +103,6 @@ func TestCheckReportsMissingAndConflictingWrappers(t *testing.T) {
 	policyRoot := policyFixture(t, canonicalAgentsText)
 	repoRoot := t.TempDir()
 	writeFile(t, filepath.Join(repoRoot, agentsTargetFilename), []byte(canonicalAgentsText), 0o600)
-	writeFile(t, filepath.Join(repoRoot, claudeTargetFilename), []byte(expectedClaudeImport), 0o600)
 	writeFile(t, filepath.Join(repoRoot, ignoreTargetFilename), []byte(expectedArtifactIgnores), 0o600)
 	writeFile(t, filepath.Join(repoRoot, posixWrapperTargetFilename), []byte("project-owned\n"), 0o600)
 

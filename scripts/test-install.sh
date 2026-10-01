@@ -236,9 +236,6 @@ EOF
   write_file "${source_root}/templates/AGENTS.md" <<'EOF'
 # Canonical guidance
 EOF
-  write_file "${source_root}/templates/CLAUDE.md" <<'EOF'
-@AGENTS.md
-EOF
   copy_file "${policy_root}/templates/code-polishyw" "${source_root}/templates/code-polishyw"
   copy_file "${policy_root}/templates/code-polishyw.ps1" "${source_root}/templates/code-polishyw.ps1"
   write_file "${source_root}/templates/behavior-review.md" <<'EOF'
@@ -528,7 +525,7 @@ content_digest="$(manifest_field "${manifest}" contentDigest)"
 for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE README.md CHANGELOG.md \
   docs/installation.md docs/agent-workflows.md docs/catalog.json docs/capabilities.json schema/code-polishy.schema.json \
   schema/code-polishy-report.schema.json schema/sarif-schema-2.1.0.json \
-  templates/AGENTS.md templates/CLAUDE.md templates/behavior-review.md \
+  templates/AGENTS.md templates/behavior-review.md \
   templates/code-polishyw templates/code-polishyw.ps1 \
   artifact-security/scanner-policy.json \
   scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
@@ -561,8 +558,8 @@ for documentation in README.md CHANGELOG.md docs/installation.md docs/agent-work
 done
 [[ ! -e "${release}/skills" ]] ||
   fail "the installed release carried a source-only skills directory"
-cmp -s "${source_root}/templates/CLAUDE.md" "${release}/templates/CLAUDE.md" ||
-  fail "the release did not carry the exact canonical CLAUDE.md import"
+[[ ! -e "${release}/templates/CLAUDE.md" ]] ||
+  fail "the release carried the retired CLAUDE.md template"
 cmp -s "${source_root}/templates/behavior-review.md" \
   "${release}/templates/behavior-review.md" ||
   fail "the release did not carry the exact behavior review instructions"

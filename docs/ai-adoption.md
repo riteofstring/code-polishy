@@ -458,14 +458,10 @@ Install the canonical guidance once:
 code-polishy agents install
 ```
 
-The locked release owns every byte of `AGENTS.md`. The command creates the
-canonical file when missing and accepts an exact existing copy without a
-rewrite. A noncanonical existing file is preserved and reported as a conflict.
-It also creates the release's exact one-line `CLAUDE.md` import (`@AGENTS.md`)
-when absent, keeping `AGENTS.md` as the single guidance authority. If
-`CLAUDE.md` differs,
-the command preserves its bytes and changes neither guidance file; resolve that
-explicit conflict before retrying. The same validated transaction appends the
+The locked release owns the canonical `AGENTS.md` prefix. The command creates a
+missing file and accepts an exact prefix followed by an optional valid final
+`## Project principles` section. It preserves and reports a noncanonical prefix
+or malformed principles section. The same validated transaction appends the
 exact `/.code-polishy-reports/` and `/.code-polishy-artifacts/` rules to the
 repository's root `.gitignore` when needed while preserving existing project
 rules, line endings, and file mode. The same transaction installs
@@ -474,11 +470,13 @@ setup command after cloning, then dispatch the exact locked release without
 depending on `PATH`. A wrapper already carrying the managed marker is repaired;
 an unrelated existing wrapper is preserved as an explicit conflict.
 Use `agents sync` after later Code Polishy upgrades; it requires an existing
-file, replaces the entire stale `AGENTS.md`, upgrades the exact former managed
-Claude redirect to the import, and repairs missing report or artifact ignore
-rules and stale managed wrappers.
-`agents check` and `doctor --strict` reject a missing rule. Do not hand-copy or
-duplicate the canonical policy text.
+file, replaces only the stale canonical prefix, preserves valid project
+principles byte-for-byte, and repairs missing report or artifact ignore rules
+and stale managed wrappers. Code Polishy no longer creates or requires
+`CLAUDE.md`; install and sync remove only the exact obsolete managed import or
+redirect and leave any custom file untouched. `agents check` and
+`doctor --strict` reject a missing rule or invalid principles section. Do not
+hand-copy or duplicate the canonical policy text.
 
 Keep canonical guidance compact and limited to durable rules used across tasks.
 `code-polishy docs` lists, searches, and reads the permanent documentation

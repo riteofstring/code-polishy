@@ -590,7 +590,7 @@ func newBehaviorReviewCLIBaseRepositoryWithReviewPolicy(t *testing.T, behaviorRe
 func writeBehaviorReviewCLICanonicalGuidance(t *testing.T, root string) {
 	t.Helper()
 	policyRoot := behaviorReviewCLIPolicyRoot(t)
-	for _, name := range []string{"AGENTS.md", "CLAUDE.md", "code-polishyw", "code-polishyw.ps1"} {
+	for _, name := range []string{"AGENTS.md", "code-polishyw", "code-polishyw.ps1"} {
 		contents, err := os.ReadFile(filepath.Join(policyRoot, "templates", name))
 		if err != nil {
 			t.Fatal(err)

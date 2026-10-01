@@ -42,15 +42,16 @@ replace the separately planned provenance work.
 
 ## Adoption ownership
 
-The agent-guidance transaction owns both wrappers alongside `AGENTS.md`,
-`CLAUDE.md`, and the report-artifact ignore rules. Installation creates missing
-wrappers; synchronization replaces only files carrying the managed marker and
-writes canonical modes when it creates or replaces a wrapper. Freshness compares
-exact bytes and Git-representable executable status, so group and other write
-bits applied by a checkout umask do not create perpetual drift. An unrelated
-pre-existing wrapper is a conflict, so the entire transaction preserves every
-target. `agents check` reports missing, stale, non-regular, or conflicting
-wrappers.
+The agent-guidance transaction owns both wrappers alongside the canonical
+`AGENTS.md` prefix and report-artifact ignore rules. Installation creates
+missing wrappers; synchronization replaces only files carrying the managed
+marker and writes canonical modes when it creates or replaces a wrapper. It
+also removes an exact obsolete managed `CLAUDE.md` stub while preserving custom
+files. Freshness compares exact bytes and Git-representable executable status,
+so group and other write bits applied by a checkout umask do not create
+perpetual drift. An unrelated pre-existing wrapper is a conflict, so the entire
+transaction preserves every target. `agents check` reports missing, stale,
+non-regular, or conflicting wrappers.
 
 The root wrapper paths are built-in sensitive control inputs. A byte-identical
 copy of the locked release's canonical template is a managed control artifact,
@@ -95,10 +96,10 @@ so a policy bump cannot disguise application cleanup as a simple version edit.
 
 `upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a
-new plan after cleanup. Apply stages canonical guidance, both wrappers, ignore
-rules, and the incoming lock as one rollback-capable transaction; the lock is
-renamed last. That rename is the guidance cutover. Upgrade never edits governed
-application source.
+new plan after cleanup. Apply stages canonical guidance, obsolete-stub cleanup,
+both wrappers, ignore rules, and the incoming lock as one rollback-capable
+transaction; the lock is renamed last. That rename is the guidance cutover.
+Upgrade never edits governed application source.
 
 Upgrade artifacts use the incoming release digest as their stable directory
 identity rather than hashing rendered lock bytes. Apply accepts an older plan

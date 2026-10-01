@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.27.16 - 2026-09-30
+
+- Let repositories append a bounded, validated `## Project principles` section
+  to managed `AGENTS.md` guidance and preserve it byte-for-byte across policy
+  synchronization. Stop creating `CLAUDE.md`, remove only exact obsolete
+  managed stubs during adoption updates, and leave custom files untouched.
+
 ## 0.27.15 - 2026-09-28
 
 - Add `trends`, a weekly report of how new code holds up on the branch being
