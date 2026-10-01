@@ -81,3 +81,9 @@
   changes unless the caller requests an uncommitted handoff. Public cutovers
   must be coherent at merge or release. Push, publish, and pull-request operations
   require explicit caller authorization.
+
+## Project principles
+
+1. **Design for AI agents first.** Code Polishy is meant to be used by AI agents,
+   not operated directly by humans. Design commands, output, documentation, and
+   recovery around what an agent needs to understand and complete its work.
