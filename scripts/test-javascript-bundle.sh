@@ -69,7 +69,9 @@ while IFS= read -r source_file; do
 done <"${bundle_source}/source-files.txt"
 {
   for source_path in "${bundle_source}"/* "${bundle_source}"/.[!.]*; do
-    [[ -f "${source_path}" ]] && basename "${source_path}"
+    if [[ -f "${source_path}" ]]; then
+      basename "${source_path}"
+    fi
   done
 } | LC_ALL=C sort >"${fixture_root}/bundle-source-files"
 LC_ALL=C sort "${bundle_source}/source-files.txt" >"${fixture_root}/declared-source-files"

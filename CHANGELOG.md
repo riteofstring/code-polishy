@@ -16,6 +16,8 @@
   riskier and no aged fix or practical mitigation suffices; record both risks.
 - Retain aged JavaScript dependency releases under exact, expiring
   non-exposure assessments with documented call paths and update dates.
+- Keep the JavaScript bundle contract running when local cache directories are
+  present beside the source files.
 
 ## 0.27.15 - 2026-09-28
 
