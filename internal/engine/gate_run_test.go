@@ -120,8 +120,7 @@ func runOSVReportExitMergeGate(t *testing.T, assessed bool) (string, Report, err
 			ID: "assessed-osv", Ecosystem: "npm", Advisory: "GHSA-abcd-1234-5678", Package: "example", AffectedVersion: "1.2.3",
 			Scope: "content/data.json", Severity: "high", Status: "not-affected", Basis: "unreachable",
 			Reason: "the affected code path is unreachable", Impact: "the vulnerable capability is not shipped",
-			Evidence: "https://example.test/evidence", Tracking: "https://example.test/tracking", Owner: "content",
-			ApprovedBy: "security", Approval: "https://example.test/approval", Reviewed: policy.Date{Time: today},
+			Evidence: "https://example.test/evidence", Owner: "content", Reviewed: policy.Date{Time: today},
 			Expires: policy.Date{Time: today.AddDate(0, 0, 7)},
 		}}
 	}

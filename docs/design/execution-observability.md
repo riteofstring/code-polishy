@@ -65,6 +65,11 @@ results remain failed commands. OSV-Scanner's exit status 1 is the first such
 protocol; vulnerability assessment policy, not process status, decides whether
 its accepted report permits the gate to pass.
 
+Vulnerability reports identify the actual owner for every assessment, including
+agent-owned decisions, without implying human sign-off. Assessed findings stay
+visible with their disposition and expiry. See
+[Dependency assessment decisions](dependency-assessments.md).
+
 Contained asset links have a read-only identity shared by formatting snapshots
 and provider context. It binds link text, canonical target, and bounded target-file
 hashes. Targets must contain owned image, media, font, or PDF assets; escaping,

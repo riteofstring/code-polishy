@@ -141,7 +141,7 @@ func TestPrintReportLabelsReleaseAgeAssessmentSeparately(t *testing.T) {
 	}
 }
 
-func TestPrintReportKeepsApprovedVulnerabilityVisible(t *testing.T) {
+func TestPrintReportKeepsAssessedVulnerabilityVisible(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -152,13 +152,14 @@ func TestPrintReportKeepsApprovedVulnerabilityVisible(t *testing.T) {
 		},
 		Assessment: policy.VulnerabilityAssessment{
 			ID: "high-not-affected", Severity: "high", Status: "not-affected", Basis: "unreachable",
-			ApprovedBy: "security", Expires: policy.Date{Time: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+			Owner: "Codex", Expires: policy.Date{Time: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
 		},
 	}}}
 	printReportTo(stdout, stderr, report)
 	if !strings.Contains(stdout.String(), "VULN-ACCEPTANCE") || !strings.Contains(stdout.String(), "high-not-affected") ||
 		!strings.Contains(stdout.String(), "observed high, ceiling high") || !strings.Contains(stdout.String(), "not-affected/unreachable") ||
-		!strings.Contains(stdout.String(), "approved by security") || !strings.Contains(stdout.String(), "expires 2026-09-01 UTC") || stderr.Len() != 0 {
+		!strings.Contains(stdout.String(), "owned by Codex") || strings.Contains(stdout.String(), "approved by") ||
+		!strings.Contains(stdout.String(), "expires 2026-09-01 UTC") || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }

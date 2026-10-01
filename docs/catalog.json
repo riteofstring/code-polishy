@@ -119,6 +119,22 @@
       "public": true
     },
     {
+      "id": "dependency-assessment-design",
+      "path": "docs/design/dependency-assessments.md",
+      "title": "Dependency assessment decisions",
+      "summary": "Understand agent-owned assessments and the vulnerability versus fresh-release risk comparison.",
+      "aliases": ["vulnerability-decisions"],
+      "public": true
+    },
+    {
+      "id": "dependency-assessments",
+      "path": "docs/security/dependency-assessments.md",
+      "title": "JavaScript dependency vulnerability assessments",
+      "summary": "Inspect exact advisory call paths, retained aged releases, and remediation dates for this repository.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "design-context",
       "path": "docs/design/design-context.md",
       "title": "Design Context Resolution",

@@ -183,6 +183,9 @@ prose-only conflict stays documentation-only.
 Do not run `test --changed` immediately before a final merge gate over the same
 candidate because the gate already selects changed-impact tests.
 
+Resolve the merge base from an explicit target, checked-in guidance,
+`origin/HEAD`, then `origin/main` or `origin/master`.
+
 Without `--base`, changed-scope tests compare the working tree with `HEAD`;
 with `TASK_BASE`, they compare `merge-base(TASK_BASE, HEAD)` plus the working
 tree. On a long-lived branch, finish each completed code-changing task with
@@ -213,6 +216,71 @@ Use it to check both new and existing tests for tautological and change-detector
 behavior. It neither changes the selected work nor requests authorization; see
 [Verification and Testing Policy](policies/verification.md#test-quality-reminder)
 for its exact trigger and quiet modes.
+
+## Dependency security decisions
+
+Read the locked supply-chain policy before changing a dependency to address an
+advisory. The 30-day admission window measures the exact package release's age,
+not the advisory's publication date. Check the existing version's exposure
+before choosing an upgrade or a vulnerability assessment.
+
+Agents own the technical investigation and decision within these policy limits;
+neither vulnerability nor release-age assessments require human sign-off. Name
+the actual assessor as owner instead of attributing a review to the caller.
+Do not ask the caller to choose between assessment categories or supply approval
+URLs. This authority does not waive mandatory checks, other external approval
+gates, or authorization for publishing and other out-of-scope operations.
+
+Trace the advisory's prerequisites through the actual application: the input
+source and its authority, the enabled caller and vulnerable API, and the
+security-sensitive use or impact. A dependency in a lockfile, a loaded module,
+or a call to another API from the same package does not establish exposure.
+Distinguish a glob's pattern from the filename it matches, enabled features
+from installed optional services, and URI parsing from a host authorization
+decision. Use the resolved package source and current configuration; a package
+name or dependency-tree listing is not enough.
+
+Choose one evidence-backed outcome:
+
+- Affected: first seek an aged fixed release or a practical mitigation that
+  removes exposure. Admit a younger fix only when the risk comparison below
+  demonstrates that waiting is worse.
+- Not affected: retain the aged release under an exact `not-affected`
+  vulnerability assessment, document why the prerequisite cannot occur, and
+  plan the update when the fixed release becomes eligible.
+- Uncertain: continue the investigation and report what remains unknown.
+  Failure to demonstrate exposure does not prove non-exposure, and uncertainty
+  alone does not justify either assessment.
+
+The waiting period protects against compromised releases and other fresh-code
+risk that clean scanners may not yet detect. Breaking it is exceptional, not
+the default response to a reachable advisory or a high severity label. Record:
+
+- The concrete reachable harm, attacker prerequisites, exploitation evidence,
+  deployment exposure, and how long remains before the fix ages in.
+- The aged fixes, feature disablement, input restrictions, or other practical
+  mitigations considered, and why they cannot safely cover that interval.
+- The exact official fix's provenance, relevant source delta, dependency and
+  lifecycle-script changes, and remaining supply-chain uncertainty.
+- Why the demonstrated risk of waiting materially outweighs admitting that
+  fresh release, with the smallest effective update and bounded expiry.
+
+Use an exact `security-fix` release-age assessment only when that case holds.
+Otherwise keep the aged version with an allowed, evidence-backed vulnerability
+assessment and remediation plan, remove exposure, or leave verification blocked
+if neither is permitted. Never manufacture non-exposure or stretch an assessment
+past its severity or known-exploited limits just to keep the gate green.
+
+Keep the analysis and remediation plan in a checked-in technical record linked
+from the assessment. An upstream advisory explains the vulnerability; it does
+not record this repository's exposure analysis or decision. Do not invent
+external records, human approval, or certainty that source inspection and
+scanners cannot establish.
+
+Report release-age admissions and vulnerability assessments separately.
+Assessed findings remain findings, even when policy accepts them. A passing
+scanner or gate validates its mechanical checks, not the truth of a manually
+written reachability claim.
 
 ## Gate evidence and retries
 

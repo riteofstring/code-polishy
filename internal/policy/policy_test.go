@@ -971,8 +971,7 @@ func TestVulnerabilityAssessmentRequiresExactIdentityAndReportsUnused(t *testing
 		ID: "accepted-advisory", Ecosystem: "pnpm", Advisory: "CVE-2026-1000",
 		Package: "example", AffectedVersion: "1.2.3", Scope: "desktop/pnpm-lock.yaml", Severity: "low",
 		Status: "not-affected", Basis: "unreachable", Reason: "unreachable", Impact: "the vulnerable path is not shipped",
-		Evidence: "https://example.test/analysis", Tracking: "https://example.test/issues/1",
-		Owner: "desktop", ApprovedBy: "security", Approval: "https://example.test/reviews/1",
+		Evidence: "https://example.test/analysis", Owner: "desktop",
 		Reviewed: Date{Time: now}, Expires: Date{Time: now.AddDate(0, 0, 30)},
 	}
 	identity := VulnerabilityIdentity{
@@ -1012,8 +1011,7 @@ func TestVulnerabilityAssessmentCannotAcceptSeverityChangesOrKnownExploitedFindi
 		ID: "accepted-advisory", Ecosystem: "npm", Advisory: "CVE-2026-1000", Package: "example",
 		AffectedVersion: "1.2.3", Scope: "package-lock.json", Severity: "low", Status: "risk-accepted", Basis: "mitigated",
 		Reason: "input is filtered", Impact: "availability only", Evidence: "https://example.test/analysis",
-		Tracking: "https://example.test/issues/1", Owner: "runtime", ApprovedBy: "security",
-		Approval: "https://example.test/reviews/1", Reviewed: Date{Time: now}, Expires: Date{Time: now.AddDate(0, 0, 30)},
+		Owner: "runtime", Reviewed: Date{Time: now}, Expires: Date{Time: now.AddDate(0, 0, 30)},
 	}
 	identity := VulnerabilityIdentity{
 		Ecosystem: "npm", Advisory: assessment.Advisory, Package: assessment.Package,
@@ -1034,15 +1032,14 @@ func TestVulnerabilityAssessmentCannotAcceptSeverityChangesOrKnownExploitedFindi
 	}
 }
 
-func TestVulnerabilityAssessmentValidationRequiresBoundedIndependentApproval(t *testing.T) {
+func TestVulnerabilityAssessmentValidationRequiresExactEvidenceAndBoundedExpiry(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC)
 	assessment := VulnerabilityAssessment{
 		ID: "accepted-advisory", Ecosystem: "npm", Advisory: "CVE-2026-1000", Package: "example",
 		AffectedVersion: "1.2.3", Scope: "package-lock.json", Severity: "moderate", Status: "risk-accepted", Basis: "temporary-no-fix",
 		Reason: "no compatible fix", Impact: "development-only tool", Evidence: "https://example.test/analysis",
-		Tracking: "https://example.test/issues/1", Owner: "tooling", ApprovedBy: "security",
-		Approval: "https://example.test/reviews/1", Reviewed: Date{Time: now}, Expires: Date{Time: now.AddDate(0, 0, MaximumModerateVulnerabilityDays)},
+		Owner: "tooling", Reviewed: Date{Time: now}, Expires: Date{Time: now.AddDate(0, 0, MaximumModerateVulnerabilityDays)},
 	}
 	validate := func(candidate VulnerabilityAssessment) error {
 		return validateVulnerabilityAssessment(candidate, "assessment", map[string]bool{}, map[string]bool{}, now)
@@ -1063,10 +1060,10 @@ func TestVulnerabilityAssessmentValidationRequiresBoundedIndependentApproval(t *
 	if err := validate(broad); err == nil || !strings.Contains(err.Error(), "exact version") {
 		t.Fatalf("expected exact-version error, got %v", err)
 	}
-	sameApprover := assessment
-	sameApprover.ApprovedBy = sameApprover.Owner
-	if err := validate(sameApprover); err == nil || !strings.Contains(err.Error(), "distinct") {
-		t.Fatalf("expected independent approval error, got %v", err)
+	missingEvidence := assessment
+	missingEvidence.Evidence = ""
+	if err := validate(missingEvidence); err == nil || !strings.Contains(err.Error(), ".evidence") {
+		t.Fatalf("expected evidence error, got %v", err)
 	}
 	overlong := assessment
 	overlong.Expires = Date{Time: now.AddDate(0, 0, MaximumModerateVulnerabilityDays+1)}
@@ -1199,8 +1196,7 @@ func highNotAffectedAssessment(now time.Time) VulnerabilityAssessment {
 		ID: "high-not-affected", Ecosystem: "pnpm", Advisory: "CVE-2026-1000", Package: "example",
 		AffectedVersion: "1.2.3", Scope: "pnpm-lock.yaml", Severity: "high", Status: "not-affected", Basis: "unreachable",
 		Reason: "the affected code path is not reachable", Impact: "the vulnerable capability is not shipped",
-		Evidence: "https://example.test/analysis", Tracking: "https://example.test/issues/1", Owner: "runtime",
-		ApprovedBy: "security", Approval: "https://example.test/reviews/1", Reviewed: Date{Time: now},
+		Evidence: "https://example.test/analysis", Owner: "runtime", Reviewed: Date{Time: now},
 		Expires: Date{Time: now.AddDate(0, 0, MaximumHighNotAffectedVulnerabilityDays)},
 	}
 }
@@ -1241,8 +1237,7 @@ func TestLoadValidatesVulnerabilityAndOverrideGovernance(t *testing.T) {
   "vulnerabilityAssessments":[{
     "id":"known-cve","ecosystem":"pnpm","advisory":"CVE-2026-1000","package":"example","affectedVersion":"1.2.3",
     "scope":"pnpm-lock.yaml","severity":"low","status":"not-affected","basis":"unreachable","reason":"unreachable",
-    "impact":"not included in the shipped path","evidence":"https://example.test/analysis","tracking":"https://example.test/issues/1",
-    "owner":"desktop","approvedBy":"security","approval":"https://example.test/reviews/1",
+    "impact":"not included in the shipped path","evidence":"https://example.test/analysis","owner":"desktop",
     "reviewed":"` + reviewed + `","expires":"` + expires + `"
   }],
   "dependencyOverridePolicies":[{

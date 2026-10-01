@@ -171,19 +171,14 @@
         "reason": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "impact": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "evidence": { "type": "string", "pattern": "^https://" },
-        "tracking": { "type": "string", "pattern": "^https://" },
         "owner": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
-        "approvedBy": {
-          "$ref": "code-polishy.schema.json#/$defs/nonemptyString"
-        },
-        "approval": { "type": "string", "pattern": "^https://" },
         "reviewed": { "type": "string", "format": "date" },
         "expires": { "type": "string", "format": "date" }
       },
       "allOf": [
         { "required": ["affectedVersion", "scope", "severity", "status"] },
         { "required": ["basis", "reason", "impact", "evidence"] },
-        { "required": ["tracking", "owner", "approvedBy", "approval"] },
+        { "required": ["owner"] },
         { "required": ["reviewed", "expires"] }
       ],
       "oneOf": [

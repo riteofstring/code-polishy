@@ -52,13 +52,14 @@ if the originally matched file is not in the current change.
   permanent module-local ignore list.
 - Vulnerabilities use `supplyChain.vulnerabilityAssessments`, not the general
   exception list. They match ecosystem, advisory or alias, package, exact
-  affected version, lockfile scope, and an approved severity ceiling. Low and
+  affected version, lockfile scope, and an assessed severity ceiling. Low and
   moderate findings may be `risk-accepted`; a high finding may only be an exact
   `not-affected` decision with a `false-positive` or `unreachable` basis and a
   30-day maximum. Critical, unknown, and CISA-known-exploited findings remain
-  blocking. Technical evidence, a tracker, distinct owner and approver, an
-  approval record, and a severity-bounded expiry are mandatory. Accepted
-  findings remain visible in reports.
+  blocking. Technical evidence, an accountable owner, a remediation plan, and
+  a severity-bounded expiry are mandatory. Agents may own either assessment
+  without human sign-off or separate external tracking. Accepted findings
+  remain visible in reports.
 - Dependency overrides use `supplyChain.dependencyOverridePolicies`, keyed to
   the exact canonical JSON hash of the governed override block. An override is
   not automatically a vulnerability waiver.

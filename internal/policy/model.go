@@ -456,10 +456,7 @@ type VulnerabilityAssessment struct {
 	Reason          string `json:"reason"`
 	Impact          string `json:"impact"`
 	Evidence        string `json:"evidence"`
-	Tracking        string `json:"tracking"`
 	Owner           string `json:"owner"`
-	ApprovedBy      string `json:"approvedBy"`
-	Approval        string `json:"approval"`
 	Reviewed        Date   `json:"reviewed"`
 	Expires         Date   `json:"expires"`
 }

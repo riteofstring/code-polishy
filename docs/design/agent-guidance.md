@@ -117,8 +117,16 @@ prevents duplicate local and CI execution while preserving one required owner.
 The vulnerability-age rule records the maintainer's risk preference. When
 evidence supports a governed not-affected assessment, waiting preserves the
 minimum dependency age instead of admitting fresh code without a reachable
-security benefit. Reachable advisories still use the security-fix admission
-path.
+security benefit. Reachable advisories require a risk comparison before using
+the security-fix admission path: waiting must be materially riskier than fresh
+code, with no adequate aged fix or practical mitigation. Agents own that
+decision without human sign-off. The canonical rule names the input, vulnerable
+API, and impact because
+dependency presence is an insufficient proxy for exposure. It keeps uncertainty
+distinct from a demonstrated not-affected result. The detailed dependency
+workflow explains the investigation and honest evidence handling without
+turning the always-loaded prefix into a security manual. Neither a severity
+label nor a green scanner substitutes for this comparison.
 
 Digest guidance addresses a recurring agent failure observed across repositories.
 A digest earns its cost when a named consumer uses it for authentication,

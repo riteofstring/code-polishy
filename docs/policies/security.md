@@ -66,13 +66,18 @@ The [Supply-chain Policy](supply-chain.md) requires immutable dependency and CI
 inputs, a release-age delay, lifecycle-script allowlists, and vulnerability
 audits. Native and OSV dependency scans run in local and CI policy checks;
 repositories can additionally opt into required recurring external monitoring.
-A low or moderate finding may be dispositioned only
-through the exact, independently approved, expiring vulnerability-assessment
-contract. A high finding may only be recorded as an exact `not-affected`
-decision with a `false-positive` or `unreachable` basis; it is never a high
-risk acceptance. Severity alone is not a rationale: record applicability,
-impact, compensating controls, technical evidence, and remediation tracking.
+A low or moderate finding may be dispositioned through an exact, expiring
+vulnerability assessment. Agents may own both demonstrated `not-affected`
+decisions and bounded low/moderate risk acceptance without human sign-off;
+technical evidence and a remediation plan remain mandatory. A high finding may
+only be recorded as an
+exact `not-affected` decision with a `false-positive` or `unreachable` basis;
+it is never a high risk acceptance. Severity alone is not a rationale: record
+applicability, impact, technical evidence, and the remediation plan.
 Critical, unknown-severity, and known-exploited findings are never accepted.
+Early admission of a security fix also requires demonstrating that waiting
+poses materially greater risk than fresh code, with no adequate aged fix or
+practical mitigation. A severity label alone cannot justify that tradeoff.
 Higher-risk repositories should add:
 
 - secret scanning;

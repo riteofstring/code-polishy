@@ -41,9 +41,10 @@
   update locks without scripts. Before installation, run
   `code-polishy dependency-review --base <merge-target>`; then install frozen
   with scripts off, run `code-polishy supply-chain --offline`, and test.
-- Before admitting a security fix under 30 days, check if its advisory
-  affects reachable behavior. If not, retain the current version under an exact
-  approved assessment until day 30; if affected, use security-fix admission.
+- Agents own dependency assessments; no human sign-off. Trace advisory inputs
+  to API and impact; presence is not exposure. Retain aged versions if unaffected.
+  Admit fixes under 30 days only if waiting is riskier and no aged fix or practical
+  mitigation suffices. Document both risks; unknown is not unaffected.
 - Keep exceptions exact, visible, owned, justified, and expiring.
 - Give each module a quick boundary suite. Test observable behavior with
   temporary state. Reject tautological, change-detector, no-op,
@@ -68,9 +69,7 @@
 - During development, run the narrowest useful exact test after a coherent
   runnable change, not after every edit or chat turn. Use
   `code-polishy test --changed` at a completed source boundary only when a final
-  gate will not immediately follow. Resolve the merge base from an explicit
-  target, checked-in guidance, `origin/HEAD`, then `origin/main` or
-  `origin/master`.
+  gate will not immediately follow. Resolve its base using `agent-workflows`.
 - Run `code-polishy merge-gate --base REF` only at a genuine merge or release
   checkpoint through `verification.finalGateOwner`. Ordinary task completion,
   commits, and delivery do not select it. Duplicate only on request; an exact

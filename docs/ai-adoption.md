@@ -568,6 +568,10 @@ owner, concrete rationale, and near expiry. Because ownership and debt policy
 are human facts, request approval before using that exception to complete the
 baseline.
 
+Dependency vulnerability and release-age decisions use the separate
+agent-owned assessment contract in the [Supply-chain Policy](policies/supply-chain.md).
+Do not request human sign-off for those technical assessments.
+
 ## 10. Record supplemental hardening status
 
 Supplemental hardening is not an initial-adoption step. After the ordinary gate

@@ -502,8 +502,11 @@ also requires low-or-above native vulnerability audits plus structured OSV and
 sets a non-blocking 90-day preference for new direct runtime dependencies
 during `dependency-review --base REF`. A release younger than 30 days requires
 an exact typed `releaseAgeAssessment`. A low or moderate vulnerability requires
-a separate exact `vulnerabilityAssessment` with independent approval and a
-severity-bounded expiry. A high finding can only be an exact `not-affected`
+a separate exact `vulnerabilityAssessment` with technical evidence, an actual
+owner, a remediation plan, and a severity-bounded expiry. Agents may own these
+decisions without human sign-off. Early security-fix admission needs evidence
+that waiting is materially riskier than fresh code and no adequate aged fix or
+practical mitigation exists. A high finding can only be an exact `not-affected`
 decision with a `false-positive` or `unreachable` basis and a 30-day maximum;
 it is never high risk acceptance. General exceptions cannot waive either
 control, and critical, unknown-severity, or known-exploited findings remain

@@ -124,7 +124,7 @@ func addGateOutcomeEvidence(policyEngine *Engine, now time.Time) {
 		ID: "dependency-review", Ecosystem: vulnerability.Ecosystem, Advisory: vulnerability.Advisory, Package: vulnerability.Package,
 		AffectedVersion: vulnerability.AffectedVersion, Scope: vulnerability.Scope, Severity: "low", Status: "not-affected", Basis: "unreachable",
 		Reason: "The affected path is unreachable.", Impact: "The affected feature is not shipped.", Evidence: "https://example.test/evidence",
-		Tracking: "https://example.test/tracking", Owner: "content", ApprovedBy: "security", Approval: "https://example.test/approval",
+		Owner:    "content",
 		Reviewed: policy.Date{Time: now}, Expires: expires,
 	}}
 	age := policy.ReleaseAgeIdentity{Ecosystem: "pnpm", Package: "example", Version: "1.2.3", Scope: "content/data.json", Released: now.AddDate(0, 0, -10), Eligible: now.AddDate(0, 0, 20)}

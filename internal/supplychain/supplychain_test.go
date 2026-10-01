@@ -306,8 +306,7 @@ func TestHighNotAffectedAssessmentCoversNativeAuditAndOSVIdentities(t *testing.T
 		ID: "high-not-affected", Ecosystem: "pnpm", Advisory: "CVE-2026-1000", Package: "example",
 		AffectedVersion: "1.2.3", Scope: "pnpm-lock.yaml", Severity: "high", Status: "not-affected", Basis: "unreachable",
 		Reason: "the affected code path is not reachable", Impact: "the vulnerable capability is not shipped",
-		Evidence: "https://example.test/analysis", Tracking: "https://example.test/issues/1", Owner: "runtime",
-		ApprovedBy: "security", Approval: "https://example.test/reviews/1", Reviewed: policy.Date{Time: now},
+		Evidence: "https://example.test/analysis", Owner: "runtime", Reviewed: policy.Date{Time: now},
 		Expires: policy.Date{Time: now.AddDate(0, 0, policy.MaximumHighNotAffectedVulnerabilityDays)},
 	}
 	native := nodeAuditFindings("low", javascript.AuditResult{Advisories: []javascript.Advisory{{

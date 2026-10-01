@@ -184,7 +184,7 @@ func validateVulnerabilityAssessment(assessment VulnerabilityAssessment, label s
 	if err := validateVulnerabilityIdentity(assessment, label, seenIDs, seenCoordinates); err != nil {
 		return err
 	}
-	if err := validateVulnerabilityApproval(assessment, label); err != nil {
+	if err := validateEvidenceURL(assessment.Evidence, label+".evidence"); err != nil {
 		return err
 	}
 	return validateVulnerabilityReviewWindow(assessment, label, now)
@@ -206,20 +206,6 @@ func validateVulnerabilityIdentity(assessment VulnerabilityAssessment, label str
 		return fmt.Errorf("%s duplicates an existing vulnerability assessment coordinate", label)
 	}
 	seenCoordinates[coordinate] = true
-	return nil
-}
-
-func validateVulnerabilityApproval(assessment VulnerabilityAssessment, label string) error {
-	for name, value := range map[string]string{
-		"evidence": assessment.Evidence, "tracking": assessment.Tracking, "approval": assessment.Approval,
-	} {
-		if err := validateEvidenceURL(value, label+"."+name); err != nil {
-			return err
-		}
-	}
-	if assessment.Owner == assessment.ApprovedBy {
-		return fmt.Errorf("%s.approvedBy must identify an approver distinct from owner", label)
-	}
 	return nil
 }
 

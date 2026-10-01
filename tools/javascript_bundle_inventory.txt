@@ -50,8 +50,8 @@ axe-core@4.12.1	MPL-2.0
 axobject-query@4.1.0	Apache-2.0
 balanced-match@1.0.2	MIT
 balanced-match@4.0.4	MIT
-brace-expansion@1.1.21	MIT
-brace-expansion@5.0.12	MIT
+brace-expansion@1.1.18	MIT
+brace-expansion@5.0.9	MIT
 braces@3.0.3	MIT
 call-bind-apply-helpers@1.0.2	MIT
 call-bind@1.0.9	MIT

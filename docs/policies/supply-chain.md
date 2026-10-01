@@ -308,6 +308,9 @@ adoption.
   exact release reaches the hard minimum. Standalone tools use ecosystem
   `artifact`, their configured name as the package, and their `versionFile` as
   the scope.
+- Agents may own release-age and vulnerability assessments without human
+  sign-off. The owner identifies the actual assessor, not an unconsulted caller.
+  Assessment authority never waives policy limits or authorizes publication.
 - Date-only review and expiry fields use UTC calendar days and remain valid
   through the named UTC date. Expiry findings name UTC explicitly.
 - Expired, changed, overlong, and unused release-age assessments fail the
@@ -324,6 +327,33 @@ adoption.
   malformed, or incomplete metadata remains a finding.
 - A release-age assessment never suppresses a native-audit or OSV finding for
   the same package. Vulnerability enforcement takes precedence over age.
+
+Before using `security-fix`, establish whether the advisory affects the
+currently resolved release in this repository. Trace the enabled caller, the
+vulnerable API, the input's authority, and the advisory's required impact.
+Dependency presence, an imported package, or scanner findings establish neither
+exposure nor non-exposure. The admission window measures the fixed package
+release's age, not the advisory's age.
+
+When evidence demonstrates non-exposure, retain the aged release with an exact
+`not-affected` vulnerability assessment until an appropriate fixed release
+reaches the hard minimum. State which prerequisite is absent and which changes
+would invalidate that conclusion. Demonstrated exposure is necessary but not
+sufficient for early `security-fix` admission. The 30-day delay protects against
+compromised and defective fresh releases that scanners may not yet recognize.
+Prefer an aged fixed release or practical mitigation. Admit a fresh fix only
+when evidence shows that the concrete risk of waiting materially outweighs its
+supply-chain risk and no such alternative suffices. Document exploitability,
+harm, remaining wait, alternatives, official provenance, the relevant source
+and dependency delta, and residual uncertainty. Severity labels alone do not
+establish that tradeoff. Keep the update minimal and its assessment exact and
+bounded by the admission date.
+
+An uncertain result requires further investigation; it is not a justification
+for either non-exposure or early admission. When no disposition is permitted,
+remove exposure or leave verification blocked rather than invent an exception. See
+[Dependency security decisions](../agent-workflows.md#dependency-security-decisions)
+for the investigation workflow.
 
 ## Lifecycle scripts
 
@@ -389,9 +419,14 @@ missing-coverage finding, never a workspace that declared nothing.
 - Scanner errors and unavailable advisory services fail.
 - A vulnerability assessment records one advisory or alias, package, exact
   resolved version, lockfile scope, accepted severity ceiling, disposition,
-  justification basis, impact, technical evidence, remediation tracker,
-  accountable owner, independent approver, approval record, review date, and
-  expiry. Ranges, wildcards, duplicate coordinates, and self-approval fail.
+  justification basis, impact, technical evidence, accountable owner, review
+  date, and expiry. Ranges, wildcards, and duplicate coordinates fail.
+- A `not-affected` assessment records the source-to-API trace and absent
+  prerequisite. A `risk-accepted` assessment records actual exposure,
+  compensating controls, residual risk, and why bounded acceptance is justified.
+  Both require a remediation plan, which may share the checked-in technical
+  evidence document. Agents can make either decision within the severity and
+  expiry limits below; neither requires human approval or an external tracker.
 - Low and moderate findings are assessable. A high finding is assessable only as
   an exact `not-affected` decision; it is never a high risk acceptance. Low
   assessments may last at most 90 days from review; moderate assessments and
@@ -406,12 +441,13 @@ missing-coverage finding, never a workspace that declared nothing.
   moderate, or high reports, but a critical, unknown, or known-exploited report
   remains blocking.
 - Applied assessments remain visible as `VULN-ACCEPTANCE` findings, including
-  approver and expiry. Changed, expired, and unused assessments fail the
-  complete online profile. Scanner failures and findings without a complete
-  structured identity are never assessable.
-- `approvedBy` and the approval URL are checked-in audit metadata. Enforce the
-  actual human sign-off with protected review of `.code-polishy.json`, such as a
-  CODEOWNERS rule and required approval from someone other than the owner.
+  disposition, actual owner, and expiry. Changed, expired, and unused
+  assessments fail the complete online profile. Scanner failures and findings
+  without a complete structured identity are never assessable.
+- An advisory page or generic commit listing is not this repository's exposure
+  analysis or remediation plan. Link to the real technical record; do not
+  invent human sign-off or external records. Scanner success checks structured
+  policy, not the truth of the assessment's reasoning.
 
 Use target providers for repository secret scanning, SAST, signed provenance,
 and license rules outside a pnpm project where relevant. Use the shared artifact-security module for
@@ -464,10 +500,7 @@ observed canonical digest; adding governance does not suppress a vulnerability.
         "reason": "The affected optional feature is disabled in every runtime.",
         "impact": "No untrusted input reaches the affected code path.",
         "evidence": "https://example.com/security/analysis/EXAMPLE-2026-1",
-        "tracking": "https://example.com/issues/1234",
         "owner": "desktop-team",
-        "approvedBy": "security-team",
-        "approval": "https://example.com/reviews/5678",
         "reviewed": "2026-08-14",
         "expires": "2026-09-13"
       }
@@ -619,14 +652,16 @@ configuration file.
 
 Because `tools/javascript/pnpm-lock.yaml` is a governed lock, the ordinary
 release-age, native audit, OSV, and dependency-review lanes apply to the bundle
-with no exemption. A bundle dependency that is younger than the hard minimum
-only because every older release carries an unfixed advisory needs a
-`security-fix` release-age assessment expiring the day that exact release
-reaches the minimum on its own.
+with no exemption. A bundle dependency follows the same applicability decision:
+an advisory that cannot affect the sealed analyzer warrants an exact
+`not-affected` assessment. Early `security-fix` admission additionally needs the
+documented risk comparison and lack of practical alternatives described above.
 
 ## Dependency updates
 
-1. Select the smallest official version that addresses the reason for change.
+1. For a security update, establish advisory-specific applicability and choose
+   the disposition before changing the lock. Select the smallest official
+   version that addresses the reason for change.
 2. Update exact direct pins and produce only the owning candidate lockfile
    without running lifecycle scripts.
 3. Run `code-polishy dependency-review --base MERGE_TARGET` before installation
@@ -643,9 +678,9 @@ reaches the minimum on its own.
    `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes
    normally select its complete full gate, including online supply-chain work,
    without a user level-selection question.
-10. Record any accepted finding with exact identity and severity, linked
-    analysis and remediation, distinct owner and approver, approval record, and
-    bounded expiry.
+10. Keep each assessed finding's exact identity, severity, technical analysis,
+    actual owner, remediation plan, and bounded expiry visible. Document both
+    vulnerability and fresh-release risks when considering early admission.
 
 Avoid broad toolchain churn or unofficial forks merely to silence one advisory.
 

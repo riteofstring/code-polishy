@@ -34,7 +34,7 @@ func TestRuntimeSchemaOwnsConditionalBoundaries(t *testing.T) {
 	artifactConfig := func(target string) string {
 		return strings.Replace(minimalConfig(), `"supplyChain":{}`, `"supplyChain":{"artifactSecurity":{"targets":[`+target+`]}}`, 1)
 	}
-	vulnerability := `{"id":"accepted","ecosystem":"npm","advisory":"CVE-2026-1000","package":"example","affectedVersion":"1.2.3","scope":"package-lock.json","severity":"high","status":"not-affected","basis":"unreachable","reason":"not reachable","impact":"not shipped","evidence":"https://example.test/evidence","tracking":"https://example.test/tracking","owner":"runtime","approvedBy":"security","approval":"https://example.test/approval","reviewed":"2026-09-01","expires":"2026-09-30"}`
+	vulnerability := `{"id":"accepted","ecosystem":"npm","advisory":"CVE-2026-1000","package":"example","affectedVersion":"1.2.3","scope":"package-lock.json","severity":"high","status":"not-affected","basis":"unreachable","reason":"not reachable","impact":"not shipped","evidence":"https://example.test/evidence","owner":"runtime","reviewed":"2026-09-01","expires":"2026-09-30"}`
 	vulnerabilityConfig := func(assessment string) string {
 		return strings.Replace(minimalConfig(), `"supplyChain":{}`, `"supplyChain":{"vulnerabilityAssessments":[`+assessment+`]}`, 1)
 	}
@@ -93,7 +93,7 @@ func TestRuntimeSchemaClosesEveryObjectBoundary(t *testing.T) {
   "tests":{"ownership":[],"suites":[{"name":"content-test","kind":"content","scope":"module","modules":["content"],"argv":["test"],"artifacts":[{"path":"junit.xml","type":"junit"}]},{"name":"full","kind":"content","scope":"repository","argv":["test"]}]},
   "supplyChain":{
     "releaseArtifacts":[{"name":"go","versionFile":"go.version","source":"go-toolchain"}],
-    "vulnerabilityAssessments":[{"id":"accepted","ecosystem":"npm","advisory":"CVE-2026-1000","package":"example","affectedVersion":"1.2.3","scope":"package-lock.json","severity":"moderate","status":"risk-accepted","basis":"mitigated","reason":"bounded","impact":"development only","evidence":"https://example.test/evidence","tracking":"https://example.test/tracking","owner":"runtime","approvedBy":"security","approval":"https://example.test/approval","reviewed":"2026-09-01","expires":"2026-09-30"}],
+    "vulnerabilityAssessments":[{"id":"accepted","ecosystem":"npm","advisory":"CVE-2026-1000","package":"example","affectedVersion":"1.2.3","scope":"package-lock.json","severity":"moderate","status":"risk-accepted","basis":"mitigated","reason":"bounded","impact":"development only","evidence":"https://example.test/evidence","owner":"runtime","reviewed":"2026-09-01","expires":"2026-09-30"}],
     "releaseAgeAssessments":[{"id":"release","ecosystem":"npm","package":"example","version":"1.2.3","scope":"package-lock.json","category":"security-fix","evidence":"https://example.test/release","reason":"security fix","owner":"security","reviewed":"2026-09-01","expires":"2026-09-30"}],
     "dependencyOverridePolicies":[{"id":"override","ecosystem":"npm","path":"package.json","field":"overrides","contentSha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","reason":"single graph","owner":"runtime","reviewed":"2026-09-01","expires":"2026-09-30"}],
     "artifactSecurity":{"targets":[{"name":"binary","mode":"command","producer":{"argv":["build"]}}]}

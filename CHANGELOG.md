@@ -2,12 +2,20 @@
 
 ## Unreleased
 
-## 0.27.16 - 2026-09-30
+## 0.28.0 - 2026-09-30
 
 - Let repositories append a bounded, validated `## Project principles` section
   to managed `AGENTS.md` guidance and preserve it byte-for-byte across policy
   synchronization. Stop creating `CLAUDE.md`, remove only exact obsolete
   managed stubs during adoption updates, and leave custom files untouched.
+- Let agents own evidence-backed vulnerability and release-age assessments
+  without human sign-off. Remove vulnerability approval and separate tracking
+  fields; retain exact evidence, ownership, expiry, and severity limits.
+- Require advisory-specific input, API, and impact analysis before considering
+  a security-fix age admission. Admit fresh code only when waiting is demonstrably
+  riskier and no aged fix or practical mitigation suffices; record both risks.
+- Retain aged JavaScript dependency releases under exact, expiring
+  non-exposure assessments with documented call paths and update dates.
 
 ## 0.27.15 - 2026-09-28
 
