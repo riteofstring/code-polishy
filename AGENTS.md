@@ -84,6 +84,6 @@
 
 ## Project principles
 
-1. **Design for AI agents first.** Code Polishy is meant to be used by AI agents,
-   not operated directly by humans. Design commands, output, documentation, and
-   recovery around what an agent needs to understand and complete its work.
+1. **Design for AI agents first.** Design commands, output, documentation, and
+   recovery so an agent can understand requirements and complete work with minimal
+   human coordination.
