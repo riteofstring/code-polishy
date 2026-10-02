@@ -41,13 +41,18 @@ class _FrameworkVisitor(_ConnectionFlow):
         self.kept = set()
         if writes is None:
             writes = Counter(
-                (
+                ("parameter", node.lineno, node.arg)
+                if isinstance(node, ast.arg)
+                else (
                     node.lineno,
                     node.attr if isinstance(node, ast.Attribute) else node.id,
                 )
                 for node in ast.walk(source["tree"])
-                if isinstance(node, (ast.Attribute, ast.Name))
-                and isinstance(node.ctx, ast.Store)
+                if isinstance(node, ast.arg)
+                or (
+                    isinstance(node, (ast.Attribute, ast.Name))
+                    and isinstance(node.ctx, ast.Store)
+                )
             )
         self.writes = writes
 
@@ -59,7 +64,13 @@ class _FrameworkVisitor(_ConnectionFlow):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
             else start
         )
-        if self.writes[(start, name)] <= 1:
+        unique = self.writes[(start, name)] <= 1
+        if isinstance(node, ast.arg):
+            unique = (
+                self.writes[(start, name)] == 0
+                and self.writes[("parameter", start, name)] == 1
+            )
+        if unique:
             self.kept.add((self.module["path"], start, end, name))
 
     def qualified(self, node):
@@ -82,7 +93,9 @@ class _FrameworkVisitor(_ConnectionFlow):
             self.callback_parameters(node)
         previous = self.scope, self.owner, self.connections, self.mutable_names
         self.scope = f"{self.scope}/function:{node.lineno}:{node.col_offset + 1}"
-        self.connections = self.parameters(node, previous[0])
+        self.connections = self.parameters(node, previous[0]) | self.captured_receivers(
+            previous[0], previous[2], previous[3]
+        )
         self.owner = None
         self.mutable_names = {
             name
@@ -99,6 +112,22 @@ class _FrameworkVisitor(_ConnectionFlow):
         }
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+    def captured_receivers(self, scope, connections, mutable_names):
+        if self.module["scopes"][scope]["kind"] != "function":
+            return set()
+        result = set()
+        for path in connections:
+            if not self.persistent_connection(path) or path[0] in mutable_names:
+                continue
+            binding = self.resolver.binding(self.module, scope, path[0])
+            if (
+                binding is not None
+                and binding["kind"] in {"parameter", "alias", "annotated"}
+                and binding == self.resolver.binding(self.module, self.scope, path[0])
+            ):
+                result.add(path)
+        return result
 
     def pytest_autouse(self, node):
         for value in node.decorator_list:

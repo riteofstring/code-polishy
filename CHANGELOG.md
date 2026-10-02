@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.28.1 - 2026-10-01
+
+- Preserve declared Python contract attribute writes through stable receivers
+  captured by nested functions, while keeping shadowed and rebound receivers
+  under dead-code analysis.
+- Add exact `callbackParameters` declarations to Python type contracts so
+  externally supplied callback arguments remain part of the interface.
+  Report stale declarations and retain unused-code findings for unrelated
+  parameters, including extra optional callback arguments.
+
 ## 0.28.0 - 2026-09-30
 
 - Let repositories append a bounded, validated `## Project principles` section

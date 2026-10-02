@@ -14,6 +14,7 @@ class _ContractVisitor(_FrameworkVisitor):
         super().__init__(resolver, source, writes)
         self.contract = contract
         self.roots = {contract["target"]}
+        self.parameter_members = set()
 
     def parameter_input(self, path):
         return len(path) == 2 and path[1] is _PARAMETER_INPUT
@@ -39,7 +40,25 @@ class _ContractVisitor(_FrameworkVisitor):
         )
 
     def callback_parameters(self, node):
-        return
+        names = self.contract.get("callbackParameters", {}).get(node.name, [])
+        if not names or not self.callback(node):
+            return
+        arguments = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+        arguments += [
+            argument
+            for argument in (node.args.vararg, node.args.kwarg)
+            if argument is not None
+        ]
+        missing = set(names) - {argument.arg for argument in arguments}
+        if missing:
+            raise ValueError(
+                f"callback {node.name} has no declared parameters: "
+                + ", ".join(sorted(missing))
+            )
+        for argument in arguments:
+            if argument.arg in names:
+                self.keep(argument, argument.arg)
+        self.parameter_members.add(node.name)
 
     def decorated(self, node):
         target = node.func if isinstance(node, ast.Call) else node
@@ -193,10 +212,18 @@ def contract_members(resolver, sources, contract, writes):
             contract["target"], contract.get("members", [])
         )
     kept = set()
+    parameter_members = set()
     for source in sources:
         visitor = _ContractVisitor(resolver, source, contract, writes[source["path"]])
         visitor.visit(source["tree"])
         kept.update(visitor.kept)
+        parameter_members.update(visitor.parameter_members)
+    missing = set(contract.get("callbackParameters", {})) - parameter_members
+    if missing:
+        raise ValueError(
+            "callback parameter members match no source definitions: "
+            + ", ".join(sorted(missing))
+        )
     return kept
 
 

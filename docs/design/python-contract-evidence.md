@@ -86,7 +86,18 @@ unavailable library's implementation. Inference failure cannot establish use.
 
 The contract interpreter matches exact source definitions. Type declarations
 identify consumed methods, attributes, decorated methods, and optionally
-annotated fields. Entry points name `module:attribute`, including nested instance
+annotated fields. Optional `callbackParameters` names externally supplied local
+parameters for explicitly listed methods. The interpreter retains only those
+parameter locations on methods belonging to the resolved type and its subclasses.
+Every mapped method must match somewhere in the project; every matching method
+must declare its mapped parameters. A missing method or parameter invalidates
+the declaration rather than silently accepting stale interface knowledge.
+Repository declarations do not require an installed dependency signature, and
+an extra optional argument does not acquire retention merely because its method
+is consumed. Positional-only declarations name the local parameter slot;
+keyword-call contracts must name the keyword accepted by the implementation.
+
+Entry points name `module:attribute`, including nested instance
 attributes, with optional consumed methods. Missing or ambiguous entry points
 and declarations matching no source definitions produce explicit policy
 findings. Unrelated same-named symbols remain subject to dead-code analysis.
@@ -103,14 +114,22 @@ A forward flow state tracks local and instance-attribute receivers. Assignments
 inside `try` blocks can establish receiver evidence after `None` initialization.
 Reassignment invalidates prior evidence; branch joins retain only bindings
 proven on every incoming path. Unknown calls invalidate instance-attribute
-bindings and names writable by closures. Unknown context managers, exception
+bindings and names writable by closures. Nested functions inherit proven lexical
+receivers only when the name resolves to the same unique binding in both scopes.
+This includes stable parameters and local aliases. Shadowing, deletion, imports,
+and enclosing rebinding, even after the nested definition, prevent capture
+evidence. Names writable through `global` or `nonlocal` remain conservative;
+mutable instance-attribute paths are not inherited. Class bodies do not transfer
+receiver flow into unrelated methods. Unknown context managers, exception
 handlers, and ordinary constructed or aliased receivers entering repeated loop
 bodies begin conservatively. Still-bound parameters proven to satisfy a declared
 type contract remain available at loop entry; loop targets and assignments
 invalidate them normally. Comprehension targets remain isolated from enclosing
 receiver bindings, while assignment expressions and other effects on enclosing
 names still participate in conservative flow joins. Ambiguous same-line writes
-receive no positive evidence.
+or parameter declarations receive no positive evidence. Callback parameter
+retention cannot hide an unrelated lambda parameter or local write that shares
+the callback parameter's name and diagnostic line.
 
 The Go-owned Vulture adapter combines contract locations with TypedDict schemas,
 standard-library protocols, and explicit external-consumer evidence. Complete

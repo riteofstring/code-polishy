@@ -515,6 +515,7 @@ For example, a model library and a runtime-selected export can be described as:
         "annotatedFields": true,
         "attributes": ["configuration"],
         "members": ["serialize"],
+        "callbackParameters": { "serialize": ["context"] },
         "decorators": ["vendor.api.validator"],
         "reason": "Model validation consumes fields and registered validators."
       },
@@ -532,7 +533,19 @@ For example, a model library and a runtime-selected export can be described as:
 
 Every record requires an exact `project`, `kind`, `target`, and nonempty `reason`.
 A `type` contract preserves only specified members on the resolved type and its
-subclasses. `annotatedFields` includes annotated class fields except direct
+subclasses. Optional `callbackParameters` maps names listed in `members` to exact
+local parameter names supplied by external callers. It retains those parameters
+on matching methods, including positional-only, keyword-only, and variadic
+parameters. Other unused parameters remain reportable. Every mapped member must
+match a source method, and every matching method must declare the named
+parameters; stale mappings produce `policy.pythonContract` findings. These
+parameters receive no retention when another parameter or write with the same
+name makes their diagnostic line ambiguous. These
+declarations express repository-owned interface knowledge, not inferred or
+authenticated dependency signatures. For Harbor callbacks, a type contract can
+declare `"callbackParameters": {"run": ["context"],
+"populate_context_post_run": ["context"]}` alongside those two `members`.
+`annotatedFields` includes annotated class fields except direct
 `ClassVar` declarations; explicitly list other framework-consumed attributes.
 A `decorator` contract preserves the exact decorated definition; optional
 `keywords` require matching literal boolean keyword arguments. A

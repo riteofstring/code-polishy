@@ -3,19 +3,21 @@ package policy
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
 type PythonContract struct {
-	Project         string          `json:"project"`
-	Kind            string          `json:"kind"`
-	Target          string          `json:"target"`
-	Members         []string        `json:"members,omitempty"`
-	Attributes      []string        `json:"attributes,omitempty"`
-	Decorators      []string        `json:"decorators,omitempty"`
-	AnnotatedFields bool            `json:"annotatedFields,omitempty"`
-	Keywords        map[string]bool `json:"keywords,omitempty"`
-	Reason          string          `json:"reason"`
+	Project            string              `json:"project"`
+	Kind               string              `json:"kind"`
+	Target             string              `json:"target"`
+	Members            []string            `json:"members,omitempty"`
+	CallbackParameters map[string][]string `json:"callbackParameters,omitempty"`
+	Attributes         []string            `json:"attributes,omitempty"`
+	Decorators         []string            `json:"decorators,omitempty"`
+	AnnotatedFields    bool                `json:"annotatedFields,omitempty"`
+	Keywords           map[string]bool     `json:"keywords,omitempty"`
+	Reason             string              `json:"reason"`
 }
 
 func validatePythonContracts(contracts []PythonContract) error {
@@ -43,6 +45,16 @@ func validatePythonContract(contract PythonContract) error {
 	}
 	if len(contract.Keywords) > 0 && contract.Kind != "decorator" {
 		return fmt.Errorf("only decorator contracts support literal keyword constraints")
+	}
+	if len(contract.CallbackParameters) > 0 {
+		if contract.Kind != "type" {
+			return fmt.Errorf("only type contracts describe callback parameters")
+		}
+		for member := range contract.CallbackParameters {
+			if !slices.Contains(contract.Members, member) {
+				return fmt.Errorf("callback parameters require a declared member: %s", member)
+			}
+		}
 	}
 	return validatePythonContractMembers(contract)
 }

@@ -11,6 +11,14 @@ func TestPythonContractConfiguration(t *testing.T) {
 		valid          bool
 	}{
 		{"type", `{"kind":"type","target":"vendor.Model","members":["execute"]}`, true},
+		{"callback parameters", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"execute":["context"]}}`, true},
+		{"undeclared callback", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"other":["context"]}}`, false},
+		{"export parameters", `{"kind":"entry-point","target":"plugins:registry.primary","members":["execute"],"callbackParameters":{"execute":["context"]}}`, false},
+		{"empty parameter mapping", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{}}`, false},
+		{"empty parameters", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"execute":[]}}`, false},
+		{"duplicate parameters", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"execute":["context","context"]}}`, false},
+		{"invalid parameter", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"execute":["context.value"]}}`, false},
+		{"invalid callback", `{"kind":"type","target":"vendor.Model","members":["execute"],"callbackParameters":{"execute.other":["context"]}}`, false},
 		{"fields", `{"kind":"type","target":"vendor.Model","annotatedFields":true}`, true},
 		{"decorator", `{"kind":"decorator","target":"vendor.register"}`, true},
 		{"nested export", `{"kind":"entry-point","target":"plugins:registry.primary","members":["execute"]}`, true},

@@ -1,11 +1,145 @@
 package quality
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+func TestPythonRepositoryContractPreservesCapturedReceivers(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"prepare"}, Attributes: []string{"_flag"}, Reason: "The framework reads state reset by phase callbacks."}
+	for _, test := range []struct {
+		name, body string
+		dead       bool
+	}{
+		{"captured self", "        def phase():\n            self._flag = False\n        phase()\n", false},
+		{"async capture", "        async def phase():\n            self._flag = False\n        return phase\n", false},
+		{"capture across levels", "        def phase():\n            def reset():\n                self._flag = False\n            reset()\n        phase()\n", false},
+		{"captured alias", "        receiver = self\n        def phase():\n            receiver._flag = False\n        phase()\n", false},
+		{"capture in loop", "        def phase():\n            for number in range(2):\n                self._flag = number\n        phase()\n", false},
+		{"parameter shadow", "        def phase(self):\n            self._flag = False\n        phase(object())\n", true},
+		{"later local shadow", "        def phase():\n            self._flag = False\n            self = object()\n            return self\n        phase()\n", true},
+		{"import shadow", "        def phase():\n            import foreign as self\n            self._flag = False\n        phase()\n", true},
+		{"exception shadow", "        def phase():\n            try:\n                unknown()\n            except Exception as self:\n                self._flag = False\n        phase()\n", true},
+		{"deleted receiver", "        def phase():\n            del self\n            self._flag = False\n        phase()\n", true},
+		{"global receiver", "        def phase():\n            global self\n            self._flag = False\n        phase()\n", true},
+		{"earlier outer rebind", "        self = object()\n        def phase():\n            self._flag = False\n        phase()\n", true},
+		{"later outer rebind", "        def phase():\n            self._flag = False\n        self = object()\n        phase()\n", true},
+		{"nonlocal mutation", "        def phase():\n            self._flag = False\n        def replace():\n            nonlocal self\n            self = object()\n        replace()\n        phase()\n", true},
+		{"unrelated captured type", "        receiver = object()\n        def phase():\n            receiver._flag = False\n        phase()\n", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := "from vendor.api import Base\nclass Trial(Base):\n    def prepare(self):\n" + test.body + "def main():\n    trial = Trial()\n    trial.prepare()\n    return trial\n"
+			if test.name == "async capture" {
+				source = strings.Replace(source, "def prepare", "async def prepare", 1)
+			}
+			_, _, response, _ := runContractVulture(t, map[string]string{"src/trial.py": source}, []policy.PythonContract{contract})
+			if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+				t.Fatalf("contract analysis failed: %+v", response)
+			}
+			dead := slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "_flag" })
+			if dead != test.dead {
+				t.Fatalf("_flag dead=%v, want %v: %+v", dead, test.dead, response.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestPythonRepositoryContractPreservesExactCallbackParameters(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run", "populate_context_post_run", "dispatch"}, CallbackParameters: map[string][]string{"run": {"context"}, "populate_context_post_run": {"context"}, "dispatch": {"payload", "context", "args", "options"}}, Reason: "The runtime supplies arguments to registered callbacks."}
+	source := `from vendor.api import Base
+class Agent(Base):
+    async def run(self, context, unused_optional=None):
+        return None
+    def populate_context_post_run(self, context):
+        return None
+    def dispatch(self, payload, /, *args, context, unused_keyword=None, **options):
+        return None
+class Unrelated:
+    def run(self, context):
+        return None
+def unrelated(context):
+    return True
+`
+	_, _, response, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, []policy.PythonContract{contract})
+	if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+		t.Fatalf("callback analysis failed: %+v", response)
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if diagnostic.Line < 9 && slices.Contains([]string{"context", "payload", "args", "options", "run", "populate_context_post_run", "dispatch"}, diagnostic.Name) {
+			t.Fatalf("externally supplied callback argument reported dead: %+v", diagnostic)
+		}
+	}
+	for _, expected := range []struct {
+		line int
+		name string
+	}{{3, "unused_optional"}, {7, "unused_keyword"}, {10, "context"}, {12, "context"}} {
+		if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Line == expected.line && d.Name == expected.name }) {
+			t.Fatalf("unrelated unused argument %v hidden: %+v", expected, response.Diagnostics)
+		}
+	}
+	contract.CallbackParameters = nil
+	_, _, without, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, []policy.PythonContract{contract})
+	if !slices.ContainsFunc(without.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Line == 3 && d.Name == "context" }) {
+		t.Fatalf("callback parameter retained without a declaration: %+v", without)
+	}
+}
+
+func TestPythonRepositoryContractRejectsStaleCallbackParameters(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run"}, CallbackParameters: map[string][]string{"run": {"context"}}, Attributes: []string{"state"}, Reason: "The runtime passes context to the run callback."}
+	for name, method := range map[string]string{
+		"missing parameter": "    def run(self, renamed):\n        return None\n",
+		"missing member":    "    def unrelated(self, context):\n        return None\n",
+		"unrelated member":  "class Other:\n    def run(self, context):\n        return None\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := "from vendor.api import Base\nclass Agent(Base):\n    state = True\n" + method
+			_, _, response, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, []policy.PythonContract{contract})
+			if response.Error != "" || response.FactsError != "" || len(response.Problems) != 1 || len(response.Resolved) != 0 {
+				t.Fatalf("stale callback declaration accepted: %+v", response)
+			}
+		})
+	}
+}
+
+func TestPythonRepositoryContractCallbackParametersSpanFiles(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run", "after"}, CallbackParameters: map[string][]string{"run": {"context"}, "after": {"result"}}, Reason: "Separate adapters implement different callback members."}
+	sources := map[string]string{}
+	for name, parameter := range map[string]string{"run": "context", "after": "result"} {
+		sources["src/"+name+".py"] = fmt.Sprintf("from vendor.api import Base\nclass Agent(Base):\n    def %s(self, %s):\n        return None\n", name, parameter)
+	}
+	_, _, response, _ := runContractVulture(t, sources, []policy.PythonContract{contract})
+	if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+		t.Fatalf("cross-file callbacks rejected: %+v", response)
+	}
+	for _, diagnostic := range response.Diagnostics {
+		if slices.Contains([]string{"context", "result", "run", "after"}, diagnostic.Name) {
+			t.Fatalf("cross-file callback argument reported dead: %+v", diagnostic)
+		}
+	}
+}
+
+func TestPythonRepositoryContractKeepsAmbiguousParameterFindings(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run"}, CallbackParameters: map[string][]string{"run": {"context"}}, Reason: "The runtime supplies the callback context argument."}
+	for name, method := range map[string]string{
+		"lambda parameter": "    def run(self, context=lambda context: None):\n        return None\n",
+		"local write":      "    def run(self, context): context = None\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := "from vendor.api import Base\nclass Agent(Base):\n" + method
+			_, _, response, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, []policy.PythonContract{contract})
+			if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+				t.Fatalf("callback analysis failed: %+v", response)
+			}
+			if !slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Line == 3 && d.Name == "context" }) {
+				t.Fatalf("same-line unused declaration hidden by callback argument: %+v", response)
+			}
+		})
+	}
+}
 
 func TestPythonRepositoryContractsPreserveExactConsumers(t *testing.T) {
 	sources := map[string]string{
