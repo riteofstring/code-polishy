@@ -88,6 +88,32 @@ def unrelated(context):
 	}
 }
 
+func TestPythonRepositoryContractPreservesMultilineCallbackParameters(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run"}, CallbackParameters: map[string][]string{"run": {"context"}}, Reason: "The runtime supplies the annotated context argument."}
+	for _, test := range []struct{ name, receiver, prefix, suffix string }{
+		{"positional", "self,", "", ""},
+		{"positional only", "self,", "", "        /,\n"},
+		{"keyword only", "self, *,", "", ""},
+		{"variadic positional", "self,", "*", ""},
+		{"variadic keyword", "self,", "**", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := fmt.Sprintf("from vendor.api import Base\nclass Agent(Base):\n    def run(\n        %s\n        %scontext: tuple[\n            str,\n            int,\n        ],\n%s    ):\n        return None\n", test.receiver, test.prefix, test.suffix)
+			_, _, without, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, nil)
+			if !slices.ContainsFunc(without.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Line == 5 && d.End == 8 && d.Name == "context" }) {
+				t.Fatalf("multiline unused argument missing without contract: %+v", without)
+			}
+			_, _, response, _ := runContractVulture(t, map[string]string{"src/agent.py": source}, []policy.PythonContract{contract})
+			if response.Error != "" || response.FactsError != "" || len(response.Problems) != 0 || len(response.Resolved) != 1 {
+				t.Fatalf("multiline callback analysis failed: %+v", response)
+			}
+			if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "context" }) {
+				t.Fatalf("externally supplied multiline argument reported dead: %+v", response.Diagnostics)
+			}
+		})
+	}
+}
+
 func TestPythonRepositoryContractRejectsStaleCallbackParameters(t *testing.T) {
 	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run"}, CallbackParameters: map[string][]string{"run": {"context"}}, Attributes: []string{"state"}, Reason: "The runtime passes context to the run callback."}
 	for name, method := range map[string]string{

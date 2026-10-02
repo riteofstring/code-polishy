@@ -61,7 +61,9 @@ class _FrameworkVisitor(_ConnectionFlow):
         start = decorators[0].lineno if decorators else node.lineno
         end = (
             node.end_lineno
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            if isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.arg)
+            )
             else start
         )
         unique = self.writes[(start, name)] <= 1
