@@ -28,3 +28,11 @@ effective source package.
 The [provider protocol](analysis-providers.md) carries these decisions explicitly.
 The [JavaScript provider](javascript-provider.md) parses compiler and framework
 semantics using that context and reports additional reads with verified identities.
+
+Native shell syntax, Go vet, and staticcheck commands identify their file or
+module path with its full SHA-256 digest. This gives gate command names a fixed
+ASCII bound without collapsing distinct paths through sanitization or truncation.
+The digest identifies the exact path, not file contents or mutable workspace
+state. Command arguments, working directories, and shell diagnostic paths retain
+the original path; planning and execution derive the same identifier regardless
+of selection order.

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.28.2 - 2026-10-08
+
+- Keep native shell and Go check identifiers bounded and distinct for paths
+  containing spaces, accents, punctuation, or long names. Preserve original
+  command arguments and shell diagnostic paths so merge and checkpoint gates
+  run the intended checks and still report invalid shell syntax.
+
 ## 0.28.1 - 2026-10-01
 
 - Preserve declared Python contract attribute writes through stable receivers
