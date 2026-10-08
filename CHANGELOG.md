@@ -8,6 +8,8 @@
   containing spaces, accents, punctuation, or long names. Preserve original
   command arguments and shell diagnostic paths so merge and checkpoint gates
   run the intended checks and still report invalid shell syntax.
+- Update the JavaScript provider's transitive `fast-uri` dependency to the aged
+  3.1.7 release and retire the assessments for its two resolved advisories.
 
 ## 0.28.1 - 2026-10-01
 

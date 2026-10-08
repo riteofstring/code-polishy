@@ -1,6 +1,7 @@
 # JavaScript dependency vulnerability assessments
 
-Reviewed on 2026-10-01. Assessment owner: Codex.
+Brace expansion reviewed on 2026-10-01; URI processing reviewed on 2026-10-08.
+Assessment owner: Codex.
 
 These assessments cover only `tools/javascript/pnpm-lock.yaml` and
 `providers/javascript/pnpm-lock.yaml`, at the exact versions recorded in
@@ -68,7 +69,13 @@ affected versions leave the locks.
 
 ## URI processing
 
-Retain `fast-uri` 3.1.6 in the JavaScript provider graph.
+The JavaScript provider graph now resolves `fast-uri` 3.1.7. This official
+release fixes the malformed-authority and port-injection advisories below;
+their exact 3.1.6 assessments have been removed. The
+[npm registry](https://registry.npmjs.org/fast-uri) records publication at
+2026-09-02 11:06:41.962 UTC, so it meets the 30-day minimum. The lock changes
+only this transitive dependency, without adding lifecycle scripts or overrides.
+The remaining host-case advisory is assessed against 3.1.7.
 
 | Advisory                                                                 | Required application behavior                                                                                                          | Fixed release |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
@@ -77,7 +84,7 @@ Retain `fast-uri` 3.1.6 in the JavaScript provider graph.
 | [GHSA-hrr3-gc8f-f4qj](https://github.com/advisories/GHSA-hrr3-gc8f-f4qj) | Make a case-sensitive host decision using scheme-relative input with encoded uppercase octets                                          | 3.1.8         |
 
 The resolved dependency path is `@astrojs/language-server` 2.16.11 →
-`volar-service-yaml` → `yaml-language-server` 1.23.0 → Ajv 8.20.0 →
+`volar-service-yaml` 0.0.71 → `yaml-language-server` 1.23.0 → Ajv 8.20.0 →
 `fast-uri`. Astro's `dist/plugins/yaml.js` registers the YAML service through
 its full language-server plugin. The provider's
 [`typecheck.mjs`](../../providers/javascript/typecheck.mjs) imports only
@@ -85,17 +92,58 @@ Astro's core, TypeScript service, and Astro service entry points, then construct
 its checker from those services. It does not import the full language-server
 plugin or the YAML service. The affected URI APIs therefore receive no input
 from this provider. The provider also does not use `fast-uri` to authorize
-network destinations.
+network destinations. Reinspection of the integrity-verified resolved package
+sources confirms that Astro's `dist/languageServerPlugin.js` registers the YAML
+service, which reaches Ajv through `yamlSchemaService.js`; Ajv's
+`dist/runtime/uri.js` imports `fast-uri`. None of those services is enabled by
+the provider's checker construction.
 
 ### Remediation
 
-Update to 3.1.7 on or after 2026-10-02 at 11:06:42 UTC and remove the two
-assessments for advisories fixed by that release. Reassess the remaining
-host-case advisory against the exact new version. Update to 3.1.8 on or after
-2026-10-15 at 07:36:26 UTC and remove the remaining assessment. Each current
-assessment expires at the end of the corresponding UTC date. Reassess
+Retain the 3.1.7 host-case assessment with its existing 2026-10-15 expiry.
+The official 3.1.8 fix was published on 2026-09-15 at 07:36:25.444 UTC and is
+still under 30 days old at this review. With no enabled call to the affected
+API or host authorization decision, waiting does not expose this provider to
+the advisory; admitting the fresh release would add avoidable supply-chain
+risk. Update to 3.1.8 on or after 2026-10-15 at 07:36:26 UTC and remove the
+remaining assessment, which expires at the end of that UTC date. Reassess
 immediately if the YAML service, full Astro language server, or a new URI
 consumer is enabled.
+
+## Unresolved advisories
+
+The online review on 2026-10-08 also reports the following dependencies. They
+have no vulnerability assessment in `.code-polishy.json` and remain release
+blockers; the existing non-exposure decisions above do not cover them.
+
+| Advisory                                                                 | Dependency                      | Lock scope           |
+| ------------------------------------------------------------------------ | ------------------------------- | -------------------- |
+| [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | `braces` 3.0.3                  | Tooling and provider |
+| [GHSA-r4xh-jqrq-34v2](https://github.com/advisories/GHSA-r4xh-jqrq-34v2) | `smol-toml` 1.7.1               | Tooling and provider |
+| [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) | `source-map-js` 1.2.1           | Provider             |
+| [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | `postcss-selector-parser` 7.1.5 | Provider             |
+| [GO-2026-6629](https://pkg.go.dev/vuln/GO-2026-6629) / CVE-2026-56851    | `golang.org/x/text` 0.39.0      | `go.mod`             |
+
+The `braces` advisory has no published fixed release. The provider's
+`resolveGlob` in [`imports.mjs`](../../providers/javascript/imports.mjs) passes
+source-selected glob patterns to `fast-glob` 3.3.3 with brace expansion enabled;
+its task generator reaches `micromatch` 4.0.8 and `braces` 3.0.3. An unreachable
+assessment is not justified for that path. Remediation needs an input-boundary
+fix that preserves supported glob behavior and reports unsupported input, with
+regression coverage for valid patterns and deeply nested braces.
+
+For the selector parser, the official 7.1.6 fix was published on 2026-09-03 at
+08:59:01.963 UTC and now meets the age minimum. The official Go fix is
+`golang.org/x/text` 0.41.0, published on 2026-08-11 at 15:22:47 UTC according
+to the [Go module proxy](https://proxy.golang.org/golang.org/x/text/@v/v0.41.0.info).
+OSV reports the Go advisory with unknown severity, which is not assessable.
+Review these exact dependency updates before installation.
+
+`smol-toml` 1.9.0 and `source-map-js` 1.2.2 become eligible on 2026-10-22 at
+17:15:35 UTC and 2026-10-30 at 14:08:10 UTC respectively, using their npm
+publication timestamps. Investigate their enabled callers and advisory
+prerequisites before choosing remediation or an exact assessment. No
+non-exposure or early-admission decision has been made for either package.
 
 ## Verification and limits
 
