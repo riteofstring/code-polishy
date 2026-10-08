@@ -236,6 +236,17 @@
       {
         "path": "docs/design/javascript-provider.md",
         "module": "javascript-provider"
+      },
+      {
+        "path": "docs/design/javascript-glob-inputs.md",
+        "sourcePaths": [
+          "tools/javascript/glob-inputs.mjs",
+          "tools/javascript/deadcode.mjs",
+          "providers/javascript/adapter.mjs",
+          "providers/javascript/build.mjs",
+          "providers/javascript/provider.test.mjs",
+          "scripts/test-javascript-runner.sh"
+        ]
       }
     ]
   },
@@ -1849,6 +1860,91 @@
         "owner": "Codex",
         "reviewed": "2026-10-08",
         "expires": "2026-10-15"
+      },
+      {
+        "id": "tooling-glob-depth-unreachable",
+        "ecosystem": "pnpm",
+        "advisory": "GHSA-vfj7-8cjw-p6xm",
+        "package": "braces",
+        "affectedVersion": "3.0.3",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "severity": "high",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "The shared glob boundary checks source imports and Knip fast-glob patterns and ignores before expansion, rejecting brace or parenthesis nesting beyond 64 levels.",
+        "impact": "Excessive-depth payloads cannot reach the recursive braces walkers; rejected input produces failed or incomplete analysis.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-10-08",
+        "expires": "2026-10-22"
+      },
+      {
+        "id": "tooling-toml-parser-unreachable",
+        "ecosystem": "pnpm",
+        "advisory": "GHSA-r4xh-jqrq-34v2",
+        "package": "smol-toml",
+        "affectedVersion": "1.7.1",
+        "scope": "tools/javascript/pnpm-lock.yaml",
+        "severity": "moderate",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "Knip uses policy-owned configuration and all plugins are disabled. Manifests use JSON or YAML; disabled script-referenced plugin configs become entry paths without invoking the TOML loader.",
+        "impact": "No repository-controlled TOML reaches smol-toml.parse or its quadratic key parser.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-10-08",
+        "expires": "2026-10-22"
+      },
+      {
+        "id": "provider-glob-depth-unreachable",
+        "ecosystem": "pnpm",
+        "advisory": "GHSA-vfj7-8cjw-p6xm",
+        "package": "braces",
+        "affectedVersion": "3.0.3",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "severity": "high",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "The shared glob boundary checks source imports and Knip fast-glob patterns and ignores before expansion, rejecting brace or parenthesis nesting beyond 64 levels.",
+        "impact": "Excessive-depth payloads cannot reach the recursive braces walkers; rejected input produces failed or incomplete analysis.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-10-08",
+        "expires": "2026-10-22"
+      },
+      {
+        "id": "provider-toml-parser-unreachable",
+        "ecosystem": "pnpm",
+        "advisory": "GHSA-r4xh-jqrq-34v2",
+        "package": "smol-toml",
+        "affectedVersion": "1.7.1",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "severity": "moderate",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "Knip uses policy-owned configuration and all plugins are disabled. Manifests use JSON or YAML; disabled script-referenced plugin configs become entry paths without invoking the TOML loader.",
+        "impact": "No repository-controlled TOML reaches smol-toml.parse or its quadratic key parser.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-10-08",
+        "expires": "2026-10-22"
+      },
+      {
+        "id": "provider-source-map-unreachable",
+        "ecosystem": "pnpm",
+        "advisory": "GHSA-68fv-2mgg-jv7q",
+        "package": "source-map-js",
+        "affectedVersion": "1.2.1",
+        "scope": "providers/javascript/pnpm-lock.yaml",
+        "severity": "high",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "The only resolved caller is PostCSS through eslint-plugin-astro. Policy never enables its no-unused-css-selector rule, and target or inline configuration cannot enable it.",
+        "impact": "Repository source maps cannot reach SourceNode.fromStringWithSourceMap through the disabled CSS processing path.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-10-08",
+        "expires": "2026-10-30"
       }
     ]
   }

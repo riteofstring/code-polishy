@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { extname, join, relative } from "node:path";
 
 import typescript from "typescript";
+import { bindKnipGlobs } from "./glob-inputs.mjs";
 
 import {
   MAXIMUM_OPERATION_PATHS,
@@ -396,8 +397,10 @@ async function bindInheritedWorkspaces(request) {
     }
     return workspace;
   };
+  const restoreGlobs = bindKnipGlobs(import.meta.resolve("knip"));
   return () => {
     prototype.findWorkspaceByFilePath = findWorkspace;
+    restoreGlobs();
   };
 }
 

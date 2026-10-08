@@ -10,6 +10,11 @@
   run the intended checks and still report invalid shell syntax.
 - Update the JavaScript provider's transitive `fast-uri` dependency to the aged
   3.1.7 release and retire the assessments for its two resolved advisories.
+- Bound repository-selected glob nesting before JavaScript dependency expansion,
+  preserving ordinary matches and reporting excessive nesting as incomplete analysis.
+- Update the selector parser and Go text dependencies to aged security fixes;
+  record exact, expiring assessments for unreachable TOML and source-map paths
+  and the guarded glob expansion path.
 
 ## 0.28.1 - 2026-10-01
 

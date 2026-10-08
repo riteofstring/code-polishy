@@ -129,7 +129,7 @@
     {
       "id": "dependency-assessments",
       "path": "docs/security/dependency-assessments.md",
-      "title": "JavaScript dependency vulnerability assessments",
+      "title": "Dependency vulnerability assessments",
       "summary": "Inspect exact advisory call paths, retained aged releases, and remediation dates for this repository.",
       "aliases": [],
       "public": true
@@ -211,6 +211,14 @@
       "path": "docs/design/installed-release-verification.md",
       "title": "Installed Release Verification",
       "summary": "Verify exact installed releases against disposable adopting repositories.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "javascript-glob-inputs",
+      "path": "docs/design/javascript-glob-inputs.md",
+      "title": "Bounded JavaScript glob inputs",
+      "summary": "Bound repository-selected glob nesting before recursive expansion in the native runner and provider.",
       "aliases": [],
       "public": true
     },

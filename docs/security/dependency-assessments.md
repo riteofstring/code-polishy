@@ -1,17 +1,19 @@
-# JavaScript dependency vulnerability assessments
+# Dependency vulnerability assessments
 
-Brace expansion reviewed on 2026-10-01; URI processing reviewed on 2026-10-08.
+Brace expansion reviewed on 2026-10-01; remaining findings reviewed on 2026-10-08.
 Assessment owner: Codex.
 
-These assessments cover only `tools/javascript/pnpm-lock.yaml` and
+The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
 `providers/javascript/pnpm-lock.yaml`, at the exact versions recorded in
 `.code-polishy.json`. They establish non-exposure in the current sealed tooling
 and JavaScript provider. They do not assert that the affected packages are free
 of vulnerabilities or that other consumers are unaffected.
 
-No early release admission is justified: the advisory prerequisites are absent,
-so a fresh fix would add supply-chain exposure without a demonstrated security
-benefit here. Retain the aged versions until the dated updates below.
+The Go and selector-parser findings are resolved by aged official releases.
+The retained dependencies have absent or blocked advisory prerequisites, so a
+fresh fix would add supply-chain exposure without a demonstrated security benefit
+here. No early release admission is needed. Retain those aged versions until the
+dated updates below.
 
 ## Brace expansion
 
@@ -110,40 +112,113 @@ remaining assessment, which expires at the end of that UTC date. Reassess
 immediately if the YAML service, full Astro language server, or a new URI
 consumer is enabled.
 
-## Unresolved advisories
+## Aged security updates
 
-The online review on 2026-10-08 also reports the following dependencies. They
-have no vulnerability assessment in `.code-polishy.json` and remain release
-blockers; the existing non-exposure decisions above do not cover them.
+The provider lock resolves `postcss-selector-parser` 7.1.6 for
+[GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf).
+The fix replaces quadratic token-index work on long flat selectors. The
+[npm registry](https://registry.npmjs.org/postcss-selector-parser) records its
+publication on 2026-09-03 at 08:59:01.963 UTC. Only that transitive package changes;
+its dependency edges are unchanged. No override or lifecycle script is introduced.
 
-| Advisory                                                                 | Dependency                      | Lock scope           |
-| ------------------------------------------------------------------------ | ------------------------------- | -------------------- |
-| [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | `braces` 3.0.3                  | Tooling and provider |
-| [GHSA-r4xh-jqrq-34v2](https://github.com/advisories/GHSA-r4xh-jqrq-34v2) | `smol-toml` 1.7.1               | Tooling and provider |
-| [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) | `source-map-js` 1.2.1           | Provider             |
-| [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | `postcss-selector-parser` 7.1.5 | Provider             |
-| [GO-2026-6629](https://pkg.go.dev/vuln/GO-2026-6629) / CVE-2026-56851    | `golang.org/x/text` 0.39.0      | `go.mod`             |
+`golang.org/x/text` is pinned to 0.41.0 for
+[GO-2026-6629](https://pkg.go.dev/vuln/GO-2026-6629) / CVE-2026-56851, which
+affects crafted input to the `secure/precis` Nickname profile. Code Polishy's own
+imports use `cases` and `unicode/norm`, but OSV's unknown-severity finding is
+not eligible for an assessment. The aged official fix removes that finding.
+The [Go module proxy](https://proxy.golang.org/golang.org/x/text/@v/v0.41.0.info)
+records publication on 2026-08-11 at 15:22:47 UTC from `go.googlesource.com/text`.
+Its module graph requires `golang.org/x/sync` 0.22.0, so that indirect pin also
+changes. The [sync release](https://proxy.golang.org/golang.org/x/sync/@v/v0.22.0.info)
+was published on 2026-07-01 at 17:29:34 UTC from `go.googlesource.com/sync`.
+Both satisfy the age minimum; module checksums authenticate the downloads.
 
-The `braces` advisory has no published fixed release. The provider's
-`resolveGlob` in [`imports.mjs`](../../providers/javascript/imports.mjs) passes
-source-selected glob patterns to `fast-glob` 3.3.3 with brace expansion enabled;
-its task generator reaches `micromatch` 4.0.8 and `braces` 3.0.3. An unreachable
-assessment is not justified for that path. Remediation needs an input-boundary
-fix that preserves supported glob behavior and reports unsupported input, with
-regression coverage for valid patterns and deeply nested braces.
+## Guarded glob expansion
 
-For the selector parser, the official 7.1.6 fix was published on 2026-09-03 at
-08:59:01.963 UTC and now meets the age minimum. The official Go fix is
-`golang.org/x/text` 0.41.0, published on 2026-08-11 at 15:22:47 UTC according
-to the [Go module proxy](https://proxy.golang.org/golang.org/x/text/@v/v0.41.0.info).
-OSV reports the Go advisory with unknown severity, which is not assessable.
-Review these exact dependency updates before installation.
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+affects `braces` 3.0.3 in both graphs. Its iterative parser accepts deeply nested
+brace and parenthesis nodes that overflow recursive compilation or expansion.
+The ordinary pattern-length limit does not stop the attack. There is no published
+fixed release at this review.
 
-`smol-toml` 1.9.0 and `source-map-js` 1.2.2 become eligible on 2026-10-22 at
-17:15:35 UTC and 2026-10-30 at 14:08:10 UTC respectively, using their npm
-publication timestamps. Investigate their enabled callers and advisory
-prerequisites before choosing remediation or an exact assessment. No
-non-exposure or early-admission decision has been made for either package.
+The provider's `resolveGlob` in
+[`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
+`import.meta.glob` patterns. Both analyzers also use Knip 5.55.1, whose workspace
+discovery and package-script entries reach `fast-glob` 3.3.3. Its task generator
+calls `micromatch` 4.0.8 brace expansion, which invokes the affected `braces` API.
+These are reachable input paths; disabled plugins alone do not protect them.
+
+[`glob-inputs.mjs`](../../tools/javascript/glob-inputs.mjs) now rejects more than
+64 nested brace/parenthesis groups before expansion. Its linear scan respects
+escaped characters, quotes, character classes, and matched closing delimiters.
+The native `bindInheritedWorkspaces` and provider adapter bind Knip's own
+`fast-glob` instance for the analysis, checking patterns and ignores at `glob`,
+`sync`, and `globStream`. The provider's exact direct fast-glob dependency resolves
+to that same instance, so its source-glob calls are guarded too. Inspection of
+Knip's `util/map-workspaces.js`, `util/glob.js`, and `util/glob-core.js` confirms
+these are its expansion entry points, including entries extracted from scripts
+even when plugins are disabled. Methods are restored during cleanup.
+
+The advisory's excessive-depth payload therefore cannot reach the recursive
+walkers. Normal matching still uses the original library and pattern. Rejection
+produces a native operational failure or provider incomplete coverage, never a
+passing empty result. Regressions exercise real source globs, workspace globs,
+package scripts, ordinary nested alternatives, and escaped literal paths.
+
+Retain exact high-severity `not-affected` assessments on the basis that the
+exploit prerequisite is now unreachable. They expire on 2026-10-22. Check for an
+official fix by that date and reassess before renewal; adopt an aged fix when
+available. Reassess immediately if Knip, fast-glob, braces, the shared guard,
+or any expansion caller changes. See the
+[boundary design](../design/javascript-glob-inputs.md) for the binding scope.
+
+## TOML parsing
+
+[GHSA-r4xh-jqrq-34v2](https://github.com/advisories/GHSA-r4xh-jqrq-34v2)
+affects `smol-toml` 1.7.1 through Knip in both graphs. Crafted TOML keys make
+`parseKey` repeatedly scan the remaining input, consuming quadratic CPU time.
+The prerequisite is repository bytes reaching `smol-toml.parse`.
+
+Knip's `util/fs.js` calls that API only through `loadTOML`; `util/loader.js`
+selects it for a loaded `.toml` configuration. The native analyzer always passes
+its generated JSON configuration explicitly. Its workspace manifest reads are
+JSON, and optional `pnpm-workspace.yaml` reads use the YAML loader. The provider
+replaces configuration initialization with its own in-memory policy and reads
+package manifests as JSON. Both explicitly disable every Knip plugin.
+`WorkspaceWorker.runPlugins` loads plugin configuration only for enabled plugins;
+script-referenced configuration for a disabled plugin becomes an entry path,
+not a call to its configuration loader. TOML parsing receives no target input.
+
+Retain exact moderate-severity `not-affected` assessments in both locks until
+2026-10-22. Update to official 1.9.0 on or after 17:15:35 UTC that day, 30 days
+after its [npm publication](https://registry.npmjs.org/smol-toml), and remove the
+assessments. With no enabled parse call, waiting avoids admitting fresh parser
+code without exposing the analyzer to this advisory. Reassess if configuration
+loading or plugin activation changes.
+
+## Source maps
+
+[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)
+affects provider `source-map-js` 1.2.1. Huge line offsets in an indexed source map
+cause excessive synchronous work in `SourceNode.fromStringWithSourceMap`.
+The resolved path is `eslint-plugin-astro` 1.3.1 → PostCSS 8.5.26 → source-map-js.
+
+In the resolved Astro plugin, PostCSS processing and parsing occur inside the
+`no-unused-css-selector` rule's style transformation and selector analysis.
+[`analysis.mjs`](../../providers/javascript/analysis.mjs) enables only the
+policy-owned JSX accessibility variants and `astro/no-conflict-set-directives`;
+it does not enable `astro/no-unused-css-selector`. It also disables inline
+configuration and does not load target ESLint configuration. Loading the plugin
+loads PostCSS, but does not execute that rule or deliver maps to the affected API.
+The provider's CSS comment scanner uses `vscode-css-languageservice`, and its
+compiler mappings use `@jridgewell/trace-mapping`, not source-map-js.
+
+Retain an exact high-severity `not-affected` assessment until 2026-10-30. Update
+to official 1.2.2 on or after 14:08:10 UTC that day, 30 days after its
+[npm publication](https://registry.npmjs.org/source-map-js), and remove the
+assessment. The disabled call path makes waiting preferable to fresh-code
+admission. Reassess immediately if CSS rule activation, map processing, or
+configuration authority changes.
 
 ## Verification and limits
 

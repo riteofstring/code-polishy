@@ -657,7 +657,7 @@ fi
 
 deadcode_target="${fixture_root}/deadcode"
 mkdir -p "${deadcode_target}/src" "${deadcode_target}/packages/web/src"
-printf '{"name":"fixture","private":true,"version":"0.0.0","type":"module"}\n' \
+printf '{"name":"fixture","private":true,"version":"0.0.0","type":"module","workspaces":["packages/{web,absent}"]}\n' \
   >"${deadcode_target}/package.json"
 cat >"${deadcode_target}/src/index.ts" <<'SOURCE'
 import { used } from "./helper.js";
@@ -717,6 +717,27 @@ if [[ -e "${deadcode_target}/node_modules" ]] ||
   [[ -n "$(find "${deadcode_target}" -name 'policy-knip.json' -print -quit)" ]]; then
   fail "the dead-code analysis wrote into the target tree"
 fi
+
+for field in workspaces scripts; do
+  javascript_sealed_run "${javascript_node}" --input-type=module - \
+    "${deadcode_target}/package.json" "${field}" <<'NODE'
+import { writeFileSync } from "node:fs";
+const [manifest, field] = process.argv.slice(2);
+const pattern = `${"{".repeat(4000)}a,b${"}".repeat(4000)}`;
+writeFileSync(manifest, JSON.stringify({
+  name: "fixture", private: true, type: "module",
+  [field]: field === "workspaces" ? [pattern] : { start: `node '${pattern}'` },
+}));
+NODE
+  if deadcode_request . "${deadcode_workspaces}" | run_runner >"${deadcode_response}"; then
+    fail "deadcode accepted excessive glob nesting from ${field}"
+  fi
+  if ! grep -qF 'glob nesting exceeds the supported 64 levels' "${deadcode_response}"; then
+    fail "deadcode failed without a bounded glob diagnostic: $(cat "${deadcode_response}")"
+  fi
+done
+printf '{"name":"fixture","private":true,"version":"0.0.0","type":"module"}\n' \
+  >"${deadcode_target}/package.json"
 
 generated_deadcode_target="${fixture_root}/generated-deadcode"
 mkdir -p "${generated_deadcode_target}/frontend/src" "${generated_deadcode_target}/python_pkg/generated"

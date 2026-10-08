@@ -34,10 +34,11 @@ function prepare() {
     cpSync(join(source, name), join(provider, name), { recursive: true });
   }
   mkdirSync(join(target, "tools/javascript"), { recursive: true });
-  cpSync(
-    join(source, "../../tools/javascript/policy.mjs"),
-    join(target, "tools/javascript/policy.mjs"),
-  );
+  for (const name of ["policy.mjs", "glob-inputs.mjs"])
+    cpSync(
+      join(source, "../../tools/javascript", name),
+      join(target, "tools/javascript", name),
+    );
   cpSync(join(source, "README.md"), join(target, "README.md"));
   const fixtures = materializeFixtures(target);
   const metadata = JSON.parse(

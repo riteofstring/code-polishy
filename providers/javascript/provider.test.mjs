@@ -174,6 +174,78 @@ function analyze(request) {
   return JSON.parse(run.stdout);
 }
 
+test("module globs retain nested alternatives and escaped literal names", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-globs-"));
+  const literal = `${"(".repeat(80)}literal${")".repeat(80)}.ts`;
+  try {
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    for (const name of ["used.ts", "other.ts", "unused.ts", literal])
+      writeFileSync(join(root, name), "export const value = 1;\n");
+    for (const [pattern, expected] of [
+      ["./{used,{other,absent}}.ts", ["other.ts", "used.ts"]],
+      [`./${literal.replaceAll("(", "\\(").replaceAll(")", "\\)")}`, [literal]],
+    ]) {
+      writeFileSync(
+        join(root, "source.ts"),
+        `const modules = import.meta.glob(${JSON.stringify(pattern)}); console.log(modules);\n`,
+      );
+      const response = analyze(requestFor(root, ["source.ts"], "architecture"));
+      assert.equal(response.status, "pass", JSON.stringify(response));
+      assert.deepEqual(response.coverage.unsupported, []);
+      assert.deepEqual(
+        response.facts.imports.map((fact) => fact.resolved).toSorted(),
+        expected,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("excessive glob nesting reports incomplete coverage before expansion", () => {
+  const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-glob-depth-"));
+  try {
+    writeFileSync(join(root, "package.json"), '{"type":"module"}');
+    for (const [opening, closing] of [
+      ["{", "}"],
+      ["(", ")"],
+    ]) {
+      const pattern = `./${opening.repeat(4000)}{used,other}${closing.repeat(4000)}.ts`;
+      writeFileSync(
+        join(root, "source.ts"),
+        `const modules = import.meta.glob(${JSON.stringify(pattern)}); console.log(modules);\n`,
+      );
+      for (const capability of ["architecture", "dead-code"]) {
+        const response = analyze(requestFor(root, ["source.ts"], capability));
+        assert.equal(response.status, "incomplete", JSON.stringify(response));
+        assert.deepEqual(response.coverage.analyzed, []);
+        assert.ok(
+          response.coverage.unsupported.some(
+            (item) =>
+              item.path === "source.ts" && item.reason.includes("glob nesting"),
+          ),
+          JSON.stringify(response),
+        );
+      }
+    }
+    writeFileSync(join(root, "source.ts"), "export const value = 1;\n");
+    const pattern = `{${"(".repeat(4000)}used${")".repeat(4000)}}`;
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        type: "module",
+        scripts: { start: `node '${pattern}'` },
+      }),
+    );
+    const response = analyze(requestFor(root, ["source.ts"], "dead-code"));
+    assert.equal(response.status, "incomplete", JSON.stringify(response));
+    assert.deepEqual(response.coverage.analyzed, []);
+    assert.match(response.coverage.unsupported[0].reason, /glob nesting/);
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
 test("each claimed capability analyzes valid source and catches its seeded defect", async (suite) => {
   const root = mkdtempSync(join(tmpdir(), "code-polishy-provider-test-"));
   try {

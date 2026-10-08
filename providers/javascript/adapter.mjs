@@ -2,6 +2,7 @@ import { createAnalysis, containTypeScriptReads } from "./context.mjs";
 import { analyzeSource } from "./analysis.mjs";
 import { typecheck } from "./typecheck.mjs";
 import { deadcode } from "./deadcode.mjs";
+import { bindKnipGlobs } from "../../tools/javascript/glob-inputs.mjs";
 
 function validateRequest(request) {
   if (
@@ -29,12 +30,14 @@ export async function analyze(request) {
   const analysis = createAnalysis(request);
   for (const path of request.files) analysis.read(path);
   const restore = containTypeScriptReads(analysis);
+  const restoreGlobs = bindKnipGlobs(import.meta.resolve("knip"));
   try {
     if (request.capability === "typecheck") await typecheck(analysis);
     else if (request.capability === "dead-code") await deadcode(analysis);
     else await analyzeSource(analysis);
     return analysis.finish();
   } finally {
+    restoreGlobs();
     restore();
   }
 }
