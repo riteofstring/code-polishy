@@ -247,12 +247,15 @@ type LintLimits struct {
 type LintActivation struct {
 	ReactHooks       bool `json:"reactHooks"`
 	JSXAccessibility bool `json:"jsxAccessibility"`
+	Complexity       bool `json:"complexity"`
+	Comments         bool `json:"comments"`
 }
 
 type LintResult struct {
 	Findings    []LintViolation `json:"findings"`
 	Comments    []LintComment   `json:"comments"`
 	Unsupported []Unsupported   `json:"unsupported"`
+	next        *lintCursor
 }
 
 type LintViolation struct {
@@ -285,21 +288,16 @@ func (bundle Bundle) Lint(ctx context.Context, root string, paths []string, limi
 	}
 	payload.Limits = &limits
 	payload.Activation = &activation
-	result, err := bundle.exchange(ctx, payload, lintTimeout)
-	if err != nil {
-		return LintResult{}, err
-	}
-	reported, err := decodeLintResult(result)
-	if err != nil {
-		return LintResult{}, fmt.Errorf("the sealed JavaScript bundle returned an unreadable %s result: %w", OperationLint, err)
-	}
-	return reported, nil
+	ctx, cancel := context.WithTimeout(ctx, lintTimeout)
+	defer cancel()
+	return bundle.lintPages(ctx, payload)
 }
 
 type lintResultWire struct {
 	Findings    *[]LintViolation   `json:"findings"`
 	Comments    *[]lintCommentWire `json:"comments"`
 	Unsupported *[]Unsupported     `json:"unsupported"`
+	Next        json.RawMessage    `json:"next"`
 }
 
 type lintCommentWire struct {
@@ -319,8 +317,12 @@ func decodeLintResult(data []byte) (LintResult, error) {
 	if err := decodeExactly(data, &wire); err != nil {
 		return LintResult{}, err
 	}
-	if wire.Findings == nil || wire.Comments == nil || wire.Unsupported == nil {
+	if wire.Findings == nil || wire.Comments == nil || wire.Unsupported == nil || len(wire.Next) == 0 {
 		return LintResult{}, fmt.Errorf("the lint result is missing required fields")
+	}
+	var next *lintCursor
+	if err := decodeExactly(wire.Next, &next); err != nil {
+		return LintResult{}, fmt.Errorf("the lint result cursor is invalid: %w", err)
 	}
 	comments := make([]LintComment, 0, len(*wire.Comments))
 	for index, comment := range *wire.Comments {
@@ -334,6 +336,7 @@ func decodeLintResult(data []byte) (LintResult, error) {
 		Findings:    *wire.Findings,
 		Comments:    comments,
 		Unsupported: *wire.Unsupported,
+		next:        next,
 	}, nil
 }
 
@@ -820,6 +823,7 @@ type request struct {
 	Paths           []string            `json:"paths,omitempty"`
 	Limits          *LintLimits         `json:"limits,omitempty"`
 	Activation      *LintActivation     `json:"activation,omitempty"`
+	Cursor          *lintCursor         `json:"cursor,omitempty"`
 	Project         string              `json:"project,omitempty"`
 	InheritedPaths  []string            `json:"inheritedPaths,omitempty"`
 	Directory       string              `json:"directory,omitempty"`

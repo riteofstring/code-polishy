@@ -424,7 +424,7 @@ func TestAnUnknownFormatResultFieldIsRejected(t *testing.T) {
 
 func TestALintRequestCarriesTheBudgetsAndActivation(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	response := `{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[],"unsupported":[]}}`
+	response := `{"protocolVersion":3,"operation":"lint","result":{"next":null,"findings":[],"comments":[],"unsupported":[]}}`
 	bundle := fakeBundle(t, "#!/bin/sh\n/bin/cat >"+observed+"\nprintf '%s\\n' '"+response+"'\n")
 	limits := LintLimits{Complexity: 9, Depth: 4, Parameters: 5}
 	activation := LintActivation{ReactHooks: true}
@@ -437,14 +437,14 @@ func TestALintRequestCarriesTheBudgetsAndActivation(t *testing.T) {
 	}
 	want := `{"protocolVersion":3,"operation":"lint","root":"/target","paths":["src/a.tsx"],` +
 		`"limits":{"complexity":9,"depth":4,"parameters":5},` +
-		`"activation":{"reactHooks":true,"jsxAccessibility":false}}`
+		`"activation":{"reactHooks":true,"jsxAccessibility":false,"complexity":false,"comments":false},"cursor":{"pathIndex":0,"resultIndex":0}}`
 	if string(request) != want {
 		t.Fatalf("unexpected request %q", string(request))
 	}
 }
 
 func TestALintRequestRefusesAnUnusableBudget(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"next":null,"findings":[],"comments":[],"unsupported":[]}}`))
 	for _, limits := range []LintLimits{
 		{Complexity: 0, Depth: 4, Parameters: 5},
 		{Complexity: 9, Depth: -1, Parameters: 5},
@@ -459,7 +459,7 @@ func TestALintRequestRefusesAnUnusableBudget(t *testing.T) {
 }
 
 func TestALintResultReportsViolationsAndUnsupportedFiles(t *testing.T) {
-	result := `{"findings":[{"path":"a.ts","line":3,"column":7,"rule":"complexity","message":"too complex"}],` +
+	result := `{"next":null,"findings":[{"path":"a.ts","line":3,"column":7,"rule":"complexity","message":"too complex"}],` +
 		`"comments":[{"path":"a.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
 		`"unsupported":[{"path":"b.ts","reason":"line 2: Unexpected token"}]}`
 	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":`+result+`}`))
@@ -480,7 +480,7 @@ func TestALintResultReportsViolationsAndUnsupportedFiles(t *testing.T) {
 }
 
 func TestALintResultRequiresParserCommentFacts(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"next":null,"findings":[],"unsupported":[]}}`))
 	if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
 		t.Fatal("expected missing comment facts to be rejected")
 	} else if !strings.Contains(err.Error(), "unreadable lint result") {
@@ -500,7 +500,7 @@ func TestALintResultRejectsMalformedParserCommentFacts(t *testing.T) {
 		{name: "uncontained path", comment: `{"path":"../a.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			result := `{"protocolVersion":3,"operation":"lint","result":{"findings":[],"comments":[` + test.comment + `],"unsupported":[]}}`
+			result := `{"protocolVersion":3,"operation":"lint","result":{"next":null,"findings":[],"comments":[` + test.comment + `],"unsupported":[]}}`
 			bundle := fakeBundle(t, respond(result))
 			if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
 				t.Fatal("expected malformed parser comment fact to be rejected")
@@ -512,7 +512,7 @@ func TestALintResultRejectsMalformedParserCommentFacts(t *testing.T) {
 }
 
 func TestALintResultRejectsLegacyDirectiveFields(t *testing.T) {
-	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"findings":[],"directives":[],"comments":[],"unsupported":[]}}`))
+	bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"lint","result":{"next":null,"findings":[],"directives":[],"comments":[],"unsupported":[]}}`))
 	if _, err := bundle.Lint(context.Background(), "/target", []string{"a.ts"}, LintLimits{Complexity: 9, Depth: 4, Parameters: 5}, LintActivation{}); err == nil {
 		t.Fatal("expected the legacy directive field to be rejected")
 	} else if !strings.Contains(err.Error(), "unreadable lint result") {

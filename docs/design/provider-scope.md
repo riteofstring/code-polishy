@@ -11,6 +11,10 @@ metadata, compiler configuration, and effective lint activation. Native lint and
 provider requests share the same resolved activation, including React overrides
 and generated-source exemptions.
 
+Native lint sends resolved complexity and comment activation before collecting
+facts. Its [bounded result pages](javascript-lint-results.md) preserve all
+applicable diagnostics without charging exempt generated findings to the limit.
+
 Local style operations retain the selected files. Type checking can report
 unchanged members of the selected compilation program. Unused-code analysis
 retains package-wide reachability across actual package trees, including when

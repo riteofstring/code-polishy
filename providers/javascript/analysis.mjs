@@ -109,14 +109,13 @@ function lint(analysis, path, source, offset, extension) {
   if (!effective) throw new Error("source has no effective lint activation");
   const activation = {
     ...effective,
+    complexity: false,
     jsxAccessibility: effective.jsxAccessibility || extension === ".astro",
   };
   const rules = lintRules({
     limits: { complexity: 1000, depth: 1000, parameters: 1000 },
     activation,
   });
-  for (const key of ["complexity", "max-depth", "max-params"])
-    delete rules[key];
   if (extension === ".astro") configureAstroRules(rules);
   const messages = lintMessages(source, extension, rules);
   for (const message of messages)

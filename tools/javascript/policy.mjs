@@ -53,10 +53,12 @@ export function lintRules(request) {
     "no-unsafe-finally": "error",
     "valid-typeof": "error",
     "use-isnan": "error",
-    complexity: ["error", request.limits.complexity],
-    "max-depth": ["error", request.limits.depth],
-    "max-params": ["error", request.limits.parameters],
   };
+  if (request.activation.complexity) {
+    rules.complexity = ["error", request.limits.complexity];
+    rules["max-depth"] = ["error", request.limits.depth];
+    rules["max-params"] = ["error", request.limits.parameters];
+  }
   const activated = [
     ...(request.activation.reactHooks ? REACT_HOOKS_RULES : []),
     ...(request.activation.jsxAccessibility ? JSX_ACCESSIBILITY_RULES : []),

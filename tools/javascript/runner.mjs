@@ -24,6 +24,7 @@ import { deadcode, requireWorkspaces } from "./deadcode.mjs";
 import { imports } from "./imports.mjs";
 import { gitlab } from "./gitlab.mjs";
 import { licenses } from "./licenses.mjs";
+import { lintPage } from "./lint-pages.mjs";
 import { packages, workspace } from "./packages.mjs";
 import {
   MAXIMUM_REQUEST_BYTES,
@@ -55,7 +56,10 @@ const OPERATIONS = {
     run: (request) => format(request, true),
   },
   parse: { fields: ["root", "paths"], run: parse },
-  lint: { fields: ["root", "paths", "limits", "activation"], run: lint },
+  lint: {
+    fields: ["root", "paths", "limits", "activation", "cursor"],
+    run: lint,
+  },
   typecheck: {
     fields: ["root", "paths", "project"],
     optionalFields: ["inheritedPaths"],
@@ -70,8 +74,6 @@ const OPERATIONS = {
   audit: { fields: ["root", "directory"], run: audit },
 };
 const BASE_REQUEST_FIELDS = ["protocolVersion", "operation"];
-
-const MAXIMUM_LINT_RESULTS = 5000;
 
 const MAXIMUM_TYPECHECK_DIAGNOSTICS = 5000;
 
@@ -198,11 +200,17 @@ function lintConfiguration({
   path,
   comments,
   commentLocations,
+  collectComments,
 }) {
   return {
     files: [`**/*${extension}`],
     plugins: {
-      facts: sourceCommentFactsPlugin(path, comments, commentLocations),
+      facts: sourceCommentFactsPlugin(
+        path,
+        comments,
+        commentLocations,
+        collectComments,
+      ),
       "react-hooks": reactHooks,
       "jsx-a11y": jsxAccessibility,
     },
@@ -220,7 +228,12 @@ function lintConfiguration({
   };
 }
 
-function sourceCommentFactsPlugin(path, facts, commentLocations) {
+function sourceCommentFactsPlugin(
+  path,
+  facts,
+  commentLocations,
+  collectComments,
+) {
   return {
     rules: {
       comments: {
@@ -234,25 +247,28 @@ function sourceCommentFactsPlugin(path, facts, commentLocations) {
               const firstCode = sourceCode.getFirstToken(sourceCode.ast);
               const comments = sourceCode.getAllComments();
               for (const [index, comment] of comments.entries()) {
-                const raw = sourceCode.text.slice(
-                  comment.range[0],
-                  comment.range[1],
-                );
-                const bounded = boundedCommentBytes(raw);
-                facts.push({
-                  path,
-                  kind: comment.type,
-                  raw: bounded.raw,
-                  complete: bounded.complete,
-                  line: comment.loc.start.line,
-                  column: comment.loc.start.column + 1,
-                  beforeCode:
-                    firstCode === null || comment.range[0] < firstCode.range[0],
-                  preamble:
-                    index === 0 &&
-                    sourceCode.text.slice(0, comment.range[0]).trim() === "",
-                  byteZero: comment.range[0] === 0,
-                });
+                if (collectComments) {
+                  const raw = sourceCode.text.slice(
+                    comment.range[0],
+                    comment.range[1],
+                  );
+                  const bounded = boundedCommentBytes(raw);
+                  facts.push({
+                    path,
+                    kind: comment.type,
+                    raw: bounded.raw,
+                    complete: bounded.complete,
+                    line: comment.loc.start.line,
+                    column: comment.loc.start.column + 1,
+                    beforeCode:
+                      firstCode === null ||
+                      comment.range[0] < firstCode.range[0],
+                    preamble:
+                      index === 0 &&
+                      sourceCode.text.slice(0, comment.range[0]).trim() === "",
+                    byteZero: comment.range[0] === 0,
+                  });
+                }
                 commentLocations.push({
                   line: comment.loc.start.line,
                   column: comment.loc.start.column + 1,
@@ -261,6 +277,7 @@ function sourceCommentFactsPlugin(path, facts, commentLocations) {
                 });
               }
               if (
+                collectComments &&
                 !comments.some((comment) => comment.type === "Shebang") &&
                 sourceCode.text.startsWith("#!")
               ) {
@@ -350,65 +367,64 @@ function collectLintMessages(
 function lint(request) {
   const linter = new eslint.Linter({ configType: "flat" });
   const rules = lintRules(request);
+  return lintPage(request, (path) => lintFile(request, linter, rules, path));
+}
+
+function lintFile(request, linter, rules, path) {
   const findings = [];
   const comments = [];
   const unsupportedPaths = [];
-  for (const path of request.paths) {
-    const extension = extname(path).toLowerCase();
-    const language = LINT_LANGUAGES[extension];
-    if (language === undefined) {
-      unsupportedPaths.push(
-        unsupported(path, "the policy-owned linter does not analyze this file"),
-      );
-      continue;
-    }
-    const source = readTargetFile(
-      join(request.root, path),
-      path,
-      unsupportedPaths,
+  const result = { findings, comments, unsupported: unsupportedPaths };
+  const extension = extname(path).toLowerCase();
+  const language = LINT_LANGUAGES[extension];
+  if (language === undefined) {
+    unsupportedPaths.push(
+      unsupported(path, "the policy-owned linter does not analyze this file"),
     );
-    if (source === null) {
-      continue;
-    }
-    const fileComments = [];
-    const fileCommentLocations = [];
-    let messages;
-    try {
-      messages = linter.verify(
-        source,
-        lintConfiguration({
-          rules,
-          language,
-          extension,
-          path,
-          comments: fileComments,
-          commentLocations: fileCommentLocations,
-        }),
-        path,
-      );
-    } catch (error) {
-      unsupportedPaths.push(unsupported(path, error.message));
-      continue;
-    }
-    if (
-      !collectLintMessages(
-        path,
-        messages,
-        findings,
-        unsupportedPaths,
-        fileCommentLocations,
-      )
-    ) {
-      continue;
-    }
-    comments.push(...fileComments);
-    if (findings.length + comments.length > MAXIMUM_LINT_RESULTS) {
-      fail(
-        `the lint operation produced more than the ${MAXIMUM_LINT_RESULTS} result limit`,
-      );
-    }
+    return result;
   }
-  return { findings, comments, unsupported: unsupportedPaths };
+  const source = readTargetFile(
+    join(request.root, path),
+    path,
+    unsupportedPaths,
+  );
+  if (source === null) {
+    return result;
+  }
+  const fileComments = [];
+  const fileCommentLocations = [];
+  let messages;
+  try {
+    messages = linter.verify(
+      source,
+      lintConfiguration({
+        rules,
+        language,
+        extension,
+        path,
+        comments: fileComments,
+        commentLocations: fileCommentLocations,
+        collectComments: request.activation.comments,
+      }),
+      path,
+    );
+  } catch (error) {
+    unsupportedPaths.push(unsupported(path, error.message));
+    return result;
+  }
+  if (
+    !collectLintMessages(
+      path,
+      messages,
+      findings,
+      unsupportedPaths,
+      fileCommentLocations,
+    )
+  ) {
+    return result;
+  }
+  result.comments = fileComments;
+  return result;
 }
 
 function diagnosticText(root, diagnostic) {
@@ -664,6 +680,8 @@ function requireActivation(activation) {
   requireExactObject(activation, "the lint activation", [
     "reactHooks",
     "jsxAccessibility",
+    "complexity",
+    "comments",
   ]);
   for (const [name, value] of Object.entries(activation)) {
     if (typeof value !== "boolean") {

@@ -137,16 +137,15 @@ func JavaScriptLintFindings(ctx context.Context, repo repository.Repository, fil
 		if err != nil {
 			return append(findings, toolFinding("javascript-bundle", err.Error()))
 		}
-		findings = append(findings, javascriptLintResultFindings(repo, result, group.checkComplexity)...)
+		findings = append(findings, javascriptLintResultFindings(repo, result)...)
 	}
 	return findings
 }
 
 type javascriptLintGroup struct {
-	limits          javascript.LintLimits
-	activation      javascript.LintActivation
-	paths           []string
-	checkComplexity bool
+	limits     javascript.LintLimits
+	activation javascript.LintActivation
+	paths      []string
 }
 
 func javascriptLintGroups(repo repository.Repository, files []string) []javascriptLintGroup {
@@ -157,11 +156,10 @@ func javascriptLintGroups(repo repository.Repository, files []string) []javascri
 		}
 		limits := javascriptLintLimits(repo, repo.IsTest(path))
 		activation := javascriptLintActivation(repo, path)
-		checkComplexity := !repo.IsGenerated(path) && repo.NativeAnalysis(path, "complexity")
-		key := fmt.Sprintf("%+v|%+v|%t", limits, activation, checkComplexity)
+		key := fmt.Sprintf("%+v|%+v", limits, activation)
 		group, exists := grouped[key]
 		if !exists {
-			group = &javascriptLintGroup{limits: limits, activation: activation, checkComplexity: checkComplexity}
+			group = &javascriptLintGroup{limits: limits, activation: activation}
 			grouped[key] = group
 		}
 		group.paths = append(group.paths, path)
@@ -204,11 +202,14 @@ func javascriptLimit(value, fallback int) int {
 
 func javascriptLintActivation(repo repository.Repository, path string) javascript.LintActivation {
 	activation := repo.JavaScriptLintActivation(path)
-	return javascript.LintActivation{ReactHooks: activation.ReactHooks, JSXAccessibility: activation.JSXAccessibility}
+	return javascript.LintActivation{
+		ReactHooks: activation.ReactHooks, JSXAccessibility: activation.JSXAccessibility,
+		Complexity: !repo.IsGenerated(path) && repo.NativeAnalysis(path, "complexity"),
+		Comments:   !repo.IsGenerated(path) && !repo.Config.Quality.CommentsAllowed() && repo.NativeAnalysis(path, "lint"),
+	}
 }
 
-func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult, complexity ...bool) []policy.Finding {
-	checkComplexity := len(complexity) == 0 || complexity[0]
+func javascriptLintResultFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, entry := range result.Unsupported {
 		if repo.IsGenerated(entry.Path) {
@@ -226,7 +227,7 @@ func javascriptLintResultFindings(repo repository.Repository, result javascript.
 			violations = append(violations, violation)
 		}
 	}
-	return append(findings, javascriptLintViolationFindings(violations, checkComplexity)...)
+	return append(findings, javascriptLintViolationFindings(violations)...)
 }
 
 func javascriptLintCommentFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {
@@ -272,22 +273,16 @@ func javascriptLintProseCommentFindings(repo repository.Repository, comments []j
 	return findings
 }
 
-func javascriptLintViolationFindings(violations []javascript.LintViolation, checkComplexity bool) []policy.Finding {
+func javascriptLintViolationFindings(violations []javascript.LintViolation) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, violation := range violations {
-		finding, include := javascriptLintViolationFinding(violation, checkComplexity)
-		if include {
-			findings = append(findings, finding)
-		}
+		findings = append(findings, javascriptLintViolationFinding(violation))
 	}
 	return findings
 }
 
-func javascriptLintViolationFinding(violation javascript.LintViolation, checkComplexity bool) (policy.Finding, bool) {
+func javascriptLintViolationFinding(violation javascript.LintViolation) policy.Finding {
 	isComplexity := javascriptComplexityRules[violation.Rule]
-	if !checkComplexity && isComplexity {
-		return policy.Finding{}, false
-	}
 	check := "quality.lint"
 	if isComplexity {
 		check = "quality.complexity"
@@ -295,7 +290,7 @@ func javascriptLintViolationFinding(violation javascript.LintViolation, checkCom
 	return policy.Finding{
 		Check: check, Path: violation.Path, Subject: violation.Rule,
 		Message: fmt.Sprintf("line %d, column %d: %s", violation.Line, violation.Column, violation.Message),
-	}, true
+	}
 }
 
 func javascriptSourceCommentAllowed(repo repository.Repository, comment javascript.LintComment) bool {

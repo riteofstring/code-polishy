@@ -418,14 +418,14 @@ SOURCE
 printf 'export default [{rules:{"max-depth":"off","max-params":"off"}}];\n' >"${target}/eslint.config.mjs"
 
 lint_request() {
-  printf '{"protocolVersion":3,"operation":"lint","root":"%s","paths":%s,"limits":%s,"activation":%s}' \
+  printf '{"protocolVersion":3,"operation":"lint","root":"%s","paths":%s,"limits":%s,"activation":%s,"cursor":{"pathIndex":0,"resultIndex":0}}' \
     "${target}" "$1" "$2" "$3"
 }
 lint_response="${fixture_root}/lint.json"
 printf 'export function value() { return 1; return 2; }\n' >"${lint_source}/unreachable.ts"
 printf 'export function value() { return 1; }\n' >"${lint_source}/reachable.ts"
 lint_request '["lint/unreachable.ts","lint/reachable.ts"]' \
-  '{"complexity":9,"depth":4,"parameters":5}' '{"reactHooks":false,"jsxAccessibility":false}' | \
+  '{"complexity":9,"depth":4,"parameters":5}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}' | \
   run_runner >"${lint_response}" || fail "native bug checks could not run"
 "${javascript_node}" - "${lint_response}" <<'NODE'
 const assert = require('node:assert/strict');
@@ -437,7 +437,7 @@ assert.deepEqual(response.findings.map(({path, rule}) => ({path, rule})), [
 ]);
 NODE
 lint_request '["lint/deep.ts","lint/directive.ts","lint/prose.ts","lint/reference-near-miss.ts","lint/reference-whitespace-near-miss.ts","lint/reference-trailing-near-miss.ts","lint/reference-suppression-near-miss.ts","lint/reference-after-code-near-miss.ts","lint/environment-after-code.test.ts","lint/environment-production.ts","lint/environment-happy.test.ts","lint/environment-line-whitespace.test.ts","lint/environment-block-whitespace.test.ts","lint/environment-trailing.test.ts","lint/environment-suppression.test.ts","lint/environment-after-comment.test.ts","lint/environment-over-boundary.test.ts","lint/jsx-comment.tsx","lint/allowed-reference.ts","lint/allowed-reference-only.d.ts","lint/allowed-environment-line.test.ts","lint/allowed-environment-block.test.ts","lint/allowed-shebang.ts","lint/empty-shebang.ts","lint/leading-space-shebang.ts","lint/literals.ts","lint/jsx-literal.tsx","lint/broken.ts","lint/broken-comment.ts","src/opaque.bin"]' \
-  '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false}' |
+  '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}' |
   run_runner >"${lint_response}" || fail "the runner rejected a well-formed lint request"
 for expected in '"rule":"max-depth"' '"rule":"max-params"' '"path":"lint/deep.ts"' '"path":"lint/directive.ts"'; do
   if ! grep -qF "${expected}" "${lint_response}"; then
@@ -502,12 +502,12 @@ done
 
 
 generous='{"complexity":20,"depth":10,"parameters":10}'
-lint_request '["lint/panel.tsx"]' "${generous}" '{"reactHooks":false,"jsxAccessibility":false}' |
+lint_request '["lint/panel.tsx"]' "${generous}" '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}' |
   run_runner >"${lint_response}" || fail "the runner rejected an unactivated lint request"
 if ! grep -qF '"findings":[]' "${lint_response}" || ! grep -qF '"comments":[]' "${lint_response}" || ! grep -qF '"unsupported":[]' "${lint_response}"; then
   fail "unactivated lint reported framework findings: $(cat "${lint_response}")"
 fi
-lint_request '["lint/panel.tsx"]' "${generous}" '{"reactHooks":true,"jsxAccessibility":true}' |
+lint_request '["lint/panel.tsx"]' "${generous}" '{"reactHooks":true,"jsxAccessibility":true,"complexity":true,"comments":true}' |
   run_runner >"${lint_response}" || fail "the runner rejected an activated lint request"
 for expected in '"rule":"react-hooks/rules-of-hooks"' '"rule":"jsx-a11y/alt-text"'; do
   if ! grep -qF "${expected}" "${lint_response}"; then
@@ -967,15 +967,15 @@ fi
 
 
 expect_runner_rejected "a lint request without budgets" \
-  '{"protocolVersion":3,"operation":"lint","root":"'"${target}"'","paths":["lint/deep.ts"],"activation":{"reactHooks":false,"jsxAccessibility":false}}'
+  '{"protocolVersion":3,"operation":"lint","root":"'"${target}"'","paths":["lint/deep.ts"],"activation":{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}}'
 expect_runner_rejected "an unusable budget" \
-  "$(lint_request '["lint/deep.ts"]' '{"complexity":0,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false}')"
+  "$(lint_request '["lint/deep.ts"]' '{"complexity":0,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}')"
 expect_runner_rejected "an unknown budget" \
-  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2,"statements":4}' '{"reactHooks":false,"jsxAccessibility":false}')"
+  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2,"statements":4}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}')"
 expect_runner_rejected "an unknown activation" \
-  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false,"vue":true}')"
+  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true,"vue":true}')"
 expect_runner_rejected "a non-boolean activation" \
-  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":"on","jsxAccessibility":false}')"
+  "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":"on","jsxAccessibility":false,"complexity":true,"comments":true}')"
 
 
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.28.3 - 2026-10-09
+
+- Apply generated JavaScript complexity and comment exemptions before lint
+  results consume the analyzer's transport budget. Preserve syntax, semantic
+  lint, producer verification, and authored-source checks.
+- Page applicable JavaScript lint results within bounded responses, retaining
+  all diagnostics and comment facts even when one file exceeds a page.
+
 ## 0.28.2 - 2026-10-08
 
 - Keep native shell and Go check identifiers bounded and distinct for paths

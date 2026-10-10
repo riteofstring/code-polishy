@@ -229,7 +229,7 @@ func TestJavaScriptLintIgnoresTargetsWithoutJavaScript(t *testing.T) {
 func TestJavaScriptLintReportsSourceCommentViolationsAndUndecidedFiles(t *testing.T) {
 	t.Parallel()
 	repo := qualityRepository(t)
-	result := `{"findings":[` +
+	result := `{"next":null,"findings":[` +
 		`{"path":"app/main.ts","line":4,"column":2,"rule":"max-depth","message":"too deep"},` +
 		`{"path":"app/view.tsx","line":9,"column":1,"rule":"jsx-a11y/alt-text","message":"missing alt"}],` +
 		`"comments":[{"path":"app/main.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
@@ -264,7 +264,7 @@ func TestJavaScriptLintAllowsCommentsWithoutWeakeningLint(t *testing.T) {
 	repo := qualityRepository(t)
 	allowComments := true
 	repo.Config.Quality.AllowComments = &allowComments
-	result := `{"findings":[{"path":"app/main.ts","line":4,"column":2,"rule":"max-depth","message":"too deep"}],` +
+	result := `{"next":null,"findings":[{"path":"app/main.ts","line":4,"column":2,"rule":"max-depth","message":"too deep"}],` +
 		`"comments":[{"path":"app/main.ts","kind":"Line","raw":"// prose","complete":true,"line":1,"column":1,"beforeCode":true,"preamble":true,"byteZero":true}],` +
 		`"unsupported":[{"path":"app/broken.ts","reason":"line 2: Unexpected token"}]}`
 	repo.PolicyRoot, _ = fakeFileBundle(t, result)
@@ -368,11 +368,11 @@ func TestJavaScriptLintActivatesFrameworkRulesOnlyInsideTheirRoot(t *testing.T) 
 	inactive := `"paths":["server/main.ts"]`
 	active := `"paths":["web/App.tsx"]`
 	if !strings.Contains(requests[0], inactive) ||
-		!strings.Contains(requests[0], `"activation":{"reactHooks":false,"jsxAccessibility":false}`) {
+		!strings.Contains(requests[0], `"activation":{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}`) {
 		t.Fatalf("unrelated source was not linted plainly: %s", requests[0])
 	}
 	if !strings.Contains(requests[1], active) ||
-		!strings.Contains(requests[1], `"activation":{"reactHooks":true,"jsxAccessibility":true}`) {
+		!strings.Contains(requests[1], `"activation":{"reactHooks":true,"jsxAccessibility":true,"complexity":true,"comments":true}`) {
 		t.Fatalf("React source did not activate the framework rules: %s", requests[1])
 	}
 }
@@ -399,20 +399,6 @@ func TestJavaScriptLintChecksGeneratedSourceWithoutComplexityBudget(t *testing.T
 	if len(requests) != 2 || !strings.Contains(strings.Join(requests, "\n"), generated) ||
 		!strings.Contains(strings.Join(requests, "\n"), ordinary) {
 		t.Fatalf("requests = %v, want generated %s and ordinary %s", requests, generated, ordinary)
-	}
-}
-
-func TestJavaScriptLintSkipsComplexityFindingsForGeneratedSource(t *testing.T) {
-	t.Parallel()
-	repo := qualityRepository(t)
-	repo.Config.Scope.Generated = []string{"app/schema.generated.ts"}
-	result := `{"findings":[{"path":"app/schema.generated.ts","line":1,"column":1,"rule":"complexity","message":"too complex"},{"path":"app/schema.generated.ts","line":2,"column":1,"rule":"no-undef","message":"missing name"}],"comments":[],"unsupported":[]}`
-	repo.PolicyRoot, _ = fakeFileBundle(t, result)
-	writeQualityFile(t, repo.Root, "app/schema.generated.ts", "export {}\n")
-
-	findings := JavaScriptLintFindings(t.Context(), repo, []string{"app/schema.generated.ts"})
-	if len(findings) != 1 || findings[0].Check != "quality.lint" || findings[0].Subject != "no-undef" {
-		t.Fatalf("findings = %+v", findings)
 	}
 }
 
@@ -790,7 +776,7 @@ func deadCodeResult(covered ...string) string {
 	return `{"unusedFiles":[],"unusedExports":[],"covered":[` + strings.Join(quoted, ",") + `],"unsupported":[]}`
 }
 
-const emptyLintResult = `{"findings":[],"comments":[],"unsupported":[]}`
+const emptyLintResult = `{"next":null,"findings":[],"comments":[],"unsupported":[]}`
 
 const emptyTypeCheckResult = `{"diagnostics":[],"covered":[],"unsupported":[]}`
 

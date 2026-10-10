@@ -3,6 +3,7 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 .npmrc
 runner.mjs
+lint-pages.mjs
 data-modules.mjs
 protocol.mjs
 audit.mjs

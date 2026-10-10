@@ -175,6 +175,14 @@
       "public": true
     },
     {
+      "id": "generated-lint-result-limit",
+      "path": "docs/bugs/generated-lint-result-limit.md",
+      "title": "Generated JavaScript exhausts the lint result limit before exemptions apply",
+      "summary": "Reproduce the generated-validator lint limit failure in 0.28.2 and identify its 0.28.3 resolution.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "git-dependency-evidence",
       "path": "docs/git-dependency-evidence.md",
       "title": "Git Dependency Evidence",
@@ -227,6 +235,14 @@
       "path": "docs/design/javascript-import-assets.md",
       "title": "JavaScript imports of local assets",
       "summary": "Resolve contained stylesheet imports while retaining dependency and missing-file checks.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "javascript-lint-results",
+      "path": "docs/design/javascript-lint-results.md",
+      "title": "Bounded JavaScript lint results",
+      "summary": "Apply resolved generated-code exemptions before analysis and retain complete findings through bounded lint pages.",
       "aliases": [],
       "public": true
     },

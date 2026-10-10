@@ -24,6 +24,16 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/javascript-lint-results.md",
+        "sourcePaths": [
+          "internal/javascript/lint.go",
+          "internal/javascript/javascript.go",
+          "tools/javascript/lint-pages.mjs",
+          "tools/javascript/runner.mjs",
+          "tools/javascript/policy.mjs"
+        ]
+      },
+      {
         "path": "docs/design/dependency-assessments.md",
         "sourcePaths": [
           "internal/policy/supplychain_config.go",
