@@ -1,6 +1,7 @@
 # Dependency vulnerability assessments
 
-Brace expansion reviewed on 2026-10-01; remaining findings reviewed on 2026-10-08.
+Brace expansion reviewed on 2026-10-01; other JavaScript and Go module findings
+reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-10.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -9,11 +10,99 @@ The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
 and JavaScript provider. They do not assert that the affected packages are free
 of vulnerabilities or that other consumers are unaffected.
 
-The Go and selector-parser findings are resolved by aged official releases.
+The Go module and selector-parser findings are resolved by aged official releases.
 The retained dependencies have absent or blocked advisory prerequisites, so a
 fresh fix would add supply-chain exposure without a demonstrated security benefit
-here. No early release admission is needed. Retain those aged versions until the
-dated updates below.
+here. Retain those aged versions until the dated updates below. The separate Go
+toolchain admission addresses a demonstrated Windows containment failure.
+
+## Go toolchain
+
+Admit official Go 1.26.9, replacing 1.26.6, under the exact
+`go-1-26-9-windows-root-security-fix` release-age assessment. This is an early
+release admission, not a vulnerability suppression. Go's
+[release history](https://go.dev/doc/devel/release#go1.26.9) dates it to
+2026-10-08. The validator conservatively bounds that date to the start of the
+following UTC day, so the release reaches 30 days on 2026-11-08 at 00:00:00 UTC.
+The admission expires at the end of 2026-11-07 UTC, covering only the waiting period.
+
+### Exposure and the cost of waiting
+
+[GO-2026-6604](https://pkg.go.dev/vuln/GO-2026-6604) affects `os.Root.Mkdir`
+and `os.Root.MkdirAll` on Windows. A junction in the final path component can
+redirect creation to a missing location outside the opened root. A repository
+author or local actor who can arrange filesystem entries in the analyzed
+repository can supply that junction. Merely naming a path or committing an
+ordinary source file does not create a Windows junction.
+
+The enabled lock/upgrade path calls `openCapabilityUpgradeRoot`, then
+`openCapabilityUpgradeDirectory` in
+[`capability_upgrade_storage.go`](../../internal/release/capability_upgrade_storage.go).
+That function calls `Root.Mkdir` before its `Root.Lstat` and directory-type
+checks. A junction at `.code-polishy-reports` pointing to a missing external
+directory therefore reaches the affected API before validation. Rejecting the
+upgrade afterward and preserving the old lock do not undo the external directory
+creation. The OSV normalization path in
+[`osv_inputs.go`](../../internal/supplychain/osv_inputs.go) also creates each
+directory with `Root.Mkdir` before checking it.
+
+The demonstrated harm is directory creation outside the repository with the
+tool user's permissions, violating the containment boundary of ordinary Windows
+operations. This analysis does not establish arbitrary file overwrite, data
+disclosure, or observed exploitation in this project. The upstream fix and its
+junction regression cases establish the failure mechanism; the native Windows
+release contract exercises rejected upgrade, absent external directory,
+preserved lock, and successful recovery after removing the junction.
+
+Waiting would retain this boundary failure for approximately 28 more days in
+supported Windows lock, upgrade, and supply-chain operations. There is no aged
+fixed Go toolchain containing this correction. Checking with `Lstat` before
+creation covers a static junction but leaves a check/create race, so it cannot
+replace the promised `Root` containment. Disabling all affected Windows
+operations for that interval removes supported ordinary behavior. A custom
+Windows filesystem implementation or private toolchain backport introduces a
+larger security-sensitive maintenance burden than the official patch. Restricting
+HTTP features does not address the filesystem escape. The native fix is the
+smallest supported correction that preserves those operations and their boundary.
+
+### Provenance and fresh-code risk
+
+The exact archives come from `https://go.dev/dl/`; checksums were checked against
+the official [download metadata](https://go.dev/dl/?mode=json&include=all).
+`tools/go_checksums.txt` pins all five supported host archives, and the Windows
+installer pins the same Windows archive in `tools/windows_tool_checksums.txt`.
+The installer verifies the archive before extraction and runs no dependency
+lifecycle scripts.
+
+The inspected [official source comparison](https://github.com/golang/go/compare/go1.26.6...go1.26.9)
+ends at `2ae494ef9fb90e0da0073c31800ba38870249994`. The
+[Windows correction](https://github.com/golang/go/commit/be88124d06cecc37d12dddd62060cbe64bacb330)
+recognizes name-surrogate reparse points, including junctions, in rooted path
+operations and adds junction cases to the containment tests. The complete patch
+series also changes compiler, runtime, HTTP, and TLS code; it is not limited to
+this filesystem fix. It updates the toolchain's vendored `golang.org/x/net` from
+`v0.47.1-0.20260731170545-cb1d721f7fb3` to
+`v0.47.1-0.20260925170545-1431957440b7`, and the Go command's `golang.org/x/mod`
+from `v0.30.1-0.20251115032019-269c237cf350` to
+`v0.30.1-0.20260813213631-9239cba97fbe`. Project module dependency versions and
+`go.sum` remain unchanged.
+
+Official provenance and checksums do not rule out upstream compromise or fresh
+compiler/runtime regressions. Rebuilding the carried Go analyzers, checking
+vulnerabilities, exercising existing release/install contracts, and running the
+full repository gate constrain compatibility risk but cannot prove the release
+safe. The bounded admission accepts that residual uncertainty because retaining
+a demonstrated escape from a security boundary for ordinary supported operations
+is materially riskier than this exact official patch update. Other scanner
+traces alone are not the basis for that judgment: Go 1.26.9 also fixes
+GO-2026-6603, GO-2026-6605, GO-2026-6607, GO-2026-6608, GO-2026-6610,
+GO-2026-6611, GO-2026-6612, GO-2026-6613, and GO-2026-6617, without asserting
+that every advisory's exploit prerequisites occur here.
+
+Remove the admission when 1.26.9 reaches the stated age, or when this exact
+toolchain leaves the pins. Reassess immediately if provenance changes or a
+regression or compromise is reported. Do not extend the assessment to another
+version or weaken vulnerability scanning.
 
 ## Brace expansion
 

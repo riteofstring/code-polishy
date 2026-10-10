@@ -4,6 +4,8 @@
 
 ## 0.28.3 - 2026-10-09
 
+- Build and ship Go 1.26.9 to fix the reported standard-library vulnerabilities,
+  including Windows junction escapes during repository-contained directory creation.
 - Apply generated JavaScript complexity and comment exemptions before lint
   results consume the analyzer's transport budget. Preserve syntax, semantic
   lint, producer verification, and authored-source checks.

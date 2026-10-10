@@ -192,7 +192,7 @@ EOF
   ]
 }
 EOF
-  printf '1.26.6\n' >"${source_root}/scripts/go_version.txt"
+  printf '1.26.9\n' >"${source_root}/scripts/go_version.txt"
   printf '%s\n' "${node_version}" >"${source_root}/tools/node-version.txt"
   printf '%s\n' "${pnpm_version}" >"${source_root}/tools/pnpm-version.txt"
   printf '0.11.0\n' >"${source_root}/tools/shellcheck-version.txt"
@@ -353,7 +353,7 @@ if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
   exit 0
 fi
 if [[ "\${1:-}" == "version" ]]; then
-  echo "go version go1.26.6 ${os_tag}/${go_platform_tag##*-}"
+  echo "go version go1.26.9 ${os_tag}/${go_platform_tag##*-}"
   exit 0
 fi
 echo "unexpected stub go invocation: \$*" >&2
@@ -509,7 +509,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 [[ "$(manifest_field "${manifest}" codePolishyVersion)" == "9.9.9" ]] ||
   fail "the release does not record the checkout version"
 
-for carried in go:1.26.6 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
+for carried in go:1.26.9 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
   staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
   ruff:0.16.0 ty:0.0.65 vulture:2.16; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||

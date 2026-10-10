@@ -32,3 +32,18 @@ The validator can check the record's structure, not the truth of a call-path
 analysis or risk comparison. Source review and the detailed dependency workflow
 own those judgments. Additional free-text fields, URL-shaped placeholders, and
 tests that merely repeat an assessment's prose would not close that gap.
+
+## Go toolchain containment
+
+The pinned Go standard library implements the repository's rooted filesystem
+boundary. Go 1.26.6 can follow a Windows junction during `Root.Mkdir` and create
+a directory outside that boundary before the caller's later validation rejects
+the path. Use the official Go 1.26.9 correction across build and carried release
+artifacts. A preliminary path check cannot provide the same protection against
+concurrent filesystem changes.
+
+The exact early admission, affected callers, considered mitigations, upstream
+delta, and fresh-code risk are recorded in the
+[Go toolchain assessment](../security/dependency-assessments.md#go-toolchain).
+The Windows release contract verifies containment, preservation of the outgoing
+lock on rejection, and normal upgrade recovery after removing the junction.

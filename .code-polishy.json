@@ -36,6 +36,8 @@
       {
         "path": "docs/design/dependency-assessments.md",
         "sourcePaths": [
+          "internal/release/capability_upgrade_storage.go",
+          "internal/release/capability_upgrade_windows_test.go",
           "internal/policy/supplychain_config.go",
           "internal/policy/vulnerability.go",
           "internal/policy/release_age.go"
@@ -1647,6 +1649,21 @@
         "source": "github-release",
         "locator": "aquasecurity/trivy",
         "tagPrefix": "v"
+      }
+    ],
+    "releaseAgeAssessments": [
+      {
+        "id": "go-1-26-9-windows-root-security-fix",
+        "ecosystem": "artifact",
+        "package": "go",
+        "version": "1.26.9",
+        "scope": "scripts/go_version.txt",
+        "category": "security-fix",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "reason": "GO-2026-6604 lets repository-controlled Windows junctions redirect Root.Mkdir outside the repository before upgrade-record and OSV-directory validation. No aged fixed toolchain or race-safe local mitigation covers the remaining wait; the official patch preserves the containment boundary.",
+        "owner": "Codex",
+        "reviewed": "2026-10-10",
+        "expires": "2026-11-07"
       }
     ],
     "vulnerabilityAssessments": [
