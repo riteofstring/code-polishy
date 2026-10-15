@@ -27,7 +27,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-NEXTEST SOURCE NOTICE INVENTORY (INCOMPLETE)
+NEXTEST SOURCE LICENSE EVIDENCE
 
 Source: https://github.com/nextest-rs/nextest/blob/fc97e97bbe0a3927482a694247da00c099f4269e/Cargo.lock
 
@@ -37,19 +37,22 @@ aarch64-unknown-linux-gnu, x86_64-pc-windows-msvc, x86_64-apple-darwin and
 aarch64-apple-darwin. This inventory covers 362 registry packages. The five
 Nextest workspace packages use the upstream license above.
 
-This is a source dependency inventory, not an attestation of the dependencies
-linked into the downloaded binaries. It excludes development-only and inactive
-locked packages. It does not establish complete native-tool notices or license
-compliance. The native SBOM composition remains incomplete. Five packages lack
-notice evidence: async-scoped 0.9.0, backtrace-ext 0.2.1, guppy-workspace-hack
-0.1.0, recursion 0.5.4 and sigchld 0.2.4.
+This is source license evidence, not an attestation of the dependencies linked
+into the downloaded binaries. It excludes development-only and inactive locked
+packages. The native SBOM composition remains incomplete.
 
-Archive notices were read from the registry archives authenticated against the
-source lock. Supplemental files come from immutable upstream revisions recorded
-in each crate's .cargo_vcs_info.json. Exact duplicate texts share one numbered
-notice; every package retains its source location. Line endings and trailing
-whitespace are normalized. Declared license expressions
-are package metadata, not replacement license texts or copyright notices.
+Archive notices were read from registry archives authenticated against the source
+lock. Supplemental files come from immutable upstream revisions recorded in each
+crate's .cargo_vcs_info.json. Shared texts retain every package's source location;
+line endings and trailing whitespace are normalized.
+
+Five packages publish standard license declarations without separate notice files:
+async-scoped 0.9.0, backtrace-ext 0.2.1, guppy-workspace-hack 0.1.0, recursion
+0.5.4 and sigchld 0.2.4. Their original package declarations and the selected
+standard license terms appear below. Apache-2.0 is selected where offered as an
+alternative; sigchld declares MIT. Author metadata is reproduced as published.
+No missing copyright holder or year has been invented. Standard license templates
+retain their original placeholders and are distinguished from upstream notices.
 
 PACKAGE INDEX
 
@@ -136,7 +139,10 @@ Package: async-scoped 0.9.0
 Declared license: Apache-2.0/MIT
 Archive: https://static.crates.io/crates/async-scoped/async-scoped-0.9.0.crate
 Archive SHA-256: 4042078ea593edffc452eef14e99fdb2b120caa4ad9618bcdeabc4a023b98740
-  Notice evidence: unavailable; declared license is not a substitute.
+  Declaration 227: archive file Cargo.toml.orig
+  Selected license: Apache-2.0
+  Standard terms 051: https://www.apache.org/licenses/LICENSE-2.0.txt
+  Separate upstream notice: not supplied; no copyright owner or year inferred.
 
 Package: atomic 0.6.1
 Declared license: Apache-2.0/MIT
@@ -183,7 +189,10 @@ Package: backtrace-ext 0.2.1
 Declared license: MIT OR Apache-2.0
 Archive: https://static.crates.io/crates/backtrace-ext/backtrace-ext-0.2.1.crate
 Archive SHA-256: 537beee3be4a18fb023b570f80e3ae28003db9167a751266b259926e25539d50
-  Notice evidence: unavailable; declared license is not a substitute.
+  Declaration 228: archive file Cargo.toml.orig
+  Selected license: Apache-2.0
+  Standard terms 051: https://www.apache.org/licenses/LICENSE-2.0.txt
+  Separate upstream notice: not supplied; no copyright owner or year inferred.
 
 Package: base64 0.22.1
 Declared license: MIT OR Apache-2.0
@@ -852,7 +861,10 @@ Package: guppy-workspace-hack 0.1.0
 Declared license: MIT OR Apache-2.0
 Archive: https://static.crates.io/crates/guppy-workspace-hack/guppy-workspace-hack-0.1.0.crate
 Archive SHA-256: 92620684d99f750bae383ecb3be3748142d6095760afd5cbcf2261e9a279d780
-  Notice evidence: unavailable; declared license is not a substitute.
+  Declaration 229: archive file Cargo.toml.orig
+  Selected license: Apache-2.0
+  Standard terms 051: https://www.apache.org/licenses/LICENSE-2.0.txt
+  Separate upstream notice: not supplied; no copyright owner or year inferred.
 
 Package: hashbrown 0.15.5
 Declared license: MIT OR Apache-2.0
@@ -1514,7 +1526,10 @@ Package: recursion 0.5.4
 Declared license: MIT OR Apache-2.0
 Archive: https://static.crates.io/crates/recursion/recursion-0.5.4.crate
 Archive SHA-256: 9dba2197bf7b1d87b4dd460c195f4edeb45a94e82e8054f8d5f317c1f0e93ca1
-  Notice evidence: unavailable; declared license is not a substitute.
+  Declaration 230: archive file Cargo.toml.orig
+  Selected license: Apache-2.0
+  Standard terms 051: https://www.apache.org/licenses/LICENSE-2.0.txt
+  Separate upstream notice: not supplied; no copyright owner or year inferred.
 
 Package: regex 1.12.4
 Declared license: MIT OR Apache-2.0
@@ -1733,7 +1748,10 @@ Package: sigchld 0.2.4
 Declared license: MIT
 Archive: https://static.crates.io/crates/sigchld/sigchld-0.2.4.crate
 Archive SHA-256: 47106eded3c154e70176fc83df9737335c94ce22f821c32d17ed1db1f83badb1
-  Notice evidence: unavailable; declared license is not a substitute.
+  Declaration 231: archive file Cargo.toml.orig
+  Selected license: MIT
+  Standard terms 232: https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt
+  Separate upstream notice: not supplied; no copyright owner or year inferred.
 
 Package: signal-hook 0.3.18
 Declared license: Apache-2.0/MIT
@@ -2528,9 +2546,9 @@ Archive SHA-256: eb81183ddd97d0c74cedf1d50d85c8d08c1b8b68ee863bdee9e706eedba1a23
   Notice 225: archive file zstd/COPYING
   Notice 226: archive file zstd/LICENSE
 
-NOTICE TEXTS
+NOTICE, DECLARATION AND LICENSE TEXTS
 
-===== NOTICE 001 =====
+===== TEXT 001 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -2733,7 +2751,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 002 =====
+===== TEXT 002 =====
 Copyright (c) 2016-2018 The gimli Developers
 
 Permission is hereby granted, free of charge, to any
@@ -2760,7 +2778,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 003 =====
+===== TEXT 003 =====
 Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
 
 Permission to use, copy, modify, and/or distribute this software for
@@ -2774,7 +2792,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
 AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-===== NOTICE 004 =====
+===== TEXT 004 =====
                               Apache License
                         Version 2.0, January 2004
                      https://www.apache.org/licenses/LICENSE-2.0
@@ -2977,7 +2995,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 005 =====
+===== TEXT 005 =====
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
 documentation files (the "Software"), to deal in the
@@ -3002,7 +3020,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 006 =====
+===== TEXT 006 =====
 Copyright (c) 2018 Tom Kaitchuck
 
 Permission is hereby granted, free of charge, to any
@@ -3029,12 +3047,12 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 007 =====
+===== TEXT 007 =====
 This project is dual-licensed under the Unlicense and MIT licenses.
 
 You may use this code under the terms of either license.
 
-===== NOTICE 008 =====
+===== TEXT 008 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Andrew Gallant
@@ -3057,7 +3075,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 009 =====
+===== TEXT 009 =====
 This is free and unencumbered software released into the public domain.
 
 Anyone is free to copy, modify, publish, use, compile, sell, or
@@ -3083,7 +3101,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <http://unlicense.org/>
 
-===== NOTICE 010 =====
+===== TEXT 010 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -3261,7 +3279,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
 END OF TERMS AND CONDITIONS
 
-===== NOTICE 011 =====
+===== TEXT 011 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -3465,7 +3483,7 @@ END OF TERMS AND CONDITIONS
    limitations under the License.
 
 
-===== NOTICE 012 =====
+===== TEXT 012 =====
 Copyright (c) Individual contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -3486,7 +3504,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 013 =====
+===== TEXT 013 =====
 Copyright (c) 2015 Josh Triplett, 2022 The rust-cli Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -3507,7 +3525,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 014 =====
+===== TEXT 014 =====
 Copyright (c) 2016 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -3534,7 +3552,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 015 =====
+===== TEXT 015 =====
 Copyright (c) 2015 Markus Unterwaditzer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -3555,7 +3573,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 016 =====
+===== TEXT 016 =====
 Copyright (c) 2018 Josh Stone
 
 Permission is hereby granted, free of charge, to any
@@ -3582,7 +3600,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 017 =====
+===== TEXT 017 =====
 SPDX-License-Identifier: ISC AND (Apache-2.0 OR ISC)
 
 
@@ -3786,7 +3804,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-===== NOTICE 018 =====
+===== TEXT 018 =====
 AWS Libcrypto (AWS-LC)
 
 AWS-LC is a fork of BoringSSL, which is itself a fork of OpenSSL.
@@ -4104,7 +4122,7 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 019 =====
+===== TEXT 019 =====
 The MIT License (MIT)
 
 Copyright (c) 2015-2020 the fiat-crypto authors (see
@@ -4128,7 +4146,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 020 =====
+===== TEXT 020 =====
 Copyright (c) 2014 Alex Crichton
 
 Permission is hereby granted, free of charge, to any
@@ -4155,7 +4173,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 021 =====
+===== TEXT 021 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Alice Maz
@@ -4178,7 +4196,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 022 =====
+===== TEXT 022 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -4381,7 +4399,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 023 =====
+===== TEXT 023 =====
 Copyright (c) 2023 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -4408,7 +4426,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 024 =====
+===== TEXT 024 =====
 Copyright (c) 2015 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -4435,7 +4453,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 025 =====
+===== TEXT 025 =====
 Copyright (c) 2014 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -4462,7 +4480,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 026 =====
+===== TEXT 026 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -4665,7 +4683,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 027 =====
+===== TEXT 027 =====
 Copyright (c) 2018-2019 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -4692,7 +4710,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 028 =====
+===== TEXT 028 =====
 This project is licensed under either of
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
@@ -4702,7 +4720,7 @@ This project is licensed under either of
 
 at your option.
 
-===== NOTICE 029 =====
+===== TEXT 029 =====
 The MIT License (MIT)
 
 Copyright (c) 2018-2019 Andrew Gallant
@@ -4725,7 +4743,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 030 =====
+===== TEXT 030 =====
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -4788,7 +4806,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 031 =====
+===== TEXT 031 =====
 MIT License
 
 Copyright (c) 2019 Daniel "Lokathor" Gee.
@@ -4799,7 +4817,7 @@ The above copyright notice and this permission notice (including the next paragr
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 032 =====
+===== TEXT 032 =====
 Copyright (c) 2019 Daniel "Lokathor" Gee.
 
 This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
@@ -4812,7 +4830,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 
 3. This notice may not be removed or altered from any source distribution.
 
-===== NOTICE 033 =====
+===== TEXT 033 =====
 Copyright (c) 2018 Carl Lerche
 
 Permission is hereby granted, free of charge, to any
@@ -4839,7 +4857,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 034 =====
+===== TEXT 034 =====
 Copyright (c) 2015 Steven Allen
 Copyright (c) The assert_fs Contributors
 Copyright (c) The camino-tempfile Contributors
@@ -4868,7 +4886,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 035 =====
+===== TEXT 035 =====
 Copyright (c) 2019 Embark Studios
 
 Permission is hereby granted, free of charge, to any
@@ -4895,7 +4913,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 036 =====
+===== TEXT 036 =====
 MIT License
 
 Copyright (c) 2020 Katharos Technology
@@ -4906,7 +4924,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 037 =====
+===== TEXT 037 =====
 Copyright (c) 2019-2026 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -4933,7 +4951,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 038 =====
+===== TEXT 038 =====
 Rust-chrono is dual-licensed under The MIT License [1] and
 Apache 2.0 License [2]. Copyright (c) 2014--2026, Kang Seonghoon and
 contributors.
@@ -5175,7 +5193,7 @@ limitations under the License.
 ~~~~
 
 
-===== NOTICE 039 =====
+===== TEXT 039 =====
 The MIT License (MIT)
 
 Copyright (c) 2017 Armin Ronacher <armin.ronacher@active-4.com>
@@ -5199,7 +5217,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== NOTICE 040 =====
+===== TEXT 040 =====
 MIT License
 
 Copyright (c) 2025 rutrum
@@ -5222,7 +5240,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 041 =====
+===== TEXT 041 =====
 Copyright (c) 2012-2013 Mozilla Foundation
 
 Permission is hereby granted, free of charge, to any
@@ -5249,7 +5267,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 042 =====
+===== TEXT 042 =====
 MIT License
 
 Copyright (c) 2024 Spire
@@ -5272,7 +5290,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 043 =====
+===== TEXT 043 =====
 Copyright (c) 2020-2025 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -5299,7 +5317,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 044 =====
+===== TEXT 044 =====
 MIT License
 
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
@@ -5322,7 +5340,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 045 =====
+===== TEXT 045 =====
 MIT License
 
 Copyright (c) 2019 Timon
@@ -5345,7 +5363,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 046 =====
+===== TEXT 046 =====
 Copyright (c) 2021 RustCrypto Developers
 
 Permission is hereby granted, free of charge, to any
@@ -5372,7 +5390,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 047 =====
+===== TEXT 047 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -5575,7 +5593,7 @@ DEALINGS IN THE SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 048 =====
+===== TEXT 048 =====
 MIT License
 
 Copyright (c) 2020 Nor Khasyatillah
@@ -5598,7 +5616,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 049 =====
+===== TEXT 049 =====
 MIT License
 
 Copyright 2019 Ryan O'Beirne
@@ -5620,7 +5638,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 050 =====
+===== TEXT 050 =====
 These documentation pages include resources by third parties. This copyright
 file applies only to those resources. The following third party resources are
 included, and carry their own copyright notices and license terms:
@@ -5672,7 +5690,7 @@ included, and carry their own copyright notices and license terms:
 
 This copyright file is intended to be distributed with rustdoc output.
 
-===== NOTICE 051 =====
+===== TEXT 051 =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -5876,7 +5894,7 @@ This copyright file is intended to be distributed with rustdoc output.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 052 =====
+===== TEXT 052 =====
 MIT License
 
 Copyright (c) 2021 Roland Fredenhagen
@@ -5899,7 +5917,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 053 =====
+===== TEXT 053 =====
 The MIT License (MIT)
 
 Copyright (c) 2016 Jelte Fennema
@@ -5922,7 +5940,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 054 =====
+===== TEXT 054 =====
 Copyright (c) 2017 Artyom Pavlov
 
 Permission is hereby granted, free of charge, to any
@@ -5949,7 +5967,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 055 =====
+===== TEXT 055 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -6125,7 +6143,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
    incurred by, or claims asserted against, such Contributor by reason
    of your accepting any such warranty or additional liability.
 
-===== NOTICE 056 =====
+===== TEXT 056 =====
 Copyright (c) 2018-2019 dirs-rs contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -6146,7 +6164,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 057 =====
+===== TEXT 057 =====
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -6221,7 +6239,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 058 =====
+===== TEXT 058 =====
 Copyright (c) 2020 Olivier Goffart <ogoffart@sixtyfps.io>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -6242,7 +6260,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 059 =====
+===== TEXT 059 =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -6421,7 +6439,7 @@ SOFTWARE.
 
    END OF TERMS AND CONDITIONS
 
-===== NOTICE 060 =====
+===== TEXT 060 =====
 The MIT License (MIT)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -6442,7 +6460,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 061 =====
+===== TEXT 061 =====
 Creative Commons Legal Code
 
 CC0 1.0 Universal
@@ -6565,7 +6583,7 @@ express Statement of Purpose.
     party to this document and has no duty or obligation with respect to
     this CC0 or use of the Work.
 
-===== NOTICE 062 =====
+===== TEXT 062 =====
 Copyright 2025 Benoît du Garreau
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -6580,7 +6598,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 063 =====
+===== TEXT 063 =====
 Copyright 2025 Benoît du Garreau
 
 Permission is hereby granted, free of charge, to any
@@ -6607,7 +6625,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 064 =====
+===== TEXT 064 =====
 Copyright (c) 2015
 
 Permission is hereby granted, free of charge, to any
@@ -6634,7 +6652,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 065 =====
+===== TEXT 065 =====
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -6653,7 +6671,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE
 
-===== NOTICE 066 =====
+===== TEXT 066 =====
 encoding_rs is copyright Mozilla Foundation.
 
 Licensed under the Apache License, Version 2.0
@@ -6672,7 +6690,7 @@ source code, are licensed under the BSD 3-Clause License
 Test code within encoding_rs is dedicated to the Public Domain when so
 designated (see the individual files for PD/CC0-dedicated sections).
 
-===== NOTICE 067 =====
+===== TEXT 067 =====
 Copyright Mozilla Foundation
 
 Permission is hereby granted, free of charge, to any
@@ -6699,7 +6717,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 068 =====
+===== TEXT 068 =====
 Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
 
 Redistribution and use in source and binary forms, with or without
@@ -6727,7 +6745,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== NOTICE 069 =====
+===== TEXT 069 =====
 MIT License
 
 Copyright (c) 2019 Anton Lazarev
@@ -6750,7 +6768,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 070 =====
+===== TEXT 070 =====
 Copyright (c) 2016--2023
 
 Permission is hereby granted, free of charge, to any
@@ -6777,7 +6795,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 071 =====
+===== TEXT 071 =====
 Copyright (c) 2014 Chris Wong
 
 Permission is hereby granted, free of charge, to any
@@ -6804,14 +6822,14 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 072 =====
+===== TEXT 072 =====
 Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 option. All files in the project carrying such notice may not be
 copied, modified, or distributed except according to those terms.
 
-===== NOTICE 073 =====
+===== TEXT 073 =====
 The MIT License
 
 Copyright 2015 The Fancy Regex Authors.
@@ -6834,7 +6852,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 074 =====
+===== TEXT 074 =====
 MIT License
 
 Copyright (c) 2018 Wez Furlong
@@ -6857,7 +6875,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 075 =====
+===== TEXT 075 =====
 UNICODE LICENSE V3
 
 COPYRIGHT AND PERMISSION NOTICE
@@ -6898,7 +6916,7 @@ not be used in advertising or otherwise to promote the sale, use or other
 dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 
-===== NOTICE 076 =====
+===== TEXT 076 =====
 Copyright (c) 2015-2017
 
 Permission is hereby granted, free of charge, to any
@@ -6925,7 +6943,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 077 =====
+===== TEXT 077 =====
 Copyright (c) 2014-2025 Alex Crichton
 
 Permission is hereby granted, free of charge, to any
@@ -6952,7 +6970,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 078 =====
+===== TEXT 078 =====
 Copyright (c) 2017 Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -6979,7 +6997,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 079 =====
+===== TEXT 079 =====
 Copyright (c) 2024 Orson Peters
 
 This software is provided 'as-is', without any express or implied warranty. In
@@ -7000,7 +7018,7 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 
-===== NOTICE 080 =====
+===== TEXT 080 =====
 MIT License
 
 Copyright (c) 2017 Denis Kurilenko
@@ -7023,7 +7041,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 081 =====
+===== TEXT 081 =====
 Copyright (c) The future-queue Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -7082,7 +7100,7 @@ the Apache 2.0 and MIT licenses.
 > IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 > DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 082 =====
+===== TEXT 082 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -7286,7 +7304,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 083 =====
+===== TEXT 083 =====
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
@@ -7314,7 +7332,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 084 =====
+===== TEXT 084 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Bartłomiej Kamiński
@@ -7337,7 +7355,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 085 =====
+===== TEXT 085 =====
                               Apache License
                         Version 2.0, January 2004
                      https://www.apache.org/licenses/
@@ -7540,7 +7558,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 086 =====
+===== TEXT 086 =====
 Copyright (c) 2018-2025 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
 
@@ -7568,7 +7586,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 087 =====
+===== TEXT 087 =====
 Copyright (c) 2018-2026 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
 
@@ -7596,7 +7614,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 088 =====
+===== TEXT 088 =====
 The MIT License (MIT)
 
 Copyright (c) m4b 2016-2024
@@ -7619,7 +7637,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 089 =====
+===== TEXT 089 =====
 Copyright (c) The cargo-guppy Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -7646,7 +7664,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 090 =====
+===== TEXT 090 =====
 Copyright (c) 2016 Amanieu d'Antras
 
 Permission is hereby granted, free of charge, to any
@@ -7673,7 +7691,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 091 =====
+===== TEXT 091 =====
 Copyright (c) 2013-2014 The Rust Project Developers.
 Copyright (c) 2015-2020 The rust-hex Developers
 
@@ -7695,7 +7713,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 092 =====
+===== TEXT 092 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -7898,7 +7916,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 093 =====
+===== TEXT 093 =====
 Copyright (c) 2017 http-rs authors
 
 Permission is hereby granted, free of charge, to any
@@ -7925,7 +7943,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 094 =====
+===== TEXT 094 =====
 Copyright (c) 2015-2025 Sean McArthur
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -7947,7 +7965,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== NOTICE 095 =====
+===== TEXT 095 =====
 Copyright (c) 2016 The humantime Developers
 
 Includes parts of http date with the following copyright:
@@ -7975,7 +7993,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 096 =====
+===== TEXT 096 =====
 The MIT License (MIT)
 
 Copyright (c) 2017 The serde-humantime Developers
@@ -7999,7 +8017,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== NOTICE 097 =====
+===== TEXT 097 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -8202,7 +8220,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 098 =====
+===== TEXT 098 =====
 Copyright (c) 2020 Andrew D. Straw
 
 Permission is hereby granted, free of charge, to any
@@ -8229,7 +8247,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 099 =====
+===== TEXT 099 =====
 Copyright (c) 2025 Oxide Computer Company
 
 Permission is hereby granted, free of charge, to any
@@ -8256,7 +8274,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 100 =====
+===== TEXT 100 =====
 Copyright (c) The rust-url developers
 
 Permission is hereby granted, free of charge, to any
@@ -8283,7 +8301,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 101 =====
+===== TEXT 101 =====
 MIT License
 
 Copyright (c) 2017 Michael Bryan
@@ -8306,7 +8324,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 102 =====
+===== TEXT 102 =====
 Copyright (c) 2016--2017
 
 Permission is hereby granted, free of charge, to any
@@ -8333,7 +8351,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 103 =====
+===== TEXT 103 =====
 The ISC License
 
 Copyright (c) Kat Marchán and other contributors.
@@ -8350,7 +8368,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.Apache License
 
-===== NOTICE 104 =====
+===== TEXT 104 =====
 MIT License
 
 Copyright (c) 2020 🐝🐝🐝
@@ -8373,7 +8391,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 105 =====
+===== TEXT 105 =====
 Copyright (c) 2010 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -8400,7 +8418,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 106 =====
+===== TEXT 106 =====
 Copyright (c) The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -8427,7 +8445,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 107 =====
+===== TEXT 107 =====
 Short version for non-lawyers:
 
 `linux-raw-sys` is triple-licensed under Apache 2.0 with the LLVM Exception,
@@ -8458,7 +8476,7 @@ is licensed under:
 
 at your option.
 
-===== NOTICE 108 =====
+===== TEXT 108 =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -8680,7 +8698,7 @@ the License, but only in their entirety and only with respect to the Combined
 Software.
 
 
-===== NOTICE 109 =====
+===== TEXT 109 =====
 Copyright (c) 2020 Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -8707,7 +8725,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 110 =====
+===== TEXT 110 =====
 Copyright (c) The nextest Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -8734,7 +8752,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 111 =====
+===== TEXT 111 =====
 MIT License
 
 Copyright (c) 2016 Jerome Froelich
@@ -8757,7 +8775,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 112 =====
+===== TEXT 112 =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -8961,7 +8979,7 @@ SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 113 =====
+===== TEXT 113 =====
 Copyright © 2018 Wesley Norris
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -8970,7 +8988,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 114 =====
+===== TEXT 114 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -9173,7 +9191,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 115 =====
+===== TEXT 115 =====
 Copyright (c) 2020 Yevhenii Reizner
 Copyright (c) 2015 Dan Burkert
 
@@ -9201,7 +9219,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 116 =====
+===== TEXT 116 =====
 Copyright (c) 2017 Gilad Naaman
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -9222,7 +9240,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 117 =====
+===== TEXT 117 =====
 Apache License
 
 Version 2.0, January 2004
@@ -9453,7 +9471,7 @@ governing permissions and
 
 limitations under the License.
 
-===== NOTICE 118 =====
+===== TEXT 118 =====
 Minimal-lexical is dual licensed under the Apache 2.0 license as well as the MIT
 license. See the LICENCE-MIT and the LICENCE-APACHE files for the licenses.
 
@@ -9492,7 +9510,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== NOTICE 119 =====
+===== TEXT 119 =====
 MIT License
 
 Copyright 2013-2014 RAD Game Tools and Valve Software
@@ -9519,7 +9537,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 120 =====
+===== TEXT 120 =====
 MIT License
 
 Copyright 2013-2014 RAD Game Tools and Valve Software
@@ -9545,7 +9563,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 121 =====
+===== TEXT 121 =====
 Copyright 2013-2014 RAD Game Tools and Valve Software
 Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 Copyright (c) 2020 Frommi
@@ -9561,7 +9579,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 
 3. This notice may not be removed or altered from any source distribution.
 
-===== NOTICE 122 =====
+===== TEXT 122 =====
 Copyright (c) 2014 Carl Lerche and other MIO contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -9582,7 +9600,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 123 =====
+===== TEXT 123 =====
 The MIT License (MIT)
 
 Copyright (c) 2016 Johann Tuffe
@@ -9607,7 +9625,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 124 =====
+===== TEXT 124 =====
 Copyright (c) 2024 Oxide Computer Company
 
 Permission is hereby granted, free of charge, to any
@@ -9634,7 +9652,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 125 =====
+===== TEXT 125 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Carl Lerche + nix-rust Authors
@@ -9657,7 +9675,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 126 =====
+===== TEXT 126 =====
 Copyright (c) 2014-2019 Geoffroy Couprie
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -9679,7 +9697,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 127 =====
+===== TEXT 127 =====
 Copyright (c) 2015 The Gimli Developers
 
 Permission is hereby granted, free of charge, to any
@@ -9706,7 +9724,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 128 =====
+===== TEXT 128 =====
 Mozilla Public License Version 2.0
 ==================================
 
@@ -10081,7 +10099,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
 
-===== NOTICE 129 =====
+===== TEXT 129 =====
 Copyright (c) 2015 Jonathan Reem
 
 Permission is hereby granted, free of charge, to any
@@ -10108,7 +10126,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 130 =====
+===== TEXT 130 =====
 MIT License
 
 Copyright (c) 2020 - present The owo-colors Developers
@@ -10131,7 +10149,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 131 =====
+===== TEXT 131 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -10334,7 +10352,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 132 =====
+===== TEXT 132 =====
 Copyright (c) 2013-2025 The rust-url developers
 
 Permission is hereby granted, free of charge, to any
@@ -10361,7 +10379,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 133 =====
+===== TEXT 133 =====
 Graphosaurus (c) by the petgraph project.
 
 Graphosaurus is licensed under a
@@ -10370,7 +10388,7 @@ Creative Commons Attribution-ShareAlike 4.0 International License.
 You should have received a copy of the license along with this
 work.  If not, see <http://creativecommons.org/licenses/by-sa/4.0/>.
 
-===== NOTICE 134 =====
+===== TEXT 134 =====
 The MIT License (MIT)
 
 Copyright (c) 2014-2022 Steven Fackler, Yuki Okushi
@@ -10392,7 +10410,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 135 =====
+===== TEXT 135 =====
 Copyright (c) 2017 Plain contributors
 
 Permission is hereby granted, free of charge, to any
@@ -10419,7 +10437,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 136 =====
+===== TEXT 136 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -10622,7 +10640,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 137 =====
+===== TEXT 137 =====
 Copyright (c) 2019 The CryptoCorrosion Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -10649,7 +10667,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 138 =====
+===== TEXT 138 =====
 MIT License
 
 Copyright (c) 2018 Andrei Volnin
@@ -10672,7 +10690,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 139 =====
+===== TEXT 139 =====
 Copyright (c) 2016 FullContact, Inc
 
 Permission is hereby granted, free of charge, to any
@@ -10699,7 +10717,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 140 =====
+===== TEXT 140 =====
 The MIT License
 
 Copyright 2015 Google Inc. All rights reserved.
@@ -10722,7 +10740,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 141 =====
+===== TEXT 141 =====
 Copyright (c) 2015 The quick-error Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -10743,7 +10761,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 142 =====
+===== TEXT 142 =====
 Copyrights in the Rand project are retained by their contributors. No
 copyright assignment is required to contribute to the Rand project.
 
@@ -10757,7 +10775,7 @@ licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
 The Rand project includes code from the Rust project
 published under these same licenses.
 
-===== NOTICE 143 =====
+===== TEXT 143 =====
                               Apache License
                         Version 2.0, January 2004
                      https://www.apache.org/licenses/
@@ -10935,7 +10953,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
 END OF TERMS AND CONDITIONS
 
-===== NOTICE 144 =====
+===== TEXT 144 =====
 Copyright 2018 Developers of the Rand project
 Copyright (c) 2014 The Rust Project Developers
 
@@ -10963,7 +10981,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 145 =====
+===== TEXT 145 =====
 Copyrights in the Rand project are retained by their contributors. No
 copyright assignment is required to contribute to the Rand project.
 
@@ -10974,7 +10992,7 @@ licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
 <http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 <LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
 
-===== NOTICE 146 =====
+===== TEXT 146 =====
                               Apache License
                         Version 2.0, January 2004
                      https://www.apache.org/licenses/
@@ -11163,7 +11181,7 @@ APPENDIX: How to apply the Apache License to your work.
    same "printed page" as the copyright notice for easier
    identification within third-party archives.
 
-===== NOTICE 147 =====
+===== TEXT 147 =====
 Copyright (c) 2018-2026 The Rand Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -11190,7 +11208,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 148 =====
+===== TEXT 148 =====
 UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE
 
 Unicode Data Files include all data files under the directories
@@ -11249,7 +11267,7 @@ shall not be used in advertising or otherwise to promote the sale,
 use or other dealings in these Data Files or Software without prior
 written authorization of the copyright holder.
 
-===== NOTICE 149 =====
+===== TEXT 149 =====
 Short version for non-lawyers:
 
 `rustix` is triple-licensed under Apache 2.0 with the LLVM Exception,
@@ -11280,7 +11298,7 @@ is licensed under:
 
 at your option.
 
-===== NOTICE 150 =====
+===== TEXT 150 =====
 ISC License (ISC)
 Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com>
 
@@ -11297,7 +11315,7 @@ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
 ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
-===== NOTICE 151 =====
+===== TEXT 151 =====
 Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
 
 Permission is hereby granted, free of charge, to any
@@ -11324,7 +11342,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 152 =====
+===== TEXT 152 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -11527,7 +11545,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 153 =====
+===== TEXT 153 =====
 Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 
 Permission is hereby granted, free of charge, to any
@@ -11554,7 +11572,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 154 =====
+===== TEXT 154 =====
 Except as otherwise noted, this project is licensed under the following
 (ISC-style) terms:
 
@@ -11575,7 +11593,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 The files under third-party/chromium are licensed as described in
 third-party/chromium/LICENSE.
 
-===== NOTICE 155 =====
+===== TEXT 155 =====
 MIT License
 
 Copyright (c) 2019 Mark Juggurnauth-Thomas
@@ -11598,7 +11616,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 156 =====
+===== TEXT 156 =====
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
 
 Permission is hereby granted, free of charge, to any
@@ -11625,7 +11643,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 157 =====
+===== TEXT 157 =====
 The MIT License (MIT)
 
 Copyright (c) m4b 2016
@@ -11648,7 +11666,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 158 =====
+===== TEXT 158 =====
 MIT License
 
 Copyright (c) 2017
@@ -11671,7 +11689,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 159 =====
+===== TEXT 159 =====
 MIT License
 
 Copyright (c) 2017 James Kominick
@@ -11694,7 +11712,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 160 =====
+===== TEXT 160 =====
 Copyright (c) 2006-2009 Graydon Hoare
 Copyright (c) 2009-2013 Mozilla Foundation
 Copyright (c) 2016 Artyom Pavlov
@@ -11723,7 +11741,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 161 =====
+===== TEXT 161 =====
 Copyright (c) 2019 Eliza Weisman
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -11744,7 +11762,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 162 =====
+===== TEXT 162 =====
                                Apache License
                          Version 2.0, January 2004
                       http://www.apache.org/licenses/
@@ -11947,7 +11965,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 163 =====
+===== TEXT 163 =====
 Copyright (c) 2016 Tomasz Miąsko
 
 Permission is hereby granted, free of charge, to any
@@ -11974,7 +11992,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 164 =====
+===== TEXT 164 =====
 Copyright 2015 Nicholas Allegra (comex).
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -11989,7 +12007,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 165 =====
+===== TEXT 165 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Nicholas Allegra (comex).
@@ -12012,7 +12030,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 166 =====
+===== TEXT 166 =====
 Copyright (c) 2017 tokio-jsonrpc developers
 
 Permission is hereby granted, free of charge, to any
@@ -12039,7 +12057,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 167 =====
+===== TEXT 167 =====
 Copyright 2012-2016 The Rust Project Developers.
 Copyright 2016-2024 Frank Denis.
 
@@ -12048,7 +12066,7 @@ http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 option.
 
-===== NOTICE 168 =====
+===== TEXT 168 =====
 Copyright (c) 2019 Carl Lerche
 
 Permission is hereby granted, free of charge, to any
@@ -12075,7 +12093,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 169 =====
+===== TEXT 169 =====
 Copyright (c) 2018 The Servo Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -12102,7 +12120,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 170 =====
+===== TEXT 170 =====
 Copyright (c) 2015 The rust-socks Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12123,7 +12141,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 171 =====
+===== TEXT 171 =====
 MIT License
 
 Copyright (c) 2017 Nikolai Vazquez
@@ -12146,7 +12164,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 172 =====
+===== TEXT 172 =====
 Copyright (c) 2018 Mozilla
 
 Permission is hereby granted, free of charge, to any
@@ -12173,7 +12191,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 173 =====
+===== TEXT 173 =====
 The MIT License (MIT)
 
 Copyright (c) 2015 Danny Guo
@@ -12198,7 +12216,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 174 =====
+===== TEXT 174 =====
 Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence. All rights reserved.
 Copyright (c) 2016-2024 Isis Agora Lovecruft. All rights reserved.
 
@@ -12229,7 +12247,7 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== NOTICE 175 =====
+===== TEXT 175 =====
 MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12250,7 +12268,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 176 =====
+===== TEXT 176 =====
 Copyright (c) The tar-rs Project Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -12277,7 +12295,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 177 =====
+===== TEXT 177 =====
 Copyright (c) 2015 Steven Allen
 
 Permission is hereby granted, free of charge, to any
@@ -12304,7 +12322,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 178 =====
+===== TEXT 178 =====
 Copyright (c) 2015 The terminal-size Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12325,7 +12343,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 179 =====
+===== TEXT 179 =====
         DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
                     Version 2, December 2004
 
@@ -12340,7 +12358,7 @@ SOFTWARE.
 
   0. You just DO WHAT THE FUCK YOU WANT TO.
 
-===== NOTICE 180 =====
+===== TEXT 180 =====
 Copyright (c) 2015 David Cuddeback
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -12362,7 +12380,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 181 =====
+===== TEXT 181 =====
 MIT License
 
 Copyright (c) 2016 Martin Geisler
@@ -12385,7 +12403,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 182 =====
+===== TEXT 182 =====
 Copyright 2017 Ruud van Asseldonk
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12406,14 +12424,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 183 =====
+===== TEXT 183 =====
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 184 =====
+===== TEXT 184 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -12617,7 +12635,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
    limitations under the License.
 
 
-===== NOTICE 185 =====
+===== TEXT 185 =====
 MIT License
 
 Copyright (c) 2020 Soveu
@@ -12640,7 +12658,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 186 =====
+===== TEXT 186 =====
 zlib License
 
 (C) 2020 Tomasz "Soveu" Marx
@@ -12662,7 +12680,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 
 
-===== NOTICE 187 =====
+===== TEXT 187 =====
 MIT License
 
 Copyright (c) Tokio Contributors
@@ -12685,7 +12703,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 188 =====
+===== TEXT 188 =====
 MIT License
 
 Copyright (c) 2019 Yoshua Wuyts
@@ -12709,7 +12727,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 189 =====
+===== TEXT 189 =====
 Copyright (c) 2019 Tokio Contributors
 
 Permission is hereby granted, free of charge, to any
@@ -12736,7 +12754,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 190 =====
+===== TEXT 190 =====
 The MIT License (MIT)
 
 Copyright (c) 2014 Mathijs van de Nes
@@ -12759,10 +12777,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 191 =====
+===== TEXT 191 =====
 MIT OR Apache-2.0
 
-===== NOTICE 192 =====
+===== TEXT 192 =====
                               Apache License
                         Version 2.0, January 2004
                      http://www.apache.org/licenses/
@@ -12965,7 +12983,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-===== NOTICE 193 =====
+===== TEXT 193 =====
 The MIT License (MIT)
 
 Copyright (c) 2014 Paho Lurie-Gregg
@@ -12988,7 +13006,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 194 =====
+===== TEXT 194 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -13191,7 +13209,7 @@ SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 195 =====
+===== TEXT 195 =====
 MIT License
 
 Copyright (c) [year] [fullname]
@@ -13214,7 +13232,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 196 =====
+===== TEXT 196 =====
 Copyright (c) 2014-2026 Sean McArthur
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -13236,7 +13254,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== NOTICE 197 =====
+===== TEXT 197 =====
 Licensed under the Apache License, Version 2.0
 <LICENSE-APACHE or
 http://www.apache.org/licenses/LICENSE-2.0> or the MIT
@@ -13245,7 +13263,7 @@ at your option. All files in the project carrying such
 notice may not be copied, modified, or distributed except
 according to those terms.
 
-===== NOTICE 198 =====
+===== TEXT 198 =====
 MIT License
 
 Copyright (c) 2024 Benjamin Sago, Fabio Valentini
@@ -13268,7 +13286,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 199 =====
+===== TEXT 199 =====
 // Copyright 2015-2016 Brian Smith.
 //
 // Permission to use, copy, modify, and/or distribute this software for any
@@ -13283,7 +13301,7 @@ SOFTWARE.
 // ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-===== NOTICE 200 =====
+===== TEXT 200 =====
 MIT License
 
 Copyright (c) 2019 Martin Algesten
@@ -13306,7 +13324,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 201 =====
+===== TEXT 201 =====
 Copyright 2022 Martin Algesten
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -13315,7 +13333,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 202 =====
+===== TEXT 202 =====
 © 2016 Bertram Truong
 © 2021 Kornel Lesiński
 
@@ -13337,7 +13355,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-===== NOTICE 203 =====
+===== TEXT 203 =====
 Copyright (c) 2016 Joe Wilm
 
 Permission is hereby granted, free of charge, to any
@@ -13364,7 +13382,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 204 =====
+===== TEXT 204 =====
 Copyright (c) 2014 The Rust Project Developers
 Copyright (c) 2018 Ashley Mannix, Christopher Armstrong, Dylan DPC, Hunar Roop Kahlon
 
@@ -13392,7 +13410,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 205 =====
+===== TEXT 205 =====
 The MIT License (MIT)
 Copyright (c) 2017-2018 Sergio Benitez
 
@@ -13413,7 +13431,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 206 =====
+===== TEXT 206 =====
 MIT License
 
 Copyright (c) 2018-Present Wez Furlong
@@ -13445,7 +13463,7 @@ available from https://github.com/ryanoasis/nerd-fonts which are clearly
 distributed under the terms of the OFL 1.1.
 Note that WezTerm excludes the Pomicons icon set from this collection.
 
-===== NOTICE 207 =====
+===== TEXT 207 =====
 # Community Data License Agreement - Permissive - Version 2.0
 
 This is the Community Data License Agreement - Permissive, Version
@@ -13508,7 +13526,7 @@ agreement.
 of Data, including for example machine learning models and models'
 insights.
 
-===== NOTICE 208 =====
+===== TEXT 208 =====
 Copyright (c) 2022-Present Wez Furlong
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -13569,7 +13587,7 @@ use or other dealings in these Data Files or Software without prior
 written authorization of the copyright holder.
 
 
-===== NOTICE 209 =====
+===== TEXT 209 =====
 MIT License
 
 Copyright (c) 2023-Present Wez Furlong
@@ -13592,7 +13610,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 210 =====
+===== TEXT 210 =====
 Copyright (c) 2018-Present Wez Furlong
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -13613,7 +13631,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 211 =====
+===== TEXT 211 =====
 MIT License
 
 Copyright (c) 2018-Present Wez Furlong
@@ -13636,7 +13654,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 212 =====
+===== TEXT 212 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -13839,7 +13857,7 @@ SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 213 =====
+===== TEXT 213 =====
 Copyright (c) 2015-2018 The winapi-rs Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -13860,7 +13878,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 214 =====
+===== TEXT 214 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -14063,7 +14081,7 @@ SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-===== NOTICE 215 =====
+===== TEXT 215 =====
     MIT License
 
     Copyright (c) Microsoft Corporation.
@@ -14086,7 +14104,7 @@ SOFTWARE.
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE
 
-===== NOTICE 216 =====
+===== TEXT 216 =====
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
 "Software"), to deal in the Software without restriction, including
@@ -14106,7 +14124,7 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 217 =====
+===== TEXT 217 =====
 Boost Software License - Version 1.0 - August 17th, 2003
 
 Permission is hereby granted, free of charge, to any person or organization
@@ -14131,7 +14149,7 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 218 =====
+===== TEXT 218 =====
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -14335,7 +14353,7 @@ DEALINGS IN THE SOFTWARE.
    limitations under the License.
 
 
-===== NOTICE 219 =====
+===== TEXT 219 =====
 Copyright 2019 The Fuchsia Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -14361,7 +14379,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== NOTICE 220 =====
+===== TEXT 220 =====
 Copyright 2023 The Fuchsia Authors
 
 Permission is hereby granted, free of charge, to any
@@ -14389,7 +14407,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 
-===== NOTICE 221 =====
+===== TEXT 221 =====
 MIT License
 
 Copyright (c) 2018-2021 The RustCrypto Project Developers
@@ -14412,7 +14430,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-===== NOTICE 222 =====
+===== TEXT 222 =====
 The MIT License (MIT)
 Copyright (c) 2016 Alexandre Bury
 
@@ -14422,10 +14440,10 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-===== NOTICE 223 =====
+===== TEXT 223 =====
 MIT or Apache-2.0
 
-===== NOTICE 224 =====
+===== TEXT 224 =====
 The auto-generated bindings are under the 3-clause BSD license:
 
 BSD License
@@ -14459,7 +14477,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== NOTICE 225 =====
+===== TEXT 225 =====
                     GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 
@@ -14800,7 +14818,7 @@ consider it more useful to permit linking proprietary applications with the
 library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
 
-===== NOTICE 226 =====
+===== TEXT 226 =====
 BSD License
 
 For Zstandard software
@@ -14831,3 +14849,94 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+===== TEXT 227 =====
+[package]
+name = "async-scoped"
+version = "0.9.0"
+authors = ["Rajsekar Manokaran <rajsekar@gmail.com>"]
+edition = "2018"
+
+documentation = "https://docs.rs/async-scoped"
+description = "Spawn scoped (non 'static) asynchronous futures for async_std and tokio runtimes"
+homepage = "https://github.com/rmanoka/async-scoped"
+repository = "https://github.com/rmanoka/async-scoped"
+readme = "README.md"
+
+categories = [ "asynchronous", "concurrency" ]
+keywords = [ "async", "async-std", "tokio", "scoped", "spawn" ]
+license = "Apache-2.0/MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+===== TEXT 228 =====
+[package]
+name = "backtrace-ext"
+description = "minor conveniences on top of the backtrace crate"
+version = "0.2.1"
+edition = "2018"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/gankra/backtrace-ext"
+rust-version = "1.56"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+===== TEXT 229 =====
+[package]
+name = "guppy-workspace-hack"
+version = "0.1.0"
+description = "workspace-hack package, managed by hakari"
+publish = true
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/facebookincubator/cargo-guppy"
+
+# The parts of the file between the BEGIN HAKARI SECTION and END HAKARI SECTION comments
+# are managed by hakari.
+
+### BEGIN HAKARI SECTION
+
+# Disabled by running `cargo hakari disable`.
+# To re-enable, run:
+#     cargo hakari generate
+### END HAKARI SECTION
+
+===== TEXT 230 =====
+[package]
+name = "recursion"
+version = "0.5.4"
+edition = "2021"
+description = "cache-aware stack safe recursion"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/inanna-malick/recursion"
+
+===== TEXT 231 =====
+[package]
+name = "sigchld"
+version = "0.2.4"
+authors = ["Jack O'Connor"]
+description = "waiting for SIGCHLD from many threads at once"
+repository = "https://github.com/oconnor663/sigchld.rs"
+readme = "README.md"
+documentation = "https://docs.rs/sigchld"
+license = "MIT"
+edition = "2021"
+
+===== TEXT 232 =====
+MIT License
+
+Copyright (c) <year> <copyright holders>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.

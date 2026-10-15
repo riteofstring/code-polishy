@@ -65,8 +65,12 @@ Restoring it requires dependency admission, implementation and verification unde
 an engine that governs Rust source; no source exclusions or policy exceptions
 stand in for that work. Existing runtime coverage failures remain enforced.
 
-Native notice completion and required platform verification belong to beta
-release preparation. Publication and self-hosting lock adoption follow the
+Native license evidence and required platform verification belong to beta
+release preparation. The beta uses reviewed official tool binaries, carries
+upstream notices and declared license terms, and discloses incomplete native
+transitive SBOM coverage. Full binary dependency attestation is follow-up work;
+target-project policy coverage is unchanged.
+Publication and self-hosting lock adoption follow the
 verified candidate. Development checkpoints may fail while work is in progress;
 release readiness requires the applicable checks to pass.
 
@@ -146,8 +150,8 @@ the deferred semantic helper's Rust source and Cargo dependencies. Its admission
 compilation and semantic integration remain required for the expanded semantic
 coverage milestone; disabling those checks is not an acceptable bootstrap.
 The beta excludes the unused draft while retaining runtime coverage errors.
-Complete native dependency notices/inventory and
-all-host execution also remain open. The 2026-10-15 JavaScript dependency updates
+Native binary inventory completeness remains a disclosed beta limitation;
+all-host execution also remains open. The 2026-10-15 JavaScript dependency updates
 remove the brace-expansion and fast-uri assessments by adopting the now-aged fixes.
 None of the remaining failures is waived by the
 optional installation boundary.
@@ -601,7 +605,8 @@ rejection, doctest example semantics and failures, and recovery through the
 verified launcher. The private installed artifact has release digest
 `5f4452b4fb01bdc396e948c761210c9e965f5246a377856213a89915c2fdc476`.
 All-host installed evidence
-and complete bundled dependency notices/inventory remain publication requirements.
+and the carried native license evidence remain publication requirements. Native
+transitive compositions remain explicitly incomplete for this beta.
 No beta release has been published or adopted.
 
 The Nextest source audit at `fc97e97bbe0a3927482a694247da00c099f4269e`
@@ -617,9 +622,11 @@ executed no dependency build scripts or procedural macros.
 `tools/cargo-nextest-license.txt` now carries 642 packaged notice files from
 that source closure and 18 supplemental upstream files covering 14 packages.
 Supplemental URLs use the immutable revisions in the authenticated crates' VCS
-metadata. Deduplication and whitespace normalization retain 226 distinct texts
-and every package's source reference. The complete file is 749,595 bytes, about
-87 KB with gzip; the existing installers already carry and authenticate it.
+metadata. Deduplication and whitespace normalization retain 226 distinct upstream
+notice texts and every package's source reference. The beta additionally carries
+five original package declarations and the selected standard license terms;
+exact duplicates share a text. The resulting 232 texts occupy 753,317 bytes,
+about 87 KB with gzip; the existing installers already carry and authenticate it.
 The SBOM reader accepts this bounded inventory up to 2 MiB.
 
 Commit `3b229f6` passes the focused release unit and installer contract suites,
@@ -631,16 +638,22 @@ Go vet and staticcheck pass for the selected change; the blocked checkpoint
 does not execute tests. This narrower selection does not supersede the broader
 `8dede4b` checkpoint's architecture findings or establish release readiness.
 
-Five packages still lack sufficient notice evidence: `async-scoped@0.9.0`,
+Five packages have no separate upstream notice files: `async-scoped@0.9.0`,
 `backtrace-ext@0.2.1`, `guppy-workspace-hack@0.1.0`, `recursion@0.5.4` and
-`sigchld@0.2.4`. Their declarations are retained as metadata, never substituted
-for missing notices. The source inventory is not proof of the linked binary
+`sigchld@0.2.4`. Their original manifest declarations and selected standard terms
+are now carried explicitly. Apache-2.0 is selected for the four packages offering
+it; sigchld declares MIT. Published author metadata is retained, and no copyright
+holder or year is invented. Standard templates are distinguished from recovered
+notices. The source inventory is not proof of the linked binary
 graph or license compliance. The [upstream release workflow](https://github.com/nextest-rs/nextest/blob/fc97e97bbe0a3927482a694247da00c099f4269e/.github/workflows/release.yml)
 does not request locked resolution from its pinned upload action; that
 [action defaults `locked` to false](https://github.com/taiki-e/upload-rust-binary-action/blob/f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6/action.yml).
 The release has no dependency SBOM asset, and the inspected Linux x64 binary
-has no cargo-auditable dependency section. Thus even this frozen source closure
-cannot authenticate the actual binary's dependency versions.
+has no cargo-auditable dependency section. Source-path inspection of all four
+checksum-verified Nextest archives found 129 registry package identities for
+each Linux architecture, 128 for universal macOS and 122 for Windows. Every
+observed identity occurs in the reviewed source closure. Those observations
+corroborate versions but do not establish the full set linked into each binary.
 Rust and Nextest SBOM entries retain explicit incomplete native compositions,
 host-specific authenticated download references and carried notice locations.
 

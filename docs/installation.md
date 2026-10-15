@@ -126,6 +126,13 @@ below. See [Cargo facts](design/cargo-facts.md),
 [Rust test declarations](design/rust-tests.md#suite-configuration) for the exact
 supported boundaries and examples.
 
+The companion contains the official checksum-pinned Rust and Nextest binaries.
+Their upstream notices and reviewed source license evidence are carried with the
+core. The release SBOM explicitly marks native transitive dependencies incomplete:
+upstream does not provide a complete binary dependency attestation, so the beta
+cannot promise exhaustive vulnerability coverage inside those tools. Target
+Cargo projects still receive the ordinary required dependency checks.
+
 ## Native source installers
 
 Source acquisition stays outside the installers. They never select a version,

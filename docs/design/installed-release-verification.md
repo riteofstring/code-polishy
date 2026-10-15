@@ -100,11 +100,26 @@ recorded in the crates' VCS metadata. Numbered shared texts preserve each packag
 source location without repeating identical license bodies. The file is bounded
 at 2 MiB and remains in the authenticated core alongside SDK notices.
 
-The inventory explicitly identifies five packages with missing notice evidence.
-It is not an exact linked-binary graph: the upstream build recipe does not request
-locked resolution, and neither its release assets nor the inspected Linux binary
-provide a dependency attestation. Complete native notice and linked-dependency
-evidence remain publication requirements alongside native installed-Rust evidence.
+Five packages publish standard license declarations without separate notice files.
+Their original package declarations and selected standard license terms are
+carried alongside the recovered notices. Apache-2.0 is selected where offered as
+an alternative; sigchld declares MIT. Published author metadata is retained,
+without inventing copyright holders or years or presenting license templates
+as recovered upstream notices. Cargo's published license field identifies the
+license under which a package is released; the separate text-file field is an
+alternative for nonstandard licenses. The [Cargo manifest contract](https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields)
+defines those fields. This evidence does not certify all redistribution obligations.
+
+The beta distributes the checksum-pinned official binaries with this source
+license evidence and explicitly incomplete native dependency compositions.
+This is not an exact linked-binary graph: the upstream build recipe does not
+request locked resolution, and its release assets provide no dependency SBOM.
+Source paths in all four reviewed Nextest archives corroborate package versions
+in the resolved source closure, but cannot establish completeness. A complete
+native binary dependency attestation remains follow-up release engineering;
+the beta makes no claim of exhaustive vulnerability coverage inside those tools.
+This distribution-evidence limit does not exempt target Cargo dependencies or
+Rust source from any required policy checks.
 
 The SBOM links each Rust tool to the selected host's reviewed upstream archive
 URLs and SHA-256 identities, reusing the installer's checksum inventory. Archive

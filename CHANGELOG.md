@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.29.0-beta.1 - 2026-10-15
+
+- Add native Rust beta support for contained Cargo projects: discovery,
+  selected formatting, compiler and Clippy diagnostics, written-source quality
+  and architecture checks, Cargo dependency policy, native tests and doctests.
+  Unsupported macro expansion, configuration and source resolution remain
+  blocking coverage findings; this beta does not claim general Rust parity.
+- Keep the Rust SDK and Nextest out of the default portable installation.
+  `install-rust` installs or repairs the official companion authenticated by
+  the core release. Missing or altered tools cannot disable required checks.
+- Validate Cargo's actual workspace, lock and source containment before native
+  test execution or receipt reuse. Require nonempty structured test outcomes
+  and preserve compiler, test, timeout and operational failure distinctions.
+- Carry upstream Rust notices and reviewed Nextest source license evidence.
+  Native transitive SBOM composition remains explicitly incomplete; target
+  dependency checks remain mandatory.
+- Adopt aged brace-expansion fixes in both JavaScript dependency graphs and
+  fast-uri 3.1.8 in the JavaScript provider, removing obsolete assessments.
+
 ## 0.28.3 - 2026-10-09
 
 - Build and ship Go 1.26.9 to fix the reported standard-library vulnerabilities,
