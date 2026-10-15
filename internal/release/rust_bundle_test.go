@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,38 @@ func TestRustBundlePublicationRollsBackEarlierTools(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stage, "payload", sdk, "replacement")); err != nil {
 		t.Fatalf("staged tools were lost during recovery: %v", err)
+	}
+}
+
+func TestRustBundleNormalizesArchivePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX execution and shared-write permission bits")
+	}
+	root, manifest := rustBundleFixture(t)
+	paths := map[string]os.FileMode{
+		rustNextestPath(manifest.Host):                           0o755,
+		".tools/rust/" + manifest.Host + "/lib/compiler-library": 0o644,
+	}
+	for path := range paths {
+		if err := os.Chmod(filepath.Join(root, filepath.FromSlash(path)), 0o777); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive, repo := filepath.Join(t.TempDir(), "rust.zip"), t.TempDir()
+	if _, err := WriteRustArchive(root, archive); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteLock(repo, indexedManifestLock(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallRustBundle(t.Context(), repo, root, archive); err != nil {
+		t.Fatal(err)
+	}
+	for path, expected := range paths {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil || info.Mode().Perm() != expected {
+			t.Fatalf("unsafe permissions on %s: %v %v", path, info, err)
+		}
 	}
 }
 

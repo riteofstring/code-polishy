@@ -20,6 +20,10 @@ payload; a companion archive carries it. Installing that archive validates its
 complete contents against the already selected core release. The archive cannot
 declare its own authority, change the repository lock, or supply core files.
 Transport location does not replace the release-owned file identities.
+Installation assigns executable permissions to the authenticated `bin` and
+`libexec` paths and read-only shared permissions to other files. Archive-supplied
+permissions cannot make installed tools writable by other users or remove their
+required execution bits.
 
 Ordinary checks never download or repair tools. Explicit setup stages and
 verifies the companion before replacing installed tools, preserving a working

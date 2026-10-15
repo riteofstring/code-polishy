@@ -54,6 +54,15 @@ partial-publication rollback, and repair. The Linux x64 tool payload is about
 companion through the public CLI on every supported host; those jobs have not yet
 supplied evidence for this candidate.
 
+The Linux x64 installed fixture passed for committed source `a3b6f82`: required
+Rust checks reject the absent payload, the exact companion installs through the
+launcher, formatting/compiler diagnostics/native tests/doctests execute, and
+removing Nextest blocks testing until repair. That private artifact has release
+digest `7070c7937b5a01e3a3858a3b36499e6b08e55fe367a3148674ebd8c0d1d47360`.
+Additional bundle tests cover release-owned permissions, preventing archive
+metadata from adding shared write access or removing executable permissions.
+This is local execution evidence, not a published release or all-host acceptance.
+
 Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
 the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
 compilation and semantic integration remain required; disabling those checks is

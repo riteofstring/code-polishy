@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func RustArchiveName(manifest Manifest) string {
@@ -61,7 +62,26 @@ func stageRustBundle(ctx context.Context, repoRoot string, manifest, tools Manif
 	if err := tools.Verify(extracted); err != nil {
 		return fmt.Errorf("rust bundle does not match the selected core release: %w", err)
 	}
+	if err := setRustToolPermissions(extracted, tools.Entries); err != nil {
+		return err
+	}
 	return ctx.Err()
+}
+
+func setRustToolPermissions(root string, entries []Entry) error {
+	for _, entry := range entries {
+		if entry.Symlink != "" {
+			continue
+		}
+		mode := os.FileMode(0o644)
+		if strings.Contains(entry.Path, "/bin/") || strings.Contains(entry.Path, "/libexec/") {
+			mode = 0o755
+		}
+		if err := os.Chmod(filepath.Join(root, filepath.FromSlash(entry.Path)), mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func acquireRustBundle(ctx context.Context, repoRoot string, manifest Manifest, source, staging string) (string, error) {
