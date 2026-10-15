@@ -79,11 +79,15 @@ func ParseWorkspace(repo repository.Repository, manifest string, data []byte) (W
 }
 
 func workspaceFromWire(repo repository.Repository, manifest string, wire workspaceWire) (Workspace, error) {
+	return workspaceFromWireWithTarget(repo, manifest, wire, TargetDirectory(repo))
+}
+
+func workspaceFromWireWithTarget(repo repository.Repository, manifest string, wire workspaceWire, target string) (Workspace, error) {
 	root, err := containedPath(repo, filepath.Join(wire.Root, "Cargo.toml"))
 	if err != nil {
 		return Workspace{}, fmt.Errorf("cargo workspace root: %w", err)
 	}
-	if wire.TargetDir != TargetDirectory(repo) {
+	if wire.TargetDir != target {
 		return Workspace{}, errors.New("cargo metadata did not retain the governed target directory")
 	}
 	workspace := Workspace{Root: filepath.ToSlash(filepath.Dir(root)), TargetDir: wire.TargetDir, Packages: wire.Packages, Members: wire.Members, DefaultMembers: wire.DefaultMembers}

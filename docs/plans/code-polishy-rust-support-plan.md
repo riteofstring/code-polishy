@@ -66,9 +66,8 @@ This is local execution evidence, not a published release or all-host acceptance
 Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
 the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
 compilation and semantic integration remain required; disabling those checks is
-not an acceptable bootstrap. Actual workspace-lock containment before native
-tests, complete native dependency notices/inventory, and all-host execution also
-remain open. The current dependency-review run additionally reports expired
+not an acceptable bootstrap. Complete native dependency notices/inventory and
+all-host execution also remain open. The current dependency-review run additionally reports expired
 JavaScript vulnerability assessments. None of these failures is waived by the
 optional installation boundary.
 
@@ -483,9 +482,13 @@ visible in command planning. Valid siblings survive a failed or oversized input;
 cancellation leaves unstarted sources explicitly uncovered. Large-input fixtures
 also exposed unsafe coordinate-property access in the pinned Python binding.
 Using its tuple interface preserves long-line and Unicode coordinates without a
-dependency change. Actual workspace-lock containment before native test
-compilation remains a separate test-runner milestone, including its command-plan
-and reusable-view boundaries.
+dependency change. Native tests now validate Cargo's actual workspace and its
+contained regular lock before compilation, retries and receipt reuse. Reusable
+execution validates both source and copied workspaces while retaining governed
+writable build directories. Direct and gate plans include those metadata commands;
+regression proofs retain the same preparation boundary. Fixtures reject escaping
+ancestor workspaces and linked locks before a build script can run, and distinguish
+an explicit workspace lock from unrelated root or member locks.
 
 Native test-source checks now reject empty built-in Rust tests, including ignored
 and conditional declarations, without classifying helpers or closures as test

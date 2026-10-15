@@ -201,8 +201,6 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 		return handleInstallRustMeta(invocation), true
 	case "release-manifest":
 		return handleReleaseManifestMeta(invocation), true
-	case "change-boundary":
-		return handleChangeBoundaryMeta(invocation), true
 	default:
 		return 0, false
 	}
@@ -210,6 +208,8 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 
 func handleWorkflowMetaCommand(invocation invocation) (int, bool) {
 	switch invocation.command {
+	case "change-boundary":
+		return handleChangeBoundaryMeta(invocation), true
 	case "task-session":
 		return handleTaskSessionWorkflowMeta(invocation), true
 	case "task-session-artifacts":

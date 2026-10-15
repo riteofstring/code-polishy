@@ -17,6 +17,11 @@ keeps the quick boundary meaningful on clean CI hosts where no prior
 installation exists, and prevents a stale developer installation from testing
 different production code. The test requires a clean committed source because
 the installer binds its artifact to that source revision.
+The same ordinary contract writes the Rust companion from the authenticated
+installation, removes its optional tools, and passes that companion to the Rust
+fixture. Missing-tool rejection, explicit installation, removal and repair
+therefore execute before release publication as well as in native release jobs.
+Windows CI separately selects the Rust bundle integrity and native test suites.
 
 The broader release harness accepts an explicit prefix and lock so final
 verification can exercise an already built native artifact without rebuilding

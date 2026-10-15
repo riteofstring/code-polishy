@@ -43,19 +43,20 @@ type gateRunController struct {
 }
 
 type gateArtifactRunner struct {
-	delegate          runner.Runner
-	run               *gaterun.Run
-	expected          []MergeGateExecutionCommand
-	reusable          map[int]gaterun.ReusableReceipt
-	logPaths          map[testLogKey]string
-	failedTests       map[string]int
-	retryCommands     map[string]policy.Command
-	artifacts         map[testLogKey][]testartifact.Record
-	artifactExecution *testartifact.Execution
-	receipts          *testReceiptController
-	progress          io.Writer
-	next              int
-	err               error
+	delegate           runner.Runner
+	run                *gaterun.Run
+	expected           []MergeGateExecutionCommand
+	reusable           map[int]gaterun.ReusableReceipt
+	logPaths           map[testLogKey]string
+	failedTests        map[string]int
+	retryCommands      map[string]policy.Command
+	prerequisiteSuites map[string]string
+	artifacts          map[testLogKey][]testartifact.Record
+	artifactExecution  *testartifact.Execution
+	receipts           *testReceiptController
+	progress           io.Writer
+	next               int
+	err                error
 }
 
 type testLogKey struct {
@@ -166,12 +167,17 @@ func newGateArtifactRunner(engine *Engine, run *gaterun.Run, commands []MergeGat
 	}
 	receipts.RenderPlan()
 	retryCommands := map[string]policy.Command{}
+	prerequisiteSuites := map[string]string{}
 	for _, suite := range engine.Repository.Config.Tests.Suites {
 		retryCommands[suite.Name] = testpolicy.SuiteCommand(engine.Repository, testpolicy.RetrySuite(suite))
+		suite.Reusable = false
+		for _, prerequisite := range testpolicy.SuitePrerequisiteCommands(engine.Repository, suite) {
+			prerequisiteSuites[prerequisite.Name] = suite.Name
+		}
 	}
 	return &gateArtifactRunner{
 		delegate: engine.Runner, run: run, expected: commands, reusable: reusable,
-		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, retryCommands: retryCommands,
+		logPaths: map[testLogKey]string{}, failedTests: map[string]int{}, retryCommands: retryCommands, prerequisiteSuites: prerequisiteSuites,
 		artifacts: map[testLogKey][]testartifact.Record{}, progress: progress,
 		artifactExecution: artifacts, receipts: receipts,
 	}
@@ -350,7 +356,7 @@ func gateBehaviorProofCommands(plan behaviorreview.GateReplayPlan) ([]MergeGateE
 	resources := []string{}
 	timeout := 1
 	for _, proof := range plan.Proofs {
-		for _, command := range []policy.Command{proof.Baseline, proof.Candidate} {
+		for _, command := range append(append([]policy.Command{proof.Baseline, proof.Candidate}, proof.Prerequisites...), proof.Prerequisites...) {
 			modules = append(modules, command.Modules...)
 			paths = append(paths, command.Paths...)
 			environment = append(environment, command.Environment...)

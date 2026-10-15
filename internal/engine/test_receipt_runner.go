@@ -202,3 +202,10 @@ func (commandRunner *testReceiptRunner) ReceiptNotes() []string {
 func (commandRunner *testReceiptRunner) PrepareSuiteView(suite policy.TestSuite) (string, func() error, error) {
 	return commandRunner.controller.PrepareSuiteView(suite)
 }
+
+func (commandRunner *testReceiptRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	if structured, ok := commandRunner.delegate.(runner.StructuredRunner); ok {
+		return structured.RunStructured(ctx, root, command)
+	}
+	return commandRunner.RunWithOutput(ctx, root, command)
+}

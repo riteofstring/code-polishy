@@ -149,7 +149,7 @@ func TestNativeRustCommandAndCopiesRetainGovernedSelection(t *testing.T) {
 		t.Fatal("retry changed the selected original package")
 	}
 	plan := ExecutionPlanForDirectTest(Plan{Suites: []policy.TestSuite{suite}})
-	if len(plan.Commands) != 1 || !slices.Contains(plan.Commands[0].Argv, "--package") {
+	if len(plan.Commands) != 2 || !slices.Contains(plan.Commands[1].Argv, "--package") {
 		t.Fatalf("native command missing from execution plan: %+v", plan)
 	}
 	ctx, cancel := context.WithCancel(t.Context())

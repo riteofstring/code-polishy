@@ -100,9 +100,9 @@ func testRustNativeReceipt(t *testing.T, doctests bool) {
 		t.Fatalf("native receipt publication: %+v, reasons=%v; %s", run, controller.reasons, output)
 	}
 	controller.allowReuse = true
-	reused, hit, err := controller.ReuseSuite(suite, 1)
-	if err != nil || !hit || !reused.Reused || len(reused.Artifacts) != 1 {
-		t.Fatalf("native receipt reuse: %+v, %v, %v", reused, hit, err)
+	reusedRun := testpolicy.RunWithEvidence(t.Context(), engine.Repository, commandRunner, testpolicy.Plan{Suites: []policy.TestSuite{suite}}, nil)
+	if len(reusedRun.Findings) != 0 || len(reusedRun.Executions) != 1 || !reusedRun.Executions[0].Reused || reusedRun.Executions[0].ReceiptPath == "" || len(reusedRun.Executions[0].Artifacts) != 1 {
+		t.Fatalf("native receipt reuse: %+v", reusedRun)
 	}
 	suite.Rust.Doctests = !doctests
 	changed, err := newTestReceiptController(engine, []policy.TestSuite{suite}, true)
@@ -182,7 +182,7 @@ func TestRustDirectTestTelemetryPreservesNativeExitStatus(t *testing.T) {
 				t.Fatalf("instrumentation lost native outcome: %+v", command)
 			}
 			telemetry := engine.AttachExecution(report).Execution
-			if len(telemetry.Commands) != 1 || telemetry.Commands[0].ExitStatus != test.exit {
+			if len(telemetry.Commands) != 2 || telemetry.Commands[0].Name != "focused-workspace" || telemetry.Commands[1].ExitStatus != test.exit {
 				t.Fatalf("native telemetry is inconsistent: %+v", telemetry)
 			}
 		})

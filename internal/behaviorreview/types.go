@@ -210,10 +210,11 @@ type GateReplayPlan struct {
 }
 
 type ReplayProofPhase struct {
-	ProofID     string         `json:"proof_id"`
-	ProofSHA256 string         `json:"proof_sha256"`
-	Baseline    policy.Command `json:"baseline"`
-	Candidate   policy.Command `json:"candidate"`
+	Prerequisites []policy.Command `json:"prerequisites,omitempty"`
+	ProofID       string           `json:"proof_id"`
+	ProofSHA256   string           `json:"proof_sha256"`
+	Baseline      policy.Command   `json:"baseline"`
+	Candidate     policy.Command   `json:"candidate"`
 }
 
 const (

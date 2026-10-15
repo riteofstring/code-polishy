@@ -482,3 +482,24 @@ func conciseDuration(duration time.Duration) string {
 	}
 	return duration.Round(10 * time.Millisecond).String()
 }
+
+func (commandRunner *gateArtifactRunner) runTestPrerequisite(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	suite := commandRunner.prerequisiteSuites[command.Name]
+	if _, failed := commandRunner.failedTests[suite]; failed {
+		for index, expected := range commandRunner.expected {
+			if expected.Category == gaterun.Check && samePolicyCommand(expected.Command, command) {
+				return commandRunner.execute(ctx, root, index, command, true, false, nil)
+			}
+		}
+	}
+	err := fmt.Errorf("test prerequisite %q does not match a failed planned suite", command.Name)
+	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+}
+
+func (retry *gateRetryRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	return retry.parent.runTestPrerequisite(ctx, root, command)
+}
+
+func (diagnostic *gateDiagnosticRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	return diagnostic.parent.runTestPrerequisite(ctx, root, command)
+}

@@ -448,11 +448,13 @@ func run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 	runResult := RunResult{}
 	var artifactExecution *testartifact.Execution
 	reuse := suiteReuseController(commandRunner)
-	for index, suite := range plan.Suites {
-		runContext := suiteRunContext(ctx, reporter, index)
-		execution := runOneSuite(runContext, repo, commandRunner, suite, reuse, &artifactExecution)
+	index := 0
+	for _, suite := range plan.Suites {
+		execution := runOneSuite(ctx, repo, commandRunner, suite, reuse, &artifactExecution, reporter, index)
+		index += len(SuitePrerequisiteCommands(repo, suite))
 		runResult.Executions = append(runResult.Executions, execution)
 		reportSuiteExecution(reporter, index, execution)
+		index++
 		if execution.Failed() {
 			runResult.Findings = append(runResult.Findings, policy.Finding{Check: "test." + suite.Kind, Path: "repository", Subject: suite.Name, Message: execution.FailureMessage})
 			if stopAfterFailure {
@@ -478,10 +480,16 @@ func suiteRunContext(ctx context.Context, reporter *ExecutionReporter, index int
 	})
 }
 
-func runOneSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, suite policy.TestSuite, reuse SuiteReuseController, artifacts **testartifact.Execution) SuiteExecution {
+func runOneSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, suite policy.TestSuite, reuse SuiteReuseController, artifacts **testartifact.Execution, reporter *ExecutionReporter, index int) (execution SuiteExecution) {
 	if err := suiteProblem(repo, suite); err != nil {
 		return failedSuiteExecution(suite, 1, err)
 	}
+	executionRoot, cleanup, preparation, err := prepareRustSuite(ctx, repo, commandRunner, suite, reporter, index)
+	if err != nil {
+		return failedSuitePreparation(ctx, suite, 1, preparation, err)
+	}
+	defer func() { finishSuiteExecution(&execution, cleanup(), reuse) }()
+	ctx = suiteRunContext(ctx, reporter, index+len(SuitePrerequisiteCommands(repo, suite)))
 	execution, reused, err := reusableSuiteExecution(reuse, suite, 1)
 	if err != nil {
 		return failedSuiteExecution(suite, 1, err)
@@ -492,13 +500,15 @@ func runOneSuite(ctx context.Context, repo repository.Repository, commandRunner 
 	if err := ensureRunArtifacts(repo.Root, commandRunner, artifacts); err != nil {
 		return failedSuiteExecution(suite, 1, err)
 	}
-	executionRoot, cleanup, err := suiteExecutionRoot(repo.Root, commandRunner, suite)
-	if err != nil {
-		return failedSuiteExecution(suite, 1, err)
+	if suite.Rust == nil {
+		var viewCleanup func() error
+		executionRoot, viewCleanup, err = suiteExecutionRoot(repo.Root, commandRunner, suite)
+		if err != nil {
+			return failedSuiteExecution(suite, 1, err)
+		}
+		cleanup = viewCleanup
 	}
-	execution = executeSuite(ctx, repo, executionRoot, commandRunner, suite, 1, *artifacts)
-	finishSuiteExecution(&execution, cleanup(), reuse)
-	return execution
+	return executeSuite(ctx, repo, executionRoot, commandRunner, suite, 1, *artifacts)
 }
 
 func ensureRunArtifacts(root string, commandRunner runner.Runner, artifacts **testartifact.Execution) error {
@@ -526,7 +536,7 @@ func finishSuiteExecution(execution *SuiteExecution, cleanupErr error, reuse Sui
 		execution.FailureCategory = runner.FailureOperational
 		execution.FailureMessage = errors.Join(errorFromMessage(execution.FailureMessage), cleanupErr).Error()
 	}
-	if execution.Suite.Reusable && !execution.Failed() && reuse != nil {
+	if execution.Suite.Reusable && !execution.Reused && !execution.Failed() && reuse != nil {
 		receipt, err := reuse.RecordSuite(*execution)
 		if err != nil {
 			execution.FailureCategory = runner.FailureOperational
@@ -581,6 +591,12 @@ func suiteReuseController(commandRunner runner.Runner) SuiteReuseController {
 func ExecuteSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, suite policy.TestSuite, attempt int) SuiteExecution {
 	if err := suiteProblem(repo, suite); err != nil {
 		return failedSuiteExecution(suite, attempt, err)
+	}
+	preflight := suite
+	preflight.Reusable = false
+	_, _, preparation, prepareErr := prepareRustSuite(ctx, repo, commandRunner, preflight, nil, 0)
+	if prepareErr != nil {
+		return failedSuitePreparation(ctx, suite, attempt, preparation, prepareErr)
 	}
 	if runnerManagesTestArtifacts(commandRunner) {
 		return executeSuite(ctx, repo, repo.Root, commandRunner, suite, attempt, nil)
@@ -698,6 +714,12 @@ func runSuite(ctx context.Context, root string, commandRunner runner.Runner, com
 func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {
 	commands := make([]ExecutionCommand, 0, len(plan.Suites))
 	for _, suite := range plan.Suites {
+		for _, prerequisite := range SuitePrerequisiteCommands(repository.Repository{}, suite) {
+			commands = append(commands, ExecutionCommand{
+				Name: prerequisite.Name, Kind: "check", Scope: suite.Scope, Cost: "quick",
+				Argv: prerequisite.Argv, Cwd: prerequisite.Cwd, TimeoutSeconds: prerequisite.TimeoutSeconds,
+			})
+		}
 		argv := slices.Clone(suite.Argv)
 		if suite.Rust != nil {
 			argv = append([]string{"cargo-nextest"}, rustTestArguments(*suite.Rust)...)

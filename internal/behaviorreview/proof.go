@@ -557,6 +557,13 @@ func (capture *proofSuiteRunner) RunWithOutput(ctx context.Context, root string,
 	return result, output, err
 }
 
+func (capture *proofSuiteRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	if structured, ok := capture.OutputRunner.(runner.StructuredRunner); ok {
+		return structured.RunStructured(ctx, root, command)
+	}
+	return capture.OutputRunner.RunWithOutput(ctx, root, command)
+}
+
 func cloneCommand(command policy.Command) policy.Command {
 	return policy.Command{
 		Name: command.Name, Provides: slices.Clone(command.Provides), Argv: slices.Clone(command.Argv), Cwd: command.Cwd,
@@ -723,7 +730,8 @@ func replayProofPhases(repo repository.Repository, root *artifactHandle, review 
 		}
 		digest := sha256Hex(data)
 		command := testpolicy.SuiteCommand(repo, suite)
-		phases = append(phases, ReplayProofPhase{ProofID: id, ProofSHA256: digest, Baseline: cloneCommand(command), Candidate: cloneCommand(command)})
+		suite.Reusable = false
+		phases = append(phases, ReplayProofPhase{ProofID: id, ProofSHA256: digest, Baseline: cloneCommand(command), Candidate: cloneCommand(command), Prerequisites: testpolicy.SuitePrerequisiteCommands(repo, suite)})
 		references = append(references, ProofReference{ID: id, SHA256: digest})
 	}
 	sort.Slice(phases, func(left, right int) bool { return phases[left].ProofID < phases[right].ProofID })

@@ -379,6 +379,7 @@ func mergeGateSuiteCommands(repo repository.Repository, suites []policy.TestSuit
 			continue
 		}
 		seen[suite.Name] = true
+		result = append(result, mergeGateCheckCommands(gaterun.Check, testpolicy.SuitePrerequisiteCommands(repo, suite))...)
 		result = append(result, MergeGateExecutionCommand{Category: gaterun.OrdinaryTest, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost, Command: testpolicy.SuiteCommand(repo, suite)})
 	}
 	return result

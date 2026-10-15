@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+func rustToolRoot(manifest Manifest, relative string) bool {
+	return manifest.ManifestVersion >= 7 && (relative == ".tools/rust/"+manifest.Host || relative == rustNextestPath(manifest.Host))
+}
+
 func rustToolEntry(manifest Manifest, relative string) bool {
 	if manifest.ManifestVersion < 7 {
 		return false

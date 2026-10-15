@@ -43,5 +43,10 @@ EOF
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \
   --fixture first-adoption
+release_root="$(dirname "${manifest}")"
+"${releases[0]}" release-manifest rust-archive --root "${release_root}" --output "${fixture_root}/rust.zip"
+host="$(awk -F'"' '/"host"/ { print $4; exit }' "${manifest}")"
+rm -rf "${release_root}/.tools/rust/${host}"
+rm "${release_root}/.tools/bin/cargo-nextest"
 bash "${policy_root}/scripts/test-installed-release-rust.sh" \
-  "$(dirname "${manifest}")" "${fixture_root}/prefix/bin/code-polishy"
+  "${release_root}" "${fixture_root}/prefix/bin/code-polishy" "${fixture_root}/rust.zip"

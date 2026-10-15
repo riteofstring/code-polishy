@@ -7,6 +7,24 @@ Nextest filter. Cargo default features remain the default. Native execution
 uses the pinned host compiler, frozen resolution and the governed Cargo cache.
 It does not enable every feature or claim another target was tested.
 
+Before compilation, each attempt runs bounded, frozen workspace-only Cargo
+metadata through the shared runner. The discovered workspace root, members,
+manifest and source paths must be contained, and its actual `Cargo.lock` must
+be a contained regular file. A nearer unrelated lock or `--frozen` alone cannot
+establish containment. Discovery executes no build scripts or procedural macros.
+The actual workspace's Nextest settings are checked before native tests run.
+
+Reusable suites validate the source workspace before creating their sealed view,
+then validate Cargo's workspace inside that view before receipt lookup. Normalized
+workspace facts must agree, including package targets, dependencies, features and
+default members; copying a subset cannot silently remove an automatic build script
+or test target. Both commands are declared in the gate plan. The view retains the original governed
+writable Cargo cache and target directory; metadata must report that exact target.
+Changing an external ancestor workspace cannot be hidden by an unchanged cached
+receipt or by moving execution into a temporary directory. Failed preparation
+cannot become an assertion failure or regression-proof red result. Candidate
+retries revalidate the workspace and retain their prerequisite command logs.
+
 The pinned Nextest runner supplies unit and integration outcomes. Each attempt
 receives a fresh managed artifact directory and release-owned Nextest settings.
 Nextest's state directory also lives there, never in the read-only source view.

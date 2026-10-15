@@ -114,7 +114,7 @@ func TestNativeRustDoctestsKeepWorkspaceBatches(t *testing.T) {
 		t.Fatalf("selected package doctests: %+v", execution)
 	}
 	plan := ExecutionPlanForDirectTest(Plan{Suites: []policy.TestSuite{suite}})
-	if len(plan.Commands) != 1 || plan.Commands[0].Argv[0] != "cargo" || !strings.Contains(strings.Join(plan.Commands[0].Argv, " "), "test --doc --frozen") {
+	if len(plan.Commands) != 2 || plan.Commands[1].Argv[0] != "cargo" || !strings.Contains(strings.Join(plan.Commands[1].Argv, " "), "test --doc --frozen") {
 		t.Fatalf("doctest execution plan: %+v", plan)
 	}
 }
