@@ -63,6 +63,33 @@ Additional bundle tests cover release-owned permissions, preventing archive
 metadata from adding shared write access or removing executable permissions.
 This is local execution evidence, not a published release or all-host acceptance.
 
+Workspace containment at `d22adaf` passed the focused native, receipt, retry,
+regression-proof and release suites. The changed-scope run completed 38 suites:
+36 passed, the installed fixture exposed an outdated single-command assertion,
+and the JavaScript bundle fixture could not complete an offline installation.
+The installed assertion now requires successful workspace discovery before native
+execution. The focused installed-release rerun passed at `d66647e`, covering
+first adoption, pack verification, absent Rust tools, exact installation,
+formatting, diagnostics, native tests, doctests, failure outcomes and repair.
+Its private Linux x64 artifact has release digest
+`424f856fa177a57d978660f0c28181262d22caa5fc8d137dc5a747a680d6d953`.
+Across the original run and focused correction, 37 of the 38 selected suites
+passed. The verification command still fails its 12 expired vulnerability
+assessments. A diagnostic rerun identified the JavaScript fixture's missing cached
+`@types/node@24.13.3` archive; this run does not establish a source defect.
+Checkpoint validation still reports unsupported semantic-helper coverage,
+Cargo dependency coverage, architecture imports and expired JavaScript
+assessments. A clean verification checkout also lacked two module Python
+environments. No policy failure was waived.
+
+The ordinary installed-release contract now exercises the optional Rust
+installation lifecycle, and Windows CI selects optional-bundle and native Rust
+contract tests. Windows execution remains unverified locally. Authenticating
+the 171-entry, 686,461,770-byte Rust payload took 3.33 seconds in a local
+measurement, excluding core verification and the inventory walk. Integrity
+checks remain active; verification is not cached across untrusted build-script
+or test execution.
+
 Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
 the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
 compilation and semantic integration remain required; disabling those checks is
