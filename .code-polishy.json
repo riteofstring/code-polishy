@@ -1868,23 +1868,6 @@
     ],
     "vulnerabilityAssessments": [
       {
-        "id": "provider-fast-uri-host-case-unreachable",
-        "ecosystem": "pnpm",
-        "advisory": "GHSA-hrr3-gc8f-f4qj",
-        "package": "fast-uri",
-        "affectedVersion": "3.1.7",
-        "scope": "providers/javascript/pnpm-lock.yaml",
-        "severity": "moderate",
-        "status": "not-affected",
-        "basis": "unreachable",
-        "reason": "The provider imports Astro compiler and TypeScript services directly; it never imports the YAML language-server plugin that reaches Ajv and fast-uri.",
-        "impact": "No repository-controlled URI reaches fast-uri.",
-        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
-        "owner": "Codex",
-        "reviewed": "2026-10-08",
-        "expires": "2026-10-15"
-      },
-      {
         "id": "tooling-glob-depth-unreachable",
         "ecosystem": "pnpm",
         "advisory": "GHSA-vfj7-8cjw-p6xm",

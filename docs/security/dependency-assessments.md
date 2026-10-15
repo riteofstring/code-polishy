@@ -1,6 +1,6 @@
 # Dependency vulnerability assessments
 
-Brace expansion resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
+Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-10.
 Assessment owner: Codex.
 
@@ -143,13 +143,13 @@ contracts remain the compatibility evidence.
 
 ## URI processing
 
-The JavaScript provider graph now resolves `fast-uri` 3.1.7. This official
-release fixes the malformed-authority and port-injection advisories below;
-their exact 3.1.6 assessments have been removed. The
+The JavaScript provider graph now resolves `fast-uri` 3.1.8. This official
+release retains the malformed-authority and port-injection fixes and corrects
+the remaining host-case advisory. All exact fast-uri assessments have been
+removed. The
 [npm registry](https://registry.npmjs.org/fast-uri) records publication at
-2026-09-02 11:06:41.962 UTC, so it meets the 30-day minimum. The lock changes
+2026-09-15 07:36:25.444 UTC, so it meets the 30-day minimum. The lock changes
 only this transitive dependency, without adding lifecycle scripts or overrides.
-The remaining host-case advisory is assessed against 3.1.7.
 
 | Advisory                                                                 | Required application behavior                                                                                                          | Fixed release |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
@@ -172,17 +172,14 @@ service, which reaches Ajv through `yamlSchemaService.js`; Ajv's
 `dist/runtime/uri.js` imports `fast-uri`. None of those services is enabled by
 the provider's checker construction.
 
-### Remediation
-
-Retain the 3.1.7 host-case assessment with its existing 2026-10-15 expiry.
-The official 3.1.8 fix was published on 2026-09-15 at 07:36:25.444 UTC and is
-still under 30 days old at this review. With no enabled call to the affected
-API or host authorization decision, waiting does not expose this provider to
-the advisory; admitting the fresh release would add avoidable supply-chain
-risk. Update to 3.1.8 on or after 2026-10-15 at 07:36:26 UTC and remove the
-remaining assessment, which expires at the end of that UTC date. Reassess
-immediately if the YAML service, full Astro language server, or a new URI
-consumer is enabled.
+The integrity-verified archive delta normalizes percent-encoded host octets
+before folding the decoded reg-name to lowercase, then restores uppercase
+escape digits. It also moves host normalization outside scheme-specific path
+normalization. Neither release declares dependencies or install lifecycle
+scripts. The update follows the original dated remediation plan now that the
+fix is aged; no early-admission or replacement vulnerability assessment is
+needed. Enabling the YAML service, full Astro language server or another URI
+consumer still requires a new applicability review of any future advisories.
 
 ## Aged security updates
 
