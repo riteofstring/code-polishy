@@ -1,6 +1,6 @@
 # Dependency vulnerability assessments
 
-Brace expansion reviewed on 2026-10-01; other JavaScript and Go module findings
+Brace expansion resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-10.
 Assessment owner: Codex.
 
@@ -106,57 +106,40 @@ version or weaken vulnerability scanning.
 
 ## Brace expansion
 
-Retain `brace-expansion` 1.1.18 and 5.0.9 in both graphs. The advisories require
-an attacker-controlled string to reach the brace expansion pattern argument:
+Both JavaScript graphs now resolve `brace-expansion` 1.1.21 and 5.0.12.
+These are the smallest releases in the existing major lines that address all
+three assessed parsing advisories:
 
-| Advisory                                                                 | Vulnerable behavior                                                    | Fixed 1.x / 5.x releases |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------ |
-| [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p) | `parseCommaParts()` recursion or argument expansion exhausts the stack | 1.1.19 / 5.0.10          |
-| [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7) | Deeply nested brace groups exhaust `expand_()`'s stack                 | 1.1.20 / 5.0.11          |
-| [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr) | The `{a},b}` rewrite consumes quadratic CPU time                       | 1.1.21 / 5.0.12          |
+| Advisory                                                                 | Vulnerable behavior                                              | Fixed 1.x / 5.x releases |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------ |
+| [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p) | Recursive comma parsing or argument expansion exhausts the stack | 1.1.19 / 5.0.10          |
+| [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7) | Nested brace expansion exhausts the stack                        | 1.1.20 / 5.0.11          |
+| [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr) | Brace rewrite repeatedly rescans growing input                   | 1.1.21 / 5.0.12          |
 
-All three exploit the pattern, not the filename being matched. Existing
-expansion-result limits do not prevent these parsing attacks; the assessment
-rests on input authority and disabled call paths instead.
+The [npm registry](https://registry.npmjs.org/brace-expansion) records 1.1.21
+at 2026-09-14 21:59:28.332 UTC and 5.0.12 at 21:59:00.288 UTC. Both meet
+the ordinary 30-day minimum. No release-age admission is needed. The 12 exact
+assessments for 1.1.18 and 5.0.9 have been removed with those versions from
+`tools/javascript/pnpm-lock.yaml` and `providers/javascript/pnpm-lock.yaml`.
 
-### Version 1.1.18
+The prior non-exposure conclusion still matches the inspected callers: native
+ESLint uses policy-owned extension patterns, the provider uses `**/*.*`, JSX
+rules receive fixed component patterns, and neither parser enables
+`projectService.allowDefaultProject`. Repository filenames are match candidates,
+not brace-expansion patterns. Knip's repository-derived glob patterns use the
+separate fast-glob/picomatch path and retain their existing bounded-input checks.
+The update closes the dependency findings now that an aged fix is available;
+it does not remove these input boundaries.
 
-ESLint 9.39.5 and `@eslint/config-array` 0.21.2 reach `minimatch` 3.1.5,
-which depends on this version. The tooling's `lintConfiguration` in
-[`runner.mjs`](../../tools/javascript/runner.mjs) generates its file pattern
-from a policy-owned extension allowlist. The provider's `lintMessages` in
-[`analysis.mjs`](../../providers/javascript/analysis.mjs) uses `**/*.*`.
-Repository-controlled source and paths are candidate text and filenames,
-not configuration patterns. Both configurations disable inline configuration.
-
-`eslint-plugin-jsx-a11y` 6.10.2 also uses `minimatch` through
-`mayContainChildComponent`. The enabled label rule supplies fixed component
-names; [`policy.mjs`](../../tools/javascript/policy.mjs) does not accept
-repository-selected component patterns or rule options. A JSX component name
-from source is the match candidate, not the pattern.
-
-Knip 5.55.1 accepts workspace patterns but its `ConfigurationChief` and glob
-utilities use `picomatch` and `fast-glob`. That path does not establish a call
-to `brace-expansion`. Neither sealed analyzer loads target ESLint or Knip
-configuration.
-
-### Version 5.0.9
-
-`@typescript-eslint/typescript-estree` 8.64.0 depends on `minimatch` 10.2.x,
-which resolves this brace-expansion version. Its
-`useProgramFromProjectService.js` calls `minimatch` from
-`filePathMatchedBy` only for `allowDefaultProject` patterns. Both analyzer
-configurations above omit `projectService` and `allowDefaultProject`.
-Importing the parser can load the matcher; it does not enable this call path.
-
-### Remediation
-
-Update to 1.1.21 and 5.0.12 on or after 2026-10-14 at 21:59:29 UTC, when
-both exact releases have aged for 30 days. The assessments expire at the end
-of that UTC date. Reassess immediately if analyzer configuration becomes
-repository-controlled, a rule starts accepting component patterns, or a
-parser project service is enabled. Remove the exact assessments when their
-affected versions leave the locks.
+Registry-integrity-verified old and new archives show iterative comma parsing,
+element-wise appends, and bounded nesting/rewrite counts. Existing dependency
+requirements remain unchanged; neither release adds an install lifecycle script.
+The 5.x maintainer-only script list adds `format:check`. Candidate locks change
+only the two brace-expansion resolutions, without overrides, new dependencies,
+or direct-pin changes. Frozen installation keeps lifecycle execution disabled.
+Official provenance and age reduce admission uncertainty without proving the
+absence of upstream compromise or regressions. Ordinary analyzer and provider
+contracts remain the compatibility evidence.
 
 ## URI processing
 

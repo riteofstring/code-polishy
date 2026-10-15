@@ -94,8 +94,9 @@ Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
 the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
 compilation and semantic integration remain required; disabling those checks is
 not an acceptable bootstrap. Complete native dependency notices/inventory and
-all-host execution also remain open. The current dependency-review run additionally reports expired
-JavaScript vulnerability assessments. None of these failures is waived by the
+all-host execution also remain open. The 2026-10-15 JavaScript dependency update
+removes the expired brace-expansion assessments by adopting the now-aged fixes.
+None of the remaining failures is waived by the
 optional installation boundary.
 
 The current [first-party language-pack plan](installable-first-party-language-packs.md)
@@ -297,13 +298,21 @@ The candidate pins Rust Analyzer `0.0.346` and locks Salsa, `salsa-macros` and
 generation executed no build scripts, and the rejected vulnerable library was
 not compiled. Review and data-only preparation do not grant executable admission.
 
-The outgoing `0.27.11` schema accepts release-age assessments only for
+The outgoing `0.28.3` schema accepts release-age assessments only for
 `artifact`, `go`, `npm`, `pnpm` and `pypi`, not `crates.io`. Its source checks also
-lack Rust analysis. A local beta policy-lock upgrade needs separate caller
-authorization before the native Cargo security-fix assessment and helper build
-can proceed. Target providers cannot replace the locked assessment contract.
-Keep the current lock unchanged meanwhile. An upgrade would neither authorize
-publication nor constitute completed Rust support.
+lack Rust analysis. A private source install cannot provide the authenticated
+HTTPS publication index and archive-backed identity required by the supported
+lock upgrade. A published native-Cargo engine and a separately authorized
+self-hosting lock upgrade must precede the helper build. Target providers cannot
+replace the locked assessment contract. Keep the current lock unchanged meanwhile.
+
+The 2026-10-15 registry inspection covered all 188 locked registry packages:
+checksums matched and none was yanked. Only the three Salsa packages remained
+under 30 days; all are ordinarily eligible by 2026-10-24 at 09:56:31 UTC.
+Waiting removes the age exception requirement. The helper is not deployed, so
+the current evidence does not establish that an early security-fix admission
+is safer than waiting. This metadata inspection is not executable admission,
+successful compilation or a replacement for Cargo security checks.
 
 After admission, compile and test the helper before integrating it. Complete
 standard-library and attribute/derive expansion, source/configuration ownership,

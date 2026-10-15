@@ -213,11 +213,21 @@ The candidate uses Rust Analyzer crates `0.0.346`, the first inspected published
 line using Salsa `0.28`, with Salsa and its macro crates locked to `0.28.5`.
 Earlier candidates depend on the affected Salsa series in
 [RUSTSEC-2026-0308](https://rustsec.org/advisories/RUSTSEC-2026-0308.html).
-The fixed release was published on 2026-09-24 and needs exact security-fix age
-admission. The currently locked `0.27.11` schema does not support `crates.io`
-release-age assessments. A separately authorized local beta policy upgrade is
-required before admitting and compiling this candidate; no out-of-band age
-waiver or alternate policy file replaces the locked assessment contract.
+Registry inspection on 2026-10-15 found 188 registry packages in the candidate
+lock, with matching published checksums and no yanked releases. Only Salsa and
+its two macro crates remain younger than 30 days. All three become ordinarily
+eligible by 2026-10-24 at 09:56:31 UTC. This data-only review neither compiles
+the helper nor establishes complete dependency admission.
+
+The currently locked `0.28.3` engine lacks native Cargo governance and
+`crates.io` release-age assessments. Its lock command requires an authenticated
+HTTPS publication index and archive-backed release identity; a private source
+installation alone cannot activate new governing policy. A published engine
+with native Cargo enforcement and a separately authorized self-hosting lock
+upgrade are required before admitting and compiling this candidate. Waiting for
+the fixed dependencies to age avoids an early-admission exception; no demonstrated
+deployed-helper exposure currently justifies one. An alternate policy file,
+handwritten lock or disabled source check cannot replace that boundary.
 
 ## Compiler checks
 
