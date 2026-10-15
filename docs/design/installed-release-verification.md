@@ -91,10 +91,20 @@ rules. An older engine does not execute a version 7 release.
 
 The SDK retains upstream component licenses and copyright inventories; parser
 wheels retain their distribution license files. Nextest's binary-only archive
-requires a separately carried upstream license. Its pinned MIT text is recorded
-with the corresponding source revision. That top-level notice does not establish
-complete third-party notices or an exact linked-dependency inventory for Nextest;
-those remain a publication requirement alongside native installed-Rust evidence.
+requires separately carried upstream notices. The existing Nextest license file
+retains its pinned MIT text and a deduplicated source notice inventory for the
+362 registry packages in the union of the five supported targets' default-feature
+normal and build dependency closures. Registry archive checksums come from the
+exact upstream source lock; supplemental notice URLs name the immutable revisions
+recorded in the crates' VCS metadata. Numbered shared texts preserve each package's
+source location without repeating identical license bodies. The file is bounded
+at 2 MiB and remains in the authenticated core alongside SDK notices.
+
+The inventory explicitly identifies five packages with missing notice evidence.
+It is not an exact linked-binary graph: the upstream build recipe does not request
+locked resolution, and neither its release assets nor the inspected Linux binary
+provide a dependency attestation. Complete native notice and linked-dependency
+evidence remain publication requirements alongside native installed-Rust evidence.
 
 The SBOM links each Rust tool to the selected host's reviewed upstream archive
 URLs and SHA-256 identities, reusing the installer's checksum inventory. Archive

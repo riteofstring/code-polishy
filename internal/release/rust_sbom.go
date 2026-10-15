@@ -158,7 +158,7 @@ func rustReleaseNotices(root *os.Root, manifest Manifest, name string) ([]cdx.Pr
 }
 
 func nextestReleaseSource(root *os.Root, version string) (string, error) {
-	data, err := readCapabilityFile(root, "tools/cargo-nextest-license.txt", 32<<10)
+	data, err := readCapabilityFile(root, "tools/cargo-nextest-license.txt", 2<<20)
 	if err != nil {
 		return "", err
 	}

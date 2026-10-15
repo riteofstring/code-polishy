@@ -570,14 +570,41 @@ No beta release has been published or adopted.
 
 The Nextest source audit at `fc97e97bbe0a3927482a694247da00c099f4269e`
 found 580 locked packages: 571 crates.io archives and 9 workspace packages,
-including upstream test fixtures. All 571 archive checksums matched on
-2026-09-25. A recursive notice-filename inventory found 979 files, but 45 crates
-had no packaged license/notice/copyright files under those names. This is a
-source-inventory observation, not proof of the linked binary graph or license
-compliance. Completing the notice set requires exact upstream source evidence;
-copying the lock or substituting generic license text does not resolve it.
+including upstream test fixtures. All 571 archive checksums were reverified on
+2026-10-15. Data-only, frozen, offline Cargo resolution selected the binary's
+default-feature normal and build dependencies for all five supported targets.
+Their union contains 362 registry packages and five Nextest workspace packages.
+The per-target registry counts are 334 for Linux x64, 329 for Linux arm64,
+338 for Windows x64, 329 for macOS x64 and 333 for macOS arm64. These commands
+executed no dependency build scripts or procedural macros.
+
+`tools/cargo-nextest-license.txt` now carries 642 packaged notice files from
+that source closure and 18 supplemental upstream files covering 14 packages.
+Supplemental URLs use the immutable revisions in the authenticated crates' VCS
+metadata. Deduplication and whitespace normalization retain 226 distinct texts
+and every package's source reference. The complete file is 749,595 bytes, about
+87 KB with gzip; the existing installers already carry and authenticate it.
+The SBOM reader accepts this bounded inventory up to 2 MiB.
+
+Five packages still lack sufficient notice evidence: `async-scoped@0.9.0`,
+`backtrace-ext@0.2.1`, `guppy-workspace-hack@0.1.0`, `recursion@0.5.4` and
+`sigchld@0.2.4`. Their declarations are retained as metadata, never substituted
+for missing notices. The source inventory is not proof of the linked binary
+graph or license compliance. The [upstream release workflow](https://github.com/nextest-rs/nextest/blob/fc97e97bbe0a3927482a694247da00c099f4269e/.github/workflows/release.yml)
+does not request locked resolution from its pinned upload action; that
+[action defaults `locked` to false](https://github.com/taiki-e/upload-rust-binary-action/blob/f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6/action.yml).
+The release has no dependency SBOM asset, and the inspected Linux x64 binary
+has no cargo-auditable dependency section. Thus even this frozen source closure
+cannot authenticate the actual binary's dependency versions.
 Rust and Nextest SBOM entries retain explicit incomplete native compositions,
 host-specific authenticated download references and carried notice locations.
+
+Bootstrap sequencing remains unresolved at the publication boundary: the native
+Cargo engine must be published and adopted before the draft semantic helper can
+be admitted under it. This does not authorize excluding required source from
+governance, changing the lock by hand, or describing the draft as complete.
+The helper remains in the branch with its coverage failures visible. No native
+publication or self-hosting upgrade has occurred.
 
 The next milestones extend ordinary macro/module coverage and
 complete installed-release integration. Existing coverage failures remain until

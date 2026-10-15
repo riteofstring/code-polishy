@@ -140,6 +140,7 @@ func TestReleaseSBOMRejectsMissingOrInconsistentNativeEvidence(t *testing.T) {
 		{name: "oversized inventory", path: "tools/rust_checksums.txt", change: func(string) string { return strings.Repeat(" ", 33<<10) }, problem: "exceeds"},
 		{name: "missing nextest notice", path: "tools/cargo-nextest-license.txt", omit: true, problem: "notice is absent"},
 		{name: "empty nextest notice", path: "tools/cargo-nextest-license.txt", change: func(string) string { return "" }, problem: "nonempty"},
+		{name: "oversized nextest notice", path: "tools/cargo-nextest-license.txt", change: func(string) string { return strings.Repeat(" ", (2<<20)+1) }, problem: "exceeds"},
 		{name: "wrong notice version", path: "tools/cargo-nextest-license.txt", change: func(value string) string { return strings.ReplaceAll(value, "0.9.138", "0.9.137") }, problem: "exact release"},
 		{name: "mutable notice source", path: "tools/cargo-nextest-license.txt", change: func(value string) string {
 			return strings.ReplaceAll(value, "fc97e97bbe0a3927482a694247da00c099f4269e", "main")
