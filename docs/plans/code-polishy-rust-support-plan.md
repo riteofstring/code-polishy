@@ -39,6 +39,33 @@ feature and target combination. Reuse existing execution controls and expose
 their limits; a new Rust-only operating-system sandbox is not a prerequisite for
 the capabilities already delivered through equivalent Go execution.
 
+## Immediate delivery: beta branch
+
+The immediate milestone is a usable, reviewable beta branch with a documented
+supported subset. Complete Rust parity remains the longer-term objective.
+Continue on `feature/rust-optional-install`, preserving the integrated mainline
+changes. Branch preparation does not require a version bump or publication.
+
+The beta focuses on the existing end-to-end crate path: discovery, selected
+formatting, compiler checks, supported quality and architecture analysis, Cargo
+dependency policy, native tests and doctests. Keep the large Rust tools in the
+authenticated optional companion and retain installation and repair evidence.
+Describe supported configurations and known limitations beside their verification
+results so adopters can assess whether their projects fit the current subset.
+
+Missing or altered tools, unsupported semantics and incomplete analysis continue
+to produce blocking findings. Beta status introduces no skip switch, successful
+empty result, policy exemption or weaker default. Full macro and semantic-helper
+coverage can follow the branch milestone; the existing helper draft and its
+admission failures remain visible until resolved.
+
+Native notice completion, all-host release evidence, publication and self-hosting
+lock adoption remain later release work. They do not prevent continued beta
+branch development. A beta branch may retain explicitly reported unfinished
+work and failed checkpoints; any merge or published beta still needs its
+applicable verification and release requirements. The current branch has not
+passed those checkpoints.
+
 ## Current baseline and architectural decisions
 
 The original implementation base included the accepted changes through `0.27.11`.
