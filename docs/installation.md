@@ -100,6 +100,32 @@ source installer retains that developer installation; the portable release
 archive is the default distribution without Rust executables. Both archives
 retain their notice and dependency-inventory obligations.
 
+### Rust beta scope
+
+The beta supports contained Cargo projects on the native host, using the pinned
+toolchain and a reviewed `Cargo.lock`. Ordinary checks cover selected formatting,
+compiler and Clippy diagnostics, written-source complexity and comment policy,
+supported module dependencies, and Cargo dependency policy. Native suites cover
+unit/integration tests through Nextest and separately declared doctests. Empty or
+wholly skipped execution cannot satisfy a required test suite.
+
+Architecture analysis covers written modules, imports, aliases and re-exports,
+plus supported standard macro arguments. Custom macros, non-builtin attribute
+expansion, ambiguous or unresolved bindings and unsupported module layouts fail
+coverage explicitly. This beta does not provide general macro-expanded semantic
+analysis. Compiler checks use the native host and default feature configuration;
+test suites can declare their own supported package and feature selections.
+Project Nextest configuration and unsupported Cargo, rustfmt or Clippy settings
+produce findings rather than silently changing policy or execution.
+
+Install the official companion before checking Rust code. Missing, damaged or
+wrong-version tools remain blocking errors; choosing beta support does not
+change required analysis. Host linkers and SDKs are still required as described
+below. See [Cargo facts](design/cargo-facts.md),
+[Rust architecture](design/rust-architecture.md) and
+[Rust test declarations](design/rust-tests.md#suite-configuration) for the exact
+supported boundaries and examples.
+
 ## Native source installers
 
 Source acquisition stays outside the installers. They never select a version,

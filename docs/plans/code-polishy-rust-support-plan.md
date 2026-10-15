@@ -39,12 +39,14 @@ feature and target combination. Reuse existing execution controls and expose
 their limits; a new Rust-only operating-system sandbox is not a prerequisite for
 the capabilities already delivered through equivalent Go execution.
 
-## Immediate delivery: beta branch
+## Immediate delivery: releasable beta
 
-The immediate milestone is a usable, reviewable beta branch with a documented
-supported subset. Complete Rust parity remains the longer-term objective.
+The immediate milestone is a releasable beta with a documented supported subset,
+passing applicable checks and a concrete committed release candidate.
+Complete Rust parity remains the longer-term objective.
 Continue on `feature/rust-optional-install`, preserving the integrated mainline
-changes. Branch preparation does not require a version bump or publication.
+changes. Prepare prerelease versioning and release notes once its supported
+behavior is settled; publication remains a separate maintainer operation.
 
 The beta focuses on the existing end-to-end crate path: discovery, selected
 formatting, compiler checks, supported quality and architecture analysis, Cargo
@@ -56,15 +58,17 @@ results so adopters can assess whether their projects fit the current subset.
 Missing or altered tools, unsupported semantics and incomplete analysis continue
 to produce blocking findings. Beta status introduces no skip switch, successful
 empty result, policy exemption or weaker default. Full macro and semantic-helper
-coverage can follow the branch milestone; the existing helper draft and its
-admission failures remain visible until resolved.
+coverage can follow the beta. The unused semantic helper draft is preserved at
+commit `3a973e2` on local branch `archive/rust-semantic-draft-3a973e2` and removed
+from the beta source tree. It has no active caller or shipped executable.
+Restoring it requires dependency admission, implementation and verification under
+an engine that governs Rust source; no source exclusions or policy exceptions
+stand in for that work. Existing runtime coverage failures remain enforced.
 
-Native notice completion, all-host release evidence, publication and self-hosting
-lock adoption remain later release work. They do not prevent continued beta
-branch development. A beta branch may retain explicitly reported unfinished
-work and failed checkpoints; any merge or published beta still needs its
-applicable verification and release requirements. The current branch has not
-passed those checkpoints.
+Native notice completion and required platform verification belong to beta
+release preparation. Publication and self-hosting lock adoption follow the
+verified candidate. Development checkpoints may fail while work is in progress;
+release readiness requires the applicable checks to pass.
 
 ## Current baseline and architectural decisions
 
@@ -137,10 +141,12 @@ all concern the semantic helper's unsupported Rust source, imports or Cargo
 governance. It also retains 12 existing file-length warnings. The dependency
 cleanup does not establish checkpoint acceptance or authorize a release.
 
-Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
-the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
-compilation and semantic integration remain required; disabling those checks is
-not an acceptable bootstrap. Complete native dependency notices/inventory and
+Full Rust parity remains incomplete. The locked `0.28.3` engine cannot govern
+the deferred semantic helper's Rust source and Cargo dependencies. Its admission,
+compilation and semantic integration remain required for the expanded semantic
+coverage milestone; disabling those checks is not an acceptable bootstrap.
+The beta excludes the unused draft while retaining runtime coverage errors.
+Complete native dependency notices/inventory and
 all-host execution also remain open. The 2026-10-15 JavaScript dependency updates
 remove the brace-expansion and fast-uri assessments by adopting the now-aged fixes.
 None of the remaining failures is waived by the
@@ -332,13 +338,14 @@ Pinned Cargo packaging fixtures cover inherited workspace license metadata.
 
 ### Semantic helper admission checkpoint
 
-`internal/rustfacts/semantic/` contains an initial, uncompiled Rust Analyzer
-helper and fixtures for generated-only dependencies, nested expansion, `$crate`
+Commit `3a973e2` retains an initial, uncompiled Rust Analyzer draft at
+`internal/rustfacts/semantic/`, removed from the beta source tree. Its fixtures
+cover generated-only dependencies, nested expansion, `$crate`
 hygiene and original call-site locations. It is not connected to public commands,
 shipped in releases or evidence of completed macro support. No helper build or
 fixture execution has been authorized by successful dependency admission yet.
 
-The candidate pins Rust Analyzer `0.0.346` and locks Salsa, `salsa-macros` and
+The deferred draft pins Rust Analyzer `0.0.346` and locks Salsa, `salsa-macros` and
 `salsa-macro-rules` to `0.28.5`. Earlier candidate Salsa releases fail
 [RUSTSEC-2026-0308](https://rustsec.org/advisories/RUSTSEC-2026-0308.html), reported
 2026-09-24. The fixed release is younger than the 30-day baseline. Registry lock
@@ -523,8 +530,10 @@ acceptance matrix are unchanged.
 
 ## Delivery and acceptance
 
-Release only after the upstream repository's authorized release workflow proves
-the entire capability matrix through the public CLI and installed artifact.
+Release the beta only after its supported subset passes the applicable source
+checks and installed-artifact verification. Unsupported cases retain blocking
+coverage findings and documented limits. The entire capability matrix remains
+the acceptance target for full Rust parity.
 Publish an exact version/digest through separately authorized publication.
 Masterbrainer then adopts that release through its dependency workflow.
 
@@ -635,12 +644,11 @@ cannot authenticate the actual binary's dependency versions.
 Rust and Nextest SBOM entries retain explicit incomplete native compositions,
 host-specific authenticated download references and carried notice locations.
 
-Bootstrap sequencing remains unresolved at the publication boundary: the native
-Cargo engine must be published and adopted before the draft semantic helper can
-be admitted under it. This does not authorize excluding required source from
-governance, changing the lock by hand, or describing the draft as complete.
-The helper remains in the branch with its coverage failures visible. No native
-publication or self-hosting upgrade has occurred.
+The beta delivers the native Cargo engine before the deferred semantic helper.
+That engine must be published and adopted before the draft can be admitted under
+it. The unused draft is retained at `3a973e2`; its removal from the beta changes
+no active analyzer or target coverage rule. No native publication or self-hosting
+upgrade has occurred.
 
 The next milestones extend ordinary macro/module coverage and
 complete installed-release integration. Existing coverage failures remain until

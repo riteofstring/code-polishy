@@ -198,7 +198,8 @@ therefore cannot establish complete macro dependency coverage. General expansion
 remains a required semantic-provider milestone; the written graph does not silently
 admit those missing edges.
 
-The initial semantic helper source is in `internal/rustfacts/semantic/`. It uses
+The deferred semantic helper draft is retained at commit `3a973e2` under
+`internal/rustfacts/semantic/`, outside the beta source tree. It uses
 Rust Analyzer's HIR library to visit expanded syntax, resolve names with macro
 hygiene and map references back to physical source. An explicit Cargo manifest,
 native target and frozen build command establish its intended input boundary;
@@ -209,7 +210,7 @@ coverage, complete bounded source ownership, execution integration and distribut
 remain unfinished. Its fixtures have not run: dependency admission currently
 prevents building this helper. It supplies no architecture coverage yet.
 
-The candidate uses Rust Analyzer crates `0.0.346`, the first inspected published
+The deferred draft uses Rust Analyzer crates `0.0.346`, the first inspected published
 line using Salsa `0.28`, with Salsa and its macro crates locked to `0.28.5`.
 Earlier candidates depend on the affected Salsa series in
 [RUSTSEC-2026-0308](https://rustsec.org/advisories/RUSTSEC-2026-0308.html).

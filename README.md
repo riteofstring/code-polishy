@@ -80,6 +80,13 @@ Code Polishy keeps its built-in tools fixed until you upgrade, so local and CI
 checks stay consistent. Built-in support covers Go, JavaScript, TypeScript,
 Python, and shell scripts.
 
+This branch also includes **Rust beta support** for contained Cargo projects.
+Rust tools install separately with `./code-polishyw install-rust`; repositories
+without Rust avoid the SDK and Nextest payload. The beta covers the supported
+formatting, compiler, source-analysis, dependency and native-test paths.
+Unsupported semantics produce blocking findings. Read the
+[Rust beta scope](docs/installation.md#rust-beta-scope) before adopting it.
+
 - **Go, JavaScript, and TypeScript:** Formats code and catches likely bugs,
   type errors, unused code, and overly complex functions. Locked dependencies
   are checked for known vulnerabilities.
