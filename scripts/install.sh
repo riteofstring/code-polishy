@@ -785,6 +785,7 @@ for retired in "check_policy.sh" "git submodule"; do
   fi
 done
 
+"${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest rust-notices --root "${staging}"
 release_digest="$("${release_manifest}" write "${staging}" "${source_revision}")"
 "${release_manifest}" verify "${staging}"
 
@@ -803,6 +804,8 @@ if [[ -n "${publication_dir}" ]]; then
     --root "${staging}" --output "${release_archive}"
   "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest publish \
     --archive "${release_archive}" --destination "${publication_dir}"
+  "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest rust-archive \
+    --root "${staging}" --output "${publication_dir}/code-polishy-${code_polishy_version}-rust-${javascript_platform_tag}.zip"
 fi
 if [[ "${build_only}" == true ]]; then
   echo "Built the portable Code Polishy publication at ${publication_dir}."

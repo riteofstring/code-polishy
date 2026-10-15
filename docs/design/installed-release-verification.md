@@ -74,10 +74,11 @@ installed wheel metadata and licenses. Release SBOM composition requires both
 parser distributions to match the manifest; missing, duplicate, wrong-version
 or undeclared Python distributions cannot be silently left out of publication.
 
-Rust is a built-in release capability. Each native archive carries the matching
-Rust SDK (Cargo, rustc, rustdoc, rustfmt, Clippy, and host standard library) and
-the pinned Nextest executable. Builders probe these tools before sealing the
-archive; installed commands never acquire a toolchain from rustup or the target
+Rust is a built-in release capability. Each native core archive authenticates a separately
+installed Rust SDK (Cargo, rustc, rustdoc, rustfmt, Clippy, and host standard
+library) and the pinned Nextest executable. Its companion archive carries those
+tools; the default core archive omits them. Builders probe these tools before
+sealing their inventory; installed commands never acquire a toolchain from rustup or the target
 project. Manifest version 7 binds the Rust and Nextest pins into the cross-host
 release identity. The launcher's existing historical-manifest reader continues
 to interpret versions 2 through 6 with their original tool fields and identity
@@ -120,3 +121,10 @@ the selected manifest, uses the installed Python and launcher, and keeps target
 state in a temporary directory. The same scenario runs on all five native hosts;
 it does not rebuild the archive or repeat the ordinary source gate. The fixture's
 URLs cannot acquire a release and never replace a consuming repository's lock.
+
+The [optional tools contract](optional-rust-tools.md) preserves required Rust
+coverage across absent, damaged and repaired installations. The native archive
+fixture first verifies rejection without tools, installs the companion against
+the core's authority, then exercises Rust behavior and removal/recovery. Small
+SDK notice copies remain in the core under `tools/rust-notices/HOST` so release
+publication retains their evidence without requiring the optional SDK payload.

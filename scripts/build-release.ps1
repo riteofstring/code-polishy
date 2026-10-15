@@ -210,6 +210,8 @@ try {
   if ($Provenance.protocolVersion -ne 3 -or $Provenance.operation -ne 'provenance' -or -not $Provenance.result.bundleDigest) {
     throw 'Portable JavaScript bundle returned incomplete provenance.'
   }
+  & $Engine --policy-root $Stage release-manifest rust-notices --root $Stage
+  if ($LASTEXITCODE -ne 0) { throw 'Rust notice materialization failed.' }
   $ReleaseDigest = (& $Engine --policy-root $Stage release-manifest write --root $Stage --source-revision $SourceRevision).Trim()
   if ($LASTEXITCODE -ne 0 -or $ReleaseDigest -notmatch '^[0-9a-f]{64}$') { throw 'Native release manifest creation failed.' }
   & $Engine --policy-root $Stage release-manifest verify --root $Stage
@@ -220,6 +222,10 @@ try {
   if ($PublicationDirectory) {
     & $Engine --policy-root $Stage release-manifest publish --archive $Output --destination $PublicationDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Native release publication metadata creation failed.' }
+    $Version = (Get-Content -Raw -LiteralPath (Join-Path $Stage 'VERSION')).Trim()
+    $RustArchive = Join-Path $PublicationDirectory "code-polishy-$Version-rust-windows-x64.zip"
+    & $Engine --policy-root $Stage release-manifest rust-archive --root $Stage --output $RustArchive
+    if ($LASTEXITCODE -ne 0) { throw 'Rust companion archive creation failed.' }
   }
   Write-Output "releaseDigest=$ReleaseDigest"
   Write-Output "archiveSHA256=$BundleDigest"

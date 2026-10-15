@@ -75,7 +75,7 @@ func WriteArchive(releaseRoot, output string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return writeArchiveAtomically(root, destination, manifest)
+	return writeArchiveAtomically(root, destination, coreArchiveManifest(manifest))
 }
 
 func verifiedReleaseRoot(releaseRoot string) (string, Manifest, error) {

@@ -382,6 +382,11 @@ ask a target dependency to satisfy shared coverage. A missing or corrupted
 shared tool means the locked release must be installed or repaired; it is not a
 target dependency gap.
 
+For governed Rust inputs, run `./code-polishyw install-rust` to install the
+exact optional tools selected by the existing core release. An absent installation
+blocks required Rust checks; do not add exclusions, replacements, or relaxed
+policy to avoid setup.
+
 For Rust unit and integration suites, use the native `rust` selector described in
 [Rust test evidence](design/rust-tests.md). Preserve Cargo workspace default
 members and features unless the suite deliberately selects alternatives. Prepare

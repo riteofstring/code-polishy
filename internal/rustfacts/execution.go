@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -34,6 +35,9 @@ func Command(repo repository.Repository, name, tool string, arguments ...string)
 }
 
 func ToolProblem(repo repository.Repository) error {
+	if err := release.VerifyRustTools(repo.PolicyRoot); err != nil {
+		return err
+	}
 	pin := repo.ToolPin("rust")
 	if pin == "" {
 		return errors.New("pinned Rust version is unavailable")

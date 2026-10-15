@@ -65,6 +65,16 @@ func handleReleasePublicationMeta(mode string, options releaseManifestOptions) i
 	switch mode {
 	case "archive":
 		return archiveReleaseManifest(options)
+	case "rust-archive":
+		return archiveRustReleaseManifest(options)
+	case "rust-notices":
+		if options.root == "" || !releaseManifestOptionsEmpty(options, "root") {
+			return commandUsageError("release-manifest", "release-manifest rust-notices requires --root PATH")
+		}
+		if err := release.MaterializeRustNotices(options.root); err != nil {
+			return operationalError(err)
+		}
+		return 0
 	case "publish":
 		return publishReleaseManifest(options)
 	case "index":
@@ -72,8 +82,20 @@ func handleReleasePublicationMeta(mode string, options releaseManifestOptions) i
 	case "oci-context":
 		return ociContextReleaseManifest(options)
 	default:
-		return commandUsageError("release-manifest", "release-manifest requires write, verify, satisfies-lock, materialize, archive, publish, index, or oci-context")
+		return commandUsageError("release-manifest", "release-manifest requires write, verify, satisfies-lock, materialize, archive, rust-archive, rust-notices, publish, index, or oci-context")
 	}
+}
+
+func archiveRustReleaseManifest(options releaseManifestOptions) int {
+	if options.root == "" || options.output == "" || !releaseManifestOptionsEmpty(options, "root", "output") {
+		return commandUsageError("release-manifest", "release-manifest rust-archive requires --root PATH and --output PATH")
+	}
+	digest, err := release.WriteRustArchive(options.root, options.output)
+	if err != nil {
+		return operationalError(err)
+	}
+	fmt.Println(digest)
+	return 0
 }
 
 func releaseManifestOptionsEmpty(options releaseManifestOptions, allowed ...string) bool {

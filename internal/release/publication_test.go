@@ -324,7 +324,7 @@ func foreignRelease(t *testing.T, host string) (string, Manifest) {
 		}
 	}
 	if host != manifest.Host {
-		before, after := ".tools/rust/"+manifest.Host, ".tools/rust/"+host
+		before, after := "tools/rust-notices/"+manifest.Host, "tools/rust-notices/"+host
 		if err := os.Rename(filepath.Join(root, filepath.FromSlash(before)), filepath.Join(root, filepath.FromSlash(after))); err != nil {
 			t.Fatal(err)
 		}

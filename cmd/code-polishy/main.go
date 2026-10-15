@@ -25,11 +25,12 @@ Commands:
   capabilities [--query TEXT] [--format human|json]
   task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
+  install-rust [--source ARCHIVE]
   pack <install|verify|root>
   agents <install|sync|check>
   lock --index URL --sha256 DIGEST
   upgrade <plan|apply> [options]
-  release-manifest <write|verify|satisfies-lock|materialize|archive|publish|index|oci-context> [options]
+  release-manifest <write|verify|satisfies-lock|materialize|archive|rust-archive|rust-notices|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
   check [--git-changes|--staged|--all|--files PATH...|--module NAME...|--name NAME...]
@@ -196,6 +197,8 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 	case "install-bundle":
 
 		return handleInstallBundleMeta(invocation), true
+	case "install-rust":
+		return handleInstallRustMeta(invocation), true
 	case "release-manifest":
 		return handleReleaseManifestMeta(invocation), true
 	case "change-boundary":

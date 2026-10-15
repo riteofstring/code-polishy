@@ -172,6 +172,16 @@
       "workflows": ["docs/agent-workflows.md"]
     },
     {
+      "name": "install-rust",
+      "kind": "command",
+      "description": "Install the exact optional Rust tools authenticated by the selected core release.",
+      "aliases": ["Rust tool setup"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md"]
+    },
+    {
       "name": "lock",
       "kind": "command",
       "description": "Atomically select an exact installed release and optionally pin its published native archives.",

@@ -112,7 +112,7 @@ func assertRustNoticeEvidence(t *testing.T, host string, component cdx.Component
 	}
 	wanted := "tools/cargo-nextest-license.txt"
 	if component.Name == "rust" {
-		wanted = ".tools/rust/" + host + "/share/doc/rust/COPYRIGHT.html"
+		wanted = "tools/rust-notices/" + host + "/doc/rust/COPYRIGHT.html"
 	}
 	if !slices.Contains(*component.Properties, cdx.Property{Name: "code-polishy:notice-path", Value: wanted}) {
 		t.Fatalf("native notice omitted: %+v", component)
@@ -144,8 +144,8 @@ func TestReleaseSBOMRejectsMissingOrInconsistentNativeEvidence(t *testing.T) {
 		{name: "mutable notice source", path: "tools/cargo-nextest-license.txt", change: func(value string) string {
 			return strings.ReplaceAll(value, "fc97e97bbe0a3927482a694247da00c099f4269e", "main")
 		}, problem: "immutable"},
-		{name: "unsealed SDK copyright", path: ".tools/rust/HOST/share/doc/rust/COPYRIGHT.html", omit: true, problem: "notice is absent"},
-		{name: "empty SDK license", path: ".tools/rust/HOST/share/licenses/rustc/LICENSE-MIT", change: func(string) string { return "" }, problem: "nonempty"},
+		{name: "unsealed SDK copyright", path: "tools/rust-notices/HOST/doc/rust/COPYRIGHT.html", omit: true, problem: "notice is absent"},
+		{name: "empty SDK license", path: "tools/rust-notices/HOST/licenses/rustc/LICENSE-MIT", change: func(string) string { return "" }, problem: "nonempty"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root, manifest := installedRelease(t, map[string]string{BinaryPath: "fixture"}, nil)

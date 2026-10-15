@@ -188,7 +188,8 @@ jobs:
             echo "The fresh installation did not report Code Polishy ${RELEASE_VERSION}." >&2
             exit 1
           fi
-          bash ./scripts/test-installed-release-rust.sh "${installed_root}" "${installation}/bin/code-polishy"
+          bash ./scripts/test-installed-release-rust.sh "${installed_root}" "${installation}/bin/code-polishy" \
+            "${publication_dir}/code-polishy-${RELEASE_VERSION}-rust-${RELEASE_HOST}.zip"
 
       - name: Build and smoke-test native archive
         if: matrix.build == 'windows'
@@ -238,7 +239,7 @@ jobs:
           }
           $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
           if (-not (Test-Path -LiteralPath $bash -PathType Leaf)) { throw 'The native Rust fixture requires Git Bash.' }
-          & $bash ./scripts/test-installed-release-rust.sh $installedRoot (Join-Path $installation 'bin\code-polishy.exe')
+          & $bash ./scripts/test-installed-release-rust.sh $installedRoot (Join-Path $installation 'bin\code-polishy.exe') (Join-Path $publicationDir "code-polishy-$env:RELEASE_VERSION-rust-$env:RELEASE_HOST.zip")
           if ($LASTEXITCODE -ne 0) { throw 'The installed Rust fixture failed.' }
 
       - name: Retain native publication
@@ -450,8 +451,8 @@ jobs:
           fi
           printf '%s  %s\n' "${index_sha}" "$(basename "${index_path}")" >"${index_path}.sha256"
           asset_count="$(find "${release_root}" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
-          if [[ "${asset_count}" -ne 27 ]]; then
-            echo "The complete publication must contain 27 assets, found ${asset_count}." >&2
+          if [[ "${asset_count}" -ne 32 ]]; then
+            echo "The complete publication must contain 32 assets, found ${asset_count}." >&2
             exit 1
           fi
           printf 'engine=%s\n' "${engine}" >>"${GITHUB_OUTPUT}"

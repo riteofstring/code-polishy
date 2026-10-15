@@ -69,6 +69,37 @@ release through the stable launcher and performs no clone, download, build,
 fallback selection, or `PATH` mutation. The wrappers contain only bootstrap and
 dispatch logic; the complete release remains in the shared user store.
 
+## Optional Rust tools
+
+The default portable installation contains Rust policy and its small syntax
+parser, but omits the Rust SDK and Nextest binaries. A repository with governed
+Rust inputs still requires the corresponding checks. Missing tools produce a
+blocking setup instruction; optional installation cannot disable analysis.
+
+Install the companion selected by the repository's existing release lock:
+
+```sh
+./code-polishyw install-rust
+```
+
+For an offline installation, use the matching published companion archive:
+
+```sh
+./code-polishyw install-rust --source /path/to/code-polishy-VERSION-rust-HOST.zip
+```
+
+Setup verifies every companion file against the authenticated core release's
+inventory. The companion cannot choose another version, alter policy, or change
+the repository lock. Ordinary checks never download tools or use ambient rustup
+installations. Modified, incomplete, or removed tools block Rust operations;
+rerunning `install-rust` repairs the optional installation. Repositories sharing an exact
+core installation also share its Rust tools.
+
+Source builds prepare the complete tool inventory for both archives. The native
+source installer retains that developer installation; the portable release
+archive is the default distribution without Rust executables. Both archives
+retain their notice and dependency-inventory obligations.
+
 ## Native source installers
 
 Source acquisition stays outside the installers. They never select a version,
@@ -251,9 +282,9 @@ One release identity has one self-contained policy root per supported host:
 - the `code-polishy` binary built from the reviewed commit with the pinned Go
   toolchain;
 - the sealed Node runtime and JavaScript tool bundle;
-- Rust `1.97.1` with Cargo, rustdoc, rustfmt, Clippy and the host standard library;
-  Nextest `0.9.138`; and Tree-sitter's pinned Rust syntax libraries in the carried
-  Python runtime, with the policy-owned formatter and Clippy settings;
+- Tree-sitter's pinned Rust syntax libraries and policy-owned formatter/Clippy
+  settings; the optional companion supplies Rust `1.97.1`, Cargo, rustdoc,
+  rustfmt, Clippy, the host standard library and Nextest `0.9.138`;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
   staticcheck, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
   `2.16`, `ty`, and the carried CPython `3.12.13+20260728` runtime from
@@ -349,14 +380,15 @@ installed release or a modified catalog cannot supply its capabilities. Older
 releases with no authenticated catalog report discovery evidence unavailable.
 
 Manifest version 7 adds `tools.rust` and `tools.cargo-nextest`. Each native release
-carries the pinned Rust SDK, host standard library, and Nextest runner; target
-repositories do not install rustup or a separate language pack. Rust parser
+authenticates the pinned Rust SDK, host standard library, and Nextest runner
+in its optional companion; target repositories install them with `install-rust`. Rust parser
 libraries reside in the carried Python runtime with their exact dependency
 manifest, lock, and distribution metadata. Changing either executable pin changes
 the cross-host release identity.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
-installed entry evidence. A release that was truncated, changed after
+core entry evidence. Optional Rust tool integrity is required before Rust
+execution. A core release that was truncated, changed after
 installation, or copied from another host fails verification and is reinstalled
 rather than executed. The launcher makes the same native judgment before every
 run on Linux, macOS, and Windows.

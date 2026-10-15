@@ -24,6 +24,18 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/optional-rust-tools.md",
+        "sourcePaths": [
+          "internal/release/rust_bundle.go",
+          "internal/release/rust_bundle_test.go",
+          "internal/release/rust_bundle_install.go",
+          "internal/release/installed.go",
+          "internal/release/publication.go",
+          "internal/rustfacts/execution.go",
+          "cmd/code-polishy/install_rust_meta.go"
+        ]
+      },
+      {
         "path": "docs/design/javascript-lint-results.md",
         "sourcePaths": [
           "internal/javascript/lint.go",
@@ -433,7 +445,7 @@
     {
       "name": "rustfacts",
       "paths": ["internal/rustfacts/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["policy", "repository", "runner", "release"]
     },
     {
       "name": "runner",

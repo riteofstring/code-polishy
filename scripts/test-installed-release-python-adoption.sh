@@ -485,7 +485,7 @@ EOF
     "python-adoption mutable GitLab include" "supplyChain.gitLabIncludePin" \
     "ci/includes/deep.yml" "fixture/secure-templates"
 
-  if ! "${release}/scripts/release-manifest.sh" verify "${release}" >"${output}" 2>&1; then
+  if ! "${release}/bin/code-polishy" --policy-root "${release}" release-manifest verify --root "${release}" >"${output}" 2>&1; then
     fail "python-adoption: managed Python commands changed the installed release: $(excerpt)"
   fi
 }

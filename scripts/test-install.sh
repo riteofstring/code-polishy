@@ -261,7 +261,7 @@ EOF
   write_file "${source_root}/scripts/code-polishy-stub.sh" <<EOF
 #!/usr/bin/env bash
 for argument in "\$@"; do
-  if [[ "\${argument}" == "satisfies-lock" ]]; then
+  if [[ "\${argument}" == "satisfies-lock" || "\${argument}" == "rust-notices" ]]; then
     exec "${engine_binary}" "\$@"
   fi
 done
@@ -378,6 +378,18 @@ EOF
     write_stub_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}"
   done
   printf '1.97.1\n' >"${source_root}/.tools/rust/${platform_tag}/.code-polishy-rust-release"
+  for notice in doc/rust/COPYRIGHT.html doc/rust/COPYRIGHT-library.html doc/cargo/LICENSE-THIRD-PARTY; do
+    write_file "${source_root}/.tools/rust/${platform_tag}/share/${notice}" <<EOF
+Fixture Rust ${notice}
+EOF
+  done
+  for component in cargo clippy rust-std rustc rustfmt; do
+    for notice in LICENSE-APACHE LICENSE-MIT; do
+      write_file "${source_root}/.tools/rust/${platform_tag}/share/licenses/${component}/${notice}" <<EOF
+Fixture ${component} ${notice}
+EOF
+    done
+  done
   write_version_tool "${source_root}/.tools/bin/cargo-nextest" --version "cargo-nextest 0.9.138 (fixture)"
   write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
   printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"

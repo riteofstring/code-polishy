@@ -1,8 +1,9 @@
 # First-class Rust support in Code Polishy
 
 Date: 2026-09-24. Status: beta implementation in progress.
-Implementation branch: `beta-rust-support`, based on `main` at
-`d6d14503ec561e54e61c36beb218f7ce684f75fe`, locked to Code Polishy `0.27.11`.
+The original implementation branch was `beta-rust-support`, based on `main` at
+`d6d14503ec561e54e61c36beb218f7ce684f75fe`. Integration continues on
+`feature/rust-optional-install` with mainline safeguards and the `0.28.3` lock.
 Imported from Masterbrainer's `docs/plans/code-polishy-rust-support-plan.md`
 at planning commit `be593fb`. This copy owns the Code Polishy implementation.
 
@@ -11,11 +12,13 @@ at planning commit `be593fb`. This copy owns the Code Polishy implementation.
 Rust receives the same product-level integration as Go and Python: automatic
 discovery, policy-owned tooling, source facts, architecture, quality, dependency
 governance, tests, reports, receipts, documentation, and verified releases.
-Target repositories must receive complete Rust support through normal Code
-Polishy setup and upgrade, without a separate pack-installation procedure or a
-hand-maintained Cargo policy stack. Automatic installation of an authenticated,
-release-owned Rust provider is compatible with this outcome; an optional pack
-or a few Cargo commands alone are not.
+Rust integration remains in the core engine. The large Rust SDK and native test
+runner are an explicit, separately installed official bundle authenticated by
+the exact core release. Repositories without Rust avoid that payload. Missing
+or altered tools block required Rust operations; installation optionality cannot
+disable source recognition or required policy coverage. The
+[optional Rust tools contract](../design/optional-rust-tools.md) owns this
+boundary. Full language-pack extraction is not required for this delivery.
 
 The Go policy engine remains the decision owner. A pinned Rust helper may supply
 compiler/parser facts through a bounded child-process protocol. Do not embed
@@ -38,9 +41,27 @@ the capabilities already delivered through equivalent Go execution.
 
 ## Current baseline and architectural decisions
 
-The implementation base includes the accepted changes through `0.27.11`.
-The earlier handoff inspected a divergent `0.25.0` checkout. Its unpublished
-behavior-review changes are not part of this base.
+The original implementation base included the accepted changes through `0.27.11`.
+The integration branch now includes mainline through `0.28.3`, preserving its
+dependency-input and Windows filesystem safeguards.
+
+Portable releases separate the SDK and Nextest into an authenticated companion.
+The core inventory remains authoritative and the native policy remains required.
+Local contract tests cover absent tools, exact installation, foreign payload
+rejection, altered and additional files, symlink rejection, cancellation,
+partial-publication rollback, and repair. The Linux x64 tool payload is about
+686 MB before compression. Release jobs exercise installation and removal of the
+companion through the public CLI on every supported host; those jobs have not yet
+supplied evidence for this candidate.
+
+Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
+the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
+compilation and semantic integration remain required; disabling those checks is
+not an acceptable bootstrap. Actual workspace-lock containment before native
+tests, complete native dependency notices/inventory, and all-host execution also
+remain open. The current dependency-review run additionally reports expired
+JavaScript vulnerability assessments. None of these failures is waived by the
+optional installation boundary.
 
 The current [first-party language-pack plan](installable-first-party-language-packs.md)
 and [universal discovery plan](universal-language-pack-capabilities.md) are
@@ -416,7 +437,7 @@ the entire capability matrix through the public CLI and installed artifact.
 Publish an exact version/digest through separately authorized publication.
 Masterbrainer then adopts that release through its dependency workflow.
 
-No target should need a Rust language-pack installation, hand-maintained import
+Targets use the official tool bundle without hand-maintained import
 inventory, copied tool bootstrap, or duplicate lint/security gate to satisfy the
 baseline. Required capabilities with known gaps cannot be described as complete.
 Masterbrainer retains ownership of GPU baselines and real application workflows.

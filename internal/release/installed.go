@@ -19,14 +19,20 @@ func (manifest Manifest) Verify(releaseDir string) error {
 		if err != nil {
 			return fmt.Errorf("read the installed Code Polishy release: %w", err)
 		}
-		if found.IsDir() {
-			return nil
-		}
 		relative, err := filepath.Rel(releaseDir, installed)
 		if err != nil {
 			return fmt.Errorf("read the installed Code Polishy release: %w", err)
 		}
 		relative = filepath.ToSlash(relative)
+		if manifest.ManifestVersion >= 7 && (relative == ".tools/rust/"+manifest.Host || relative == rustNextestPath(manifest.Host)) {
+			if found.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if found.IsDir() {
+			return nil
+		}
 
 		if relative == ManifestFilename {
 			return nil
@@ -36,6 +42,9 @@ func (manifest Manifest) Verify(releaseDir string) error {
 			return fmt.Errorf("%s is installed under a Code Polishy release that does not record it", installed)
 		}
 		delete(pending, relative)
+		if rustToolEntry(manifest, relative) {
+			return nil
+		}
 		return verifyEntry(installed, found, recorded)
 	}
 	if err := filepath.WalkDir(releaseDir, walk); err != nil {
@@ -43,6 +52,9 @@ func (manifest Manifest) Verify(releaseDir string) error {
 	}
 
 	for _, entry := range manifest.Entries {
+		if rustToolEntry(manifest, entry.Path) {
+			continue
+		}
 		if _, missing := pending[entry.Path]; missing {
 			return fmt.Errorf(
 				"the installed Code Polishy release is missing %s",

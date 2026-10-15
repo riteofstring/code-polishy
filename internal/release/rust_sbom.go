@@ -132,7 +132,7 @@ func rustReleaseNoticePaths(host, name string) []string {
 	if name == "cargo-nextest" {
 		return []string{"tools/cargo-nextest-license.txt"}
 	}
-	prefix := ".tools/rust/" + host + "/share/"
+	prefix := "tools/rust-notices/" + host + "/"
 	paths := []string{prefix + "doc/rust/COPYRIGHT.html", prefix + "doc/rust/COPYRIGHT-library.html", prefix + "doc/cargo/LICENSE-THIRD-PARTY"}
 	for _, component := range rustReleaseComponents {
 		for _, license := range []string{"LICENSE-APACHE", "LICENSE-MIT"} {

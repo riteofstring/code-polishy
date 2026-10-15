@@ -367,6 +367,14 @@
       "public": true
     },
     {
+      "id": "optional-rust-tools",
+      "path": "docs/design/optional-rust-tools.md",
+      "title": "Optional Rust Tool Installation",
+      "summary": "Keep the Rust SDK separately installed while preserving required analysis and exact release authority.",
+      "aliases": ["install-rust"],
+      "public": true
+    },
+    {
       "id": "rust-tests",
       "path": "docs/design/rust-tests.md",
       "title": "Native Rust Test Evidence",

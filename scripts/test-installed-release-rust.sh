@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
 exercise_rust_adoption_fixture() {
-  local fixture_root="$1" real_git="$2" release="$3" launcher="$4" lock="$5" python
+  local fixture_root="$1" real_git="$2" release="$3" launcher="$4" lock="$5" companion="${6:-}" python
   python="$(installed_fixture_python "${release}")"
-  "${python}" -I -B - "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}" <<'PY'
+  "${python}" -I -B - "${fixture_root}" "${real_git}" "${release}" "${launcher}" "${lock}" "${companion}" <<'PY'
 import json
 import pathlib
 import shutil
 import subprocess
 import sys
 
-fixture, git, release, launcher, lock = sys.argv[1:]
+fixture, git, release, launcher, lock, companion = sys.argv[1:]
 root = pathlib.Path(fixture) / "rust-adoption"
 root.mkdir()
 
@@ -100,6 +100,10 @@ write("src/lib.rs", rust_source(42))
 install_fixture_lock()
 subprocess.run([git, "-C", str(root), "init", "--quiet"], check=True)
 subprocess.run([launcher, "--repo-root", str(root), "agents", "install"], check=True)
+if companion:
+    missing = policy("check", "--files", "src/lib.rs", status=1)
+    assert any("install-rust" in finding["message"] for finding in missing["findings"]), missing
+    subprocess.run([launcher, "--repo-root", str(root), "install-rust", "--source", companion], check=True, timeout=300)
 policy("format", "--all")
 subprocess.run([git, "-C", str(root), "add", "-A"], check=True)
 subprocess.run([git, "-C", str(root), "-c", "user.name=Rust Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "fixture"], check=True)
@@ -151,14 +155,21 @@ write("src/lib.rs", 'pub fn answer() -> u32 { "not an integer" }\n')
 assert_native_outcome(policy("test", "--suite", "rust-docs", status=1), 101, "operational", "rust-docs", "rustdoc")
 write("src/lib.rs", documentation + rust_source(42))
 assert_native_outcome(policy("test", "--suite", "rust-docs"), 0, suite="rust-docs", artifact_type="rustdoc")
+if companion:
+    manifest = json.loads((pathlib.Path(release) / "release-manifest.json").read_text())
+    executable = "cargo-nextest.exe" if manifest["host"] == "windows-x64" else "cargo-nextest"
+    (pathlib.Path(release) / ".tools/bin" / executable).unlink()
+    missing = policy("test", "--suite", "rust-unit", status=1)
+    assert any("install-rust" in finding["message"] for finding in missing["findings"]), missing
+    subprocess.run([launcher, "--repo-root", str(root), "install-rust", "--source", companion], check=True, timeout=300)
 print("Installed Rust formatting, compiler diagnostics, native tests and doctests, failures, and recovery passed.")
 PY
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   set -euo pipefail
-  if [[ "$#" -ne 2 || ! -d "$1" || ! -x "$2" ]]; then
-    echo 'usage: test-installed-release-rust.sh RELEASE_ROOT LAUNCHER' >&2
+  if [[ ( "$#" -ne 2 && "$#" -ne 3 ) || ! -d "$1" || ! -x "$2" ]]; then
+    echo 'usage: test-installed-release-rust.sh RELEASE_ROOT LAUNCHER [RUST_ARCHIVE]' >&2
     exit 2
   fi
   policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -166,5 +177,5 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   fail() { echo "installed Rust fixture failure: $1" >&2; exit 1; }
   fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-installed-rust.XXXXXX")"
   trap 'rm -rf -- "${fixture_root}"' EXIT
-  exercise_rust_adoption_fixture "${fixture_root}" "$(command -v git)" "$1" "$2" ""
+  exercise_rust_adoption_fixture "${fixture_root}" "$(command -v git)" "$1" "$2" "" "${3:-}"
 fi
