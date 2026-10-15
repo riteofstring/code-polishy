@@ -586,6 +586,15 @@ and every package's source reference. The complete file is 749,595 bytes, about
 87 KB with gzip; the existing installers already carry and authenticate it.
 The SBOM reader accepts this bounded inventory up to 2 MiB.
 
+Commit `3b229f6` passes the focused release unit and installer contract suites,
+including oversized-notice rejection and the final carried notice file.
+Formatting and whitespace checks pass. Its clean-checkout checkpoint against
+`48b4668` remains rejected by 55 existing semantic-helper coverage errors:
+48 check-provider, four source-comment and three Cargo supply-chain findings.
+Go vet and staticcheck pass for the selected change; the blocked checkpoint
+does not execute tests. This narrower selection does not supersede the broader
+`8dede4b` checkpoint's architecture findings or establish release readiness.
+
 Five packages still lack sufficient notice evidence: `async-scoped@0.9.0`,
 `backtrace-ext@0.2.1`, `guppy-workspace-hack@0.1.0`, `recursion@0.5.4` and
 `sigchld@0.2.4`. Their declarations are retained as metadata, never substituted
