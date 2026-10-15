@@ -74,8 +74,8 @@ formatting, diagnostics, native tests, doctests, failure outcomes and repair.
 Its private Linux x64 artifact has release digest
 `424f856fa177a57d978660f0c28181262d22caa5fc8d137dc5a747a680d6d953`.
 Across the original run and focused correction, 37 of the 38 selected suites
-passed. The verification command still fails its 12 expired vulnerability
-assessments. A diagnostic rerun identified the JavaScript fixture's missing cached
+passed. At that checkpoint, the verification command also failed 12 expired
+vulnerability assessments. A diagnostic rerun identified the JavaScript fixture's missing cached
 `@types/node@24.13.3` archive; this run does not establish a source defect.
 Checkpoint validation still reports unsupported semantic-helper coverage,
 Cargo dependency coverage, architecture imports and expired JavaScript
@@ -90,12 +90,32 @@ measurement, excluding core verification and the inventory walk. Integrity
 checks remain active; verification is not cached across untrusted build-script
 or test execution.
 
+JavaScript dependency verification recovered on 2026-10-15. Commit `89b1ed9` updates both
+JavaScript graphs to aged brace-expansion 1.1.21 and 5.0.12, removes the 12
+expired assessments, regenerates the installed inventory and restores the
+frozen offline cache. All 38 changed-scope suites passed at that commit,
+including the installed optional Rust lifecycle. The private Linux x64 artifact
+has release digest
+`9b9516ab1ee818a8763f87a978f236e4bd2fd3f7bfa6c992da786172ae76434b`.
+Commit `8dede4b` additionally updates only the provider's fast-uri resolution to
+aged 3.1.8 and removes its assessment before expiry. All 39 focused provider
+cases passed against that final lock. The other suites remain evidence for
+`89b1ed9`; the provider-only follow-up did not repeat the full run.
+Online dependency review and installed offline supply-chain verification at the
+final dependency state report only the three existing Cargo coverage failures.
+Formatting passes. No assessment was extended and no release-age exemption was
+introduced. See the [dependency record](../security/dependency-assessments.md).
+The final clean-checkout checkpoint at `8dede4b` remains rejected: 59 errors
+all concern the semantic helper's unsupported Rust source, imports or Cargo
+governance. It also retains 12 existing file-length warnings. The dependency
+cleanup does not establish checkpoint acceptance or authorize a release.
+
 Full Rust delivery remains incomplete. The locked `0.28.3` engine cannot govern
 the candidate semantic helper's Rust source and Cargo dependencies. Its admission,
 compilation and semantic integration remain required; disabling those checks is
 not an acceptable bootstrap. Complete native dependency notices/inventory and
-all-host execution also remain open. The 2026-10-15 JavaScript dependency update
-removes the expired brace-expansion assessments by adopting the now-aged fixes.
+all-host execution also remain open. The 2026-10-15 JavaScript dependency updates
+remove the brace-expansion and fast-uri assessments by adopting the now-aged fixes.
 None of the remaining failures is waived by the
 optional installation boundary.
 
