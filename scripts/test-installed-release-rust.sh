@@ -78,8 +78,10 @@ def assert_native_outcome(report, exit_status, category="", suite="rust-unit", a
         assert len(artifacts) == 1 and artifacts[0]["type"] == artifact_type, command
         assert artifacts[0]["size"] > 0 and len(artifacts[0]["sha256"]) == 64, command
     executed = report["execution"]["commands"]
-    assert len(executed) == 1, executed
-    pathlib.Path(executed[0]["argv"][0]).resolve().relative_to(pathlib.Path(release).resolve())
+    assert [entry["name"] for entry in executed] == [suite + "-workspace", suite], executed
+    assert executed[0]["argv"][1] == "metadata" and executed[0]["exitStatus"] == 0, executed
+    for entry in executed:
+        pathlib.Path(entry["argv"][0]).resolve().relative_to(pathlib.Path(release).resolve())
 
 
 config = {
