@@ -450,7 +450,7 @@ func run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 	reuse := suiteReuseController(commandRunner)
 	for index, suite := range plan.Suites {
 		runContext := suiteRunContext(ctx, reporter, index)
-		execution := runOneSuite(runContext, repo.Root, commandRunner, suite, reuse, &artifactExecution)
+		execution := runOneSuite(runContext, repo, commandRunner, suite, reuse, &artifactExecution)
 		runResult.Executions = append(runResult.Executions, execution)
 		reportSuiteExecution(reporter, index, execution)
 		if execution.Failed() {
@@ -478,7 +478,10 @@ func suiteRunContext(ctx context.Context, reporter *ExecutionReporter, index int
 	})
 }
 
-func runOneSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, reuse SuiteReuseController, artifacts **testartifact.Execution) SuiteExecution {
+func runOneSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, suite policy.TestSuite, reuse SuiteReuseController, artifacts **testartifact.Execution) SuiteExecution {
+	if err := suiteProblem(repo, suite); err != nil {
+		return failedSuiteExecution(suite, 1, err)
+	}
 	execution, reused, err := reusableSuiteExecution(reuse, suite, 1)
 	if err != nil {
 		return failedSuiteExecution(suite, 1, err)
@@ -486,14 +489,14 @@ func runOneSuite(ctx context.Context, root string, commandRunner runner.Runner, 
 	if reused {
 		return execution
 	}
-	if err := ensureRunArtifacts(root, commandRunner, artifacts); err != nil {
+	if err := ensureRunArtifacts(repo.Root, commandRunner, artifacts); err != nil {
 		return failedSuiteExecution(suite, 1, err)
 	}
-	executionRoot, cleanup, err := suiteExecutionRoot(root, commandRunner, suite)
+	executionRoot, cleanup, err := suiteExecutionRoot(repo.Root, commandRunner, suite)
 	if err != nil {
 		return failedSuiteExecution(suite, 1, err)
 	}
-	execution = executeSuite(ctx, executionRoot, commandRunner, suite, 1, *artifacts)
+	execution = executeSuite(ctx, repo, executionRoot, commandRunner, suite, 1, *artifacts)
 	finishSuiteExecution(&execution, cleanup(), reuse)
 	return execution
 }
@@ -575,15 +578,18 @@ func suiteReuseController(commandRunner runner.Runner) SuiteReuseController {
 	return controller
 }
 
-func ExecuteSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int) SuiteExecution {
-	if runnerManagesTestArtifacts(commandRunner) {
-		return executeSuite(ctx, root, commandRunner, suite, attempt, nil)
+func ExecuteSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, suite policy.TestSuite, attempt int) SuiteExecution {
+	if err := suiteProblem(repo, suite); err != nil {
+		return failedSuiteExecution(suite, attempt, err)
 	}
-	execution, err := testartifact.Start(root, "")
+	if runnerManagesTestArtifacts(commandRunner) {
+		return executeSuite(ctx, repo, repo.Root, commandRunner, suite, attempt, nil)
+	}
+	execution, err := testartifact.Start(repo.Root, "")
 	if err != nil {
 		return failedSuiteExecution(suite, attempt, err)
 	}
-	result := executeSuite(ctx, root, commandRunner, suite, attempt, execution)
+	result := executeSuite(ctx, repo, repo.Root, commandRunner, suite, attempt, execution)
 	if completeErr := execution.Complete(); completeErr != nil {
 		result.FailureCategory = runner.FailureOperational
 		if result.FailureMessage == "" {
@@ -605,8 +611,8 @@ func RetrySuite(suite policy.TestSuite) policy.TestSuite {
 	return retry
 }
 
-func executeSuite(ctx context.Context, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int, artifactExecution *testartifact.Execution) SuiteExecution {
-	command := suiteCommand(suite)
+func executeSuite(ctx context.Context, repo repository.Repository, root string, commandRunner runner.Runner, suite policy.TestSuite, attempt int, artifactExecution *testartifact.Execution) SuiteExecution {
+	command := SuiteCommand(repo, suite)
 	if artifactExecution != nil {
 		prepared, err := artifactExecution.PrepareCommand(suite, command)
 		if err != nil {
@@ -618,7 +624,10 @@ func executeSuite(ctx context.Context, root string, commandRunner runner.Runner,
 	artifacts := []testartifact.Record{}
 	if artifactExecution != nil {
 		var artifactErr error
-		artifacts, artifactErr = artifactExecution.ValidateCommand(command)
+		artifacts, artifactErr = artifactExecution.ValidateCommand(command, result.ExitStatus)
+		if artifactErr != nil && (result.FailureCategory == "" || result.FailureCategory == runner.FailureCommandExit) {
+			result.FailureCategory = runner.FailureOperational
+		}
 		err = errors.Join(err, artifactErr)
 	} else if provider, ok := commandRunner.(interface {
 		TestArtifacts(string, int) []testartifact.Record
@@ -652,18 +661,10 @@ func runnerManagesTestArtifacts(commandRunner runner.Runner) bool {
 	return ok && managed.ManagesTestArtifacts()
 }
 
-func suiteCommand(suite policy.TestSuite) policy.Command {
-	return policy.Command{
-		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
-		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
-		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
-		TimeoutSeconds:    suite.TimeoutSeconds,
-		SealedEnvironment: suite.Reusable,
-		TestArtifacts:     append([]policy.TestArtifact{}, suite.Artifacts...),
-	}
-}
-
 func cloneSuite(suite policy.TestSuite) policy.TestSuite {
+	if suite.Rust != nil {
+		suite.Rust = suite.Rust.Clone()
+	}
 	suite.Modules = append([]string{}, suite.Modules...)
 	suite.Argv = append([]string{}, suite.Argv...)
 	suite.RetryArgv = append([]string{}, suite.RetryArgv...)
@@ -682,6 +683,9 @@ type resultRunner interface {
 }
 
 func runSuite(ctx context.Context, root string, commandRunner runner.Runner, command policy.Command) (runner.Result, bool, error) {
+	if testartifact.NeedsCommandOutput(command) && !runnerManagesTestArtifacts(commandRunner) {
+		return runCapturedSuite(ctx, root, commandRunner, command)
+	}
 	if observed, ok := commandRunner.(resultRunner); ok {
 		result, err := observed.RunWithResult(ctx, root, command)
 		return result, true, err
@@ -694,9 +698,16 @@ func runSuite(ctx context.Context, root string, commandRunner runner.Runner, com
 func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {
 	commands := make([]ExecutionCommand, 0, len(plan.Suites))
 	for _, suite := range plan.Suites {
+		argv := slices.Clone(suite.Argv)
+		if suite.Rust != nil {
+			argv = append([]string{"cargo-nextest"}, rustTestArguments(*suite.Rust)...)
+			if suite.Rust.Doctests {
+				argv[0] = "cargo"
+			}
+		}
 		commands = append(commands, ExecutionCommand{
 			Name: suite.Name, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost,
-			Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
+			Argv: argv, Cwd: suite.Cwd,
 			ExclusiveResources: append([]string{}, suite.ExclusiveResources...), TimeoutSeconds: suite.TimeoutSeconds,
 		})
 	}

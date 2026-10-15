@@ -148,7 +148,7 @@ func (engine *Engine) diagnoseTestFailure(ctx context.Context, plan testpolicy.P
 	if outcomeBearingRetry {
 		retryRunner = testRetryRunner(engine.Runner)
 	}
-	retry := testpolicy.ExecuteSuite(ctx, engine.Repository.Root, retryRunner, testpolicy.RetrySuite(original.Suite), original.Attempt+1)
+	retry := testpolicy.ExecuteSuite(ctx, engine.Repository, retryRunner, testpolicy.RetrySuite(original.Suite), original.Attempt+1)
 	retryEvidence := engine.testCommandEvidence(plan, selection, []testpolicy.SuiteExecution{retry}, "working-tree")[0]
 	retryEvidence.Diagnostic = !outcomeBearingRetry
 	diagnostic := TestFailureDiagnostic{Suite: original.Suite.Name, CandidateRetry: &retryEvidence}
@@ -257,7 +257,9 @@ func (engine *Engine) executeBaselineSuite(ctx context.Context, worktree string,
 	if !available {
 		return nil, false
 	}
-	execution := testpolicy.ExecuteSuite(ctx, worktree, commandRunner, baseline, attempt)
+	baselineRepo := engine.Repository
+	baselineRepo.Root = worktree
+	execution := testpolicy.ExecuteSuite(ctx, baselineRepo, commandRunner, baseline, attempt)
 	return &execution, true
 }
 
@@ -277,7 +279,7 @@ func (engine *Engine) baselineSuite(worktree string, candidate policy.TestSuite)
 }
 
 func sameTestSuiteSemantics(candidate, baseline policy.TestSuite) bool {
-	return sameTestSuiteIdentity(candidate, baseline) && sameTestSuiteCollections(candidate, baseline)
+	return sameTestSuiteIdentity(candidate, baseline) && sameTestSuiteCollections(candidate, baseline) && candidate.Rust.Equal(baseline.Rust)
 }
 
 func sameTestSuiteIdentity(candidate, baseline policy.TestSuite) bool {

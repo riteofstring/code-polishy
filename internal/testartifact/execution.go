@@ -115,13 +115,16 @@ func (execution *Execution) PrepareCommand(suite policy.TestSuite, command polic
 		}
 	}
 	command.Argv = substituteArguments(command.Argv, suiteDirectory, execution.id)
-	command.EnvironmentOverrides = []string{
-		EnvironmentDirectory + "=" + suiteDirectory,
-		EnvironmentID + "=" + execution.id,
-	}
-	command.TestArtifacts = append([]policy.TestArtifact{}, suite.Artifacts...)
+	command.EnvironmentOverrides = append(append([]string{}, command.EnvironmentOverrides...),
+		EnvironmentDirectory+"="+suiteDirectory,
+		EnvironmentID+"="+execution.id,
+	)
+	command.TestArtifacts = suite.ArtifactDeclarations()
 	command.TestArtifactSuite = suite.Name
 	command.TestArtifactDirectory = suiteDirectory
+	if err := prepareNextest(command); err != nil {
+		return policy.Command{}, err
+	}
 	return command, nil
 }
 
@@ -134,14 +137,14 @@ func substituteArguments(argv []string, directory, executionID string) []string 
 	return result
 }
 
-func (execution *Execution) ValidateCommand(command policy.Command) ([]Record, error) {
+func (execution *Execution) ValidateCommand(command policy.Command, exitStatus int) ([]Record, error) {
 	if command.TestArtifactDirectory == "" || command.TestArtifactSuite == "" {
 		if len(command.TestArtifacts) == 0 {
 			return []Record{}, nil
 		}
 		return nil, errors.New("test artifact command has no managed directory")
 	}
-	return validateDeclared(command.TestArtifactDirectory, command.TestArtifactSuite, command.TestArtifacts)
+	return validateDeclared(command.TestArtifactDirectory, command.TestArtifactSuite, command.TestArtifacts, exitStatus)
 }
 
 func (execution *Execution) Complete() error {

@@ -21,7 +21,7 @@ set -euo pipefail
 
 
 release_manifest_name="release-manifest.json"
-release_manifest_version=6
+release_manifest_version=7
 
 
 
@@ -46,6 +46,8 @@ release_pin_files=(
   "tools/staticcheck-version.txt"
   "tools/ty-version.txt"
   "tools/vulture-version.txt"
+  "tools/rust-version.txt"
+  "tools/cargo-nextest-version.txt"
 )
 
 case "$(uname -s)" in
@@ -148,6 +150,8 @@ shellcheck_version="$(read_tool_pin "${release_pin_files[9]}")"
 staticcheck_version="$(read_tool_pin "${release_pin_files[10]}")"
 ty_version="$(read_tool_pin "${release_pin_files[11]}")"
 vulture_version="$(read_tool_pin "${release_pin_files[12]}")"
+rust_version="$(read_tool_pin "${release_pin_files[13]}")"
+nextest_version="$(read_tool_pin "${release_pin_files[14]}")"
 
 
 
@@ -278,6 +282,8 @@ release_identity() {
   printf 'tool.staticcheck=%s\n' "${staticcheck_version}"
   printf 'tool.ty=%s\n' "${ty_version}"
   printf 'tool.vulture=%s\n' "${vulture_version}"
+  printf 'tool.rust=%s\n' "${rust_version}"
+  printf 'tool.cargo-nextest=%s\n' "${nextest_version}"
 }
 
 release_digest="$(release_identity |
@@ -317,7 +323,9 @@ $(render_features)
     "shellcheck": "${shellcheck_version}",
     "staticcheck": "${staticcheck_version}",
     "ty": "${ty_version}",
-    "vulture": "${vulture_version}"
+    "vulture": "${vulture_version}",
+    "rust": "${rust_version}",
+    "cargo-nextest": "${nextest_version}"
   },
   "releaseDigest": "${release_digest}",
   "contentDigest": "${content_digest}",

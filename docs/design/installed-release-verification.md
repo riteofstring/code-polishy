@@ -67,3 +67,56 @@ LGPL-2.1-or-later license. The library remains a separate Python package
 that recipients can replace; modified installations do not retain the original
 release's verified digest identity. Target project environments are not used
 for analyzer imports.
+
+The Rust syntax helper's Tree-sitter distributions share that carried Python
+runtime. Native builders carry their exact manifest and lock alongside the
+installed wheel metadata and licenses. Release SBOM composition requires both
+parser distributions to match the manifest; missing, duplicate, wrong-version
+or undeclared Python distributions cannot be silently left out of publication.
+
+Rust is a built-in release capability. Each native archive carries the matching
+Rust SDK (Cargo, rustc, rustdoc, rustfmt, Clippy, and host standard library) and
+the pinned Nextest executable. Builders probe these tools before sealing the
+archive; installed commands never acquire a toolchain from rustup or the target
+project. Manifest version 7 binds the Rust and Nextest pins into the cross-host
+release identity. The launcher's existing historical-manifest reader continues
+to interpret versions 2 through 6 with their original tool fields and identity
+rules. An older engine does not execute a version 7 release.
+
+The SDK retains upstream component licenses and copyright inventories; parser
+wheels retain their distribution license files. Nextest's binary-only archive
+requires a separately carried upstream license. Its pinned MIT text is recorded
+with the corresponding source revision. That top-level notice does not establish
+complete third-party notices or an exact linked-dependency inventory for Nextest;
+those remain a publication requirement alongside native installed-Rust evidence.
+
+The SBOM links each Rust tool to the selected host's reviewed upstream archive
+URLs and SHA-256 identities, reusing the installer's checksum inventory. Archive
+digests describe those downloads, not the extracted executable. Missing,
+duplicate, foreign-version or malformed archive rows fail composition. The
+selected SDK's primary licenses and upstream copyright inventories must remain
+nonempty regular files in the sealed manifest; Nextest's primary notice must name
+its exact version and immutable source revision. Notice locations are recorded
+on their components. CycloneDX compositions explicitly mark both native tools'
+transitive inventories incomplete until linked-dependency evidence exists.
+An upstream source lock is not an exact linked graph, and a dependency's declared
+license expression is not its copyright notice. These references authenticate
+reviewed inputs, not the upstream builder's identity.
+
+The installed Rust adoption fixture uses a dependency-free Cargo library in a
+temporary repository. Every policy operation enters through the exact installed
+launcher and lock. It exercises selected formatting, compiler diagnostics in JSON
+and SARIF, a passing native suite, an assertion failure, and an empty selection.
+Separate doctest cases cover runtime, expected-panic, compile-only, compile-fail
+and ignored examples, assertion failure, empty evidence, crate compilation failure
+and recovery through the installed compiler and result adapter.
+The fixture checks the retained structured test outcome rather than treating the
+CLI's nonzero exit as sufficient evidence. It never downloads target packages or
+changes the caller's repository authority.
+
+Each native release job also invokes this fixture against its freshly installed
+archive. The standalone fixture constructs an inert publication-shaped lock from
+the selected manifest, uses the installed Python and launcher, and keeps target
+state in a temporary directory. The same scenario runs on all five native hosts;
+it does not rebuild the archive or repeat the ordinary source gate. The fixture's
+URLs cannot acquire a release and never replace a consuming repository's lock.

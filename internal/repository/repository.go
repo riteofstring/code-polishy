@@ -495,10 +495,20 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 			{Name: "osv-scanner", Path: repo.PolicyTool("osv-scanner"), Version: repo.ToolPin("osv-scanner")},
 			{Name: "ruff", Path: repo.PolicyTool("ruff"), Version: repo.ToolPin("ruff")},
 			{Name: "ty", Path: repo.PolicyTool("ty"), Version: repo.ToolPin("ty")},
+			{Name: "cargo-nextest", Path: repo.PolicyTool("cargo-nextest"), Version: repo.ToolPin("cargo-nextest")},
 		}},
 		{directory: shellcheckDirectory, tools: []GovernedTool{{Name: "shellcheck", Path: filepath.Join(shellcheckDirectory, executableName("shellcheck")), Version: repo.ToolPin("shellcheck")}}},
 		{directory: nodeDirectory, tools: []GovernedTool{{Name: "node", Path: filepath.Join(nodeDirectory, executableName("node")), Version: repo.ToolPin("node")}}},
 		{directory: bundleBin},
+		{directory: filepath.Dir(repo.RustTool("cargo")), tools: []GovernedTool{
+			{Name: "cargo", Path: repo.RustTool("cargo"), Version: repo.ToolPin("rust")},
+			{Name: "rustc", Path: repo.RustTool("rustc"), Version: repo.ToolPin("rust")},
+			{Name: "rustdoc", Path: repo.RustTool("rustdoc"), Version: repo.ToolPin("rust")},
+			{Name: "rustfmt", Path: repo.RustTool("rustfmt"), Version: repo.ToolPin("rust")},
+			{Name: "cargo-fmt", Path: repo.RustTool("cargo-fmt"), Version: repo.ToolPin("rust")},
+			{Name: "cargo-clippy", Path: repo.RustTool("cargo-clippy"), Version: repo.ToolPin("rust")},
+			{Name: "clippy-driver", Path: repo.RustTool("clippy-driver"), Version: repo.ToolPin("rust")},
+		}},
 	} {
 		if !isDirectory(optional.directory) {
 			continue
@@ -609,7 +619,7 @@ func builtInExtensionLanguage(path string) string {
 		".go": "go", ".ts": "typescript", ".tsx": "typescript", ".js": "typescript",
 		".jsx": "typescript", ".mjs": "typescript", ".cjs": "typescript", ".mts": "typescript",
 		".cts": "typescript", ".vue": "typescript", ".svelte": "typescript", ".astro": "typescript",
-		".py": "python", ".pyi": "python", ".sh": "shell", ".bash": "shell", ".rs": "rust",
+		".py": "python", ".pyi": "python", ".sh": "shell", ".bash": "shell", ".rs": "rust", ".wgsl": "wgsl",
 		".java": "jvm", ".kt": "jvm", ".kts": "jvm", ".rb": "ruby", ".php": "php",
 		".swift": "swift", ".c": "native", ".h": "native", ".cc": "native", ".cpp": "native",
 		".cxx": "native", ".hpp": "native", ".proto": "protobuf", ".sql": "sql", ".dart": "dart",

@@ -766,7 +766,7 @@ func TestSupplyChainAggregatesProvidersAfterStaticFinding(t *testing.T) {
 
 func TestMergeGateSuiteCommandsPreserveConfiguredKinds(t *testing.T) {
 	t.Parallel()
-	commands := mergeGateSuiteCommands([]policy.TestSuite{
+	commands := mergeGateSuiteCommands(repository.Repository{}, []policy.TestSuite{
 		{Name: "unit", Kind: "unit", Scope: "module", Cost: "quick"},
 		{Name: "browser", Kind: "browser", Scope: "repository", Cost: "expensive"},
 	})

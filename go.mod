@@ -6,6 +6,7 @@ require (
 	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/dlclark/regexp2 v1.11.0
 	github.com/in-toto/attestation v1.2.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/rhysd/actionlint v1.7.12
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/yuin/goldmark v1.8.5

@@ -207,6 +207,11 @@ EOF
   mkdir -p "${source_root}/internal/pythonfacts"
   printf '[project]\nname="fixture"\nversion="9.9.9"\n' >"${source_root}/internal/pythonfacts/pyproject.toml"
   printf 'version = 1\nrevision = 3\n' >"${source_root}/internal/pythonfacts/uv.lock"
+  copy_file "${policy_root}/internal/rustfacts/pyproject.toml" "${source_root}/internal/rustfacts/pyproject.toml"
+  copy_file "${policy_root}/internal/rustfacts/uv.lock" "${source_root}/internal/rustfacts/uv.lock"
+  for rust_pin in rust-version.txt rust_checksums.txt rustfmt.toml clippy.toml cargo-nextest-version.txt cargo-nextest_checksums.txt cargo-nextest-license.txt; do
+    copy_file "${policy_root}/tools/${rust_pin}" "${source_root}/tools/${rust_pin}"
+  done
   printf '3.12.13+20260728\n' >"${source_root}/tools/python-version.txt"
   printf '%s\n' 'cpython-3.12.13+20260728-x86_64-unknown-linux-gnu-install_only.tar.gz fd9d70e1e1ed3f6caccb4e2eefe570aa07589c8f86ddf0e87f68a96cd14272e1' \
     >"${source_root}/tools/python_runtime_checksums.txt"
@@ -366,6 +371,14 @@ EOF
   write_version_tool "${source_root}/.tools/bin/osv-scanner" --version "osv-scanner version: 2.4.0"
   write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.16.0"
   write_version_tool "${source_root}/.tools/bin/ty" --version "ty 0.0.65 (87de836df 2026-07-29)"
+  for rust_tool in rustc rustdoc cargo; do
+    write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.1 (fixture)"
+  done
+  for rust_tool in rustfmt cargo-fmt clippy-driver cargo-clippy; do
+    write_stub_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}"
+  done
+  printf '1.97.1\n' >"${source_root}/.tools/rust/${platform_tag}/.code-polishy-rust-release"
+  write_version_tool "${source_root}/.tools/bin/cargo-nextest" --version "cargo-nextest 0.9.138 (fixture)"
   write_python_runtime_tool "${source_root}/.tools/python/${platform_tag}/python" "3.12.13" "2.16" "26.3"
   printf '3.12.13+20260728\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-python-release"
   printf '26.3\n' >"${source_root}/.tools/python/${platform_tag}/.code-polishy-packaging-release"
@@ -511,7 +524,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
 for carried in go:1.26.9 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
   staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
-  ruff:0.16.0 ty:0.0.65 vulture:2.16; do
+  ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
 done
@@ -533,6 +546,10 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   tools/staticcheck-version.txt tools/govulncheck-version.txt \
   tools/osv-scanner-version.txt tools/python-version.txt tools/python_runtime_checksums.txt \
   internal/pythonfacts/pyproject.toml internal/pythonfacts/uv.lock \
+  internal/rustfacts/pyproject.toml internal/rustfacts/uv.lock \
+  tools/rust-version.txt tools/rust_checksums.txt tools/cargo-nextest-version.txt tools/cargo-nextest_checksums.txt \
+  tools/cargo-nextest-license.txt \
+  tools/rustfmt.toml tools/clippy.toml \
   tools/packaging-version.txt tools/packaging_wheel_checksums.txt \
   tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
   tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
@@ -547,7 +564,8 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/go/${go_platform_tag}/go/bin/go" \
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
-  .tools/bin/staticcheck .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty; do
+  ".tools/rust/${platform_tag}/bin/rustc" ".tools/rust/${platform_tag}/bin/cargo-clippy" \
+  .tools/bin/staticcheck .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
@@ -679,6 +697,25 @@ grep -q ".tools/bin/osv-scanner" "${fixture_root}/missing-tool.log" ||
 mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout missing a pinned tool changed what is installed"
+
+for rust_tool in rustc rustdoc cargo; do
+  write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.2 (fixture)"
+  if install_release >"${fixture_root}/rust-version.log" 2>&1; then
+    fail "a checkout with the wrong ${rust_tool} installed a release"
+  fi
+  grep -q "${rust_tool}.*1.97.2" "${fixture_root}/rust-version.log" ||
+    fail "the mismatched ${rust_tool} was rejected without its reported version"
+  write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.1 (fixture)"
+done
+write_version_tool "${source_root}/.tools/bin/cargo-nextest" --version "cargo-nextest 0.9.139 (fixture)"
+if install_release >"${fixture_root}/nextest-version.log" 2>&1; then
+  fail "a checkout with the wrong Nextest installed a release"
+fi
+grep -q 'cargo-nextest.*0.9.139' "${fixture_root}/nextest-version.log" ||
+  fail "the mismatched Nextest was rejected without its reported version"
+write_version_tool "${source_root}/.tools/bin/cargo-nextest" --version "cargo-nextest 0.9.138 (fixture)"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a mismatched Rust tool changed the installed release"
 
 write_version_tool "${source_root}/.tools/bin/ruff" --version "ruff 0.99.0"
 if install_release >"${fixture_root}/tool-version.log" 2>&1; then

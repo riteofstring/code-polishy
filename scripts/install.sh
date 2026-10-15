@@ -305,6 +305,15 @@ release_contents=(
   "tools/osv-scanner-version.txt"
   "internal/pythonfacts/pyproject.toml"
   "internal/pythonfacts/uv.lock"
+  "internal/rustfacts/pyproject.toml"
+  "internal/rustfacts/uv.lock"
+  "tools/rust-version.txt"
+  "tools/rust_checksums.txt"
+  "tools/rustfmt.toml"
+  "tools/clippy.toml"
+  "tools/cargo-nextest-version.txt"
+  "tools/cargo-nextest_checksums.txt"
+  "tools/cargo-nextest-license.txt"
   "tools/astroid-version.txt"
   "tools/astroid_checksums.txt"
   "tools/packaging-version.txt"
@@ -342,10 +351,13 @@ esac
 go_tool_dir=".tools/go/${javascript_os_tag}-${go_arch_tag}"
 shellcheck_tool_dir=".tools/shellcheck/${javascript_os_tag}-${shellcheck_arch_tag}"
 python_tool_dir=".tools/python/${javascript_platform_tag}"
+rust_tool_dir=".tools/rust/${javascript_platform_tag}"
 policy_tools=(
   "${go_tool_dir}"
   "${shellcheck_tool_dir}"
   "${python_tool_dir}"
+  "${rust_tool_dir}"
+  ".tools/bin/cargo-nextest"
   ".tools/bin/staticcheck"
   ".tools/bin/govulncheck"
   ".tools/bin/osv-scanner"
@@ -378,6 +390,10 @@ carried_tools=(
   "ruff:tools/ruff-version.txt"
   "ty:tools/ty-version.txt"
   "vulture:tools/vulture-version.txt"
+  "rustc:tools/rust-version.txt"
+  "rustdoc:tools/rust-version.txt"
+  "cargo:tools/rust-version.txt"
+  "cargo-nextest:tools/cargo-nextest-version.txt"
 )
 
 carried_markers=(
@@ -385,6 +401,7 @@ carried_markers=(
   "packaging:${python_tool_dir}/.code-polishy-packaging-release:tools/packaging-version.txt"
   "python:${python_tool_dir}/.code-polishy-python-release:tools/python-version.txt"
   "vulture:${python_tool_dir}/.code-polishy-vulture-release:tools/vulture-version.txt"
+  "rust:${rust_tool_dir}/.code-polishy-rust-release:tools/rust-version.txt"
 )
 
 
@@ -408,6 +425,12 @@ pinned_identity() {
 
 probed_version() {
   case "$1" in
+    rustc | rustdoc | cargo)
+      javascript_sealed_run "${policy_root}/${rust_tool_dir}/bin/$1" --version | awk 'NR == 1 { print $2 }'
+      ;;
+    cargo-nextest)
+      javascript_sealed_run "${policy_root}/.tools/bin/cargo-nextest" --version | awk 'NR == 1 { print $2 }'
+      ;;
     go)
       javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version |
         awk '{ sub(/^go/, "", $3); print $3 }'
@@ -631,6 +654,12 @@ trap interrupted INT TERM HUP
 
 javascript_scratch_home="${scratch}/home"
 echo "Probing the exact version of every tool this release carries..."
+for rust_tool in rustc rustdoc cargo rustfmt cargo-fmt clippy-driver cargo-clippy; do
+  if [[ ! -x "${policy_root}/${rust_tool_dir}/bin/${rust_tool}" ]]; then
+    echo "The carried Rust SDK is missing ${rust_tool}. Run ./tools/install-policy-tools.sh." >&2
+    exit 1
+  fi
+done
 for carried in "${carried_tools[@]}"; do
   carried_tool="${carried%%:*}"
   carried_pin="${carried#*:}"

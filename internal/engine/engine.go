@@ -643,6 +643,7 @@ func (engine *Engine) supplyChain(ctx context.Context, offline, includeInstalled
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
 	if offline {
 		mode = "offline"
+		findings = append(findings, supplychain.CheckCargoResolution(ctx, engine.Repository, files, true, engine.Runner)...)
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
 	if !offline {
@@ -977,7 +978,7 @@ func configuredToolFindings(repo repository.Repository) []policy.Finding {
 	findings := []policy.Finding{}
 	commands := append([]policy.Command{}, repo.Config.Checks...)
 	for _, suite := range repo.Config.Tests.Suites {
-		commands = append(commands, policy.Command{Name: suite.Name, Argv: suite.Argv, Cwd: suite.Cwd, TimeoutSeconds: suite.TimeoutSeconds})
+		commands = append(commands, testpolicy.SuiteCommand(repo, suite))
 	}
 	for _, command := range commands {
 		if command.Managed {

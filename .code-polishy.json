@@ -44,6 +44,103 @@
         ]
       },
       {
+        "path": "docs/design/cargo-facts.md",
+        "module": "rustfacts"
+      },
+      {
+        "path": "docs/design/rust-tests.md",
+        "sourcePaths": [
+          "internal/policy/rust_tests.go",
+          "internal/policy/rust_tests_test.go",
+          "internal/rustfacts/tests.go",
+          "internal/testing/rust.go",
+          "internal/testing/rust_test.go",
+          "internal/testing/rust_output.go",
+          "internal/testing/rust_doctest_test.go",
+          "internal/engine/test_receipts.go",
+          "internal/engine/test_receipt_runner.go",
+          "internal/engine/test_execution_view.go",
+          "internal/engine/rust_tests_test.go",
+          "internal/behaviorreview/proof.go",
+          "internal/behaviorreview/rust_proof_test.go",
+          "internal/testartifact/execution.go",
+          "internal/testartifact/nextest.go",
+          "internal/testartifact/nextest_config.go",
+          "internal/testartifact/nextest_test.go",
+          "internal/testartifact/rustdoc.go",
+          "internal/testartifact/rustdoc_output.go",
+          "internal/testartifact/rustdoc_test.go",
+          "internal/testartifact/xml.go"
+        ]
+      },
+      {
+        "path": "docs/design/rust-architecture.md",
+        "sourcePaths": [
+          "internal/architecture/rust.go",
+          "internal/architecture/rust_evidence.go",
+          "internal/architecture/rust_test.go",
+          "internal/architecture/architecture.go"
+        ]
+      },
+      {
+        "path": "docs/design/rust-inputs.md",
+        "sourcePaths": [
+          "internal/policy/data.go",
+          "internal/policy/rust_inputs_test.go",
+          "internal/policy/rust_quality_test.go",
+          "internal/policy/cargo_release_age_test.go",
+          "internal/policy/cargo_vulnerability_test.go",
+          "internal/repository/cargo_manifest.go",
+          "internal/repository/cargo_manifest_test.go",
+          "internal/repository/cargo_dependencies.go",
+          "internal/repository/cargo_dependencies_test.go",
+          "internal/repository/cargo_git.go",
+          "internal/repository/cargo_git_test.go",
+          "internal/repository/cargo_lock.go",
+          "internal/repository/cargo_lock_test.go",
+          "internal/repository/rust_tools.go",
+          "internal/repository/rust_tools_test.go",
+          "internal/repository/rust_inputs_test.go",
+          "internal/quality/cargo_manifest.go",
+          "internal/quality/cargo_manifest_test.go",
+          "internal/quality/cargo.go",
+          "internal/quality/cargo_test.go",
+          "internal/quality/rust_format.go",
+          "internal/quality/rust_format_test.go",
+          "internal/quality/rust_source.go",
+          "internal/quality/rust_source_test.go",
+          "internal/quality/comments.go",
+          "internal/quality/wgsl_test.go",
+          "internal/supplychain/cargo.go",
+          "internal/supplychain/cargo_test.go",
+          "internal/supplychain/cargo_lock.go",
+          "internal/supplychain/cargo_lock_test.go",
+          "internal/supplychain/cargo_archive.go",
+          "internal/supplychain/cargo_archive_test.go",
+          "internal/supplychain/cargo_licenses.go",
+          "internal/supplychain/cargo_licenses_test.go",
+          "internal/supplychain/cargo_licenses_runtime_test.go",
+          "internal/supplychain/cargo_resolution.go",
+          "internal/supplychain/cargo_resolution_test.go",
+          "internal/supplychain/cargo_release_age.go",
+          "internal/supplychain/cargo_release_age_test.go",
+          "internal/supplychain/cargo_registry.go",
+          "internal/supplychain/cargo_registry_test.go",
+          "internal/supplychain/osv_cargo.go",
+          "internal/supplychain/osv_cargo_test.go",
+          "internal/supplychain/osv_cargo_runtime_test.go",
+          "internal/supplychain/release_age.go",
+          "internal/supplychain/online_profile.go",
+          "internal/supplychain/supplychain.go",
+          "internal/engine/cargo_supplychain_test.go",
+          "tools/install-rust.sh",
+          "tools/install-rust.ps1",
+          "tools/install-policy-tools.sh",
+          "tools/install-policy-tools.ps1",
+          "scripts/test-rust-runtime.sh"
+        ]
+      },
+      {
         "path": "docs/design/provider-scope.md",
         "sourcePaths": [
           "internal/repository/providers.go",
@@ -79,7 +176,11 @@
         "sourcePaths": [
           "internal/policy/git_evidence.go",
           "internal/supplychain/git_evidence.go",
+          "internal/supplychain/git_evidence_validation.go",
           "internal/supplychain/git_evidence_state.go",
+          "internal/supplychain/cargo_git_evidence_test.go",
+          "internal/supplychain/cargo_git_state_test.go",
+          "internal/engine/supplychain_evidence_test.go",
           "internal/supplychain/osv_uv.go"
         ]
       },
@@ -171,10 +272,18 @@
       {
         "path": "docs/design/installed-release-verification.md",
         "sourcePaths": [
+          "internal/release/manifest_writer.go",
+          "internal/release/launcher_manifest.go",
+          "internal/release/sbom.go",
+          "internal/release/rust_sbom.go",
+          "internal/release/rust_sbom_test.go",
+          "scripts/release-manifest.sh",
+          "scripts/build-release.ps1",
           "scripts/build-oci-image.sh",
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
-          "scripts/test-installed-release-architecture.sh"
+          "scripts/test-installed-release-architecture.sh",
+          "scripts/test-installed-release-rust.sh"
         ]
       },
       {
@@ -182,7 +291,12 @@
         "sourcePaths": [
           "internal/policy/review_snapshot.go",
           "internal/engine/behavior_review_decision.go",
-          "internal/engine/merge_gate.go"
+          "internal/engine/merge_gate.go",
+          "internal/supplychain/review.go",
+          "internal/supplychain/review_inventory.go",
+          "internal/supplychain/cargo_review.go",
+          "internal/supplychain/cargo_review_lock.go",
+          "internal/supplychain/cargo_review_test.go"
         ]
       },
       {
@@ -193,6 +307,8 @@
           "internal/repository/python_project.go",
           "internal/repository/repository.go",
           "internal/repository/control_inputs.go",
+          "internal/repository/contained_file.go",
+          "internal/repository/contained_directory_test.go",
           "internal/repository/test_ownership.go",
           "internal/engine/engine.go",
           "internal/engine/execution_telemetry.go",
@@ -315,6 +431,11 @@
       "dependsOn": ["policy", "pythonfacts"]
     },
     {
+      "name": "rustfacts",
+      "paths": ["internal/rustfacts/**"],
+      "dependsOn": ["policy", "repository", "runner"]
+    },
+    {
       "name": "runner",
       "paths": ["internal/runner/**"],
       "dependsOn": ["policy"]
@@ -347,7 +468,8 @@
         "gaterun",
         "policy",
         "repository",
-        "runner"
+        "runner",
+        "testing"
       ]
     },
     {
@@ -385,7 +507,8 @@
         "policy",
         "pythonfacts",
         "repository",
-        "runner"
+        "runner",
+        "rustfacts"
       ]
     },
     {
@@ -395,6 +518,7 @@
         "javascript",
         "policy",
         "pythonfacts",
+        "rustfacts",
         "repository",
         "runner",
         "pack"
@@ -403,7 +527,13 @@
     {
       "name": "testing",
       "paths": ["internal/testing/**"],
-      "dependsOn": ["policy", "repository", "runner", "testartifact"]
+      "dependsOn": [
+        "policy",
+        "repository",
+        "runner",
+        "rustfacts",
+        "testartifact"
+      ]
     },
     {
       "name": "supplychain",
@@ -413,6 +543,7 @@
         "policy",
         "repository",
         "runner",
+        "rustfacts",
         "spdx",
         "workflow"
       ]
@@ -517,6 +648,7 @@
         "policy",
         "spdx",
         "pythonfacts",
+        "rustfacts",
         "repository",
         "runner",
         "gaterun",
@@ -600,6 +732,15 @@
         "modules": ["repository"],
         "argv": ["go", "test", "-count=1", "./internal/repository/..."],
         "paths": ["internal/repository/**/*_test.go"]
+      },
+      {
+        "name": "rustfacts-unit",
+        "kind": "unit",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["rustfacts"],
+        "argv": ["go", "test", "-count=1", "./internal/rustfacts/..."],
+        "paths": ["internal/rustfacts/**/*_test.go"]
       },
       {
         "name": "runner-unit",
@@ -823,6 +964,22 @@
           "scripts/test-release-preflight.sh"
         ],
         "argv": ["./scripts/test-release-preflight.sh"],
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
+      },
+      {
+        "name": "rust-runtime-contract",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "paths": [
+          "scripts/test-rust-runtime.sh",
+          "tools/install-rust.*",
+          "tools/rust-version.txt",
+          "tools/rust_checksums.txt",
+          "tools/verify-sha256.sh"
+        ],
+        "argv": ["./scripts/test-rust-runtime.sh"],
         "runOn": ["focused", "recommended", "full"],
         "modules": ["tooling"]
       },
@@ -1327,6 +1484,7 @@
         "paths": [
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
+          "scripts/test-installed-release-rust.sh",
           "cmd/code-polishy/**",
           "internal/pack/**",
           "tools/fixtures/language-pack/**"
@@ -1367,12 +1525,14 @@
       "scripts/test-mutation-wrapper.sh",
       "scripts/test-install.sh",
       "scripts/test-release-preflight.sh",
+      "scripts/test-rust-runtime.sh",
       "scripts/test-javascript-runtime.sh",
       "scripts/test-javascript-bundle.sh",
       "scripts/test-javascript-runner.sh",
       "scripts/test-javascript-project.sh",
       "scripts/test-installed-release.sh",
       "scripts/test-installed-release-contract.sh",
+      "scripts/test-installed-release-rust.sh",
       "scripts/test-build-oci-image.sh",
       "scripts/test-javascript-provider.sh"
     ],
@@ -1396,6 +1556,11 @@
         "paths": ["internal/repository/**/*_test.go"],
         "module": "repository",
         "focusedSuite": "repository-unit"
+      },
+      {
+        "paths": ["internal/rustfacts/**/*_test.go"],
+        "module": "rustfacts",
+        "focusedSuite": "rustfacts-unit"
       },
       {
         "paths": ["internal/runner/**/*_test.go"],
@@ -1523,6 +1688,11 @@
         "focusedSuite": "release-preflight-contract"
       },
       {
+        "paths": ["scripts/test-rust-runtime.sh"],
+        "module": "tooling",
+        "focusedSuite": "rust-runtime-contract"
+      },
+      {
         "paths": ["scripts/test-javascript-runtime.sh"],
         "module": "tooling",
         "focusedSuite": "javascript-runtime-contract"
@@ -1545,7 +1715,8 @@
       {
         "paths": [
           "scripts/test-installed-release.sh",
-          "scripts/test-installed-release-contract.sh"
+          "scripts/test-installed-release-contract.sh",
+          "scripts/test-installed-release-rust.sh"
         ],
         "module": "tooling",
         "focusedSuite": "installed-release-contract"
@@ -1567,6 +1738,13 @@
   },
   "supplyChain": {
     "releaseArtifacts": [
+      {
+        "name": "cargo-nextest",
+        "versionFile": "tools/cargo-nextest-version.txt",
+        "source": "github-release",
+        "locator": "nextest-rs/nextest",
+        "tagPrefix": "cargo-nextest-"
+      },
       {
         "name": "astroid",
         "versionFile": "tools/astroid-version.txt",
@@ -1618,6 +1796,12 @@
         "source": "github-release",
         "locator": "koalaman/shellcheck",
         "tagPrefix": "v"
+      },
+      {
+        "name": "rust",
+        "versionFile": "tools/rust-version.txt",
+        "source": "github-release",
+        "locator": "rust-lang/rust"
       },
       {
         "name": "staticcheck",

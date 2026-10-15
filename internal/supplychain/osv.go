@@ -48,18 +48,27 @@ func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 		return nil, fmt.Errorf("enumerate dependency inputs: %w", err)
 	}
 	emptyPNPMProjects := dependencyFreePNPMProjects(repo, files)
+	cargo, err := osvLockInputs(repo, "Cargo.lock", osvCargoInventory)
+	if err != nil {
+		return nil, err
+	}
 	scans := []osvScan{}
 	for _, root := range activeOSVRoots(repo.Config) {
 		command := osvCommand(repo, "osv-scan-"+safeName(root), root)
 		command.Argv = append(command.Argv, "--recursive", "--experimental-disable-plugins", "python/uvlock", "--experimental-exclude", "g:**/.code-polishy-reports")
-		if rootHasOnlyCoveredDependencyInputs(repo, root, files, inputs, emptyPNPMProjects) {
+		command.Argv = append(command.Argv, "--experimental-disable-plugins", "rust/cargolock", "--experimental-disable-plugins", "rust/cargotoml")
+		if rootHasOnlyCoveredDependencyInputs(repo, root, files, append(append([]osvLockInput{}, inputs...), cargo...), emptyPNPMProjects) {
 			command.Argv = append(command.Argv, "--allow-no-lockfiles")
 		}
 		command.Argv = append(command.Argv, ".")
 		scans = append(scans, osvScan{Command: command, Root: root})
 	}
 	uv, err := osvUVScans(repo, inputs)
-	return append(scans, uv...), err
+	if err != nil {
+		return nil, err
+	}
+	rust, err := osvCargoScans(repo, cargo)
+	return append(append(scans, uv...), rust...), err
 }
 
 func dependencyFreePNPMProjects(repo repository.Repository, files []string) map[string]map[string]bool {
@@ -114,23 +123,27 @@ func dependencyFreePNPMLock(repo repository.Repository, root string, manifests [
 	return len(expected) == 0
 }
 
-func rootHasOnlyCoveredDependencyInputs(repo repository.Repository, root string, files []string, uvInputs []onlineUVInput, pnpmProjects map[string]map[string]bool) bool {
-	allowed := coveredDependencyInputs(root, files, uvInputs, pnpmProjects)
+func rootHasOnlyCoveredDependencyInputs(repo repository.Repository, root string, files []string, lockInputs []osvLockInput, pnpmProjects map[string]map[string]bool) bool {
+	allowed := coveredDependencyInputs(root, files, lockInputs, pnpmProjects)
 	return len(allowed) != 0 && !hasUncoveredDependencyInput(repo, root, files, allowed)
 }
 
-func coveredDependencyInputs(root string, files []string, uvInputs []onlineUVInput, pnpmProjects map[string]map[string]bool) map[string]bool {
+func coveredDependencyInputs(root string, files []string, lockInputs []osvLockInput, pnpmProjects map[string]map[string]bool) map[string]bool {
 	allowed := map[string]bool{}
 	available := map[string]bool{}
 	for _, path := range files {
 		available[path] = true
 	}
-	for _, input := range uvInputs {
+	for _, input := range lockInputs {
 		if !scopeInsideOSVRoot(input.Scope, root) {
 			continue
 		}
 		allowed[input.Scope] = true
-		manifest := filepath.ToSlash(filepath.Join(filepath.Dir(input.Scope), "pyproject.toml"))
+		name := "pyproject.toml"
+		if filepath.Base(input.Scope) == "Cargo.lock" {
+			name = "Cargo.toml"
+		}
+		manifest := filepath.ToSlash(filepath.Join(filepath.Dir(input.Scope), name))
 		if available[manifest] {
 			allowed[manifest] = true
 		}
@@ -212,7 +225,7 @@ func compactStrings(values []string) []string {
 
 func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) []policy.Finding {
 	root := scan.Root
-	output, runErr := runOSVCommandWithOutput(ctx, repo, scan, commandRunner)
+	result, output, runErr := runOSVCommandWithOutput(ctx, repo, scan, commandRunner)
 	findings, parseErr := parseOSVScanReport(repo, scan, output.Stdout)
 	if parseErr != nil {
 		message := fmt.Sprintf("parse OSV-Scanner JSON: %v", parseErr)
@@ -226,32 +239,38 @@ func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, 
 			Message: message,
 		}}
 	}
-	if runErr != nil && len(findings) == 0 {
+	if runErr != nil && !acceptedOSVFindingExit(ctx, result, findings, runErr) {
 		message := strings.TrimSpace(string(output.Stderr))
 		if message == "" {
 			message = runErr.Error()
 		}
-		return []policy.Finding{{Check: "policy.securityScanner", Path: root, Subject: "osv-scanner", Message: message}}
+		return append(findings, policy.Finding{Check: "policy.securityScanner", Path: root, Subject: "osv-scanner", Message: message})
 	}
 	return findings
 }
 
-func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) (runner.Output, error) {
+func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) (runner.Result, runner.Output, error) {
 	if observed, ok := commandRunner.(runner.ReportOutputRunner); ok {
-		_, output, err := observed.RunWithReportOutput(ctx, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
+		return observed.RunWithReportOutput(ctx, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
 			return acceptedOSVReportExit(ctx, repo, scan, result, output, runErr)
 		})
-		return output, err
 	}
-	return runCommandWithOutput(ctx, repo, scan.Command, commandRunner)
+	if observed, ok := commandRunner.(runner.OutputRunner); ok {
+		return observed.RunWithOutput(ctx, repo.Root, scan.Command)
+	}
+	return runner.Result{}, runner.Output{}, fmt.Errorf("common command runner cannot capture scanner output")
 }
 
 func acceptedOSVReportExit(ctx context.Context, repo repository.Repository, scan osvScan, result runner.Result, output runner.Output, runErr error) bool {
+	findings, err := parseOSVScanReport(repo, scan, output.Stdout)
+	return err == nil && acceptedOSVFindingExit(ctx, result, findings, runErr)
+}
+
+func acceptedOSVFindingExit(ctx context.Context, result runner.Result, findings []policy.Finding, runErr error) bool {
 	if ctx.Err() != nil || runErr == nil || result.ExitStatus != 1 || runner.FailureCategoryFor(ctx, result, runErr) != runner.FailureCommandExit {
 		return false
 	}
-	findings, err := parseOSVScanReport(repo, scan, output.Stdout)
-	if err != nil || len(findings) == 0 {
+	if len(findings) == 0 {
 		return false
 	}
 	for _, finding := range findings {
@@ -299,23 +318,34 @@ func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]
 	return parseOSVScanReport(repo, osvScan{Root: root}, payload)
 }
 
-func parseOSVScanReport(repo repository.Repository, scan osvScan, payload []byte) ([]policy.Finding, error) {
+func decodeOSVReport(payload []byte) (osvReport, error) {
+	var report osvReport
 	if len(bytes.TrimSpace(payload)) == 0 {
-		return nil, errors.New("scanner returned no JSON report")
+		return report, errors.New("scanner returned no JSON report")
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &fields); err != nil {
-		return nil, err
+		return report, err
 	}
 	if _, exists := fields["results"]; !exists {
-		return nil, errors.New("scanner report omitted results")
+		return report, errors.New("scanner report omitted results")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
-	var report osvReport
 	if err := decoder.Decode(&report); err != nil {
-		return nil, err
+		return report, err
 	}
 	if err := requireOneJSONValue(decoder); err != nil {
+		return report, err
+	}
+	return report, nil
+}
+
+func parseOSVScanReport(repo repository.Repository, scan osvScan, payload []byte) ([]policy.Finding, error) {
+	report, err := decodeOSVReport(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateOSVCargoReport(scan, report); err != nil {
 		return nil, err
 	}
 	findings := []policy.Finding{}

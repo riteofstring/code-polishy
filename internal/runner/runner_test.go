@@ -104,19 +104,35 @@ func TestOSRunnerRunWithWritersUsesOnlyTheRequestedDestinations(t *testing.T) {
 }
 
 func TestOSRunnerBoundsStructuredOutputCapture(t *testing.T) {
+	t.Parallel()
+	for _, structured := range []bool{false, true} {
+		for _, exit := range []string{"0", "101"} {
+			t.Run("structured="+strconv.FormatBool(structured)+"/exit="+exit, func(t *testing.T) {
+				testBoundedOutputCapture(t, structured, exit)
+			})
+		}
+	}
+}
+
+func testBoundedOutputCapture(t *testing.T, structured bool, exit string) {
+	t.Helper()
 	root := t.TempDir()
 	script := filepath.Join(root, "large-report.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nhead -c 8388609 /dev/zero\nhead -c 65537 /dev/zero >&2\n"), 0o700); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nhead -c 8388609 /dev/zero\nhead -c 65537 /dev/zero >&2\nexit "+exit+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	result, output, err := (OSRunner{}).RunWithOutput(context.Background(), root, policy.Command{
+	run := (OSRunner{}).RunWithOutput
+	if structured {
+		run = (OSRunner{}).RunStructured
+	}
+	result, output, err := run(context.Background(), root, policy.Command{
 		Name: "large-report", Argv: []string{"./large-report.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
 	})
 	if err == nil || !strings.Contains(err.Error(), "captured structured output") {
 		t.Fatalf("large structured output error = %v", err)
 	}
 
-	if result.ExitStatus != 0 || len(output.Stdout) != maximumStructuredOutputBytes || len(output.Stderr) != maximumStructuredDiagnosticBytes {
+	if strconv.Itoa(result.ExitStatus) != exit || result.FailureCategory != FailureOperational || len(output.Stdout) != maximumStructuredOutputBytes || len(output.Stderr) != maximumStructuredDiagnosticBytes {
 		t.Fatalf("large structured output result=%+v stdout=%d stderr=%d", result, len(output.Stdout), len(output.Stderr))
 	}
 }

@@ -640,5 +640,5 @@ func nextLine(data []byte, index int) int {
 }
 
 func sourceCommentsHandledElsewhere(repo repository.Repository, path string) bool {
-	return repo.IsGenerated(path) || repo.AnalysisOwner(path, "lint", "").Pack != ""
+	return repo.IsGenerated(path) || repo.Language(path) == "rust" || repo.AnalysisOwner(path, "lint", "").Pack != ""
 }

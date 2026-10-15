@@ -251,6 +251,9 @@ One release identity has one self-contained policy root per supported host:
 - the `code-polishy` binary built from the reviewed commit with the pinned Go
   toolchain;
 - the sealed Node runtime and JavaScript tool bundle;
+- Rust `1.97.1` with Cargo, rustdoc, rustfmt, Clippy and the host standard library;
+  Nextest `0.9.138`; and Tree-sitter's pinned Rust syntax libraries in the carried
+  Python runtime, with the policy-owned formatter and Clippy settings;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
   staticcheck, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
   `2.16`, `ty`, and the carried CPython `3.12.13+20260728` runtime from
@@ -323,7 +326,7 @@ swap the code a release runs without changing an installed file.
 
 Each manifest version has an exact schema and identity calculation. The engine
 accepts only its own version. The stable launcher keeps explicit readers for
-installed manifest versions 2 through 5 so installing a newer release does not
+installed manifest versions 2 through 6 so installing a newer release does not
 strand repositories still locked to an older one. It verifies each older
 release using that version's original fields and never invents evidence added
 by a later schema.
@@ -345,6 +348,13 @@ validates the selected catalog against the repository's exact lock; another
 installed release or a modified catalog cannot supply its capabilities. Older
 releases with no authenticated catalog report discovery evidence unavailable.
 
+Manifest version 7 adds `tools.rust` and `tools.cargo-nextest`. Each native release
+carries the pinned Rust SDK, host standard library, and Nextest runner; target
+repositories do not install rustup or a separate language pack. Rust parser
+libraries reside in the carried Python runtime with their exact dependency
+manifest, lock, and distribution metadata. Changing either executable pin changes
+the cross-host release identity.
+
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 installed entry evidence. A release that was truncated, changed after
 installation, or copied from another host fails verification and is reinstalled
@@ -364,7 +374,7 @@ homes, temporary files, and target output remain outside the release tree.
 Before it stages anything, the installer asks every tool the release will carry
 what version it is and requires the answer to be the version the checked-in pin
 beside it names — the Go toolchain, Node, pnpm, ShellCheck, staticcheck,
-govulncheck, OSV-Scanner, Ruff, PyPA `packaging`, Vulture, `ty`, and carried
+govulncheck, OSV-Scanner, Ruff, Rust/Cargo/rustdoc, Nextest, PyPA `packaging`, Vulture, `ty`, and carried
 CPython. The manifest records those identities, and a present file and a byte
 inventory cannot show that a local tool cache holds the version the manifest
 would claim. The two Go analyzers are read out of their binaries with the pinned
@@ -377,6 +387,12 @@ The installer verifies the CPython archive before extraction and the exact
 `packaging` `26.3` and Vulture `2.16` wheels before unpacking their pure-Python
 packages into that carried runtime. It removes `pip` and `ensurepip` and does
 not use a target `.venv` or target Python installation for either package.
+
+Rust target builds also need the host's native linker and SDK: a C toolchain on
+Linux, Xcode command-line tools on macOS, or the Visual Studio C++ build tools
+and Windows SDK for MSVC. These host prerequisites are separate from the carried
+Rust SDK; Code Polishy does not install system development packages. See the
+[Rust platform prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html).
 
 The installer stages a complete release, verifies the staged tree against the
 manifest it just wrote, and only then moves it into place under one name. A
@@ -541,7 +557,7 @@ report and test artifacts workspace-local.
 Self-hosting covers one target shape: a Go repository that also owns the sealed
 bundle's source. `./scripts/test-installed-release.sh` covers the others. It
 builds disposable repositories — Go with no JavaScript, a pnpm application, a
-pnpm workspace, TypeScript, and React — gives each the lock this checkout
+pnpm workspace, TypeScript, React, Python and Rust — gives each the lock this checkout
 requires, and governs them with the installed launcher. The Go target also runs
 the complete non-documentation flow: pre-coding intent capture, review
 preparation, red/green proof, finalization, checkpoint, and merge. It verifies
@@ -553,6 +569,10 @@ disturb is a check that did not run. The script installs nothing and reaches no
 network; it needs an installed release named by the selected lock. `--prefix`
 selects the release store, and `--lock` can select a temporary candidate lock
 without changing this repository's checked-in lock.
+
+`--fixture rust-adoption` selects the dependency-free Cargo fixture. It exercises
+the carried formatter, compiler and parser, JSON/SARIF findings, structured native
+test outcomes, empty-test rejection, and recovery after correcting a failure.
 
 What it proves is the release the selected lock names. By default that is this
 checkout's lock, which must be refreshed before validating a newly published

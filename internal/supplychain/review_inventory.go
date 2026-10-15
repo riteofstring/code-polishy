@@ -49,7 +49,7 @@ func validateNodeInventoryDeclaration(manifest, value string) error {
 
 func addResolvedInventoryRecords(inventory dependencyInventoryMap, direct map[string]bool, records []dependencyRecord) {
 	for _, record := range records {
-		if record.Ecosystem != "git" && direct[record.Ecosystem+"\x00"+record.Name+"\x00"+record.Version] {
+		if record.Directness != "resolved" && record.Ecosystem != "git" && direct[record.Ecosystem+"\x00"+record.Name+"\x00"+record.Version] {
 			continue
 		}
 		addDependencyRecords(inventory, []dependencyRecord{record})

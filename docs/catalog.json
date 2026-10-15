@@ -351,6 +351,38 @@
       "public": true
     },
     {
+      "id": "rust-architecture",
+      "path": "docs/design/rust-architecture.md",
+      "title": "Rust Architecture Integration",
+      "summary": "Understand native Rust module resolution, dependency direction, cycles and explicit coverage limits.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "rust-inputs",
+      "path": "docs/design/rust-inputs.md",
+      "title": "Rust and Shader Input Coverage",
+      "summary": "Understand Rust control inputs, WGSL source ownership, selection, and unavailable analysis.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "rust-tests",
+      "path": "docs/design/rust-tests.md",
+      "title": "Native Rust Test Evidence",
+      "summary": "Understand native Cargo test selection, structured Nextest and doctest outcomes, artifact authority and compiler-specific boundaries.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "cargo-facts",
+      "path": "docs/design/cargo-facts.md",
+      "title": "Cargo Project Facts",
+      "summary": "Understand governed Cargo discovery, workspace facts, and dependency-resolution boundaries.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "security",
       "path": "docs/policies/security.md",
       "title": "Security Policy",

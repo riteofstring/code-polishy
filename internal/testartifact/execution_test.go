@@ -33,7 +33,7 @@ func TestExecutionExposesContainedSuiteDirectoryAndCapturesXML(t *testing.T) {
 	}
 	writeArtifactFile(t, command.TestArtifactDirectory, "junit.xml", "<testsuites><testsuite/></testsuites>\n")
 	writeArtifactFile(t, command.TestArtifactDirectory, "coverage/cobertura.xml", "<coverage/>\n")
-	records, err := execution.ValidateCommand(command)
+	records, err := execution.ValidateCommand(command, 0)
 	if err != nil || len(records) != 2 || records[0].SHA256 == "" || records[1].Path != "unit/coverage/cobertura.xml" {
 		t.Fatalf("records = %+v, error = %v", records, err)
 	}
@@ -69,7 +69,7 @@ func TestArtifactValidationFailsClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeArtifactFile(t, command.TestArtifactDirectory, "result.xml", test.content)
-			if _, err := execution.ValidateCommand(command); err == nil || !strings.Contains(err.Error(), test.want) {
+			if _, err := execution.ValidateCommand(command, 0); err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
 		})
@@ -88,7 +88,7 @@ func TestArtifactValidationRejectsMissingLinksAndOversize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execution.ValidateCommand(command); err == nil || !strings.Contains(err.Error(), "missing") {
+	if _, err := execution.ValidateCommand(command, 0); err == nil || !strings.Contains(err.Error(), "missing") {
 		t.Fatalf("missing artifact error = %v", err)
 	}
 	outside := filepath.Join(t.TempDir(), "outside.xml")
@@ -99,7 +99,7 @@ func TestArtifactValidationRejectsMissingLinksAndOversize(t *testing.T) {
 	if err := os.Symlink(outside, target); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execution.ValidateCommand(command); err == nil || !strings.Contains(err.Error(), "linked") {
+	if _, err := execution.ValidateCommand(command, 0); err == nil || !strings.Contains(err.Error(), "linked") {
 		t.Fatalf("linked artifact error = %v", err)
 	}
 	if err := os.Remove(target); err != nil {
@@ -115,7 +115,7 @@ func TestArtifactValidationRejectsMissingLinksAndOversize(t *testing.T) {
 	if err := os.Truncate(target, MaximumArtifactBytes+1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execution.ValidateCommand(command); err == nil || !strings.Contains(err.Error(), "exceeds") {
+	if _, err := execution.ValidateCommand(command, 0); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("oversized artifact error = %v", err)
 	}
 }
@@ -131,7 +131,7 @@ func TestOptionalArtifactMayOmitItsParentDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	records, err := execution.ValidateCommand(command)
+	records, err := execution.ValidateCommand(command, 0)
 	if err != nil || len(records) != 0 {
 		t.Fatalf("records = %+v, error = %v", records, err)
 	}

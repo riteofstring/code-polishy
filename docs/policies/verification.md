@@ -749,8 +749,8 @@ merge workflow for a genuine merge or release candidate.
   invariants where input space is broad.
 
 The parser rejects obvious no-op and pass-with-no-tests commands, and ordinary
-source checks reject empty or unconditional-skip Go tests. These intentionally
-cheap checks are not semantic proof. Optional supplemental mutation testing can
+source checks reject empty or unconditional-skip Go tests and empty built-in Rust
+tests. These intentionally cheap checks are not semantic proof. Optional supplemental mutation testing can
 establish whether realistic production changes make the tests fail. See
 [Test Strength and Executable Specification](test-strength.md).
 

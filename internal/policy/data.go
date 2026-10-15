@@ -92,7 +92,7 @@ func overlapsScope(pattern string, candidates []string) bool {
 
 func dataPatternIsExecutableSource(pattern string) bool {
 	for _, extension := range []string{
-		".bash", ".c", ".cc", ".cjs", ".cpp", ".cs", ".cts", ".cxx", ".dart", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt", ".kts", ".mjs", ".mts", ".php", ".proto", ".py", ".pyi", ".rb", ".rs", ".sh", ".sql", ".swift", ".ts", ".tsx", ".vue", ".svelte", ".astro",
+		".bash", ".c", ".cc", ".cjs", ".cpp", ".cs", ".cts", ".cxx", ".dart", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt", ".kts", ".mjs", ".mts", ".php", ".proto", ".py", ".pyi", ".rb", ".rs", ".sh", ".sql", ".swift", ".ts", ".tsx", ".vue", ".svelte", ".astro", ".wgsl",
 	} {
 		if strings.HasSuffix(strings.ToLower(pattern), extension) {
 			return true

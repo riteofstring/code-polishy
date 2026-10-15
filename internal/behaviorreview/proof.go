@@ -15,6 +15,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
 const worktreeDirectory = "w"
@@ -222,7 +223,7 @@ func replayProofExecution(ctx context.Context, repo repository.Repository, comma
 	if err := ensureCandidateUnchanged(repo, candidate); err != nil {
 		return err
 	}
-	baselineResult, _, baselineErr := runSuite(ctx, commandRunner, baseline, suite)
+	baselineResult, _, baselineErr := runSuite(ctx, repo, commandRunner, baseline, suite)
 	if err := ensureCandidateUnchanged(repo, candidate); err != nil {
 		return err
 	}
@@ -232,7 +233,7 @@ func replayProofExecution(ctx context.Context, repo repository.Repository, comma
 	if err := ensureReplayCandidateUnchanged(repo, candidateRepository, candidate); err != nil {
 		return err
 	}
-	candidateResult, _, candidateErr := runSuite(ctx, commandRunner, candidateWorktree, suite)
+	candidateResult, _, candidateErr := runSuite(ctx, repo, commandRunner, candidateWorktree, suite)
 	if err := ensureReplayCandidateUnchanged(repo, candidateRepository, candidate); err != nil {
 		return err
 	}
@@ -460,7 +461,7 @@ func applyAndRecord(ctx context.Context, root *artifactHandle, worktree string, 
 }
 
 func runAndRecord(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, artifactRoot *artifactHandle, executionRoot, candidate string, suite policy.TestSuite, id, suffix string) (proofExecution, error) {
-	result, output, runErr := runSuite(ctx, commandRunner, executionRoot, suite)
+	result, output, runErr := runSuite(ctx, repo, commandRunner, executionRoot, suite)
 	digest, err := writeProofArtifact(artifactRoot, id, suffix, suiteLog(result, output, runErr))
 	changedErr := ensureCandidateUnchanged(repo, candidate)
 	if err != nil {
@@ -526,16 +527,34 @@ func applyFailure(err error, exitStatus int) error {
 	return operational("apply candidate evidence patch", err)
 }
 
-func runSuite(ctx context.Context, commandRunner runner.OutputRunner, root string, suite policy.TestSuite) (runner.Result, runner.Output, error) {
-	return commandRunner.RunWithOutput(ctx, root, suiteCommand(suite))
+func runSuite(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root string, suite policy.TestSuite) (runner.Result, runner.Output, error) {
+	repo.Root = root
+	capture := &proofSuiteRunner{OutputRunner: commandRunner}
+	execution := testpolicy.ExecuteSuite(ctx, repo, capture, suite, 1)
+	if !execution.Failed() {
+		return execution.Result, capture.output, nil
+	}
+	err := errors.New(execution.FailureMessage)
+	if execution.FailureCategory != runner.FailureCommandExit {
+		err = operational("run regression suite", err)
+	}
+	return execution.Result, capture.output, err
 }
 
-func suiteCommand(suite policy.TestSuite) policy.Command {
-	return policy.Command{
-		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd, Paths: append([]string{}, suite.Paths...),
-		Modules: append([]string{}, suite.Modules...), RunOn: append([]string{}, suite.RunOn...), Environment: append([]string{}, suite.Environment...),
-		ExclusiveResources: append([]string{}, suite.ExclusiveResources...), TimeoutSeconds: suite.TimeoutSeconds,
-	}
+type proofSuiteRunner struct {
+	runner.OutputRunner
+	output runner.Output
+}
+
+func (capture *proofSuiteRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
+	result, _, err := capture.RunWithOutput(ctx, root, command)
+	return result, err
+}
+
+func (capture *proofSuiteRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	result, output, err := capture.OutputRunner.RunWithOutput(ctx, root, command)
+	capture.output = output
+	return result, output, err
 }
 
 func cloneCommand(command policy.Command) policy.Command {
@@ -544,11 +563,12 @@ func cloneCommand(command policy.Command) policy.Command {
 		Paths: slices.Clone(command.Paths), Modules: slices.Clone(command.Modules), RunOn: slices.Clone(command.RunOn),
 		Environment: slices.Clone(command.Environment), ExclusiveResources: slices.Clone(command.ExclusiveResources), TimeoutSeconds: command.TimeoutSeconds,
 		Managed: command.Managed, PassFiles: command.PassFiles, PassFilePaths: slices.Clone(command.PassFilePaths), SealedEnvironment: command.SealedEnvironment,
+		EnvironmentOverrides: slices.Clone(command.EnvironmentOverrides), TestArtifacts: slices.Clone(command.TestArtifacts),
 	}
 }
 
 func executionOperational(ctx context.Context, exitStatus int, err error) bool {
-	if ctx.Err() != nil || exitStatus < 0 || exitStatus == 124 {
+	if ctx.Err() != nil || exitStatus < 0 || exitStatus == 124 || errors.Is(err, ErrOperational) {
 		return true
 	}
 	return err != nil && exitStatus == 0
@@ -702,7 +722,7 @@ func replayProofPhases(repo repository.Repository, root *artifactHandle, review 
 			return nil, nil, err
 		}
 		digest := sha256Hex(data)
-		command := suiteCommand(suite)
+		command := testpolicy.SuiteCommand(repo, suite)
 		phases = append(phases, ReplayProofPhase{ProofID: id, ProofSHA256: digest, Baseline: cloneCommand(command), Candidate: cloneCommand(command)})
 		references = append(references, ProofReference{ID: id, SHA256: digest})
 	}

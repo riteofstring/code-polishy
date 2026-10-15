@@ -180,7 +180,7 @@ func (engine *Engine) finalizeMergeGateReplayFailure(ctx context.Context, base s
 }
 
 func (engine *Engine) executePlannedMergeGate(ctx context.Context, base string, plan MergeGateExecutionPlan, controller *gateRunController) (Report, error) {
-	plannedRunner := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: controller.runner, expected: plan.Commands}
+	plannedRunner := &mergeGatePlannedRunner{repo: engine.Repository, root: engine.Repository.Root, delegate: controller.runner, expected: plan.Commands}
 	plannedEngine := *engine
 	plannedEngine.Runner = plannedRunner
 	report, gateErr := plannedEngine.runMergeGateLevel(ctx, plan)
@@ -283,7 +283,7 @@ func (engine *Engine) planDocumentationMergeGateExecution(plan MergeGateExecutio
 		return MergeGateExecutionPlan{}, err
 	}
 	plan.Tests = tests
-	plan.Commands = mergeGateSuiteCommands(plan.Tests.Suites)
+	plan.Commands = mergeGateSuiteCommands(engine.Repository, plan.Tests.Suites)
 	return plan, nil
 }
 
@@ -308,7 +308,7 @@ func (engine *Engine) planOrdinaryMergeGateExecution(plan MergeGateExecutionPlan
 		}
 	}
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Check, plannedPolicyCheckCommands(engine.Repository, checkSelection, "gate"))...)
-	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(plan.Tests.Suites)...)
+	plan.Commands = append(plan.Commands, mergeGateSuiteCommands(engine.Repository, plan.Tests.Suites)...)
 	plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.Build, quality.CommandsForProfiles(engine.Repository, checkSelection, "build"))...)
 	return engine.appendMergeGateSupplyChainCommands(plan)
 }
@@ -320,7 +320,8 @@ func plannedPolicyCheckCommands(repo repository.Repository, selection repository
 
 func plannedArchitectureCommands(repo repository.Repository, files []string) []policy.Command {
 	commands := architecture.ProviderCommands(repo, files)
-	return append(commands, architecture.PythonGraphCommands(repo, files)...)
+	commands = append(commands, architecture.PythonGraphCommands(repo, files)...)
+	return append(commands, architecture.RustGraphCommands(repo, files)...)
 }
 
 func (engine *Engine) mergeGateTestRequest(plan MergeGateExecutionPlan) (repository.Selection, testpolicy.Request, error) {
@@ -340,6 +341,7 @@ func (engine *Engine) appendMergeGateSupplyChainCommands(plan MergeGateExecution
 		return MergeGateExecutionPlan{}, err
 	}
 	if plan.Level != testpolicy.MergeLevelFull {
+		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, supplychain.CargoResolutionCommands(engine.Repository, supplySelection.Files, true))...)
 		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain"))...)
 		return plan, nil
 	}
@@ -369,7 +371,7 @@ func mergeGateCheckCommands(category gaterun.CommandCategory, commands []policy.
 	return result
 }
 
-func mergeGateSuiteCommands(suites []policy.TestSuite) []MergeGateExecutionCommand {
+func mergeGateSuiteCommands(repo repository.Repository, suites []policy.TestSuite) []MergeGateExecutionCommand {
 	result := make([]MergeGateExecutionCommand, 0, len(suites))
 	seen := map[string]bool{}
 	for _, suite := range suites {
@@ -377,7 +379,7 @@ func mergeGateSuiteCommands(suites []policy.TestSuite) []MergeGateExecutionComma
 			continue
 		}
 		seen[suite.Name] = true
-		result = append(result, MergeGateExecutionCommand{Category: gaterun.OrdinaryTest, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost, Command: suiteCommand(suite)})
+		result = append(result, MergeGateExecutionCommand{Category: gaterun.OrdinaryTest, Kind: suite.Kind, Scope: suite.Scope, Cost: suite.Cost, Command: testpolicy.SuiteCommand(repo, suite)})
 	}
 	return result
 }
@@ -472,18 +474,8 @@ func uniqueBehaviorReviewSuites(suites []policy.TestSuite, additional int) ([]po
 	return selected, seen
 }
 
-func suiteCommand(suite policy.TestSuite) policy.Command {
-	return policy.Command{
-		Name: suite.Name, Argv: append([]string{}, suite.Argv...), Cwd: suite.Cwd,
-		Paths: append([]string{}, suite.Paths...), Modules: append([]string{}, suite.Modules...),
-		Environment: append([]string{}, suite.Environment...), ExclusiveResources: append([]string{}, suite.ExclusiveResources...),
-		TimeoutSeconds:    suite.TimeoutSeconds,
-		SealedEnvironment: suite.Reusable,
-		TestArtifacts:     append([]policy.TestArtifact{}, suite.Artifacts...),
-	}
-}
-
 type mergeGatePlannedRunner struct {
+	repo     repository.Repository
 	root     string
 	viewRoot string
 	delegate runner.Runner
@@ -523,7 +515,7 @@ func (commandRunner *mergeGatePlannedRunner) TestArtifacts(name string, attempt 
 
 func (commandRunner *mergeGatePlannedRunner) ReuseSuite(suite policy.TestSuite, attempt int) (testpolicy.SuiteExecution, bool, error) {
 	if commandRunner.err != nil || commandRunner.next >= len(commandRunner.expected) ||
-		!samePolicyCommand(commandRunner.expected[commandRunner.next].Command, suiteCommand(suite)) {
+		!samePolicyCommand(commandRunner.expected[commandRunner.next].Command, testpolicy.SuiteCommand(commandRunner.repo, suite)) {
 		return testpolicy.SuiteExecution{}, false, nil
 	}
 	controller, ok := commandRunner.delegate.(testpolicy.SuiteReuseController)

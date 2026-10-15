@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
@@ -25,7 +26,7 @@ func TestExecuteSuiteCapturesManagedJUnitArtifact(t *testing.T) {
 		Argv: []string{executable, "-test.run=^TestManagedArtifactHelper$"}, Environment: []string{artifactHelperMode},
 		Artifacts: []policy.TestArtifact{{Path: "junit.xml", Type: "junit", Required: true}},
 	}
-	execution := ExecuteSuite(t.Context(), root, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repository.Repository{Root: root}, runner.OSRunner{}, suite, 1)
 	if execution.Failed() || len(execution.Artifacts) != 1 || execution.Artifacts[0].SHA256 == "" ||
 		execution.Artifacts[0].Path != "artifact-helper/junit.xml" {
 		t.Fatalf("execution = %+v", execution)
@@ -47,7 +48,7 @@ func TestExecuteSuiteFailsWhenRequiredArtifactIsMissing(t *testing.T) {
 		Argv: []string{executable, "-test.run=^TestManagedArtifactHelper$"}, Environment: []string{artifactHelperMode},
 		Artifacts: []policy.TestArtifact{{Path: "junit.xml", Type: "junit", Required: true}},
 	}
-	execution := ExecuteSuite(t.Context(), root, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repository.Repository{Root: root}, runner.OSRunner{}, suite, 1)
 	if !execution.Failed() || execution.FailureCategory != runner.FailureOperational || !strings.Contains(execution.FailureMessage, "required junit artifact") {
 		t.Fatalf("execution = %+v", execution)
 	}
@@ -65,7 +66,7 @@ func TestExecuteSuiteKeepsCommandFailureAndCapturesArtifact(t *testing.T) {
 		Argv: []string{executable, "-test.run=^TestManagedArtifactHelper$"}, Environment: []string{artifactHelperMode},
 		Artifacts: []policy.TestArtifact{{Path: "junit.xml", Type: "junit", Required: true}},
 	}
-	execution := ExecuteSuite(t.Context(), root, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repository.Repository{Root: root}, runner.OSRunner{}, suite, 1)
 	if !execution.Failed() || execution.FailureCategory != runner.FailureCommandExit || len(execution.Artifacts) != 1 {
 		t.Fatalf("execution = %+v", execution)
 	}

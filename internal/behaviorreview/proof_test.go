@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/repository"
+	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
 func TestProveCreatesRedGreenEvidenceAndCleansWorktree(t *testing.T) {
@@ -250,7 +251,7 @@ func assertReplayPlanProofPhase(t *testing.T, repo repository.Repository, plan G
 		t.Fatalf("replay phases = %+v", plan.Proofs)
 	}
 	phase := plan.Proofs[0]
-	wantCommand := suiteCommand(repo.Config.Tests.Suites[0])
+	wantCommand := testpolicy.SuiteCommand(repo, repo.Config.Tests.Suites[0])
 	if phase.ProofID != proof.ID || phase.ProofSHA256 != plan.Receipt.Proofs[0].SHA256 || !reflect.DeepEqual(phase.Baseline, wantCommand) || !reflect.DeepEqual(phase.Candidate, wantCommand) {
 		t.Fatalf("replay phase = %+v, want proof %q and command %+v", phase, proof.ID, wantCommand)
 	}

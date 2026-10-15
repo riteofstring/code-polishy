@@ -2,7 +2,7 @@
 
 Signed CI assessments are optional. Ordinary local dependency review does not
 require an attestation service. By default, public registry vulnerability and
-minimum-age checks still run, including registry packages sharing a `uv.lock`
+minimum-age checks still run, including registry packages sharing a `uv.lock` or `Cargo.lock`
 with Git dependencies. Git identities are not sent to public registry scanners.
 A nonblocking `supplyChain.gitSourceCoverage` warning identifies unverified Git
 vulnerability, license, integrity, and authenticated age coverage. Passing the
@@ -32,7 +32,7 @@ Each provider has these exact fields:
 | `scanners`     | Approved scanner identities, each with exact `name`, `version`, and lowercase binary `sha256`.   |
 
 Each attestation has `scope`, `provider`, and `path`. The scope is the exact
-repository-relative `uv.lock` path; the provider names one configured trust
+repository-relative `uv.lock` or `Cargo.lock` path; the provider names one configured trust
 entry. The path names one signed artifact. Paths must be canonical and
 contained, without globs, traversal, or symbolic links. Each scope has one
 artifact, and every artifact path is distinct.
@@ -106,7 +106,15 @@ sort lexicographically by the four values joined with NUL characters. Git
 packages use ecosystem `git` and source
 `git+<scheme>://<host>/<repository>@<full-commit>`, followed by
 `#subdirectory=<contained-path>` when present. Registry packages use ecosystem
-`pypi` and source `registry:<exact-registry-URL>`. Local packages are omitted;
+`pypi` and source `registry:<exact-registry-URL>` for uv locks. Cargo's public
+registry packages use ecosystem `crates.io` and source `registry:https://crates.io`.
+Cargo Git packages keep ecosystem `git`; their lock has no package-subdirectory
+field, so the subject's subdirectory is empty and its snapshot covers the whole
+repository. Multiple crates at one repository/commit need separate named subjects.
+Candidate Git sources must declare and resolve to the same full revision; a
+branch, tag or missing declared revision cannot establish exact-pin evidence.
+Include inactive optional and platform packages from the complete Cargo lock.
+Local packages are omitted;
 unsupported sources fail coverage. Use JSON string escaping without ASCII-only
 Unicode escaping; escape `<`, `>`, `&`, U+2028, and U+2029 as the corresponding
 lowercase `\u` sequences, matching the protocol's Go JSON encoding.
@@ -139,7 +147,7 @@ identity, freshness, and complete inventory checks remain separate requirements.
 Arrays must be present and non-null. Each signed artifact and decoded payload
 is bounded to 4 MiB, with at most 1,024 Git subjects and 8,192 vulnerability or license
 results. The repository inventory is separately bounded to 512 lockfiles,
-16 MiB per lock, and 32 MiB in total.
+16 MiB per uv lock, 8 MiB per Cargo lock, and 32 MiB across both ecosystems.
 
 ## Verify and retain evidence
 
@@ -155,8 +163,11 @@ retain the original lockfile scope. A lock containing Git sources receives
 vulnerability and license coverage from its complete signed assessment.
 Public registry release-age checks remain active. Non-public registry
 identities are never queried at PyPI; absent authenticated publication coverage
-for such packages remains an explicit failure. Other ecosystems retain their
-native OSV scan inputs.
+for such packages remains an explicit failure. Cargo's raw manifest and lock
+extractors are disabled; its public crates.io projection is scanned separately,
+including in mixed Git/registry locks. Signed Git evidence never turns private
+Cargo sources into public scanner inputs. Other ecosystems retain their native
+OSV scan inputs.
 
 JSON and SARIF reports retain verified artifact receipts, including provider,
 path, artifact digest, assessment-policy digest, lock and inventory digests,

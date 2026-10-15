@@ -7,6 +7,7 @@ $PolicyRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
   throw 'Code Polishy Windows releases currently require x64.'
 }
+& (Join-Path $PSScriptRoot 'install-rust.ps1')
 
 function Read-Pin([string]$Relative) {
   return (Get-Content -Raw (Join-Path $PolicyRoot $Relative)).Trim()
@@ -426,8 +427,10 @@ with zipfile.ZipFile(wheel) as archive:
   $AstroidSource = Get-Verified "astroid-$AstroidVersion.tar.gz" "https://files.pythonhosted.org/packages/da/fd/24475b7cfb70298e8921bc077adb46a3fe77887422545d8a061573e130ee/astroid-$AstroidVersion.tar.gz"
   & (Join-Path $PolicyRoot 'tools/install-astroid.ps1') -Python $Python -PythonRoot $PythonRoot -Wheel $AstroidWheel -Source $AstroidSource -Version $AstroidVersion
 
-  $FactsEnvironment = Join-Path $PolicyRoot 'internal/pythonfacts/.venv'
-  $FactsPython = Join-Path $FactsEnvironment 'Scripts/python.exe'
+  & $Python -I -B (Join-Path $PolicyRoot 'internal/rustfacts/install.py') $PolicyRoot
+  if ($LASTEXITCODE -ne 0) { throw 'Rust syntax distribution installation failed.' }
+  & $Python -I -B (Join-Path $PolicyRoot 'internal/rustfacts/install_nextest.py') $PolicyRoot
+  if ($LASTEXITCODE -ne 0) { throw 'Rust test runner installation failed.' }
   function Test-PythonFactsEnvironment {
     if (-not (Test-Path -LiteralPath (Join-Path $FactsEnvironment 'pyvenv.cfg') -PathType Leaf) -or
         -not (Test-Path -LiteralPath $FactsPython -PathType Leaf) -or
@@ -438,16 +441,20 @@ with zipfile.ZipFile(wheel) as archive:
     return $LASTEXITCODE -eq 0 -and $FactsProbe.Count -eq 3 -and
       $FactsProbe[0].Trim() -eq $PythonVersion -and $FactsProbe[1].Trim() -eq $PackagingVersion -and $FactsProbe[2].Trim() -eq $AstroidVersion
   }
-  if (-not (Test-PythonFactsEnvironment)) {
-    if (Test-Path -LiteralPath $FactsEnvironment) {
-      Remove-Item -LiteralPath $FactsEnvironment -Recurse -Force
-    }
-    & $Python -I -B -m venv --without-pip --system-site-packages $FactsEnvironment
-    if ($LASTEXITCODE -ne 0 -or -not (Test-PythonFactsEnvironment)) {
+  foreach ($FactsModule in @('pythonfacts', 'rustfacts')) {
+    $FactsEnvironment = Join-Path $PolicyRoot "internal/$FactsModule/.venv"
+    $FactsPython = Join-Path $FactsEnvironment 'Scripts/python.exe'
+    if (-not (Test-PythonFactsEnvironment)) {
       if (Test-Path -LiteralPath $FactsEnvironment) {
         Remove-Item -LiteralPath $FactsEnvironment -Recurse -Force
       }
-      throw 'The contained Python facts environment failed verification.'
+      & $Python -I -B -m venv --without-pip --system-site-packages $FactsEnvironment
+      if ($LASTEXITCODE -ne 0 -or -not (Test-PythonFactsEnvironment)) {
+        if (Test-Path -LiteralPath $FactsEnvironment) {
+          Remove-Item -LiteralPath $FactsEnvironment -Recurse -Force
+        }
+        throw 'The contained Python facts environment failed verification.'
+      }
     }
   }
 

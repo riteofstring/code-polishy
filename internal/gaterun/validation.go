@@ -524,7 +524,7 @@ func validateTestArtifacts(artifacts []TestArtifact) error {
 	seen := map[string]bool{}
 	for _, artifact := range artifacts {
 		if !validToken(artifact.Suite) || !validArtifactRelativePath(artifact.Path) ||
-			artifact.Type != "junit" && artifact.Type != "cobertura" || artifact.Size < 0 || artifact.Size > 32<<20 ||
+			!validArtifactType(artifact.Type) || artifact.Size < 0 || artifact.Size > 32<<20 ||
 			!validSHA256(artifact.SHA256) || seen[artifact.Path] {
 			return fmt.Errorf("%w: test artifact evidence is invalid", ErrInvalidArtifact)
 		}

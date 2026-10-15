@@ -23,6 +23,8 @@ const (
 	MaxTestFileLines                        = 2500
 	MaxGoComplexity                         = 12
 	MaxGoTestComplexity                     = 20
+	MaxRustComplexity                       = 12
+	MaxRustTestComplexity                   = 20
 	MaxPythonComplexity                     = 10
 	MaxTypeScriptComplexity                 = 10
 	MaxTypeScriptTestComplexity             = 10
@@ -255,6 +257,8 @@ type ReliabilityReminder struct {
 type Complexity struct {
 	Go             int `json:"go,omitempty"`
 	GoTest         int `json:"goTest,omitempty"`
+	Rust           int `json:"rust,omitempty"`
+	RustTest       int `json:"rustTest,omitempty"`
 	Python         int `json:"python,omitempty"`
 	TypeScript     int `json:"typescript,omitempty"`
 	TypeScriptTest int `json:"typescriptTest,omitempty"`
@@ -373,7 +377,8 @@ type TestSuite struct {
 	Reusable           bool           `json:"reusable,omitempty"`
 	Cost               string         `json:"cost,omitempty"`
 	Modules            []string       `json:"modules,omitempty"`
-	Argv               []string       `json:"argv"`
+	Argv               []string       `json:"argv,omitempty"`
+	Rust               *RustTestSuite `json:"rust,omitempty"`
 	RetryArgv          []string       `json:"retryArgv,omitempty"`
 	Cwd                string         `json:"cwd,omitempty"`
 	Paths              []string       `json:"paths,omitempty"`
@@ -390,6 +395,15 @@ type TestArtifact struct {
 	Path     string `json:"path"`
 	Type     string `json:"type"`
 	Required bool   `json:"required,omitempty"`
+}
+
+type RustTestSuite struct {
+	Manifest          string   `json:"manifest,omitempty"`
+	Doctests          bool     `json:"doctests,omitempty"`
+	Packages          []string `json:"packages,omitempty"`
+	Features          []string `json:"features,omitempty"`
+	NoDefaultFeatures bool     `json:"noDefaultFeatures,omitempty"`
+	Filter            string   `json:"filter,omitempty"`
 }
 
 type SupplyChain struct {

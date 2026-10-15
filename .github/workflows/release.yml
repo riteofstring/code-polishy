@@ -188,6 +188,7 @@ jobs:
             echo "The fresh installation did not report Code Polishy ${RELEASE_VERSION}." >&2
             exit 1
           fi
+          bash ./scripts/test-installed-release-rust.sh "${installed_root}" "${installation}/bin/code-polishy"
 
       - name: Build and smoke-test native archive
         if: matrix.build == 'windows'
@@ -235,6 +236,10 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $reportedVersion -ne "code-polishy $env:RELEASE_VERSION") {
             throw "The fresh installation did not report Code Polishy $env:RELEASE_VERSION."
           }
+          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+          if (-not (Test-Path -LiteralPath $bash -PathType Leaf)) { throw 'The native Rust fixture requires Git Bash.' }
+          & $bash ./scripts/test-installed-release-rust.sh $installedRoot (Join-Path $installation 'bin\code-polishy.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'The installed Rust fixture failed.' }
 
       - name: Retain native publication
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

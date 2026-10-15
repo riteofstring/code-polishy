@@ -146,7 +146,7 @@ func (runner OSRunner) RunWithOutput(parent context.Context, root string, specif
 	result, err := runner.run(parent, root, specification, appendOutputWriter(runner.Stdout, stdout), appendOutputWriter(runner.Stderr, stderr))
 	if stdout.truncated || stderr.truncated {
 		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
-		result.FailureCategory = FailureCategoryFor(parent, result, err)
+		result.FailureCategory = CaptureFailureCategory(parent, result, err)
 	}
 	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
 }
@@ -157,7 +157,7 @@ func (runner OSRunner) RunStructured(parent context.Context, root string, specif
 	result, err := runner.run(parent, root, specification, stdout, appendOutputWriter(runner.Stderr, stderr))
 	if stdout.truncated || stderr.truncated {
 		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
-		result.FailureCategory = FailureCategoryFor(parent, result, err)
+		result.FailureCategory = CaptureFailureCategory(parent, result, err)
 	}
 	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
 }
@@ -167,6 +167,14 @@ func captureLimit(stdout, stderr *boundedOutput) int {
 		return stdout.limit
 	}
 	return stderr.limit
+}
+
+func CaptureFailureCategory(ctx context.Context, result Result, err error) FailureCategory {
+	category := FailureCategoryFor(ctx, result, err)
+	if category == FailureTimeout || category == FailureCanceled {
+		return category
+	}
+	return FailureOperational
 }
 
 func appendOutputWriter(configured io.Writer, captured io.Writer) io.Writer {

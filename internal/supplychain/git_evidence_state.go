@@ -26,7 +26,7 @@ func ReadGitEvidenceState(repo repository.Repository, now time.Time) (GitEvidenc
 	if !repo.Config.SupplyChain.GitEvidence.Required {
 		return GitEvidenceState{Receipts: []GitEvidenceReceipt{}}, nil
 	}
-	inputs, err := onlineUVInputs(repo)
+	inputs, err := resolvedLockInputs(repo, map[string]func([]byte, string) ([]resolvedPackage, error){"uv.lock": parseUVLock, "Cargo.lock": osvCargoInventory})
 	if err != nil {
 		return GitEvidenceState{}, err
 	}
@@ -36,12 +36,11 @@ func ReadGitEvidenceState(repo repository.Repository, now time.Time) (GitEvidenc
 		if !gitLockPackages(input.Packages) {
 			continue
 		}
-		findings, receipt := verifyGitLockEvidence(repo, input.Scope, input.Packages, now)
-		binding := gitEvidenceBinding{Scope: input.Scope, InventorySHA256: gitEvidenceInventoryDigest(input.Packages), Findings: findings, Receipt: receipt}
-		binding.ArtifactSHA256, binding.ArtifactStatus = gitEvidenceArtifactIdentity(repo, input.Scope)
-		if receipt != nil {
-			state.Receipts = append(state.Receipts, *receipt)
-			identityReceipt := *receipt
+		assessment := assessRequiredGitLock(repo, input.Scope, input.Packages, now)
+		binding := gitEvidenceBinding{Scope: input.Scope, InventorySHA256: assessment.InventorySHA256, Findings: assessment.Findings, Receipt: assessment.Receipt, ArtifactSHA256: assessment.ArtifactSHA256, ArtifactStatus: assessment.ArtifactStatus}
+		if assessment.Receipt != nil {
+			state.Receipts = append(state.Receipts, *assessment.Receipt)
+			identityReceipt := *assessment.Receipt
 			identityReceipt.RetrievedAt = time.Time{}
 			binding.Receipt = &identityReceipt
 		}
@@ -56,16 +55,4 @@ func ReadGitEvidenceState(repo repository.Repository, now time.Time) (GitEvidenc
 	}
 	state.IdentitySHA256 = gitEvidenceDigest(data)
 	return state, nil
-}
-
-func gitEvidenceArtifactIdentity(repo repository.Repository, scope string) (string, string) {
-	declaration, _, err := configuredGitEvidence(repo.Config.SupplyChain.GitEvidence, scope)
-	if err != nil {
-		return "", "unavailable"
-	}
-	data, err := readGitEvidenceFile(repo, declaration.Path, maximumGitEvidenceBytes)
-	if err != nil {
-		return "", gitEvidenceFinding(scope, err).Subject
-	}
-	return gitEvidenceDigest(data), "read"
 }

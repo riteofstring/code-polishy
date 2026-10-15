@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 )
 
@@ -39,6 +40,10 @@ func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDiges
 	rootRef := "pkg:generic/code-polishy@" + manifest.CodePolishyVersion
 	inventory := releaseSBOMInventory{components: map[string]cdx.Component{}, dependencies: map[string]map[string]bool{rootRef: {}}}
 	toolRefs := releaseSBOMTools(manifest)
+	compositions, err := rustReleaseSBOMEvidence(releaseRoot, manifest, toolRefs)
+	if err != nil {
+		return nil, err
+	}
 	for name, component := range toolRefs {
 		inventory.add(component)
 		inventory.edge(rootRef, component.BOMRef)
@@ -74,6 +79,7 @@ func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDiges
 	}}
 	document.Components = &components
 	document.Dependencies = &dependencies
+	document.Compositions = &compositions
 	buffer := &bytes.Buffer{}
 	if err := cdx.NewBOMEncoder(buffer, cdx.BOMFileFormatJSON).SetPretty(true).SetEscapeHTML(false).EncodeVersion(document, cdx.SpecVersion1_6); err != nil {
 		return nil, fmt.Errorf("encode CycloneDX release SBOM: %w", err)
@@ -86,7 +92,8 @@ func releaseSBOMTools(manifest Manifest) map[string]cdx.Component {
 		"go": manifest.Tools.Go, "govulncheck": manifest.Tools.Govulncheck, "node": manifest.Tools.Node,
 		"osv-scanner": manifest.Tools.OSVScanner, "pnpm": manifest.Tools.PNPM, "python": manifest.Tools.Python,
 		"ruff": manifest.Tools.Ruff, "shellcheck": manifest.Tools.Shellcheck, "staticcheck": manifest.Tools.Staticcheck,
-		"ty": manifest.Tools.Ty,
+		"ty":   manifest.Tools.Ty,
+		"rust": manifest.Tools.Rust, "cargo-nextest": manifest.Tools.Nextest,
 	}
 	result := make(map[string]cdx.Component, len(versions))
 	for name, version := range versions {
@@ -300,6 +307,13 @@ func (inventory *releaseSBOMInventory) addPython(root, rootRef string, manifest 
 		return fmt.Errorf("read Astroid library pin: %w", err)
 	}
 	expected["astroid"] = strings.TrimSpace(string(astroid))
+	parserPins, err := rustParserReleasePins(root)
+	if err != nil {
+		return err
+	}
+	for name, version := range parserPins {
+		expected[name] = version
+	}
 	if len(inputs) != len(expected) {
 		return errors.New("release Python distribution inventory is incomplete or contains an ungoverned distribution")
 	}
@@ -359,7 +373,7 @@ func pythonReleaseDistributions(inputs []pythonfacts.Input, expected map[string]
 
 func (inventory *releaseSBOMInventory) addPythonComponents(rootRef string, expected map[string]string, distributions map[string]pythonfacts.Distribution) (map[string]string, error) {
 	refs := map[string]string{}
-	for _, name := range []string{"astroid", "packaging", "vulture"} {
+	for _, name := range []string{"astroid", "packaging", "vulture", "tree-sitter", "tree-sitter-rust"} {
 		version := expected[name]
 		distribution, found := distributions[name]
 		if !found || distribution.Version != version {
@@ -371,6 +385,33 @@ func (inventory *releaseSBOMInventory) addPythonComponents(rootRef string, expec
 		refs[name] = ref
 	}
 	return refs, nil
+}
+
+func rustParserReleasePins(root string) (map[string]string, error) {
+	data, err := os.ReadFile(filepath.Join(root, "internal", "rustfacts", "pyproject.toml"))
+	if err != nil {
+		return nil, fmt.Errorf("read Rust parser dependency pins: %w", err)
+	}
+	var manifest struct {
+		Project struct {
+			Dependencies []string `toml:"dependencies"`
+		} `toml:"project"`
+	}
+	if err := toml.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("parse Rust parser dependency pins: %w", err)
+	}
+	pins := map[string]string{}
+	for _, requirement := range manifest.Project.Dependencies {
+		name, version, exact := strings.Cut(requirement, "==")
+		if !exact || !slices.Contains([]string{"tree-sitter", "tree-sitter-rust"}, name) || !versionPattern.MatchString(version) || pins[name] != "" {
+			return nil, errors.New("rust parser release dependencies must name each supported distribution exactly once with an exact version")
+		}
+		pins[name] = version
+	}
+	if len(pins) != 2 {
+		return nil, errors.New("rust parser release dependency inventory is incomplete")
+	}
+	return pins, nil
 }
 
 func (inventory *releaseSBOMInventory) addPythonEdges(distributions map[string]pythonfacts.Distribution, refs map[string]string) error {

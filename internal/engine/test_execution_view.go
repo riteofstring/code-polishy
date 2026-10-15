@@ -29,8 +29,10 @@ func (controller *testReceiptController) PrepareSuiteView(suite policy.TestSuite
 	if !found {
 		return controller.root, func() error { return nil }, nil
 	}
-	if err := validateReusableArguments(suite.Argv); err != nil {
-		return "", nil, err
+	if suite.Rust == nil {
+		if err := validateReusableArguments(suite.Argv); err != nil {
+			return "", nil, err
+		}
 	}
 	view, err := createSuiteExecutionView(controller.root, suite.Cwd, identity.Inputs)
 	if err != nil {
@@ -40,6 +42,9 @@ func (controller *testReceiptController) PrepareSuiteView(suite policy.TestSuite
 }
 
 func validateReusableArguments(argv []string) error {
+	if len(argv) == 0 {
+		return errors.New("reusable suite has no executable command")
+	}
 	for _, argument := range argv[1:] {
 		if strings.Contains(argument, "{artifactDir}") {
 			continue

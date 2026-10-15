@@ -728,7 +728,6 @@ func TestUnsupportedManifestsRequireCompleteProvidersAtTheirLanguageModule(t *te
 		source   string
 	}{
 		{name: "python requirements", manifest: "requirements-prod.txt", source: "src/main.py"},
-		{name: "cargo", manifest: "Cargo.toml", source: "src/lib.rs"},
 		{name: "maven", manifest: "pom.xml", source: "src/Main.java"},
 		{name: "gradle", manifest: "build.gradle.kts", source: "src/Main.java"},
 		{name: "bundler", manifest: "Gemfile", source: "src/main.rb"},
@@ -768,8 +767,8 @@ func TestUnsupportedManifestsRequireCompleteProvidersAtTheirLanguageModule(t *te
 func TestGeneratedScopeCannotHideDependencyManifest(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	repo.Config.Scope.Generated = []string{"Cargo.toml"}
-	findings := CoverageFindings(repo, []string{"Cargo.toml"})
+	repo.Config.Scope.Generated = []string{"Gemfile"}
+	findings := CoverageFindings(repo, []string{"Gemfile"})
 	if countFindings(findings, "policy.supplyChainCoverage") != 4 || supplyChecks(findings)["policy.securityMonitoring"] {
 		t.Fatalf("generated scope must not suppress dependency coverage: %+v", findings)
 	}

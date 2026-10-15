@@ -25,6 +25,13 @@ Reports expose requested and expanded paths, analysis-context paths, graph
 size, total evaluation time, phase durations, exact analyzer commands, resource
 wait, analyzer-owned Vulture subphases, and cache activity so retained evidence
 identifies both scope and cost.
+The observation wrapper forwards structured process results unchanged to suite
+execution. Recording an exit status while discarding it from the caller would
+make native test-artifact validation disagree with the command that produced it.
+Bounded capture overflow is an operational failure even when the child exits with
+a normal test-failure code. A partial stream cannot establish native outcome
+evidence or a regression-proof red result. Cancellation and timeout retain their
+more specific failure categories.
 
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;
@@ -38,6 +45,10 @@ Cache lifetime follows its evidence lifetime. Repository facts are reused
 within one command after configuration composition. Cross-process analyzer
 results are reused only through an existing digest-bound receipt mechanism;
 ordinary files are never trusted from a timestamp-only persistent cache.
+
+[Rust and shader input coverage](rust-inputs.md) defines the Rust settings that
+expand policy selection and WGSL's source classification. Language recognition
+does not establish analyzer availability or Cargo workspace resolution.
 
 Candidate test retries are outcome-bearing attempts, not baseline diagnostics.
 The first full attempt establishes all tests except the observed failures; an
@@ -64,6 +75,9 @@ in evidence, while malformed, empty, timed-out, canceled, and operational
 results remain failed commands. OSV-Scanner's exit status 1 is the first such
 protocol; vulnerability assessment policy, not process status, decides whether
 its accepted report permits the gate to pass.
+Standalone scanner calls use the same exit conditions. A timeout or operational
+failure remains a scanner finding even when an advisory was emitted before the
+failure; assessing that advisory cannot erase the failed scan.
 
 Vulnerability reports identify the actual owner for every assessment, including
 agent-owned decisions, without implying human sign-off. Assessed findings stay
@@ -81,3 +95,10 @@ inputs while remaining in the protected outcome inventory. Ordinary content read
 and all provider edit targets retain the strict regular-file boundary, including
 every parent component; a link cannot become an authorized write route. No new
 asset-link configuration is required.
+
+Bounded directory inventory uses the same canonical, contained, non-linked parent
+checks as regular-file reads. Opening must retain the inspected directory's
+identity. It returns direct entries only and fails if the selected entry budget
+is exceeded; callers still validate each selected file through the regular-file
+boundary. Cargo's archive-license reader uses this to discover physical cache
+directories without interpreting their opaque names as registry authority.

@@ -245,13 +245,10 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.err = err
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
-	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput)
-	artifacts := []testartifact.Record{}
-	if commandRunner.expected[index].Category == gaterun.OrdinaryTest {
-		var artifactErr error
-		artifacts, artifactErr = commandRunner.artifactExecution.ValidateCommand(actual)
-		runErr = errors.Join(runErr, artifactErr)
-	}
+	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput || testartifact.NeedsCommandOutput(actual))
+	runErr = captureGateTestOutput(ctx, actual, &result, output, runErr)
+	artifacts, artifactErr := commandRunner.validateTestArtifacts(index, actual, &result)
+	runErr = errors.Join(runErr, artifactErr)
 	logResult, logErr := commandLog.Close()
 	if logErr != nil {
 		commandRunner.err = logErr
@@ -280,6 +277,29 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.artifacts[testLogKey{name: command.Name, attempt: attempt.Number}] = append([]testartifact.Record{}, artifacts...)
 	}
 	return commandRunner.finishCommand(command, result, output, runErr, category, reportBearing, logResult, attempt.LogPath)
+}
+
+func captureGateTestOutput(ctx context.Context, command policy.Command, result *runner.Result, output runner.Output, runErr error) error {
+	category := runner.FailureCategoryFor(ctx, *result, runErr)
+	if category != "" && category != runner.FailureCommandExit {
+		return runErr
+	}
+	if err := testartifact.CaptureCommandOutput(command, output.Stdout); err != nil {
+		result.FailureCategory = runner.FailureOperational
+		return errors.Join(runErr, err)
+	}
+	return runErr
+}
+
+func (commandRunner *gateArtifactRunner) validateTestArtifacts(index int, command policy.Command, result *runner.Result) ([]testartifact.Record, error) {
+	if commandRunner.expected[index].Category != gaterun.OrdinaryTest {
+		return []testartifact.Record{}, nil
+	}
+	artifacts, err := commandRunner.artifactExecution.ValidateCommand(command, result.ExitStatus)
+	if err != nil && (result.FailureCategory == "" || result.FailureCategory == runner.FailureCommandExit) {
+		result.FailureCategory = runner.FailureOperational
+	}
+	return artifacts, err
 }
 
 func gateCommandAttempt(ctx context.Context, result runner.Result, output runner.Output, runErr error, accept runner.ReportOutcomeAcceptor) (gaterun.CommandStatus, runner.FailureCategory, bool) {
@@ -382,7 +402,7 @@ func runGateCommand(ctx context.Context, commandRunner runner.Runner, root strin
 		result, err := streamed.RunWithWriters(ctx, root, command, io.MultiWriter(stdout, capturedStdout), io.MultiWriter(stderr, capturedStderr))
 		if capturedStdout.truncated || capturedStderr.truncated {
 			err = errors.Join(err, fmt.Errorf("captured command output exceeds its structured output limit"))
-			result.FailureCategory = runner.FailureOperational
+			result.FailureCategory = runner.CaptureFailureCategory(ctx, result, err)
 		}
 		return result, runner.Output{Stdout: capturedStdout.Bytes(), Stderr: capturedStderr.Bytes()}, err
 	}

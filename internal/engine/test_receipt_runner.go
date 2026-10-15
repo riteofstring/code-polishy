@@ -180,6 +180,13 @@ func (commandRunner *testReceiptRunner) RunWithResult(ctx context.Context, root 
 	return runner.Result{ExecutionDuration: time.Since(started)}, err
 }
 
+func (commandRunner *testReceiptRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+	if captured, ok := commandRunner.delegate.(runner.OutputRunner); ok {
+		return captured.RunWithOutput(ctx, root, command)
+	}
+	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, errors.New("test receipt runner requires bounded native command output")
+}
+
 func (commandRunner *testReceiptRunner) ReuseSuite(suite policy.TestSuite, attempt int) (testpolicy.SuiteExecution, bool, error) {
 	return commandRunner.controller.ReuseSuite(suite, attempt)
 }

@@ -3,6 +3,7 @@ package sourcegraph
 import (
 	"encoding/hex"
 	"fmt"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -50,7 +51,11 @@ func normalizeFactInput(input FactInput) (FactInput, error) {
 		return FactInput{}, fmt.Errorf("source dependency graph fact root: %w", err)
 	}
 	project, err := normalizePath(input.Project, false)
-	if err != nil || project != factProjectManifest(root) {
+	expected := factProjectManifest(root)
+	if input.Analyzer == "rust-facts" {
+		expected = path.Join(root, "Cargo.toml")
+	}
+	if err != nil || project != expected {
 		return FactInput{}, fmt.Errorf("source dependency graph fact project does not match its root")
 	}
 	for _, digest := range []string{input.FactsSHA256, input.PartitionsSHA256, input.ResolutionSHA256} {
@@ -72,6 +77,8 @@ func validFactAnalyzer(analyzer, protocol string) bool {
 		return protocol == "python-facts/v3"
 	case "ruff":
 		return protocol == "ruff-graph-facts/v2"
+	case "rust-facts":
+		return protocol == "rust-source/v2"
 	default:
 		return false
 	}
@@ -94,11 +101,14 @@ func coverFactInput(input FactInput, nodes map[string]Node, covered map[string]b
 	for _, path := range input.Paths {
 		node, exists := nodes[path]
 		languageMatches := node.Language == "python"
+		if input.Analyzer == "rust-facts" {
+			languageMatches = node.Language == "rust"
+		}
 		if input.Provider != nil {
 			languageMatches = slices.Contains(input.Provider.Languages, node.Language)
 		}
 		if !exists || !languageMatches || node.Root != input.Root || covered[path] {
-			return fmt.Errorf("source dependency graph fact path %q is absent, duplicated, or outside its Python project", path)
+			return fmt.Errorf("source dependency graph fact path %q is absent, duplicated, or outside its analyzer project", path)
 		}
 		covered[path] = true
 	}

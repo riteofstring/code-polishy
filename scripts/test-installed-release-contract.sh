@@ -43,3 +43,5 @@ EOF
   --prefix "${fixture_root}/prefix" \
   --lock "${fixture_root}/target/.code-polishy.lock.json" \
   --fixture first-adoption
+bash "${policy_root}/scripts/test-installed-release-rust.sh" \
+  "$(dirname "${manifest}")" "${fixture_root}/prefix/bin/code-polishy"
