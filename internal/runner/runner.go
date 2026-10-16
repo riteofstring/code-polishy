@@ -316,6 +316,8 @@ func commandEnvironment(specification policy.Command, pathEntries []string) ([]s
 		"PATH=",
 		"HOME=" + home,
 		"TMPDIR=" + temporary,
+		"TMP=" + temporary,
+		"TEMP=" + temporary,
 		"XDG_CONFIG_HOME=" + filepath.Join(home, "config"),
 		"XDG_CACHE_HOME=" + filepath.Join(home, "cache"),
 		"XDG_DATA_HOME=" + filepath.Join(home, "data"),

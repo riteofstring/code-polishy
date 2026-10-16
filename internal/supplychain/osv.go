@@ -376,15 +376,27 @@ func osvScope(repo repository.Repository, root, source string) (string, error) {
 	}
 	path := filepath.Clean(source)
 	if filepath.IsAbs(path) {
-		relative, err := filepath.Rel(repo.Root, path)
-		if err != nil {
-			return "", err
-		}
-		path = relative
+		return osvAbsoluteScope(repo, path)
 	} else if root != "." {
 		path = filepath.Join(filepath.FromSlash(root), path)
 	}
 	return repo.NormalizePath(path)
+}
+
+func osvAbsoluteScope(repo repository.Repository, path string) (string, error) {
+	relative, err := filepath.Rel(repo.Root, path)
+	if err == nil && filepath.IsLocal(relative) {
+		return repo.NormalizePath(relative)
+	}
+	physicalRoot, err := filepath.EvalSymlinks(repo.Root)
+	if err != nil {
+		return "", err
+	}
+	relative, err = filepath.Rel(physicalRoot, path)
+	if err != nil {
+		return "", err
+	}
+	return repo.NormalizePath(relative)
 }
 
 func osvPackageFindings(scope string, observed osvPackageResult) []policy.Finding {

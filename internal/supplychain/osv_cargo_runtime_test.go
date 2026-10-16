@@ -12,7 +12,24 @@ import (
 
 func TestOSVCargoPinnedRuntimeUsesCompleteOfflineProjection(t *testing.T) {
 	t.Parallel()
+	testOSVCargoPinnedRuntimeProjection(t, false)
+}
+
+func TestOSVCargoPinnedRuntimeThroughRepositoryAlias(t *testing.T) {
+	t.Parallel()
+	testOSVCargoPinnedRuntimeProjection(t, true)
+}
+
+func testOSVCargoPinnedRuntimeProjection(t *testing.T, aliased bool) {
+	t.Helper()
 	repo := cargoOSVRepository(t, cargoOSVMixedLock())
+	if aliased {
+		alias := filepath.Join(t.TempDir(), "parent")
+		if err := os.Symlink(filepath.Dir(repo.Root), alias); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		repo.Root = filepath.Join(alias, filepath.Base(repo.Root))
+	}
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)

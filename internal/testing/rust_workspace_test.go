@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestNativeRustRejectsExternalWorkspaceBeforeCompilation(t *testing.T) {
@@ -25,7 +23,7 @@ func TestNativeRustRejectsExternalWorkspaceBeforeCompilation(t *testing.T) {
 		writeRustSuiteFile(t, parent, "Cargo.lock", "version=4\n[[package]]\nname='app'\nversion='1.0.0'\n")
 		writeRustSuiteFile(t, root, "build.rs", "fn main() { std::fs::write(\"build-started\", b\"ran\").unwrap(); }\n")
 		for attempt := 1; attempt <= 2; attempt++ {
-			execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, attempt)
+			execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, attempt)
 			if !execution.Failed() || !strings.Contains(execution.FailureMessage, "workspace root") {
 				t.Fatalf("external workspace accepted for doctests=%v attempt=%d: %+v", doctests, attempt, execution)
 			}
@@ -50,7 +48,7 @@ func TestNativeRustRejectsLinkedWorkspaceLockBeforeCompilation(t *testing.T) {
 			t.Skipf("symlink creation unavailable: %v", err)
 		}
 		writeRustSuiteFile(t, repo.Root, "build.rs", "fn main() { std::fs::write(\"build-started\", b\"ran\").unwrap(); }\n")
-		execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2)
+		execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2)
 		if !execution.Failed() || !strings.Contains(execution.FailureMessage, "contained Cargo.lock") {
 			t.Fatalf("linked lock accepted for doctests=%v: %+v", doctests, execution)
 		}
@@ -69,12 +67,12 @@ func TestNativeRustUsesActualExplicitWorkspaceLock(t *testing.T) {
 	writeRustSuiteFile(t, repo.Root, "crates/app/src/lib.rs", "#[test]\nfn behavior() { assert_eq!(2 + 2, 4); }\n")
 	lock := "version=4\n[[package]]\nname='app'\nversion='1.0.0'\n"
 	writeRustSuiteFile(t, repo.Root, "crates/app/Cargo.lock", lock)
-	missing := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	missing := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if !missing.Failed() || !strings.Contains(missing.FailureMessage, "contained Cargo.lock") {
 		t.Fatalf("unrelated root or member lock replaced the workspace lock: %+v", missing)
 	}
 	writeRustSuiteFile(t, repo.Root, "workspace/Cargo.lock", lock)
-	if recovered := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2); recovered.Failed() {
+	if recovered := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2); recovered.Failed() {
 		t.Fatalf("valid explicit workspace failed: %+v", recovered)
 	}
 }

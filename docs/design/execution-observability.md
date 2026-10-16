@@ -33,6 +33,12 @@ a normal test-failure code. A partial stream cannot establish native outcome
 evidence or a regression-proof red result. Cancellation and timeout retain their
 more specific failure categories.
 
+Sealed commands receive one private writable temporary directory through
+`TMPDIR`, `TMP`, and `TEMP`. Windows native tools use `TMP` or `TEMP` rather than
+`TMPDIR`; omitting them can send compiler scratch files to the Windows directory.
+The runner removes the private directory after the command and its descendants
+finish. Ambient temporary-directory settings are not required for native tools.
+
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;
 they do not construct global reachability evidence that cannot establish a
@@ -78,6 +84,12 @@ its accepted report permits the gate to pass.
 Standalone scanner calls use the same exit conditions. A timeout or operational
 failure remains a scanner finding even when an advisory was emitted before the
 failure; assessing that advisory cannot erase the failed scan.
+
+Scanner source paths can use either the caller's repository-root spelling or
+its physical path. Scope normalization resolves only the repository root and
+still rejects paths outside it. Projected scans require the exact planned input
+path before attributing findings to the original lockfile; a root alias does not
+authorize another projection or source.
 
 Vulnerability reports identify the actual owner for every assessment, including
 agent-owned decisions, without implying human sign-off. Assessed findings stay

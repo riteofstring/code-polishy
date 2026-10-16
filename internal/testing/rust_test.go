@@ -21,7 +21,7 @@ func TestNativeRustSuiteProducesNonemptyEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if execution.Failed() || len(execution.Artifacts) != 1 || execution.Artifacts[0].Type != policy.NextestJUnitArtifact || execution.Artifacts[0].SHA256 == "" {
 		t.Fatalf("native Rust execution: %+v", execution)
 	}
@@ -50,7 +50,7 @@ func TestNativeRustSuiteDistinguishesTestAndOperationalFailure(t *testing.T) {
 			if test.build != "" {
 				writeRustSuiteFile(t, repo.Root, "build.rs", test.build)
 			}
-			execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+			execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 			if !execution.Failed() || execution.FailureCategory != test.category || (len(execution.Artifacts) == 1) != test.artifact {
 				t.Fatalf("failure classification: %+v", execution)
 			}
@@ -65,12 +65,12 @@ func TestNativeRustSuiteHonorsCargoFeaturesAndFilter(t *testing.T) {
 	suite.Rust.Features = []string{"chosen"}
 	suite.Rust.NoDefaultFeatures = true
 	suite.Rust.Filter = "test(=selected)"
-	execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if execution.Failed() || len(execution.Artifacts) != 1 {
 		t.Fatalf("Cargo feature/filter selection: %+v", execution)
 	}
 	suite.Rust.Filter = "test(=absent)"
-	empty := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2)
+	empty := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2)
 	if !empty.Failed() || empty.FailureCategory != runner.FailureOperational {
 		t.Fatalf("empty filter was accepted: %+v", empty)
 	}
@@ -85,18 +85,18 @@ func TestNativeRustSuiteUsesWorkspaceDefaultsAndExplicitPackages(t *testing.T) {
 	writeRustSuiteFile(t, repo.Root, "crates/service/Cargo.toml", "[package]\nname='service'\nversion='1.0.0'\nedition='2024'\n")
 	writeRustSuiteFile(t, repo.Root, "crates/core/src/lib.rs", "#[test]\nfn behavior() { assert_eq!(2 + 2, 4); }\n")
 	writeRustSuiteFile(t, repo.Root, "crates/service/src/lib.rs", "#[test]\nfn behavior() { assert_eq!(2 + 2, 5); }\n")
-	defaultRun := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	defaultRun := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if defaultRun.Failed() {
 		t.Fatalf("unselected workspace member was tested: %+v", defaultRun)
 	}
 	suite.Rust.Packages = []string{"service"}
-	explicit := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2)
+	explicit := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2)
 	if !explicit.Failed() || explicit.FailureCategory != runner.FailureCommandExit {
 		t.Fatalf("explicit package was not tested: %+v", explicit)
 	}
 	suite.Rust.Packages = []string{"core"}
 	writeRustSuiteFile(t, repo.Root, "crates/core/tests/public.rs", "#[test]\nfn public_behavior() { assert_eq!(2 + 2, 5); }\n")
-	integration := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 3)
+	integration := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 3)
 	if !integration.Failed() || integration.FailureCategory != runner.FailureCommandExit {
 		t.Fatalf("integration target was not tested: %+v", integration)
 	}
@@ -106,7 +106,7 @@ func TestNativeRustSuiteNeverRepairsLocksOrIgnoresProjectSettings(t *testing.T) 
 	t.Parallel()
 	repo, suite := rustSuiteRepository(t, "#[test]\nfn behavior() { assert_eq!(2 + 2, 4); }\n")
 	writeRustSuiteFile(t, repo.Root, "Cargo.lock", "version = 4\n")
-	execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if !execution.Failed() || execution.FailureCategory != runner.FailureOperational {
 		t.Fatalf("stale lock was accepted: %+v", execution)
 	}
@@ -115,7 +115,7 @@ func TestNativeRustSuiteNeverRepairsLocksOrIgnoresProjectSettings(t *testing.T) 
 		t.Fatalf("stale lock was changed: %q, %v", lock, err)
 	}
 	writeRustSuiteFile(t, repo.Root, ".config/nextest.toml", "[profile.default]\ndefault-filter='not test(live_probe)'\n")
-	preflight := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2)
+	preflight := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2)
 	if !strings.Contains(preflight.FailureMessage, "cannot silently replace") {
 		t.Fatalf("project settings were ignored: %+v", preflight)
 	}
@@ -128,7 +128,7 @@ func TestNativeRustSuiteFindsExplicitWorkspaceNextestSettings(t *testing.T) {
 	writeRustSuiteFile(t, repo.Root, "workspace/Cargo.toml", "[workspace]\nmembers=['../crates/app']\nresolver='3'\n")
 	writeRustSuiteFile(t, repo.Root, "workspace/.config/nextest.toml", "[profile.default]\ndefault-filter='not test(live_probe)'\n")
 	suite.Rust.Manifest = "crates/app/Cargo.toml"
-	execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if !execution.Failed() || !strings.Contains(execution.FailureMessage, "workspace/.config/nextest.toml") {
 		t.Fatalf("explicit workspace configuration was ignored: %+v", execution)
 	}
@@ -154,7 +154,7 @@ func TestNativeRustCommandAndCopiesRetainGovernedSelection(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	execution := ExecuteSuite(ctx, repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(ctx, repo, rustSuiteRunner(t), suite, 1)
 	if !execution.Failed() || execution.FailureCategory != runner.FailureCanceled {
 		t.Fatalf("canceled test became another outcome: %+v", execution)
 	}
@@ -183,4 +183,15 @@ func writeRustSuiteFile(t *testing.T, root, name, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func rustSuiteRunner(t *testing.T) runner.OSRunner {
+	t.Helper()
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Rust command stdout:\n%s\nstderr:\n%s", stdout, stderr)
+		}
+	})
+	return runner.OSRunner{Stdout: stdout, Stderr: stderr}
 }

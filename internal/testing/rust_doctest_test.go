@@ -27,7 +27,7 @@ func TestNativeRustDoctestsRespectExampleSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+	execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 	if execution.Failed() || len(execution.Artifacts) != 1 || execution.Artifacts[0].Type != policy.RustdocArtifact {
 		t.Fatalf("doctest execution: %+v", execution)
 	}
@@ -59,7 +59,7 @@ func TestNativeRustDoctestsKeepFailuresDistinct(t *testing.T) {
 			if test.build != "" {
 				writeRustSuiteFile(t, repo.Root, "build.rs", test.build)
 			}
-			execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1)
+			execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1)
 			if !execution.Failed() || execution.FailureCategory != test.category || (len(execution.Artifacts) == 1) != test.artifact {
 				t.Fatalf("doctest classification: %+v", execution)
 			}
@@ -74,16 +74,16 @@ func TestNativeRustDoctestsHonorFeaturesAndCancellation(t *testing.T) {
 	suite.Rust.Doctests = true
 	suite.Rust.Features = []string{"chosen"}
 	suite.Rust.NoDefaultFeatures = true
-	if execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1); execution.Failed() {
+	if execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1); execution.Failed() {
 		t.Fatalf("doctest features: %+v", execution)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if execution := ExecuteSuite(ctx, repo, runner.OSRunner{}, suite, 2); execution.FailureCategory != runner.FailureCanceled {
+	if execution := ExecuteSuite(ctx, repo, rustSuiteRunner(t), suite, 2); execution.FailureCategory != runner.FailureCanceled {
 		t.Fatalf("doctest cancellation: %+v", execution)
 	}
 	writeRustSuiteFile(t, repo.Root, "Cargo.lock", "version=4\n")
-	if execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 3); execution.FailureCategory != runner.FailureOperational {
+	if execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 3); execution.FailureCategory != runner.FailureOperational {
 		t.Fatalf("doctest stale lock: %+v", execution)
 	}
 	data, err := os.ReadFile(filepath.Join(repo.Root, "Cargo.lock"))
@@ -102,15 +102,15 @@ func TestNativeRustDoctestsKeepWorkspaceBatches(t *testing.T) {
 		writeRustSuiteFile(t, repo.Root, name+"/src/lib.rs", "/// ```\n/// assert_eq!(2 + 2, 4);\n/// ```\npub fn answer() {}\n")
 	}
 	suite.Rust.Doctests = true
-	if execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 1); execution.Failed() {
+	if execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 1); execution.Failed() {
 		t.Fatalf("workspace doctests: %+v", execution)
 	}
 	writeRustSuiteFile(t, repo.Root, "second/src/lib.rs", "/// ```\n/// assert_eq!(2 + 2, 5);\n/// ```\npub fn answer() {}\n")
-	if execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 2); execution.FailureCategory != runner.FailureCommandExit {
+	if execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 2); execution.FailureCategory != runner.FailureCommandExit {
 		t.Fatalf("workspace doctest failure: %+v", execution)
 	}
 	suite.Rust.Packages = []string{"first"}
-	if execution := ExecuteSuite(t.Context(), repo, runner.OSRunner{}, suite, 3); execution.Failed() {
+	if execution := ExecuteSuite(t.Context(), repo, rustSuiteRunner(t), suite, 3); execution.Failed() {
 		t.Fatalf("selected package doctests: %+v", execution)
 	}
 	plan := ExecutionPlanForDirectTest(Plan{Suites: []policy.TestSuite{suite}})
