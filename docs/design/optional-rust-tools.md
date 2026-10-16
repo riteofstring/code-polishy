@@ -14,6 +14,12 @@ the setup command. Configuration cannot disable Rust recognition, select an
 ambient compiler, change the approved tool versions, or substitute an arbitrary
 successful command for native evidence. Unsupported semantics remain failures.
 
+Task-session environment receipts include Nextest with the installed Rust SDK,
+not with the core tools that share its executable directory. A core-only
+installation can start a task session without Rust. Once the SDK is present,
+the receipt requires its complete compiler and Nextest inventory. Rust checks
+retain their separate tool-integrity validation before execution.
+
 The authenticated core release owns the exact Rust tool inventory, versions,
 host, and file identities. Its default archive omits the corresponding tool
 payload; a companion archive carries it. Installing that archive validates its
