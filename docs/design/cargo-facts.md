@@ -14,6 +14,13 @@ code nor proves that dependencies or any target configuration have been checked.
 The selected manifest and Cargo's actual workspace membership determine scope;
 directory naming is never a package identifier.
 
+Cargo can report the physical checkout path while the caller uses an operating
+system alias, such as macOS's `/var` or Windows short directory names. Input
+containment recognizes both spellings of the repository root, then reads the
+relative path through the existing contained regular-file boundary. Only the
+root is resolved: links within source paths remain invalid, and absent inactive
+remote targets retain their ordinary missing-file semantics.
+
 Discovery retains each package's minimum Rust version as a fact. Cargo enforces
 compiler compatibility when the selected package/feature/target configuration is
 checked. An unselected member with a newer minimum version must not prevent

@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"golang.org/x/mod/semver"
@@ -233,13 +232,20 @@ func containedPath(repo repository.Repository, absolute string) (string, error) 
 	if !filepath.IsAbs(absolute) {
 		return "", errors.New("cargo reported a non-absolute input path")
 	}
-	relative, err := filepath.Rel(repo.Root, absolute)
-	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || relative == ".." {
-		return "", fmt.Errorf("cargo input %q escapes the repository", absolute)
+	physicalRoot, err := filepath.EvalSymlinks(repo.Root)
+	if err != nil {
+		return "", fmt.Errorf("cargo repository root: %w", err)
 	}
-	path := filepath.ToSlash(relative)
-	if _, err := repo.ReadContainedFile(path, 8<<20); err != nil {
-		return path, fmt.Errorf("cargo input %q: %w", path, err)
+	for _, root := range []string{repo.Root, physicalRoot} {
+		relative, err := filepath.Rel(root, absolute)
+		if err != nil || relative == "." || !filepath.IsLocal(relative) {
+			continue
+		}
+		path := filepath.ToSlash(relative)
+		if _, err := repo.ReadContainedFile(path, 8<<20); err != nil {
+			return path, fmt.Errorf("cargo input %q: %w", path, err)
+		}
+		return path, nil
 	}
-	return path, nil
+	return "", fmt.Errorf("cargo input %q escapes the repository", absolute)
 }

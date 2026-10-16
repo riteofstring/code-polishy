@@ -162,9 +162,12 @@ func validateCompilerTarget(repo repository.Repository, workspace Workspace, eve
 }
 
 func matchesDiscoveredTarget(repo repository.Repository, targets []Target, reported Target) bool {
+	path, err := containedPath(repo, reported.Path)
+	if err != nil {
+		return false
+	}
 	return slices.ContainsFunc(targets, func(target Target) bool {
-		absolute := filepath.Join(repo.Root, filepath.FromSlash(target.Path))
-		return reported.Name == target.Name && filepath.Clean(reported.Path) == absolute && slices.Equal(reported.Kinds, target.Kinds) && reported.Edition == target.Edition
+		return reported.Name == target.Name && path == target.Path && slices.Equal(reported.Kinds, target.Kinds) && reported.Edition == target.Edition
 	})
 }
 
