@@ -311,6 +311,14 @@
       "public": true
     },
     {
+      "id": "line-budget-design",
+      "path": "docs/design/line-budget.md",
+      "title": "Repository Line Budget",
+      "summary": "Understand what the line budget counts, why it cannot be exempted, and how budget changes stay visible.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "reliability-reminder-design",
       "path": "docs/design/reliability-reminder.md",
       "title": "Reliability Reminder",

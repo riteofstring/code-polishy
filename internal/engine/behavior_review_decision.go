@@ -194,6 +194,21 @@ func behaviorReviewNotRunDecision(affected, configured, requested []string) (beh
 }
 
 func (engine *Engine) behaviorReviewConfigAt(base string) (behaviorReviewBaseConfiguration, error) {
+	data, normalized, present, err := engine.configFileAt(base)
+	if err != nil {
+		return behaviorReviewBaseConfiguration{}, err
+	}
+	if !present {
+		return behaviorReviewBaseConfiguration{Config: policy.Config{}, Path: normalized, Present: false}, nil
+	}
+	config, err := policy.ParseReviewSnapshot(data, normalized)
+	if err != nil {
+		return behaviorReviewBaseConfiguration{}, fmt.Errorf("parse base configuration: %w", err)
+	}
+	return behaviorReviewBaseConfiguration{Config: config, Path: normalized, Present: true}, nil
+}
+
+func (engine *Engine) configFileAt(base string) ([]byte, string, bool, error) {
 	configPath := engine.Repository.Config.ConfigPath
 	if configPath == "" {
 		configPath = policy.ConfigFilename
@@ -204,26 +219,19 @@ func (engine *Engine) behaviorReviewConfigAt(base string) (behaviorReviewBaseCon
 		}
 		relative, err := filepath.Rel(engine.Repository.Root, configPath)
 		if err != nil {
-			return behaviorReviewBaseConfiguration{}, fmt.Errorf("resolve base configuration: %w", err)
+			return nil, "", false, fmt.Errorf("resolve base configuration: %w", err)
 		}
 		configPath = relative
 	}
 	normalized, err := engine.Repository.NormalizePath(configPath)
 	if err != nil {
-		return behaviorReviewBaseConfiguration{}, fmt.Errorf("resolve base configuration: %w", err)
+		return nil, "", false, fmt.Errorf("resolve base configuration: %w", err)
 	}
 	data, present, err := engine.Repository.ReadRegularFileAt(base, normalized)
 	if err != nil {
-		return behaviorReviewBaseConfiguration{}, fmt.Errorf("read base configuration: %w", err)
+		return nil, "", false, fmt.Errorf("read base configuration: %w", err)
 	}
-	if !present {
-		return behaviorReviewBaseConfiguration{Config: policy.Config{}, Path: normalized, Present: false}, nil
-	}
-	config, err := policy.ParseReviewSnapshot(data, normalized)
-	if err != nil {
-		return behaviorReviewBaseConfiguration{}, fmt.Errorf("parse base configuration: %w", err)
-	}
-	return behaviorReviewBaseConfiguration{Config: config, Path: normalized, Present: true}, nil
+	return data, normalized, present, nil
 }
 
 func behaviorReviewFeatureRequirements(

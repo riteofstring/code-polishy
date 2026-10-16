@@ -594,7 +594,7 @@ func checkTextFile(repo repository.Repository, path string) []policy.Finding {
 		return nil
 	}
 	findings := newlineFindings(path, data)
-	if !checksFileLength(repo, path) || isLengthInput(path) {
+	if !repo.CountsSourceLines(path) {
 		return findings
 	}
 	lineCount := bytes.Count(data, []byte("\n"))
@@ -613,15 +613,6 @@ func checkTextFile(repo repository.Repository, path string) []policy.Finding {
 		findings = append(findings, policy.Finding{Check: "quality.fileLength", Path: path, Subject: strconv.Itoa(lineCount), Message: fmt.Sprintf("file has %d physical lines; review threshold is %d and blocking maximum is %d", lineCount, reviewAt, limit), Severity: policy.FindingWarning})
 	}
 	return findings
-}
-
-func checksFileLength(repo repository.Repository, path string) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".md", ".markdown", ".json", ".jsonc", ".yaml", ".yml", ".toml", ".html", ".htm", ".css", ".sql", ".proto":
-		return false
-	default:
-		return repo.IsExecutableSource(path)
-	}
 }
 
 func newlineFindings(path string, data []byte) []policy.Finding {
@@ -973,11 +964,6 @@ func toolFinding(tool, message string) policy.Finding {
 
 func safeName(value string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
-}
-
-func isLengthInput(path string) bool {
-	name := strings.ToLower(filepath.Base(path))
-	return name == "go.sum" || name == "go.work.sum" || strings.HasSuffix(name, ".lock") || name == "license"
 }
 
 func isExecutable(path string) bool {

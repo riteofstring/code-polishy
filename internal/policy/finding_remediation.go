@@ -15,6 +15,8 @@ var findingRemediationRules = []struct {
 }{
 	{"quality.format quality.gofmt quality.finalNewline quality.trailingWhitespace quality.documentationFinalNewline quality.documentationWhitespace", "Apply the locked formatter to the selected handwritten source, then check the same scope. Repair generated content through its declared producer."},
 	{"quality.fileLength", "Review whether the file combines distinct responsibilities. Extract only cohesive units supported by clear behavior or dependency boundaries; preserve a cohesive file instead of creating forwarding-only fragments."},
+	{"quality.lineBudget", "Remove unnecessary code, duplication, and speculative machinery until the scope fits. Do not compress formatting, delete valuable tests, or move logic into configuration. If the code is needed, ask the caller for a specific budget increase with justification; change quality.lineBudget only at their explicit request."},
+	{"quality.lineBudgetChange", "Confirm that the caller explicitly requested this line budget change; otherwise restore the base budget."},
 	{"quality.complexity quality.goComplexity", "Simplify the reported function's branching and extract cohesive operations while preserving its observable behavior."},
 	{"quality.deadCode", "Remove the reported unused declaration or connect it to a real supported caller. For external consumers, provide exact current consumer evidence instead of suppressing the finding."},
 	{"quality.typecheck", "Correct the reported expression, declaration, or caller so the actual values satisfy the declared type contract; do not replace the contract with an unchecked type."},

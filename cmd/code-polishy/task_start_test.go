@@ -489,3 +489,39 @@ func TestTaskStartUnavailableCatalogCannotPublishIntent(t *testing.T) {
 		t.Fatalf("unavailable catalog left an intent capture: %v", err)
 	}
 }
+
+func TestTaskStartReportsRemainingLineBudget(t *testing.T) {
+	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["quality"].(map[string]any)["lineBudget"] = map[string]any{"production": 1000}
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
+	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename)
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "Configure line budget")
+
+	status, stdout, stderr := captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "value.go"))
+	var packet engine.TaskStartPacket
+	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || stderr != "" {
+		t.Fatalf("task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)
+	}
+	if len(packet.LineBudget) != 1 || packet.LineBudget[0].Scope != "production" || packet.LineBudget[0].Budget != 1000 || packet.LineBudget[0].Lines == 0 {
+		t.Fatalf("line budget = %+v", packet.LineBudget)
+	}
+	remaining := packet.LineBudget[0].Budget - packet.LineBudget[0].Lines
+	status, stdout, stderr = captureRunOutput(t, []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "value.go"})
+	expected := fmt.Sprintf("LINE BUDGET production: %d of 1000 non-blank lines; %d remaining", packet.LineBudget[0].Lines, remaining)
+	if status != 0 || stderr != "" || !strings.Contains(stdout, expected) {
+		t.Fatalf("human task start omitted %q: status=%d stdout=%q stderr=%q", expected, status, stdout, stderr)
+	}
+}

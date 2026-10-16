@@ -139,6 +139,7 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
+	findings = append(findings, quality.LineBudgetFindings(engine.Repository)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, portability.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, testpolicy.CoverageFindings(engine.Repository, files)...)
@@ -175,6 +176,7 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	findings := []policy.Finding{}
 	engine.executionPhase(ctx, "coverage", func(context.Context) {
 		findings = append(findings, engine.coverageFindings()...)
+		findings = append(findings, engine.lineBudgetChangeFindings(selection.Base)...)
 	})
 	engine.executionPhase(ctx, "quality", func(phaseContext context.Context) {
 		findings = append(findings, quality.Check(phaseContext, engine.Repository, selection, engine.Runner, profile)...)
@@ -229,6 +231,7 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
+	findings = append(findings, quality.LineBudgetFindings(engine.Repository)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, portability.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, testpolicy.CoverageFindings(engine.Repository, files)...)

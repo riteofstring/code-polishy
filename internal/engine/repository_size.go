@@ -18,6 +18,7 @@ func (engine *Engine) Size(base string) (Report, error) {
 	notes := []string{
 		"repository size is descriptive evidence; project context determines whether it is reasonable",
 		"source contents were not included in the size report",
+		"source lines count non-blank lines in handwritten files that have a file-length budget",
 	}
 	if analysis.Comparison != nil {
 		notes = append(notes, "base comparison uses canonical Git blob sizes for both revisions")
@@ -35,6 +36,8 @@ func repositorySizeTables(analysis repository.SizeAnalysis) []Table {
 	tables = appendSizeGroupTable(tables, "GOVERNED CONTENT", "CATEGORY", analysis.Governed.Categories, analysis.Governed.Bytes)
 	tables = appendSizeGroupTable(tables, "GOVERNED MODULES", "MODULE", analysis.Governed.Modules, analysis.Governed.Bytes)
 	tables = appendSizeGroupTable(tables, "GOVERNED LANGUAGES", "LANGUAGE", analysis.Governed.Languages, analysis.Governed.Bytes)
+	tables = append(tables, sourceLinesTable(analysis.SourceLines))
+	tables = appendLineBudgetTable(tables, analysis.SourceLines.Budget)
 	tables = appendSizeFileTable(tables, "LARGEST WORKSPACE FILES", analysis.Workspace.LargestFiles)
 	tables = appendSizeFileTable(tables, "LARGEST GOVERNED FILES", analysis.Governed.LargestFiles)
 	if analysis.Comparison != nil {
@@ -70,6 +73,29 @@ func appendSizeGroupTable(tables []Table, title, label string, groups []reposito
 		rows = append(rows, []string{group.Name, strconv.Itoa(group.Files), formatSizeBytes(group.Bytes), formatSizeShare(group.Bytes, total)})
 	}
 	return append(tables, Table{Title: title, Columns: []string{label, "FILES", "SIZE", "SHARE"}, Rows: rows})
+}
+
+func sourceLinesTable(lines repository.SourceLines) Table {
+	rows := [][]string{{"all", strconv.Itoa(lines.Production), strconv.Itoa(lines.Test)}}
+	languages := lines.Languages
+	if len(languages) > repositorySizeTableLimit {
+		languages = languages[:repositorySizeTableLimit]
+	}
+	for _, language := range languages {
+		rows = append(rows, []string{language.Name, strconv.Itoa(language.Production), strconv.Itoa(language.Test)})
+	}
+	return Table{Title: "SOURCE LINES", Columns: []string{"LANGUAGE", "PRODUCTION", "TEST"}, Rows: rows}
+}
+
+func appendLineBudgetTable(tables []Table, scopes []repository.LineBudgetScope) []Table {
+	if len(scopes) == 0 {
+		return tables
+	}
+	rows := make([][]string, 0, len(scopes))
+	for _, scope := range scopes {
+		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), strconv.Itoa(scope.Budget), strconv.Itoa(scope.Budget - scope.Lines)})
+	}
+	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BUDGET", "REMAINING"}, Rows: rows})
 }
 
 func appendSizeFileTable(tables []Table, title string, files []repository.SizeFile) []Table {

@@ -245,6 +245,13 @@ type Quality struct {
 	MaxTestDepth        int                  `json:"maxTestDepth,omitempty"`
 	MaxParams           int                  `json:"maxParams,omitempty"`
 	MaxTestParams       int                  `json:"maxTestParams,omitempty"`
+	LineBudget          *LineBudget          `json:"lineBudget,omitempty"`
+}
+
+type LineBudget struct {
+	Production int `json:"production,omitempty"`
+	Test       int `json:"test,omitempty"`
+	Total      int `json:"total,omitempty"`
 }
 
 type ReliabilityReminder struct {

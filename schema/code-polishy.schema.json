@@ -465,7 +465,18 @@
         "maxDepth": { "type": "integer", "minimum": 1, "maximum": 4 },
         "maxTestDepth": { "type": "integer", "minimum": 1, "maximum": 8 },
         "maxParams": { "type": "integer", "minimum": 1, "maximum": 5 },
-        "maxTestParams": { "type": "integer", "minimum": 1, "maximum": 8 }
+        "maxTestParams": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "lineBudget": { "$ref": "#/$defs/lineBudget" }
+      }
+    },
+    "lineBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "production": { "type": "integer", "minimum": 1 },
+        "test": { "type": "integer", "minimum": 1 },
+        "total": { "type": "integer", "minimum": 1 }
       }
     },
     "reliabilityReminder": {

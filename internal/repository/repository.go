@@ -866,7 +866,11 @@ func (repo Repository) hasShellShebang(path string) bool {
 	if readErr != nil && !errors.Is(readErr, io.EOF) || closeErr != nil {
 		return false
 	}
-	first := string(bytes.SplitN(prefix[:count], []byte("\n"), 2)[0])
+	return shellShebang(prefix[:count])
+}
+
+func shellShebang(data []byte) bool {
+	first := string(bytes.SplitN(data, []byte("\n"), 2)[0])
 	return strings.HasPrefix(first, "#!") && (strings.Contains(first, "/sh") || strings.Contains(first, "/bash") || strings.Contains(first, " sh") || strings.Contains(first, " bash"))
 }
 

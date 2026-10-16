@@ -27,7 +27,9 @@ func prepareInputs(repo repository.Repository, request *Request) error {
 func prepareInputPaths(repo repository.Repository, request *Request, paths []string) error {
 	paths = sortedUnique(append(slices.Clone(paths), request.Files...))
 	assetLinks := validatedAssetLinkInputs(repo, paths)
-	request.Policy = PolicyInput{Quality: policy.EffectiveQuality(repo.Config.Quality), Files: []SourceInput{}}
+	quality := policy.EffectiveQuality(repo.Config.Quality)
+	quality.LineBudget = nil
+	request.Policy = PolicyInput{Quality: quality, Files: []SourceInput{}}
 	paths = prepareUnits(repo, request, paths)
 	for path := range assetLinks {
 		paths = append(paths, path)

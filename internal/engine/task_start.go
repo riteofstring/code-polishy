@@ -33,6 +33,7 @@ type TaskStartPacket struct {
 	WorkflowDocuments   []string                      `json:"workflowDocuments"`
 	ConfiguredGuards    []CapabilityEntry             `json:"configuredGuards"`
 	ReliabilityReminder *ReliabilityReminder          `json:"reliabilityReminder,omitempty"`
+	LineBudget          []repository.LineBudgetScope  `json:"lineBudget,omitempty"`
 	Verification        policy.Verification           `json:"verification"`
 	FinalGateOwner      string                        `json:"finalGateOwner"`
 	NextActions         []TaskStartAction             `json:"nextActions"`
@@ -174,6 +175,9 @@ func (engine *Engine) taskStartPacket(request ContextRequest, requestedFeatures 
 		ReliabilityReminder: engine.reliabilityReminder(selection.Candidate),
 		Verification:        engine.Repository.Config.Verification,
 		FinalGateOwner:      engine.Repository.Config.Verification.EffectiveFinalGateOwner(),
+	}
+	if packet.LineBudget, err = engine.lineBudgetScopes(); err != nil {
+		return TaskStartPacket{}, nil, err
 	}
 	packet.collectGuards(inventory.Capabilities)
 	return packet, features, nil

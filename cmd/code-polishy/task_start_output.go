@@ -37,6 +37,9 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 	printTaskStartCapture(&output, packet.Intent.Capture)
 	printReliabilityReminder(&output, packet.ReliabilityReminder)
 	printTaskStartContext(&output, packet.RepositoryContext)
+	for _, scope := range packet.LineBudget {
+		fmt.Fprintf(&output, "LINE BUDGET %s: %d of %d non-blank lines; %d remaining\n", scope.Scope, scope.Lines, scope.Budget, scope.Budget-scope.Lines)
+	}
 	fmt.Fprintf(&output, "CONFIGURED GUARDS: %d; use `code-polishy capabilities --format json` for the complete catalog.\n", len(packet.ConfiguredGuards))
 	fmt.Fprintln(&output, "WORKFLOW DOCUMENTS:", boundedTaskStartValues(packet.WorkflowDocuments))
 	fmt.Fprintln(&output, "MERGE CHECKPOINT GATE OWNER (inactive for ordinary task delivery):", packet.FinalGateOwner)
