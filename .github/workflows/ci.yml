@@ -206,6 +206,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          .\tools\initialize-windows-sdk.ps1
           $go = '.tools\go\windows-amd64\go\bin\go.exe'
           & $go test -run '^$' ./...
           if ($LASTEXITCODE -ne 0) { throw 'Go package compilation failed.' }

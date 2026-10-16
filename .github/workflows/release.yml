@@ -205,6 +205,7 @@ jobs:
             throw "The runner is not the requested $env:RELEASE_HOST native host."
           }
           .\tools\install-policy-tools.ps1
+          .\tools\initialize-windows-sdk.ps1
           $publicationDir = Join-Path $env:RUNNER_TEMP "publication\$env:RELEASE_HOST"
           $rawArchive = Join-Path $env:RUNNER_TEMP 'code-polishy-release.zip'
           .\scripts\build-release.ps1 -Output $rawArchive -PublicationDirectory $publicationDir

@@ -455,7 +455,10 @@ not use a target `.venv` or target Python installation for either package.
 
 Rust target builds also need the host's native linker and SDK: a C toolchain on
 Linux, Xcode command-line tools on macOS, or the Visual Studio C++ build tools
-and Windows SDK for MSVC. These host prerequisites are separate from the carried
+and Windows SDK for MSVC. Run Windows Rust checks from an x64 Visual Studio
+Developer PowerShell session so Microsoft's linker and SDK libraries are active.
+A regular shell can select an unrelated `link.exe` supplied by Unix tools.
+These host prerequisites are separate from the carried
 Rust SDK; Code Polishy does not install system development packages. See the
 [Rust platform prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html).
 

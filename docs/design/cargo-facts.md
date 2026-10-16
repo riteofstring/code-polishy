@@ -287,6 +287,10 @@ installation roots so rustc can discover Visual Studio through its native
 discovery mechanism, including `vswhere.exe`. Without those roots, discovery can
 fail and leave an unrelated `link.exe` on PATH selected as the linker. This does
 not admit ambient Rust compiler selection or Cargo configuration.
+Native Windows CI and release smoke tests explicitly initialize Microsoft's x64
+developer shell and verify that the active linker belongs to the selected Visual
+Studio installation. The SDK's existing PATH and library inputs reach sealed
+Rust commands; automatic discovery alone is not a supported CI prerequisite.
 
 Structured success requires a final Cargo outcome and a compiled target for
 every selected package. An empty stream, unrecognized output, partial compilation
