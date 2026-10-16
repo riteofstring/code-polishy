@@ -3,6 +3,7 @@ package policymodule
 import (
 	"context"
 	"os"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -158,9 +159,13 @@ func modulesForPythonFiles(repo repository.Repository, files []string) []string 
 	return slices.Compact(modules)
 }
 
-func executableVersion(path string, acceptedLines ...string) bool {
+func executableFile(path string) bool {
 	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+	return err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0)
+}
+
+func executableVersion(path string, acceptedLines ...string) bool {
+	if !executableFile(path) {
 		return false
 	}
 	output, err := runner.ToolOutput(path, "--version")
@@ -176,8 +181,7 @@ func executableVersion(path string, acceptedLines ...string) bool {
 }
 
 func tyExecutableVersion(path, pin string) bool {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+	if !executableFile(path) {
 		return false
 	}
 	output, err := runner.ToolOutput(path, "--version")
@@ -213,8 +217,7 @@ func vultureRuntimeVersion(repo repository.Repository, pin string) bool {
 func pythonRuntimeOutput(repo repository.Repository, source string) string {
 	command := repo.PythonCommand(source)
 	path := command[0]
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+	if !executableFile(path) {
 		return ""
 	}
 	_, output, err := (runner.OSRunner{}).RunStructured(context.Background(), repo.Root, policy.Command{

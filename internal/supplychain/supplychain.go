@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -964,7 +965,7 @@ func safeName(value string) string {
 
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0
+	return err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0)
 }
 
 func regularFile(path string) bool {

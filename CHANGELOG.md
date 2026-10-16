@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.29.0-beta.2 - 2026-10-16
+
+- Recognize pinned OSV-Scanner, ty and Python tools on Windows, where files
+  carry no execute permission bits. Windows Cargo, Python and dependency
+  policy no longer reports installed tools as missing; the 0.29.0-beta.1 tag
+  was not published because its Windows release build failed this check.
+- Exercise the installed native Rust release on Windows in ordinary CI before
+  a release tag depends on it.
+
 ## 0.29.0-beta.1 - 2026-10-15
 
 - Add native Rust beta support for contained Cargo projects: discovery,

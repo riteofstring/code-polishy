@@ -202,6 +202,30 @@ jobs:
         shell: pwsh
         run: .\tools\install-policy-tools.ps1
 
+      - name: Exercise the installed native Rust release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          .\tools\initialize-windows-sdk.ps1
+          $version = (Get-Content -LiteralPath VERSION -Raw).Trim()
+          $publicationDir = Join-Path $env:RUNNER_TEMP 'rust-publication'
+          .\scripts\build-release.ps1 -Output (Join-Path $env:RUNNER_TEMP 'rust-release.zip') -PublicationDirectory $publicationDir
+          $archive = Join-Path $publicationDir "code-polishy-$version-windows-x64.zip"
+          $descriptor = Join-Path $publicationDir "code-polishy-$version-windows-x64.release.json"
+          $archiveSha = [string](Get-Content -LiteralPath $descriptor -Raw | ConvertFrom-Json).archive.sha256
+          $inspection = Join-Path $env:RUNNER_TEMP 'rust-release-inspection'
+          $installation = Join-Path $env:RUNNER_TEMP 'rust-release-installation'
+          Expand-Archive -LiteralPath $archive -DestinationPath $inspection
+          & (Join-Path $inspection 'bin\code-polishy.exe') --policy-root $inspection install-bundle --source $archive --sha256 $archiveSha --prefix $installation
+          if ($LASTEXITCODE -ne 0) { throw 'The fresh release installation failed.' }
+          $installedEngines = @(Get-ChildItem -LiteralPath (Join-Path $installation 'releases') -Filter 'code-polishy.exe' -File -Recurse)
+          if ($installedEngines.Count -ne 1) { throw 'The fresh installation did not contain exactly one release engine.' }
+          $installedRoot = Split-Path -Parent (Split-Path -Parent $installedEngines[0].FullName)
+          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+          & $bash ./scripts/test-installed-release-rust.sh $installedRoot (Join-Path $installation 'bin\code-polishy.exe') (Join-Path $publicationDir "code-polishy-$version-rust-windows-x64.zip")
+          if ($LASTEXITCODE -ne 0) { throw 'The installed Rust fixture failed.' }
+
       - name: Compile all Go packages and run native Windows contracts
         shell: pwsh
         run: |
