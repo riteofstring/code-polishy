@@ -4,10 +4,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+func TestWindowsSealedEnvironmentUsesNativeNameLookup(t *testing.T) {
+	t.Setenv("Code_Polishy_Selected", "sdk-root")
+	t.Setenv("CODE_POLISHY_UNSELECTED", "not-inherited")
+	environment, cleanup, err := commandEnvironment(policy.Command{
+		SealedEnvironment: true, Environment: []string{"CODE_POLISHY_SELECTED"},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if !slices.Contains(environment, "CODE_POLISHY_SELECTED=sdk-root") || slices.Contains(environment, "CODE_POLISHY_UNSELECTED=not-inherited") {
+		t.Fatalf("selected Windows environment: %v", environment)
+	}
+}
 
 func TestWindowsSealedTemporaryDirectory(t *testing.T) {
 	t.Parallel()

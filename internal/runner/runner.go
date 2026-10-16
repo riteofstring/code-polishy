@@ -380,10 +380,9 @@ func asciiDigit(character rune) bool {
 
 func explicitlySelectedEnvironment(requested []string) []string {
 	environment := []string{}
-	for _, entry := range os.Environ() {
-		name, _, found := strings.Cut(entry, "=")
-		if found && slices.Contains(requested, name) {
-			environment = append(environment, entry)
+	for _, name := range requested {
+		if value, found := os.LookupEnv(name); found {
+			environment = append(environment, name+"="+value)
 		}
 	}
 	return environment

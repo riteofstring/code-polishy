@@ -39,6 +39,10 @@ Sealed commands receive one private writable temporary directory through
 The runner removes the private directory after the command and its descendants
 finish. Ambient temporary-directory settings are not required for native tools.
 
+Explicit environment selection uses operating-system name lookup: Windows names
+are case-insensitive, while Unix names remain case-sensitive. Only requested
+names are inherited, including values explicitly set to an empty string.
+
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;
 they do not construct global reachability evidence that cannot establish a

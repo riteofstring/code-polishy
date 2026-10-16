@@ -282,6 +282,11 @@ scripts and procedural macros may execute during checking. Their output
 directories, emitted configuration and native linkage are compiler evidence,
 not a claim of filesystem or network sandboxing. Native SDK failures remain
 ordinary failed checks; the Rust distribution does not supply every native SDK.
+Windows commands retain the standard `ProgramFiles` and `ProgramFiles(x86)`
+installation roots so rustc can discover Visual Studio through its native
+discovery mechanism, including `vswhere.exe`. Without those roots, discovery can
+fail and leave an unrelated `link.exe` on PATH selected as the linker. This does
+not admit ambient Rust compiler selection or Cargo configuration.
 
 Structured success requires a final Cargo outcome and a compiled target for
 every selected package. An empty stream, unrecognized output, partial compilation

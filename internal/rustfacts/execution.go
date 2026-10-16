@@ -25,7 +25,7 @@ func Command(repo repository.Repository, name, tool string, arguments ...string)
 	return policy.Command{
 		Name: name, Argv: append([]string{repo.RustTool(tool)}, arguments...), Cwd: ".",
 		Managed: true, SealedEnvironment: true, TimeoutSeconds: 300,
-		Environment: []string{"SYSTEMROOT", "WINDIR"},
+		Environment: []string{"SYSTEMROOT", "WINDIR", "ProgramFiles", "ProgramFiles(x86)"},
 		EnvironmentOverrides: []string{
 			"RUSTC=" + repo.RustTool("rustc"), "RUSTDOC=" + repo.RustTool("rustdoc"),
 			"CARGO_HOME=" + CargoHome(repo), "CARGO_TARGET_DIR=" + TargetDirectory(repo),
