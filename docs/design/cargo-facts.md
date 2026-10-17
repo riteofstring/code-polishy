@@ -190,6 +190,17 @@ re-exports. Function, block, closure, implementation and generic bindings retain
 lexical scope; they cannot leak into sibling scopes or substitute for a module's
 members. Prelude lookup respects edition, `no_std`, `no_implicit_prelude` and
 local shadowing. Qualified module members never inherit the implicit prelude.
+Crate-root `extern crate` aliases, including `extern crate self`, enter the
+[extern prelude](https://doc.rust-lang.org/reference/names/preludes.html#extern-prelude)
+for descendant modules. A child declaration does not become a sibling's implicit
+binding, and local shadowing or `no_implicit_prelude` still takes precedence.
+
+Local glob lookup visits each module/name pair once along the active search
+path. Circular re-exports cannot introduce a binding by themselves; revisiting
+that search contributes no candidate while other glob branches still resolve.
+Distinct definitions remain ambiguous, missing names remain uncovered, and
+recursive explicit aliases still fail. The search state is discarded on return,
+so one lookup cannot hide a candidate from another.
 
 Known standard macro arguments are parsed using the same upstream Rust grammar
 with their original byte locations retained. This includes assertion/formatting

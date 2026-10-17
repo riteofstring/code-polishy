@@ -67,10 +67,11 @@ type moduleInventory struct {
 	sources   map[string]Source
 	available map[string]bool
 	crates    []*rustCrate
+	globs     map[rustGlobLookup]bool
 }
 
 func ResolveModules(repo repository.Repository, workspaces []Workspace, sources Sources, selected, allFiles []string) ModuleGraph {
-	inventory := moduleInventory{repo: repo, sources: map[string]Source{}, available: map[string]bool{}}
+	inventory := moduleInventory{repo: repo, sources: map[string]Source{}, available: map[string]bool{}, globs: map[rustGlobLookup]bool{}}
 	for _, path := range allFiles {
 		inventory.available[path] = true
 	}

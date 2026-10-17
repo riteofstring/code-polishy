@@ -118,7 +118,18 @@ func (inventory *moduleInventory) resolveAlias(binding rustBinding, name string,
 	return inventory.resolvePath(binding.scope, binding.alias, true, depth+1)
 }
 
+type rustGlobLookup struct {
+	module *rustModule
+	name   string
+}
+
 func (inventory *moduleInventory) resolveGlobName(module *rustModule, name string, depth int) (rustBinding, bool, error) {
+	lookup := rustGlobLookup{module: module, name: name}
+	if inventory.globs[lookup] {
+		return rustBinding{}, false, nil
+	}
+	inventory.globs[lookup] = true
+	defer delete(inventory.globs, lookup)
 	var result rustBinding
 	found := false
 	for _, glob := range module.globs {
@@ -149,6 +160,9 @@ func (inventory *moduleInventory) externalCrate(module *rustModule, name string)
 		return rustBinding{external: true}, nil
 	}
 	if implicitPrelude(module) {
+		if binding, found := module.crate.root.bindings[name]; found && binding.extern {
+			return inventory.resolveAlias(binding, name, 0)
+		}
 		binding, err := inventory.declaredCrate(module, name)
 		if err == nil && !(binding.standard && name == "std" && module.crate.noStd) {
 			return binding, nil
