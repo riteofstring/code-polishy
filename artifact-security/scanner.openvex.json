@@ -1,74 +1,100 @@
 {
   "@context": "https://openvex.dev/ns/v0.2.0",
-  "@id": "https://code-polishy.invalid/security/vex/trivy-0.72.0/1",
-  "author": "Code Polishy maintainers",
-  "timestamp": "2026-08-03T05:43:34Z",
-  "version": 1,
+  "@id": "https://github.com/riteofstring/code-polishy/blob/main/artifact-security/scanner.openvex.json",
+  "author": "Codex",
+  "timestamp": "2026-10-17T19:40:46Z",
+  "version": 2,
   "statements": [
     {
       "vulnerability": {
-        "name": "CVE-2026-39822"
+        "name": "CVE-2026-95837"
       },
       "products": [
         {
-          "@id": "pkg:golang/stdlib@v1.26.4"
+          "@id": "pkg:golang/github.com/containerd/containerd/v2@v2.3.3"
         }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Code Polishy invokes Trivy only for its version command, an anonymous database download, and offline Docker-archive scans; binary reachability analysis found no vulnerable os.Root symbols."
+      "impact_statement": "The vulnerable API is the containerd CRI server CreateContainer checkpoint-restore path. Trivy scans a local image archive through NewArchiveImage; Code Polishy never runs a containerd server, restores a checkpoint, or mounts a runtime socket into the scanner."
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-50151"
+        "name": "CVE-2026-78669"
       },
       "products": [
         {
-          "@id": "pkg:golang/oras.land/oras-go/v2@v2.6.0"
+          "@id": "pkg:golang/golang.org/x/net@v0.58.0"
         }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The scanner never pushes registry blobs or receives registry credentials; its only networked action is an anonymous database download with no mounted scan input or credentials."
+      "impact_statement": "Offline archive scans have no network and do not create gRPC or containerd clients. The sole networked operation downloads the database using Trivy pkg/remote and pkg/x/http with the standard net/http transport, not golang.org/x/net/http2; the scanner image also disables the standard HTTP/2 client with GODEBUG=http2client=0."
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-50163"
+        "name": "CVE-2026-84304"
       },
       "products": [
         {
-          "@id": "pkg:golang/oras.land/oras-go/v2@v2.6.0"
+          "@id": "pkg:golang/google.golang.org/grpc@v1.82.1"
         }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The scanner receives local Docker image archives with --input and --offline-scan; it never invokes ORAS artifact pull or unpack."
+      "impact_statement": "The affected gRPC HTTP/2 transport requires a live client or server connection. Archive scans use the standalone local service with no runtime socket or network, and database download uses the standard net/http registry client. Neither operation starts a gRPC transport."
     },
     {
       "vulnerability": {
-        "name": "CVE-2026-56852"
+        "name": "CVE-2026-84445"
       },
       "products": [
         {
-          "@id": "pkg:golang/golang.org/x/text@v0.38.0"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
-      "impact_statement": "Every scanned archive is captured locally from a declared artifact target; parsing is networkless, resource-bounded, and capped by a ten-minute timeout."
-    },
-    {
-      "vulnerability": {
-        "name": "GHSA-hrxh-6v49-42gf"
-      },
-      "products": [
-        {
-          "@id": "pkg:golang/google.golang.org/grpc@v1.81.0"
+          "@id": "pkg:golang/google.golang.org/grpc@v1.82.1"
         }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The scanner does not run an xDS RBAC service or a gRPC HTTP/2 server; offline scans have no network, and database download receives no untrusted mounts or credentials."
+      "impact_statement": "The vulnerable operation is xDS server routing of an HTTP/2 request without authority or Host. Code Polishy invokes only version, database download, and standalone offline image-archive scans; it never starts a gRPC or xDS server."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78667"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib@v1.26.6"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected net/http file-serving handlers parse attacker-controlled Range request headers. The scanner starts no HTTP server and uses no file-serving transport; its only networked operation is an outgoing HTTPS database download."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-78669"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib@v1.26.6"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "inline_mitigations_already_exist",
+      "impact_statement": "The minimal scanner image sets GODEBUG=http2client=0. Trivy clones the standard net/http transport for database downloads, so Go does not negotiate HTTP/2 or process HTTP/2 SETTINGS frames. Archive scans run with --network none and no server mode is enabled."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-97031"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/stdlib@v1.26.6"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The affected crypto/tls decodeInnerClientHello operation processes ECH ClientHello extensions on a TLS server. Code Polishy never starts a TLS server in the scanner: database download is an HTTPS client, and archive scans run without network access."
     }
   ]
 }

@@ -11,6 +11,13 @@ digest, the expected Trivy version, the minimal scanner Dockerfile hash, and the
 scanner runtime's OpenVEX hash before use. It copies only the Trivy binary and
 CA bundle into a non-root scratch image.
 
+The scanner image disables Go's HTTP/2 client. Its database download uses
+HTTPS over HTTP/1.1; target scanning remains offline. The release-owned
+[scanner assessments](design/trivy-scanner-assessments.md) document the exact
+remaining findings and their applicability. Linux release builds exercise the
+installed scanner against a minimal scratch image with a fresh database before
+publication.
+
 Each run:
 
 1. verifies a reachable Docker server and supported server architecture;

@@ -152,6 +152,14 @@ state in a temporary directory. The same scenario runs on all five native hosts;
 it does not rebuild the archive or repeat the ordinary source gate. The fixture's
 URLs cannot acquire a release and never replace a consuming repository's lock.
 
+The Linux release jobs also run artifact security through the freshly installed
+launcher against a non-root scratch image containing one text file. The fixture
+has its own manifest-derived lock and downloads a fresh vulnerability database.
+Both the scanner self-report and target report must exist with no blocking
+findings and valid CycloneDX SBOMs. Exact scanner OpenVEX acceptances stay visible;
+the fixture does not freeze advisory counts or suppress newly reported findings.
+This check runs on native Linux amd64 and arm64 before artifact publication.
+
 The [optional tools contract](optional-rust-tools.md) preserves required Rust
 coverage across absent, damaged and repaired installations. The native archive
 fixture first verifies rejection without tools, installs the companion against

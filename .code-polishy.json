@@ -24,6 +24,10 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/trivy-scanner-assessments.md",
+        "module": "artifactsecurity"
+      },
+      {
         "path": "docs/design/optional-rust-tools.md",
         "sourcePaths": [
           "internal/release/rust_bundle.go",

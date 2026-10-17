@@ -372,6 +372,7 @@ type scannerBoundary struct {
 	containers map[string][]string
 	findings   []map[string]any
 	imageID    string
+	version    string
 }
 
 type runOnlyBoundary struct{}
@@ -392,6 +393,10 @@ func (unavailableScannerBoundary) RunWithOutput(context.Context, string, policy.
 
 func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 	t.Helper()
+	version, err := os.ReadFile(filepath.Join(policyRoot, "tools", "trivy-version.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	payload, err := os.ReadFile(filepath.Join(policyRoot, "artifact-security", "scanner.openvex.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -430,6 +435,7 @@ func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 	return &scannerBoundary{
 		t: t, containers: map[string][]string{}, findings: findings,
 		imageID: "sha256:" + strings.Repeat("a", 64),
+		version: strings.TrimSpace(string(version)),
 	}
 }
 
@@ -543,7 +549,7 @@ func (boundary *scannerBoundary) containerCommand(arguments []string) (runner.Ou
 
 func (boundary *scannerBoundary) startContainer(arguments []string) (runner.Output, error) {
 	if slices.Contains(arguments, "version") {
-		return runner.Output{Stdout: []byte("Version: 0.72.0\n")}, nil
+		return runner.Output{Stdout: []byte("Version: " + boundary.version + "\n")}, nil
 	}
 	if slices.Contains(arguments, "--download-db-only") {
 		cache, ok := mountSource(arguments, "/cache")
@@ -603,7 +609,7 @@ func (boundary *scannerBoundary) writeVulnerabilityReport(arguments []string) er
 	}
 	report := map[string]any{
 		"SchemaVersion": 2,
-		"Trivy":         map[string]any{"Version": "0.72.0"},
+		"Trivy":         map[string]any{"Version": boundary.version},
 		"ArtifactType":  "container_image",
 		"Metadata":      map[string]any{"ImageID": boundary.imageID},
 		"Results":       []map[string]any{{"Target": "scanner", "Vulnerabilities": findings}},

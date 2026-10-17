@@ -66,6 +66,14 @@
       "public": true
     },
     {
+      "id": "artifact-security-scanner",
+      "path": "docs/design/trivy-scanner-assessments.md",
+      "title": "Trivy Scanner Assessments",
+      "summary": "Review the pinned scanner runtime, HTTP transport restriction, and exact OpenVEX findings.",
+      "aliases": ["trivy-assessments"],
+      "public": true
+    },
+    {
       "id": "behavior-review",
       "path": "docs/policies/behavior-review.md",
       "title": "Behavior and Final-State Review",
