@@ -783,13 +783,15 @@ def main():
     }
     for entry in request["sources"]:
         result = source_facts(parser, entry)
-        output = json.dumps({**metadata, "sources": [result]})
-        if len(output.encode("utf-8")) + 1 > MAXIMUM_REQUEST:
+        output = (json.dumps({**metadata, "sources": [result]}) + "\n").encode("utf-8")
+        if len(output) > MAXIMUM_REQUEST:
             result = source_result(
                 entry, "Rust syntax source record exceeds 8388608 bytes"
             )
-            output = json.dumps({**metadata, "sources": [result]})
-        sys.stdout.write(output + "\n")
+            output = (json.dumps({**metadata, "sources": [result]}) + "\n").encode(
+                "utf-8"
+            )
+        sys.stdout.buffer.write(output)
 
 
 if __name__ == "__main__":

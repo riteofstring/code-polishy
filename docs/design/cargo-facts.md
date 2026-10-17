@@ -109,7 +109,8 @@ paths without discarding valid siblings. Cancellation prevents later batches
 from starting and leaves their files explicitly uncovered.
 
 Responses stream one newline-terminated `rust-source/v2` record per requested
-source, in request order, through the common runner's writer interface. Each
+source, in request order, through the common runner's writer interface. Binary
+UTF-8 output uses a single LF terminator on every host, including Windows. Each
 record is limited to 8388608 bytes including its terminator and validated before
 the next is retained; diagnostics remain limited to 65536 bytes. Syntax facts
 can expand beyond their input size without creating a repository-wide response

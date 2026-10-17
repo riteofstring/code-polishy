@@ -13,6 +13,27 @@ import (
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
+func TestRustSourceStreamUsesPortableRecordTerminators(t *testing.T) {
+	t.Parallel()
+	repo := rustRepository(t)
+	write(t, repo.Root, "source.rs", "pub fn café() {}\n")
+	plan := PlanSources(repo, []string{"source.rs"})
+	command := plan.Commands[0]
+	command.Argv = append([]string{}, command.Argv...)
+	command.Argv[4] = "import sys;sys.stdout.reconfigure(newline='\\r\\n');" + command.Argv[4]
+	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.ContainsRune(output.Stdout, '\r') || !bytes.HasSuffix(output.Stdout, []byte("\n")) {
+		t.Fatal("Windows text translation changed the bounded syntax record terminator")
+	}
+	sources, err := ParseSources(repo, plan.Inputs, output.Stdout)
+	if err != nil || len(sources) != 1 || len(sources[0].Functions) != 1 || sources[0].Functions[0].Name != "café" {
+		t.Fatalf("portable framing changed the parsed source: %v", err)
+	}
+}
+
 func TestRustSourceStreamRetainsSiblingsOfOversizedFacts(t *testing.T) {
 	t.Parallel()
 	repo := rustRepository(t)

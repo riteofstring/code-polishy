@@ -28,11 +28,11 @@ identifies both scope and cost.
 The observation wrapper forwards structured process results unchanged to suite
 execution. Recording an exit status while discarding it from the caller would
 make native test-artifact validation disagree with the command that produced it.
-Configured prerequisites resolve installed release tools through the same
-governed tool inventory as execution. Their registered absolute paths do not
-depend on ambient PATH entries, and an ambient executable cannot conceal a
-missing member of an installed tool bundle. Unregistered external commands
-retain ordinary host discovery.
+Configured prerequisite checks resolve registered executables through the
+governed tool inventory. Doctor uses these absolute paths instead of ambient
+PATH entries, so an ambient executable cannot conceal a missing member of an
+installed tool bundle. Unregistered external commands retain ordinary host
+discovery.
 Gate execution forwards typed streams through the same planned-command, log,
 and attempt-recording path. Consumers validate bounded records incrementally;
 the diagnostic log retains its existing bounded head and tail. Streaming does
