@@ -1,10 +1,12 @@
 package rustfacts
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +14,29 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
+
+func TestRustSourceFactsKeepLargeResultInventories(t *testing.T) {
+	t.Parallel()
+	repo := rustRepository(t)
+	var source strings.Builder
+	for index := range 1200 {
+		fmt.Fprintf(&source, "pub fn function_%d() {}\n", index)
+	}
+	paths := make([]string, 20)
+	for index := range paths {
+		paths[index] = fmt.Sprintf("source_%02d.rs", index)
+		write(t, repo.Root, paths[index], source.String())
+	}
+	result := ReadSources(t.Context(), repo, PlanSources(repo, paths), runner.OSRunner{})
+	if len(result.Findings) != 0 || len(result.Files) != len(paths) {
+		t.Fatalf("expanded syntax facts lost source coverage: files=%d findings=%+v", len(result.Files), result.Findings)
+	}
+	for index, file := range result.Files {
+		if file.Path != paths[index] || len(file.Functions) != 1200 || file.Functions[1199].Name != "function_1199" {
+			t.Fatalf("large result lost its original function inventory: path=%s functions=%d", file.Path, len(file.Functions))
+		}
+	}
+}
 
 func TestRustSourceFactsBatchLargeScopes(t *testing.T) {
 	t.Parallel()
@@ -41,11 +66,15 @@ func TestRustSourceFactsBatchLargeScopes(t *testing.T) {
 					Protocol string        `json:"protocol"`
 					Sources  []SourceInput `json:"sources"`
 				}
-				if err := json.Unmarshal(command.Stdin, &request); err != nil {
+				program, payload, found := bytes.Cut(command.Stdin, []byte("\n"))
+				if !found || len(program) > 1<<20 {
+					t.Fatal("parser command omitted its bounded program record")
+				}
+				if err := json.Unmarshal(payload, &request); err != nil {
 					t.Fatal(err)
 				}
-				if len(command.Stdin) > 8<<20 || len(request.Sources) > 4096 || len(request.Sources) == 0 || request.Protocol != SourceProtocol {
-					t.Fatalf("unbounded or empty parser request: bytes=%d sources=%d protocol=%s", len(command.Stdin), len(request.Sources), request.Protocol)
+				if len(payload) > 8<<20 || len(request.Sources) > 4096 || len(request.Sources) == 0 || request.Protocol != SourceProtocol {
+					t.Fatalf("unbounded or empty parser request: bytes=%d sources=%d protocol=%s", len(payload), len(request.Sources), request.Protocol)
 				}
 				for _, source := range request.Sources {
 					seen = append(seen, source.Path)
@@ -147,11 +176,18 @@ type sourceBatchRunner struct {
 	after    func(int, runner.Output) (runner.Output, error)
 }
 
-func (boundary *sourceBatchRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *sourceBatchRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	boundary.commands = append(boundary.commands, command)
 	result, output, err := boundary.OSRunner.RunStructured(ctx, root, command)
 	if err == nil {
 		output, err = boundary.after(len(boundary.commands), output)
 	}
-	return result, output, err
+	if err != nil {
+		return result, err
+	}
+	if _, err := stderr.Write(output.Stderr); err != nil {
+		return result, err
+	}
+	_, err = stdout.Write(output.Stdout)
+	return result, err
 }

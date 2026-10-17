@@ -722,19 +722,23 @@ class SyntaxCollector:
         return children
 
 
-def source_facts(parser, entry):
-    source = entry["source"].encode("utf-8")
-    tree = parser.parse(source)
-    result = {
+def source_result(entry, error=""):
+    return {
         "path": entry["path"],
         "complete": False,
-        "error": "",
+        "error": error,
         "comments": [],
         "attributes": [],
         "functions": [],
         "macros": [],
         "graph": [],
     }
+
+
+def source_facts(parser, entry):
+    source = entry["source"].encode("utf-8")
+    tree = parser.parse(source)
+    result = source_result(entry)
     if tree is None or tree.root_node.has_error:
         result["error"] = (
             "Rust syntax is incomplete or unsupported by the pinned grammar"
@@ -771,17 +775,21 @@ def read_request():
 def main():
     request = read_request()
     parser = Parser(Language(tree_sitter_rust.language()))
-    result = {
+    metadata = {
         "protocol": PROTOCOL,
         "pythonVersion": platform.python_version(),
         "parserVersion": importlib.metadata.version("tree-sitter"),
         "grammarVersion": importlib.metadata.version("tree-sitter-rust"),
-        "sources": [source_facts(parser, entry) for entry in request["sources"]],
     }
-    output = json.dumps(result)
-    if len(output.encode("utf-8")) > MAXIMUM_REQUEST:
-        raise ValueError("Rust syntax response exceeds 8388608 bytes")
-    sys.stdout.write(output + "\n")
+    for entry in request["sources"]:
+        result = source_facts(parser, entry)
+        output = json.dumps({**metadata, "sources": [result]})
+        if len(output.encode("utf-8")) + 1 > MAXIMUM_REQUEST:
+            result = source_result(
+                entry, "Rust syntax source record exceeds 8388608 bytes"
+            )
+            output = json.dumps({**metadata, "sources": [result]})
+        sys.stdout.write(output + "\n")
 
 
 if __name__ == "__main__":

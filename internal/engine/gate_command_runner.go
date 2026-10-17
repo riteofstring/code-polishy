@@ -106,20 +106,49 @@ func (commandRunner *gateArtifactRunner) Run(ctx context.Context, root string, c
 }
 
 func (commandRunner *gateArtifactRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	result, _, err := commandRunner.runNext(ctx, root, command, false, nil)
+	result, _, err := commandRunner.runNext(ctx, root, command, gateCommandOutput{})
 	return result, err
 }
 
 func (commandRunner *gateArtifactRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, true, nil)
+	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true})
 }
 
 func (commandRunner *gateArtifactRunner) RunWithReportOutput(ctx context.Context, root string, command policy.Command, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, true, accept)
+	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true, accept: accept})
 }
 
 func (commandRunner *gateArtifactRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, true, nil)
+	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true})
+}
+
+func (commandRunner *gateArtifactRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	if stdout == nil {
+		stdout = io.Discard
+	}
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	result, _, err := commandRunner.runNext(ctx, root, command, gateCommandOutput{stdout: stdout, stderr: stderr})
+	return result, err
+}
+
+type gateCommandOutput struct {
+	capture bool
+	accept  runner.ReportOutcomeAcceptor
+	stdout  io.Writer
+	stderr  io.Writer
+}
+
+func (output gateCommandOutput) run(ctx context.Context, delegate runner.Runner, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, runner.Output, error) {
+	if output.stdout != nil {
+		if _, ok := delegate.(runner.StreamRunner); !ok {
+			return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, fmt.Errorf("gate command %q requires streamed output", command.Name)
+		}
+		stdout = io.MultiWriter(stdout, output.stdout)
+		stderr = io.MultiWriter(stderr, output.stderr)
+	}
+	return runGateCommand(ctx, delegate, root, command, stdout, stderr, output.capture || testartifact.NeedsCommandOutput(command))
 }
 
 func (commandRunner *gateArtifactRunner) ManagesTestArtifacts() bool { return true }
@@ -188,7 +217,7 @@ func (commandRunner *gateArtifactRunner) TestRetryRunner() runner.Runner {
 	return &gateRetryRunner{parent: commandRunner}
 }
 
-func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root string, command policy.Command, captureOutput bool, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
+func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root string, command policy.Command, output gateCommandOutput) (runner.Result, runner.Output, error) {
 	if commandRunner.err != nil {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, commandRunner.err
 	}
@@ -206,7 +235,7 @@ func (commandRunner *gateArtifactRunner) runNext(ctx context.Context, root strin
 		fmt.Fprintf(commandRunner.progress, "REUSE %s\n", command.Name)
 		return runner.Result{ExitStatus: 0}, runner.Output{}, nil
 	}
-	return commandRunner.execute(ctx, root, index, command, captureOutput, false, accept)
+	return commandRunner.execute(ctx, root, index, command, output, false)
 }
 
 func (commandRunner *gateArtifactRunner) plannedIndex(root string, command policy.Command) (int, error) {
@@ -233,7 +262,7 @@ func (commandRunner *gateArtifactRunner) plannedIndex(root string, command polic
 	return index, nil
 }
 
-func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root string, index int, command policy.Command, captureOutput, diagnostic bool, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
+func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root string, index int, command policy.Command, options gateCommandOutput, diagnostic bool) (runner.Result, runner.Output, error) {
 	fmt.Fprintf(commandRunner.progress, "RUN %s\n", command.Name)
 	actual, err := commandRunner.prepareCommand(index, command)
 	if err != nil {
@@ -245,7 +274,7 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.err = err
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
-	result, output, runErr := runGateCommand(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr(), captureOutput || testartifact.NeedsCommandOutput(actual))
+	result, output, runErr := options.run(ctx, commandRunner.delegate, root, actual, commandLog.Stdout(), commandLog.Stderr())
 	runErr = captureGateTestOutput(ctx, actual, &result, output, runErr)
 	artifacts, artifactErr := commandRunner.validateTestArtifacts(index, actual, &result)
 	runErr = errors.Join(runErr, artifactErr)
@@ -254,7 +283,7 @@ func (commandRunner *gateArtifactRunner) execute(ctx context.Context, root strin
 		commandRunner.err = logErr
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, output, errors.Join(runErr, logErr)
 	}
-	status, category, reportBearing := gateCommandAttempt(ctx, result, output, runErr, accept)
+	status, category, reportBearing := gateCommandAttempt(ctx, result, output, runErr, options.accept)
 	gateCategory := gaterun.FailureCategory("")
 	if status == gaterun.Failed {
 		gateCategory = gaterun.FailureCategory(category)
@@ -345,7 +374,7 @@ func (commandRunner *gateArtifactRunner) runDiagnostic(ctx context.Context, root
 		commandRunner.err = errors.Join(commandRunner.err, err)
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, err
 	}
-	result, _, err := commandRunner.execute(ctx, root, index, command, false, true, nil)
+	result, _, err := commandRunner.execute(ctx, root, index, command, gateCommandOutput{}, true)
 	return result, err
 }
 
@@ -357,7 +386,7 @@ func (commandRunner *gateArtifactRunner) runRetry(ctx context.Context, root stri
 		commandRunner.err = errors.Join(commandRunner.err, err)
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, err
 	}
-	result, _, err := commandRunner.execute(ctx, root, index, command, false, false, nil)
+	result, _, err := commandRunner.execute(ctx, root, index, command, gateCommandOutput{}, false)
 	return result, err
 }
 
@@ -488,7 +517,7 @@ func (commandRunner *gateArtifactRunner) runTestPrerequisite(ctx context.Context
 	if _, failed := commandRunner.failedTests[suite]; failed {
 		for index, expected := range commandRunner.expected {
 			if expected.Category == gaterun.Check && samePolicyCommand(expected.Command, command) {
-				return commandRunner.execute(ctx, root, index, command, true, false, nil)
+				return commandRunner.execute(ctx, root, index, command, gateCommandOutput{capture: true}, false)
 			}
 		}
 	}

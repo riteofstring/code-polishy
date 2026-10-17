@@ -1021,8 +1021,10 @@ func checkedInCommandFinding(repo repository.Repository, name, executable string
 }
 
 func configuredToolPath(repo repository.Repository, executable string) string {
-	if executable == "go" || executable == "gofmt" {
-		return repo.GoTool(executable)
+	for _, tool := range repo.CommandEnvironment().Tools {
+		if tool.Name == executable {
+			return tool.Path
+		}
 	}
 	return executable
 }

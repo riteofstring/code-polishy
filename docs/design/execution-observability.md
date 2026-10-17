@@ -28,6 +28,16 @@ identifies both scope and cost.
 The observation wrapper forwards structured process results unchanged to suite
 execution. Recording an exit status while discarding it from the caller would
 make native test-artifact validation disagree with the command that produced it.
+Configured prerequisites resolve installed release tools through the same
+governed tool inventory as execution. Their registered absolute paths do not
+depend on ambient PATH entries, and an ambient executable cannot conceal a
+missing member of an installed tool bundle. Unregistered external commands
+retain ordinary host discovery.
+Gate execution forwards typed streams through the same planned-command, log,
+and attempt-recording path. Consumers validate bounded records incrementally;
+the diagnostic log retains its existing bounded head and tail. Streaming does
+not introduce an aggregate capture limit or permit reuse without the facts.
+Consumer failures remain failed command attempts.
 Bounded capture overflow is an operational failure even when the child exits with
 a normal test-failure code. A partial stream cannot establish native outcome
 evidence or a regression-proof red result. Cancellation and timeout retain their

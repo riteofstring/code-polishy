@@ -3,11 +3,55 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
+
+func TestDoctorFindsInstalledRustToolsWithoutAmbientPath(t *testing.T) {
+	root := contentRepository(t, nil)
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeEngineFile(t, root, "tools/rust-version.txt", "1.97.1\n", 0o600)
+	tool := policyEngine.Repository.RustTool("cargo")
+	if err := os.MkdirAll(filepath.Dir(tool), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tool, []byte("fixture executable"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	policyEngine.Repository.Config.Checks = []policy.Command{{Name: "native-build", Argv: []string{"cargo", "build"}}}
+	t.Setenv("PATH", t.TempDir())
+	report, err := policyEngine.Doctor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.tool" && finding.Subject == "cargo"
+	}) {
+		t.Fatalf("installed Cargo was reported missing: %+v", report.Findings)
+	}
+	if err := os.Remove(tool); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(os.Getenv("PATH"), filepath.Base(tool)), []byte("ambient executable"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	report, err = policyEngine.Doctor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.tool" && finding.Subject == "cargo"
+	}) {
+		t.Fatal("ambient Cargo concealed an incomplete governed installation")
+	}
+}
 
 func TestGovernedEnvironmentKeepsRustCompanionOptionalAndComplete(t *testing.T) {
 	root := contentRepository(t, nil)

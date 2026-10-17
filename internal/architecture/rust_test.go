@@ -2,6 +2,7 @@ package architecture
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -297,4 +298,9 @@ type rustGraphRecordingRunner struct {
 func (boundary *rustGraphRecordingRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.names = append(boundary.names, command.Name)
 	return boundary.OSRunner.RunStructured(ctx, root, command)
+}
+
+func (boundary *rustGraphRecordingRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	boundary.names = append(boundary.names, command.Name)
+	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
 }

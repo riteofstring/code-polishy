@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.29.0-beta.3 - 2026-10-17
+
+- Resolve configured prerequisites through the installed tool inventory, including
+  the optional Cargo companion, without relying on ambient PATH entries.
+- Stream Rust syntax facts as bounded source records so expanded results larger
+  than 8 MiB retain complete coverage. Oversized individual results remain
+  explicit coverage failures while valid sibling sources remain available.
+- Route Rust syntax workers through the shared Python program transport and
+  preserve their planned command identities, bounded logs, and failed attempts
+  throughout gate execution.
+
 ## 0.29.0-beta.2 - 2026-10-16
 
 - Recognize pinned OSV-Scanner, ty and Python tools on Windows, where files

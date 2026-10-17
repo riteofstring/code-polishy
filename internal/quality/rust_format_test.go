@@ -3,6 +3,7 @@ package quality
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -193,13 +194,18 @@ type rustSyntaxFailureRunner struct {
 }
 
 func (boundary *rustSyntaxFailureRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if command.Name == "policy-rust-source-facts" {
-		return runner.Result{}, runner.Output{Stdout: []byte("{}")}, boundary.failure
-	}
 	if strings.HasPrefix(command.Name, "policy-rustfmt-") {
 		boundary.formatted++
 	}
 	return boundary.OSRunner.RunStructured(ctx, root, command)
+}
+
+func (boundary *rustSyntaxFailureRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	if command.Name == "policy-rust-source-facts" {
+		_, err := io.WriteString(stdout, "{}\n")
+		return runner.Result{}, errors.Join(err, boundary.failure)
+	}
+	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
 }
 
 type rustEditingRunner struct {
@@ -213,6 +219,13 @@ func (boundary rustEditingRunner) RunStructured(ctx context.Context, root string
 		boundary.edit()
 	}
 	return boundary.OSRunner.RunStructured(ctx, root, command)
+}
+
+func (boundary rustEditingRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	if strings.HasPrefix(command.Name, boundary.before) {
+		boundary.edit()
+	}
+	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
 }
 
 func rustFormatRepository(t *testing.T) repository.Repository {

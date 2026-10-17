@@ -19,6 +19,9 @@ historical ownership relations explicitly for impact analysis, without
 inventing a focused suite or changing the candidate's ownership rules. Suite
 defaults preserve the command identity used by historical review evidence.
 Only the candidate configuration governs current checks and test execution.
+The planned runner enforces the same command identity for captured and streamed
+analyzers; stream forwarding retains the gate attempt and log boundary described
+in [Execution observability](execution-observability.md).
 
 The engine reads the snapshot from the bounded regular Git blob at the exact
 base revision. An absent configuration selects first-adoption behavior;

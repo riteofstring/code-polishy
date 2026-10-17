@@ -2,6 +2,7 @@ package quality
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -105,4 +106,9 @@ func (boundary *cargoRecordingRunner) Run(ctx context.Context, root string, comm
 func (boundary *cargoRecordingRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.names = append(boundary.names, command.Name)
 	return boundary.OSRunner.RunStructured(ctx, root, command)
+}
+
+func (boundary *cargoRecordingRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	boundary.names = append(boundary.names, command.Name)
+	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
 }

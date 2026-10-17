@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 	"time"
@@ -613,6 +614,16 @@ func (commandRunner *mergeGatePlannedRunner) RunStructured(ctx context.Context, 
 		return observed.RunWithOutput(ctx, root, command)
 	}
 	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture structured output for %q", command.Name)
+}
+
+func (commandRunner *mergeGatePlannedRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	if err := commandRunner.start(root, command); err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, err
+	}
+	if observed, ok := commandRunner.delegate.(runner.StreamRunner); ok {
+		return observed.RunWithWriters(ctx, root, command, stdout, stderr)
+	}
+	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, fmt.Errorf("merge gate command runner cannot stream output for %q", command.Name)
 }
 
 func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.Command) error {

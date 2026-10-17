@@ -108,6 +108,16 @@ oversized source or a failed batch produces coverage findings for the affected
 paths without discarding valid siblings. Cancellation prevents later batches
 from starting and leaves their files explicitly uncovered.
 
+Responses stream one newline-terminated `rust-source/v2` record per requested
+source, in request order, through the common runner's writer interface. Each
+record is limited to 8388608 bytes including its terminator and validated before
+the next is retained; diagnostics remain limited to 65536 bytes. Syntax facts
+can expand beyond their input size without creating a repository-wide response
+ceiling. An individual source whose facts exceed the record budget emits an
+explicit incomplete result, preserving its valid siblings. A missing, repeated,
+foreign, malformed, oversized or unterminated record, or a failed worker,
+invalidates its batch. No partial stream establishes complete coverage.
+
 Locations unpack Tree-sitter's point tuples and translate byte columns into
 original Unicode coordinates. The pinned Python binding's
 [point attribute getters](https://github.com/tree-sitter/py-tree-sitter/blob/v0.26.0/tree_sitter/binding/point.c)
@@ -309,3 +319,9 @@ probe before atomic replacement. Corrupt downloads, invalid payloads, failed
 probes and replacement failures preserve a previous working executable. Reuse
 checks the installed release; it does not hash local state. This provisions a
 runner, not test evidence or doctest execution.
+
+The syntax worker uses the shared Python program transport: a bounded program
+record precedes the request on standard input. Command arguments contain only
+the fixed bootstrap, so multiline source remains valid in gate identities and
+does not depend on platform command-line limits. Rust facts depend on the
+existing Python transport owner rather than maintaining a second bootstrap.

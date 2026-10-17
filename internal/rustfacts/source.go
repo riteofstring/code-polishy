@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"unicode/utf8"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
@@ -101,12 +103,27 @@ func (plan *SourcePlan) appendBatch(repo repository.Repository, encoded [][]byte
 	request = append(request, sourceRequestPrefix...)
 	request = append(request, bytes.Join(encoded, []byte(","))...)
 	request = append(request, ']', '}')
+	stdin, err := sourceCommandInput(request)
+	if err != nil {
+		start := len(plan.Inputs) - len(encoded)
+		plan.Findings = append(plan.Findings, sourceBatchFindings(plan.Inputs[start:], err.Error())...)
+		plan.Inputs = plan.Inputs[:start]
+		return
+	}
 	name := "policy-rust-source-facts"
 	if len(plan.Commands) > 0 {
 		name += fmt.Sprintf("-%d", len(plan.Commands)+1)
 	}
-	plan.Commands = append(plan.Commands, policy.Command{Name: name, Argv: repo.PythonCommand(sourceParser), Cwd: ".", Stdin: request, Managed: true, SealedEnvironment: true, TimeoutSeconds: 60})
+	plan.Commands = append(plan.Commands, policy.Command{Name: name, Argv: repo.PythonCommand(pythonfacts.ProgramBootstrap), Cwd: ".", Stdin: stdin, Managed: true, SealedEnvironment: true, TimeoutSeconds: 60})
 	plan.batchEnds = append(plan.batchEnds, len(plan.Inputs))
+}
+
+func sourceCommandInput(request []byte) ([]byte, error) {
+	input, err := pythonfacts.ProgramInput(sourceParser, bytes.NewReader(request))
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(input)
 }
 
 func sourceAnalysisSelected(repo repository.Repository, path string) bool {
@@ -121,7 +138,7 @@ func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePla
 	if len(plan.Commands) == 0 {
 		return result
 	}
-	structured, ok := boundary.(runner.StructuredRunner)
+	streamed, ok := boundary.(runner.StreamRunner)
 	if !ok {
 		result.Findings = append(result.Findings, sourceBatchFindings(plan.Inputs, "the runner cannot capture bounded Rust syntax facts")...)
 		return result
@@ -129,7 +146,7 @@ func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePla
 	start := 0
 	for index, command := range plan.Commands {
 		end := plan.batchEnds[index]
-		batch := readSourceBatch(ctx, repo, plan.Inputs[start:end], command, structured)
+		batch := readSourceBatch(ctx, repo, plan.Inputs[start:end], command, streamed)
 		result.Files = append(result.Files, batch.Files...)
 		result.Findings = append(result.Findings, batch.Findings...)
 		start = end
@@ -137,15 +154,17 @@ func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePla
 	return result
 }
 
-func readSourceBatch(ctx context.Context, repo repository.Repository, inputs []SourceInput, command policy.Command, boundary runner.StructuredRunner) Sources {
+func readSourceBatch(ctx context.Context, repo repository.Repository, inputs []SourceInput, command policy.Command, boundary runner.StreamRunner) Sources {
 	if err := ctx.Err(); err != nil {
 		return Sources{Findings: sourceBatchFindings(inputs, "Rust syntax analysis did not run: "+err.Error())}
 	}
-	_, output, err := boundary.RunStructured(ctx, repo.Root, command)
+	output := sourceStream{repo: repo, inputs: inputs}
+	diagnostics := sourceDiagnostics{}
+	_, err := boundary.RunWithWriters(ctx, repo.Root, command, &output, &diagnostics)
 	if err != nil {
-		return Sources{Findings: sourceBatchFindings(inputs, fmt.Sprintf("Rust syntax analysis failed: %v; %s", err, diagnosticOutput(output.Stderr)))}
+		return Sources{Findings: sourceBatchFindings(inputs, fmt.Sprintf("Rust syntax analysis failed: %v; %s", err, diagnosticOutput(diagnostics.Bytes())))}
 	}
-	sources, err := ParseSources(repo, inputs, output.Stdout)
+	sources, err := output.finish()
 	if err != nil {
 		return Sources{Findings: sourceBatchFindings(inputs, "invalid Rust syntax evidence: "+err.Error())}
 	}
