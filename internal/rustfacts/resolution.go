@@ -38,7 +38,7 @@ func resolutionCommand(repo repository.Repository, manifest string, offline bool
 	if !offline {
 		mode = "--locked"
 	}
-	command := Command(repo, "policy-cargo-resolution-"+manifest, "cargo", "metadata", "--format-version", "1", mode, "--manifest-path", manifest)
+	command := Command(repo, manifestCommandName("policy-cargo-resolution", manifest), "cargo", "metadata", "--format-version", "1", mode, "--manifest-path", manifest)
 	if !offline {
 		index := slices.Index(command.EnvironmentOverrides, "CARGO_NET_OFFLINE=true")
 		command.EnvironmentOverrides[index] = "CARGO_NET_OFFLINE=false"

@@ -55,7 +55,7 @@ func PlanDiscovery(repo repository.Repository, selected, allFiles []string) Disc
 	}
 	plan.Commands = append(plan.Commands, Command(repo, "policy-rust-version", "rustc", "--version"), Command(repo, "policy-cargo-version", "cargo", "--version"))
 	for _, manifest := range plan.Manifests {
-		plan.Commands = append(plan.Commands, Command(repo, "policy-cargo-metadata-"+manifest, "cargo", "metadata", "--format-version", "1", "--no-deps", "--frozen", "--manifest-path", manifest))
+		plan.Commands = append(plan.Commands, Command(repo, manifestCommandName("policy-cargo-metadata", manifest), "cargo", "metadata", "--format-version", "1", "--no-deps", "--frozen", "--manifest-path", manifest))
 	}
 	return plan
 }

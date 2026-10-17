@@ -58,7 +58,7 @@ func compilationSources(repo repository.Repository, manifest string, allFiles []
 }
 
 func compilationCommand(repo repository.Repository, manifest string) policy.Command {
-	command := Command(repo, "policy-clippy-"+manifest, "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--force-warn", "clippy::all", "--force-warn", "unused")
+	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--force-warn", "clippy::all", "--force-warn", "unused")
 	for _, lint := range strings.Fields(compilerWarningLints) {
 		command.Argv = append(command.Argv, "--force-warn", lint)
 	}

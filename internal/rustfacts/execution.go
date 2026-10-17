@@ -1,6 +1,7 @@
 package rustfacts
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,10 @@ import (
 	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
+
+func manifestCommandName(operation, manifest string) string {
+	return fmt.Sprintf("%s-%x", operation, sha256.Sum256([]byte(operation+"\x00"+manifest)))
+}
 
 func CargoHome(repo repository.Repository) string {
 	return filepath.Join(repo.Root, ".tools", "cargo-home")

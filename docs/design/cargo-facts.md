@@ -6,6 +6,13 @@ architecture and dependency policy consume facts without acquiring their own
 Cargo resolvers. Commands use the common structured runner so limits, cancellation
 and command evidence have one owner.
 
+Manifest-specific command names use a bounded digest of the operation and
+repository-relative manifest path as their immutable execution identity. Raw
+paths can contain separators, spaces, Unicode or more bytes than the gate's
+identifier limit. Replacing separators would merge distinct paths. The exact
+manifest remains in command arguments and finding paths; this identifier does
+not detect file changes or authenticate manifest contents.
+
 Workspace discovery runs `cargo metadata --format-version 1 --no-deps --frozen`.
 It can discover members, targets, inherited metadata, declared dependencies and
 features before dependencies are materialized. A null `resolve` is deliberately

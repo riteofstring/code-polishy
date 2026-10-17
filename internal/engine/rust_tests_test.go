@@ -15,8 +15,50 @@ import (
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/rustfacts"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
+
+func TestRustCargoCommandsEnterGateForNestedManifests(t *testing.T) {
+	t.Parallel()
+	root := nativeRustEngineRepository(t)
+	manifests := []string{
+		"content/native/app/Cargo.toml",
+		"content/native-app/Cargo.toml",
+		"content/with space/" + strings.Repeat("é", 80) + "/Cargo.toml",
+	}
+	for _, manifest := range manifests {
+		writeEngineFile(t, root, manifest, "[package]\nname='nested'\nversion='1.0.0'\nedition='2024'\n[workspace]\n[lib]\npath='lib.rs'\n", 0o600)
+		writeEngineFile(t, root, filepath.Join(filepath.Dir(manifest), "lib.rs"), "pub fn answer() -> u32 { 42 }\n", 0o600)
+	}
+	initializeEngineGitRepository(t, root)
+	engine, err := Open(root, enginePolicyRoot(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := engine.Repository.AllFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution := rustfacts.PlanResolution(engine.Repository, manifests, true)
+	compilation := rustfacts.PlanCompilation(engine.Repository, resolution.Discovery, files)
+	if len(resolution.Discovery.Findings) != 0 || len(compilation.Findings) != 0 || len(compilation.Commands) != len(manifests) {
+		t.Fatalf("Cargo command planning failed: %+v, %+v", resolution, compilation)
+	}
+	commands := mergeGateCheckCommands(gaterun.SupplyChain, resolution.Commands)
+	commands = append(commands, mergeGateCheckCommands(gaterun.Check, compilation.Commands)...)
+	identity, err := gateRunIdentity(engine, gaterun.CheckpointGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "changed", commands, testGateRunBehaviorReview(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, command := range identity.Commands {
+		if seen[command.Name] {
+			t.Fatalf("different Cargo commands share an identity: %s", command.Name)
+		}
+		seen[command.Name] = true
+	}
+}
 
 func TestRustNativeGateRetainsRealValidatedEvidence(t *testing.T) {
 	t.Parallel()

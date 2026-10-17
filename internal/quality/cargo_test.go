@@ -22,7 +22,7 @@ func TestCargoCheckDiscoversInvalidMemberFromSelectedRustSource(t *testing.T) {
 	writeQualityFile(t, repo.Root, "app/src/lib.rs", "pub fn app() {}\n")
 	findings := cargoDiscoveryFindings(t.Context(), repo, []string{"app/src/lib.rs"}, runner.OSRunner{})
 	if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-		return finding.Check == "policy.rustProject" && finding.Subject == "policy-cargo-metadata-app/Cargo.toml"
+		return finding.Check == "policy.rustProject" && finding.Path == "app/Cargo.toml" && strings.HasPrefix(finding.Subject, "policy-cargo-metadata-") && strings.Contains(finding.Message, "missing")
 	}) {
 		t.Fatalf("missing workspace failure from selected source: %+v", findings)
 	}
@@ -34,10 +34,15 @@ func TestCargoCheckCommandsExposeActualDiscoveryPlan(t *testing.T) {
 	writeQualityFile(t, repo.Root, "Cargo.toml", "[package]\nname='app'\nversion='1.0.0'\n")
 	writeQualityFile(t, repo.Root, "src/lib.rs", "pub fn app() {}\n")
 	commands := CheckCommands(repo, repository.Selection{Files: []string{"src/lib.rs"}}, "check")
-	for _, name := range []string{"policy-rust-version", "policy-cargo-version", "policy-cargo-metadata-Cargo.toml"} {
+	for _, name := range []string{"policy-rust-version", "policy-cargo-version"} {
 		if !slices.ContainsFunc(commands, func(command policy.Command) bool { return command.Name == name && command.SealedEnvironment }) {
 			t.Errorf("Cargo command %s is missing from check planning: %+v", name, commands)
 		}
+	}
+	if !slices.ContainsFunc(commands, func(command policy.Command) bool {
+		return strings.HasPrefix(command.Name, "policy-cargo-metadata-") && command.Argv[len(command.Argv)-1] == "Cargo.toml" && command.SealedEnvironment
+	}) {
+		t.Fatalf("Cargo manifest discovery is missing from check planning: %+v", commands)
 	}
 }
 
