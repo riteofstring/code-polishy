@@ -216,7 +216,7 @@ jobs:
               "version": 4,
               "project": {"kind": "content"},
               "modules": [{"name": "fixture", "paths": ["image/**"]}],
-              "tests": {"suites": [{
+              "tests": {"ownership": [], "suites": [{
                   "name": "image-build", "kind": "integration", "scope": "module", "modules": ["fixture"],
                   "argv": ["docker", "build", "--check", "image"],
               }]},

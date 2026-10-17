@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+## 0.29.1 - 2026-10-17
+
+- Declare the required test ownership in the installed artifact-security
+  fixture so Linux release jobs can validate the scanner and target image.
+
 ## 0.29.0 - 2026-10-17
+
+This version was not published because the Linux artifact-security fixture
+failed configuration validation before scanning.
 
 - Add an optional, enforced repository line budget. `quality.lineBudget` caps
   non-blank lines of handwritten production source, test source, or both
