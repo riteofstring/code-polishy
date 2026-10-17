@@ -19,7 +19,8 @@
     ]
   },
   "quality": {
-    "allowComments": false
+    "allowComments": false,
+    "lineBudget": { "production": 100000 }
   },
   "documentation": {
     "design": [
