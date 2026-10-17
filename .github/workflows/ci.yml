@@ -222,7 +222,7 @@ jobs:
           $installedEngines = @(Get-ChildItem -LiteralPath (Join-Path $installation 'releases') -Filter 'code-polishy.exe' -File -Recurse)
           if ($installedEngines.Count -ne 1) { throw 'The fresh installation did not contain exactly one release engine.' }
           $installedRoot = Split-Path -Parent (Split-Path -Parent $installedEngines[0].FullName)
-          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+          $bash = Join-Path $env:ProgramFiles 'Git\usr\bin\bash.exe'
           & $bash ./scripts/test-installed-release-rust.sh $installedRoot (Join-Path $installation 'bin\code-polishy.exe') (Join-Path $publicationDir "code-polishy-$version-rust-windows-x64.zip")
           if ($LASTEXITCODE -ne 0) { throw 'The installed Rust fixture failed.' }
 

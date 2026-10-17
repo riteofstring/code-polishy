@@ -12,7 +12,7 @@ $developerShell = Join-Path $installation 'Common7\Tools\Launch-VsDevShell.ps1'
 if (-not $env:LIB -or -not $env:INCLUDE) {
   throw 'The Visual Studio developer shell did not initialize the native SDK libraries and headers.'
 }
-$linker = (Get-Command link.exe -CommandType Application -ErrorAction Stop).Source
+$linker = (Get-Command link.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $installationPrefix = $installation.TrimEnd('\') + '\'
 if (-not $linker.StartsWith($installationPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
   throw "The active linker is outside the selected Visual Studio installation: $linker"
