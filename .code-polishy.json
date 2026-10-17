@@ -371,6 +371,14 @@
         ]
       },
       {
+        "path": "docs/design/line-budget.md",
+        "sourcePaths": [
+          "internal/repository/source_lines.go",
+          "internal/quality/line_budget.go",
+          "internal/engine/line_budget.go"
+        ]
+      },
+      {
         "path": "docs/design/reliability-reminder.md",
         "sourcePaths": [
           "internal/policy/reliability_reminder.go",

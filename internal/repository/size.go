@@ -39,6 +39,7 @@ type SizeAnalysis struct {
 	Workspace     SizeWorkspace   `json:"workspace"`
 	Governed      SizeGoverned    `json:"governed"`
 	ExcludedPaths []string        `json:"excludedPaths"`
+	SourceLines   SourceLines     `json:"sourceLines"`
 	Comparison    *SizeComparison `json:"comparison,omitempty"`
 }
 
@@ -141,9 +142,14 @@ func (repo Repository) AnalyzeSize(requestedBase string) (SizeAnalysis, error) {
 	if err != nil {
 		return SizeAnalysis{}, err
 	}
+	sourceLines, err := repo.CountSourceLines()
+	if err != nil {
+		return SizeAnalysis{}, err
+	}
 	analysis := SizeAnalysis{
 		Workspace: workspace, Governed: governed,
 		ExcludedPaths: slices.Clone(sizeAnalysisExcludedPaths),
+		SourceLines:   sourceLines,
 	}
 	if requestedBase == "" {
 		return analysis, nil

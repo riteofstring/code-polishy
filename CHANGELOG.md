@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.29.0 - 2026-10-17
+
+- Add an optional, enforced repository line budget. `quality.lineBudget` caps
+  non-blank lines of handwritten production source, test source, or both
+  together. Checks and gates fail when a scope is exceeded, `size` and
+  `task-start` show the remaining lines, and base comparisons warn when the
+  budget changes. Tracked files outside a sparse checkout count from their
+  indexed content.
+- Include the native Rust beta capabilities and portability fixes from the
+  0.29.0 prereleases. Rust and Nextest remain an optional authenticated
+  companion; unsupported semantics still produce blocking coverage findings.
+- Update the release-owned Trivy scanner to 0.74.0 and disable its unnecessary
+  HTTP/2 client transport. Reassess the remaining exact findings so scanner
+  self-analysis permits artifact checks without weakening target policy.
+  Verify installed artifact security on both native Linux release hosts.
+- Update `brace-expansion` to the aged 1.1.21 and 5.0.12 releases in both
+  JavaScript graphs and the provider's `fast-uri` to 3.1.8, resolving their
+  remaining advisories and retiring the expired assessments.
+
 ## 0.29.0-beta.3 - 2026-10-17
 
 - Resolve configured prerequisites through the installed tool inventory, including

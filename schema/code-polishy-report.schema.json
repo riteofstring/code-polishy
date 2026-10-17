@@ -325,7 +325,7 @@
     "repositorySize": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workspace", "governed", "excludedPaths"],
+      "required": ["workspace", "governed", "excludedPaths", "sourceLines"],
       "properties": {
         "workspace": { "$ref": "#/$defs/sizeWorkspace" },
         "governed": { "$ref": "#/$defs/sizeGoverned" },
@@ -334,7 +334,46 @@
           "maxItems": 16,
           "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
         },
+        "sourceLines": { "$ref": "#/$defs/sourceLines" },
         "comparison": { "$ref": "#/$defs/sizeComparison" }
+      }
+    },
+    "sourceLines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["production", "test", "languages", "budget"],
+      "properties": {
+        "production": { "type": "integer", "minimum": 0 },
+        "test": { "type": "integer", "minimum": 0 },
+        "languages": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "production", "test"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 4096 },
+              "production": { "type": "integer", "minimum": 0 },
+              "test": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "budget": { "$ref": "#/$defs/lineBudgetScopes" }
+      }
+    },
+    "lineBudgetScopes": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "lines", "budget"],
+        "properties": {
+          "scope": { "enum": ["production", "test", "total"] },
+          "lines": { "type": "integer", "minimum": 0 },
+          "budget": { "type": "integer", "minimum": 1 }
+        }
       }
     },
     "sizeWorkspace": {

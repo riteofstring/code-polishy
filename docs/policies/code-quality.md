@@ -875,6 +875,46 @@ of the same internal sequence. When a large file is embedded HTML/CSS/JS inside
 a server string, move executable code into normal source files so it can be
 formatted, linted, typechecked, and tested.
 
+## Repository line budget
+
+A file-length budget cannot see growth spread across many acceptable files.
+`quality.lineBudget` caps the repository's handwritten source instead:
+
+```json
+{
+  "quality": {
+    "lineBudget": { "production": 40000, "test": 30000 }
+  }
+}
+```
+
+Configure any of `production`, `test`, and `total`; an absent field has no cap,
+and an absent object disables the budget. There is no default because a
+reasonable size depends on the project.
+
+The budget counts non-blank lines in every governed file that has a file-length
+budget. Generated output, declared data, lockfiles, symbolic links, and the
+file types excluded from file length do not count. Files classified as tests
+count toward `test`; everything else counts toward `production`. Tracked files
+outside a sparse checkout count from their indexed content.
+
+Every `check`, checkpoint gate, and merge gate counts the whole repository,
+whatever the selection, and reports a blocking `quality.lineBudget` error for
+each exceeded scope. The finding cannot be exempted. `code-polishy size` shows
+the counts by language and each scope's remaining lines, and `task-start` shows
+the remaining lines before work begins.
+
+Only the caller may change the budget. When a check compares against a base,
+any difference in `quality.lineBudget` produces a `quality.lineBudgetChange`
+warning so the change stays visible in review. Checked-in configuration cannot
+prove who approved it; protect `.code-polishy.json` with CODEOWNERS and required
+review where that matters.
+
+When the budget is exceeded, remove unnecessary code, duplication, and
+speculative machinery. Compressing formatting, deleting valuable tests, or
+moving logic into configuration only hides the growth. If the code is needed,
+ask the caller for a specific increase and explain why.
+
 ## Test source quality
 
 Ordinary code health rejects only high-confidence vacuity: obvious no-op or

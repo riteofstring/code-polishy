@@ -697,6 +697,7 @@ func suppressibleCheck(check string) bool {
 		"architecture.fileCycle", "testing.fileCycle", "architecture.sourceGraphCoverage",
 		"architecture.importCoverage", "architecture.pythonFactsCoverage",
 		"architecture.reviewSignal", "policy.architectureReview",
+		"quality.lineBudget", "quality.lineBudgetChange",
 	}, check) {
 		return false
 	}

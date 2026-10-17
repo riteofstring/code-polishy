@@ -10,7 +10,9 @@ code-polishy size --base origin/main --format json
 ```
 
 The command is descriptive and exits successfully when analysis completes. It
-does not enforce a universal size budget or label a project as too large.
+does not enforce a universal size budget or label a project as too large. A
+repository can set its own enforced line budget with `quality.lineBudget`; see
+the [Code Quality Policy](policies/code-quality.md#repository-line-budget).
 
 ## What is measured
 
@@ -32,7 +34,9 @@ compression, clones, and hard links can therefore use a different amount of
 physical storage on a particular machine.
 
 The human report shows bounded summaries, categories, top-level paths, modules,
-languages, and largest files. JSON output retains the same structured byte and
+languages, and largest files. It also counts non-blank lines of handwritten
+source by language, split into production and test, and shows each configured
+line budget with its remaining lines. JSON output retains the same structured byte and
 file counts in `repositorySize`; it includes paths and metadata but no file
 contents. Language grouping uses file extensions and configured language rules,
 not content sniffing.
