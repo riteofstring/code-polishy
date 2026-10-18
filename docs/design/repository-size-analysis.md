@@ -28,8 +28,13 @@ shares describe only measured entries; an unreadable subtree is never treated
 as empty. Governed inventory and source-reading failures remain operational
 errors. Missing tracked paths are omitted from the materialized inventory;
 permission and other inspection errors are returned before workspace measurement.
-Git can report untracked traversal failures through diagnostics despite exiting
-successfully, so untracked inventory diagnostics also prevent partial counts.
+Untracked inventory first identifies directory subtrees fully excluded by the
+repository's own glob rules and gives Git their literal paths to avoid traversing
+them. File-specific exclusions cannot hide a whole directory, and directories
+containing dynamic control inputs remain visible. This directory pass only
+selects exclusions; Git still owns file enumeration and ignore rules. Git can
+report traversal failures through diagnostics despite exiting successfully, so
+diagnostics remaining after those exclusions prevent partial governed counts.
 Restoring access restores complete measurement on the next invocation.
 
 Byte totals are logical content sizes rather than filesystem block allocation.

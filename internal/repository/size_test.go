@@ -65,6 +65,7 @@ func TestAnalyzeSizeRejectsUnreadableSourceDirectory(t *testing.T) {
 			t.Parallel()
 			repo := newGitRepository(t)
 			repo.Config.Quality.LineBudget = &policy.LineBudget{Production: 10}
+			repo.Config.Scope.Exclude = []string{"src/placeholder"}
 			writeFile(t, repo.Root, "visible.go", "package app\n")
 			git(t, repo.Root, "add", ".")
 			git(t, repo.Root, "commit", "-m", "visible source")
@@ -89,6 +90,62 @@ func TestAnalyzeSizeRejectsUnreadableSourceDirectory(t *testing.T) {
 			}
 			recovered, err := repo.AnalyzeSize("")
 			if err != nil || recovered.Workspace.Incomplete || recovered.SourceLines.Production != 3 || !slices.Equal(recovered.SourceLines.Budget, baseline.SourceLines.Budget) {
+				t.Fatalf("permission recovery = %+v, error = %v", recovered, err)
+			}
+		})
+	}
+}
+
+func TestAnalyzeSizePreservesUnreadablePolicyExcludedDirectories(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name    string
+		path    string
+		exclude string
+	}{
+		{name: "default", path: "node_modules/private"},
+		{name: "configured", path: "runs/private", exclude: "runs/**"},
+		{name: "nested wildcard", path: "work/cache/private", exclude: "**/cache/**"},
+		{name: "literal brackets", path: "runs[1]/private", exclude: "runs[1]/**"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			repo := newGitRepository(t)
+			repo.Config.Quality.LineBudget = &policy.LineBudget{Production: 10}
+			if fixture.exclude != "" {
+				repo.Config.Scope.Exclude = []string{fixture.exclude}
+			}
+			writeFile(t, repo.Root, ".gitignore", "ignored/\n")
+			writeFile(t, repo.Root, "src/app.go", "package app\nfunc Run() {}\n")
+			git(t, repo.Root, "add", ".")
+			git(t, repo.Root, "commit", "-m", "source")
+			writeFile(t, repo.Root, "extra.go", "package app\n")
+			paths := []string{fixture.path, "ignored/private"}
+			slices.Sort(paths)
+			for _, path := range paths {
+				writeFile(t, repo.Root, path+"/hidden.go", "package hidden\n")
+				denySizeDirectory(t, filepath.Join(repo.Root, filepath.FromSlash(path)))
+			}
+			analysis, err := repo.AnalyzeSize("HEAD")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !analysis.Workspace.Incomplete || analysis.Workspace.UnreadablePathCount != 2 || !slices.Equal(analysis.Workspace.UnreadablePaths, paths) {
+				t.Fatalf("incomplete workspace = %+v", analysis.Workspace)
+			}
+			if analysis.SourceLines.Production != 3 || !slices.Equal(analysis.SourceLines.Budget, []LineBudgetScope{{Scope: "production", Lines: 3, Budget: 10}}) {
+				t.Fatalf("source lines = %+v", analysis.SourceLines)
+			}
+			if analysis.Comparison == nil || analysis.Comparison.AddedFiles != 1 {
+				t.Fatalf("untracked source comparison = %+v", analysis.Comparison)
+			}
+			for _, path := range paths {
+				if err := os.Chmod(filepath.Join(repo.Root, filepath.FromSlash(path)), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			recovered, err := repo.AnalyzeSize("")
+			if err != nil || recovered.Workspace.Incomplete || recovered.SourceLines.Production != 3 {
 				t.Fatalf("permission recovery = %+v, error = %v", recovered, err)
 			}
 		})

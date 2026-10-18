@@ -213,7 +213,7 @@ func (repo Repository) gitCandidateSizeRecords() ([]sizeRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := repo.gitLines("ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := repo.gitIncludedUntrackedFiles()
 	if err != nil {
 		return nil, err
 	}

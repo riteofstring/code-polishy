@@ -95,7 +95,7 @@ func (repo Repository) rawGitFiles(excludes []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := repo.gitLines("ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := gitUntrackedFiles(repo.Root, excludes, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (repo Repository) selectionSince(revision string) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	untracked, err := repo.gitLines("ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := repo.gitIncludedUntrackedFiles()
 	if err != nil {
 		return Selection{}, err
 	}

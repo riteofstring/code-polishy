@@ -32,11 +32,54 @@ func (repo Repository) gitIncludedFiles() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := repo.gitLines("ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := repo.gitIncludedUntrackedFiles()
 	if err != nil {
 		return nil, err
 	}
 	return repo.existingIncluded(append(tracked, untracked...))
+}
+
+func (repo Repository) gitIncludedUntrackedFiles() ([]string, error) {
+	excludes := append(append([]string{}, policy.DefaultExcludes...), repo.Config.Scope.Exclude...)
+	return gitUntrackedFiles(repo.Root, excludes, repo.DynamicControlInputs)
+}
+
+func gitUntrackedFiles(root string, excludes, controlInputs []string) ([]string, error) {
+	arguments := []string{"ls-files", "-z", "--others", "--exclude-standard", "--"}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || !entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if relative == "." || !excludedGitInventoryDirectory(relative, excludes, controlInputs) {
+			return nil
+		}
+		arguments = append(arguments, ":(top,literal,exclude)"+relative)
+		return filepath.SkipDir
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gitLinesAt(root, arguments...)
+}
+
+func excludedGitInventoryDirectory(path string, excludes, controlInputs []string) bool {
+	prefix := path + "/"
+	for _, input := range controlInputs {
+		if strings.HasPrefix(input, prefix) {
+			return false
+		}
+	}
+	for _, pattern := range excludes {
+		if strings.HasSuffix(pattern, "**") && policy.Match(prefix, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 func (repo Repository) walkIncludedFiles() ([]string, error) {

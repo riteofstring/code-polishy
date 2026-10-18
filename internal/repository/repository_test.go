@@ -380,6 +380,26 @@ func TestAllFilesSkipsRemovedTrackedPaths(t *testing.T) {
 	}
 }
 
+func TestAllFilesRetainsDynamicControlInputsInExcludedTrees(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	writeFile(t, repo.Root, "app.go", "package sample\n")
+	writeFile(t, repo.Root, ".tools/control.yml", "stages: [test]\n")
+	writeFile(t, repo.Root, ".tools/generated.go", "package generated\n")
+	configured, err := repo.WithDynamicControlInputs([]string{".tools/control.yml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := configured.AllFiles()
+	if err != nil || !slices.Equal(files, []string{".tools/control.yml", "app.go"}) {
+		t.Fatalf("governed files = %v, error = %v", files, err)
+	}
+	files, err = configured.RawFiles()
+	if err != nil || !slices.Equal(files, []string{"app.go"}) {
+		t.Fatalf("raw files = %v, error = %v", files, err)
+	}
+}
+
 func TestExplicitSelectionRejectsMissingAndExcludedPaths(t *testing.T) {
 	t.Parallel()
 	repo := Repository{Root: t.TempDir(), Config: policy.Config{Scope: policy.Scope{Exclude: []string{"vendor/**"}}}}
