@@ -912,9 +912,14 @@ func (repo Repository) gitLines(arguments ...string) ([]string, error) {
 
 func gitLinesAt(root string, arguments ...string) ([]string, error) {
 	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
+	var diagnostics bytes.Buffer
+	command.Stderr = &diagnostics
 	output, err := command.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git %s: %w", strings.Join(arguments, " "), err)
+	}
+	if len(arguments) > 0 && arguments[0] == "ls-files" && slices.Contains(arguments, "--others") && diagnostics.Len() > 0 {
+		return nil, fmt.Errorf("git %s did not produce a complete file inventory: %s", strings.Join(arguments, " "), strings.TrimSpace(diagnostics.String()))
 	}
 	separator := byte('\n')
 	if slices.Contains(arguments, "-z") {

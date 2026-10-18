@@ -28,6 +28,8 @@ shares describe only measured entries; an unreadable subtree is never treated
 as empty. Governed inventory and source-reading failures remain operational
 errors. Missing tracked paths are omitted from the materialized inventory;
 permission and other inspection errors are returned before workspace measurement.
+Git can report untracked traversal failures through diagnostics despite exiting
+successfully, so untracked inventory diagnostics also prevent partial counts.
 Restoring access restores complete measurement on the next invocation.
 
 Byte totals are logical content sizes rather than filesystem block allocation.

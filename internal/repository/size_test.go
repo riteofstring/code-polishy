@@ -58,32 +58,40 @@ func TestAnalyzeSizePreservesSourceCountsWithUnreadableIgnoredDirectories(t *tes
 	}
 }
 
-func TestAnalyzeSizeRejectsUnreadableTrackedDirectory(t *testing.T) {
+func TestAnalyzeSizeRejectsUnreadableSourceDirectory(t *testing.T) {
 	t.Parallel()
-	repo := newGitRepository(t)
-	repo.Config.Quality.LineBudget = &policy.LineBudget{Production: 10}
-	writeFile(t, repo.Root, "visible.go", "package app\n")
-	writeFile(t, repo.Root, "src/app.go", "package app\n\nfunc Run() {}\n")
-	git(t, repo.Root, "add", ".")
-	git(t, repo.Root, "commit", "-m", "source")
-	baseline, err := repo.AnalyzeSize("")
-	if err != nil || baseline.SourceLines.Production != 3 {
-		t.Fatalf("baseline source counts = %+v, error = %v", baseline.SourceLines, err)
-	}
-	directory := filepath.Join(repo.Root, "src")
-	denySizeDirectory(t, directory)
-	if analysis, err := repo.AnalyzeSize(""); !errors.Is(err, os.ErrPermission) {
-		t.Errorf("unreadable tracked directory returned source counts %+v, error = %v", analysis.SourceLines, err)
-	}
-	if lines, err := repo.CountSourceLines(); !errors.Is(err, os.ErrPermission) {
-		t.Errorf("unreadable tracked directory returned line budget %+v, error = %v", lines, err)
-	}
-	if err := os.Chmod(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	recovered, err := repo.AnalyzeSize("")
-	if err != nil || recovered.Workspace.Incomplete || recovered.SourceLines.Production != 3 || !slices.Equal(recovered.SourceLines.Budget, baseline.SourceLines.Budget) {
-		t.Fatalf("permission recovery = %+v, error = %v", recovered, err)
+	for _, state := range []string{"tracked", "untracked"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			repo := newGitRepository(t)
+			repo.Config.Quality.LineBudget = &policy.LineBudget{Production: 10}
+			writeFile(t, repo.Root, "visible.go", "package app\n")
+			git(t, repo.Root, "add", ".")
+			git(t, repo.Root, "commit", "-m", "visible source")
+			writeFile(t, repo.Root, "src/app.go", "package app\n\nfunc Run() {}\n")
+			if state == "tracked" {
+				git(t, repo.Root, "add", "src/app.go")
+			}
+			baseline, err := repo.AnalyzeSize("")
+			if err != nil || baseline.SourceLines.Production != 3 {
+				t.Fatalf("baseline source counts = %+v, error = %v", baseline.SourceLines, err)
+			}
+			directory := filepath.Join(repo.Root, "src")
+			denySizeDirectory(t, directory)
+			if analysis, err := repo.AnalyzeSize(""); err == nil || !strings.Contains(err.Error(), "src") {
+				t.Errorf("unreadable source directory returned source counts %+v, error = %v", analysis.SourceLines, err)
+			}
+			if lines, err := repo.CountSourceLines(); err == nil || !strings.Contains(err.Error(), "src") {
+				t.Errorf("unreadable source directory returned line budget %+v, error = %v", lines, err)
+			}
+			if err := os.Chmod(directory, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			recovered, err := repo.AnalyzeSize("")
+			if err != nil || recovered.Workspace.Incomplete || recovered.SourceLines.Production != 3 || !slices.Equal(recovered.SourceLines.Budget, baseline.SourceLines.Budget) {
+				t.Fatalf("permission recovery = %+v, error = %v", recovered, err)
+			}
+		})
 	}
 }
 
