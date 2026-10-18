@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.29.2 - 2026-10-18
+
 - Preserve governed source counts and line-budget headroom when workspace-only
   paths are unreadable. Size reports mark workspace totals incomplete and list
   unreadable paths instead of aborting the analysis.
