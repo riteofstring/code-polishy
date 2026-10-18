@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -318,6 +319,11 @@ func validateDependencyOverridePolicies(policies []DependencyOverridePolicy) err
 }
 
 func validateDependencyOverridePolicy(override DependencyOverridePolicy, label string, seenIDs, seenOwners map[string]bool, now time.Time) error {
+	if override.Ecosystem == "cargo" || override.Field == "patch.crates-io" {
+		if override.Ecosystem != "cargo" || override.Field != "patch.crates-io" || filepath.Base(override.Path) != "Cargo.toml" {
+			return fmt.Errorf("%s Cargo overrides must own patch.crates-io in a Cargo.toml manifest", label)
+		}
+	}
 	if seenIDs[override.ID] {
 		return fmt.Errorf("duplicate dependency override policy id %q", override.ID)
 	}

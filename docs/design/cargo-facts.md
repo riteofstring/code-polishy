@@ -51,6 +51,19 @@ Offline verification uses `--frozen` and requires that cache to be prepared.
 Both modes require a contained, parsed workspace lock before resolution runs.
 Neither repairs a missing or stale lockfile.
 
+Explicitly governed `patch.crates-io` sources resolve through their consumer's
+workspace lock. Selecting a contained replacement manifest adds its declared
+consumer rather than inventing a dependency-owned lock. Independent projects
+retain their own locks. For these consumers, data-only metadata enables all
+consumer features so optional replacements have actual source evidence; this
+does not compile those features or establish that every feature combination can
+execute together. Every declared patch must occur in the locked graph with its
+exact local manifest or Git repository and commit, outside workspace members.
+Unused substitutions, missing locks and stale resolution remain findings.
+Nested patch owners are rejected because Cargo applies only workspace-root
+patches. No dependency development target or build script executes in this
+operation, and the original manifests and locks remain untouched.
+
 Resolved facts preserve opaque package IDs, source identities, renamed edges,
 dependency kinds, target predicates and enabled features. Every graph node and
 edge must refer to a real package, and resolved package coordinates must occur

@@ -25,6 +25,9 @@ func osvUnmaintainedGroup(group osvGroup, observed osvPackageResult, identifiers
 	if group.MaxSeverity != "" || observed.Package.Ecosystem != "crates.io" || len(identifiers) == 0 {
 		return false
 	}
+	if slices.ContainsFunc(identifiers, func(id string) bool { return strings.HasPrefix(id, "CVE-") }) {
+		return false
+	}
 	covered := map[string]bool{}
 	for _, advisory := range observed.Vulnerabilities {
 		aliases := append([]string{advisory.ID}, advisory.Aliases...)

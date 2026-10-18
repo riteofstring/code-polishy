@@ -64,8 +64,11 @@ func DependencyReviewStatic(ctx context.Context, repo repository.Repository, fil
 }
 
 func static(ctx context.Context, repo repository.Repository, files []string, includeInstalledLicenses bool) []policy.Finding {
-	findings := []policy.Finding{}
+	findings := cargoStaticFindings(repo, files)
 	for _, path := range files {
+		if filepath.Base(path) == "Cargo.toml" {
+			continue
+		}
 		findings = append(findings, staticPathFindings(repo, path)...)
 	}
 	findings = append(findings, pnpmGovernanceFindings(ctx, repo, files)...)

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ type CargoManifest struct {
 	Package      *CargoPackageManifest
 	Workspace    *CargoWorkspaceManifest
 	Dependencies []CargoDependencyDeclaration
+	Patches      map[string]json.RawMessage
 }
 
 type CargoPackageManifest struct {
@@ -95,6 +97,14 @@ func ParseCargoManifest(path string, data []byte) (CargoManifest, error) {
 		return CargoManifest{}, err
 	}
 	manifest := CargoManifest{Path: path, Root: filepath.ToSlash(filepath.Dir(path)), Package: document.Package, Dependencies: dependencies}
+	manifest.Patches = map[string]json.RawMessage{}
+	for registry, declarations := range document.Patch {
+		encoded, err := json.Marshal(declarations)
+		if err != nil {
+			return CargoManifest{}, err
+		}
+		manifest.Patches["patch."+registry] = encoded
+	}
 	if document.Workspace != nil {
 		manifest.Workspace = &document.Workspace.CargoWorkspaceManifest
 	}

@@ -227,9 +227,9 @@
       "required": ["id", "ecosystem", "path", "field"],
       "properties": {
         "id": { "$ref": "code-polishy.schema.json#/$defs/identifier" },
-        "ecosystem": { "enum": ["npm", "pnpm"] },
+        "ecosystem": { "enum": ["npm", "pnpm", "cargo"] },
         "path": { "$ref": "code-polishy.schema.json#/$defs/concretePath" },
-        "field": { "enum": ["overrides", "pnpm.overrides"] },
+        "field": { "enum": ["overrides", "pnpm.overrides", "patch.crates-io"] },
         "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "reason": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "owner": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },

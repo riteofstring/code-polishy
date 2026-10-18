@@ -12,22 +12,12 @@ import (
 )
 
 func checkCargoManifest(repo repository.Repository, path string) []policy.Finding {
-	inventory := repo.InspectCargoManifests([]string{path})
-	findings := []policy.Finding{}
-	for _, problem := range inventory.Problems {
-		findings = append(findings, policy.Finding{Check: "supplyChain.cargoManifest", Path: problem.Path, Line: problem.Line, Subject: "manifest", Message: problem.Message})
-	}
-	for _, manifest := range inventory.Manifests {
-		for _, dependency := range manifest.Dependencies {
-			findings = append(findings, cargoDeclarationFindings(repo, manifest, dependency)...)
-		}
-	}
-	return findings
+	return cargoStaticFindings(repo, []string{path})
 }
 
-func cargoDeclarationFindings(repo repository.Repository, manifest repository.CargoManifest, dependency repository.CargoDependencyDeclaration) []policy.Finding {
-	if dependency.Table == "replace" || strings.HasPrefix(dependency.Table, "patch.") {
-		return []policy.Finding{cargoDependencyFinding(manifest.Path, dependency, "supplyChain.cargoSource", "Cargo patch/replace declarations require governed override and resolved-source evidence")}
+func cargoDeclarationFindings(repo repository.Repository, manifest repository.CargoManifest, dependency repository.CargoDependencyDeclaration, replacement, governedPatch bool) []policy.Finding {
+	if err := cargoPatchDeclarationProblem(dependency, governedPatch); err != nil {
+		return []policy.Finding{cargoDependencyFinding(manifest.Path, dependency, "supplyChain.cargoSource", err.Error())}
 	}
 	if err := cargoDeclarationFields(dependency); err != nil {
 		return []policy.Finding{cargoDependencyFinding(manifest.Path, dependency, "supplyChain.cargoManifest", err.Error())}
@@ -36,15 +26,31 @@ func cargoDeclarationFindings(repo repository.Repository, manifest repository.Ca
 		return nil
 	}
 	findings := []policy.Finding{}
-	if dependency.Version != "" || dependency.Path == "" && dependency.Git == "" {
-		if !exactCargoRequirement(dependency.Version) {
-			findings = append(findings, cargoDependencyFinding(manifest.Path, dependency, "supplyChain.exactVersion", "Cargo dependencies must use an exact =major.minor.patch requirement without build metadata; bare versions and ranges permit updates"))
-		}
+	if cargoRequiresExactRequirement(dependency, replacement) && !exactCargoRequirement(dependency.Version) {
+		findings = append(findings, cargoDependencyFinding(manifest.Path, dependency, "supplyChain.exactVersion", "Cargo dependencies must use an exact =major.minor.patch requirement without build metadata; bare versions and ranges permit updates"))
 	}
 	if err := cargoDeclarationSource(repo, manifest, dependency); err != nil {
 		findings = append(findings, cargoDependencyFinding(manifest.Path, dependency, "supplyChain.cargoSource", err.Error()))
 	}
 	return findings
+}
+
+func cargoPatchDeclarationProblem(dependency repository.CargoDependencyDeclaration, governed bool) error {
+	if dependency.Table == "replace" || strings.HasPrefix(dependency.Table, "patch.") && (dependency.Table != "patch.crates-io" || !governed) {
+		return fmt.Errorf("cargo patch/replace declarations require governed override and resolved-source evidence")
+	}
+	if dependency.Table == "patch.crates-io" && dependency.Path == "" && dependency.Git == "" {
+		return fmt.Errorf("cargo registry patches must select a contained path or immutable Git source")
+	}
+	return nil
+}
+
+func cargoRequiresExactRequirement(dependency repository.CargoDependencyDeclaration, replacement bool) bool {
+	registry := dependency.Path == "" && dependency.Git == ""
+	if replacement && registry && dependency.Version != "" {
+		return false
+	}
+	return dependency.Version != "" || registry
 }
 
 func cargoDeclarationFields(dependency repository.CargoDependencyDeclaration) error {

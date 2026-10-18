@@ -474,6 +474,16 @@ canonical JSON override object plus reason, owner, review date, and expiry.
 Run the static check once after introducing an ungoverned override to obtain the
 observed canonical digest; adding governance does not suppress a vulnerability.
 
+Cargo `patch.crates-io` uses the same ownership record with ecosystem `cargo`,
+the exact `Cargo.toml` path and field `patch.crates-io`. The digest covers the
+parsed table encoded as canonical JSON. Contained local replacements and exact
+Git revisions require actual source binding through the consumer's frozen lock.
+Replacement registry requirements remain transitive constraints; the consumer's
+direct requirements stay exactly pinned. Local source provenance and changes
+need review under the override owner and remain a visible coverage warning.
+Other patch registries, `replace`, nested patch owners, unresolved replacements
+and substitutions for workspace members are not admitted by this contract.
+
 ```json
 {
   "supplyChain": {

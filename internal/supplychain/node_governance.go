@@ -23,7 +23,7 @@ func nodeManifestGovernanceFindings(repo repository.Repository, path, manager st
 		if !nonemptyJSONObject(block.raw) {
 			continue
 		}
-		findings = append(findings, nodeOverrideBlockFindings(repo, path, manager, block.field, block.raw)...)
+		findings = append(findings, dependencyOverrideBlockFindings(repo, path, manager, block.field, block.raw)...)
 	}
 	return findings
 }
@@ -52,7 +52,7 @@ func nodeOverrideBlocks(payload packageJSON) []nodeOverrideBlock {
 	}
 }
 
-func nodeOverrideBlockFindings(repo repository.Repository, path, manager, field string, raw json.RawMessage) []policy.Finding {
+func dependencyOverrideBlockFindings(repo repository.Repository, path, manager, field string, raw json.RawMessage) []policy.Finding {
 	digest, err := canonicalJSONSHA256(raw)
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.dependencyOverride", Path: path, Subject: field, Message: err.Error()}}
@@ -88,6 +88,13 @@ func dependencyOverrideGovernanceFinding(repo repository.Repository, files []str
 		}, true
 	}
 	if !slices.Contains(files, governance.Path) {
+		return unusedDependencyOverridePolicy(governance), true
+	}
+	if governance.Ecosystem == "cargo" {
+		inventory := repo.InspectCargoManifests([]string{governance.Path})
+		if len(inventory.Manifests) == 1 && nonemptyJSONObject(inventory.Manifests[0].Patches[governance.Field]) {
+			return policy.Finding{}, false
+		}
 		return unusedDependencyOverridePolicy(governance), true
 	}
 	payload, ok := readPackageJSON(repo, governance.Path)

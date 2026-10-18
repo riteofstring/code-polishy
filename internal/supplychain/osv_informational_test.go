@@ -68,6 +68,7 @@ func TestOSVUnmaintainedClassificationPreservesUncertainAndSecurityFindings(t *t
 			p.Vulnerabilities[0].Affected[0].DatabaseSpecific.CVSS = json.RawMessage(`"CVSS:3.1/AV:N"`)
 		},
 		"unrepresented alias": func(p *osvPackageResult) { p.Groups[0].Aliases = []string{"CVE-2026-1234"} },
+		"CVE alias":           func(p *osvPackageResult) { p.Vulnerabilities[0].Aliases = []string{"CVE-2026-1234"} },
 		"mixed group": func(p *osvPackageResult) {
 			p.Groups[0].IDs = append(p.Groups[0].IDs, "RUSTSEC-2026-0001")
 			p.Vulnerabilities = append(p.Vulnerabilities, osvVulnerability{ID: "RUSTSEC-2026-0001"})

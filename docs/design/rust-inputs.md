@@ -50,6 +50,33 @@ explicit source governance. Static manifest checks neither install dependencies
 nor run build scripts. They do not establish lock agreement, vulnerability, license
 or release-age coverage; those remain separate dependency-policy operations.
 
+The existing `dependencyOverridePolicies` contract governs Cargo's root
+`patch.crates-io` table with ecosystem `cargo`. Its canonical JSON identity is
+computed from the parsed TOML table, retaining every declaration field. Changed,
+missing, expired and unused ownership remains visible. Supported substitutions
+select contained local package manifests or exact Git revisions; other patch
+registries and deprecated `replace` declarations remain unsupported.
+
+A governed local replacement is consumed as a dependency of the declaring
+application. Its registry requirements are transitive constraints resolved by
+that application's lock, so copying a dependency into the repository does not
+require rewriting its upstream constraints or creating a standalone lock.
+Consumer declarations retain exact-version policy, and replacement Git and path
+sources retain containment and immutable-pin checks. Cargo must prove each
+replacement's actual source and package identity in the consumer graph; a
+workspace member cannot obtain transitive treatment through a patch declaration.
+This does not authorize the replacement's own development targets or establish
+an independently buildable library project.
+
+Local replacement source remains governed repository code. A visible source
+coverage warning distinguishes review of its provenance and changes from the
+public registry's age, advisory and license evidence. The override owner must
+record that review and its maintenance plan; a matching table digest neither
+authenticates the copied source nor proves it unaffected. Registry dependencies
+in the complete consumer lock retain their ordinary age and security checks.
+The [consumer resolution](cargo-facts.md#locked-resolution) supplies the actual
+source binding without compiling the replacement or executing its build scripts.
+
 Lock inventory supports Cargo's version-3 and version-4 records. A package
 identity retains its name, complete version and exact source; different versions
 or sources are not collapsed. Git-index and sparse registry records must carry
@@ -141,7 +168,7 @@ aliases and original lock scope. Only RustSec records explicitly classifying
 the matching crates.io package as unmaintained, without group severity,
 advisory/affected severity or a CVSS score, qualify. Every grouped identifier
 must be covered by such a record. Missing metadata, contradictory matching
-records, security aliases, other ecosystems and `unsound` or other notice
+records, CVE identities, security aliases, other ecosystems and `unsound` or other notice
 categories remain blocking vulnerability findings. A maintenance notice cannot
 mask a separate vulnerability for the same package or require an invented
 non-exposure assessment. Complete warning-bearing scanner exits retain the same

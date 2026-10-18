@@ -14,6 +14,7 @@ import (
 type ResolutionPlan struct {
 	Discovery DiscoveryPlan
 	Commands  []policy.Command
+	Patches   map[string]repository.CargoManifest
 }
 
 type ResolutionResult struct {
@@ -22,13 +23,19 @@ type ResolutionResult struct {
 }
 
 func PlanResolution(repo repository.Repository, files []string, offline bool) ResolutionPlan {
-	discovery := PlanDiscovery(repo, files, files)
-	plan := ResolutionPlan{Discovery: discovery, Commands: slices.Clone(discovery.Commands)}
+	manifests, patches, findings := cargoResolutionRoots(repo, selectedManifests(files, files))
+	discovery := PlanDiscovery(repo, manifests, manifests)
+	discovery.Findings = append(discovery.Findings, findings...)
+	plan := ResolutionPlan{Discovery: discovery, Commands: slices.Clone(discovery.Commands), Patches: patches}
 	if len(plan.Commands) == 0 {
 		return plan
 	}
 	for _, manifest := range discovery.Manifests {
-		plan.Commands = append(plan.Commands, resolutionCommand(repo, manifest, offline))
+		command := resolutionCommand(repo, manifest, offline)
+		if _, present := patches[manifest]; present {
+			command.Argv = append(command.Argv, "--all-features")
+		}
+		plan.Commands = append(plan.Commands, command)
 	}
 	return plan
 }
@@ -57,6 +64,11 @@ func Resolve(ctx context.Context, repo repository.Repository, plan ResolutionPla
 			continue
 		}
 		resolution, findings := resolveManifest(ctx, repo, manifest, *workspace, command, commandRunner)
+		if len(findings) == 0 {
+			if owner, present := plan.Patches[manifest]; present {
+				findings = append(findings, cargoResolvedPatchFindings(owner, resolution)...)
+			}
+		}
 		result.Findings = append(result.Findings, findings...)
 		if len(findings) == 0 {
 			result.Resolutions = append(result.Resolutions, resolution)
