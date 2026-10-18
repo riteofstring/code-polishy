@@ -123,10 +123,8 @@ func scanScannerRuntime(ctx context.Context, repo repository.Repository, state *
 		return err
 	}
 	archive := filepath.Join(directory, "image.tar")
-	if _, err := state.client.run(ctx, governedDockerCommandPrefix+"save-scanner", "image", "save", "--output", archive, state.image); err != nil {
-		return err
-	}
-	imageID, err := inspectImageID(ctx, state.client, governedDockerCommandPrefix+"inspect-scanner", state.image)
+	imageID, err := saveDockerImage(ctx, state.client, governedDockerCommandPrefix+"scanner", state.image, archive,
+		state.policy.MaximumArchiveBytes, state.policy.MaximumReportBytes)
 	if err != nil {
 		return err
 	}
@@ -379,18 +377,15 @@ func prepareDockerfileArtifact(ctx context.Context, repo repository.Repository, 
 		_, err := state.client.cleanup(cleanupContext, governedDockerCommandPrefix+"target-"+target.Name+"-remove", "image", "rm", "--force", tag)
 		return err
 	}
-	imageID, err := inspectImageID(ctx, state.client, governedDockerCommandPrefix+"target-"+target.Name+"-inspect", tag)
-	if err != nil {
-		_ = cleanup()
-		return preparedArtifact{}, err
-	}
 	directory := filepath.Join(state.root, "targets", target.Name)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		_ = cleanup()
 		return preparedArtifact{}, err
 	}
 	archive := filepath.Join(directory, "image.tar")
-	if _, err := state.client.run(ctx, governedDockerCommandPrefix+"target-"+target.Name+"-save", "image", "save", "--output", archive, tag); err != nil {
+	imageID, err := saveDockerImage(ctx, state.client, governedDockerCommandPrefix+"target-"+target.Name, tag, archive,
+		state.policy.MaximumArchiveBytes, state.policy.MaximumReportBytes)
+	if err != nil {
 		_ = cleanup()
 		return preparedArtifact{}, err
 	}

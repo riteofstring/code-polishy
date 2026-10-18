@@ -38,6 +38,10 @@ HIGH and CRITICAL vulnerabilities, secrets, image-config misconfigurations,
 and end-of-life operating systems are blocking. Secret matches are never copied
 into normalized findings or reports.
 
+Built images are saved by immutable Docker identity. Trivy reports must match
+the configuration digest from that exact saved archive; see
+[Container Archive Identity](design/artifact-identity.md).
+
 ## Target modes
 
 Use `dockerfile` when the shared engine can build the product directly:
@@ -99,6 +103,7 @@ beneath the supplied directory:
 
 The producer owns only product construction. It must not run Trivy, download a
 database, apply OpenVEX, or publish security reports.
+Its optional `imageId` denotes the configuration digest reported by Trivy.
 
 ## OpenVEX
 

@@ -25,6 +25,15 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/artifact-identity.md",
+        "sourcePaths": [
+          "internal/artifactsecurity/archive.go",
+          "internal/artifactsecurity/archive_test.go",
+          "internal/artifactsecurity/artifactsecurity_test.go",
+          "internal/artifactsecurity/run.go"
+        ]
+      },
+      {
         "path": "docs/design/trivy-scanner-assessments.md",
         "module": "artifactsecurity"
       },

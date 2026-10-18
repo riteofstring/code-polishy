@@ -434,7 +434,7 @@ func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 	}
 	return &scannerBoundary{
 		t: t, containers: map[string][]string{}, findings: findings,
-		imageID: "sha256:" + strings.Repeat("a", 64),
+		imageID: "sha256:" + bytesSHA256([]byte(archiveFixtureConfig)),
 		version: strings.TrimSpace(string(version)),
 	}
 }
@@ -502,7 +502,7 @@ func (boundary *scannerBoundary) imageCommand(arguments []string) (runner.Output
 		if strings.Contains(format, "RepoDigests") {
 			return runner.Output{Stdout: []byte(`["` + arguments[len(arguments)-1] + `"]` + "\n")}, nil
 		}
-		return runner.Output{Stdout: []byte(boundary.imageID + "\n")}, nil
+		return runner.Output{Stdout: []byte("sha256:" + strings.Repeat("b", 64) + "\n")}, nil
 	case "save":
 		path, ok := flagValue(arguments, "--output")
 		if !ok {
@@ -511,10 +511,13 @@ func (boundary *scannerBoundary) imageCommand(arguments []string) (runner.Output
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return runner.Output{}, err
 		}
-		payload := []byte("target image")
-		if strings.Contains(arguments[len(arguments)-1], "artifact-scanner") {
-			payload = []byte("scanner image")
+		if arguments[len(arguments)-1] != "sha256:"+strings.Repeat("b", 64) {
+			return runner.Output{}, fmt.Errorf("image save did not use the inspected immutable identity")
 		}
+		payload := fixtureDockerArchive(boundary.t, []archiveFixtureEntry{
+			{name: "manifest.json", body: `[{"Config":"image.json","Layers":[]}]`},
+			{name: "image.json", body: archiveFixtureConfig},
+		})
 		return runner.Output{}, os.WriteFile(path, payload, 0o600)
 	default:
 		return runner.Output{}, fmt.Errorf("unsupported image operation %v", arguments)
@@ -599,11 +602,7 @@ func (boundary *scannerBoundary) writeVulnerabilityReport(arguments []string) er
 	findings := []map[string]any{}
 	archive, archiveFound := mountSource(arguments, "/input/image.tar")
 	if archiveFound && !slices.Contains(arguments, "--vex") {
-		payload, err := os.ReadFile(archive)
-		if err != nil {
-			return err
-		}
-		if string(payload) == "scanner image" {
+		if filepath.Base(filepath.Dir(archive)) == "code-polishy-scanner" {
 			findings = boundary.findings
 		}
 	}

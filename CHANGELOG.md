@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.29.3 - 2026-10-18
+
+- Resolve cyclic Rust glob exports and root `extern crate` aliases without
+  losing valid imports, and use bounded, distinct Cargo command identities in
+  gates while preserving their original manifest arguments.
+- Govern explicit Cargo replacement sources through the actual consumer lock.
+  Verify exact source bindings and that every replacement is consumed, retain
+  root dependency pins, and expose local-source provenance limits as findings.
+- Preserve explicitly classified RustSec unmaintained notices as warnings.
+  Vulnerabilities, severity-bearing records and incomplete classifications
+  remain subject to the existing security checks.
+- Save built container images by immutable Docker identity and compare Trivy
+  reports with the saved configuration digest. Support Docker's legacy and
+  containerd image stores while rejecting missing or ambiguous archive identity
+  and mismatched scanner reports.
+
 ## 0.29.2 - 2026-10-18
 
 - Preserve governed source counts and line-budget headroom when workspace-only
