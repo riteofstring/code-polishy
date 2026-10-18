@@ -36,7 +36,7 @@ func (repo Repository) gitIncludedFiles() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return repo.existingIncluded(append(tracked, untracked...)), nil
+	return repo.existingIncluded(append(tracked, untracked...))
 }
 
 func (repo Repository) walkIncludedFiles() ([]string, error) {

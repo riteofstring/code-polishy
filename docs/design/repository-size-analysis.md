@@ -26,7 +26,9 @@ siblings and marks workspace totals incomplete, retaining the total number of
 unreadable paths and the first 20 paths in traversal order. These totals and
 shares describe only measured entries; an unreadable subtree is never treated
 as empty. Governed inventory and source-reading failures remain operational
-errors. Restoring access restores complete measurement on the next invocation.
+errors. Missing tracked paths are omitted from the materialized inventory;
+permission and other inspection errors are returned before workspace measurement.
+Restoring access restores complete measurement on the next invocation.
 
 Byte totals are logical content sizes rather than filesystem block allocation.
 Workspace and governed-current totals describe materialized entries, while a

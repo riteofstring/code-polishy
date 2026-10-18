@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
@@ -283,7 +284,10 @@ func (repo Repository) selectionSince(revision string) (Selection, error) {
 	}
 	rawChanged := append(append([]string{}, changed...), untracked...)
 	candidate := CandidateDelta{AddedOrModified: repo.candidatePaths(rawChanged), Deleted: repo.candidatePaths(deleted)}
-	files := repo.existingIncluded(rawChanged)
+	files, err := repo.existingIncluded(rawChanged)
+	if err != nil {
+		return Selection{}, err
+	}
 	policySensitive := repo.policyInputChanged(candidate.Paths())
 	selection := Selection{Base: revision, Candidate: candidate, Files: files, PolicySensitive: policySensitive}
 	if len(candidate.Deleted) > 0 || repo.hasNonRegularIncluded(rawChanged) || policySensitive {
@@ -312,7 +316,8 @@ func (repo Repository) stagedSelection() (Selection, error) {
 	if err := repo.rejectStagedWorkingTreeDivergence(staged); err != nil {
 		return Selection{}, err
 	}
-	return Selection{Candidate: candidate, Files: repo.existingIncluded(staged), PolicySensitive: policySensitive}, nil
+	files, err := repo.existingIncluded(staged)
+	return Selection{Candidate: candidate, Files: files, PolicySensitive: policySensitive}, err
 }
 
 func (repo Repository) stagedChanges() ([]string, []string, error) {
@@ -786,7 +791,7 @@ func (repo Repository) Read(path string) ([]byte, error) {
 	return os.ReadFile(resolved)
 }
 
-func (repo Repository) existingIncluded(paths []string) []string {
+func (repo Repository) existingIncluded(paths []string) ([]string, error) {
 	files := []string{}
 	for _, path := range paths {
 		path = strings.TrimPrefix(filepath.ToSlash(path), "./")
@@ -794,11 +799,17 @@ func (repo Repository) existingIncluded(paths []string) []string {
 			continue
 		}
 		info, err := os.Lstat(filepath.Join(repo.Root, filepath.FromSlash(path)))
-		if err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			files = append(files, path)
 		}
 	}
-	return uniqueSorted(files)
+	return uniqueSorted(files), nil
 }
 
 func (repo Repository) candidatePaths(paths []string) []string {

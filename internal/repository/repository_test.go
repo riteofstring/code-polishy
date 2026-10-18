@@ -354,6 +354,32 @@ func TestAllFilesIncludesTrackedAndVisibleUntracked(t *testing.T) {
 	}
 }
 
+func TestAllFilesSkipsRemovedTrackedPaths(t *testing.T) {
+	t.Parallel()
+	for _, replacement := range []bool{false, true} {
+		t.Run(fmt.Sprintf("replace-directory-%t", replacement), func(t *testing.T) {
+			t.Parallel()
+			repo := newGitRepository(t)
+			writeFile(t, repo.Root, "keep.go", "package sample\n")
+			writeFile(t, repo.Root, "removed/source.go", "package sample\n")
+			git(t, repo.Root, "add", ".")
+			git(t, repo.Root, "commit", "-m", "source")
+			if err := os.RemoveAll(filepath.Join(repo.Root, "removed")); err != nil {
+				t.Fatal(err)
+			}
+			expected := []string{"keep.go"}
+			if replacement {
+				writeFile(t, repo.Root, "removed", "replacement file\n")
+				expected = append(expected, "removed")
+			}
+			files, err := repo.AllFiles()
+			if err != nil || !slices.Equal(files, expected) {
+				t.Fatalf("files = %v, error = %v", files, err)
+			}
+		})
+	}
+}
+
 func TestExplicitSelectionRejectsMissingAndExcludedPaths(t *testing.T) {
 	t.Parallel()
 	repo := Repository{Root: t.TempDir(), Config: policy.Config{Scope: policy.Scope{Exclude: []string{"vendor/**"}}}}
