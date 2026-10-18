@@ -66,6 +66,14 @@
       "public": true
     },
     {
+      "id": "artifact-security-identity",
+      "path": "docs/design/artifact-identity.md",
+      "title": "Container Archive Identity",
+      "summary": "Bind scanner reports to the configuration in the immutable Docker image archive.",
+      "aliases": ["container-identity"],
+      "public": true
+    },
+    {
       "id": "artifact-security-scanner",
       "path": "docs/design/trivy-scanner-assessments.md",
       "title": "Trivy Scanner Assessments",
