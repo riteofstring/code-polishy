@@ -59,17 +59,22 @@ func testOSVCargoPinnedRuntimeProjection(t *testing.T, aliased bool) {
 			}
 			continue
 		}
-		if len(findings) != 3 || !slices.ContainsFunc(findings, func(f policy.Finding) bool {
-			return f.Vulnerability != nil && f.Vulnerability.Advisory == "RUSTSEC-2026-0001" && f.Vulnerability.Scope == "Cargo.lock"
+		assertCargoOSVFindings(t, findings)
+	}
+}
+
+func assertCargoOSVFindings(t *testing.T, findings []policy.Finding) {
+	t.Helper()
+	if len(findings) != 3 || !slices.ContainsFunc(findings, func(f policy.Finding) bool {
+		return f.Vulnerability != nil && f.Vulnerability.Advisory == "RUSTSEC-2026-0001" && f.Vulnerability.Scope == "Cargo.lock"
+	}) {
+		t.Fatalf("pinned Cargo scanner lost complete package or vulnerability evidence: %+v", findings)
+	}
+	for _, version := range []string{"1.0.0", "2.0.0"} {
+		if !slices.ContainsFunc(findings, func(f policy.Finding) bool {
+			return f.Check == "supplyChain.osvUnmaintained" && f.Severity == policy.FindingWarning && f.Path == "Cargo.lock" && f.Fields["advisory"] == "RUSTSEC-2026-0002" && f.Fields["version"] == version
 		}) {
-			t.Fatalf("pinned Cargo scanner lost complete package or vulnerability evidence: %+v", findings)
-		}
-		for _, version := range []string{"1.0.0", "2.0.0"} {
-			if !slices.ContainsFunc(findings, func(f policy.Finding) bool {
-				return f.Check == "supplyChain.osvUnmaintained" && f.Severity == policy.FindingWarning && f.Path == "Cargo.lock" && f.Fields["advisory"] == "RUSTSEC-2026-0002" && f.Fields["version"] == version
-			}) {
-				t.Fatalf("pinned Cargo scanner lost maintenance classification for %s: %+v", version, findings)
-			}
+			t.Fatalf("pinned Cargo scanner lost maintenance classification for %s: %+v", version, findings)
 		}
 	}
 }
