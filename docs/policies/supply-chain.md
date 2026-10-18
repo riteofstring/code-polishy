@@ -413,7 +413,13 @@ missing-coverage finding, never a workspace that declared nothing.
   `lock-sync` provider.
 - Policy-pinned OSV-Scanner runs as an independent source advisory lane whenever
   a supported dependency graph is detected. Its JSON is parsed centrally and
-  all reported affected versions, including unknown-severity results, block.
+  all reported vulnerable versions, including unknown-severity results, block.
+  RustSec `unmaintained` notices remain visible maintenance warnings when every
+  advisory in the group explicitly classifies the matching crates.io package
+  that way and reports no severity or CVSS score. Missing or conflicting evidence,
+  `unsound` advisories and other notice categories remain security findings.
+  A maintenance warning does not establish non-exposure or waive dependency
+  pinning, age, source or vulnerability checks.
 - Python/uv must still declare module-scoped lock consistency; OSV supplies its
   default security coverage unless an exact governed module override applies.
 - Scanner errors and unavailable advisory services fail.

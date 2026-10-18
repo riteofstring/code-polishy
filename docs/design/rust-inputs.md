@@ -133,6 +133,20 @@ use the `crates.io` ecosystem and cannot approve a different lock or version.
 The pinned runtime contract is exercised against a temporary synthetic offline
 advisory database, without querying a live provider.
 
+RustSec also publishes [informational advisory categories](https://github.com/RustSec/advisory-db/blob/main/README.md#advisory-format).
+An `unmaintained` notice identifies a maintenance concern rather than an
+unspecified exploit. The OSV reader retains affected-package metadata and emits
+`supplyChain.osvUnmaintained` warnings with exact package, version, advisory,
+aliases and original lock scope. Only RustSec records explicitly classifying
+the matching crates.io package as unmaintained, without group severity,
+advisory/affected severity or a CVSS score, qualify. Every grouped identifier
+must be covered by such a record. Missing metadata, contradictory matching
+records, security aliases, other ecosystems and `unsound` or other notice
+categories remain blocking vulnerability findings. A maintenance notice cannot
+mask a separate vulnerability for the same package or require an invented
+non-exposure assessment. Complete warning-bearing scanner exits retain the same
+protocol checks as vulnerability-bearing exits; operational failures still fail.
+
 ## Configured license policy
 
 When `supplyChain.allowedLicenses` is configured, installed-license verification

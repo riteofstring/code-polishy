@@ -274,6 +274,9 @@ func acceptedOSVFindingExit(ctx context.Context, result runner.Result, findings 
 		return false
 	}
 	for _, finding := range findings {
+		if finding.Check == "supplyChain.osvUnmaintained" && finding.Severity == policy.FindingWarning {
+			continue
+		}
 		if finding.Check != "supplyChain.osvVulnerability" || finding.Vulnerability == nil {
 			return false
 		}
@@ -310,8 +313,10 @@ type osvGroup struct {
 }
 
 type osvVulnerability struct {
-	ID      string   `json:"id"`
-	Aliases []string `json:"aliases"`
+	ID       string              `json:"id"`
+	Aliases  []string            `json:"aliases"`
+	Severity []json.RawMessage   `json:"severity"`
+	Affected []osvAffectedRecord `json:"affected"`
 }
 
 func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]policy.Finding, error) {
@@ -416,6 +421,10 @@ func osvPackageFindings(scope string, observed osvPackageResult) []policy.Findin
 	findings := []policy.Finding{}
 	for _, group := range groups {
 		identifiers := osvGroupIdentifiers(group, observed.Vulnerabilities)
+		if osvUnmaintainedGroup(group, observed, identifiers) {
+			findings = append(findings, osvUnmaintainedFinding(scope, observed, identifiers))
+			continue
+		}
 		advisory := preferredAdvisory(identifiers)
 		if advisory == "" {
 			advisory = "OSV:unknown"

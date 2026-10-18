@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
@@ -57,8 +59,17 @@ func testOSVCargoPinnedRuntimeProjection(t *testing.T, aliased bool) {
 			}
 			continue
 		}
-		if len(findings) != 1 || findings[0].Vulnerability == nil || findings[0].Vulnerability.Advisory != "RUSTSEC-2026-0001" || findings[0].Vulnerability.Scope != "Cargo.lock" {
+		if len(findings) != 3 || !slices.ContainsFunc(findings, func(f policy.Finding) bool {
+			return f.Vulnerability != nil && f.Vulnerability.Advisory == "RUSTSEC-2026-0001" && f.Vulnerability.Scope == "Cargo.lock"
+		}) {
 			t.Fatalf("pinned Cargo scanner lost complete package or vulnerability evidence: %+v", findings)
+		}
+		for _, version := range []string{"1.0.0", "2.0.0"} {
+			if !slices.ContainsFunc(findings, func(f policy.Finding) bool {
+				return f.Check == "supplyChain.osvUnmaintained" && f.Severity == policy.FindingWarning && f.Path == "Cargo.lock" && f.Fields["advisory"] == "RUSTSEC-2026-0002" && f.Fields["version"] == version
+			}) {
+				t.Fatalf("pinned Cargo scanner lost maintenance classification for %s: %+v", version, findings)
+			}
 		}
 	}
 }
@@ -76,6 +87,20 @@ func cargoOSVDatabase(t *testing.T) string {
   "published":"2026-01-01T00:00:00Z","summary":"Offline scanner fixture",
   "affected":[{"package":{"ecosystem":"crates.io","name":"registry-crate"},
   "ranges":[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]}]
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err = archive.Create("RUSTSEC-2026-0002.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = file.Write([]byte(`{
+  "schema_version":"1.7.0","id":"RUSTSEC-2026-0002","modified":"2026-01-01T00:00:00Z",
+  "published":"2026-01-01T00:00:00Z","summary":"Offline maintenance fixture",
+  "affected":[{"package":{"ecosystem":"crates.io","name":"registry-crate"},
+  "ranges":[{"type":"SEMVER","events":[{"introduced":"0"}]}],
+  "database_specific":{"informational":"unmaintained","cvss":null}}]
 }`))
 	if err != nil {
 		t.Fatal(err)
