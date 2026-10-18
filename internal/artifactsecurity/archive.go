@@ -33,7 +33,7 @@ func dockerArchiveImageID(archive string, maximum, metadataMaximum int64) (strin
 		return "", fmt.Errorf("decode Docker archive manifest: %w", err)
 	}
 	if len(manifest) != 1 || manifest[0].Config == "" {
-		return "", errors.New("Docker archive must identify exactly one image configuration")
+		return "", errors.New("saved Docker archive must identify exactly one image configuration")
 	}
 	config, err := dockerArchiveEntry(archive, manifest[0].Config, maximum, metadataMaximum)
 	if err != nil {
@@ -48,7 +48,7 @@ func dockerArchiveEntry(archive, name string, maximum, entryMaximum int64) ([]by
 		return nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() > maximum {
-		return nil, fmt.Errorf("Docker archive must be a regular file no larger than %d bytes", maximum)
+		return nil, fmt.Errorf("saved Docker archive must be a regular file no larger than %d bytes", maximum)
 	}
 	file, err := os.Open(archive)
 	if err != nil {
@@ -72,7 +72,7 @@ func readDockerArchiveEntry(reader *tar.Reader, name string, maximum int64) ([]b
 			continue
 		}
 		if payload != nil || header.Typeflag != tar.TypeReg || header.Size > maximum {
-			return nil, fmt.Errorf("Docker archive entry %q must be one bounded regular file", name)
+			return nil, fmt.Errorf("saved Docker archive entry %q must be one bounded regular file", name)
 		}
 		payload, err = io.ReadAll(reader)
 		if err != nil {
@@ -80,7 +80,7 @@ func readDockerArchiveEntry(reader *tar.Reader, name string, maximum int64) ([]b
 		}
 	}
 	if payload == nil {
-		return nil, fmt.Errorf("Docker archive omits %q", name)
+		return nil, fmt.Errorf("saved Docker archive omits %q", name)
 	}
 	return payload, nil
 }
