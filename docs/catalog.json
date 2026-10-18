@@ -183,14 +183,6 @@
       "public": true
     },
     {
-      "id": "generated-lint-result-limit",
-      "path": "docs/bugs/generated-lint-result-limit.md",
-      "title": "Generated JavaScript exhausts the lint result limit before exemptions apply",
-      "summary": "Reproduce the generated-validator lint limit failure in 0.28.2 and identify its 0.28.3 resolution.",
-      "aliases": [],
-      "public": true
-    },
-    {
       "id": "git-dependency-evidence",
       "path": "docs/git-dependency-evidence.md",
       "title": "Git Dependency Evidence",
