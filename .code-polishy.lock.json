@@ -1,41 +1,41 @@
 {
   "lockVersion": 2,
-  "codePolishyVersion": "0.29.1",
-  "releaseDigest": "16525b8fd52d059d5ce0f336835259830c178746cf7539b4184f17c21ad4d43b",
+  "codePolishyVersion": "0.29.2",
+  "releaseDigest": "913260a55e01deeb62a4b068bf2ede8b8f852b768f1ac90d680a63aa1a6c6108",
   "features": ["javascript-bundle"],
   "publication": {
-    "indexUrl": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-release-index.json",
-    "indexSha256": "1299dde845366041c443d1a2017724fd354a108131baa8614b12f41151f7d534",
+    "indexUrl": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-release-index.json",
+    "indexSha256": "4f9d88fa4436541a315f4d51206828853327ce61ed60562be110f0271856713c",
     "archives": [
       {
         "host": "darwin-arm64",
-        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-0.29.1-darwin-arm64.zip",
-        "sha256": "99270a9833d6cb0c8d3be9f401c26abeb6bc021839ae35e46d800d182d86f6cb",
-        "size": 270206541
+        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-0.29.2-darwin-arm64.zip",
+        "sha256": "1597af686149dba257b98829917105fda36ca7dbaafccfa64303cfd69978abf3",
+        "size": 270215861
       },
       {
         "host": "darwin-x64",
-        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-0.29.1-darwin-x64.zip",
-        "sha256": "c461beb71345150b15c249e08e87367ce459701ad3f4345bbaf2046b9482e25a",
-        "size": 274252355
+        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-0.29.2-darwin-x64.zip",
+        "sha256": "904925829cd097c29f5c497c0106d6b8f39a1470b948f78d69c8233e83a26030",
+        "size": 274263570
       },
       {
         "host": "linux-arm64",
-        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-0.29.1-linux-arm64.zip",
-        "sha256": "fdff475b3dd1e4bb99727b94649c474e1365d8df5708de618e19fd7f6330eb31",
-        "size": 335682820
+        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-0.29.2-linux-arm64.zip",
+        "sha256": "41ccf1e8a34d7156fcdd624f63bcfb79511a4d231af89ffce4516c6d2061f390",
+        "size": 335689421
       },
       {
         "host": "linux-x64",
-        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-0.29.1-linux-x64.zip",
-        "sha256": "108a33acebb6fa61d272257e393815e14b5c6d2ca8380db2261f024ab0001c8d",
-        "size": 363349946
+        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-0.29.2-linux-x64.zip",
+        "sha256": "aa97d03eee651af4317768588d4e13e6f052b99e7d15313acca4c7c535d5bd86",
+        "size": 363360249
       },
       {
         "host": "windows-x64",
-        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.1/code-polishy-0.29.1-windows-x64.zip",
-        "sha256": "66df2d921387e20313ed44b44ab2c970a8679e31f7bb345bacade76fde0afaee",
-        "size": 277504956
+        "url": "https://github.com/riteofstring/code-polishy/releases/download/v0.29.2/code-polishy-0.29.2-windows-x64.zip",
+        "sha256": "555a242cd36b8df0e06107f3f4c12221bf91bce306390b2d6105b0015e3efde9",
+        "size": 277514597
       }
     ]
   }
