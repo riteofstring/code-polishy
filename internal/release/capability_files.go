@@ -20,7 +20,7 @@ func ReadCapabilityCatalog(releaseRoot string, locked Lock) (AuthenticatedCapabi
 	if err != nil {
 		return AuthenticatedCapabilityCatalog{}, fmt.Errorf("read catalog release manifest: %w", err)
 	}
-	manifest, err := parseManifest(manifestData, ManifestFilename)
+	manifest, err := parseLauncherManifest(manifestData, ManifestFilename)
 	if err != nil {
 		return AuthenticatedCapabilityCatalog{}, err
 	}

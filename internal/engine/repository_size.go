@@ -23,6 +23,9 @@ func (engine *Engine) Size(base string) (Report, error) {
 	if analysis.Comparison != nil {
 		notes = append(notes, "base comparison uses canonical Git blob sizes for both revisions")
 	}
+	if analysis.Workspace.Incomplete {
+		notes = append(notes, fmt.Sprintf("workspace totals are incomplete: %d paths could not be measured; workspace sizes and shares describe only measured entries", analysis.Workspace.UnreadablePathCount))
+	}
 	report := engine.normalizeReport(Report{Notes: notes})
 	report.RepositorySize = &analysis
 	report.Tables = repositorySizeTables(analysis)
@@ -31,6 +34,13 @@ func (engine *Engine) Size(base string) (Report, error) {
 
 func repositorySizeTables(analysis repository.SizeAnalysis) []Table {
 	tables := []Table{repositorySizeSummaryTable(analysis)}
+	if analysis.Workspace.Incomplete {
+		rows := make([][]string, 0, len(analysis.Workspace.UnreadablePaths))
+		for _, path := range analysis.Workspace.UnreadablePaths {
+			rows = append(rows, []string{path})
+		}
+		tables = append(tables, Table{Title: "UNREADABLE WORKSPACE PATHS", Columns: []string{"PATH"}, Rows: rows})
+	}
 	tables = appendSizeGroupTable(tables, "WORKSPACE CATEGORIES", "CATEGORY", analysis.Workspace.Categories, analysis.Workspace.Bytes)
 	tables = appendSizeGroupTable(tables, "WORKSPACE TOP LEVEL", "PATH", analysis.Workspace.TopLevel, analysis.Workspace.Bytes)
 	tables = appendSizeGroupTable(tables, "GOVERNED CONTENT", "CATEGORY", analysis.Governed.Categories, analysis.Governed.Bytes)
@@ -49,8 +59,12 @@ func repositorySizeTables(analysis repository.SizeAnalysis) []Table {
 }
 
 func repositorySizeSummaryTable(analysis repository.SizeAnalysis) Table {
+	workspace := "workspace"
+	if analysis.Workspace.Incomplete {
+		workspace += " (incomplete)"
+	}
 	rows := [][]string{
-		{"workspace", strconv.Itoa(analysis.Workspace.Files), formatSizeBytes(analysis.Workspace.Bytes)},
+		{workspace, strconv.Itoa(analysis.Workspace.Files), formatSizeBytes(analysis.Workspace.Bytes)},
 		{"governed working tree", strconv.Itoa(analysis.Governed.Files), formatSizeBytes(analysis.Governed.Bytes)},
 	}
 	if comparison := analysis.Comparison; comparison != nil {

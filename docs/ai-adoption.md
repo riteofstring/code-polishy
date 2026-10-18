@@ -646,9 +646,12 @@ When asked to upgrade Code Polishy, the AI agent should:
    channel, an unpublished candidate, or an unpinned index;
 3. for an outgoing v2 lock, run
    `upgrade plan --index URL --sha256 DIGEST` through a release that implements
-   the upgrade protocol. If the outgoing release predates that command, install
-   the exact current-host candidate first and invoke the installed incoming
-   binary directly;
+   the upgrade protocol. If the outgoing release predates that command or cannot
+   read the incoming manifest schema, verify the current-host archive against
+   the authenticated index, use its own engine to install it beside the outgoing
+   release, and invoke the installed incoming binary directly. Follow the
+   [bootstrap commands](installation.md#the-target-lock) rather than the
+   repository wrapper, which still selects the outgoing release;
 4. inspect its authenticated capability delta and its added, removed, and
    changed diagnostics. Planning may install the immutable candidate and write
    managed evidence, but it must not change the target lock or application

@@ -148,7 +148,7 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 		return upgradePlanningResult{}, err
 	}
 	outgoingRoot := release.Directory(installPrefix, outgoing)
-	if err := verifyUpgradeRelease(outgoingRoot, outgoing); err != nil {
+	if err := verifyUpgradeRelease(outgoingRoot, outgoing, true); err != nil {
 		return upgradePlanningResult{}, fmt.Errorf("outgoing release: %w", err)
 	}
 	outgoingSnapshot, outgoingSnapshotData, err := runUpgradeDiagnostics(invocation, outgoingRoot, outgoing, false)
@@ -234,11 +234,11 @@ func prepareUpgradeApplication(invocation invocation, planPath string) (release.
 		return release.UpgradePlan{}, nil, "", errors.New("repository lock changed after upgrade planning; create a new plan")
 	}
 	incomingRoot := release.Directory(plan.InstallPrefix, plan.Incoming)
-	if err := verifyUpgradeRelease(incomingRoot, plan.Incoming); err != nil {
+	if err := verifyUpgradeRelease(incomingRoot, plan.Incoming, false); err != nil {
 		return release.UpgradePlan{}, nil, "", fmt.Errorf("incoming release: %w", err)
 	}
 	outgoingRoot := release.Directory(plan.InstallPrefix, plan.Outgoing)
-	if err := verifyUpgradeRelease(outgoingRoot, plan.Outgoing); err != nil {
+	if err := verifyUpgradeRelease(outgoingRoot, plan.Outgoing, true); err != nil {
 		return release.UpgradePlan{}, nil, "", fmt.Errorf("outgoing release: %w", err)
 	}
 	return plan, currentBytes, incomingRoot, nil
@@ -508,8 +508,12 @@ func readUpgradeOutgoingLock(repoRoot string) (release.Lock, []byte, error) {
 	return locked, data, nil
 }
 
-func verifyUpgradeRelease(root string, locked release.Lock) error {
-	manifest, present, err := release.ReadManifest(root)
+func verifyUpgradeRelease(root string, locked release.Lock, outgoing bool) error {
+	readManifest := release.ReadManifest
+	if outgoing {
+		readManifest = release.ReadLauncherManifest
+	}
+	manifest, present, err := readManifest(root)
 	if err != nil || !present {
 		if err == nil {
 			err = errors.New("release manifest is unavailable")

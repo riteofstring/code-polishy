@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	maximumSizeGroups       = 64
-	maximumSizeTopLevel     = 32
-	maximumSizeLargestFiles = 20
+	maximumSizeGroups          = 64
+	maximumSizeTopLevel        = 32
+	maximumSizeLargestFiles    = 20
+	maximumSizeUnreadablePaths = 20
 )
 
 var sizeAnalysisExcludedPaths = []string{
@@ -44,11 +45,14 @@ type SizeAnalysis struct {
 }
 
 type SizeWorkspace struct {
-	Files        int         `json:"files"`
-	Bytes        int64       `json:"bytes"`
-	Categories   []SizeGroup `json:"categories"`
-	TopLevel     []SizeGroup `json:"topLevel"`
-	LargestFiles []SizeFile  `json:"largestFiles"`
+	Incomplete          bool        `json:"incomplete"`
+	UnreadablePathCount int         `json:"unreadablePathCount"`
+	UnreadablePaths     []string    `json:"unreadablePaths"`
+	Files               int         `json:"files"`
+	Bytes               int64       `json:"bytes"`
+	Categories          []SizeGroup `json:"categories"`
+	TopLevel            []SizeGroup `json:"topLevel"`
+	LargestFiles        []SizeFile  `json:"largestFiles"`
 }
 
 type SizeGoverned struct {
@@ -120,12 +124,14 @@ type sizeRecord struct {
 }
 
 type workspaceSizeCollector struct {
-	repo          Repository
-	governedPaths map[string]bool
-	categories    map[string]SizeGroup
-	topLevel      map[string]SizeGroup
-	largest       []SizeFile
-	total         SizeTotal
+	repo                Repository
+	governedPaths       map[string]bool
+	categories          map[string]SizeGroup
+	topLevel            map[string]SizeGroup
+	largest             []SizeFile
+	total               SizeTotal
+	unreadablePaths     []string
+	unreadablePathCount int
 }
 
 func (repo Repository) AnalyzeSize(requestedBase string) (SizeAnalysis, error) {
@@ -492,12 +498,15 @@ func (repo Repository) summarizeWorkspaceSize(governed []sizeRecord) (SizeWorksp
 	collector := workspaceSizeCollector{
 		repo: repo, governedPaths: governedPaths,
 		categories: map[string]SizeGroup{}, topLevel: map[string]SizeGroup{}, largest: []SizeFile{},
+		unreadablePaths: []string{},
 	}
 	err := filepath.WalkDir(repo.Root, collector.visit)
 	if err != nil {
 		return SizeWorkspace{}, err
 	}
 	return SizeWorkspace{
+		Incomplete:          collector.unreadablePathCount != 0,
+		UnreadablePathCount: collector.unreadablePathCount, UnreadablePaths: collector.unreadablePaths,
 		Files: collector.total.Files, Bytes: collector.total.Bytes,
 		Categories:   orderedSizeGroups(collector.categories, 0, ""),
 		TopLevel:     orderedSizeGroups(collector.topLevel, maximumSizeTopLevel, "remaining-top-level"),
@@ -508,7 +517,7 @@ func (repo Repository) summarizeWorkspaceSize(governed []sizeRecord) (SizeWorksp
 func (collector *workspaceSizeCollector) visit(path string, entry fs.DirEntry, walkErr error) error {
 	relative, skipDirectory, omit, err := workspaceSizeWalkEntry(collector.repo.Root, path, entry, walkErr)
 	if err != nil {
-		return err
+		return collector.unreadable(relative, err)
 	}
 	if skipDirectory {
 		return filepath.SkipDir
@@ -518,7 +527,7 @@ func (collector *workspaceSizeCollector) visit(path string, entry fs.DirEntry, w
 	}
 	info, accepted, err := measurableSizeEntry(relative, entry)
 	if err != nil {
-		return err
+		return collector.unreadable(relative, err)
 	}
 	if !accepted {
 		return nil
@@ -527,20 +536,31 @@ func (collector *workspaceSizeCollector) visit(path string, entry fs.DirEntry, w
 	return nil
 }
 
-func workspaceSizeWalkEntry(root, path string, entry fs.DirEntry, walkErr error) (string, bool, bool, error) {
-	if walkErr != nil {
-		return "", false, false, walkErr
+func (collector *workspaceSizeCollector) unreadable(path string, err error) error {
+	if path == "" || path == "." || collector.governedPaths[path] {
+		return err
 	}
+	collector.unreadablePathCount++
+	if len(collector.unreadablePaths) < maximumSizeUnreadablePaths {
+		collector.unreadablePaths = append(collector.unreadablePaths, path)
+	}
+	return nil
+}
+
+func workspaceSizeWalkEntry(root, path string, entry fs.DirEntry, walkErr error) (string, bool, bool, error) {
 	relative, err := filepath.Rel(root, path)
 	if err != nil {
 		return "", false, false, err
 	}
 	relative = filepath.ToSlash(relative)
+	if excludedSizeAnalysisPath(relative) {
+		return relative, entry != nil && entry.IsDir(), true, nil
+	}
+	if walkErr != nil {
+		return relative, false, false, walkErr
+	}
 	if relative == "." {
 		return relative, false, true, nil
-	}
-	if excludedSizeAnalysisPath(relative) {
-		return relative, entry.IsDir(), true, nil
 	}
 	return relative, false, entry.IsDir(), nil
 }

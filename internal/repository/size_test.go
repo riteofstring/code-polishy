@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +11,82 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
+
+func TestAnalyzeSizePreservesSourceCountsWithUnreadableIgnoredDirectories(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	repo.Config = policy.Config{
+		Tests:   policy.Testing{Ownership: []policy.TestOwnership{{Module: "application", Paths: []string{"src/*_test.go"}}}},
+		Quality: policy.Quality{LineBudget: &policy.LineBudget{Production: 10}},
+	}
+	writeFile(t, repo.Root, ".gitignore", "runs/\n")
+	writeFile(t, repo.Root, "src/app.go", "package app\n\nfunc Run() {}\n")
+	writeFile(t, repo.Root, "src/app_test.go", "package app\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "source")
+	paths := []string{}
+	for index := range maximumSizeUnreadablePaths + 2 {
+		path := fmt.Sprintf("runs/private-%02d", index)
+		writeFile(t, repo.Root, path+"/output", "unmeasured bytes\n")
+		absolute := filepath.Join(repo.Root, filepath.FromSlash(path))
+		denySizeDirectory(t, absolute)
+		paths = append(paths, path)
+	}
+	writeFile(t, repo.Root, "runs/z-readable/output", "measured bytes\n")
+	analysis, err := repo.AnalyzeSize("HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := analysis.Workspace
+	assertIncompleteSizeAnalysis(t, analysis, paths)
+	for _, path := range paths {
+		if err := os.Chmod(filepath.Join(repo.Root, filepath.FromSlash(path)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recovered, err := repo.AnalyzeSize("")
+	if err != nil || recovered.Workspace.Incomplete || recovered.Workspace.UnreadablePathCount != 0 || len(recovered.Workspace.UnreadablePaths) != 0 || recovered.Workspace.Bytes != workspace.Bytes+int64(len(paths)*17) {
+		t.Fatalf("permission recovery: %+v, error = %v", recovered.Workspace, err)
+	}
+	source := filepath.Join(repo.Root, "src", "app.go")
+	if err := os.Chmod(source, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(source, 0o600) })
+	if _, err := repo.AnalyzeSize(""); !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("unreadable governed source must fail: %v", err)
+	}
+}
+
+func assertIncompleteSizeAnalysis(t *testing.T, analysis SizeAnalysis, paths []string) {
+	t.Helper()
+	workspace := analysis.Workspace
+	if !workspace.Incomplete || workspace.UnreadablePathCount != len(paths) || !slices.Equal(workspace.UnreadablePaths, paths[:maximumSizeUnreadablePaths]) {
+		t.Fatalf("incomplete workspace = %+v", workspace)
+	}
+	if group := groupByName(workspace.TopLevel, "runs"); group.Files != 1 || group.Bytes != 15 {
+		t.Fatalf("readable sibling was not measured: %+v", group)
+	}
+	if lines := analysis.SourceLines; lines.Production != 2 || lines.Test != 1 || len(lines.Budget) != 1 || lines.Budget[0].Budget != 10 || lines.Budget[0].Lines != 2 {
+		t.Fatalf("source counts or budget lost: %+v", lines)
+	}
+	if analysis.Comparison == nil || analysis.Comparison.DeltaBytes != 0 {
+		t.Fatalf("base comparison lost: %+v", analysis.Comparison)
+	}
+}
+
+func denySizeDirectory(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o700) })
+	if _, err := os.ReadDir(path); err == nil {
+		t.Skip("this host does not enforce directory read permissions for the test user")
+	} else if !errors.Is(err, os.ErrPermission) {
+		t.Fatal(err)
+	}
+}
 
 func TestAnalyzeSizeSeparatesWorkspaceConsumersFromGovernedContent(t *testing.T) {
 	t.Parallel()

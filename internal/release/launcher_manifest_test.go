@@ -80,6 +80,11 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 		manifest.Tools.Packaging = "26.3"
 	}
 	manifest.ReleaseDigest = manifest.Identity()
+	return renderHistoricalManifest(t, manifest), manifest
+}
+
+func renderHistoricalManifest(t *testing.T, manifest Manifest) []byte {
+	t.Helper()
 	tools := historicalManifestTools(t, manifest)
 	document := manifestDocument{
 		ManifestVersion: manifest.ManifestVersion, CodePolishyVersion: manifest.CodePolishyVersion,
@@ -88,7 +93,7 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 		CapabilityCatalogSHA256: manifest.CapabilityCatalogSHA256,
 		EntryCount:              manifest.EntryCount, Entries: manifest.Entries,
 	}
-	return render(t, document), manifest
+	return render(t, document)
 }
 
 func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {

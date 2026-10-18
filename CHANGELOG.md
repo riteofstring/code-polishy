@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Preserve governed source counts and line-budget headroom when workspace-only
+  paths are unreadable. Size reports mark workspace totals incomplete and list
+  unreadable paths instead of aborting the analysis.
+- Authenticate historical outgoing manifests and capability evidence during
+  upgrade planning and application. Document bootstrapping through the verified
+  incoming engine when the outgoing engine cannot read its manifest schema.
+
 ## 0.29.1 - 2026-10-17
 
 - Declare the required test ownership in the installed artifact-security

@@ -94,6 +94,22 @@ capability delta and runs the outgoing and incoming engines against the same
 repository. The durable plan identifies added, removed, and changed diagnostics
 so a policy bump cannot disguise application cleanup as a simple version edit.
 
+The incoming planner verifies an outgoing installation with the launcher's
+existing historical manifest readers. Each reader preserves that schema's
+original tool fields and identity calculation; the complete installed tree and
+outgoing lock must still authenticate before its engine runs. Capability
+catalogs and retained comparison proofs likewise authenticate version 6
+identities, the first schema that bound a catalog. Earlier releases without that
+evidence report an unavailable capability delta rather than inferred changes.
+Incoming installation and verification still require the current schema.
+
+An old engine cannot interpret future manifest fields. When the outgoing planner
+cannot read the candidate, the caller verifies the incoming archive against the
+authenticated publication index, uses that archive's own engine to install it,
+then runs plan and apply directly through the installed incoming engine. The
+repository wrapper continues to select the outgoing release until apply commits
+the lock, so it cannot perform this bootstrap by choosing a newer release.
+
 `upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a
 new plan after cleanup. Apply stages canonical guidance, obsolete-stub cleanup,

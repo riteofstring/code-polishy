@@ -19,6 +19,15 @@ materialized tracked and non-ignored untracked content selected by the
 repository's composed policy. Comparing the totals exposes local disk consumers
 without mistaking them for versioned project content.
 
+Workspace measurement is supplementary to governed counts. An unreadable
+workspace-only directory or entry must not discard readable source counts,
+line-budget headroom, or a Git comparison. The walker continues through readable
+siblings and marks workspace totals incomplete, retaining the total number of
+unreadable paths and the first 20 paths in traversal order. These totals and
+shares describe only measured entries; an unreadable subtree is never treated
+as empty. Governed inventory and source-reading failures remain operational
+errors. Restoring access restores complete measurement on the next invocation.
+
 Byte totals are logical content sizes rather than filesystem block allocation.
 Workspace and governed-current totals describe materialized entries, while a
 base comparison describes canonical Git blob bytes. Sparse files, compression,

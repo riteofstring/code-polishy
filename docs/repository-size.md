@@ -29,6 +29,15 @@ The report separates two views:
 from workspace totals. Excluding Code Polishy's own outputs makes repeated
 analysis stable.
 
+If an ignored directory or another workspace-only entry is unreadable, `size`
+still reports readable governed content, source lines, and line-budget headroom.
+It labels workspace totals **incomplete** and lists up to 20 unreadable paths.
+JSON records `workspace.incomplete`, `workspace.unreadablePathCount`, and
+`workspace.unreadablePaths` inside `repositorySize`. Workspace totals and shares
+cover only measured entries, not the inaccessible contents. Restore access and
+rerun to obtain complete workspace totals. Failures to inventory or read governed
+source still fail the command.
+
 Sizes are logical byte totals, not filesystem block allocation. Sparse files,
 compression, clones, and hard links can therefore use a different amount of
 physical storage on a particular machine.

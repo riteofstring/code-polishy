@@ -10,6 +10,55 @@ import (
 	"testing"
 )
 
+func TestCapabilityUpgradeAuthenticatesHistoricalCatalogAndRetainedProof(t *testing.T) {
+	t.Parallel()
+	repo, oldRoot, nextRoot, _, next := capabilityUpgradeFixture(t)
+	manifest, _, err := ReadManifest(oldRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.ManifestVersion = 6
+	manifest.Tools.Rust, manifest.Tools.Nextest = "", ""
+	manifest.ReleaseDigest = manifest.Identity()
+	if err := os.WriteFile(filepath.Join(oldRoot, ManifestFilename), renderHistoricalManifest(t, manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := indexedManifestLock(manifest)
+	oldRoot = relocateCapabilityRelease(t, filepath.Dir(filepath.Dir(oldRoot)), oldRoot, old)
+	if err := WriteLock(repo, old); err != nil {
+		t.Fatal(err)
+	}
+	result, err := PrepareCapabilityUpgrade(repo, nextRoot, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCapabilityUpgradeChanges(t, result.Delta, old)
+	assertCapabilityUpgradeLock(t, repo, old)
+	if err := os.RemoveAll(oldRoot); err != nil {
+		t.Fatal(err)
+	}
+	assertCapabilityUpgradeChanges(t, ReadCapabilityUpgrade(repo, next), old)
+	original := readCapabilityUpgradeArtifact(t, repo, result.Delta)
+	for name, mutate := range map[string]func(*capabilityCatalogProof){
+		"source revision":          func(proof *capabilityCatalogProof) { proof.Manifest.SourceRevision = strings.Repeat("f", 40) },
+		"historically absent tool": func(proof *capabilityCatalogProof) { proof.Manifest.Tools.Rust = "1.97.1" },
+		"catalog bytes": func(proof *capabilityCatalogProof) {
+			proof.Catalog = bytes.ReplaceAll(proof.Catalog, []byte("selected"), []byte("invented"))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var record capabilityUpgradeRecord
+			if err := json.Unmarshal(original, &record); err != nil {
+				t.Fatal(err)
+			}
+			mutate(record.Outgoing)
+			if _, err := parseCapabilityUpgradeRecord(render(t, record), next); err == nil {
+				t.Fatal("accepted altered historical capability evidence")
+			}
+		})
+	}
+}
+
 func TestCapabilityUpgradePersistsExactChangesAndPreservesRepeatedLock(t *testing.T) {
 	t.Parallel()
 	repo, oldRoot, nextRoot, old, next := capabilityUpgradeFixture(t)
@@ -124,9 +173,12 @@ func TestCapabilityUpgradeDoesNotInferMissingReleaseMetadata(t *testing.T) {
 					t.Fatal(err)
 				}
 				manifest.ManifestVersion, manifest.CapabilityCatalogSHA256 = 5, ""
+				manifest.Tools.Rust, manifest.Tools.Nextest = "", ""
 				manifest.ReleaseDigest = manifest.Identity()
 				old := indexedManifestLock(manifest)
-				writeCapabilityManifest(t, oldRoot, manifest)
+				if err := os.WriteFile(filepath.Join(oldRoot, ManifestFilename), renderHistoricalManifest(t, manifest), 0o600); err != nil {
+					t.Fatal(err)
+				}
 				if err := os.Rename(oldRoot, Directory(filepath.Dir(filepath.Dir(oldRoot)), old)); err != nil {
 					t.Fatal(err)
 				}

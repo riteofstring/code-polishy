@@ -44,7 +44,7 @@ func authenticateCapabilityProof(proof *capabilityCatalogProof, expected Lock) (
 		SourceRevision: identity.SourceRevision, Features: identity.Features, Tools: identity.Tools,
 		CapabilityCatalogSHA256: identity.CapabilityCatalogSHA256,
 	}
-	if identity.Version != ManifestVersion || identity.ReleaseVersion != expected.CodePolishyVersion || manifest.Identity() != expected.ReleaseDigest {
+	if identity.Version < 6 || identity.Version > ManifestVersion || identity.ReleaseVersion != expected.CodePolishyVersion || manifest.Identity() != expected.ReleaseDigest {
 		return AuthenticatedCapabilityCatalog{}, fmt.Errorf("capability evidence does not authenticate its release identity")
 	}
 	if err := validateCapabilityProofIdentity(manifest, expected); err != nil {
@@ -62,6 +62,9 @@ func authenticateCapabilityProof(proof *capabilityCatalogProof, expected Lock) (
 }
 
 func validateCapabilityProofIdentity(manifest Manifest, expected Lock) error {
+	if manifest.ManifestVersion < 7 && (manifest.Tools.Rust != "" || manifest.Tools.Nextest != "") {
+		return fmt.Errorf("capability evidence records tools absent from its historical manifest schema")
+	}
 	if !revisionPattern.MatchString(manifest.SourceRevision) {
 		return fmt.Errorf("capability evidence records an invalid source revision")
 	}

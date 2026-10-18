@@ -388,12 +388,14 @@ release symlinks, every link contributes its exact target: the bundle is linked
 together by pnpm's isolated linker, so retargeting one link would otherwise
 swap the code a release runs without changing an installed file.
 
-Each manifest version has an exact schema and identity calculation. The engine
-accepts only its own version. The stable launcher keeps explicit readers for
-installed manifest versions 2 through 6 so installing a newer release does not
-strand repositories still locked to an older one. It verifies each older
-release using that version's original fields and never invents evidence added
-by a later schema.
+Each manifest version has an exact schema and identity calculation. Ordinary
+engine execution accepts only its own version. The stable launcher keeps explicit
+readers for historical installed manifest versions 2 through 6 so installing a
+newer release does not strand repositories still locked to an older one. It
+verifies each older release using that version's original fields and never
+invents evidence added by a later schema. Upgrade planning and application reuse
+those readers only to verify the outgoing release; the incoming release must use
+the current schema.
 
 Manifest version 4 adds `tools.python` for the carried CPython
 `3.12.13+20260728` runtime and `tools.vulture` for Vulture `2.16`. Those fields
@@ -538,11 +540,32 @@ rollback-capable transaction with the lock last. New errors can be acknowledged
 without fixing them by adding `--accept-new-findings`. Neither phase edits
 application source, runs tests, or runs a merge gate.
 
-When the outgoing release has a v2 lock but predates `upgrade`, first install the
-pinned current-host candidate with the existing local bundle workflow, then
-invoke both phases through that incoming release binary directly. The outgoing
-lock and guidance still govern until apply replaces the lock; the incoming
-release governs afterward.
+When the outgoing release has a v2 lock but predates `upgrade` or cannot read the
+incoming manifest schema, bootstrap through the incoming release. Obtain the
+exact publication index and verify its separately published SHA-256. Download
+its current-host archive and verify the archive's SHA-256 against that index
+before extracting or executing it. For checksum verification, use
+`sha256sum --check` on Linux, `shasum -a 256 --check` on macOS, or `Get-FileHash`
+on Windows.
+
+Use the verified archive's own engine for local installation, with the same
+prefix that contains the outgoing release:
+
+```sh
+<verified-extracted-release>/bin/code-polishy install-bundle \
+  --source /absolute/path/code-polishy-<version>-<host>.zip \
+  --sha256 <archive-sha256> --prefix <installation-prefix>
+<installation-prefix>/releases/<version>-<release-digest>/bin/code-polishy \
+  --repo-root <repository> upgrade plan \
+  --index <https-index-url> --sha256 <index-sha256> --prefix <installation-prefix>
+<installation-prefix>/releases/<version>-<release-digest>/bin/code-polishy \
+  --repo-root <repository> upgrade apply --plan <reported-plan-path>
+```
+
+On Windows, use `code-polishy.exe` and PowerShell invocation syntax. Invoke both
+phases through the installed incoming engine, since the repository wrapper and
+stable launcher still select the outgoing lock. The outgoing lock and guidance
+govern until apply replaces the lock; the incoming release governs afterward.
 
 ### Replacing a pre-v2 lock
 

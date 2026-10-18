@@ -379,8 +379,25 @@
     "sizeWorkspace": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files", "bytes", "categories", "topLevel", "largestFiles"],
+      "required": [
+        "files",
+        "bytes",
+        "categories",
+        "topLevel",
+        "largestFiles",
+        "incomplete",
+        "unreadablePathCount",
+        "unreadablePaths"
+      ],
       "properties": {
+        "incomplete": { "type": "boolean" },
+        "unreadablePathCount": { "type": "integer", "minimum": 0 },
+        "unreadablePaths": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "files": { "type": "integer", "minimum": 0 },
         "bytes": { "type": "integer", "minimum": 0 },
         "categories": { "$ref": "#/$defs/sizeGroups" },
