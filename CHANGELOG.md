@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.29.4 - 2026-10-20
+
+- Compile governed Cargo replacements through their actual consumer, including
+  when only replacement source is selected. Retain source discovery and checks
+  without requiring dependency-owned locks or compiling dependency development
+  targets. Keep mixed Rust/Go execution aligned with the gate's command plan.
+
 ## 0.29.3 - 2026-10-18
 
 - Resolve cyclic Rust glob exports and root `extern crate` aliases without

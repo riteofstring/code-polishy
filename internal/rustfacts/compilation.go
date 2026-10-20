@@ -26,7 +26,9 @@ func PlanCompilation(repo repository.Repository, discovery DiscoveryPlan, allFil
 	if len(discovery.Commands) == 0 {
 		return plan
 	}
-	for _, manifest := range discovery.Manifests {
+	manifests, _, findings := cargoResolutionRoots(repo, discovery.Manifests)
+	plan.Findings = append(plan.Findings, findings...)
+	for _, manifest := range manifests {
 		files := compilationSources(repo, manifest, allFiles)
 		native, err := repo.NativeUnit(files, "lint", "typecheck", "dead-code")
 		if err != nil {

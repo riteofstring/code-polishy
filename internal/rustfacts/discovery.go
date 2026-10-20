@@ -29,6 +29,11 @@ func PlanDiscovery(repo repository.Repository, selected, allFiles []string) Disc
 	if len(manifests) == 0 {
 		return plan
 	}
+	consumers, _, findings := cargoResolutionRoots(repo, manifests)
+	plan.Findings = append(plan.Findings, findings...)
+	manifests = append(manifests, consumers...)
+	slices.Sort(manifests)
+	manifests = slices.Compact(manifests)
 	if err := configurationProblem(repo); err != nil {
 		plan.Findings = append(plan.Findings, projectFinding(manifests[0], "configuration", err.Error()))
 		return plan

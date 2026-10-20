@@ -290,8 +290,18 @@ invitation for the check to resolve dependencies.
 
 Checks select the manifest's ordinary Cargo packages, default features and all
 enabled targets, using the governed native host explicitly. They do not enable
-every feature or establish coverage of other target configurations. Compiler
-warnings, Clippy's default lint group and unused-code lints use `--force-warn` at
+every feature or establish coverage of other target configurations.
+
+Compiler selection maps explicitly governed replacement packages to their consumers,
+using the same ownership boundary as locked resolution. Discovery retains the
+replacement's own metadata for source analysis and also discovers its consumer.
+Selecting only replacement source still checks the consumer; selecting both
+does not compile it twice. Replacement development targets and their independent
+locks are not part of the consumer build. Source analysis remains selected for
+the replacement, while compiler evidence covers only dependencies active in the
+consumer's default feature and host configuration.
+
+Compiler warnings, Clippy's default lint group and unused-code lints use `--force-warn` at
 the invocation boundary. Source `allow`, `expect`, `deny` and `forbid` attributes
 cannot hide these diagnostics or turn policy lint collection into a compiler
 failure. Code Polishy treats the resulting typed findings as blocking errors,
