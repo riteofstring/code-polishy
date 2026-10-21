@@ -1,31 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 usage() {
@@ -51,13 +26,6 @@ if [[ "${checkout_root}" != "${policy_root}" ]]; then
   fail "Run the release preflight from its own checkout root, not from ${checkout_root}."
 fi
 
-
-
-
-
-
-
-
 candidate_requirement="Name the reviewed candidate with Git's canonical lowercase full commit object ID, exactly as \`git rev-parse HEAD\` prints it."
 if [[ ! "${requested}" =~ ^[0-9a-f]{40}$ ]]; then
   fail "The requested candidate ${requested} is not a canonical lowercase full commit object ID, so it names the candidate only through resolution." \
@@ -79,8 +47,6 @@ if [[ "${candidate}" != "${head_commit}" ]]; then
     "Check out the exact candidate before running the preflight; a release is built from the commit that is present."
 fi
 
-
-
 drift="$(git -C "${policy_root}" status --porcelain=v1 --untracked-files=all)"
 if [[ -n "${drift}" ]]; then
   fail "The candidate worktree at ${policy_root} has staged, unstaged, or untracked changes:" \
@@ -99,10 +65,6 @@ if ! grep -Eq "^## ${version//./\\.} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "${policy_ro
     "Move this release's entries out of \`## Unreleased\` and under an exact \`## ${version} - <YYYY-MM-DD>\` heading."
 fi
 
-
-
-
-
 tag_command="git tag -a ${tag_name} -m \"Code Polishy ${version}\" ${candidate}"
 if git -C "${policy_root}" rev-parse --verify --quiet "refs/tags/${tag_name}" >/dev/null; then
   tag_type="$(git -C "${policy_root}" cat-file -t "refs/tags/${tag_name}")"
@@ -111,9 +73,6 @@ if git -C "${policy_root}" rev-parse --verify --quiet "refs/tags/${tag_name}" >/
       "Delete it and create the annotated tag as its own explicit release action:" \
       "  ${tag_command}"
   fi
-
-
-
 
   tag_target="$(git -C "${policy_root}" for-each-ref --format='%(object)' "refs/tags/${tag_name}")"
   tag_target_type="$(git -C "${policy_root}" cat-file -t "${tag_target}" 2>/dev/null || echo "missing")"

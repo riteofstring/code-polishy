@@ -818,7 +818,47 @@ Dead code is not harmless inventory. It obscures owners, increases dependency
 surface, confuses tools and agents, and preserves superseded behavior.
 
 - Go uses the pinned Staticcheck default correctness set, including `U1000`, on
-  affected packages.
+  affected packages. `U1000` cannot see an exported function that no other
+  package calls, or a function that only tests call. Complete selections and
+  gates therefore also run the pinned `deadcode` whole-program analysis, which
+  ignores tests, for each Go module with a program. It separates what forms the
+  program from what is reported:
+  - The program for each of `darwin/amd64`, `darwin/arm64`, `linux/amd64`,
+    `linux/arm64`, and `windows/amd64` is what the pinned Go toolchain builds
+    there: every package with a `main` function, regardless of exclusion or
+    pack ownership, since any of them can call native code. Cross targets build
+    without cgo; the host uses its effective `CGO_ENABLED` setting.
+  - Programs in other repository modules whose builds compile the module's
+    source are analyzed too, so their calls count. A build compiles the
+    members of the `go.work` that lists its module and the local directories
+    its control files `replace` an import path with, under that import path.
+    A module that no enclosing `go.work` lists builds alone with `GOWORK=off`.
+  - Packages natively analyzed for dead code are analyzed even when no program
+    imports them, so an unused package is reported. Excluded and pack-owned
+    packages that no program imports play no part.
+  - A program or analyzed package that build constraints or the cgo setting
+    leave out simply does not exist on that target. Any other load failure is
+    a `quality.deadCodeCoverage` finding, and no module whose source that
+    build compiles is reported, because an unloadable caller would make
+    conclusions unsound. A package
+    whose own files fail to load counts even when unowned, since its role is
+    then unknown, as does a `main` package file that does not parse.
+  - `deadcode` roots its analysis only at `main` and `init` and does not
+    follow `//go:linkname` aliases, so it cannot see a function that C calls
+    through a cgo `//export` or that code calls through a linkname. When a
+    target's program compiles a cgo file that exports a Go function, or a
+    repository package that declares `//go:linkname`, each of that target's
+    programs is also linked separately with the pinned toolchain without
+    inlining, and a function any linked program keeps is reachable on that
+    target, since the linker keeps every export and linkname target that is
+    used and everything they call. A link failure is a
+    `quality.deadCodeCoverage` finding.
+  - A function is reported only when its file is natively analyzed, not
+    excluded, and not generated, and it is unreachable in every analyzed build
+    that compiles that file, and its module has a program of its own. Other
+    modules' code, including modules that share a path prefix, is never
+    reported on their behalf. Keep test-only helpers in
+    `_test.go` files.
 - TypeScript/JavaScript dead code comes from the sealed JavaScript bundle. A
   target installs, pins, and configures nothing: a target `knip.json`,
   `.knip.json`, or `package.json#knip` is reported rather than read, and every

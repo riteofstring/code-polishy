@@ -274,7 +274,7 @@ func FinalStateFindings(ctx context.Context, repo repository.Repository, options
 	return finalStateFindings(ctx, repo, options)
 }
 
-func Prove(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ProveOptions) (ProveResult, error) {
+func Prove(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, options ProveOptions) (ProveResult, error) {
 	return prove(ctx, repo, commandRunner, options)
 }
 
@@ -282,7 +282,7 @@ func ValidateGateReceipt(ctx context.Context, repo repository.Repository, option
 	return validateGateReceipt(ctx, repo, options)
 }
 
-func ReplayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
+func ReplayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, options ValidateGateReceiptOptions) (GateReceipt, error) {
 	return replayGateReceipt(ctx, repo, commandRunner, options)
 }
 

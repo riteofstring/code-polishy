@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestGitEvidenceReportsRetainVerifiedIdentityAcrossJSONAndSARIF(t *testing.T) {
@@ -71,7 +72,7 @@ func TestGitEvidenceChangesDuringConfiguredSecurityChecksPreventAcceptance(t *te
 
 type gitEvidenceChangingRunner struct{}
 
-func (gitEvidenceChangingRunner) Run(_ context.Context, root string, _ policy.Command) error {
+func (gitEvidenceChangingRunner) runPlain(_ context.Context, root string, _ policy.Command) error {
 	file, err := os.OpenFile(filepath.Join(root, ".code-polishy-reports/git-evidence/proof.json"), os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -193,4 +194,8 @@ func engineGitStatement(provider policy.GitEvidenceProvider, commit, scope, lock
 		"subjects": []map[string]any{{"ecosystem": "git", "name": "private-kit", "version": "1.0.0", "repository": "git+ssh://private.example.test/kit.git", "commit": commit, "subdirectory": "", "treeSha256": strings.Repeat("d", 64), "observation": map[string]any{"kind": "first-observed", "record": provider.Issuer + "/records/kit", "timestamp": now.AddDate(0, 0, -90)}}},
 		"scan":     map[string]any{"coverage": "complete", "target": "git-contents-and-resolved-lock/v1", "scanner": provider.Scanners[0], "completedAt": now, "advisoryVersion": "snapshot-v1", "advisoryUpdated": now.Add(-time.Hour), "vulnerabilities": []any{}, "licenses": []map[string]string{{"ecosystem": "git", "name": "private-kit", "version": "1.0.0", "source": source, "expression": "MIT"}}},
 	}
+}
+
+func (double gitEvidenceChangingRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

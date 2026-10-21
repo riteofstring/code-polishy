@@ -37,7 +37,7 @@ func testOSVCargoPinnedRuntimeProjection(t *testing.T, aliased bool) {
 		t.Fatal(err)
 	}
 	repo.PolicyRoot = root
-	if !isExecutable(repo.PolicyTool("osv-scanner")) {
+	if !runner.ExecutableFile(repo.PolicyTool("osv-scanner")) {
 		t.Fatal("pinned OSV-Scanner is required; run ./tools/install-policy-tools.sh")
 	}
 	scans, err := osvScanPlan(repo)

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
@@ -271,12 +272,12 @@ func (session *nativeTaskSession) freezeEnvironment() error {
 		return err
 	}
 	receiptPath := filepath.Join(session.result.OutputDir, "governed-environment.json")
-	if err := writeAtomic(receiptPath, append(data, '\n'), 0o600); err != nil {
+	if err := durablefile.Write(receiptPath, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
 	paths := strings.Join(session.environment.PathEntries, "\n") + "\n"
 	pathsPath := filepath.Join(session.result.OutputDir, "governed-environment.paths")
-	if err := writeAtomic(pathsPath, []byte(paths), 0o600); err != nil {
+	if err := durablefile.Write(pathsPath, []byte(paths), 0o600); err != nil {
 		return err
 	}
 	session.environmentReceiptDigest, err = digestFile(receiptPath)
@@ -413,7 +414,7 @@ func (session *nativeTaskSession) checkBoundary(root, logPath string) error {
 	for _, finding := range report.Findings {
 		fmt.Fprintf(&output, "FAIL %s %s %s\n", finding.Check, finding.Path, finding.Message)
 	}
-	if err := writeAtomic(logPath, []byte(output.String()), 0o600); err != nil {
+	if err := durablefile.Write(logPath, []byte(output.String()), 0o600); err != nil {
 		return err
 	}
 	if len(report.Findings) != 0 {
@@ -492,11 +493,11 @@ func (session *nativeTaskSession) snapshot(ctx context.Context) error {
 		return err
 	}
 	status, _ := session.gitText(ctx, session.result.Workspace, "status", "--short", "--untracked-files=all")
-	_ = writeAtomic(filepath.Join(session.result.OutputDir, "candidate-status.txt"), []byte(status+"\n"), 0o600)
+	_ = durablefile.Write(filepath.Join(session.result.OutputDir, "candidate-status.txt"), []byte(status+"\n"), 0o600)
 	commits, _ := session.gitText(ctx, session.result.Workspace, "log", "--oneline", "--decorate", session.result.TrustedBase+"..HEAD")
-	_ = writeAtomic(filepath.Join(session.result.OutputDir, "candidate-commits.txt"), []byte(commits+"\n"), 0o600)
+	_ = durablefile.Write(filepath.Join(session.result.OutputDir, "candidate-commits.txt"), []byte(commits+"\n"), 0o600)
 	patch, _ := session.gitBytes(ctx, session.result.Workspace, "diff", "--binary", session.result.TrustedBase, "--")
-	return writeAtomic(filepath.Join(session.result.OutputDir, "candidate.patch"), patch, 0o600)
+	return durablefile.Write(filepath.Join(session.result.OutputDir, "candidate.patch"), patch, 0o600)
 }
 
 func (session *nativeTaskSession) cleanup(ctx context.Context) error {
@@ -608,7 +609,7 @@ func (session *nativeTaskSession) writeReceipt() error {
 		}
 		fmt.Fprintf(&receipt, "%s=%s\n", field[0], field[1])
 	}
-	return writeAtomic(filepath.Join(session.result.OutputDir, "session.txt"), []byte(receipt.String()), 0o600)
+	return durablefile.Write(filepath.Join(session.result.OutputDir, "session.txt"), []byte(receipt.String()), 0o600)
 }
 
 func (session *nativeTaskSession) git(ctx context.Context, directory string, stdout io.Writer, arguments ...string) (runner.HostResult, error) {

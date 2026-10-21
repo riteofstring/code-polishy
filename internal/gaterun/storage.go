@@ -1,16 +1,17 @@
 package gaterun
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
+	policyschema "github.com/riteofstring/code-polishy/schema"
 )
 
 const (
@@ -254,94 +255,11 @@ func marshalArtifact(value any, operation string) ([]byte, error) {
 }
 
 func decodeStrict(data []byte, value any, label string) error {
-	if err := rejectDuplicateJSONKeys(data); err != nil {
+	if err := policyschema.ValidateUniqueJSON(data, 64); err != nil {
 		return fmt.Errorf("%w: %s JSON is invalid: %v", ErrInvalidArtifact, label, err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
+	if err := strictjson.Decode(data, value); err != nil {
 		return fmt.Errorf("%w: %s JSON is invalid: %v", ErrInvalidArtifact, label, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err != nil {
-			return fmt.Errorf("%w: %s JSON is invalid: %v", ErrInvalidArtifact, label, err)
-		}
-		return fmt.Errorf("%w: %s JSON has more than one value", ErrInvalidArtifact, label)
-	}
-	return nil
-}
-
-func rejectDuplicateJSONKeys(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := consumeJSONValue(decoder); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		if err != nil {
-			return err
-		}
-		return errors.New("JSON has more than one value")
-	}
-	return nil
-}
-
-func consumeJSONValue(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, isDelimiter := token.(json.Delim)
-	if !isDelimiter {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		return consumeJSONObject(decoder)
-	case '[':
-		return consumeJSONArray(decoder)
-	default:
-		return errors.New("JSON has an unexpected delimiter")
-	}
-}
-
-func consumeJSONObject(decoder *json.Decoder) error {
-	seen := map[string]bool{}
-	for decoder.More() {
-		if err := consumeJSONObjectEntry(decoder, seen); err != nil {
-			return err
-		}
-	}
-	return consumeJSONEnd(decoder, '}')
-}
-
-func consumeJSONObjectEntry(decoder *json.Decoder, seen map[string]bool) error {
-	key, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	name, ok := key.(string)
-	if !ok || seen[name] {
-		return errors.New("JSON object has duplicate or invalid key")
-	}
-	seen[name] = true
-	return consumeJSONValue(decoder)
-}
-
-func consumeJSONArray(decoder *json.Decoder) error {
-	for decoder.More() {
-		if err := consumeJSONValue(decoder); err != nil {
-			return err
-		}
-	}
-	return consumeJSONEnd(decoder, ']')
-}
-
-func consumeJSONEnd(decoder *json.Decoder, expected rune) error {
-	end, err := decoder.Token()
-	if err != nil || end != json.Delim(expected) {
-		return errors.New("JSON container is not closed")
 	}
 	return nil
 }

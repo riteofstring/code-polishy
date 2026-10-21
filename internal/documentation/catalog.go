@@ -1,8 +1,6 @@
 package versioneddocs
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -123,17 +123,8 @@ func decodeCatalog(data []byte) (catalog, error) {
 	if !utf8.Valid(data) {
 		return catalog{}, errors.New("catalog is not valid UTF-8")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	var parsed catalog
-	if err := decoder.Decode(&parsed); err != nil {
-		return catalog{}, fmt.Errorf("parse catalog: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("catalog contains more than one JSON value")
-		}
+	if err := strictjson.Decode(data, &parsed); err != nil {
 		return catalog{}, fmt.Errorf("parse catalog: %w", err)
 	}
 	return parsed, nil

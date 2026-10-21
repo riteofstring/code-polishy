@@ -1,7 +1,6 @@
 package pythonfacts
 
 import (
-	"slices"
 	"strings"
 	"testing"
 )
@@ -72,106 +71,8 @@ func assertAdapterMetadata(t *testing.T, metadata Distribution) {
 
 func assertAdapterSource(t *testing.T, source Source) {
 	t.Helper()
-	imports := sourceModuleTestImports(t, source)
-	if source.Error != "" || len(source.Imports) != 1 || len(imports) != 1 || imports[0].Callee != "importlib.import_module" {
+	if source.Error != "" || len(source.Imports) != 1 {
 		t.Fatalf("source = %+v", source)
-	}
-	if imports[0].EvidenceError == "" {
-		t.Fatalf("unbounded computed import evidence = %+v", imports[0])
-	}
-}
-
-func TestAdapterTracesOnlyBoundedComputedImportTargets(t *testing.T) {
-	python, err := DefaultInterpreter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := Analyze(python, Request{Sources: []Input{{Path: "src/app.py", Source: `import importlib
-import importlib.metadata
-import json
-from pathlib import Path
-importlib.import_module(("app.plugins.first", "app.plugins.second")[choice])
-importlib.import_module(json.loads(Path("plugins.json").read_text(encoding="utf-8"))["enabled"][choice])
-importlib.import_module(importlib.metadata.entry_points(group="app.plugins")[choice].module)
-`}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := response.Sources[0]
-	imports := sourceModuleTestImports(t, source)
-	if source.Error != "" || len(imports) != 3 {
-		t.Fatalf("source = %+v", source)
-	}
-	if strings.Join(imports[0].Targets, ",") != "app.plugins.first,app.plugins.second" || imports[0].EvidenceError != "" {
-		t.Fatalf("enumeration = %+v", imports[0])
-	}
-	configuration := imports[1]
-	if len(configuration.Configuration) != 1 || configuration.Configuration[0].Path != "plugins.json" || configuration.Configuration[0].JSONPointer != "/enabled" || configuration.EvidenceError != "" {
-		t.Fatalf("configuration = %+v", configuration)
-	}
-	if imports[2].EntryPointGroup != "app.plugins" || imports[2].EvidenceError != "" {
-		t.Fatalf("entry point = %+v", imports[2])
-	}
-}
-
-func TestAdapterFindsComputedImportsInDefinitionExpressions(t *testing.T) {
-	python, err := DefaultInterpreter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := Analyze(python, Request{Sources: []Input{{Path: "definitions.py", Source: `import importlib
-def load(value: importlib.import_module(annotation_name) = importlib.import_module(default_name)) -> importlib.import_module(return_name):
-    return value
-loader = lambda: importlib.import_module(lambda_name)
-@importlib.import_module(decorator_name)
-class Plugin(importlib.import_module(base_name), metaclass=importlib.import_module(metaclass_name)):
-    setting = importlib.import_module(class_name)
-`}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	facts := response.Sources[0]
-	imports := sourceModuleTestImports(t, facts)
-	if facts.Error != "" || len(imports) != 8 {
-		t.Fatalf("source = %+v", facts)
-	}
-	arguments := make([]string, 0, len(imports))
-	for _, fact := range imports {
-		arguments = append(arguments, fact.Argument)
-	}
-	slices.Sort(arguments)
-	if strings.Join(arguments, ",") != "annotation_name,base_name,class_name,decorator_name,default_name,lambda_name,metaclass_name,return_name" {
-		t.Fatalf("computed imports = %+v", imports)
-	}
-	if imports[3].Callable != "<lambda>" {
-		t.Fatalf("lambda computed import = %+v", imports[3])
-	}
-}
-
-func TestAdapterDoesNotTreatShadowedAliasesAsComputedImports(t *testing.T) {
-	python, err := DefaultInterpreter()
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := Analyze(python, Request{Sources: []Input{{Path: "shadowed.py", Source: `import importlib
-def parameter(importlib):
-    return importlib.import_module(parameter_name)
-def local():
-    import other as importlib
-    return importlib.import_module(local_name)
-for importlib in values:
-    importlib.import_module(loop_name)
-import other as importlib
-importlib.import_module(module_name)
-value = lambda importlib: importlib.import_module(lambda_name)
-`}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	facts := response.Sources[0]
-	imports := sourceModuleTestImports(t, facts)
-	if facts.Error != "" || len(imports) != 0 {
-		t.Fatalf("source = %+v", facts)
 	}
 }
 
@@ -197,16 +98,4 @@ func TestAdapterFailsClosedForSyntaxIdentityAndResourceBoundaries(t *testing.T) 
 	if _, err := Analyze(python, Request{Metadata: []Input{{Path: "broken.dist-info/METADATA", Source: string([]byte{0xff})}}}); err == nil {
 		t.Fatal("invalid UTF-8 was accepted")
 	}
-}
-
-func sourceModuleTestImports(t *testing.T, source Source) []ModuleImport {
-	t.Helper()
-	if source.Error != "" {
-		t.Fatal(source.Error)
-	}
-	result, err := ResolveTypeProject(t.Context(), typeTestInterpreter(t), typeTestModules([]Source{source}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return result.Imports
 }

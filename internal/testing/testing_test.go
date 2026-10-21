@@ -712,7 +712,7 @@ type recordingTestingRunner struct {
 	command policy.Command
 }
 
-func (runner *recordingTestingRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (runner *recordingTestingRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	runner.command = command
 	return nil
 }
@@ -722,10 +722,19 @@ type evidenceTestingRunner struct {
 	err    error
 }
 
-func (testRunner *evidenceTestingRunner) Run(_ context.Context, _ string, _ policy.Command) error {
-	return testRunner.err
+func (testRunner *evidenceTestingRunner) runResult(_ context.Context, _ string, _ policy.Command) (runner.Result, error) {
+	return testRunner.result, testRunner.err
 }
 
-func (testRunner *evidenceTestingRunner) RunWithResult(_ context.Context, _ string, _ policy.Command) (runner.Result, error) {
-	return testRunner.result, testRunner.err
+func Run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
+	return RunWithEvidence(ctx, repo, commandRunner, plan, reporter).Findings
+}
+
+func (double *recordingTestingRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *evidenceTestingRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	result, err := double.runResult(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
 }

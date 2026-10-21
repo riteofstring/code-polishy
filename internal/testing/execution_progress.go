@@ -189,10 +189,6 @@ func (reporter *ExecutionReporter) CommandFinished(index int, result ExecutionRe
 		index+1, len(reporter.plan.Commands), terminalValue(result.Status), result.ExecutionDuration, resourceWait, elapsed)
 }
 
-func (reporter *ExecutionReporter) CommandNotStarted(index int) {
-	reporter.CommandFinished(index, ExecutionResult{Status: executionStatusNotStarted, ResourceWaitKnown: true})
-}
-
 func (reporter *ExecutionReporter) command(index int) (ExecutionCommand, bool) {
 	if index < 0 || index >= len(reporter.plan.Commands) {
 		return ExecutionCommand{}, false

@@ -83,13 +83,6 @@ func (engine *Engine) withArchitectureReviewStatus(report Report, status behavio
 	return report
 }
 
-func combineArchitectureReview(left, right *behaviorreview.ArchitectureReviewStatus) *behaviorreview.ArchitectureReviewStatus {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
 func (engine *Engine) Architecture(ctx context.Context, selection repository.Selection) Report {
 	analysis := architecture.AnalyzeWithRunner(ctx, engine.Repository, selection.Files, engine.Runner)
 	files, err := engine.Repository.AllFiles()

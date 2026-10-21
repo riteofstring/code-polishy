@@ -8,7 +8,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -29,6 +28,7 @@ func Check(ctx context.Context, repo repository.Repository, selection repository
 	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, cargoDiscoveryFindings(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, goToolChecks(ctx, repo, selection.Files, commandRunner)...)
+	findings = append(findings, goReachabilityFindings(ctx, repo, selection, commandRunner, profile)...)
 	findings = append(findings, shellChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, JavaScriptFormatFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptLintFindings(ctx, repo, selection.Files)...)
@@ -53,6 +53,7 @@ func CheckCommands(repo repository.Repository, selection repository.Selection, p
 		commands = append(commands, rustfacts.PlanCompilation(repo, discovery, allFiles).Commands...)
 		goCommands, _ := nativeGoToolCommands(repo, selection.Files, allFiles)
 		commands = append(commands, goCommands...)
+		commands = append(commands, goReachabilityCommands(repo, selection, profile)...)
 	}
 	shellCommands, _ := shellToolCommands(repo, selection.Files)
 	commands = append(commands, shellCommands...)
@@ -83,7 +84,7 @@ func Format(ctx context.Context, repo repository.Repository, selection repositor
 			arguments = append(arguments, filepath.Join(repo.Root, filepath.FromSlash(path)))
 		}
 		command := policy.Command{Name: "gofmt-write", Argv: append([]string{repo.GoTool("gofmt")}, arguments...), Cwd: ".", TimeoutSeconds: 300}
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+		if err := runner.RunCommand(ctx, commandRunner, repo.Root, command); err != nil {
 			findings = append(findings, commandFinding("quality.format", command.Name, err))
 		}
 	}
@@ -108,7 +109,7 @@ func RunCommandsForProfiles(ctx context.Context, repo repository.Repository, sel
 			findings = append(findings, packQualityFindings(ctx, repo, selection, command, commandRunner, profile)...)
 			continue
 		}
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+		if err := runner.RunCommand(ctx, commandRunner, repo.Root, command); err != nil {
 			findings = append(findings, configuredCommandFailure(command, err))
 		}
 	}
@@ -213,7 +214,7 @@ func RunNamedCommands(ctx context.Context, repo repository.Repository, commandRu
 			findings = append(findings, packQualityFindings(ctx, repo, repository.Selection{Files: files, All: true}, command, commandRunner, command.RunOn[0])...)
 			continue
 		}
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+		if err := runner.RunCommand(ctx, commandRunner, repo.Root, command); err != nil {
 			findings = append(findings, configuredCommandFailure(command, err))
 		}
 	}
@@ -519,24 +520,29 @@ func goToolFindings(repo repository.Repository, capabilities map[string]bool) []
 	if capabilities["lint"] || capabilities["typecheck"] || capabilities["dead-code"] {
 		findings = append(findings, goCompilerToolFindings(repo)...)
 	}
-	if capabilities["format"] && !isExecutable(repo.GoTool("gofmt")) {
+	if capabilities["format"] && !runner.ExecutableFile(repo.GoTool("gofmt")) {
 		findings = append(findings, toolFinding("gofmt", "pinned gofmt is unavailable; run ./tools/install-policy-tools.sh"))
 	}
 	if !capabilities["dead-code"] {
 		return findings
 	}
-	if !isExecutable(repo.PolicyTool("staticcheck")) {
-		return append(findings, toolFinding("staticcheck", "pinned staticcheck is unavailable; run ./tools/install-policy-tools.sh"))
+	findings = append(findings, pinnedGoModuleToolFindings(repo, "staticcheck")...)
+	return append(findings, pinnedGoModuleToolFindings(repo, "deadcode")...)
+}
+
+func pinnedGoModuleToolFindings(repo repository.Repository, name string) []policy.Finding {
+	if !runner.ExecutableFile(repo.PolicyTool(name)) {
+		return []policy.Finding{toolFinding(name, "pinned "+name+" is unavailable; run ./tools/install-policy-tools.sh")}
 	}
-	if pin := repo.ToolPin("staticcheck"); pin == "" || runner.GoModuleVersion(repo.GoTool("go"), repo.PolicyTool("staticcheck")) != pin {
-		findings = append(findings, toolFinding("staticcheck", "staticcheck does not match tools/staticcheck-version.txt"))
+	if pin := repo.ToolPin(name); pin == "" || runner.GoModuleVersion(repo.GoTool("go"), repo.PolicyTool(name)) != pin {
+		return []policy.Finding{toolFinding(name, name+" does not match tools/"+name+"-version.txt")}
 	}
-	return findings
+	return nil
 }
 
 func goCompilerToolFindings(repo repository.Repository) []policy.Finding {
 	tool := repo.GoTool("go")
-	if !isExecutable(tool) {
+	if !runner.ExecutableFile(tool) {
 		return []policy.Finding{toolFinding("go", "pinned Go toolchain is unavailable; run ./tools/install-policy-tools.sh")}
 	}
 	if !requiredGoVersion(repo, tool) {
@@ -547,7 +553,7 @@ func goCompilerToolFindings(repo repository.Repository) []policy.Finding {
 
 func shellToolFindings(repo repository.Repository) []policy.Finding {
 	shellcheck := filepath.Join(repo.PolicyRoot, "tools", "shellcheck.sh")
-	if !isExecutable(shellcheck) {
+	if !runner.ExecutableFile(shellcheck) {
 		return []policy.Finding{toolFinding("shellcheck", "pinned ShellCheck wrapper is unavailable")}
 	}
 	if !requiredShellCheckVersion(repo, shellcheck) {
@@ -561,7 +567,7 @@ func requiredGoVersion(repo repository.Repository, goTool string) bool {
 	if pin == "" {
 		return false
 	}
-	output, err := safeOutput(goTool, "version")
+	output, err := runner.ToolOutput(goTool, "version")
 	fields := strings.Fields(string(output))
 	return err == nil && len(fields) >= 3 && fields[2] == "go"+strings.TrimPrefix(pin, "go")
 }
@@ -571,7 +577,7 @@ func requiredShellCheckVersion(repo repository.Repository, shellcheck string) bo
 	if pin == "" {
 		return false
 	}
-	output, err := safeOutput(shellcheck, "--version")
+	output, err := runner.ToolOutput(shellcheck, "--version")
 	return err == nil && strings.Contains(string(output), "version: "+pin)
 }
 
@@ -654,7 +660,7 @@ func goToolChecks(ctx context.Context, repo repository.Repository, files []strin
 	commands, routing := nativeGoToolCommands(repo, goFiles, allFiles)
 	findings = append(findings, routing...)
 	for _, command := range commands {
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+		if err := runner.RunCommand(ctx, commandRunner, repo.Root, command); err != nil {
 			check := "quality.goVet"
 			if strings.HasPrefix(command.Name, "staticcheck-") {
 				check = "quality.deadCode"
@@ -710,7 +716,7 @@ func goPackageToolCommands(repo repository.Repository, packages map[string]map[s
 			continue
 		}
 		staticcheck := repo.PolicyTool("staticcheck")
-		if isExecutable(staticcheck) {
+		if runner.ExecutableFile(staticcheck) {
 			commands = append(commands, policy.Command{
 				Name: "staticcheck-" + safeName(moduleRoot), Argv: append([]string{staticcheck}, packageNames...), Cwd: moduleRoot, TimeoutSeconds: 900,
 			})
@@ -805,7 +811,7 @@ func cyclomaticComplexity(body *ast.BlockStmt) int {
 func shellChecks(ctx context.Context, repo repository.Repository, files []string, commandRunner runner.Runner) []policy.Finding {
 	commands, findings := shellToolCommands(repo, files)
 	for _, command := range commands {
-		if err := commandRunner.Run(ctx, repo.Root, command); err != nil {
+		if err := runner.RunCommand(ctx, commandRunner, repo.Root, command); err != nil {
 			if strings.HasPrefix(command.Name, "shell-syntax-") {
 				path := command.Paths[0]
 				findings = append(findings, policy.Finding{Check: "quality.shellSyntax", Path: path, Subject: path, Message: err.Error()})
@@ -834,7 +840,7 @@ func shellToolCommands(repo repository.Repository, files []string) ([]policy.Com
 		return commands, nil
 	}
 	wrapper := filepath.Join(repo.PolicyRoot, "tools", "shellcheck.sh")
-	if !isExecutable(wrapper) {
+	if !runner.ExecutableFile(wrapper) {
 		return commands, []policy.Finding{toolFinding("shellcheck", "pinned ShellCheck is unavailable; run ./tools/install-policy-tools.sh")}
 	}
 
@@ -974,15 +980,4 @@ func toolFinding(tool, message string) policy.Finding {
 
 func safeName(value string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
-}
-
-func isExecutable(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0
-}
-
-func safeOutput(name string, arguments ...string) ([]byte, error) {
-	command := exec.Command(name, arguments...)
-	command.Env = runner.Environment(nil)
-	return command.CombinedOutput()
 }

@@ -6,10 +6,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 //go:embed contract_definitions.py
@@ -72,13 +73,8 @@ func decodeContractDefinitions(data []byte, modules []TypeModule, requests []Con
 		Evidence []ContractDefinitionEvidence `json:"evidence"`
 		Problems []ReachabilityProblem        `json:"problems"`
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&wire); err != nil {
+	if err := strictjson.Decode(data, &wire); err != nil {
 		return ContractDefinitionProject{}, err
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return ContractDefinitionProject{}, fmt.Errorf("dependency contract response has trailing data")
 	}
 	if wire.Protocol != "python-contract-definitions/v1" || wire.Evidence == nil || wire.Problems == nil {
 		return ContractDefinitionProject{}, fmt.Errorf("dependency contract response is incomplete")

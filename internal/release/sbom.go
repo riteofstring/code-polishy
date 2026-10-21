@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
 	runtimeinfo "runtime/debug"
 	"slices"
 	"strings"
+
+	policyschema "github.com/riteofstring/code-polishy/schema"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/pelletier/go-toml/v2"
@@ -92,8 +93,9 @@ func releaseSBOMTools(manifest Manifest) map[string]cdx.Component {
 		"go": manifest.Tools.Go, "govulncheck": manifest.Tools.Govulncheck, "node": manifest.Tools.Node,
 		"osv-scanner": manifest.Tools.OSVScanner, "pnpm": manifest.Tools.PNPM, "python": manifest.Tools.Python,
 		"ruff": manifest.Tools.Ruff, "shellcheck": manifest.Tools.Shellcheck, "staticcheck": manifest.Tools.Staticcheck,
-		"ty":   manifest.Tools.Ty,
-		"rust": manifest.Tools.Rust, "cargo-nextest": manifest.Tools.Nextest,
+		"deadcode": manifest.Tools.Deadcode,
+		"ty":       manifest.Tools.Ty,
+		"rust":     manifest.Tools.Rust, "cargo-nextest": manifest.Tools.Nextest,
 	}
 	result := make(map[string]cdx.Component, len(versions))
 	for name, version := range versions {
@@ -150,7 +152,7 @@ func readJavaScriptPackageMap(root string) (javascriptPackageMap, error) {
 	if len(data) == 0 || len(data) > 8<<20 {
 		return javascriptPackageMap{}, errors.New("sealed JavaScript package map has an invalid size")
 	}
-	if err := validateUniqueJSON(data); err != nil {
+	if err := policyschema.ValidateUniqueJSON(data, 64); err != nil {
 		return javascriptPackageMap{}, fmt.Errorf("validate sealed JavaScript package map: %w", err)
 	}
 	var packageMap javascriptPackageMap
@@ -205,7 +207,7 @@ func javascriptPackageEntryIdentity(packageRoot *os.Root, key string, entry java
 	}
 	manifestPath := path.Join(key, "package.json")
 	data, err := readCapabilityFile(packageRoot, manifestPath, maximumJavaScriptPackageManifestBytes)
-	if err != nil || validateUniqueJSON(data) != nil {
+	if err != nil || policyschema.ValidateUniqueJSON(data, 64) != nil {
 		return "", "", errors.New("package path has no valid manifest")
 	}
 	var manifest struct {
@@ -547,72 +549,4 @@ func (inventory *releaseSBOMInventory) sortedDependencies() []cdx.Dependency {
 	}
 	slices.SortFunc(dependencies, func(left, right cdx.Dependency) int { return strings.Compare(left.Ref, right.Ref) })
 	return dependencies
-}
-
-func validateUniqueJSON(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	count := 0
-	if err := validateUniqueJSONValue(decoder, 0, &count); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("JSON contains trailing data")
-	}
-	return nil
-}
-
-func validateUniqueJSONValue(decoder *json.Decoder, depth int, count *int) error {
-	*count++
-	if depth > 64 || *count > 1000000 {
-		return errors.New("JSON exceeds its structural limit")
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, compound := token.(json.Delim)
-	if !compound {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		err = validateUniqueJSONObject(decoder, depth, count)
-	case '[':
-		err = validateUniqueJSONArray(decoder, depth, count)
-	default:
-		return errors.New("JSON contains an invalid delimiter")
-	}
-	if err != nil {
-		return err
-	}
-	_, err = decoder.Token()
-	return err
-}
-
-func validateUniqueJSONObject(decoder *json.Decoder, depth int, count *int) error {
-	seen := map[string]bool{}
-	for decoder.More() {
-		keyToken, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-		key, ok := keyToken.(string)
-		if !ok || seen[key] {
-			return errors.New("JSON object contains an invalid or duplicate key")
-		}
-		seen[key] = true
-		if err := validateUniqueJSONValue(decoder, depth+1, count); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateUniqueJSONArray(decoder *json.Decoder, depth int, count *int) error {
-	for decoder.More() {
-		if err := validateUniqueJSONValue(decoder, depth+1, count); err != nil {
-			return err
-		}
-	}
-	return nil
 }

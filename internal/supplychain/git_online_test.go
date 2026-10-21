@@ -104,11 +104,11 @@ type gitOnlineBoundary struct {
 	projection bool
 }
 
-func (boundary *gitOnlineBoundary) Run(context.Context, string, policy.Command) error {
+func (boundary *gitOnlineBoundary) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("unexpected unstructured command")
 }
 
-func (boundary *gitOnlineBoundary) RunWithOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *gitOnlineBoundary) runOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.t.Helper()
 	if filepath.Base(command.Argv[0]) != "osv-scanner" {
 		return runner.Result{}, runner.Output{}, fmt.Errorf("unexpected online tool")
@@ -138,4 +138,11 @@ func (boundary *gitOnlineBoundary) RunWithOutput(_ context.Context, root string,
 	}
 	payload := fmt.Sprintf(`{"results":[{"source":{"path":%q,"type":"lockfile"},"packages":[{"package":{"name":"requests","version":"2.31.0","ecosystem":"PyPI"},"vulnerabilities":[{"id":"GHSA-test-public"}]}]}]}`, path)
 	return runner.Result{ExitStatus: 1}, runner.Output{Stdout: []byte(payload)}, fmt.Errorf("vulnerability found")
+}
+
+func (double *gitOnlineBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

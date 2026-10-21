@@ -2,7 +2,9 @@ package repository
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -112,7 +114,7 @@ func (repo Repository) inspectGoWorkspace(
 	problems := []GoModuleProblem{}
 	seen := map[string]bool{}
 	for _, use := range parsed.Use {
-		manifest, resolveErr := repo.goWorkspaceUseManifest(workspace, use.Path)
+		manifest, resolveErr := repo.goLocalModuleManifest(workspace, use.Path)
 		if resolveErr != nil {
 			problems = append(problems, goModuleProblem(workspace, fmt.Sprintf("Go workspace use path %q is invalid", use.Path), resolveErr))
 			continue
@@ -137,7 +139,7 @@ func (repo Repository) inspectGoWorkspace(
 	return problems
 }
 
-func (repo Repository) goWorkspaceUseManifest(workspace, declared string) (string, error) {
+func (repo Repository) goLocalModuleManifest(control, declared string) (string, error) {
 	normalized := strings.ReplaceAll(declared, "\\", "/")
 	if windowsAbsolutePath(normalized) && !filepath.IsAbs(filepath.FromSlash(normalized)) {
 		return "", fmt.Errorf("path is absolute for another platform")
@@ -145,7 +147,7 @@ func (repo Repository) goWorkspaceUseManifest(workspace, declared string) (strin
 	native := filepath.FromSlash(normalized)
 	target := native
 	if !filepath.IsAbs(native) {
-		target = filepath.Join(repo.Root, filepath.FromSlash(filepath.Dir(workspace)), native)
+		target = filepath.Join(repo.Root, filepath.FromSlash(filepath.Dir(control)), native)
 	}
 	manifest, err := repo.NormalizePath(filepath.Join(target, "go.mod"))
 	if err != nil {
@@ -155,6 +157,120 @@ func (repo Repository) goWorkspaceUseManifest(workspace, declared string) (strin
 		return "", err
 	}
 	return manifest, nil
+}
+
+type GoBuild struct {
+	Workspace string
+	Sources   []GoBuildSource
+}
+
+type GoBuildSource struct {
+	Root  string
+	Paths []string
+}
+
+type goLocalReplacement struct {
+	path     string
+	manifest string
+}
+
+func (repo Repository) GoBuild(files []string, main GoModule, modules []GoModule) GoBuild {
+	build := GoBuild{Sources: []GoBuildSource{}}
+	controls := []string{main.Manifest}
+	declared := map[string]bool{main.Root: true}
+	if workspace, found := goEnclosingWorkspace(files, main); found {
+		if members := repo.goWorkspaceUses(workspace); slices.Contains(members, main.Manifest) {
+			build.Workspace = workspace
+			controls = append([]string{workspace}, members...)
+			for _, member := range members {
+				declared[filepath.ToSlash(filepath.Dir(member))] = true
+			}
+		}
+	}
+	replaced := map[string]map[string]bool{}
+	for _, control := range controls {
+		for _, replacement := range repo.goLocalReplacements(control) {
+			root := filepath.ToSlash(filepath.Dir(replacement.manifest))
+			if replaced[root] == nil {
+				replaced[root] = map[string]bool{}
+			}
+			replaced[root][replacement.path] = true
+		}
+	}
+	for _, module := range modules {
+		paths := map[string]bool{}
+		if declared[module.Root] {
+			paths[module.Name] = true
+		}
+		maps.Copy(paths, replaced[module.Root])
+		if len(paths) > 0 {
+			build.Sources = append(build.Sources, GoBuildSource{Root: module.Root, Paths: sortedSet(paths)})
+		}
+	}
+	slices.SortFunc(build.Sources, func(left, right GoBuildSource) int { return strings.Compare(left.Root, right.Root) })
+	return build
+}
+
+func goEnclosingWorkspace(files []string, main GoModule) (string, bool) {
+	_, workspaces := goModuleControlPaths(files)
+	nearest := ""
+	for _, workspace := range workspaces {
+		directory := filepath.ToSlash(filepath.Dir(workspace))
+		encloses := directory == "." || main.Root == directory || strings.HasPrefix(main.Root, directory+"/")
+		if encloses && (nearest == "" || len(directory) > len(filepath.Dir(nearest))) {
+			nearest = workspace
+		}
+	}
+	return nearest, nearest != ""
+}
+
+func (repo Repository) goWorkspaceUses(workspace string) []string {
+	data, err := repo.Read(workspace)
+	if err != nil {
+		return nil
+	}
+	parsed, err := modfile.ParseWork(workspace, data, nil)
+	if err != nil {
+		return nil
+	}
+	manifests := []string{}
+	for _, use := range parsed.Use {
+		if manifest, err := repo.goLocalModuleManifest(workspace, use.Path); err == nil {
+			manifests = append(manifests, manifest)
+		}
+	}
+	return manifests
+}
+
+func (repo Repository) goLocalReplacements(control string) []goLocalReplacement {
+	data, err := repo.Read(control)
+	if err != nil {
+		return nil
+	}
+	var replacements []*modfile.Replace
+	if filepath.Base(control) == "go.work" {
+		parsed, err := modfile.ParseWork(control, data, nil)
+		if err != nil {
+			return nil
+		}
+		replacements = parsed.Replace
+	} else {
+		parsed, err := modfile.Parse(control, data, nil)
+		if err != nil {
+			return nil
+		}
+		replacements = parsed.Replace
+	}
+	local := []goLocalReplacement{}
+	for _, replacement := range replacements {
+		if replacement.New.Version != "" || !modfile.IsDirectoryPath(replacement.New.Path) {
+			continue
+		}
+		if manifest, err := repo.goLocalModuleManifest(control, replacement.New.Path); err == nil {
+			local = append(local, goLocalReplacement{path: replacement.Old.Path, manifest: manifest})
+		}
+	}
+	return local
 }
 
 func windowsAbsolutePath(path string) bool {

@@ -19,6 +19,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/workflow"
 )
 
 func TestPackageJSONRejectsRangesAndMissingLifecyclePolicy(t *testing.T) {
@@ -895,9 +896,12 @@ func TestGoModuleRejectsMalformedAndUnpinnedReplaceVersions(t *testing.T) {
 	contents := "module example.test/app\n\nrequire example.test/dependency version\nreplace example.test/dependency => example.test/fork latest\n"
 	writeSupplyFile(t, repo.Root, "go.mod", contents)
 	findings := checkGoModule(repo, "go.mod")
-	checks := supplyChecks(findings)
-	if !checks["supplyChain.goVersion"] || !checks["supplyChain.goReplace"] {
+	if len(findings) != 1 || findings[0].Check != "supplyChain.goModule" || !strings.Contains(findings[0].Message, "go.mod:3") {
 		t.Fatalf("findings = %+v", findings)
+	}
+	writeSupplyFile(t, repo.Root, "go.mod", "module example.test/app\n\nreplace example.test/dependency => /absolute/fork\n")
+	if findings := checkGoModule(repo, "go.mod"); len(findings) != 1 || findings[0].Check != "supplyChain.goReplace" {
+		t.Fatalf("absolute replacement findings = %+v", findings)
 	}
 }
 
@@ -942,7 +946,8 @@ func TestPythonDependenciesMustBeExactAndLocked(t *testing.T) {
 func TestPythonWildcardIsNotAnExactVersion(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	project, err := repository.ParsePythonProject("pyproject.toml", []byte("[project]\ndependencies = [\"requests==2.*\", \"urllib3==2.5.0\"]\n"))
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"requests==2.*\", \"urllib3==2.5.0\"]\n")
+	project, err := repo.ReadPythonProject("pyproject.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -955,33 +960,14 @@ func TestPythonWildcardIsNotAnExactVersion(t *testing.T) {
 func TestPythonFileDependencyMustRemainInsideRepository(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	project, err := repository.ParsePythonProject("pyproject.toml", []byte("[project]\ndependencies = [\"shared @ file:../../outside\"]\n"))
+	writeSupplyFile(t, repo.Root, "pyproject.toml", "[project]\ndependencies = [\"shared @ file:../../outside\"]\n")
+	project, err := repo.ReadPythonProject("pyproject.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	findings := pythonDependencyFindings(repo, "pyproject.toml", project.Requirements)
 	if len(findings) != 1 || findings[0].Check != "supplyChain.localDependency" {
 		t.Fatalf("findings = %+v", findings)
-	}
-}
-
-func TestPythonDependencyParserIncludesOptionalAndDependencyGroups(t *testing.T) {
-	t.Parallel()
-	manifest := `[project]
-dependencies = ["requests==2.32.0"]
-
-[project.optional-dependencies]
-dev = [
-  "pytest==9.0.0",
-]
-
-[dependency-groups]
-docs = ["mkdocs==1.6.0"]
-`
-	got := parsePythonDependencies(manifest)
-	want := []string{"requests==2.32.0", "pytest==9.0.0", "mkdocs==1.6.0"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("dependencies = %v", got)
 	}
 }
 
@@ -1169,11 +1155,11 @@ type supplyToolBoundary struct {
 	goModules []map[string]any
 }
 
-func (boundary supplyToolBoundary) Run(context.Context, string, policy.Command) error {
+func (boundary supplyToolBoundary) runPlain(context.Context, string, policy.Command) error {
 	return nil
 }
 
-func (boundary supplyToolBoundary) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary supplyToolBoundary) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	if request, found := argumentAfter(command.Argv, "--request-json"); found {
 		var envelope struct {
 			Operation string `json:"operation"`
@@ -1239,4 +1225,20 @@ func findingSubject(findings []policy.Finding, subject string) bool {
 		}
 	}
 	return false
+}
+
+func workflowRunsWeeklySecurity(contents string) bool {
+	facts, err := workflow.Parse("workflow.yml", []byte(contents), nil)
+	return err == nil && workflowFactsRunWeeklySecurity(facts)
+}
+
+func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]policy.Finding, error) {
+	return parseOSVScanReport(repo, osvScan{Root: root}, payload)
+}
+
+func (double supplyToolBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

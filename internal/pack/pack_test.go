@@ -320,13 +320,13 @@ type responseRunner struct {
 	mutate    func()
 }
 
-func (boundary *responseRunner) Run(context.Context, string, policy.Command) error { return nil }
+func (boundary *responseRunner) runPlain(context.Context, string, policy.Command) error { return nil }
 
-func (boundary *responseRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
-	return boundary.RunStructured(context.Background(), "", command)
+func (boundary *responseRunner) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+	return runner.RunCaptured(context.Background(), boundary, "", command, runner.CaptureStructured)
 }
 
-func (boundary *responseRunner) RunStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *responseRunner) runStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	request := Request{}
 	if err := json.Unmarshal(command.Stdin, &request); err != nil {
 		return runner.Result{}, runner.Output{}, err
@@ -419,4 +419,14 @@ func TestUnavailablePackRetainsOnlyAuthenticatedClaims(t *testing.T) {
 	if forged := Resolve(selected, store); len(forged.Findings) != 1 || len(forged.Commands) != 0 {
 		t.Fatalf("unauthenticated manifest established claims: %+v", forged)
 	}
+}
+
+func (double *responseRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

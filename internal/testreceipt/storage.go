@@ -1,15 +1,15 @@
 package testreceipt
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/durablefile"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
 
@@ -26,14 +26,6 @@ func Load(repositoryRoot string, identity Identity) (Reusable, error) {
 		return Reusable{}, fmt.Errorf("%w: receipt identity does not match", ErrInvalid)
 	}
 	return reusable, nil
-}
-
-func loadAt(repositoryRoot string, identity Identity, now time.Time) (Reusable, error) {
-	identitySHA256, err := identity.Digest()
-	if err != nil {
-		return Reusable{}, err
-	}
-	return loadDigestAt(repositoryRoot, identitySHA256, now)
 }
 
 func LoadDigest(repositoryRoot, identitySHA256 string) (Reusable, error) {
@@ -102,7 +94,7 @@ func recordPassedAt(repositoryRoot string, identity Identity, duration time.Dura
 	if err != nil {
 		return Reusable{}, err
 	}
-	if err := writeReceiptFile(filepath.Join(directory, identitySHA256+".json"), data); err != nil {
+	if err := durablefile.Write(filepath.Join(directory, identitySHA256+".json"), data, 0o600); err != nil {
 		return Reusable{}, err
 	}
 	return Reusable{Receipt: receipt, Path: receiptDisplayPath(identitySHA256)}, nil
@@ -116,15 +108,9 @@ func validateReceiptResult(duration time.Duration, source Source, now time.Time)
 }
 
 func decodeReceipt(data []byte) (Receipt, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	receipt := Receipt{}
-	if err := decoder.Decode(&receipt); err != nil {
+	if err := strictjson.Decode(data, &receipt); err != nil {
 		return Receipt{}, fmt.Errorf("%w: receipt JSON is malformed", ErrInvalid)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Receipt{}, fmt.Errorf("%w: receipt JSON has trailing data", ErrInvalid)
 	}
 	recorded := receipt.SHA256
 	receipt.SHA256 = ""
@@ -222,30 +208,6 @@ func readReceiptFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func writeReceiptFile(path string, data []byte) error {
-	directory := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directory, ".receipt-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return err
-	}
-	_, writeErr := temporary.Write(data)
-	closeErr := temporary.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		return err
-	}
-	return replaceReceipt(temporaryPath, path)
-}
-
 func receiptDisplayPath(identitySHA256 string) string {
 	return rootDirectory + "/" + storeDirectory + "/" + identitySHA256 + ".json"
-}
-
-func sameReceipt(left, right Receipt) bool {
-	return left.SHA256 != "" && left.SHA256 == right.SHA256
 }

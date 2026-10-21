@@ -94,11 +94,9 @@ keep the sealed bundle portable and minimal.
   `python-facts/v3` requests are reserved for Python quality checks that need
   cross-file semantic evidence; they use CPython 3.12 `tomllib`, `tokenize`,
   and `ast` plus the carried `packaging` release.
-  Complete source files are partitioned deterministically. Compact type facts
-  resolve TypedDict schemas and literal-key reads across the validated union through
-  `python-type-project/v3`, and Vulture uses the same parser, AST extractor, and
-  semantic resolvers. Consumer target resolution also accepts bounded compact
-  records through `python-reachability-project/v1`. Each source record is
+  Complete source files are partitioned deterministically. Vulture resolves
+  TypedDict schemas and consumer targets across the validated union with the
+  same parser, AST extractor, and semantic resolvers. Each source record is
   limited to 16 MiB, the compact project to 256 MiB, and semantic traversal to
   bounded depths and visits. A project-local `.venv` is passed only to `ty` when
   dependencies require it; Vulture always uses carried CPython and its pinned

@@ -1,6 +1,42 @@
 # Changelog
 
-## Unreleased
+## 0.30.0 - 2026-10-20
+
+- Build and ship Go 1.26.10 to reject compromised certificate intermediates
+  covered by GO-2026-6809. Pin all native archives and document the bounded
+  security-fix admission before the ordinary 30-day waiting period.
+- Add `cleanup` to remove installed releases that no known repository still
+  locks. Installed releases record the repositories they run for in the shared
+  prefix, and cleanup rereads each recorded lock before keeping its release;
+  `--dry-run` reports what would be removed and the space it would free.
+  Recording and cleanup are serialized across processes, so concurrent
+  commands cannot lose a registration.
+- Add `cleanup --reports` and `cleanup --artifacts` to preview or remove generated
+  repository reports, verification caches, and completed owned test output.
+  Preserve active runs, review and upgrade records, and unrelated files outside
+  generated trees. Combine the scopes with `--dry-run` to inspect paths and sizes.
+- Report Go functions that no program can reach. Complete selections and gates
+  run the pinned `deadcode` whole-program analysis for each Go module with a
+  `main` package on the five supported release targets and report functions
+  unreachable on every target that builds a program and compiles them,
+  including exported and test-only functions that Staticcheck `U1000` cannot
+  see. Programs that export Go functions to C through cgo, or whose repository
+  packages declare `//go:linkname`, are also linked, so functions called from C
+  or through a linkname alias and their callees stay reachable. Release manifests
+  move to version 8 to record the carried `deadcode` version.
+- Remove the orphaned Python import, runtime-check, loader, and TypedDict-read
+  resolvers left behind when architecture moved to the Ruff graph, and build
+  releases with the native manifest writer instead of a shell copy.
+- Remove the unused `task-session-artifacts`, `task-session-receipt`, and
+  `governed-environment` commands and the `test-plan` alias; use
+  `test-levels`. Parse `go.mod` and `go.work` with `golang.org/x/mod`, so a
+  malformed manifest is reported as `supplyChain.goModule` instead of
+  line-by-line version findings.
+- Recognize pinned Go tools on Windows during quality checks, and replace test
+  receipts atomically on Windows instead of deleting the previous receipt
+  first.
+- Reject native release verification for a different host before inspecting
+  installed content.
 
 ## 0.29.3 - 2026-10-18
 

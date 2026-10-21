@@ -3,7 +3,6 @@ package architecture
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -77,14 +76,7 @@ func pythonSelection(repo repository.Repository, selected, allFiles []string) py
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
 	problemSources, findings := pythonInventoryFindings(inventory, sources)
-	projects := map[string]repository.PythonProject{}
-	owners := map[string]string{}
-	for _, project := range inventory.Projects {
-		projects[project.Manifest] = project
-		for _, source := range project.Files {
-			owners[source] = project.Manifest
-		}
-	}
+	projects, owners := inventory.Owners()
 	selectedByProject := map[string][]string{}
 	for _, source := range sources {
 		if problemSources[source] {
@@ -188,7 +180,7 @@ func pythonInventoryFindings(inventory repository.PythonProjectInventory, source
 	for _, problem := range inventory.Problems {
 		relevant := false
 		for _, source := range sources {
-			if pythonProblemAffectsSource(problem, source) {
+			if problem.Affects(source) {
 				invalid[source] = true
 				relevant = true
 			}
@@ -198,24 +190,6 @@ func pythonInventoryFindings(inventory repository.PythonProjectInventory, source
 		}
 	}
 	return invalid, findings
-}
-
-func pythonProblemAffectsSource(problem repository.PythonInventoryProblem, source string) bool {
-	for _, candidate := range []string{problem.Path, problem.Subject} {
-		if candidate == source {
-			return true
-		}
-		if candidate == "." || candidate != "" && strings.HasPrefix(source, strings.TrimSuffix(candidate, "/")+"/") {
-			return true
-		}
-		if filepath.Base(candidate) == "pyproject.toml" {
-			directory := filepath.ToSlash(filepath.Dir(candidate))
-			if directory == "." || strings.HasPrefix(source, directory+"/") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func pythonProjectSourceGraph(
@@ -229,18 +203,11 @@ func pythonProjectSourceGraph(
 	commands pythonGraphCommandPair,
 	commandRunner runner.Runner,
 ) sourceGraphPart {
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return sourceGraphPart{findings: []policy.Finding{{
-			Check: "policy.tool", Path: project.Manifest, Subject: "ruff",
-			Message: "the architecture runner cannot capture the bounded Ruff graph output",
-		}}, incomplete: true}
-	}
 	bounded, cancel := context.WithTimeout(ctx, pythonImportBudget)
 	defer cancel()
 	graphs := make([]pythonGraph, 0, 2)
 	for _, command := range commands.ordered() {
-		_, output, runErr := structured.RunStructured(bounded, repo.Root, command)
+		_, output, runErr := runner.RunCaptured(bounded, commandRunner, repo.Root, command, runner.CaptureStructured)
 		if runErr != nil {
 			return sourceGraphPart{findings: []policy.Finding{{Check: "policy.tool", Path: project.Manifest, Subject: "ruff", Message: runErr.Error()}}, incomplete: true}
 		}
@@ -271,7 +238,7 @@ func pythonGraphCommand(repo repository.Repository, project repository.PythonPro
 	}
 	paths := make([]string, 0, len(sources))
 	for _, source := range sources {
-		relative, err := pythonProjectPath(project, source)
+		relative, err := project.RelativePath(source)
 		if err != nil {
 			return policy.Command{}, err
 		}
@@ -309,19 +276,6 @@ func pythonGraphName(root string) string {
 		return "root"
 	}
 	return strings.NewReplacer("/", "-", "\\", "-", ".", "-").Replace(root)
-}
-
-func pythonProjectPath(project repository.PythonProject, source string) (string, error) {
-	root := filepath.FromSlash(project.Root)
-	relative, err := filepath.Rel(root, filepath.FromSlash(source))
-	if err != nil {
-		return "", err
-	}
-	relative = filepath.ToSlash(relative)
-	if relative == ".." || strings.HasPrefix(relative, "../") {
-		return "", fmt.Errorf("source %q is outside project root %q", source, project.Root)
-	}
-	return relative, nil
 }
 
 func pythonProjectSelection(repo repository.Repository, projects map[string]repository.PythonProject, selectedByProject map[string][]string) (map[string][]string, []policy.Finding) {

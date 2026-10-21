@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,30 +50,6 @@ func MarshalGovernedEnvironment(receipt GovernedEnvironmentReceipt) ([]byte, err
 		return nil, errors.New("governed environment digest does not match its content")
 	}
 	return json.MarshalIndent(receipt, "", "  ")
-}
-
-func ParseGovernedEnvironment(data []byte) (GovernedEnvironmentReceipt, error) {
-	var receipt GovernedEnvironmentReceipt
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&receipt); err != nil {
-		return GovernedEnvironmentReceipt{}, fmt.Errorf("parse governed environment: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("the governed environment contains more than one JSON value")
-		}
-		return GovernedEnvironmentReceipt{}, err
-	}
-	if err := validateGovernedEnvironment(receipt); err != nil {
-		return GovernedEnvironmentReceipt{}, err
-	}
-	digest, err := governedEnvironmentDigest(receipt)
-	if err != nil || digest != receipt.Digest {
-		return GovernedEnvironmentReceipt{}, errors.New("governed environment digest does not match its content")
-	}
-	return receipt, nil
 }
 
 func validateGovernedEnvironment(receipt GovernedEnvironmentReceipt) error {

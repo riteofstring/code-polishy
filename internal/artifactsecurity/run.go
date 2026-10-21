@@ -16,6 +16,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 type scannerRuntime struct {
@@ -51,15 +52,11 @@ func Run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 	if len(targets) == 0 {
 		return Result{}
 	}
-	outputRunner, ok := commandRunner.(runner.OutputRunner)
-	if !ok {
-		return operationalResult("command-runner", errors.New("artifact security requires a governed command runner with structured output capture"))
-	}
 	configured, err := loadScannerPolicy(repo.PolicyRoot)
 	if err != nil {
 		return operationalResult("scanner-policy", err)
 	}
-	runtimeState, err := prepareScannerRuntime(ctx, repo, configured, outputRunner)
+	runtimeState, err := prepareScannerRuntime(ctx, repo, configured, commandRunner)
 	if err != nil {
 		return operationalResult("scanner-runtime", err)
 	}
@@ -164,7 +161,7 @@ func artifactOperationalFinding(target, subject string, err error) policy.Findin
 	return policy.Finding{Check: "artifactSecurity.operation", Path: policy.ConfigFilename, Subject: target + ":" + subject, Message: message}
 }
 
-func prepareScannerRuntime(ctx context.Context, repo repository.Repository, configured scannerPolicy, commandRunner runner.OutputRunner) (*scannerRuntime, error) {
+func prepareScannerRuntime(ctx context.Context, repo repository.Repository, configured scannerPolicy, commandRunner runner.Runner) (*scannerRuntime, error) {
 	client := dockerClient{root: repo.Root, executor: commandRunner}
 	platform, err := prepareScannerSource(ctx, client, configured.SourceImage)
 	if err != nil {
@@ -426,7 +423,7 @@ func runArtifactProducer(ctx context.Context, repo repository.Repository, client
 		Environment:        append(append([]string{}, producer.Environment...), "CODE_POLISHY_ARTIFACT_OUTPUT="+directory),
 		ExclusiveResources: []string{"artifact-security"}, TimeoutSeconds: producer.TimeoutSeconds,
 	}
-	if err := client.executor.Run(ctx, repo.Root, command); err != nil {
+	if err := runner.RunCommand(ctx, client.executor, repo.Root, command); err != nil {
 		return fmt.Errorf("artifact producer %s: %w", targetName, err)
 	}
 	return nil
@@ -442,12 +439,7 @@ func readProducerManifest(directory, relative string, maximumArchiveBytes int64)
 		return producerManifest{}, "", err
 	}
 	var manifest producerManifest
-	decoder := json.NewDecoder(strings.NewReader(string(manifestBytes)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil {
-		return producerManifest{}, "", fmt.Errorf("decode artifact producer manifest: %w", err)
-	}
-	if err := requireJSONEOF(decoder); err != nil {
+	if err := strictjson.Decode(manifestBytes, &manifest); err != nil {
 		return producerManifest{}, "", fmt.Errorf("decode artifact producer manifest: %w", err)
 	}
 	if manifest.Version != 1 || manifest.Archive == "" || manifest.Reference == "" {

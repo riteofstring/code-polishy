@@ -65,7 +65,7 @@ func TestRustCompilationCollectsLintsDespiteSourceLevels(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := compilationRepository(t, test.source)
 			plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
-			result, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+			result, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
 			if err != nil || result.ExitStatus != 0 {
 				t.Fatalf("lint collection failed compilation: %+v, %v; %s", result, err, output.Stderr)
 			}
@@ -159,7 +159,7 @@ func TestRustCompilationInventoriesGeneratedBuildScriptFacts(t *testing.T) {
 	repo := compilationRepository(t, "pub fn answer() -> u32 { 42 }\n")
 	write(t, repo.Root, "build.rs", "fn main() { println!(\"cargo::rustc-cfg=generated_build\"); println!(\"cargo::rustc-check-cfg=cfg(generated_build)\"); println!(\"cargo::rustc-env=GENERATED_VALUE=42\"); }\n")
 	plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
 	if err != nil {
 		t.Fatalf("build script compilation: %v %s", err, output.Stderr)
 	}
@@ -203,7 +203,7 @@ func TestRustCompilationKeepsDefaultFeaturesAndSkipsGatedTargets(t *testing.T) {
 	write(t, repo.Root, "Cargo.toml", manifest+"[features]\ndefault=['first']\nfirst=[]\nsecond=[]\n[[bin]]\nname='gated'\npath='gated.rs'\nrequired-features=['second']\n")
 	write(t, repo.Root, "gated.rs", "compile_error!(\"unselected target\");\nfn main() {}\n")
 	plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
 	if err != nil {
 		t.Fatalf("default configuration failed: %v %s", err, output.Stderr)
 	}

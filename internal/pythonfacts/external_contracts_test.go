@@ -10,7 +10,7 @@ func TestExternalReachabilityContractsBindLocalMembers(t *testing.T) {
 	for _, kind := range []string{"base", "protocol", "decorator", "entry-point"} {
 		t.Run(kind, func(t *testing.T) {
 			modules, input := externalContractInput(t, kind)
-			result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+			result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 			if err != nil || len(result.Problems) != 0 || len(result.Evidence) != 1 || result.Evidence[0].Targets[0].Symbol != "Plugin.on_event" {
 				t.Fatalf("external contract = %+v, %v", result, err)
 			}
@@ -18,7 +18,7 @@ func TestExternalReachabilityContractsBindLocalMembers(t *testing.T) {
 			if err := ValidateReachabilityEvidence([]string{modules[0].Path}, []ReachabilityInput{input}, []string{input.ID}, result.Evidence); err == nil {
 				t.Fatal("changed dependency retained previously accepted evidence")
 			}
-			changed, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+			changed, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 			if err != nil || len(changed.Evidence) != 1 || changed.Evidence[0].Identity == result.Evidence[0].Identity {
 				t.Fatalf("dependency change did not invalidate identity: %+v, %v", changed, err)
 			}
@@ -31,7 +31,7 @@ func TestExternalReachabilityRequiresDependencyDefinitionProof(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			modules, input := externalContractInput(t, kind)
 			input.Dependency.Contract = nil
-			result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+			result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 			if err != nil || len(result.Evidence) != 0 || len(result.Problems) != 1 {
 				t.Fatalf("unproven dependency preserved a local member: %+v, %v", result, err)
 			}
@@ -60,7 +60,7 @@ func TestExternalReachabilityRejectsDisconnectedContracts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+			result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 			if err != nil || len(result.Evidence) != 0 || len(result.Problems) != 1 {
 				t.Fatalf("disconnected contract accepted: %+v, %v", result, err)
 			}

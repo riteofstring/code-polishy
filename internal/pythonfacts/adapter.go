@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -378,13 +379,8 @@ func embeddedAdapterSource() string {
 
 func decodeResponse(data []byte) (Response, error) {
 	var response Response
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
+	if err := strictjson.Decode(data, &response); err != nil {
 		return Response{}, fmt.Errorf("decode python-facts response: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Response{}, errors.New("python-facts response has trailing JSON")
 	}
 	return response, nil
 }

@@ -1,10 +1,8 @@
 package supplychain
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 func readSignedGitEvidence(repo repository.Repository, declaration policy.GitEvidenceAttestation, provider policy.GitEvidenceProvider) (gitEvidenceStatement, string, error) {
@@ -85,13 +84,8 @@ func decodeGitEvidenceJSON(data []byte, destination any) error {
 	if err := validateGitEvidenceJSON(data, destination); err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
+	if err := strictjson.Decode(data, destination); err != nil {
 		return gitEvidenceFailure("invalid", "Git evidence does not match the supported document structure")
-	}
-	if err := requireOneJSONValue(decoder); err != nil {
-		return gitEvidenceFailure("invalid", "Git evidence must contain exactly one JSON document")
 	}
 	return nil
 }

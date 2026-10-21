@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -16,8 +17,25 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
+type Capture uint8
+
+const (
+	CaptureNone Capture = iota
+	CaptureOutput
+	CaptureStructured
+)
+
+type Invocation struct {
+	Root    string
+	Command policy.Command
+	Capture Capture
+	Stdout  io.Writer
+	Stderr  io.Writer
+	Accept  ReportOutcomeAcceptor
+}
+
 type Runner interface {
-	Run(context.Context, string, policy.Command) error
+	Execute(context.Context, Invocation) (Result, Output, error)
 }
 
 type Output struct {
@@ -25,26 +43,29 @@ type Output struct {
 	Stderr []byte
 }
 
-type OutputRunner interface {
-	Runner
-	RunWithOutput(context.Context, string, policy.Command) (Result, Output, error)
-}
-
 type ReportOutcomeAcceptor func(Result, Output, error) bool
 
-type ReportOutputRunner interface {
-	Runner
-	RunWithReportOutput(context.Context, string, policy.Command, ReportOutcomeAcceptor) (Result, Output, error)
+func RunCommand(ctx context.Context, commandRunner Runner, root string, command policy.Command) error {
+	_, _, err := commandRunner.Execute(ctx, Invocation{Root: root, Command: command})
+	return err
 }
 
-type StructuredRunner interface {
-	Runner
-	RunStructured(context.Context, string, policy.Command) (Result, Output, error)
+func RunCaptured(ctx context.Context, commandRunner Runner, root string, command policy.Command, capture Capture) (Result, Output, error) {
+	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: capture})
 }
 
-type StreamRunner interface {
-	Runner
-	RunWithWriters(context.Context, string, policy.Command, io.Writer, io.Writer) (Result, error)
+func RunObserved(ctx context.Context, commandRunner Runner, root string, command policy.Command) (Result, error) {
+	result, _, err := commandRunner.Execute(ctx, Invocation{Root: root, Command: command})
+	return result, err
+}
+
+func RunStreamed(ctx context.Context, commandRunner Runner, root string, command policy.Command, stdout, stderr io.Writer) (Result, error) {
+	result, _, err := commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Stdout: stdout, Stderr: stderr})
+	return result, err
+}
+
+func RunWithReport(ctx context.Context, commandRunner Runner, root string, command policy.Command, accept ReportOutcomeAcceptor) (Result, Output, error) {
+	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: CaptureOutput, Accept: accept})
 }
 
 type CommandPhase struct {
@@ -122,44 +143,26 @@ const (
 	maximumStructuredDiagnosticBytes = 64 << 10
 )
 
-func (runner OSRunner) Run(parent context.Context, root string, specification policy.Command) error {
-	_, err := runner.RunWithStatus(parent, root, specification)
-	return err
-}
-
-func (runner OSRunner) RunWithStatus(parent context.Context, root string, specification policy.Command) (int, error) {
-	result, err := runner.RunWithResult(parent, root, specification)
-	return result.ExitStatus, err
-}
-
-func (runner OSRunner) RunWithResult(parent context.Context, root string, specification policy.Command) (Result, error) {
-	return runner.run(parent, root, specification, runner.Stdout, runner.Stderr)
-}
-
-func (runner OSRunner) RunWithWriters(parent context.Context, root string, specification policy.Command, stdout, stderr io.Writer) (Result, error) {
-	return runner.run(parent, root, specification, stdout, stderr)
-}
-
-func (runner OSRunner) RunWithOutput(parent context.Context, root string, specification policy.Command) (Result, Output, error) {
-	stdout := &boundedOutput{limit: maximumStructuredOutputBytes}
-	stderr := &boundedOutput{limit: maximumStructuredDiagnosticBytes}
-	result, err := runner.run(parent, root, specification, appendOutputWriter(runner.Stdout, stdout), appendOutputWriter(runner.Stderr, stderr))
-	if stdout.truncated || stderr.truncated {
-		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
+func (runner OSRunner) Execute(parent context.Context, invocation Invocation) (Result, Output, error) {
+	stdout, stderr := runner.Stdout, runner.Stderr
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		stdout, stderr = invocation.Stdout, invocation.Stderr
+	}
+	if invocation.Capture == CaptureNone {
+		result, err := runner.run(parent, invocation.Root, invocation.Command, stdout, stderr)
+		return result, Output{}, err
+	}
+	if invocation.Capture == CaptureStructured {
+		stdout = nil
+	}
+	capturedStdout := &boundedOutput{limit: maximumStructuredOutputBytes}
+	capturedStderr := &boundedOutput{limit: maximumStructuredDiagnosticBytes}
+	result, err := runner.run(parent, invocation.Root, invocation.Command, appendOutputWriter(stdout, capturedStdout), appendOutputWriter(stderr, capturedStderr))
+	if capturedStdout.truncated || capturedStderr.truncated {
+		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", invocation.Command.Name, captureLimit(capturedStdout, capturedStderr)))
 		result.FailureCategory = CaptureFailureCategory(parent, result, err)
 	}
-	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
-}
-
-func (runner OSRunner) RunStructured(parent context.Context, root string, specification policy.Command) (Result, Output, error) {
-	stdout := &boundedOutput{limit: maximumStructuredOutputBytes}
-	stderr := &boundedOutput{limit: maximumStructuredDiagnosticBytes}
-	result, err := runner.run(parent, root, specification, stdout, appendOutputWriter(runner.Stderr, stderr))
-	if stdout.truncated || stderr.truncated {
-		err = errors.Join(err, fmt.Errorf("captured structured output for command %q exceeds its %d byte stream limit", specification.Name, captureLimit(stdout, stderr)))
-		result.FailureCategory = CaptureFailureCategory(parent, result, err)
-	}
-	return result, Output{Stdout: stdout.buffer.Bytes(), Stderr: stderr.buffer.Bytes()}, err
+	return result, Output{Stdout: capturedStdout.buffer.Bytes(), Stderr: capturedStderr.buffer.Bytes()}, err
 }
 
 func captureLimit(stdout, stderr *boundedOutput) int {
@@ -452,6 +455,15 @@ func (buffer *lockedBuffer) bytes() []byte {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
 	return append([]byte{}, buffer.buffer.Bytes()...)
+}
+
+func ExecutableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && executableMode(runtime.GOOS, info.Mode())
+}
+
+func executableMode(goos string, mode os.FileMode) bool {
+	return goos == "windows" || mode&0o111 != 0
 }
 
 func GoModuleVersion(goTool, binary string) string {

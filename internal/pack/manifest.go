@@ -1,11 +1,8 @@
 package pack
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"regexp"
 	"runtime"
@@ -13,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -66,17 +64,8 @@ type Fixture struct {
 }
 
 func ParseManifest(data []byte, source string) (Manifest, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	manifest := Manifest{}
-	if err := decoder.Decode(&manifest); err != nil {
-		return Manifest{}, fmt.Errorf("parse %s: %w", source, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("contains more than one JSON value")
-		}
+	if err := strictjson.Decode(data, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("parse %s: %w", source, err)
 	}
 	if err := validateManifest(manifest); err != nil {

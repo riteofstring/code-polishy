@@ -85,7 +85,7 @@ func TestArtifactFinalizationFailureDoesNotOfferExecutionIDAsSuite(t *testing.T)
 		Check: "test.artifacts", Path: ".code-polishy-test-artifacts", Subject: "execution-20260905", Message: "cannot publish completed manifest: permission denied",
 	})
 	command := finding.Remediation.NextCommand
-	if command == nil || !slices.Equal(command.Argv, []string{"code-polishy", "test-plan"}) || command.Cwd != "." {
+	if command == nil || !slices.Equal(command.Argv, []string{"code-polishy", "test-levels"}) || command.Cwd != "." {
 		t.Fatalf("artifact recovery invents an executable suite: %+v", finding.Remediation)
 	}
 }

@@ -102,11 +102,11 @@ func providerGraphRepository(t *testing.T, language string) repository.Repositor
 
 type providerGraphRunner struct{ omit bool }
 
-func (boundary providerGraphRunner) Run(context.Context, string, policy.Command) error {
+func (boundary providerGraphRunner) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("structured analysis is required")
 }
 
-func (boundary providerGraphRunner) RunStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary providerGraphRunner) runStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	request := pack.Request{}
 	if err := json.Unmarshal(command.Stdin, &request); err != nil {
 		return runner.Result{}, runner.Output{}, err
@@ -153,4 +153,11 @@ func TestProviderGraphRetainsActualPackageBoundaries(t *testing.T) {
 	if _, err := sourcegraph.New(part.nodes, part.edges, part.inputs, nil); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (double providerGraphRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

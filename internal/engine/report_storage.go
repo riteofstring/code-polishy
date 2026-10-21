@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -63,7 +64,7 @@ func (engine *Engine) FinalizeReport(command string, report Report) (Report, err
 	if err := ensureManagedReportDirectory(engine.Repository.Root, directory); err != nil {
 		return Report{}, err
 	}
-	if err := writeAtomic(filepath.Join(engine.Repository.Root, filepath.FromSlash(relative)), data, 0o600); err != nil {
+	if err := durablefile.Write(filepath.Join(engine.Repository.Root, filepath.FromSlash(relative)), data, 0o600); err != nil {
 		return Report{}, fmt.Errorf("write managed report: %w", err)
 	}
 	return report, nil

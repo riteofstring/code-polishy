@@ -252,19 +252,3 @@ func pythonTOMLValueLeaves(leaves *[]pythonTOMLLeaf, path []string, value python
 		pythonTOMLValueLeaves(leaves, child, field.value)
 	}
 }
-
-func pythonRuffTargetVersion(value string) (string, error) {
-	python, err := pythonfacts.DefaultInterpreter()
-	if err != nil {
-		return "", err
-	}
-	response, err := pythonfacts.Analyze(python, pythonfacts.Request{Specifiers: []string{value}})
-	if err != nil {
-		return "", err
-	}
-	fact := response.Specifiers[0]
-	if fact.Error != "" || fact.Target == "" {
-		return "", fmt.Errorf("%s", fact.Error)
-	}
-	return fact.Target, nil
-}

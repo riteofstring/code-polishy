@@ -105,11 +105,7 @@ func compileManifest(ctx context.Context, repo repository.Repository, manifest s
 	if _, err := repo.ReadContainedFile(lock, 8<<20); err != nil {
 		return []policy.Finding{projectFinding(lock, "lockfile", fmt.Sprintf("governed compilation requires a contained Cargo.lock; prepare and review dependency resolution before checking: %v", err))}
 	}
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return []policy.Finding{projectFinding(manifest, "compilation", "the runner cannot capture bounded Cargo compiler output")}
-	}
-	_, output, runErr := structured.RunStructured(ctx, repo.Root, command)
+	_, output, runErr := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureStructured)
 	report, parseErr := ParseCompilation(repo, manifest, workspace, output.Stdout)
 	findings := report.Findings
 	if parseErr != nil {

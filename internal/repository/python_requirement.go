@@ -27,31 +27,6 @@ func NormalizePythonPackageName(name string) (string, error) {
 	return result.Normalized, nil
 }
 
-func ParsePythonRequirement(value string) (PythonRequirement, error) {
-	python, err := pythonfacts.DefaultInterpreter()
-	if err != nil {
-		return PythonRequirement{}, err
-	}
-	response, err := pythonfacts.Analyze(python, pythonfacts.Request{Requirements: []string{value}})
-	if err != nil {
-		return PythonRequirement{}, err
-	}
-	return pythonRequirementFact(response.Requirements[0])
-}
-
-func pythonRequirementFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
-	requirement, err := pythonRequirementInventoryFact(fact)
-	if err != nil {
-		return PythonRequirement{}, err
-	}
-	if requirement.Kind == PythonGitRequirement {
-		if err := requirement.Git.ValidateExactPin(); err != nil {
-			return PythonRequirement{}, err
-		}
-	}
-	return requirement, nil
-}
-
 func pythonRequirementInventoryFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
 	if fact.Error != "" {
 		return PythonRequirement{}, fmt.Errorf("invalid Python requirement: %s", fact.Error)

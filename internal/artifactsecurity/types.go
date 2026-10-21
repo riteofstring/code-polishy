@@ -1,12 +1,10 @@
 package artifactsecurity
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +19,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -104,13 +103,8 @@ func loadScannerPolicy(policyRoot string) (scannerPolicy, error) {
 	if err != nil {
 		return scannerPolicy{}, fmt.Errorf("read artifact scanner policy: %w", err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
 	var configured scannerPolicy
-	if err := decoder.Decode(&configured); err != nil {
-		return scannerPolicy{}, fmt.Errorf("decode artifact scanner policy: %w", err)
-	}
-	if err := requireJSONEOF(decoder); err != nil {
+	if err := strictjson.Decode(payload, &configured); err != nil {
 		return scannerPolicy{}, fmt.Errorf("decode artifact scanner policy: %w", err)
 	}
 	if err := configured.validate(policyRoot); err != nil {
@@ -182,18 +176,6 @@ func (configured scannerPolicy) validateLimitFields() error {
 	return nil
 }
 
-func requireJSONEOF(decoder *json.Decoder) error {
-	var extra any
-	err := decoder.Decode(&extra)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return errors.New("more than one JSON value")
-}
-
 func readBoundedRegularFile(path string, maximum int64) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -241,7 +223,7 @@ func randomHex(size int) (string, error) {
 
 type dockerClient struct {
 	root     string
-	executor runner.OutputRunner
+	executor runner.Runner
 }
 
 type commandResult struct {
@@ -258,7 +240,7 @@ func (client dockerClient) cleanup(ctx context.Context, name string, arguments .
 }
 
 func (client dockerClient) runCommand(ctx context.Context, command policy.Command) (commandResult, error) {
-	_, output, err := client.executor.RunWithOutput(ctx, client.root, command)
+	_, output, err := runner.RunCaptured(ctx, client.executor, client.root, command, runner.CaptureOutput)
 	result := commandResult{stdout: string(output.Stdout), stderr: string(output.Stderr)}
 	if err == nil {
 		return result, nil

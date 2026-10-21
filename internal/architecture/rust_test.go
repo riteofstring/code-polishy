@@ -1,6 +1,8 @@
 package architecture
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"io"
 	"path/filepath"
@@ -295,12 +297,24 @@ type rustGraphRecordingRunner struct {
 	names []string
 }
 
-func (boundary *rustGraphRecordingRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *rustGraphRecordingRunner) runStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.names = append(boundary.names, command.Name)
-	return boundary.OSRunner.RunStructured(ctx, root, command)
+	return runner.RunCaptured(ctx, boundary.OSRunner, root, command, runner.CaptureStructured)
 }
 
-func (boundary *rustGraphRecordingRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (boundary *rustGraphRecordingRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	boundary.names = append(boundary.names, command.Name)
-	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
+	return runner.RunStreamed(ctx, boundary.OSRunner, root, command, stdout, stderr)
+}
+
+func (double *rustGraphRecordingRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return double.OSRunner.Execute(ctx, invocation)
 }

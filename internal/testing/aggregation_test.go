@@ -7,6 +7,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestPlanCollapsesDeclaredCoverageAndExactDuplicateCommands(t *testing.T) {
@@ -39,7 +40,11 @@ func TestPlanCollapsesDeclaredCoverageAndExactDuplicateCommands(t *testing.T) {
 
 type aggregationRunner struct{ names []string }
 
-func (commandRunner *aggregationRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (commandRunner *aggregationRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	commandRunner.names = append(commandRunner.names, command.Name)
 	return nil
+}
+
+func (double *aggregationRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

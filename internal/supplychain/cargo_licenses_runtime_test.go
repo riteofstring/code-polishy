@@ -25,7 +25,7 @@ func TestCargoLicensesReadPinnedCargoPublishedWorkspaceMetadata(t *testing.T) {
 	writeSupplyFile(t, repo.Root, "crates/package/build.rs", "compile_error!(\"package verification must not execute build scripts\");\n")
 	writeSupplyFile(t, repo.Root, "Cargo.lock", "version=4\n[[package]]\nname='crate'\nversion='1.0.0'\n")
 	command := rustfacts.Command(repo, "package-license-fixture", "cargo", "package", "--manifest-path", "crates/package/Cargo.toml", "--frozen", "--allow-dirty", "--no-verify")
-	if _, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command); err != nil {
+	if _, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured); err != nil {
 		t.Fatalf("pinned Cargo packaging failed: %v, %s", err, output.Stderr)
 	}
 	data, err := repo.ReadContainedFile(".tools/rust-target/package/crate-1.0.0.crate", 8<<20)

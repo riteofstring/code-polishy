@@ -121,7 +121,7 @@ func TestSizeBuildsHumanAndSchemaValidatedMachineEvidence(t *testing.T) {
 
 func TestFormatSizeBytesUsesSignedIECUnits(t *testing.T) {
 	t.Parallel()
-	if got := formatSizeBytes(1536); got != "1.5 KiB" {
+	if got := FormatSizeBytes(1536); got != "1.5 KiB" {
 		t.Fatalf("formatted size = %q", got)
 	}
 	if got := formatSignedSizeBytes(-2 << 20); got != "-2.0 MiB" {

@@ -1,12 +1,10 @@
 package pack
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"slices"
 	"strings"
@@ -14,6 +12,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 type Request struct {
@@ -131,10 +130,6 @@ func failedResult(adapter *policy.PackAdapter, err error) Result {
 }
 
 func execute(ctx context.Context, root string, command policy.Command, commandRunner runner.Runner, request Request) (Response, error) {
-	boundary, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return Response{}, errors.New("governed runner cannot capture adapter output")
-	}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return Response{}, err
@@ -143,7 +138,7 @@ func execute(ctx context.Context, root string, command policy.Command, commandRu
 		return Response{}, errors.New("adapter request exceeds 8 MiB")
 	}
 	command.Stdin = append(data, '\n')
-	result, output, runErr := boundary.RunStructured(ctx, root, command)
+	result, output, runErr := runner.RunCaptured(ctx, commandRunner, root, command, runner.CaptureStructured)
 	if runErr != nil {
 		return Response{}, fmt.Errorf("adapter process failed (%s): %w", runner.FailureCategoryFor(ctx, result, runErr), runErr)
 	}
@@ -165,15 +160,9 @@ func parseResponse(data []byte, request Request) (Response, error) {
 }
 
 func decodeResponse(data []byte) (Response, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	response := Response{}
-	if err := decoder.Decode(&response); err != nil {
+	if err := strictjson.Decode(data, &response); err != nil {
 		return Response{}, fmt.Errorf("decode adapter response: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Response{}, errors.New("adapter returned more than one JSON response")
 	}
 	return response, nil
 }

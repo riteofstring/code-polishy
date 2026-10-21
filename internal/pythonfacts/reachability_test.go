@@ -3,13 +3,12 @@ package pythonfacts
 import (
 	"encoding/json"
 	"slices"
-	"strings"
 	"testing"
 )
 
 func TestReachabilityResolvesRelativeReexportsAndAliases(t *testing.T) {
 	modules, input := reachabilityTestInput(t, false)
-	result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+	result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 	if err != nil || len(result.Problems) != 0 || len(result.Evidence) != 1 {
 		t.Fatalf("resolve consumer: %+v, %v", result, err)
 	}
@@ -25,7 +24,7 @@ func TestReachabilityRejectsDuplicateConsumers(t *testing.T) {
 	modules, input := reachabilityTestInput(t, false)
 	duplicate := input
 	duplicate.ID = "competing-consumer"
-	result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input, duplicate})
+	result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input, duplicate})
 	if err != nil || len(result.Evidence) != 0 || len(result.Problems) != 2 {
 		t.Fatalf("duplicate declarations acquired reachability: %+v, %v", result, err)
 	}
@@ -33,7 +32,7 @@ func TestReachabilityRejectsDuplicateConsumers(t *testing.T) {
 
 func TestReachabilityRejectsStaleRegistryEvidence(t *testing.T) {
 	modules, input := reachabilityTestInput(t, true)
-	result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+	result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 	if err != nil || len(result.Problems) != 0 || len(result.Evidence) != 1 {
 		t.Fatalf("resolve registry: %+v, %v", result, err)
 	}
@@ -50,67 +49,61 @@ func TestReachabilityRejectsStaleRegistryEvidence(t *testing.T) {
 	}
 }
 
-func TestReachabilityRejectsAlteredSourceAndTargetEvidence(t *testing.T) {
+func TestReachabilityRejectsAlteredTargetEvidence(t *testing.T) {
 	modules, input := reachabilityTestInput(t, false)
-	result, err := ResolveReachability(t.Context(), typeTestInterpreter(t), modules, []ReachabilityInput{input})
+	result, err := resolveReachabilityForTest(t, modules, []ReachabilityInput{input})
 	if err != nil || len(result.Evidence) != 1 || len(result.Problems) != 0 {
 		t.Fatalf("resolve original evidence: %+v, %v", result, err)
 	}
-	covered := []typeCoverage{}
+	files := []string{}
 	for _, module := range modules {
-		covered = append(covered, typeCoverage{Path: module.Path, SourceSHA256: module.SourceSHA256})
+		files = append(files, module.Path)
 	}
-	encoded, err := json.Marshal(map[string]any{"protocol": "python-reachability-project/v1", "covered": covered, "evidence": result.Evidence, "problems": result.Problems})
+	encoded, err := json.Marshal(result.Evidence)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := decodeReachabilityProject(encoded, modules, []ReachabilityInput{input}); err != nil {
-		t.Fatal(err)
-	}
-	for name, mutate := range map[string]func(map[string]any){
-		"omitted source": func(value map[string]any) { value["covered"] = value["covered"].([]any)[1:] },
-		"stale source": func(value map[string]any) {
-			value["covered"].([]any)[0].(map[string]any)["sourceSha256"] = strings.Repeat("a", 64)
-		},
-		"reordered sources": func(value map[string]any) { slices.Reverse(value["covered"].([]any)) },
-		"missing evidence":  func(value map[string]any) { value["evidence"] = []any{} },
-		"duplicate evidence": func(value map[string]any) {
-			evidence := value["evidence"].([]any)
-			value["evidence"] = append(evidence, evidence[0])
-		},
-		"substituted target": func(value map[string]any) {
-			reachabilityTestTarget(value)["symbol"] = "unrelated"
-		},
-		"foreign definition": func(value map[string]any) {
-			reachabilityTestTarget(value)["definitions"].([]any)[0].(map[string]any)["path"] = "other/secret.py"
-		},
-		"unresolved evidence": func(value map[string]any) {
-			value["problems"] = []any{map[string]any{"id": input.ID, "message": "consumer is stale"}}
-		},
-		"unknown field": func(value map[string]any) { value["trusted"] = true },
+	for name, test := range map[string]struct {
+		mutate   func([]any) []any
+		resolved []string
+	}{
+		"missing evidence":   {func(evidence []any) []any { return []any{} }, []string{input.ID}},
+		"duplicate evidence": {func(evidence []any) []any { return append(evidence, evidence[0]) }, []string{input.ID}},
+		"substituted target": {func(evidence []any) []any {
+			reachabilityTestTarget(evidence)["symbol"] = "unrelated"
+			return evidence
+		}, []string{input.ID}},
+		"foreign definition": {func(evidence []any) []any {
+			reachabilityTestTarget(evidence)["definitions"].([]any)[0].(map[string]any)["path"] = "other/secret.py"
+			return evidence
+		}, []string{input.ID}},
+		"unresolved evidence": {func(evidence []any) []any { return evidence }, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			var value map[string]any
+			var value []any
 			if err := json.Unmarshal(encoded, &value); err != nil {
 				t.Fatal(err)
 			}
-			mutate(value)
-			changed, err := json.Marshal(value)
+			changed, err := json.Marshal(test.mutate(value))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := decodeReachabilityProject(changed, modules, []ReachabilityInput{input}); err == nil {
+			var evidence []ReachabilityEvidence
+			if err := json.Unmarshal(changed, &evidence); err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateReachabilityEvidence(files, []ReachabilityInput{input}, test.resolved, evidence); err == nil {
 				t.Fatal("altered evidence acquired reachability")
 			}
 		})
 	}
-	if _, err := decodeReachabilityProject(encoded, modules, []ReachabilityInput{input, input}); err == nil {
+	if err := ValidateReachabilityEvidence(files, []ReachabilityInput{input, input}, []string{input.ID}, result.Evidence); err == nil {
 		t.Fatal("duplicate input identities acquired reachability")
 	}
 }
 
-func reachabilityTestTarget(value map[string]any) map[string]any {
-	return value["evidence"].([]any)[0].(map[string]any)["targets"].([]any)[0].(map[string]any)
+func reachabilityTestTarget(evidence []any) map[string]any {
+	return evidence[0].(map[string]any)["targets"].([]any)[0].(map[string]any)
 }
 
 func reachabilityTestInput(t *testing.T, registry bool) ([]TypeModule, ReachabilityInput) {

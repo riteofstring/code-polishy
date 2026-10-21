@@ -65,7 +65,7 @@ func TestReleaseSBOMEnumeratesShippedEcosystemGraphsOnce(t *testing.T) {
 			manifest.Entries[index].SHA256 = digest
 		}
 	}
-	manifest.ContentDigest = releaseEntriesDigest(manifest.Entries)
+	manifest.ContentDigest = EntriesDigest(manifest.Entries)
 	if err := os.WriteFile(filepath.Join(root, ManifestFilename), render(t, manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func foreignRelease(t *testing.T, host string) (string, Manifest) {
 	}
 	manifest.Host = host
 	slices.SortFunc(manifest.Entries, func(first, second Entry) int { return strings.Compare(first.Path, second.Path) })
-	manifest.ContentDigest = releaseEntriesDigest(manifest.Entries)
+	manifest.ContentDigest = EntriesDigest(manifest.Entries)
 	manifest.ReleaseDigest = manifest.Identity()
 	data := render(t, manifest)
 	if err := os.WriteFile(filepath.Join(root, ManifestFilename), data, 0o644); err != nil {

@@ -61,7 +61,7 @@ type reuseFixtureRunner struct {
 	recorded int
 }
 
-func (commandRunner *reuseFixtureRunner) Run(context.Context, string, policy.Command) error {
+func (commandRunner *reuseFixtureRunner) runPlain(context.Context, string, policy.Command) error {
 	commandRunner.runs++
 	return nil
 }
@@ -90,4 +90,8 @@ func reusableSuiteFixture() policy.TestSuite {
 		Name: "unit", Kind: "unit", Scope: "repository", Reusable: true, Cost: "quick", Argv: []string{"true"}, Cwd: ".",
 		RunOn: []string{"full"}, ExclusiveResources: []string{}, TimeoutSeconds: 30,
 	}
+}
+
+func (double *reuseFixtureRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

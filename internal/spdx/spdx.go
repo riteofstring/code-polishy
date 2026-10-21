@@ -1,17 +1,16 @@
 package spdx
 
 import (
-	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -76,7 +75,6 @@ type exceptionRecord struct {
 }
 
 type snapshot struct {
-	identity   SnapshotIdentity
 	licenses   map[string]string
 	exceptions map[string]string
 }
@@ -88,37 +86,6 @@ var (
 	identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*\+?$`)
 	licenseRef = regexp.MustCompile(`^LicenseRef-[A-Za-z0-9][A-Za-z0-9.-]*$`)
 )
-
-func Identity() (SnapshotIdentity, error) {
-	data, err := authoritativeSnapshot()
-	return data.identity, err
-}
-
-func LicenseIDs() ([]string, error) {
-	data, err := authoritativeSnapshot()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, 0, len(data.licenses))
-	for _, value := range data.licenses {
-		result = append(result, value)
-	}
-	sortStrings(result)
-	return result, nil
-}
-
-func ExceptionIDs() ([]string, error) {
-	data, err := authoritativeSnapshot()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, 0, len(data.exceptions))
-	for _, value := range data.exceptions {
-		result = append(result, value)
-	}
-	sortStrings(result)
-	return result, nil
-}
 
 func authoritativeSnapshot() (snapshot, error) {
 	loadOnce.Do(loadSnapshot)
@@ -146,7 +113,7 @@ func readSnapshot() (snapshot, error) {
 	if err != nil {
 		return snapshot{}, err
 	}
-	return snapshot{identity: identity, licenses: licenseIndex, exceptions: exceptionIndex}, nil
+	return snapshot{licenses: licenseIndex, exceptions: exceptionIndex}, nil
 }
 
 func readSnapshotIdentity() (SnapshotIdentity, error) {
@@ -195,13 +162,8 @@ func indexRecords[T any](records []T, id func(T) string) (map[string]string, err
 }
 
 func decodeStrict(data []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
+	if err := strictjson.Decode(data, target); err != nil {
 		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("JSON contains trailing data")
 	}
 	return nil
 }
@@ -408,12 +370,4 @@ func (parser *expressionParser) accept(value string) bool {
 	}
 	parser.position++
 	return true
-}
-
-func sortStrings(values []string) {
-	for index := 1; index < len(values); index++ {
-		for position := index; position > 0 && values[position] < values[position-1]; position-- {
-			values[position], values[position-1] = values[position-1], values[position]
-		}
-	}
 }

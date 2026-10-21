@@ -123,7 +123,7 @@ try {
     'tools/cargo-nextest-license.txt',
     'tools/rustfmt.toml','tools/clippy.toml',
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
-    'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/ty-version.txt','tools/ty.toml',
+    'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/deadcode-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',
     'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
@@ -134,7 +134,7 @@ try {
 
   $StageBin = Join-Path $Stage '.tools/bin'
   New-Item -ItemType Directory -Force -Path $StageBin | Out-Null
-  foreach ($Tool in @('staticcheck.exe','govulncheck.exe','osv-scanner.exe','ruff.exe','ty.exe','cargo-nextest.exe')) {
+  foreach ($Tool in @('staticcheck.exe','deadcode.exe','govulncheck.exe','osv-scanner.exe','ruff.exe','ty.exe','cargo-nextest.exe')) {
     Copy-Item -LiteralPath (Join-Path $PolicyRoot ".tools/bin/$Tool") -Destination (Join-Path $StageBin $Tool)
   }
 

@@ -9,12 +9,8 @@ import (
 	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
 
-func runCapturedSuite(ctx context.Context, root string, boundary runner.Runner, command policy.Command) (runner.Result, bool, error) {
-	captured, ok := boundary.(runner.OutputRunner)
-	if !ok {
-		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, true, errors.New("native doctests require bounded command output")
-	}
-	result, output, err := captured.RunWithOutput(ctx, root, command)
+func runCapturedSuite(ctx context.Context, root string, boundary runner.Runner, command policy.Command) (runner.Result, error) {
+	result, output, err := runner.RunCaptured(ctx, boundary, root, command, runner.CaptureOutput)
 	category := runner.FailureCategoryFor(ctx, result, err)
 	if category == "" || category == runner.FailureCommandExit {
 		if artifactErr := testartifact.CaptureCommandOutput(command, output.Stdout); artifactErr != nil {
@@ -22,5 +18,5 @@ func runCapturedSuite(ctx context.Context, root string, boundary runner.Runner, 
 			err = errors.Join(err, artifactErr)
 		}
 	}
-	return result, true, err
+	return result, err
 }

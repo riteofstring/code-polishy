@@ -1,12 +1,14 @@
 package architecture
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestGoImportMustFollowDeclaredModuleDependency(t *testing.T) {
@@ -108,4 +110,12 @@ func writeArchitectureFile(t *testing.T, root, path, contents string) {
 	if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func Check(ctx context.Context, repo repository.Repository, selected []string) []policy.Finding {
+	return CheckWithRunner(ctx, repo, selected, runner.OSRunner{PathEntries: repo.CommandEnvironment().PathEntries})
+}
+
+func CheckWithRunner(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
+	return AnalyzeWithRunner(ctx, repo, selected, commandRunner).Findings
 }

@@ -35,7 +35,6 @@ func TestAnalyzeProjectSourcesPartitionsAProjectLargerThanOneRequest(t *testing.
 		project.Sources[0].Imports[1].Module != "project.module_1000" {
 		t.Fatalf("cross-partition import fact = %+v", project.Sources[0].Imports)
 	}
-	assertPartitionedModuleImports(t, python, project)
 	assertProjectPartitionCoverage(t, project, len(inputs))
 }
 
@@ -157,7 +156,7 @@ func projectResponse(_ context.Context, _ string, request Request) (Response, er
 	for _, input := range request.Sources {
 		digest := sha256.Sum256([]byte(input.Source))
 		response.Sources = append(response.Sources, Source{Path: input.Path, SHA256: hex.EncodeToString(digest[:]), Imports: []Import{},
-			TypeFacts: json.RawMessage(`{"scopes":[{"id":"module","parent":"","kind":"module"}],"bindings":[],"reads":[],"calls":[]}`)})
+			TypeFacts: json.RawMessage(`{"scopes":[{"id":"module","parent":"","kind":"module"}],"bindings":[],"calls":[]}`)})
 	}
 	return response, nil
 }
@@ -192,22 +191,4 @@ func modulePartitionTestInputs() []Input {
 		inputs = append(inputs, Input{Path: projectSourcePath(index), Source: source})
 	}
 	return inputs
-}
-
-func assertPartitionedModuleImports(t *testing.T, python string, project SourceProject) {
-	t.Helper()
-	resolved, err := ResolveTypeProject(t.Context(), python, typeTestModules(project.Sources))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(resolved.Imports) != 1 || resolved.Imports[0].Callee != "importlib.import_module" ||
-		!slices.Equal(resolved.Imports[0].Targets, []string{"project.plugins.first"}) {
-		t.Fatalf("cross-partition computed import fact = %+v", resolved.Imports)
-	}
-	modules := typeTestModules(project.Sources)
-	slices.Reverse(modules)
-	reordered, err := ResolveTypeProject(t.Context(), python, modules)
-	if err != nil || reordered.Identity != resolved.Identity || !reflect.DeepEqual(reordered.Imports, resolved.Imports) {
-		t.Fatalf("module ordering changed loader resolution: %+v, error = %v", reordered.Imports, err)
-	}
 }

@@ -1,16 +1,17 @@
 package testreceipt
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -119,7 +120,7 @@ func storeImportedBundle(repositoryRoot string, imported importedBundle) (int, e
 	if err != nil {
 		return 0, err
 	}
-	if err := writeReceiptFile(filepath.Join(directory, ciBundleFilename), encoded); err != nil {
+	if err := durablefile.Write(filepath.Join(directory, ciBundleFilename), encoded, 0o600); err != nil {
 		return 0, err
 	}
 	return len(imported.Receipts), nil
@@ -168,15 +169,9 @@ func eligibleLocalReceipt(directory string, entry os.DirEntry, now time.Time) (R
 }
 
 func decodeExportBundle(data []byte, now time.Time) (exportBundle, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	bundle := exportBundle{}
-	if err := decoder.Decode(&bundle); err != nil {
+	if err := strictjson.Decode(data, &bundle); err != nil {
 		return exportBundle{}, fmt.Errorf("%w: bundle JSON is malformed", ErrInvalid)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return exportBundle{}, fmt.Errorf("%w: bundle JSON has trailing data", ErrInvalid)
 	}
 	if !validExportBundleHeader(bundle) {
 		return exportBundle{}, fmt.Errorf("%w: bundle fields are malformed", ErrInvalid)
@@ -227,15 +222,9 @@ func loadImportedReceipt(repositoryRoot, identitySHA256 string, now time.Time) (
 }
 
 func decodeImportedBundle(data []byte) (importedBundle, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	bundle := importedBundle{}
-	if err := decoder.Decode(&bundle); err != nil {
+	if err := strictjson.Decode(data, &bundle); err != nil {
 		return importedBundle{}, fmt.Errorf("%w: imported bundle JSON is malformed", ErrInvalid)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return importedBundle{}, fmt.Errorf("%w: imported bundle JSON has trailing data", ErrInvalid)
 	}
 	digestValue, err := importedBundleDigest(bundle)
 	if err != nil || !validImportedBundleHeader(bundle, digestValue) {

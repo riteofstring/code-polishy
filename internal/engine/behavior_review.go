@@ -10,7 +10,6 @@ import (
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
-	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
@@ -121,13 +120,9 @@ func (engine *Engine) FinalizeBehaviorReview(ctx context.Context, base string) (
 }
 
 func (engine *Engine) ProveRegression(ctx context.Context, base, suite string, evidence []string, id string, expectedRedExitStatus int) (behaviorreview.ProveResult, error) {
-	commandRunner, ok := engine.Runner.(runner.OutputRunner)
-	if ok {
-		return behaviorreview.Prove(ctx, engine.Repository, commandRunner, behaviorreview.ProveOptions{
-			Base: base, Suite: suite, Evidence: append([]string{}, evidence...), ID: id, ExpectedRedExitStatus: expectedRedExitStatus,
-		})
-	}
-	return behaviorreview.ProveResult{}, fmt.Errorf("regression-proof requires a runner that captures command output")
+	return behaviorreview.Prove(ctx, engine.Repository, engine.Runner, behaviorreview.ProveOptions{
+		Base: base, Suite: suite, Evidence: append([]string{}, evidence...), ID: id, ExpectedRedExitStatus: expectedRedExitStatus,
+	})
 }
 
 func behaviorReviewGateReceiptFinding(err error) (*policy.Finding, error) {

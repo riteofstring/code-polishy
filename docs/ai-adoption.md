@@ -199,10 +199,10 @@ First look for that required release under `<prefix>/releases`. For an
 existing lock, match its exact Code Polishy version and release digest. Without
 a lock, require the manifest's `sourceRevision` to equal the selected checkout's
 `HEAD`. Verify the candidate and stable launcher using the matching installed
-release. On Unix, the manifest can also be verified directly with:
+release. The manifest can also be verified directly with that release's engine:
 
 ```sh
-<code-polishy-checkout>/scripts/release-manifest.sh verify <release-directory>
+<release-directory>/bin/code-polishy release-manifest verify --root <release-directory>
 ```
 
 If the release and launcher are already valid, reuse them without rebuilding or
@@ -376,7 +376,7 @@ the modules and capability it covers, have a bounded timeout, and fail when its
 evidence is missing. It must not auto-install packages during a policy check.
 
 The installed release supplies the Go toolchain, ShellCheck, staticcheck,
-govulncheck, Rust/Cargo/rustfmt/Clippy, Nextest, Ruff, Vulture, its carried CPython runtime, `ty`, OSV-Scanner, and
+deadcode, govulncheck, Rust/Cargo/rustfmt/Clippy, Nextest, Ruff, Vulture, its carried CPython runtime, `ty`, OSV-Scanner, and
 the sealed JavaScript tooling. Do not add target-local copies of those tools or
 ask a target dependency to satisfy shared coverage. A missing or corrupted
 shared tool means the locked release must be installed or repaired; it is not a
@@ -506,7 +506,7 @@ The resulting guidance should make these execution boundaries clear:
 - ordinary interactive edits use the caller's checkout and finish with a
   coherent verified commit; task sessions are for requested isolation or
   unattended work;
-- `test-levels` (and the `test-plan` compatibility alias) is read-only;
+- `test-levels` is read-only;
 - after each completed committed task on a long-lived branch, agents run
   `checkpoint-gate --base <previous-checkpoint>`; conversational and read-only
   requests do not create checkpoints, and an unchanged invocation is a no-op;

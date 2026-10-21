@@ -319,7 +319,7 @@ One release identity has one self-contained policy root per supported host:
   settings; the optional companion supplies Rust `1.97.1`, Cargo, rustdoc,
   rustfmt, Clippy, the host standard library and Nextest `0.9.138`;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
-  staticcheck, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
+  staticcheck, deadcode, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
   `2.16`, `ty`, and the carried CPython `3.12.13+20260728` runtime from
   python-build-standalone. A
   target installs no policy tooling, and none of these is ever taken from an
@@ -441,7 +441,7 @@ homes, temporary files, and target output remain outside the release tree.
 Before it stages anything, the installer asks every tool the release will carry
 what version it is and requires the answer to be the version the checked-in pin
 beside it names — the Go toolchain, Node, pnpm, ShellCheck, staticcheck,
-govulncheck, OSV-Scanner, Ruff, Rust/Cargo/rustdoc, Nextest, PyPA `packaging`, Vulture, `ty`, and carried
+deadcode, govulncheck, OSV-Scanner, Ruff, Rust/Cargo/rustdoc, Nextest, PyPA `packaging`, Vulture, `ty`, and carried
 CPython. The manifest records those identities, and a present file and a byte
 inventory cannot show that a local tool cache holds the version the manifest
 would claim. The two Go analyzers are read out of their binaries with the pinned
@@ -488,6 +488,79 @@ Release directories are named `<version>-<releaseDigest>`, so releases from
 different reviewed commits coexist and each target selects the exact one it
 requires. Reinstalling a commit whose release is already installed and verified
 keeps the installed bytes rather than replacing them.
+
+## Removing unused releases
+
+Installed releases stay until they are removed. Each one carries its complete
+toolchain, so a prefix that has accumulated many versions can occupy tens of
+gigabytes. Remove every release that no known repository still locks with:
+
+```sh
+./code-polishyw cleanup --dry-run
+./code-polishyw cleanup
+```
+
+Every command an installed release runs for a repository records that
+repository's path in `<prefix>/repositories.json`. The file records paths, not
+versions: cleanup rereads each recorded repository's current lock, so a pull,
+branch switch, or checkout that changes a lock outside Code Polishy cannot make
+it stale. Cleanup keeps the release each lock names, removes every other
+release directory, and forgets recorded repositories that no longer have a
+lock. It reports what it kept and for which repositories, what it removed, and
+the space freed. `--dry-run` reports the same plan without changing anything.
+Recording and cleanup take a lock file in the prefix, so concurrent commands
+cannot drop one another's entries and no repository can be recorded while
+cleanup decides what to keep. Cleanup holds that lock only until the releases it
+removes are moved aside, so other commands do not wait while it deletes them.
+
+Cleanup removes nothing when the registry or a recorded repository's lock
+cannot be read, because it cannot then tell which releases are in use; repair
+the named file, or remove a registry that cannot be repaired. It leaves the
+stable launcher, language packs, and in-progress installations in place. A
+release is first moved out of `<prefix>/releases` and then deleted, so an
+interrupted removal never leaves a partial release under its name; the next
+cleanup finishes the deletion.
+
+A repository that has never run a command through an installed release that
+records repositories, such as a fresh clone or one still locked to a release
+that predates cleanup, is unknown to cleanup, and its release may be removed.
+Cleanup reads only the lock each recorded checkout has now, so the release of
+another branch is not kept either. Its next wrapper call reports that the
+locked release is not installed, and `./code-polishyw setup` reinstalls it.
+Cleanup can likewise remove a candidate that `upgrade plan` installed before
+`upgrade apply` replaced the lock; plan the upgrade again to reinstall it.
+
+## Removing repository outputs
+
+Select generated repository outputs explicitly:
+
+```sh
+./code-polishyw cleanup --reports --artifacts --dry-run
+./code-polishyw cleanup --reports --artifacts
+```
+
+Use either scope alone or combine them. These flags select repository outputs
+instead of installed releases. The dry run lists selected paths, logical byte
+sizes, and retained entries; actual cleanup reports the removed paths and total.
+Run repository cleanup after other Code Polishy commands finish.
+
+`--reports` removes completed managed report trees, completed gate executions
+and their logs, and the test receipt cache under `.code-polishy-reports`.
+Deleting cached gate results and test receipts makes verification rerun as
+needed. Cleanup preserves behavior-review and architecture-review evidence,
+capability-upgrade records, incomplete gate runs, and files outside recognized
+generated trees. Keep personal notes and saved evidence outside generated report
+trees and the `test-receipts` cache. Use `behavior-review cleanup` when you intend
+to remove its retained review evidence.
+
+`--artifacts` removes completed executions under `.code-polishy-artifacts`
+using the same ownership checks as automatic test artifact retention. Active
+leases, invalid ownership records, unowned files, and trees containing symbolic
+links or special entries are retained. Abandoned runs with active leases are
+also retained. Artifact-only cleanup preserves reports and test receipts.
+
+Both scopes refuse linked output roots and preserve trees containing symbolic
+links or special entries. Missing output directories require no action.
 
 ## The target lock
 

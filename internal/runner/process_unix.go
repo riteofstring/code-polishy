@@ -58,6 +58,13 @@ func newHostExecCommand(specification HostCommand) (*exec.Cmd, error) {
 	return command, nil
 }
 
+func Handoff(ctx context.Context, command HostCommand) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return handoffHostCommand(command)
+}
+
 func handoffHostCommand(specification HostCommand) error {
 	if specification.Path == "" || len(specification.Argv) == 0 {
 		return errors.New("host command requires a path and argv")

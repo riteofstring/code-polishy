@@ -26,14 +26,14 @@ type pythonQualityRunner struct {
 	errors   map[string]error
 }
 
-func (qualityRunner *pythonQualityRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (qualityRunner *pythonQualityRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	if qualityRunner.errors == nil {
 		return nil
 	}
 	return qualityRunner.errors[command.Name]
 }
 
-func (qualityRunner *pythonQualityRunner) RunStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (qualityRunner *pythonQualityRunner) runStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	qualityRunner.commands = append(qualityRunner.commands, command)
 	if qualityRunner.errors != nil && qualityRunner.errors[command.Name] != nil {
 		return runner.Result{}, runner.Output{}, qualityRunner.errors[command.Name]
@@ -592,7 +592,7 @@ func TestPythonVultureAdapterResolvesExactSameNamedReferencesWhenInstalled(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +677,7 @@ patched.side_effect = RuntimeError
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -725,7 +725,7 @@ def unused_helper():
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,7 +808,7 @@ func pythonVultureRuntimeInstalled(t *testing.T, repo repository.Repository) boo
 		Name: "probe-vulture", Argv: repo.PythonCommand("import importlib.metadata;print(importlib.metadata.version('vulture'))"),
 		Cwd: ".", TimeoutSeconds: 30, SealedEnvironment: true,
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		return false
 	}
@@ -875,4 +875,29 @@ func samePythonQualityCommand(left, right policy.Command) bool {
 	return reflect.DeepEqual(left, right)
 }
 
-var _ runner.StructuredRunner = (*pythonQualityRunner)(nil)
+func PythonQualityFindings(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
+	return pythonQualityFindingsForPlan(ctx, repo, pythonQualityPlanFor(repo, selected), commandRunner)
+}
+
+func pythonQualityCommands(repo repository.Repository, selected []string) []policy.Command {
+	return pythonQualityPlanCommands(pythonQualityPlanFor(repo, selected))
+}
+
+func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQualityPlan {
+	return buildPythonQualityPlan(repo, selected, true)
+}
+
+func pythonVultureCommand(repo repository.Repository, project repository.PythonProject) (policy.Command, error) {
+	return pythonVultureCommandForSources(repo, project, project.Files)
+}
+
+func pythonVultureFindings(repo repository.Repository, project repository.PythonProject, data []byte) []policy.Finding {
+	return pythonVultureFindingsForSources(repo, project, project.Files, data)
+}
+
+func (double *pythonQualityRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}

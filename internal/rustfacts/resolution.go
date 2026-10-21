@@ -83,11 +83,7 @@ func resolveManifest(ctx context.Context, repo repository.Repository, manifest s
 	if err != nil {
 		return Resolution{}, []policy.Finding{resolutionFinding(path, fmt.Sprintf("Cargo lock verification requires a reviewed, contained lockfile: %v", err))}
 	}
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return Resolution{}, []policy.Finding{resolutionFinding(manifest, "the runner cannot capture bounded Cargo resolution metadata")}
-	}
-	_, output, err := structured.RunStructured(ctx, repo.Root, command)
+	_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		return Resolution{}, []policy.Finding{resolutionFinding(path, fmt.Sprintf("Cargo could not verify locked resolution: %v; %s", err, diagnosticOutput(output.Stderr)))}
 	}

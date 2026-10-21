@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const ProtocolVersion = 3
@@ -416,10 +416,6 @@ type TypeDiagnostic struct {
 	Column  int    `json:"column"`
 	Code    int    `json:"code"`
 	Message string `json:"message"`
-}
-
-func (bundle Bundle) TypeCheck(ctx context.Context, root, project string, paths []string) (TypeCheckResult, error) {
-	return bundle.TypeCheckInherited(ctx, root, project, paths, nil)
 }
 
 func (bundle Bundle) TypeCheckInherited(ctx context.Context, root, project string, paths, inherited []string) (TypeCheckResult, error) {
@@ -908,13 +904,8 @@ func decodeResponse(operation Operation, stdout []byte, stderr string, runErr er
 }
 
 func decodeExactly(data []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
+	if err := strictjson.Decode(data, target); err != nil {
 		return err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		return fmt.Errorf("unexpected trailing content")
 	}
 	return nil
 }
@@ -926,7 +917,7 @@ func diagnostics(stderr string) string {
 	return ": " + stderr
 }
 
-func (bundle Bundle) paths() (node, runner string, err error) {
+func (bundle Bundle) paths() (node, script string, err error) {
 	if !filepath.IsAbs(bundle.PolicyRoot) {
 		return "", "", fmt.Errorf("the Code Polishy checkout path %q is not absolute", bundle.PolicyRoot)
 	}
@@ -937,16 +928,11 @@ func (bundle Bundle) paths() (node, runner string, err error) {
 	}
 	root := filepath.Join(bundle.PolicyRoot, ".tools", "javascript")
 	node = filepath.Join(root, host, "node", "bin", javascriptExecutable("node", runtime.GOOS))
-	runner = filepath.Join(root, "bundle", "runner.mjs")
-	if !isExecutableFile(node) || !isRegularFile(runner) {
+	script = filepath.Join(root, "bundle", "runner.mjs")
+	if !runner.ExecutableFile(node) || !isRegularFile(script) {
 		return "", "", fmt.Errorf("the sealed JavaScript tool bundle is not installed under %s; run ./tools/install-policy-tools.sh", root)
 	}
-	return node, runner, nil
-}
-
-func isExecutableFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && executableModeSupported(runtime.GOOS, info.Mode())
+	return node, script, nil
 }
 
 func javascriptExecutable(name, goos string) string {
@@ -954,10 +940,6 @@ func javascriptExecutable(name, goos string) string {
 		return name + ".exe"
 	}
 	return name
-}
-
-func executableModeSupported(goos string, mode os.FileMode) bool {
-	return goos == "windows" || mode&0o111 != 0
 }
 
 func isRegularFile(path string) bool {

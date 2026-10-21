@@ -92,6 +92,21 @@
       "workflows": ["docs/agent-workflows.md"]
     },
     {
+      "name": "cleanup",
+      "kind": "command",
+      "description": "Remove unused installed releases or explicitly selected generated repository reports and completed test artifacts.",
+      "aliases": [
+        "release cleanup",
+        "remove unused releases",
+        "report cleanup",
+        "artifact cleanup"
+      ],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/installation.md"]
+    },
+    {
       "name": "dependency-review",
       "kind": "command",
       "description": "Review a candidate dependency graph before installation.",
@@ -290,16 +305,6 @@
       "kind": "command",
       "description": "Inspect available verification levels and their selected work.",
       "aliases": ["verification levels"],
-      "paths": [],
-      "modules": [],
-      "enforcement": ["explicit"],
-      "workflows": ["docs/agent-workflows.md"]
-    },
-    {
-      "name": "test-plan",
-      "kind": "command",
-      "description": "Inspect base-aware test selection without executing tests.",
-      "aliases": ["test selection"],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTypedDictCallableFieldFormsPreserveKeyReads(t *testing.T) {
+func TestTypedDictCallableFieldFormsAreAccepted(t *testing.T) {
 	for _, test := range []struct{ name, imports, annotation string }{
 		{"no arguments", "from typing import Callable", "Callable[[], str]"},
 		{"typed arguments", "from typing import Callable", "Callable[[int, str], bool]"},
@@ -24,16 +24,15 @@ func TestTypedDictCallableFieldFormsPreserveKeyReads(t *testing.T) {
 			if test.name == "functional" {
 				definition = "Options = TypedDict(\"Options\", {\"callback\": " + test.annotation + ", \"unused\": int})\n"
 			}
-			result, err := resolveTypeTestSources(t, map[string]string{
+			fields, err := resolveTypeTestSources(t, map[string]string{
 				"src/models.py":    "from typing import TypedDict\n" + test.imports + "\n" + definition,
 				"src/callbacks.py": "from typing import Callable as Function\n",
-				"src/service.py":   "from models import Options\ndef invoke(value: Options):\n    return value[\"callback\"]\n",
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(result.Reads) != 1 || result.Reads[0].Path != "src/service.py" || result.Reads[0].Field.Path != "src/models.py" || result.Reads[0].Field.TypeName != "Options" || result.Reads[0].Field.Key != "callback" {
-				t.Fatalf("reads=%+v", result.Reads)
+			if len(fields) != 2 || fields[0].Path != "src/models.py" || fields[0].TypeName != "Options" || fields[0].Key != "callback" {
+				t.Fatalf("fields=%+v", fields)
 			}
 		})
 	}
@@ -51,9 +50,9 @@ func TestTypedDictFieldErrorsIdentifyTheDeclaration(t *testing.T) {
 		{"duplicate", "    callback: str\n    callback: int\n", "duplicate keys"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := resolveTypeTestSources(t, map[string]string{"src/models.py": "from typing import Callable, TypedDict\nclass Options(TypedDict):\n" + test.fields})
-			if err == nil || len(result.Reads) != 0 {
-				t.Fatalf("result=%+v err=%v", result, err)
+			fields, err := resolveTypeTestSources(t, map[string]string{"src/models.py": "from typing import Callable, TypedDict\nclass Options(TypedDict):\n" + test.fields})
+			if err == nil {
+				t.Fatalf("fields=%+v", fields)
 			}
 			location := "src/models.py:3:5"
 			if test.name == "duplicate" {

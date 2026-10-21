@@ -2,8 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"slices"
 	"sync"
 	"time"
@@ -134,72 +132,13 @@ type executionRunner struct {
 	recorder *executionRecorder
 }
 
-type resultRunner interface {
-	RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-}
-
 func (commandRunner *executionRunner) RecordCommandPhases(ctx context.Context, command policy.Command, phases []runner.CommandPhase) {
 	commandRunner.recorder.addCommandPhases(ctx, command, phases)
 }
 
-func (commandRunner *executionRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (commandRunner *executionRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
+func (commandRunner *executionRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
 	started := time.Now()
-	if delegate, ok := commandRunner.delegate.(resultRunner); ok {
-		result, err := delegate.RunWithResult(ctx, root, command)
-		commandRunner.recorder.addCommand(ctx, command, result, time.Since(started), err)
-		return result, err
-	}
-	err := commandRunner.delegate.Run(ctx, root, command)
-	result := runner.Result{ExecutionDuration: time.Since(started)}
-	if err != nil {
-		result.ExitStatus = -1
-	}
-	commandRunner.recorder.addCommand(ctx, command, result, result.ExecutionDuration, err)
-	return result, err
-}
-
-func (commandRunner *executionRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	delegate, ok := commandRunner.delegate.(runner.OutputRunner)
-	if !ok {
-		return commandRunner.unsupported(ctx, command, "captured output")
-	}
-	started := time.Now()
-	result, output, err := delegate.RunWithOutput(ctx, root, command)
-	commandRunner.recorder.addCommand(ctx, command, result, time.Since(started), err)
+	result, output, err := commandRunner.delegate.Execute(ctx, invocation)
+	commandRunner.recorder.addCommand(ctx, invocation.Command, result, time.Since(started), err)
 	return result, output, err
-}
-
-func (commandRunner *executionRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	delegate, ok := commandRunner.delegate.(runner.StructuredRunner)
-	if !ok {
-		return commandRunner.unsupported(ctx, command, "structured output")
-	}
-	started := time.Now()
-	result, output, err := delegate.RunStructured(ctx, root, command)
-	commandRunner.recorder.addCommand(ctx, command, result, time.Since(started), err)
-	return result, output, err
-}
-
-func (commandRunner *executionRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
-	delegate, ok := commandRunner.delegate.(runner.StreamRunner)
-	if !ok {
-		result, _, err := commandRunner.unsupported(ctx, command, "streamed output")
-		return result, err
-	}
-	started := time.Now()
-	result, err := delegate.RunWithWriters(ctx, root, command, stdout, stderr)
-	commandRunner.recorder.addCommand(ctx, command, result, time.Since(started), err)
-	return result, err
-}
-
-func (commandRunner *executionRunner) unsupported(ctx context.Context, command policy.Command, output string) (runner.Result, runner.Output, error) {
-	err := fmt.Errorf("the execution telemetry runner cannot delegate %s", output)
-	result := runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}
-	commandRunner.recorder.addCommand(ctx, command, result, 0, err)
-	return result, runner.Output{}, err
 }

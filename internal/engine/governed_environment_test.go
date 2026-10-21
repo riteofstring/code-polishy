@@ -81,11 +81,7 @@ func TestGovernedEnvironmentKeepsRustCompanionOptionalAndComplete(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := MarshalGovernedEnvironment(receipt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ParseGovernedEnvironment(data); err != nil {
+	if _, err := MarshalGovernedEnvironment(receipt); err != nil {
 		t.Fatalf("complete Rust companion receipt: %v", err)
 	}
 }

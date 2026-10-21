@@ -63,7 +63,7 @@ type proofInputs struct {
 	expectedRedExitStatus int
 }
 
-func prove(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ProveOptions) (result ProveResult, resultErr error) {
+func prove(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, options ProveOptions) (result ProveResult, resultErr error) {
 	ctx = reviewContext(ctx)
 	if commandRunner == nil {
 		return ProveResult{}, fmt.Errorf("%w: regression proof requires an output-capturing runner", ErrInvalidInput)
@@ -99,7 +99,7 @@ func prove(ctx context.Context, repo repository.Repository, commandRunner runner
 	}, nil
 }
 
-func replayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, options ValidateGateReceiptOptions) (GateReceipt, error) {
+func replayGateReceipt(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, options ValidateGateReceiptOptions) (GateReceipt, error) {
 	ctx = reviewContext(ctx)
 	if commandRunner == nil {
 		return GateReceipt{}, fmt.Errorf("%w: proof replay requires an output-capturing runner", ErrInvalidInput)
@@ -178,7 +178,7 @@ func replayPacket(repo repository.Repository, receipt GateReceipt) (*artifactHan
 	return root, prepared.packet, nil
 }
 
-func replayProof(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root *artifactHandle, packet reviewPacket, candidate string, reference ProofReference) error {
+func replayProof(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, root *artifactHandle, packet reviewPacket, candidate string, reference ProofReference) error {
 	proof, data, err := readProof(root, reference.ID)
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func replayEvidenceError(id string, err error) error {
 	return fmt.Errorf("%w: proof %q cannot be replayed: %v", ErrInvalidEvidence, id, err)
 }
 
-func replayProofExecution(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root *artifactHandle, candidate string, proof regressionProof, suite policy.TestSuite, patch []byte) (resultErr error) {
+func replayProofExecution(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, root *artifactHandle, candidate string, proof regressionProof, suite policy.TestSuite, patch []byte) (resultErr error) {
 	baseline, err := createReplayWorktree(ctx, repo, root, "rb-", proof.Base)
 	if err != nil {
 		return err
@@ -420,7 +420,7 @@ func createDetachedProofWorktree(ctx context.Context, repo repository.Repository
 	return path, nil
 }
 
-func executeProof(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root *artifactHandle, worktree string, inputs proofInputs) (regressionProof, error) {
+func executeProof(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, root *artifactHandle, worktree string, inputs proofInputs) (regressionProof, error) {
 	applyDigest, err := applyAndRecord(ctx, root, worktree, inputs)
 	if err != nil {
 		return regressionProof{}, err
@@ -460,7 +460,7 @@ func applyAndRecord(ctx context.Context, root *artifactHandle, worktree string, 
 	return digest, nil
 }
 
-func runAndRecord(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, artifactRoot *artifactHandle, executionRoot, candidate string, suite policy.TestSuite, id, suffix string) (proofExecution, error) {
+func runAndRecord(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, artifactRoot *artifactHandle, executionRoot, candidate string, suite policy.TestSuite, id, suffix string) (proofExecution, error) {
 	result, output, runErr := runSuite(ctx, repo, commandRunner, executionRoot, suite)
 	digest, err := writeProofArtifact(artifactRoot, id, suffix, suiteLog(result, output, runErr))
 	changedErr := ensureCandidateUnchanged(repo, candidate)
@@ -527,9 +527,9 @@ func applyFailure(err error, exitStatus int) error {
 	return operational("apply candidate evidence patch", err)
 }
 
-func runSuite(ctx context.Context, repo repository.Repository, commandRunner runner.OutputRunner, root string, suite policy.TestSuite) (runner.Result, runner.Output, error) {
+func runSuite(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, root string, suite policy.TestSuite) (runner.Result, runner.Output, error) {
 	repo.Root = root
-	capture := &proofSuiteRunner{OutputRunner: commandRunner}
+	capture := &proofSuiteRunner{Runner: commandRunner}
 	execution := testpolicy.ExecuteSuite(ctx, repo, capture, suite, 1)
 	if !execution.Failed() {
 		return execution.Result, capture.output, nil
@@ -542,26 +542,18 @@ func runSuite(ctx context.Context, repo repository.Repository, commandRunner run
 }
 
 type proofSuiteRunner struct {
-	runner.OutputRunner
+	runner.Runner
 	output runner.Output
 }
 
-func (capture *proofSuiteRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	result, _, err := capture.RunWithOutput(ctx, root, command)
-	return result, err
-}
-
-func (capture *proofSuiteRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	result, output, err := capture.OutputRunner.RunWithOutput(ctx, root, command)
+func (capture *proofSuiteRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return capture.Runner.Execute(ctx, invocation)
+	}
+	invocation.Capture = runner.CaptureOutput
+	result, output, err := capture.Runner.Execute(ctx, invocation)
 	capture.output = output
 	return result, output, err
-}
-
-func (capture *proofSuiteRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if structured, ok := capture.OutputRunner.(runner.StructuredRunner); ok {
-		return structured.RunStructured(ctx, root, command)
-	}
-	return capture.OutputRunner.RunWithOutput(ctx, root, command)
 }
 
 func cloneCommand(command policy.Command) policy.Command {

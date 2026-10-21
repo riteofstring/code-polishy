@@ -2,6 +2,7 @@ package rustfacts
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -176,9 +177,9 @@ type sourceBatchRunner struct {
 	after    func(int, runner.Output) (runner.Output, error)
 }
 
-func (boundary *sourceBatchRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (boundary *sourceBatchRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	boundary.commands = append(boundary.commands, command)
-	result, output, err := boundary.OSRunner.RunStructured(ctx, root, command)
+	result, output, err := runner.RunCaptured(ctx, boundary.OSRunner, root, command, runner.CaptureStructured)
 	if err == nil {
 		output, err = boundary.after(len(boundary.commands), output)
 	}
@@ -190,4 +191,13 @@ func (boundary *sourceBatchRunner) RunWithWriters(ctx context.Context, root stri
 	}
 	_, err = stdout.Write(output.Stdout)
 	return result, err
+}
+
+func (double *sourceBatchRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	return double.OSRunner.Execute(ctx, invocation)
 }

@@ -66,12 +66,12 @@ type optionalGitBoundary struct {
 	projected  bool
 }
 
-func (boundary *optionalGitBoundary) Run(ctx context.Context, root string, command policy.Command) error {
-	_, _, err := boundary.RunWithOutput(ctx, root, command)
+func (boundary *optionalGitBoundary) runPlain(ctx context.Context, root string, command policy.Command) error {
+	_, _, err := runner.RunCaptured(ctx, boundary, root, command, runner.CaptureOutput)
 	return err
 }
 
-func (boundary *optionalGitBoundary) RunWithOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *optionalGitBoundary) runOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.t.Helper()
 	input, projected := argumentAfter(command.Argv, "--lockfile")
 	if !projected {
@@ -91,4 +91,11 @@ func (boundary *optionalGitBoundary) RunWithOutput(_ context.Context, root strin
 	}
 	payload := fmt.Sprintf(`{"results":[{"source":{"path":%q,"type":"lockfile"},"packages":[{"package":{"name":"support-lib","version":"2.0.0","ecosystem":"PyPI"},"vulnerabilities":[{"id":"GHSA-test-public"}]}]}]}`, path)
 	return runner.Result{ExitStatus: 1}, runner.Output{Stdout: []byte(payload)}, fmt.Errorf("vulnerability found")
+}
+
+func (double *optionalGitBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

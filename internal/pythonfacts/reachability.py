@@ -1,15 +1,10 @@
 import hashlib
 import json
 import posixpath
-import sys
 import unicodedata
 
 from external_contracts import external_consumer, resolve_external_contract
 from type_resolver import (
-    MAX_FACT_BYTES,
-    MAX_MODULES,
-    MAX_OUTPUT_BYTES,
-    MAX_RECORD_BYTES,
     _exact,
     _name,
     _Resolver,
@@ -157,21 +152,6 @@ class ReachabilityResolver:
                 raise ValueError("consumer does not resolve to one containing callable")
             scope = _scope_for(binding)
         return scope
-
-    def callable_name(self, module, scope):
-        names = {}
-        for bindings in module["bindings"].values():
-            for binding in bindings:
-                if binding["kind"] in {"function", "class"}:
-                    names[_scope_for(binding)] = binding["name"]
-        parts = []
-        while scope != "module":
-            if scope in names:
-                parts.append(names[scope])
-            elif module["scopes"][scope]["kind"] == "function":
-                parts.append("<lambda>")
-            scope = scope.rpartition("/")[0]
-        return ".".join(reversed(parts)) if parts else "<module>"
 
     def callee(self, module, call):
         expression = call["callee"]
@@ -502,50 +482,3 @@ def resolve_reachability(modules, requests, inferred):
         except (ValueError, TypeError, KeyError, IndexError, RecursionError) as error:
             problems.append({"id": request["id"], "message": str(error)[:4096]})
     return evidence, problems
-
-
-def resolve_stream(source, output):
-    header = json.loads(
-        source.readline(MAX_RECORD_BYTES + 1), object_pairs_hook=_unique_object
-    )
-    _exact(header, ("protocol", "count", "requests"), "reachability project header")
-    if (
-        header["protocol"] != "python-reachability-project/v1"
-        or type(header["count"]) is not int
-        or not 0 <= header["count"] <= MAX_MODULES
-        or not isinstance(header["requests"], list)
-    ):
-        raise ValueError("reachability project header is invalid")
-    modules, size = [], 0
-    for _ in range(header["count"]):
-        record = source.readline(MAX_RECORD_BYTES + 1)
-        size += len(record)
-        if (
-            len(record) > MAX_RECORD_BYTES
-            or size > MAX_FACT_BYTES
-            or not record.endswith(b"\n")
-        ):
-            raise ValueError("reachability project exceeds its bounded transport")
-        modules.append(json.loads(record, object_pairs_hook=_unique_object))
-    if source.read(1):
-        raise ValueError("reachability project has trailing input")
-    evidence, problems = resolve_reachability(modules, header["requests"], set())
-    result = {
-        "protocol": header["protocol"],
-        "covered": [
-            {"path": value["path"], "sourceSha256": value["sourceSha256"]}
-            for value in modules
-        ],
-        "evidence": evidence,
-        "problems": problems,
-    }
-    encoded = json.dumps(
-        result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    if len(encoded) > MAX_OUTPUT_BYTES:
-        raise ValueError("reachability evidence exceeds its response boundary")
-    output.write(encoded)
-
-
-if __name__ == "__main__":
-    resolve_stream(sys.stdin.buffer, sys.stdout.buffer)

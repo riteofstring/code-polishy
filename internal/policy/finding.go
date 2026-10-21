@@ -68,7 +68,7 @@ func defaultFindingRemediation(finding Finding) FindingRemediation {
 	if finding.Check == "test.artifacts" {
 		return FindingRemediation{
 			Summary:     "Restore writable managed test-artifact storage and resolve the reported finalization error. Inspect the test plan before rerunning affected suites; the execution ID is not a suite name.",
-			NextCommand: &FindingCommand{Argv: []string{"code-polishy", "test-plan"}, Cwd: "."},
+			NextCommand: &FindingCommand{Argv: []string{"code-polishy", "test-levels"}, Cwd: "."},
 		}
 	}
 	return FindingRemediation{

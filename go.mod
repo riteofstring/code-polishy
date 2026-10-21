@@ -1,6 +1,6 @@
 module github.com/riteofstring/code-polishy
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/CycloneDX/cyclonedx-go v0.11.0

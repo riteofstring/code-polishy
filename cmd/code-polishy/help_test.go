@@ -16,9 +16,9 @@ import (
 
 func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 	publicCommands := []string{
-		"version", "docs", "install-rust", "pack", "agents", "lock", "upgrade", "release-manifest", "change-boundary", "task-session",
+		"version", "docs", "install-rust", "pack", "agents", "lock", "upgrade", "cleanup", "release-manifest", "change-boundary", "task-session",
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
-		"test", "test-plan", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
+		"test", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
 		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
 		"architecture-review", "capabilities", "task-start", "size", "trends",
 	}
@@ -74,7 +74,7 @@ func TestSupplementalHelpRequiresExplicitSelection(t *testing.T) {
 		!strings.Contains(testOutput.String(), "requiredSupplementalKinds do not invoke it") {
 		t.Fatalf("test help does not disclose explicit supplemental selection: %q", testOutput.String())
 	}
-	for _, command := range []string{"test-plan", "test-levels"} {
+	for _, command := range []string{"test-levels"} {
 		page, found := commandHelpFor(command)
 		if !found {
 			t.Fatalf("%s help page is missing", command)
@@ -106,7 +106,7 @@ func TestEvaluationCommandHelpDistinguishesDirectoriesAndModules(t *testing.T) {
 func TestReportCommandHelpDistinguishesEvaluationAndDisplayOptions(t *testing.T) {
 	t.Parallel()
 	for _, command := range []string{
-		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-plan", "test-levels", "verify", "architecture",
+		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-levels", "verify", "architecture",
 		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix", "size", "trends",
 	} {
 		page, found := commandHelpFor(command)

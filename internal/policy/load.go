@@ -1,11 +1,9 @@
 package policy
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -13,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
@@ -42,13 +42,8 @@ func Parse(data []byte, source string) (Config, error) {
 	if err := validateRuntimeSchema(data); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", source, err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	config := Config{}
-	if err := decoder.Decode(&config); err != nil {
-		return Config{}, fmt.Errorf("parse %s: %w", source, err)
-	}
-	if err := requireEOF(decoder); err != nil {
+	if err := strictjson.Decode(data, &config); err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", source, err)
 	}
 	config.ConfigPath = source
@@ -64,16 +59,6 @@ func Parse(data []byte, source string) (Config, error) {
 		return Config{}, err
 	}
 	return config, nil
-}
-
-func requireEOF(decoder *json.Decoder) error {
-	var extra any
-	if err := decoder.Decode(&extra); errors.Is(err, io.EOF) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	return errors.New("configuration contains more than one JSON value")
 }
 
 func EffectiveQuality(quality Quality) Quality {

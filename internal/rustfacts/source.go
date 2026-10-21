@@ -138,15 +138,10 @@ func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePla
 	if len(plan.Commands) == 0 {
 		return result
 	}
-	streamed, ok := boundary.(runner.StreamRunner)
-	if !ok {
-		result.Findings = append(result.Findings, sourceBatchFindings(plan.Inputs, "the runner cannot capture bounded Rust syntax facts")...)
-		return result
-	}
 	start := 0
 	for index, command := range plan.Commands {
 		end := plan.batchEnds[index]
-		batch := readSourceBatch(ctx, repo, plan.Inputs[start:end], command, streamed)
+		batch := readSourceBatch(ctx, repo, plan.Inputs[start:end], command, boundary)
 		result.Files = append(result.Files, batch.Files...)
 		result.Findings = append(result.Findings, batch.Findings...)
 		start = end
@@ -154,13 +149,13 @@ func ReadSources(ctx context.Context, repo repository.Repository, plan SourcePla
 	return result
 }
 
-func readSourceBatch(ctx context.Context, repo repository.Repository, inputs []SourceInput, command policy.Command, boundary runner.StreamRunner) Sources {
+func readSourceBatch(ctx context.Context, repo repository.Repository, inputs []SourceInput, command policy.Command, boundary runner.Runner) Sources {
 	if err := ctx.Err(); err != nil {
 		return Sources{Findings: sourceBatchFindings(inputs, "Rust syntax analysis did not run: "+err.Error())}
 	}
 	output := sourceStream{repo: repo, inputs: inputs}
 	diagnostics := sourceDiagnostics{}
-	_, err := boundary.RunWithWriters(ctx, repo.Root, command, &output, &diagnostics)
+	_, err := runner.RunStreamed(ctx, boundary, repo.Root, command, &output, &diagnostics)
 	if err != nil {
 		return Sources{Findings: sourceBatchFindings(inputs, fmt.Sprintf("Rust syntax analysis failed: %v; %s", err, diagnosticOutput(diagnostics.Bytes())))}
 	}

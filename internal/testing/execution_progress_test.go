@@ -100,3 +100,7 @@ func executionProgressFixture(level string) ExecutionPlan {
 		}},
 	}
 }
+
+func (reporter *ExecutionReporter) CommandNotStarted(index int) {
+	reporter.CommandFinished(index, ExecutionResult{Status: executionStatusNotStarted, ResourceWaitKnown: true})
+}

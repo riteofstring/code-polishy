@@ -720,14 +720,6 @@ func (repo Repository) readPythonProject(normalized string) (PythonProject, erro
 	return project, nil
 }
 
-func ParsePythonProject(manifest string, data []byte) (PythonProject, error) {
-	python, err := pythonfacts.DefaultInterpreter()
-	if err != nil {
-		return PythonProject{}, err
-	}
-	return parsePythonProjectWith(python, manifest, data)
-}
-
 func parsePythonProjectWith(python, manifest string, data []byte) (PythonProject, error) {
 	parsed, err := parsePythonManifestWith(python, manifest, data)
 	if err != nil {
@@ -964,4 +956,46 @@ func pythonManifestError(manifest string, line int, format string, arguments ...
 		return fmt.Errorf("%s: %s", manifest, message)
 	}
 	return fmt.Errorf("%s line %d: %s", manifest, line, message)
+}
+
+func (problem PythonInventoryProblem) Affects(source string) bool {
+	for _, candidate := range []string{problem.Path, problem.Subject} {
+		if candidate == source {
+			return true
+		}
+		if candidate == "." || candidate != "" && strings.HasPrefix(source, strings.TrimSuffix(candidate, "/")+"/") {
+			return true
+		}
+		if filepath.Base(candidate) == "pyproject.toml" {
+			directory := filepath.ToSlash(filepath.Dir(candidate))
+			if directory == "." || strings.HasPrefix(source, directory+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (project PythonProject) RelativePath(source string) (string, error) {
+	relative, err := filepath.Rel(filepath.FromSlash(project.Root), filepath.FromSlash(source))
+	if err != nil {
+		return "", err
+	}
+	relative = filepath.ToSlash(relative)
+	if relative == ".." || strings.HasPrefix(relative, "../") {
+		return "", fmt.Errorf("source %q is outside project root %q", source, project.Root)
+	}
+	return relative, nil
+}
+
+func (inventory PythonProjectInventory) Owners() (map[string]PythonProject, map[string]string) {
+	projects := map[string]PythonProject{}
+	owners := map[string]string{}
+	for _, project := range inventory.Projects {
+		projects[project.Manifest] = project
+		for _, source := range project.Files {
+			owners[source] = project.Manifest
+		}
+	}
+	return projects, owners
 }

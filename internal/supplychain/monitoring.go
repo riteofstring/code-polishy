@@ -83,11 +83,6 @@ func hasSecurityMonitoringProvider(commands []policy.Command) bool {
 	return false
 }
 
-func workflowRunsWeeklySecurity(contents string) bool {
-	facts, err := workflowfacts.Parse("workflow.yml", []byte(contents), nil)
-	return err == nil && workflowFactsRunWeeklySecurity(facts)
-}
-
 func workflowFactsRunWeeklySecurity(facts workflowfacts.Facts) bool {
 	hasSchedule := false
 	for _, schedule := range facts.Schedules {

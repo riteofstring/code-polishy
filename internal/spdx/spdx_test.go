@@ -5,27 +5,6 @@ import (
 	"testing"
 )
 
-func TestSnapshotIdentityAndCompleteIdentifierSets(t *testing.T) {
-	identity, err := Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if identity.Version != "3.28.0" || identity.Tag != "v3.28.0" || identity.Commit != "c4a7237ec8f4654e867546f9f409749300f1bf4c" {
-		t.Fatalf("identity = %+v", identity)
-	}
-	licenses, err := LicenseIDs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	exceptions, err := ExceptionIDs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(licenses) != 727 || len(exceptions) != 84 {
-		t.Fatalf("licenses=%d exceptions=%d", len(licenses), len(exceptions))
-	}
-}
-
 func TestExpressionsUseOfficialIdentifiersAndPolicyPrecedence(t *testing.T) {
 	allowed := map[string]bool{
 		"mit": true,

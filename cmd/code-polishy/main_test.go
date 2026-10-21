@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -441,7 +442,7 @@ func TestParseTestReceiptOptionsRequiresOneCompleteMode(t *testing.T) {
 
 func TestParseBaseOption(t *testing.T) {
 	t.Parallel()
-	base, err := parseBaseOption("test-plan", []string{"--base", "origin/main"})
+	base, err := parseBaseOption("test-levels", []string{"--base", "origin/main"})
 	if err != nil || base != "origin/main" {
 		t.Fatalf("base=%q err=%v", base, err)
 	}
@@ -769,7 +770,7 @@ func installedRelease(t *testing.T, revision string) string {
 		Features: []string{"javascript-bundle"},
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Deadcode: "0.50.0",
 			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138",
 		},
 		CapabilityCatalogSHA256: hex.EncodeToString(catalogDigest[:]),
@@ -1011,95 +1012,6 @@ func TestNativeTaskSessionFreezesCanonicalScopeAndPreservesWorkerArgv(t *testing
 	}
 }
 
-func TestNativeTaskSessionFreezesAndValidatesExactArtifacts(t *testing.T) {
-	output := t.TempDir()
-	options, err := parseTaskSessionArtifactOptions([]string{
-		"freeze", "--output-dir", output, "--config", ".code-polishy.json",
-		"--module", "cli", "--allow-path=plan with spaces.md", "--allow-new-path", "new.md",
-		"--", "./worker", "Unicode-λ", "",
-	})
-	if err != nil {
-		t.Fatalf("parse freeze options: %v", err)
-	}
-	scopeDigest, commandDigest, err := freezeTaskSessionArtifacts(options)
-	if err != nil {
-		t.Fatalf("freeze artifacts: %v", err)
-	}
-	scope, err := os.ReadFile(filepath.Join(output, taskSessionScopeArtifact))
-	if err != nil {
-		t.Fatalf("read scope artifact: %v", err)
-	}
-	wantScope := nulDelimited([]string{"--module", "cli", "--allow-path", "plan with spaces.md", "--allow-new-path", "new.md"})
-	if !slices.Equal(scope, wantScope) {
-		t.Fatalf("scope artifact = %q, want %q", scope, wantScope)
-	}
-	command, err := os.ReadFile(filepath.Join(output, taskSessionCommandArtifact))
-	if err != nil {
-		t.Fatalf("read command artifact: %v", err)
-	}
-	wantCommand := nulDelimited([]string{"./worker", "Unicode-λ", ""})
-	if !slices.Equal(command, wantCommand) {
-		t.Fatalf("command artifact = %q, want %q", command, wantCommand)
-	}
-	if err := validateTaskSessionArtifacts(taskSessionArtifactOptions{
-		operation: "validate", outputDir: output, config: ".code-polishy.json",
-		scopeDigest: scopeDigest, commandDigest: commandDigest,
-	}); err != nil {
-		t.Fatalf("validate frozen artifacts: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(output, taskSessionCommandArtifact), append(command, 'x'), 0o600); err != nil {
-		t.Fatalf("tamper with command artifact: %v", err)
-	}
-	if err := validateTaskSessionArtifacts(taskSessionArtifactOptions{
-		operation: "validate", outputDir: output, config: ".code-polishy.json",
-		scopeDigest: scopeDigest, commandDigest: commandDigest,
-	}); err == nil || !strings.Contains(err.Error(), "malformed") {
-		t.Fatalf("tampered command validation error = %v", err)
-	}
-}
-
-func TestNativeTaskSessionArtifactValidationRejectsChangedScopeAndWeakDigests(t *testing.T) {
-	output := t.TempDir()
-	options := taskSessionArtifactOptions{
-		operation: "freeze", outputDir: output, config: "config.json",
-		scope: []string{"--module", "cli"}, command: []string{"worker"},
-	}
-	scopeDigest, commandDigest, err := freezeTaskSessionArtifacts(options)
-	if err != nil {
-		t.Fatalf("freeze artifacts: %v", err)
-	}
-	if _, err := parseTaskSessionArtifactOptions([]string{
-		"validate", "--output-dir", output, "--scope-digest", strings.Repeat("a", 40),
-		"--command-digest", commandDigest,
-	}); err == nil {
-		t.Fatal("validate accepted a legacy short digest")
-	}
-	if err := validateTaskSessionArtifacts(taskSessionArtifactOptions{
-		operation: "validate", outputDir: output, config: "changed.json",
-		scopeDigest: scopeDigest, commandDigest: commandDigest,
-	}); err == nil || !strings.Contains(err.Error(), "scope changed") {
-		t.Fatalf("changed config validation error = %v", err)
-	}
-}
-
-func TestNativeTaskSessionArtifactFreezeRollsBackAsOneMutation(t *testing.T) {
-	output := t.TempDir()
-	commandPath := filepath.Join(output, taskSessionCommandArtifact)
-	if err := os.WriteFile(commandPath, []byte("existing"), 0o600); err != nil {
-		t.Fatalf("write existing command artifact: %v", err)
-	}
-	_, _, err := freezeTaskSessionArtifacts(taskSessionArtifactOptions{
-		operation: "freeze", outputDir: output,
-		scope: []string{"--module", "cli"}, command: []string{"worker"},
-	})
-	if err == nil {
-		t.Fatal("freeze replaced an existing artifact")
-	}
-	if _, err := os.Lstat(filepath.Join(output, taskSessionScopeArtifact)); !os.IsNotExist(err) {
-		t.Fatalf("failed freeze left a scope artifact: %v", err)
-	}
-	contents, err := os.ReadFile(commandPath)
-	if err != nil || string(contents) != "existing" {
-		t.Fatalf("existing command artifact changed: contents=%q err=%v", contents, err)
-	}
+func printReportTo(stdout, stderr io.Writer, report engine.Report) {
+	printReportWithMode(stdout, stderr, report, false)
 }

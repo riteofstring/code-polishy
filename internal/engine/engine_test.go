@@ -1489,7 +1489,7 @@ type failingEngineRunner struct {
 	failure  string
 }
 
-func (runner *failingEngineRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (runner *failingEngineRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	runner.commands = append(runner.commands, command.Name)
 	if command.Name == runner.failure {
 		return errors.New("configured failure")
@@ -1497,7 +1497,7 @@ func (runner *failingEngineRunner) Run(_ context.Context, _ string, command poli
 	return nil
 }
 
-func (runner *recordingEngineRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (runner *recordingEngineRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	runner.commands = append(runner.commands, command.Name)
 	return nil
 }
@@ -1515,12 +1515,7 @@ type focusedRetryEngineRunner struct {
 	commands      [][]string
 }
 
-func (testRunner *focusedRetryEngineRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := testRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (testRunner *focusedRetryEngineRunner) RunWithResult(_ context.Context, root string, command policy.Command) (runner.Result, error) {
+func (testRunner *focusedRetryEngineRunner) runResult(_ context.Context, root string, command policy.Command) (runner.Result, error) {
 	if root != testRunner.candidateRoot {
 		return runner.Result{}, nil
 	}
@@ -1531,12 +1526,7 @@ func (testRunner *focusedRetryEngineRunner) RunWithResult(_ context.Context, roo
 	return runner.Result{ExitStatus: 0}, nil
 }
 
-func (testRunner *diagnosticEngineRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := testRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (testRunner *diagnosticEngineRunner) RunWithResult(_ context.Context, root string, _ policy.Command) (runner.Result, error) {
+func (testRunner *diagnosticEngineRunner) runResult(_ context.Context, root string, _ policy.Command) (runner.Result, error) {
 	if root == testRunner.candidateRoot {
 		testRunner.candidateRuns++
 		if testRunner.candidateRuns <= testRunner.candidateFailures {
@@ -1552,4 +1542,26 @@ func (testRunner *diagnosticEngineRunner) RunWithResult(_ context.Context, root 
 		return runner.Result{ExitStatus: 17, FailureCategory: runner.FailureCommandExit}, errors.New("baseline suite failed")
 	}
 	return runner.Result{ExitStatus: 0}, nil
+}
+
+func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error) {
+	return engine.MergeGateWithOptions(ctx, base, MergeGateOptions{})
+}
+
+func (double *failingEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *recordingEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *focusedRetryEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	result, err := double.runResult(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
+}
+
+func (double *diagnosticEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	result, err := double.runResult(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
 }

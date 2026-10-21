@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-
-
-
-
-
-
-
 javascript_policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 case "$(uname -s)" in
@@ -33,15 +26,9 @@ javascript_runtime_dir="${javascript_runtime_root}/${javascript_platform_tag}"
 javascript_node="${javascript_runtime_dir}/node/bin/node"
 javascript_pnpm="${javascript_runtime_dir}/pnpm/bin/pnpm.cjs"
 
-
-
 javascript_bundle_source="${javascript_policy_root}/tools/javascript"
 javascript_bundle_dir="${javascript_runtime_root}/bundle"
 javascript_store="${javascript_runtime_root}/store"
-
-
-
-
 
 javascript_bundle_source_files=()
 while IFS= read -r javascript_bundle_source_file; do
@@ -49,9 +36,6 @@ while IFS= read -r javascript_bundle_source_file; do
 done <"${javascript_bundle_source}/source-files.txt"
 export javascript_runner="${javascript_bundle_dir}/runner.mjs"
 export javascript_bundle_manifest_name="bundle-manifest.json"
-
-
-
 
 javascript_sealed_run() {
   if [[ -z "${javascript_scratch_home:-}" ]]; then
@@ -71,8 +55,6 @@ javascript_sealed_run() {
     "$@"
 }
 
-
-
 javascript_sealed_pnpm() {
   local bundle_dir="$1"
   shift
@@ -87,8 +69,6 @@ javascript_sealed_pnpm() {
         --store-dir "${javascript_store}" "$@"
   )
 }
-
-
 
 javascript_copy_bundle_source() {
   local target="$1"

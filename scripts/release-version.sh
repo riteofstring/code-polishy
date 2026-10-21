@@ -1,19 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 usage() {
   echo "usage: release-version.sh <version-file>" >&2
   exit 2

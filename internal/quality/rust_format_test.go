@@ -1,6 +1,8 @@
 package quality
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -193,19 +195,19 @@ type rustSyntaxFailureRunner struct {
 	formatted int
 }
 
-func (boundary *rustSyntaxFailureRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *rustSyntaxFailureRunner) runStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	if strings.HasPrefix(command.Name, "policy-rustfmt-") {
 		boundary.formatted++
 	}
-	return boundary.OSRunner.RunStructured(ctx, root, command)
+	return runner.RunCaptured(ctx, boundary.OSRunner, root, command, runner.CaptureStructured)
 }
 
-func (boundary *rustSyntaxFailureRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (boundary *rustSyntaxFailureRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	if command.Name == "policy-rust-source-facts" {
 		_, err := io.WriteString(stdout, "{}\n")
 		return runner.Result{}, errors.Join(err, boundary.failure)
 	}
-	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
+	return runner.RunStreamed(ctx, boundary.OSRunner, root, command, stdout, stderr)
 }
 
 type rustEditingRunner struct {
@@ -214,18 +216,18 @@ type rustEditingRunner struct {
 	edit   func()
 }
 
-func (boundary rustEditingRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary rustEditingRunner) runStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	if strings.HasPrefix(command.Name, boundary.before) {
 		boundary.edit()
 	}
-	return boundary.OSRunner.RunStructured(ctx, root, command)
+	return runner.RunCaptured(ctx, boundary.OSRunner, root, command, runner.CaptureStructured)
 }
 
-func (boundary rustEditingRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (boundary rustEditingRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	if strings.HasPrefix(command.Name, boundary.before) {
 		boundary.edit()
 	}
-	return boundary.OSRunner.RunWithWriters(ctx, root, command, stdout, stderr)
+	return runner.RunStreamed(ctx, boundary.OSRunner, root, command, stdout, stderr)
 }
 
 func rustFormatRepository(t *testing.T) repository.Repository {
@@ -242,4 +244,28 @@ func rustFormatFileText(t *testing.T, repo repository.Repository, path string) s
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func (double *rustSyntaxFailureRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return double.OSRunner.Execute(ctx, invocation)
+}
+
+func (double rustEditingRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return double.OSRunner.Execute(ctx, invocation)
 }

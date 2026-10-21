@@ -110,7 +110,7 @@ func TestRustSourceFactsRejectFabricatedOrIncompleteResponses(t *testing.T) {
 	repo := rustRepository(t)
 	write(t, repo.Root, "src/lib.rs", "pub fn f() {}\n")
 	plan := PlanSources(repo, []string{"src/lib.rs"})
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}

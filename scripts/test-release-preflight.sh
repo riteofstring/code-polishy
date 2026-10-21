@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-preflight-test.XXXXXX")" && pwd -P)"
 cleanup() {
@@ -25,10 +17,6 @@ remote_started="${fixture_root}/remote-started"
 remote_continue="${fixture_root}/remote-continue"
 real_git="$(command -v git)"
 
-
-
-
-
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 fail() {
@@ -40,10 +28,6 @@ write_file() {
   mkdir -p "$(dirname "$1")"
   cat >"$1"
 }
-
-
-
-
 
 build_source_checkout() {
   rm -rf "${source_root}" "${remote_root}"
@@ -80,8 +64,6 @@ commit_checkout() {
   "${real_git}" -C "${source_root}" commit --quiet -m "$1"
 }
 
-
-
 build_command_shims() {
   mkdir -p "${shim_bin}"
   cat >"${shim_bin}/git" <<EOF
@@ -103,8 +85,6 @@ repository_state() {
   "${real_git}" -C "${source_root}" rev-parse HEAD
   "${real_git}" -C "${source_root}" status --porcelain=v1 --untracked-files=all
 }
-
-
 
 run_preflight() {
   local before after status=0
@@ -172,11 +152,6 @@ usage_status=0
 run_preflight || usage_status=$?
 [[ "${usage_status}" == "2" ]] || fail "a missing candidate was not refused as a usage error"
 
-
-
-
-
-
 requirement="canonical lowercase full commit object ID"
 expect_fail "a candidate that names no commit" "does not name a commit" \
   0000000000000000000000000000000000000000
@@ -215,9 +190,6 @@ printf 'unstaged\n' >>"${source_root}/later.txt"
 expect_fail "an unstaged modification" "later.txt" "${candidate}"
 "${real_git}" -C "${source_root}" checkout -- later.txt
 
-
-
-
 expect_pass "a clean untagged candidate" "${candidate}"
 grep -q "the tag v9.9.9 does not exist yet" "${output}" ||
   fail "the missing tag state was not reported"
@@ -246,8 +218,6 @@ candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 expect_fail "a malformed VERSION" "not a strict MAJOR.MINOR.PATCH semantic version" "${candidate}"
 grep -qF "\`9.9\`" "${output}" || fail "the malformed version was refused without naming it"
 
-
-
 printf '9. 9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable interior whitespace version"
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
@@ -272,8 +242,6 @@ printf '9.9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable version restored"
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
-
-
 write_file "${source_root}/CHANGELOG.md" <<'EOF'
 # Changelog
 
@@ -290,13 +258,9 @@ grep -qF '## 9.9.9 - <YYYY-MM-DD>' "${output}" ||
 build_source_checkout
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
-
-
 "${real_git}" -C "${source_root}" tag v9.9.9
 expect_fail "a lightweight candidate tag" "not an annotated tag" "${candidate}"
 "${real_git}" -C "${source_root}" tag -d v9.9.9 >/dev/null
-
-
 
 "${real_git}" -C "${source_root}" tag -a nested-inner -m "inner tag" "${candidate}"
 "${real_git}" -C "${source_root}" -c advice.nestedTag=false tag -a v9.9.9 \
@@ -317,16 +281,11 @@ expect_pass "an annotated tag at the exact candidate" "${candidate}"
 grep -q "the annotated tag v9.9.9 points directly at the exact candidate" "${output}" ||
   fail "the resolved tag state was not reported"
 
-
-
-
 tag_object="$("${real_git}" -C "${source_root}" rev-parse refs/tags/v9.9.9)"
 expect_fail "a full object ID naming a tag object" \
   "not itself a commit object" "${tag_object}"
 grep -qF "${requirement}" "${output}" ||
   fail "a tag object ID was refused without the exact naming requirement"
-
-
 
 [[ -s "${git_log}" ]] || fail "the preflight was never asked for repository state"
 while read -r invocation; do
@@ -336,8 +295,6 @@ while read -r invocation; do
     *) fail "the preflight ran an unexpected git command: git ${invocation}" ;;
   esac
 done <"${git_log}"
-
-
 
 : >"${git_log}"
 build_source_checkout

@@ -65,15 +65,10 @@ func Discover(ctx context.Context, repo repository.Repository, plan DiscoveryPla
 	if len(plan.Commands) == 0 {
 		return result
 	}
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		result.Findings = append(result.Findings, projectFinding(plan.Manifests[0], "metadata", "the runner cannot capture bounded Cargo metadata"))
-		return result
-	}
 	seen := map[string]bool{}
 	for index, command := range plan.Commands {
 		manifest := plan.Manifests[max(0, index-2)]
-		_, output, err := structured.RunStructured(ctx, repo.Root, command)
+		_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureStructured)
 		if err != nil {
 			result.Findings = append(result.Findings, projectFinding(manifest, command.Name, fmt.Sprintf("Cargo discovery failed: %v: %s", err, diagnosticOutput(output.Stderr))))
 			if index < 2 || ctx.Err() != nil {

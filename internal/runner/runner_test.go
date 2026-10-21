@@ -27,7 +27,7 @@ func TestOSRunnerExecutesArgumentArray(t *testing.T) {
 	}
 	runner := OSRunner{}
 	command := policy.Command{Name: "record", Argv: []string{"./record.sh", "literal;not-shell"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds}
-	if err := runner.Run(context.Background(), root, command); err != nil {
+	if err := RunCommand(context.Background(), runner, root, command); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "result"))
@@ -47,9 +47,9 @@ func TestOSRunnerCapturesStructuredOutputThroughTheCommonBoundary(t *testing.T) 
 		t.Fatal(err)
 	}
 	var configuredStdout, configuredStderr bytes.Buffer
-	result, output, err := (OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}).RunWithOutput(context.Background(), root, policy.Command{
+	result, output, err := RunCaptured(context.Background(), OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}, root, policy.Command{
 		Name: "report", Argv: []string{"./report.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
-	})
+	}, CaptureOutput)
 	if err != nil || result.ExitStatus != 0 || string(output.Stdout) != "report" || string(output.Stderr) != "diagnostic" {
 		t.Fatalf("result=%+v output=%+v error=%v", result, output, err)
 	}
@@ -66,9 +66,9 @@ func TestOSRunnerKeepsStructuredProtocolOutputOutOfHumanOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	var configuredStdout, configuredStderr bytes.Buffer
-	result, output, err := (OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}).RunStructured(context.Background(), root, policy.Command{
+	result, output, err := RunCaptured(context.Background(), OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}, root, policy.Command{
 		Name: "protocol", Argv: []string{"./protocol.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
-	})
+	}, CaptureStructured)
 	if err != nil || result.ExitStatus != 0 || string(output.Stdout) != "response" || string(output.Stderr) != "diagnostic" {
 		t.Fatalf("result=%+v output=%+v error=%v", result, output, err)
 	}
@@ -85,13 +85,7 @@ func TestOSRunnerRunWithWritersUsesOnlyTheRequestedDestinations(t *testing.T) {
 		t.Fatal(err)
 	}
 	var configuredStdout, configuredStderr, requestedStdout, requestedStderr bytes.Buffer
-	result, err := (OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}).RunWithWriters(
-		context.Background(),
-		root,
-		policy.Command{Name: "redirect", Argv: []string{"./redirect.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds},
-		&requestedStdout,
-		&requestedStderr,
-	)
+	result, err := RunStreamed(context.Background(), OSRunner{Stdout: &configuredStdout, Stderr: &configuredStderr}, root, policy.Command{Name: "redirect", Argv: []string{"./redirect.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds}, &requestedStdout, &requestedStderr)
 	if err != nil || result.ExitStatus != 0 {
 		t.Fatalf("result=%+v error=%v", result, err)
 	}
@@ -121,13 +115,13 @@ func testBoundedOutputCapture(t *testing.T, structured bool, exit string) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nhead -c 8388609 /dev/zero\nhead -c 65537 /dev/zero >&2\nexit "+exit+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	run := (OSRunner{}).RunWithOutput
+	capture := CaptureOutput
 	if structured {
-		run = (OSRunner{}).RunStructured
+		capture = CaptureStructured
 	}
-	result, output, err := run(context.Background(), root, policy.Command{
+	result, output, err := RunCaptured(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "large-report", Argv: []string{"./large-report.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
-	})
+	}, capture)
 	if err == nil || !strings.Contains(err.Error(), "captured structured output") {
 		t.Fatalf("large structured output error = %v", err)
 	}
@@ -144,7 +138,7 @@ func TestOSRunnerRejectsEscapingWorkingDirectory(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
 		t.Fatal(err)
 	}
-	err := (OSRunner{}).Run(context.Background(), root, policy.Command{Name: "escape", Argv: []string{"true"}, Cwd: "escape", TimeoutSeconds: 5})
+	err := RunCommand(context.Background(), OSRunner{}, root, policy.Command{Name: "escape", Argv: []string{"true"}, Cwd: "escape", TimeoutSeconds: 5})
 	if err == nil || !strings.Contains(err.Error(), "outside") {
 		t.Fatalf("expected containment error, got %v", err)
 	}
@@ -157,7 +151,7 @@ func TestOSRunnerTimesOut(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nsleep 5\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	status, err := (OSRunner{}).RunWithStatus(context.Background(), root, policy.Command{Name: "wait", Argv: []string{"./wait.sh"}, Cwd: ".", TimeoutSeconds: 1})
+	status, err := runStatus(context.Background(), OSRunner{}, root, policy.Command{Name: "wait", Argv: []string{"./wait.sh"}, Cwd: ".", TimeoutSeconds: 1})
 	if err == nil || status != 124 || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("status=%d error=%v", status, err)
 	}
@@ -202,7 +196,7 @@ func TestOSRunnerClassifiesObservedFailures(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			result, err := (OSRunner{}).RunWithResult(testCase.ctx, root, testCase.command)
+			result, err := RunObserved(testCase.ctx, OSRunner{}, root, testCase.command)
 			if err == nil || result.FailureCategory != testCase.category || FailureCategoryFor(testCase.ctx, result, err) != testCase.category {
 				t.Fatalf("result=%+v error=%v category=%q", result, err, FailureCategoryFor(testCase.ctx, result, err))
 			}
@@ -226,7 +220,7 @@ func TestOSRunnerReportsProcessStatus(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nexit 17\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	status, err := (OSRunner{}).RunWithStatus(context.Background(), root, policy.Command{
+	status, err := runStatus(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "fail", Argv: []string{"./fail.sh"}, Cwd: ".", TimeoutSeconds: 5,
 	})
 	if err == nil || status != 17 {
@@ -245,7 +239,7 @@ func TestOSRunnerOnlyForwardsRequestedSensitiveEnvironment(t *testing.T) {
 	run := func(name string, environment []string) string {
 		t.Helper()
 		command := policy.Command{Name: name, Argv: []string{"./environment.sh"}, Cwd: ".", Environment: environment, TimeoutSeconds: successfulCommandTimeoutSeconds}
-		if err := (OSRunner{}).Run(context.Background(), root, command); err != nil {
+		if err := RunCommand(context.Background(), OSRunner{}, root, command); err != nil {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(filepath.Join(root, "result"))
@@ -271,7 +265,7 @@ func TestOSRunnerBuildsASealedCommandEnvironment(t *testing.T) {
 	if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := (OSRunner{}).Run(context.Background(), root, policy.Command{
+	if err := RunCommand(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "sealed-environment", Argv: []string{"./environment.sh"}, Cwd: ".", SealedEnvironment: true,
 		TimeoutSeconds: successfulCommandTimeoutSeconds,
 	}); err != nil {
@@ -301,7 +295,7 @@ func TestOSRunnerCancellationCancelsDescendants(t *testing.T) {
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		result <- (OSRunner{}).Run(ctx, root, policy.Command{
+		result <- RunCommand(ctx, OSRunner{}, root, policy.Command{
 			Name: "descendant", Argv: []string{"./descendant.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
 		})
 	}()
@@ -346,9 +340,9 @@ func TestOSRunnerSuccessWithInheritedOutputCancelsDescendantsBeforeReleasingReso
 		t.Fatal(err)
 	}
 	resource := "success-cleanup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	result, output, err := (OSRunner{}).RunWithOutput(context.Background(), root, policy.Command{
+	result, output, err := RunCaptured(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "background", Argv: []string{"./background.sh"}, Cwd: ".", ExclusiveResources: []string{resource}, TimeoutSeconds: successfulCommandTimeoutSeconds,
-	})
+	}, CaptureOutput)
 	if err != nil {
 		t.Fatalf("background command: %v", err)
 	}
@@ -359,7 +353,7 @@ func TestOSRunnerSuccessWithInheritedOutputCancelsDescendantsBeforeReleasingReso
 	if err := os.WriteFile(after, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := (OSRunner{}).Run(context.Background(), root, policy.Command{
+	if err := RunCommand(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "after-background", Argv: []string{"./after-background.sh"}, Cwd: ".", ExclusiveResources: []string{resource}, TimeoutSeconds: successfulCommandTimeoutSeconds,
 	}); err != nil {
 		t.Fatalf("resource remained locked after successful cleanup: %v", err)
@@ -392,7 +386,7 @@ func TestOSRunnerPrependsPinnedToolDirectory(t *testing.T) {
 	}
 	commandRunner := OSRunner{PathEntries: []string{toolDirectory}}
 	command := policy.Command{Name: "find-helper", Argv: []string{"policy-go-helper"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds}
-	if err := commandRunner.Run(context.Background(), root, command); err != nil {
+	if err := RunCommand(context.Background(), commandRunner, root, command); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "result"))
@@ -442,7 +436,7 @@ func TestExclusiveResourcesSerializeAcrossProcessesAndReleaseAfterFailureOrCance
 	t.Setenv("CODE_POLISHY_RESOURCE_MARKER", filepath.Join(t.TempDir(), "cancelled"))
 	t.Setenv("CODE_POLISHY_RESOURCE_SLEEP", "5")
 	t.Setenv("CODE_POLISHY_RESOURCE_EXIT", "0")
-	result, err := (OSRunner{}).RunWithResult(contextWithTimeout, cancelRoot, command)
+	result, err := RunObserved(contextWithTimeout, OSRunner{}, cancelRoot, command)
 	if err == nil || result.ExitStatus != 124 {
 		t.Fatalf("cancelled command result=%+v error=%v", result, err)
 	}
@@ -454,11 +448,8 @@ func TestExclusiveResourcesSerializeAcrossProcessesAndReleaseAfterFailureOrCance
 	waitForResourceMarker(t, afterCancellation)
 }
 
-func TestResourceLockNamespaceIsStablePerUserAndWaitsReportPeriodically(t *testing.T) {
+func TestResourceLockWaitsReportPeriodically(t *testing.T) {
 	resource := "performance-progress-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	if resourceLockNamespaceForUser(1000) == resourceLockNamespaceForUser(1001) {
-		t.Fatal("resource lock namespace is not partitioned by Unix user")
-	}
 	root := resourceFixtureRepository(t)
 	marker := filepath.Join(t.TempDir(), "holder")
 	holder := startResourceHelper(t, root, marker, resource, "2", "0")
@@ -470,7 +461,7 @@ func TestResourceLockNamespaceIsStablePerUserAndWaitsReportPeriodically(t *testi
 	t.Setenv("CODE_POLISHY_RESOURCE_MARKER", filepath.Join(t.TempDir(), "waiter"))
 	t.Setenv("CODE_POLISHY_RESOURCE_SLEEP", "0")
 	t.Setenv("CODE_POLISHY_RESOURCE_EXIT", "0")
-	result, err := (OSRunner{}).RunWithResult(contextWithProgress, root, resourceCommand("waiter", resource))
+	result, err := RunObserved(contextWithProgress, OSRunner{}, root, resourceCommand("waiter", resource))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +486,7 @@ func TestResourceProcessHelper(t *testing.T) {
 		return
 	}
 	command := resourceCommand("resource-helper", os.Getenv("CODE_POLISHY_RESOURCE_NAME"))
-	if _, err := (OSRunner{}).RunWithResult(context.Background(), os.Getenv("CODE_POLISHY_RESOURCE_ROOT"), command); err != nil {
+	if _, err := RunObserved(context.Background(), OSRunner{}, os.Getenv("CODE_POLISHY_RESOURCE_ROOT"), command); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -595,5 +586,35 @@ func TestGoModuleVersionReadsTheBinaryRatherThanRunningIt(t *testing.T) {
 
 	if got := GoModuleVersion(filepath.Join(root, "absent"), binary); got != "" {
 		t.Fatalf("a missing toolchain reported %q", got)
+	}
+}
+
+func TestExecutableModeUsesTheHostContract(t *testing.T) {
+	if !executableMode("windows", 0o600) {
+		t.Fatal("Windows regular executable required Unix mode bits")
+	}
+	if executableMode("linux", os.FileMode(0o600)) || !executableMode("linux", os.FileMode(0o700)) {
+		t.Fatal("Unix executable mode bits were not honored")
+	}
+}
+
+func runStatus(ctx context.Context, commandRunner Runner, root string, command policy.Command) (int, error) {
+	result, err := RunObserved(ctx, commandRunner, root, command)
+	return result.ExitStatus, err
+}
+
+func TestCaptureFailureCategoryPreservesInterruptions(t *testing.T) {
+	t.Parallel()
+	err := errors.New("captured output exceeded its limit")
+	for _, test := range []struct {
+		recorded, want FailureCategory
+	}{
+		{FailureCommandExit, FailureOperational},
+		{FailureTimeout, FailureTimeout},
+		{FailureCanceled, FailureCanceled},
+	} {
+		if got := CaptureFailureCategory(context.Background(), Result{ExitStatus: 101, FailureCategory: test.recorded}, err); got != test.want {
+			t.Errorf("%s capture failure category = %s, want %s", test.recorded, got, test.want)
+		}
 	}
 }

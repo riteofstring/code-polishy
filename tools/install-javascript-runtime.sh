@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
 # shellcheck source=tools/javascript-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-env.sh"
 
@@ -42,11 +31,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-
-
 javascript_scratch_home="${temporary_dir}/home"
-
-
 
 list_binary_artifacts() {
   (
@@ -89,8 +74,6 @@ mv "${temporary_dir}/extract/node-v${node_version}-${platform_tag}" "${staging}/
 tar -xzf "${temporary_dir}/${pnpm_archive}" -C "${temporary_dir}/extract"
 mv "${temporary_dir}/extract/package" "${staging}/pnpm"
 
-
-
 rm -rf \
   "${staging}/node/bin/npm" \
   "${staging}/node/bin/npx" \
@@ -102,9 +85,6 @@ if [[ -n "${retained_managers}" ]]; then
   echo "Node ${node_version} bundles unexpected package managers: ${retained_managers}" >&2
   exit 1
 fi
-
-
-
 
 node_binaries="$(list_binary_artifacts "${staging}/node")"
 if [[ -n "${node_binaries}" ]]; then

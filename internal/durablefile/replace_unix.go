@@ -1,9 +1,9 @@
 //go:build !windows
 
-package testreceipt
+package durablefile
 
 import "os"
 
-func replaceReceipt(source, destination string) error {
+func Replace(source, destination string) error {
 	return os.Rename(source, destination)
 }

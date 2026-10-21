@@ -22,12 +22,12 @@ type ownershipAnalysisGateRunner struct {
 	commands []policy.Command
 }
 
-func (commandRunner *ownershipAnalysisGateRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (commandRunner *ownershipAnalysisGateRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	commandRunner.commands = append(commandRunner.commands, command)
 	return nil
 }
 
-func (commandRunner *ownershipAnalysisGateRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (commandRunner *ownershipAnalysisGateRunner) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	commandRunner.commands = append(commandRunner.commands, command)
 	graph := map[string][]string{}
 	for _, path := range command.Paths {
@@ -37,11 +37,11 @@ func (commandRunner *ownershipAnalysisGateRunner) RunWithOutput(_ context.Contex
 	return runner.Result{ExitStatus: 0}, runner.Output{Stdout: data}, err
 }
 
-func (commandRunner *plannedOutputRunner) Run(context.Context, string, policy.Command) error {
+func (commandRunner *plannedOutputRunner) runPlain(context.Context, string, policy.Command) error {
 	return nil
 }
 
-func (commandRunner *plannedOutputRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (commandRunner *plannedOutputRunner) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	commandRunner.command = command
 	return runner.Result{ExitStatus: 0}, commandRunner.output, nil
 }
@@ -54,7 +54,7 @@ func TestMergeGatePlannedRunnerCapturesStructuredAnalyzerOutput(t *testing.T) {
 		root: "/repository", delegate: delegate,
 		expected: []MergeGateExecutionCommand{{Command: command}},
 	}
-	result, output, err := commandRunner.RunStructured(t.Context(), "/repository", command)
+	result, output, err := runner.RunCaptured(t.Context(), commandRunner, "/repository", command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,9 +135,23 @@ func TestMergeGatePlannedRunnerNamesCommandIdentityMismatch(t *testing.T) {
 		root: "/repository", delegate: &plannedOutputRunner{},
 		expected: []MergeGateExecutionCommand{{Command: expected}},
 	}
-	_, _, err := commandRunner.RunWithOutput(t.Context(), "/repository", actual)
+	_, _, err := runner.RunCaptured(t.Context(), commandRunner, "/repository", actual, runner.CaptureOutput)
 	if err == nil || !strings.Contains(err.Error(), `command "actual"`) || !strings.Contains(err.Error(), `expected "expected"`) ||
 		!strings.Contains(err.Error(), "metadata") || !strings.Contains(err.Error(), "arguments") || !strings.Contains(err.Error(), "selection") {
 		t.Fatalf("mismatch error = %v", err)
 	}
+}
+
+func (double *ownershipAnalysisGateRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *plannedOutputRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

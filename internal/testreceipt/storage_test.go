@@ -92,3 +92,15 @@ func fixtureIdentity() Identity {
 		Inputs: []Input{{Path: "domain/model.go", Mode: 0o644, SHA256: strings.Repeat("c", 64)}},
 	}
 }
+
+func loadAt(repositoryRoot string, identity Identity, now time.Time) (Reusable, error) {
+	identitySHA256, err := identity.Digest()
+	if err != nil {
+		return Reusable{}, err
+	}
+	return loadDigestAt(repositoryRoot, identitySHA256, now)
+}
+
+func sameReceipt(left, right Receipt) bool {
+	return left.SHA256 != "" && left.SHA256 == right.SHA256
+}

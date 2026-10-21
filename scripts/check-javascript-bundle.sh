@@ -1,19 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/javascript-env.sh
 source "${policy_root}/tools/javascript-env.sh"
@@ -29,9 +16,6 @@ case "${1-}" in
     ;;
 esac
 
-
-
-
 approved_licenses="Apache-2.0 BSD-2-Clause BSD-3-Clause BlueOak-1.0.0 CC0-1.0 ISC MIT MPL-2.0 Python-2.0"
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-javascript-bundle-check.XXXXXX")"
@@ -44,8 +28,6 @@ javascript_scratch_home="${temporary_dir}/home"
 "${policy_root}/tools/verify-javascript-bundle-lock.sh" \
   "${javascript_bundle_source}/pnpm-lock.yaml"
 
-
-
 javascript_copy_bundle_source "${temporary_dir}/bundle"
 javascript_sealed_pnpm "${temporary_dir}/bundle" \
   install --lockfile-only --frozen-lockfile --offline >/dev/null
@@ -56,13 +38,8 @@ if [[ ! -d "${javascript_bundle_dir}" ]]; then
   exit 1
 fi
 
-
-
 "${policy_root}/tools/javascript-bundle-manifest.sh" verify "${javascript_bundle_dir}"
 "${policy_root}/tools/verify-javascript-bundle-tree.sh" "${javascript_bundle_dir}"
-
-
-
 
 installed_inventory="${temporary_dir}/inventory.txt"
 license_flattener="${temporary_dir}/flatten-licenses.mjs"
@@ -82,8 +59,6 @@ javascript_sealed_run env "npm_config_store_dir=${javascript_store}" \
   --dir "${javascript_bundle_dir}" --config.storeDir="${javascript_store}" \
   licenses list --json |
   javascript_sealed_run "${javascript_node}" "${license_flattener}" >"${installed_inventory}"
-
-
 
 locked_packages="${temporary_dir}/locked.txt"
 awk '/^packages:/ { in_packages = 1; next }

@@ -19,6 +19,7 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	provenancev1 "github.com/in-toto/attestation/go/predicates/provenance/v1"
 	intoto "github.com/in-toto/attestation/go/v1"
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -839,18 +840,7 @@ func writeNewFileAtomically(output string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(destination), ".code-polishy-index-*.json")
-	if err != nil {
-		return err
-	}
-	path := temporary.Name()
-	defer os.Remove(path)
-	_, writeErr := temporary.Write(data)
-	closeErr := temporary.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		return err
-	}
-	return os.Rename(path, destination)
+	return durablefile.Write(destination, data, 0o600)
 }
 
 func renderJSON(value any) ([]byte, error) {

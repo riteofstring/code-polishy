@@ -27,11 +27,11 @@ func TestWindowsSealedEnvironmentUsesNativeNameLookup(t *testing.T) {
 
 func TestWindowsSealedTemporaryDirectory(t *testing.T) {
 	t.Parallel()
-	result, output, err := (OSRunner{}).RunWithOutput(t.Context(), t.TempDir(), policy.Command{
+	result, output, err := RunCaptured(t.Context(), OSRunner{}, t.TempDir(), policy.Command{
 		Name: "private-temporary-directory", Argv: []string{os.Args[0], "-test.run=^TestWindowsSealedTemporaryDirectoryHelper$"},
 		SealedEnvironment: true, TimeoutSeconds: 30,
 		EnvironmentOverrides: []string{"CODE_POLISHY_TEMP_PROBE=1"},
-	})
+	}, CaptureOutput)
 	if err != nil || result.ExitStatus != 0 {
 		t.Fatalf("sealed temporary directory: %+v, %v; %s%s", result, err, output.Stdout, output.Stderr)
 	}

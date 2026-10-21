@@ -161,11 +161,11 @@ func gateCommandOutcome(outcomes []gaterun.CommandOutcome, name string) (gaterun
 
 type assessedOSVGateRunner struct{}
 
-func (assessedOSVGateRunner) Run(context.Context, string, policy.Command) error {
+func (assessedOSVGateRunner) runPlain(context.Context, string, policy.Command) error {
 	return nil
 }
 
-func (assessedOSVGateRunner) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (assessedOSVGateRunner) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	if command.ReportProtocol != policy.OSVVulnerabilityReportProtocol {
 		return runner.Result{ExitStatus: 0}, runner.Output{}, nil
 	}
@@ -229,12 +229,7 @@ type intermittentGateRunner struct {
 	focused [][]string
 }
 
-func (testRunner *intermittentGateRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := testRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (testRunner *intermittentGateRunner) RunWithResult(_ context.Context, _ string, command policy.Command) (runner.Result, error) {
+func (testRunner *intermittentGateRunner) runResult(_ context.Context, _ string, command policy.Command) (runner.Result, error) {
 	if command.Name != "focused" {
 		return runner.Result{ExitStatus: 0}, nil
 	}
@@ -292,7 +287,7 @@ func TestMergeGateRecordsValidatedTestArtifacts(t *testing.T) {
 
 type artifactWritingEngineRunner struct{}
 
-func (artifactWritingEngineRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (artifactWritingEngineRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	if command.TestArtifactDirectory == "" {
 		return nil
 	}
@@ -379,4 +374,20 @@ func TestWorkingTreeCandidateDigestChangesWithContent(t *testing.T) {
 	if first == second {
 		t.Fatal("working-tree content change did not change the candidate identity")
 	}
+}
+
+func (double assessedOSVGateRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *intermittentGateRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	result, err := double.runResult(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
+}
+
+func (double artifactWritingEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

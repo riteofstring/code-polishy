@@ -15,17 +15,13 @@ import (
 )
 
 func FormatSource(ctx context.Context, repo repository.Repository, path, edition string, source []byte, commandRunner runner.Runner) ([]byte, error) {
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return nil, errors.New("the formatter runner cannot capture bounded rustfmt output")
-	}
 	configuration, style, err := formatConfiguration(repo, path, edition)
 	if err != nil {
 		return nil, err
 	}
 	command := Command(repo, "policy-rustfmt-"+path, "rustfmt", "--edition", edition, "--style-edition", style, "--emit", "stdout", "--config-path", configuration)
 	command.Stdin = source
-	_, output, err := structured.RunStructured(ctx, repo.Root, command)
+	_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		return nil, fmt.Errorf("rustfmt failed for %s: %v %s", path, err, diagnosticOutput(output.Stderr))
 	}

@@ -1,8 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-
-
 $PolicyRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
   throw 'Code Polishy Windows releases currently require x64.'
@@ -100,6 +98,7 @@ try {
   $env:GOBIN = $Bin
   try {
     & $Go install "honnef.co/go/tools/cmd/staticcheck@$(Read-Pin 'tools/staticcheck-version.txt')"
+    & $Go install "golang.org/x/tools/cmd/deadcode@$(Read-Pin 'tools/deadcode-version.txt')"
     & $Go install "golang.org/x/vuln/cmd/govulncheck@$(Read-Pin 'tools/govulncheck-version.txt')"
   } finally { $env:GOBIN = $SavedGoBin }
 
@@ -463,10 +462,6 @@ with zipfile.ZipFile(wheel) as archive:
   $Osv = Get-Verified $OsvAsset "https://github.com/google/osv-scanner/releases/download/$OsvVersion/$OsvAsset"
   Copy-Item -LiteralPath $Osv -Destination (Join-Path $Bin 'osv-scanner.exe') -Force
 
-
-
-
-
   New-Item -ItemType Directory -Force -Path $JavascriptRoot | Out-Null
   $BundleDestination = Join-Path $JavascriptRoot 'bundle'
   $BundleSource = Join-Path $PolicyRoot 'tools/javascript'
@@ -505,6 +500,7 @@ with zipfile.ZipFile(wheel) as archive:
   $BundleInstallation = $null
 
   & (Join-Path $Bin 'staticcheck.exe') -version
+  & $Go version -m (Join-Path $Bin 'deadcode.exe')
   & (Join-Path $Bin 'govulncheck.exe') -version
   & (Join-Path $Bin 'osv-scanner.exe') --version
   & (Join-Path $Bin 'ruff.exe') --version

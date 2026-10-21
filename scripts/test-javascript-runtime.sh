@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 verify_sha256="${policy_root}/tools/verify-sha256.sh"
 installer="${policy_root}/tools/install-javascript-runtime.sh"
@@ -45,8 +40,6 @@ for pin in "node:${node_version}" "pnpm:${pnpm_version}"; do
   fi
 done
 
-
-
 expected_entries="node-v${node_version}-darwin-arm64.tar.gz
 node-v${node_version}-darwin-x64.tar.gz
 node-v${node_version}-linux-arm64.tar.gz
@@ -80,8 +73,6 @@ done <"${binaries}"
 if ! grep -q 'reflink' "${binaries}"; then
   fail "binary inventory does not record the pnpm prebuilt binaries"
 fi
-
-
 
 for script in "${installer}" "${runtime_env}"; do
   if grep -nE 'command -v (node|npm|npx|pnpm|corepack)\b' "${script}"; then

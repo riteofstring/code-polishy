@@ -496,6 +496,7 @@ func (repo Repository) CommandEnvironment() GovernedEnvironment {
 	}{
 		{directory: policyBin, tools: []GovernedTool{
 			{Name: "staticcheck", Path: repo.PolicyTool("staticcheck"), Version: repo.ToolPin("staticcheck")},
+			{Name: "deadcode", Path: repo.PolicyTool("deadcode"), Version: repo.ToolPin("deadcode")},
 			{Name: "govulncheck", Path: repo.PolicyTool("govulncheck"), Version: repo.ToolPin("govulncheck")},
 			{Name: "osv-scanner", Path: repo.PolicyTool("osv-scanner"), Version: repo.ToolPin("osv-scanner")},
 			{Name: "ruff", Path: repo.PolicyTool("ruff"), Version: repo.ToolPin("ruff")},

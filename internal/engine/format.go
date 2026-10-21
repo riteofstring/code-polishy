@@ -139,10 +139,3 @@ func (engine *Engine) formatFileOutcome(path, before string, inventory repositor
 	}
 	return file, nil
 }
-
-func combineFormatting(left, right *FormatOutcome) *FormatOutcome {
-	if right != nil {
-		return right
-	}
-	return left
-}

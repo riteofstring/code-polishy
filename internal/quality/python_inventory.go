@@ -1,10 +1,8 @@
 package quality
 
 import (
-	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -53,7 +51,7 @@ func pythonQualityInvalidProjects(inventory repository.PythonProjectInventory) m
 func pythonQualityMarkInvalidSources(problem repository.PythonInventoryProblem, sources []string, invalid map[string]bool) bool {
 	relevant := false
 	for _, source := range sources {
-		if pythonInventoryProblemAffects(problem, source) {
+		if problem.Affects(source) {
 			invalid[source] = true
 			relevant = true
 		}
@@ -75,23 +73,11 @@ func pythonInventoryProblemAffectsProject(problem repository.PythonInventoryProb
 		return true
 	}
 	for _, source := range project.Files {
-		if pythonInventoryProblemAffects(problem, source) {
+		if problem.Affects(source) {
 			return true
 		}
 	}
 	return false
-}
-
-func pythonQualityProjectOwners(inventory repository.PythonProjectInventory) (map[string]repository.PythonProject, map[string]string) {
-	projects := map[string]repository.PythonProject{}
-	owners := map[string]string{}
-	for _, project := range inventory.Projects {
-		projects[project.Manifest] = project
-		for _, source := range project.Files {
-			owners[source] = project.Manifest
-		}
-	}
-	return projects, owners
 }
 
 func pythonQualitySelectedProjects(sources []string, invalid map[string]bool, owners map[string]string) (map[string][]string, []policy.Finding) {
@@ -160,22 +146,4 @@ func pythonQualitySources(repo repository.Repository, selected []string) []strin
 	}
 	sort.Strings(sources)
 	return sources
-}
-
-func pythonInventoryProblemAffects(problem repository.PythonInventoryProblem, source string) bool {
-	for _, candidate := range []string{problem.Path, problem.Subject} {
-		if candidate == source {
-			return true
-		}
-		if candidate == "." || candidate != "" && strings.HasPrefix(source, strings.TrimSuffix(candidate, "/")+"/") {
-			return true
-		}
-		if filepath.Base(candidate) == "pyproject.toml" {
-			directory := filepath.ToSlash(filepath.Dir(candidate))
-			if directory == "." || strings.HasPrefix(source, directory+"/") {
-				return true
-			}
-		}
-	}
-	return false
 }

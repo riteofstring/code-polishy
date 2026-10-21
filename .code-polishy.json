@@ -11,6 +11,20 @@
       "internal/spdx/data/licenses.json"
     ],
     "generated": ["internal/engine/testdata/**", "schema/sarif*.json"],
+    "pythonContracts": [
+      {
+        "project": "internal/pythonfacts/pyproject.toml",
+        "kind": "entry-point",
+        "target": "reachability:resolve_reachability",
+        "reason": "The Go-owned Vulture adapter program imports this resolver from the embedded Python support modules."
+      },
+      {
+        "project": "internal/pythonfacts/pyproject.toml",
+        "kind": "entry-point",
+        "target": "type_resolver:typed_dict_fields",
+        "reason": "The Go-owned Vulture adapter program imports this resolver from the embedded Python support modules."
+      }
+    ],
     "entryPoints": [
       "tools/javascript/bundle-manifest.mjs",
       "tools/javascript/runner.mjs",
@@ -24,6 +38,18 @@
   },
   "documentation": {
     "design": [
+      {
+        "path": "docs/design/repository-cleanup.md",
+        "sourcePaths": [
+          "cmd/code-polishy/cleanup_meta.go",
+          "cmd/code-polishy/cleanup_meta_test.go",
+          "internal/engine/cleanup.go",
+          "internal/engine/cleanup_reports.go",
+          "internal/engine/cleanup_test.go",
+          "internal/testartifact/cleanup.go",
+          "internal/testartifact/cleanup_test.go"
+        ]
+      },
       {
         "path": "docs/design/artifact-identity.md",
         "sourcePaths": [
@@ -245,9 +271,6 @@
         "path": "docs/design/python-contract-evidence.md",
         "sourcePaths": [
           "internal/policy/python_runtime_loaders.go",
-          "internal/pythonfacts/module_imports.py",
-          "internal/pythonfacts/object_imports.py",
-          "internal/pythonfacts/runtime_checks.py",
           "internal/pythonfacts/type_resolver.py",
           "internal/pythonfacts/types.go",
           "internal/pythonfacts/reachability.py",
@@ -312,7 +335,6 @@
           "internal/release/sbom.go",
           "internal/release/rust_sbom.go",
           "internal/release/rust_sbom_test.go",
-          "scripts/release-manifest.sh",
           "scripts/build-release.ps1",
           "scripts/build-oci-image.sh",
           "scripts/test-installed-release.sh",
@@ -433,6 +455,8 @@
         "runner",
         "gaterun",
         "finalstate",
+        "durablefile",
+        "strictjson",
         "behaviorreview",
         "documentation",
         "agents",
@@ -458,16 +482,18 @@
   "modules": [
     {
       "name": "spdx",
-      "paths": ["internal/spdx/**"]
+      "paths": ["internal/spdx/**"],
+      "dependsOn": ["strictjson"]
     },
     {
       "name": "pythonfacts",
-      "paths": ["internal/pythonfacts/**"]
+      "paths": ["internal/pythonfacts/**"],
+      "dependsOn": ["strictjson"]
     },
     {
       "name": "policy",
       "paths": ["internal/policy/**", "schema/**"],
-      "dependsOn": ["spdx"]
+      "dependsOn": ["spdx", "strictjson"]
     },
     {
       "name": "repository",
@@ -477,7 +503,14 @@
     {
       "name": "rustfacts",
       "paths": ["internal/rustfacts/**"],
-      "dependsOn": ["policy", "pythonfacts", "repository", "runner", "release"]
+      "dependsOn": [
+        "policy",
+        "pythonfacts",
+        "repository",
+        "runner",
+        "release",
+        "strictjson"
+      ]
     },
     {
       "name": "runner",
@@ -487,21 +520,29 @@
     {
       "name": "gaterun",
       "paths": ["internal/gaterun/**"],
-      "dependsOn": ["architecture", "policy", "testreceipt"]
+      "dependsOn": ["architecture", "policy", "testreceipt", "strictjson"]
     },
     {
       "name": "testartifact",
       "paths": ["internal/testartifact/**"],
-      "dependsOn": ["policy"]
+      "dependsOn": ["policy", "durablefile", "strictjson"]
     },
     {
       "name": "testreceipt",
       "paths": ["internal/testreceipt/**"],
-      "dependsOn": ["policy", "testartifact"]
+      "dependsOn": ["policy", "testartifact", "durablefile", "strictjson"]
     },
     {
       "name": "finalstate",
       "paths": ["internal/finalstate/**"]
+    },
+    {
+      "name": "durablefile",
+      "paths": ["internal/durablefile/**"]
+    },
+    {
+      "name": "strictjson",
+      "paths": ["internal/strictjson/**"]
     },
     {
       "name": "behaviorreview",
@@ -513,12 +554,14 @@
         "policy",
         "repository",
         "runner",
-        "testing"
+        "testing",
+        "strictjson"
       ]
     },
     {
       "name": "documentation",
-      "paths": ["internal/documentation/**"]
+      "paths": ["internal/documentation/**"],
+      "dependsOn": ["strictjson"]
     },
     {
       "name": "agents",
@@ -535,12 +578,12 @@
     {
       "name": "release",
       "paths": ["internal/release/**"],
-      "dependsOn": ["policy", "pythonfacts"]
+      "dependsOn": ["policy", "pythonfacts", "durablefile", "strictjson"]
     },
     {
       "name": "javascript",
       "paths": ["internal/javascript/**"],
-      "dependsOn": ["release", "runner"]
+      "dependsOn": ["release", "runner", "strictjson"]
     },
     {
       "name": "quality",
@@ -552,7 +595,8 @@
         "pythonfacts",
         "repository",
         "runner",
-        "rustfacts"
+        "rustfacts",
+        "strictjson"
       ]
     },
     {
@@ -589,7 +633,8 @@
         "runner",
         "rustfacts",
         "spdx",
-        "workflow"
+        "workflow",
+        "strictjson"
       ]
     },
     {
@@ -599,7 +644,7 @@
     {
       "name": "artifactsecurity",
       "paths": ["internal/artifactsecurity/**"],
-      "dependsOn": ["policy", "repository", "runner"]
+      "dependsOn": ["policy", "repository", "runner", "strictjson"]
     },
     {
       "name": "policymodule",
@@ -609,7 +654,7 @@
     {
       "name": "pack",
       "paths": ["internal/pack/**"],
-      "dependsOn": ["policy", "repository", "runner", "release"]
+      "dependsOn": ["policy", "repository", "runner", "release", "strictjson"]
     },
     {
       "name": "portability",
@@ -640,7 +685,8 @@
         "workflow",
         "testartifact",
         "testreceipt",
-        "testing"
+        "testing",
+        "durablefile"
       ]
     },
     {
@@ -699,6 +745,8 @@
         "testartifact",
         "testreceipt",
         "finalstate",
+        "durablefile",
+        "strictjson",
         "behaviorreview",
         "documentation",
         "agents",
@@ -783,6 +831,7 @@
         "scope": "module",
         "cost": "quick",
         "modules": ["rustfacts"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "argv": ["go", "test", "-count=1", "./internal/rustfacts/..."],
         "paths": ["internal/rustfacts/**/*_test.go"]
       },
@@ -827,10 +876,27 @@
         "paths": ["internal/finalstate/**/*_test.go"]
       },
       {
+        "name": "durablefile-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["durablefile"],
+        "argv": ["go", "test", "-count=1", "./internal/durablefile/..."],
+        "paths": ["internal/durablefile/**/*_test.go"]
+      },
+      {
+        "name": "strictjson-unit",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["strictjson"],
+        "argv": ["go", "test", "-count=1", "./internal/strictjson/..."],
+        "paths": ["internal/strictjson/**/*_test.go"]
+      },
+      {
         "name": "behaviorreview-unit",
         "kind": "unit",
         "scope": "module",
         "modules": ["behaviorreview"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "argv": ["go", "test", "-count=1", "./internal/behaviorreview/..."],
         "paths": ["internal/behaviorreview/**/*_test.go"]
       },
@@ -871,6 +937,7 @@
         "kind": "unit",
         "scope": "module",
         "modules": ["quality"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "argv": ["go", "test", "-count=1", "./internal/quality/..."],
         "paths": ["internal/quality/**/*_test.go"]
       },
@@ -887,6 +954,7 @@
         "kind": "unit",
         "scope": "module",
         "modules": ["testing"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "argv": ["go", "test", "-count=1", "./internal/testing/..."],
         "paths": ["internal/testing/**/*_test.go"]
       },
@@ -943,6 +1011,7 @@
         "kind": "unit",
         "scope": "module",
         "modules": ["engine"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "argv": ["go", "test", "-count=1", "./internal/engine/..."],
         "paths": ["internal/engine/**/*_test.go"]
       },
@@ -978,7 +1047,6 @@
         "paths": [
           "scripts/*install.sh",
           "scripts/build-*",
-          "scripts/release-manifest.sh",
           "scripts/release-version.sh",
           "cmd/code-polishy-launcher/**",
           "internal/release/**",
@@ -1525,6 +1593,7 @@
         "kind": "contract",
         "scope": "module",
         "modules": ["tooling"],
+        "environment": ["SDKROOT", "DEVELOPER_DIR"],
         "paths": [
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
@@ -1630,6 +1699,16 @@
         "paths": ["internal/finalstate/**/*_test.go"],
         "module": "finalstate",
         "focusedSuite": "finalstate-unit"
+      },
+      {
+        "paths": ["internal/durablefile/**/*_test.go"],
+        "module": "durablefile",
+        "focusedSuite": "durablefile-unit"
+      },
+      {
+        "paths": ["internal/strictjson/**/*_test.go"],
+        "module": "strictjson",
+        "focusedSuite": "strictjson-unit"
       },
       {
         "paths": ["internal/behaviorreview/**/*_test.go"],
@@ -1854,6 +1933,12 @@
         "locator": "honnef.co/go/tools"
       },
       {
+        "name": "deadcode",
+        "versionFile": "tools/deadcode-version.txt",
+        "source": "go-module",
+        "locator": "golang.org/x/tools"
+      },
+      {
         "name": "ty",
         "versionFile": "tools/ty-version.txt",
         "source": "github-release",
@@ -1881,17 +1966,17 @@
     ],
     "releaseAgeAssessments": [
       {
-        "id": "go-1-26-9-windows-root-security-fix",
+        "id": "go-1-26-10-x509-security-fix",
         "ecosystem": "artifact",
         "package": "go",
-        "version": "1.26.9",
+        "version": "1.26.10",
         "scope": "scripts/go_version.txt",
         "category": "security-fix",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
-        "reason": "GO-2026-6604 lets repository-controlled Windows junctions redirect Root.Mkdir outside the repository before upgrade-record and OSV-directory validation. No aged fixed toolchain or race-safe local mitigation covers the remaining wait; the official patch preserves the containment boundary.",
+        "reason": "GO-2026-6809 permits known compromised intermediates during TLS verification on hosts whose trust stores still accept them. An intercepting peer can forge release-age metadata used for dependency admission. No aged fix exists, and requiring trust-store repair on every supported host cannot enforce this boundary; the narrow official x509 patch is safer than waiting through 2026-11-18.",
         "owner": "Codex",
-        "reviewed": "2026-10-10",
-        "expires": "2026-11-07"
+        "reviewed": "2026-10-21",
+        "expires": "2026-11-18"
       }
     ],
     "vulnerabilityAssessments": [

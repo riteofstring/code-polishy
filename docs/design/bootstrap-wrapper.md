@@ -31,6 +31,10 @@ proof occurs before a release directory, launcher, or publication output is
 committed. A source checkout cannot silently replace the lock with what it
 built.
 
+The public `release-manifest verify` operation checks the current host before
+validating the installed tree. Source-install replacement and repair therefore
+reject an installation recorded for another host before reusing it.
+
 Normal wrapper dispatch never clones, downloads, builds, changes `PATH`, or
 selects a fallback release. The wrapper checks that the exact release directory
 and stable launcher are present, then delegates once; the stable launcher

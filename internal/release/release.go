@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 	MaximumLockBytes = 32 << 10
 
 	LockVersion     = 2
-	ManifestVersion = 7
+	ManifestVersion = 8
 
 	releasesDirectory = "releases"
 )
@@ -109,6 +110,7 @@ type Tools struct {
 	Nextest     string `json:"cargo-nextest"`
 	Shellcheck  string `json:"shellcheck"`
 	Staticcheck string `json:"staticcheck"`
+	Deadcode    string `json:"deadcode,omitempty"`
 	Ty          string `json:"ty"`
 	Vulture     string `json:"vulture"`
 }
@@ -315,6 +317,9 @@ func (manifest Manifest) Identity() string {
 		fmt.Fprintf(identity, "tool.rust=%s\n", manifest.Tools.Rust)
 		fmt.Fprintf(identity, "tool.cargo-nextest=%s\n", manifest.Tools.Nextest)
 	}
+	if manifest.ManifestVersion >= 8 {
+		fmt.Fprintf(identity, "tool.deadcode=%s\n", manifest.Tools.Deadcode)
+	}
 	digest := sha256.Sum256([]byte(identity.String()))
 	return hex.EncodeToString(digest[:])
 }
@@ -394,16 +399,7 @@ func VerifyLockedRelease(repoRoot, releaseRoot string) (Manifest, error) {
 }
 
 func decodeExactly(data []byte, source string, document any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(document); err != nil {
-		return fmt.Errorf("parse %s: %w", source, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("the document contains more than one JSON value")
-		}
+	if err := strictjson.Decode(data, document); err != nil {
 		return fmt.Errorf("parse %s: %w", source, err)
 	}
 	return nil
@@ -488,6 +484,9 @@ func validateManifestToolPins(manifest Manifest, source string) error {
 			struct{ tool, version string }{"Nextest", manifest.Tools.Nextest},
 		)
 	}
+	if manifest.ManifestVersion >= 8 {
+		pins = append(pins, struct{ tool, version string }{"deadcode", manifest.Tools.Deadcode})
+	}
 	for _, pin := range pins {
 		if !versionPattern.MatchString(pin.version) {
 			return fmt.Errorf("%s records the unusable %s version %q", source, pin.tool, pin.version)
@@ -521,7 +520,7 @@ func validateEntries(manifest Manifest, source string) error {
 	}) {
 		return fmt.Errorf("%s records no %s, so it is not a release that can run", source, binaryPath)
 	}
-	if releaseEntriesDigest(manifest.Entries) != manifest.ContentDigest {
+	if EntriesDigest(manifest.Entries) != manifest.ContentDigest {
 		return fmt.Errorf("%s content digest does not match its entry list", source)
 	}
 	return nil

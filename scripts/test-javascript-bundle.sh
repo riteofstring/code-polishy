@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/javascript-env.sh
 source "${policy_root}/tools/javascript-env.sh"
@@ -26,8 +16,6 @@ lockfile="${bundle_source}/pnpm-lock.yaml"
 
 
 runner_sources=("${bundle_source}"/*.mjs)
-
-
 
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-javascript-bundle-test.XXXXXX")" && pwd -P)"
 cleanup() {
@@ -51,8 +39,6 @@ expect_rejected() {
     fail "${description} failed without an explanation"
   fi
 }
-
-
 
 node_version="$(tr -d '[:space:]' <"${policy_root}/tools/node-version.txt")"
 pnpm_version="$(tr -d '[:space:]' <"${policy_root}/tools/pnpm-version.txt")"
@@ -89,13 +75,9 @@ done < <(awk '/"dependencies"/ { in_dependencies = 1; next }
   /^  }/ { in_dependencies = 0 }
   in_dependencies { gsub(/[",]/, ""); print $2 }' "${manifest}")
 
-
-
 if grep -q '"scripts"' "${manifest}"; then
   fail "manifest declares scripts"
 fi
-
-
 
 for required_setting in \
   "onlyBuiltDependencies: []" \
@@ -133,8 +115,6 @@ for script in "${policy_root}/tools/javascript-env.sh" \
     fail "$(basename "${script}") invokes a JavaScript tool as a bare command"
   fi
 done
-
-
 
 "${verify_lock}" "${lockfile}" || fail "the checked-in lock was rejected"
 locked="${fixture_root}/locked.txt"
@@ -216,8 +196,6 @@ touch "${tree_fixture}/node_modules/native.node"
 expect_rejected "a tree carrying a prebuilt binary" "${verify_tree}" "${tree_fixture}"
 rm "${tree_fixture}/node_modules/native.node"
 
-
-
 ln -s .pnpm/example/native.node "${tree_fixture}/node_modules/linked.node"
 expect_rejected "a tree linking to a prebuilt binary" "${verify_tree}" "${tree_fixture}"
 rm "${tree_fixture}/node_modules/linked.node"
@@ -234,16 +212,11 @@ ln -s .pnpm/example/node_modules/example "${tree_fixture}/node_modules/example"
 "${verify_tree}" "${tree_fixture}" || fail "a contained package symlink was rejected"
 rm "${tree_fixture}/node_modules/example"
 
-
-
 for prohibited_construct in process.cwd 'require('; do
   if grep -nF "${prohibited_construct}" "${runner_sources[@]}"; then
     fail "the runner uses '${prohibited_construct}'"
   fi
 done
-
-
-
 
 audit_source="${bundle_source}/audit.mjs"
 for module_source in "${runner_sources[@]}"; do
@@ -264,10 +237,6 @@ fi
 if ! grep -qF '"pnpm.cjs",' "${audit_source}" || ! grep -qF 'bundleDirectory,' "${audit_source}"; then
   fail "the native audit does not resolve the pinned pnpm beside the installed bundle"
 fi
-
-
-
-
 
 "${javascript_node}" --input-type=module - "${javascript_bundle_dir}" "${runner_sources[@]}" <<'JS'
 import fs from "node:fs";
@@ -307,8 +276,6 @@ for (const source of sources) {
 if (checked === 0) throw new Error("No deferred dependencies were verified");
 JS
 
-
-
 "${bundle_manifest}" verify "${javascript_bundle_dir}" ||
   fail "the installed bundle does not match its manifest"
 expect_rejected "wrong manifest usage" "${bundle_manifest}" verify
@@ -321,8 +288,6 @@ cp "${manifest}" "${runner_sources[@]}" "${manifest_fixture}/"
 printf 'installed\n' >"${manifest_fixture}/node_modules/installed.js"
 "${bundle_manifest}" write "${manifest_fixture}" || fail "writing a bundle manifest failed"
 "${bundle_manifest}" verify "${manifest_fixture}" || fail "a freshly written manifest was rejected"
-
-
 
 sed 's/"node": "[^"]*"/"node": "0.0.0"/' \
   "${manifest_fixture}/${javascript_bundle_manifest_name}" >"${fixture_root}/changed-manifest.json"
@@ -341,8 +306,6 @@ rm "${manifest_fixture}/node_modules/added.js"
 rm "${manifest_fixture}/node_modules/installed.js"
 expect_rejected "a removed installed file" "${bundle_manifest}" verify "${manifest_fixture}"
 printf 'installed\n' >"${manifest_fixture}/node_modules/installed.js"
-
-
 
 printf 'other\n' >"${manifest_fixture}/node_modules/other.js"
 ln -s installed.js "${manifest_fixture}/node_modules/tool.js"
@@ -366,10 +329,13 @@ expect_rejected "a bundle with no manifest" "${bundle_manifest}" verify "${manif
 
 portable_source="${fixture_root}/portable-source"
 portable_bundle="${fixture_root}/portable-bundle"
+engine_binary="${fixture_root}/code-polishy-engine"
+(cd "${policy_root}" && "${policy_root}/scripts/go.sh" build -trimpath \
+  -o "${engine_binary}" ./cmd/code-polishy)
 javascript_copy_bundle_source "${portable_source}"
 javascript_sealed_pnpm "${portable_source}" install --offline --frozen-lockfile \
   --ignore-scripts --config.nodeLinker=hoisted >/dev/null
-"${policy_root}/.tools/bin/code-polishy" --policy-root "${policy_root}" \
+"${engine_binary}" --policy-root "${policy_root}" \
   release-manifest materialize --source "${portable_source}" \
   --destination "${portable_bundle}" || fail "portable release materialization failed"
 if find "${portable_bundle}" -type l | grep -q .; then

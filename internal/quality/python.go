@@ -104,43 +104,32 @@ type pythonTyDiagnosticWire struct {
 	} `json:"location"`
 }
 
-func PythonQualityFindings(ctx context.Context, repo repository.Repository, selected []string, commandRunner runner.Runner) []policy.Finding {
-	return pythonQualityFindingsForPlan(ctx, repo, pythonQualityPlanFor(repo, selected), commandRunner)
-}
-
 func pythonQualityFindingsForSelection(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
 	return pythonQualityFindingsForPlan(ctx, repo, buildPythonQualityPlan(repo, selection.Files, selection.All || profile == "gate"), commandRunner)
 }
 
 func pythonQualityFindingsForPlan(ctx context.Context, repo repository.Repository, plan pythonQualityPlan, commandRunner runner.Runner) []policy.Finding {
 	findings := append([]policy.Finding{}, plan.findings...)
-	structured, supportsStructuredOutput := commandRunner.(runner.StructuredRunner)
 	for _, project := range plan.projects {
-		findings = append(findings, pythonQualityProjectFindings(ctx, repo, project, structured, supportsStructuredOutput)...)
+		findings = append(findings, pythonQualityProjectFindings(ctx, repo, project, commandRunner)...)
 	}
 	return uniquePythonQualityFindings(findings)
 }
 
-func pythonQualityProjectFindings(ctx context.Context, repo repository.Repository, project pythonQualityProject, structured runner.StructuredRunner, supportsStructuredOutput bool) []policy.Finding {
+func pythonQualityProjectFindings(ctx context.Context, repo repository.Repository, project pythonQualityProject, commandRunner runner.Runner) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, specification := range project.commands {
-		findings = append(findings, pythonQualityCommandFindings(ctx, repo, project, specification, structured, supportsStructuredOutput)...)
+		findings = append(findings, pythonQualityCommandFindings(ctx, repo, project, specification, commandRunner)...)
 	}
 	return findings
 }
 
-func pythonQualityCommandFindings(ctx context.Context, repo repository.Repository, project pythonQualityProject, specification pythonQualityCommand, structured runner.StructuredRunner, supportsStructuredOutput bool) []policy.Finding {
-	if !supportsStructuredOutput {
-		if specification.kind == pythonVultureQualityKind {
-			return pythonVultureCoverage(project.project.Files, "the quality runner cannot capture bounded structured tool output")
-		}
-		return []policy.Finding{pythonQualityToolFinding(project.project, specification.kind, "the quality runner cannot capture bounded structured tool output")}
-	}
+func pythonQualityCommandFindings(ctx context.Context, repo repository.Repository, project pythonQualityProject, specification pythonQualityCommand, commandRunner runner.Runner) []policy.Finding {
 	bounded, cancel := context.WithTimeout(ctx, pythonQualityBudget)
-	_, output, runErr := structured.RunStructured(bounded, repo.Root, specification.command)
+	_, output, runErr := runner.RunCaptured(bounded, commandRunner, repo.Root, specification.command, runner.CaptureStructured)
 	cancel()
 	if specification.kind == pythonVultureQualityKind {
-		recordPythonVultureCommandPhases(ctx, specification.command, commandRunnerPhaseRecorder(structured), output.Stdout)
+		recordPythonVultureCommandPhases(ctx, specification.command, commandRunnerPhaseRecorder(commandRunner), output.Stdout)
 	}
 	if runErr != nil {
 		if specification.kind == pythonVultureQualityKind {
@@ -151,7 +140,7 @@ func pythonQualityCommandFindings(ctx context.Context, repo repository.Repositor
 	return pythonQualityOutputFindings(repo, project, specification.kind, output.Stdout)
 }
 
-func commandRunnerPhaseRecorder(commandRunner runner.StructuredRunner) runner.CommandPhaseRecorder {
+func commandRunnerPhaseRecorder(commandRunner runner.Runner) runner.CommandPhaseRecorder {
 	recorder, _ := commandRunner.(runner.CommandPhaseRecorder)
 	return recorder
 }
@@ -275,10 +264,6 @@ func pythonRuffDiagnosticFindings(diagnostics []pythonRuffDiagnostic, check stri
 	return findings
 }
 
-func pythonQualityCommands(repo repository.Repository, selected []string) []policy.Command {
-	return pythonQualityPlanCommands(pythonQualityPlanFor(repo, selected))
-}
-
 func pythonQualityCommandsForSelection(repo repository.Repository, selection repository.Selection, profile string) []policy.Command {
 	return pythonQualityPlanCommands(buildPythonQualityPlan(repo, selection.Files, selection.All || profile == "gate"))
 }
@@ -291,10 +276,6 @@ func pythonQualityPlanCommands(plan pythonQualityPlan) []policy.Command {
 		}
 	}
 	return commands
-}
-
-func pythonQualityPlanFor(repo repository.Repository, selected []string) pythonQualityPlan {
-	return buildPythonQualityPlan(repo, selected, true)
 }
 
 func buildPythonQualityPlan(repo repository.Repository, selected []string, includeVulture bool) pythonQualityPlan {
@@ -313,7 +294,7 @@ func buildPythonQualityPlan(repo repository.Repository, selected []string, inclu
 	}
 	inventory := repo.PythonProjectInventory(allFiles)
 	findings, invalid, invalidProjects := pythonQualityInventoryFindings(sources, selectedManifests, inventory)
-	projects, owners := pythonQualityProjectOwners(inventory)
+	projects, owners := inventory.Owners()
 	selectedByProject, ownershipFindings := pythonQualitySelectedProjects(sources, invalid, owners)
 	findings = append(findings, ownershipFindings...)
 	referenceFindings, referenceOnly := pythonQualityDynamicReferenceProjects(repo, projects, selectedByProject, selectedManifests, invalidProjects)
@@ -437,7 +418,7 @@ func pythonRuffBaselineCoverageCommand(repo repository.Repository, project repos
 func pythonQualityProjectPaths(project repository.PythonProject, sources []string) ([]string, error) {
 	paths := make([]string, 0, len(sources))
 	for _, source := range sources {
-		path, err := pythonQualityProjectPath(project, source)
+		path, err := project.RelativePath(source)
 		if err != nil {
 			return nil, err
 		}
@@ -450,7 +431,7 @@ func pythonQualityProjectPaths(project repository.PythonProject, sources []strin
 func pythonQualityProjectSearchPaths(project repository.PythonProject) ([]string, error) {
 	paths := []string{}
 	for _, root := range project.SourceRoots {
-		relative, err := pythonQualityProjectPath(project, root)
+		relative, err := project.RelativePath(root)
 		if err != nil {
 			return nil, err
 		}
@@ -459,19 +440,6 @@ func pythonQualityProjectSearchPaths(project repository.PythonProject) ([]string
 		}
 	}
 	return paths, nil
-}
-
-func pythonQualityProjectPath(project repository.PythonProject, source string) (string, error) {
-	root := filepath.FromSlash(project.Root)
-	relative, err := filepath.Rel(root, filepath.FromSlash(source))
-	if err != nil {
-		return "", err
-	}
-	relative = filepath.ToSlash(relative)
-	if relative == ".." || strings.HasPrefix(relative, "../") {
-		return "", fmt.Errorf("source %q is outside project root %q", source, project.Root)
-	}
-	return relative, nil
 }
 
 func pythonQualityModules(repo repository.Repository, sources []string) []string {
@@ -572,7 +540,7 @@ func pythonQualityVenv(repo repository.Repository, project repository.PythonProj
 	if !pythonQualityVenvHasInterpreter(resolved) {
 		return "", fmt.Errorf("project environment %s has no runnable Python interpreter", project.Venv)
 	}
-	return pythonQualityProjectPath(project, project.Venv)
+	return project.RelativePath(project.Venv)
 }
 
 func pythonQualityVenvDirectory(repo repository.Repository, project repository.PythonProject) (string, error) {

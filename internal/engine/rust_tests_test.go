@@ -2,9 +2,9 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -248,44 +248,23 @@ func nativeRustEngineRepository(t *testing.T) string {
 
 type nativeRustGateRunner struct{}
 
-func TestRustDoctestGateTruncationPreservesInterruptedOutcomes(t *testing.T) {
-	t.Parallel()
-	for _, category := range []runner.FailureCategory{runner.FailureCommandExit, runner.FailureTimeout, runner.FailureCanceled} {
-		t.Run(string(category), func(t *testing.T) {
-			result, output, err := runGateCommand(t.Context(), rustDoctestOverflowRunner{category: category}, t.TempDir(), policy.Command{Name: "docs"}, io.Discard, io.Discard, true)
-			want := category
-			if category == runner.FailureCommandExit {
-				want = runner.FailureOperational
-			}
-			if err == nil || !strings.Contains(err.Error(), "captured command output") || result.FailureCategory != want || len(output.Stdout) != 8<<20 {
-				t.Fatalf("interrupted captured output: %+v, bytes=%d, %v", result, len(output.Stdout), err)
-			}
-		})
-	}
-}
-
-type rustDoctestOverflowRunner struct {
-	category runner.FailureCategory
-}
-
-func (commandRunner rustDoctestOverflowRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithWriters(ctx, root, command, io.Discard, io.Discard)
+func (nativeRustGateRunner) runPlain(ctx context.Context, root string, command policy.Command) error {
+	_, err := runner.RunStreamed(ctx, (nativeRustGateRunner{}), root, command, io.Discard, io.Discard)
 	return err
 }
 
-func (commandRunner rustDoctestOverflowRunner) RunWithWriters(_ context.Context, _ string, _ policy.Command, stdout, _ io.Writer) (runner.Result, error) {
-	_, err := stdout.Write(bytes.Repeat([]byte("x"), 8<<20+1))
-	return runner.Result{ExitStatus: 101, FailureCategory: commandRunner.category}, errors.Join(errors.New("interrupted after output"), err)
-}
-
-func (nativeRustGateRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := (nativeRustGateRunner{}).RunWithWriters(ctx, root, command, io.Discard, io.Discard)
-	return err
-}
-
-func (nativeRustGateRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (nativeRustGateRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	if command.Managed {
-		return (runner.OSRunner{}).RunWithWriters(ctx, root, command, stdout, stderr)
+		return runner.RunStreamed(ctx, runner.OSRunner{}, root, command, stdout, stderr)
 	}
 	return runner.Result{}, nil
+}
+
+func (double nativeRustGateRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

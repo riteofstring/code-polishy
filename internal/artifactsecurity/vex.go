@@ -1,13 +1,14 @@
 package artifactsecurity
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const openVEXContext = "https://openvex.dev/ns/v0.2.0"
@@ -68,13 +69,8 @@ func parseOpenVEX(path string, now time.Time) (map[string]openVEXAssessment, err
 
 func decodeOpenVEX(payload []byte) (openVEXDocument, error) {
 	var document openVEXDocument
-	decoder := json.NewDecoder(strings.NewReader(string(payload)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil {
+	if err := strictjson.Decode(payload, &document); err != nil {
 		return openVEXDocument{}, fmt.Errorf("decode OpenVEX document: %w", err)
-	}
-	if err := requireJSONEOF(decoder); err != nil {
-		return openVEXDocument{}, err
 	}
 	return document, nil
 }

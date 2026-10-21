@@ -24,10 +24,3 @@ type HostResult struct {
 func Run(ctx context.Context, command HostCommand) (HostResult, error) {
 	return runHostCommand(ctx, command)
 }
-
-func Handoff(ctx context.Context, command HostCommand) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return handoffHostCommand(command)
-}

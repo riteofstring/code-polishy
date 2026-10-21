@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -145,15 +147,24 @@ type shellGateRunner struct {
 	commands []policy.Command
 }
 
-func (commandRunner *shellGateRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithWriters(ctx, root, command, io.Discard, io.Discard)
+func (commandRunner *shellGateRunner) runPlain(ctx context.Context, root string, command policy.Command) error {
+	_, err := runner.RunStreamed(ctx, commandRunner, root, command, io.Discard, io.Discard)
 	return err
 }
 
-func (commandRunner *shellGateRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (commandRunner *shellGateRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	commandRunner.commands = append(commandRunner.commands, command)
 	if strings.HasPrefix(command.Name, "shell-syntax-") || command.Name == "shellcheck" {
-		return (runner.OSRunner{}).RunWithWriters(ctx, root, command, stdout, stderr)
+		return runner.RunStreamed(ctx, runner.OSRunner{}, root, command, stdout, stderr)
 	}
 	return runner.Result{}, nil
+}
+
+func (double *shellGateRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

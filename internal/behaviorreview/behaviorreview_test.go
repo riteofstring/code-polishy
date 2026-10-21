@@ -1036,12 +1036,12 @@ type behaviorRunner struct {
 	roots                  []string
 }
 
-func (commandRunner *behaviorRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, _, err := commandRunner.RunWithOutput(ctx, root, command)
+func (commandRunner *behaviorRunner) runPlain(ctx context.Context, root string, command policy.Command) error {
+	_, _, err := runner.RunCaptured(ctx, commandRunner, root, command, runner.CaptureOutput)
 	return err
 }
 
-func (commandRunner *behaviorRunner) RunWithOutput(_ context.Context, root string, _ policy.Command) (runner.Result, runner.Output, error) {
+func (commandRunner *behaviorRunner) runOutput(_ context.Context, root string, _ policy.Command) (runner.Result, runner.Output, error) {
 	commandRunner.roots = append(commandRunner.roots, root)
 	if commandRunner.attachBaselineWorktree && root != commandRunner.candidateRoot {
 		if err := exec.Command("git", "-C", root, "switch", "-c", "cleanup-block").Run(); err != nil {
@@ -1435,4 +1435,11 @@ func reviewJSON(review ReviewResult) string {
 		panic(err)
 	}
 	return string(data) + "\n"
+}
+
+func (double *behaviorRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

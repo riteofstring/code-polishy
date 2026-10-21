@@ -114,8 +114,8 @@ code-polishy test --supplemental --resume
 ```
 
 `test --supplemental` executes supplemental work directly. `test --all`,
-`verify`, `gate`, and `merge-gate` exclude it. `test-levels` (and its
-`test-plan` compatibility alias) keeps the ordinary profiles visible and, with
+`verify`, `gate`, and `merge-gate` exclude it. `test-levels` keeps the
+ordinary profiles visible and, with
 a trusted base, reports the level that `merge-gate` will select. It lists
 impact-relevant supplemental quality separately but executes none of it.
 

@@ -21,9 +21,6 @@ version_for() {
   GOTOOLCHAIN=local "$1" version 2>/dev/null | awk '{print $3}'
 }
 
-
-
-
 go_bin=""
 if [[ -n "${os_tag}" && -n "${arch_tag}" ]]; then
   go_bin="${repo_root}/.tools/go/${os_tag}-${arch_tag}/go/bin/go"

@@ -23,11 +23,11 @@ type providerPlanRunner struct {
 	roots        []string
 }
 
-func (boundary *providerPlanRunner) Run(context.Context, string, policy.Command) error {
+func (boundary *providerPlanRunner) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("provider requires structured execution")
 }
 
-func (boundary *providerPlanRunner) RunStructured(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *providerPlanRunner) runStructured(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	request := pack.Request{}
 	if err := json.Unmarshal(command.Stdin, &request); err != nil {
 		return runner.Result{}, runner.Output{}, err
@@ -105,7 +105,7 @@ func TestPlannedPackExecutionRejectsIdentityChanges(t *testing.T) {
 			actual := planned
 			example.mutate(&actual)
 			boundary := &mergeGatePlannedRunner{root: repo.Root, expected: []MergeGateExecutionCommand{planned}, delegate: &providerPlanRunner{}}
-			if _, _, err := boundary.RunStructured(t.Context(), actual.Root, actual.Command); err == nil {
+			if _, _, err := runner.RunCaptured(t.Context(), boundary, actual.Root, actual.Command, runner.CaptureStructured); err == nil {
 				t.Fatal("changed provider execution was accepted")
 			}
 			if boundary.next != 0 {
@@ -159,4 +159,11 @@ func providerPlanRepository(t *testing.T) repository.Repository {
 		t.Fatal(err)
 	}
 	return repo
+}
+
+func (double *providerPlanRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

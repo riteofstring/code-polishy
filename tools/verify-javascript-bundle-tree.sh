@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
 if [[ "$#" -ne 1 ]]; then
   echo "usage: verify-javascript-bundle-tree.sh <bundle-dir>" >&2
   exit 2
@@ -32,9 +22,6 @@ if [[ -n "${prebuilt_binaries}" ]]; then
   printf '%s\n' "${prebuilt_binaries}" >&2
   exit 1
 fi
-
-
-
 
 link_leaves_bundle() {
   local link="$1" target="$2" depth=0 segment
@@ -67,9 +54,6 @@ if [[ -n "${escaping_links}" ]]; then
   printf '%s\n' "${escaping_links}" >&2
   exit 1
 fi
-
-
-
 
 metadata="${bundle_dir}/node_modules/.modules.yaml"
 if [[ ! -f "${metadata}" ]]; then

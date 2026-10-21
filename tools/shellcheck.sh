@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 required_version="$(tr -d '[:space:]' <"${policy_root}/tools/shellcheck-version.txt")"
 required_version="${required_version#v}"

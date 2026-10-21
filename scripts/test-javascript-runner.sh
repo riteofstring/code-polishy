@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
 javascript_test_name="test-javascript-runner"
 # shellcheck source=scripts/javascript-runner-test-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-runner-test-env.sh"
@@ -21,9 +10,6 @@ node_version="$(javascript_test_node_version)"
 pnpm_version="$(javascript_test_pnpm_version)"
 manifest="${bundle_source}/package.json"
 installed_manifest="${javascript_bundle_dir}/${javascript_bundle_manifest_name}"
-
-
-
 
 response="${fixture_root}/response.json"
 printf '{"protocolVersion":3,"operation":"provenance"}' | run_runner >"${response}" ||
@@ -43,8 +29,6 @@ done < <(awk '/"dependencies"/ { in_dependencies = 1; next }
   /^  }/ { in_dependencies = 0 }
   in_dependencies { gsub(/[",]/, ""); sub(/:$/, "", $1); print $1, $2 }' "${manifest}")
 
-
-
 decoy="${fixture_root}/decoy/node_modules/prettier"
 mkdir -p "${decoy}"
 printf '{"name":"prettier","version":"0.0.0-decoy"}\n' >"${decoy}/package.json"
@@ -52,8 +36,6 @@ decoy_response="$(cd "${fixture_root}/decoy" && printf '{"protocolVersion":3,"op
 if [[ "${decoy_response}" != "$(cat "${response}")" ]]; then
   fail "the runner resolved a tool from the working directory"
 fi
-
-
 
 target="${fixture_root}/target"
 mkdir -p "${target}/src"
@@ -98,8 +80,6 @@ fi
 if [[ "$(cat "${target}/src/formatted.ts")" != 'const value = 1;' ]]; then
   fail "format-write rewrote an already formatted file"
 fi
-
-
 
 gitlab_target="${fixture_root}/gitlab"
 mkdir -p "${gitlab_target}/ci" "${gitlab_target}/.git"
@@ -161,9 +141,6 @@ for image_scope in 'global:image' 'global:service' 'default:image' 'default:serv
     fail "the gitlab operation did not report ${image_scope}: $(cat "${gitlab_response}")"
   fi
 done
-
-
-
 
 gitlab_invalid_target="${fixture_root}/gitlab-invalid"
 mkdir -p "${gitlab_invalid_target}/ci"
@@ -251,10 +228,6 @@ for malformed in broken.json broken.jsonc broken.yaml broken.yml; do
   fi
 done
 
-
-
-
-
 outside="${fixture_root}/outside"
 mkdir -p "${outside}"
 printf 'const value   =  1\n' >"${outside}/loose.ts"
@@ -272,8 +245,6 @@ done
 if [[ "$(cat "${outside}/loose.ts")" != 'const value   =  1' ]]; then
   fail "format-write rewrote a file outside the target tree"
 fi
-
-
 
 lint_source="${target}/lint"
 mkdir -p "${lint_source}"
@@ -499,8 +470,6 @@ for undecided in lint/broken.ts lint/broken-comment.ts src/opaque.bin; do
   fi
 done
 
-
-
 generous='{"complexity":20,"depth":10,"parameters":10}'
 lint_request '["lint/panel.tsx"]' "${generous}" '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}' |
   run_runner >"${lint_response}" || fail "the runner rejected an unactivated lint request"
@@ -514,8 +483,6 @@ for expected in '"rule":"react-hooks/rules-of-hooks"' '"rule":"jsx-a11y/alt-text
     fail "activated lint did not report ${expected}: $(cat "${lint_response}")"
   fi
 done
-
-
 
 project_source="${target}/project"
 mkdir -p "${project_source}/src"
@@ -562,8 +529,6 @@ if ! grep -qF '"path":"generated/external.ts"' "${typecheck_response}" ||
   fail "typecheck did not apply the project context to an external generated root: $(cat "${typecheck_response}")"
 fi
 
-
-
 mkdir -p "${project_source}/strict"
 printf '{"compilerOptions":{"strict":true,"target":"ES2022","module":"Preserve"}}\n' \
   >"${project_source}/tsconfig.base.json"
@@ -577,10 +542,6 @@ if ! grep -qF '"code":7006' "${typecheck_response}"; then
   fail "the extended project did not inherit its base strictness: $(cat "${typecheck_response}")"
 fi
 
-
-
-
-
 printf '{"compilerOptions":{"noCheck":true,"target":"ES2022","module":"Preserve"},"include":["src"]}\n' \
   >"${project_source}/tsconfig.nocheck.json"
 typecheck_request '["project/src/wrong.ts"]' project/tsconfig.nocheck.json |
@@ -589,10 +550,6 @@ typecheck_request '["project/src/wrong.ts"]' project/tsconfig.nocheck.json |
 if ! grep -qF '"code":2322' "${typecheck_response}"; then
   fail "a project declaring noCheck reported no diagnostics: $(cat "${typecheck_response}")"
 fi
-
-
-
-
 
 printf 'export const outside: number = "text";\n' >"${outside}/escaped.ts"
 printf 'import { outside } from "../../../outside/escaped.js";\nexport const used = outside;\n' \
@@ -607,8 +564,6 @@ if grep -qF 'escaped.ts' "${typecheck_response}"; then
   fail "the checked program read outside the target tree: $(cat "${typecheck_response}")"
 fi
 rm "${project_source}/src/escape.ts"
-
-
 
 expect_project_refused() {
   local description="$1"
@@ -637,8 +592,6 @@ printf '{"extends":"../../outside-tsconfig.json","include":["src"]}\n' \
 expect_project_refused "an extension chain leaving the repository" project/tsconfig.outside.json \
   "the project extends configuration outside the repository"
 
-
-
 printf '{"compilerOptions":{"strict":true}}\n' >"${outside}/linked-tsconfig.json"
 ln -s "${outside}" "${project_source}/linked-base"
 printf '{"extends":"./linked-base/linked-tsconfig.json","include":["src"]}\n' \
@@ -652,8 +605,6 @@ expect_project_refused "an absent project" project/tsconfig.absent.json "the fil
 if grep -qF "${fixture_root}" "${typecheck_response}"; then
   fail "a typecheck result leaked a host path: $(cat "${typecheck_response}")"
 fi
-
-
 
 deadcode_target="${fixture_root}/deadcode"
 mkdir -p "${deadcode_target}/src" "${deadcode_target}/packages/web/src"
@@ -677,8 +628,6 @@ printf '{"name":"web","private":true,"version":"0.0.0","dependencies":{"vite":"7
   >"${deadcode_target}/packages/web/package.json"
 printf 'export const shared = () => 4;\n' >"${deadcode_target}/packages/web/src/lib.ts"
 printf 'export const stranded = () => 5;\n' >"${deadcode_target}/packages/web/src/spare.ts"
-
-
 
 executed_marker="${fixture_root}/vite-config-executed"
 cat >"${deadcode_target}/packages/web/vite.config.mts" <<SOURCE
@@ -778,8 +727,6 @@ if ! grep -qF '"symbol":"idle"' "${deadcode_response}"; then
   fail "a nested tree reported no unused export: $(cat "${deadcode_response}")"
 fi
 
-
-
 deadcode_request . '[{"root":".","entry":[],"project":["src/index.ts","src/absent.ts","src/notes.md"]}]' |
   run_runner >"${deadcode_response}" || fail "the runner rejected an undecidable deadcode selection"
 if ! grep -qF '"covered":["src/index.ts"]' "${deadcode_response}"; then
@@ -790,8 +737,6 @@ for undecided in '"path":"src/absent.ts"' '"path":"src/notes.md"'; do
     fail "deadcode did not report ${undecided} as undecided: $(cat "${deadcode_response}")"
   fi
 done
-
-
 
 printf 'export const elsewhere = 1;\n' >"${outside}/elsewhere.ts"
 ln -s "${outside}" "${deadcode_target}/src/linked-directory"
@@ -807,9 +752,6 @@ rm "${deadcode_target}/src/linked-directory"
 if grep -qF "${fixture_root}" "${deadcode_response}"; then
   fail "a deadcode result leaked a host path: $(cat "${deadcode_response}")"
 fi
-
-
-
 
 reachability_target="${fixture_root}/reachability"
 mkdir -p "${reachability_target}/src"
@@ -828,8 +770,6 @@ if ! grep -qF '"unusedFiles":["src/helper.ts"]' "${deadcode_response}"; then
   fail "a module outside the target tree kept target source alive: $(cat "${deadcode_response}")"
 fi
 
-
-
 mkdir -p "${deadcode_target}/detached"
 printf 'export const stray = 1;\n' >"${deadcode_target}/detached/stray.ts"
 deadcode_request detached '[{"root":"detached","entry":[],"project":["detached/stray.ts"]}]' |
@@ -837,8 +777,6 @@ deadcode_request detached '[{"root":"detached","entry":[],"project":["detached/s
 if ! grep -qF 'Unable to find package.json' "${deadcode_response}"; then
   fail "the refusal did not name the missing package: $(cat "${deadcode_response}")"
 fi
-
-
 
 expect_runner_rejected "a deadcode request without packages" \
   "$(deadcode_request . '[]')"
@@ -854,9 +792,6 @@ expect_runner_rejected "an unanalyzed entry point" \
   "$(deadcode_request . '[{"root":".","entry":["src/helper.ts"],"project":["src/index.ts"]}]')"
 expect_runner_rejected "an unknown package field" \
   "$(deadcode_request . '[{"root":".","entry":[],"project":["src/index.ts"],"ignore":["x"]}]')"
-
-
-
 
 imports_target="${fixture_root}/imports"
 mkdir -p "${imports_target}/web" "${imports_target}/domain" "${imports_target}/packages/ui/src" \
@@ -913,13 +848,8 @@ expect_import() {
   fi
 }
 
-
-
 expect_import "../domain/model.js" "domain/model.ts" ""
 expect_import "@scope/ui" "packages/ui/src/index.ts" "@scope/ui"
-
-
-
 
 expect_import "left-pad" "node_modules/left-pad/index.js" "left-pad"
 expect_import "@scope/absent" "" "@scope/absent"
@@ -933,8 +863,6 @@ expect_import "crypto" "" ""
 expect_import "@/lib/thing" "" ""
 expect_import "#internal" "" ""
 
-
-
 expect_import "../../outside/thing.js" "" ""
 expect_import "@scope/linked" "" "@scope/linked"
 
@@ -947,8 +875,6 @@ if ! grep -qF '"path":"web/legacy.cjs","line":1,"column":27,"specifier":"../doma
   "${imports_response}"; then
   fail "imports did not resolve a literal require: $(cat "${imports_response}")"
 fi
-
-
 
 if ! grep -qF 'line 8: a dynamic import whose specifier is computed' "${imports_response}"; then
   fail "imports did not report the computed dynamic import: $(cat "${imports_response}")"
@@ -964,8 +890,6 @@ if [[ -e "${imports_target}/tsconfig.json" ]] || [[ -e "${imports_target}/web/ap
   fail "reading imports wrote into the target tree"
 fi
 
-
-
 expect_runner_rejected "a lint request without budgets" \
   '{"protocolVersion":3,"operation":"lint","root":"'"${target}"'","paths":["lint/deep.ts"],"activation":{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true}}'
 expect_runner_rejected "an unusable budget" \
@@ -976,8 +900,6 @@ expect_runner_rejected "an unknown activation" \
   "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":false,"jsxAccessibility":false,"complexity":true,"comments":true,"vue":true}')"
 expect_runner_rejected "a non-boolean activation" \
   "$(lint_request '["lint/deep.ts"]' '{"complexity":9,"depth":2,"parameters":2}' '{"reactHooks":"on","jsxAccessibility":false,"complexity":true,"comments":true}')"
-
-
 
 for uncontained in '["../escape.ts"]' '["/etc/passwd"]' '["src/./a.ts"]' '["src\\a.ts"]' '[""]'; do
   expect_runner_rejected "an uncontained selection ${uncontained}" "$(format_request format "${uncontained}")"

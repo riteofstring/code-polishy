@@ -151,7 +151,6 @@ code-polishy test --module MODULE
 code-polishy test --changed [--base TASK_BASE]
 code-polishy test --suite SUITE
 code-polishy test-levels [--base TASK_BASE]
-code-polishy test-plan [--base TASK_BASE]
 code-polishy test --recommended [--base TASK_BASE]
 code-polishy test --all
 code-polishy test --supplemental [--resume]
@@ -175,14 +174,14 @@ code-polishy merge-gate --base MERGE_TARGET
   count.
 - `--suite` runs exact named suites for diagnosis or an authorized special
   workflow.
-- `test-levels` and its compatibility alias `test-plan` execute no tests. They
-  show a terminal-safe ASCII table of all four scopes, changed and impacted
-  modules, and their cost mix. Its supplemental row is availability information,
-  not a recommendation or execution trigger. For an ordinary Markdown-only
-  delta, they add a first-class documentation row with zero application suites.
-  With a trusted base, they report the exact policy-selected level, reasons,
-  the one `merge-gate` execution path, and whether each selected suite has
-  reusable exact evidence; without a base, they report diagnostic advice only.
+- `test-levels` executes no tests. It shows a terminal-safe ASCII table of all
+  four scopes, changed and impacted modules, and their cost mix. Its
+  supplemental row is availability information, not a recommendation or
+  execution trigger. For an ordinary Markdown-only delta, it adds a first-class
+  documentation row with zero application suites. With a trusted base, it
+  reports the exact policy-selected level, reasons, the one `merge-gate`
+  execution path, and whether each selected suite has reusable exact evidence;
+  without a base, it reports diagnostic advice only.
 - `--recommended` runs focused suites for impacted modules plus repository
   suites marked recommended whose `paths` match the change. Without `--base`,
   it uses the working tree compared with `HEAD`. With `--base TASK_BASE`, it
@@ -345,7 +344,7 @@ checkpoints:
 
 - the default `check`, `check --git-changes`, and `check --staged`;
 - the default changed-scope `test` command and `test --changed`;
-- `test-levels` and its `test-plan` compatibility alias; and
+- `test-levels`; and
 - `checkpoint-gate` and `merge-gate`.
 
 The reminder says: “Make sure none of the tests (new or old) are tautological
@@ -708,7 +707,7 @@ An AI collaborator should treat the levels differently:
    `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task only after
    it records the accepted HEAD.
 5. During a task, use `test --changed --base TASK_BASE` or
-   `test-levels --base TASK_BASE` (or the compatibility alias `test-plan`) to
+   `test-levels --base TASK_BASE` to
    inspect changes since the task boundary. At an ordinary merge checkpoint,
    resolve a trusted merge target separately.
 6. At a genuine merge checkpoint, run `merge-gate --base MERGE_TARGET` without

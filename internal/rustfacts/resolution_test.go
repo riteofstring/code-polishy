@@ -142,11 +142,18 @@ type resolutionRunner struct {
 	commands []policy.Command
 }
 
-func (boundary *resolutionRunner) Run(context.Context, string, policy.Command) error {
+func (boundary *resolutionRunner) runPlain(context.Context, string, policy.Command) error {
 	panic("Cargo resolution must use bounded structured output")
 }
 
-func (boundary *resolutionRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *resolutionRunner) runStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.commands = append(boundary.commands, command)
-	return (runner.OSRunner{}).RunStructured(ctx, root, command)
+	return runner.RunCaptured(ctx, runner.OSRunner{}, root, command, runner.CaptureStructured)
+}
+
+func (double *resolutionRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

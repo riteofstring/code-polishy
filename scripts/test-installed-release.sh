@@ -89,8 +89,6 @@ if [[ ! -d "${release}" || -L "${release}" ]]; then
   fail "the locked release directory is unavailable at ${release}"
 fi
 
-
-
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-installed-release.XXXXXX")" && pwd -P)"
 cleanup() {
   rm -rf "${fixture_root}"
@@ -103,10 +101,6 @@ write_file() {
   mkdir -p "$(dirname "$1")"
   cat >"$1"
 }
-
-
-
-
 
 write_target_commands() {
   local target="$1" name
@@ -130,8 +124,6 @@ EOF
   done
 }
 
-
-
 write_security_workflow() {
   write_file "$1/.github/workflows/security.yml" <<'EOF'
 name: security
@@ -145,9 +137,6 @@ jobs:
       - run: code-polishy supply-chain
 EOF
 }
-
-
-
 
 write_pnpm_workspace() {
   local target="$1"
@@ -170,10 +159,6 @@ trustPolicy: no-downgrade
 EOF
   } >"${target}/pnpm-workspace.yaml"
 }
-
-
-
-
 
 seal_target() {
   local target="$1"
@@ -198,9 +183,6 @@ seal_target() {
   "${real_git}" -C "${target}" add -A
   "${real_git}" -C "${target}" commit --quiet -m "disposable target"
 }
-
-
-
 
 run_policy() {
   local target="$1"
@@ -227,8 +209,6 @@ expect_findings() {
     fail "${description}: ${*} reported nothing: $(excerpt)"
   fi
 }
-
-
 
 expect_finding() {
   local description="$1" check="$2" path="$3" subject="$4"
@@ -360,9 +340,6 @@ EOF
 
 echo "Governing disposable targets with the release named by ${lock} requires..."
 
-
-
-
 go_only="${fixture_root}/go-only"
 mkdir -p "${go_only}"
 write_file "${go_only}/go.mod" <<'EOF'
@@ -454,10 +431,6 @@ exercise_documentation_lane "${go_only}" "go-only"
 expect_pass "${go_only}" "go-only" check --all
 expect_pass "${go_only}" "go-only" --verbose doctor --strict
 
-
-
-
-
 if ! grep -q "conditional policy module: osv at ." "${output}"; then
   fail "go-only: the release activated no dependency scanning: $(excerpt)"
 fi
@@ -476,9 +449,6 @@ expect_findings "${go_only}" "go-only" check --all
 expect_finding "go-only" "quality.gofmt" "internal/greeting/farewell.go" "format"
 expect_absent "go-only reported a JavaScript-owned check" \
   "^FAIL +quality\.(format|lint|typecheck|deadCode) "
-
-
-
 
 exercise_scoped_analysis_fixture "${fixture_root}" "${release}" "${output}"
 
@@ -576,9 +546,6 @@ EOF
 expect_findings "${pnpm_app}" "pnpm-app" check --all
 expect_finding "pnpm-app" "quality.format" "src/unformatted.js" "prettier"
 expect_finding "pnpm-app" "quality.complexity" "src/parameters.js" "max-params"
-
-
-
 
 monorepo="${fixture_root}/pnpm-monorepo"
 mkdir -p "${monorepo}"
@@ -716,8 +683,6 @@ EOF
 expect_findings "${monorepo}" "pnpm-monorepo" architecture --all
 expect_finding "pnpm-monorepo" "architecture.moduleDependency" "packages/lib/src/index.js" "app"
 
-
-
 typescript="${fixture_root}/typescript"
 mkdir -p "${typescript}"
 write_file "${typescript}/package.json" <<'EOF'
@@ -817,9 +782,6 @@ expect_findings "${typescript}" "typescript" check --all
 expect_finding "typescript" "quality.typecheck" "src/widen.ts" "TS2322"
 expect_finding "typescript" "quality.deadCode" "src/widen.ts" "knip"
 
-
-
-
 react="${fixture_root}/react"
 mkdir -p "${react}"
 write_file "${react}/package.json" <<'EOF'
@@ -860,8 +822,6 @@ packages:
     resolution: {integrity: sha512-bbb==}
 EOF
 write_pnpm_workspace "${react}"
-
-
 
 write_file "${react}/node_modules/react/package.json" <<'EOF'
 {

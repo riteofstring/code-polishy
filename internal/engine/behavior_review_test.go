@@ -1374,7 +1374,7 @@ type checkpointArtifactFailureRunner struct {
 	sabotaged bool
 }
 
-func (runner *checkpointArtifactFailureRunner) Run(_ context.Context, _ string, _ policy.Command) error {
+func (runner *checkpointArtifactFailureRunner) runPlain(_ context.Context, _ string, _ policy.Command) error {
 	if runner.sabotaged {
 		return nil
 	}
@@ -1392,7 +1392,7 @@ func (runner *checkpointArtifactFailureRunner) Run(_ context.Context, _ string, 
 	return nil
 }
 
-func (commandRunner *behaviorReviewReplayRunner) Run(_ context.Context, _ string, command policy.Command) error {
+func (commandRunner *behaviorReviewReplayRunner) runPlain(_ context.Context, _ string, command policy.Command) error {
 	commandRunner.events = append(commandRunner.events, "planned:"+command.Name)
 	if command.Name == commandRunner.failure {
 		return errors.New("configured failure")
@@ -1400,7 +1400,7 @@ func (commandRunner *behaviorReviewReplayRunner) Run(_ context.Context, _ string
 	return nil
 }
 
-func (commandRunner *behaviorReviewReplayRunner) RunWithOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (commandRunner *behaviorReviewReplayRunner) runOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	commandRunner.events = append(commandRunner.events, "replay:"+command.Name)
 	data, err := os.ReadFile(filepath.Join(root, "content", "data.json"))
 	if err != nil {
@@ -1484,4 +1484,15 @@ func gitBehaviorReview(t *testing.T, root string, arguments ...string) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
+}
+
+func (double *checkpointArtifactFailureRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *behaviorReviewReplayRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

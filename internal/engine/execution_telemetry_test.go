@@ -18,10 +18,9 @@ func TestExecutionTelemetryRecordsPhasesCommandsAndCacheUse(t *testing.T) {
 	policyEngine := &Engine{Repository: repository.Repository{Root: t.TempDir()}, Runner: commandRunner}
 	policyEngine.BeginExecution(time.Now().Add(-10*time.Millisecond), 2*time.Millisecond)
 	policyEngine.executionPhase(t.Context(), "quality", func(ctx context.Context) {
-		structured := policyEngine.Runner.(runner.StructuredRunner)
-		_, _, _ = structured.RunStructured(ctx, policyEngine.Repository.Root, policy.Command{
+		_, _, _ = runner.RunCaptured(ctx, policyEngine.Runner, policyEngine.Repository.Root, policy.Command{
 			Name: "analyzer", Argv: []string{"tool", "check", "selected.py"}, Cwd: ".", TimeoutSeconds: 1,
-		})
+		}, runner.CaptureStructured)
 		policyEngine.Runner.(runner.CommandPhaseRecorder).RecordCommandPhases(ctx, policy.Command{Name: "analyzer"}, []runner.CommandPhase{{
 			Name: "analysis", Duration: 2 * time.Millisecond,
 		}})
@@ -89,10 +88,17 @@ func assertExecutionCaches(t *testing.T, telemetry *ExecutionTelemetry) {
 
 type telemetryTestRunner struct{}
 
-func (*telemetryTestRunner) Run(context.Context, string, policy.Command) error {
+func (*telemetryTestRunner) runPlain(context.Context, string, policy.Command) error {
 	return errors.New("failed")
 }
 
-func (*telemetryTestRunner) RunStructured(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
+func (*telemetryTestRunner) runStructured(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
 	return runner.Result{ExitStatus: 7, ResourceWait: 3 * time.Millisecond, FailureCategory: runner.FailureCommandExit}, runner.Output{}, errors.New("failed")
+}
+
+func (double *telemetryTestRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

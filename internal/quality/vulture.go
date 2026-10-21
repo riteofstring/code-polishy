@@ -26,7 +26,7 @@ const pythonVultureAdapter = `import ast,json,os,pkgutil,re,sys,time
 from collections import defaultdict
 from source_parser import parse_source
 from type_facts import type_facts
-from type_resolver import typed_dict_reads
+from type_resolver import typed_dict_fields
 from repository_contracts import framework_members
 P=10
 M=4194304
@@ -262,7 +262,7 @@ try:
  try:
   type_modules=_vulture_type_modules(fs)
   tm("type-facts")
-  typed=typed_dict_reads(type_modules,fields=True)
+  typed=typed_dict_fields(type_modules)
   tm("typed-dict")
   frameworks,resolved,problems=framework_members(type_modules,fs,target_fs,x["contracts"],x["complete"])
   tm("framework-contracts")
@@ -418,10 +418,6 @@ type pythonVultureResponse struct {
 	FactsError   string
 	Error        string
 	Timings      []pythonVultureTiming
-}
-
-func pythonVultureCommand(repo repository.Repository, project repository.PythonProject) (policy.Command, error) {
-	return pythonVultureCommandForSources(repo, project, project.Files)
 }
 
 func pythonVultureCommandForSources(repo repository.Repository, project repository.PythonProject, targets []string) (policy.Command, error) {

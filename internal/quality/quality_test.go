@@ -11,6 +11,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
 func TestSourceChecksFindTextHygiene(t *testing.T) {
@@ -472,7 +473,7 @@ type recordingQualityRunner struct {
 	commands []policy.Command
 }
 
-func (recorder *recordingQualityRunner) Run(_ context.Context, root string, specification policy.Command) error {
+func (recorder *recordingQualityRunner) runPlain(_ context.Context, root string, specification policy.Command) error {
 	recorder.roots = append(recorder.roots, root)
 	recorder.commands = append(recorder.commands, specification)
 	return nil
@@ -489,7 +490,7 @@ func (recorder *recordingQualityRunner) command(name string) (string, policy.Com
 
 type failingQualityRunner struct{}
 
-func (failingQualityRunner) Run(context.Context, string, policy.Command) error {
+func (failingQualityRunner) runPlain(context.Context, string, policy.Command) error {
 	return errors.New("scanner failed")
 }
 
@@ -531,4 +532,12 @@ func withoutSourceCommentCoverage(findings []policy.Finding) []policy.Finding {
 		}
 	}
 	return result
+}
+
+func (double *recordingQualityRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double failingQualityRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

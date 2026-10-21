@@ -1,15 +1,16 @@
 package testartifact
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 func writeManifest(directory string, value manifest) error {
@@ -24,24 +25,7 @@ func writeManifest(directory string, value manifest) error {
 		return err
 	}
 	data = append(data, '\n')
-	temporary, err := os.CreateTemp(directory, ".owner-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := replaceManifest(temporaryPath, filepath.Join(directory, manifestFilename)); err != nil {
+	if err := durablefile.Write(filepath.Join(directory, manifestFilename), data, 0o600); err != nil {
 		return fmt.Errorf("publish test artifact ownership manifest: %w", err)
 	}
 	return nil
@@ -83,15 +67,9 @@ func readManifestData(path string) ([]byte, error) {
 }
 
 func decodeManifest(data []byte) (manifest, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	value := manifest{}
-	if err := decoder.Decode(&value); err != nil {
+	if err := strictjson.Decode(data, &value); err != nil {
 		return manifest{}, err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return manifest{}, errors.New("test artifact ownership manifest has trailing data")
 	}
 	return value, nil
 }

@@ -8,7 +8,7 @@ import (
 
 func TestLauncherManifestReadsHistoricalSchemasWithoutReinterpretingThem(t *testing.T) {
 	t.Parallel()
-	for _, version := range []int{2, 3, 4, 5, 6} {
+	for _, version := range []int{2, 3, 4, 5, 6, 7} {
 		data, expected := historicalManifest(t, version)
 		manifest, err := parseLauncherManifest(data, ManifestFilename)
 		if err != nil {
@@ -31,6 +31,15 @@ func TestLauncherManifestKeepsHistoricalToolSchemasExact(t *testing.T) {
 	)
 	if _, err := parseLauncherManifest([]byte(withLaterField), ManifestFilename); err == nil {
 		t.Fatal("the version 3 manifest accepted a version 4 tool field")
+	}
+}
+
+func TestLauncherManifestRejectsDeadcodeInHistoricalSchemas(t *testing.T) {
+	t.Parallel()
+	data, _ := historicalManifest(t, 7)
+	changed := strings.Replace(string(data), `"tools":{`, `"tools":{"deadcode":"0.50.0",`, 1)
+	if _, err := parseLauncherManifest([]byte(changed), ManifestFilename); err == nil {
+		t.Fatal("version 7 accepted the later deadcode tool field")
 	}
 }
 
@@ -65,8 +74,11 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 	if version < 6 {
 		manifest.CapabilityCatalogSHA256 = ""
 	}
-	manifest.Tools.Rust = ""
-	manifest.Tools.Nextest = ""
+	manifest.Tools.Deadcode = ""
+	if version < 7 {
+		manifest.Tools.Rust = ""
+		manifest.Tools.Nextest = ""
+	}
 	manifest.Tools.Packaging = ""
 	manifest.Tools.Python = ""
 	manifest.Tools.Vulture = ""
@@ -118,8 +130,12 @@ func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 		PNPM: base.PNPM, Ruff: base.Ruff, Shellcheck: base.Shellcheck, Staticcheck: base.Staticcheck,
 		Ty: manifest.Tools.Ty, Python: manifest.Tools.Python, Vulture: manifest.Tools.Vulture,
 	}
+	versionFive := manifestToolsV5{manifestToolsV4: versionFour, Packaging: manifest.Tools.Packaging}
+	if manifest.ManifestVersion >= 7 {
+		return render(t, manifestToolsV7{manifestToolsV5: versionFive, Rust: manifest.Tools.Rust, Nextest: manifest.Tools.Nextest})
+	}
 	if manifest.ManifestVersion >= 5 {
-		return render(t, manifestToolsV5{manifestToolsV4: versionFour, Packaging: manifest.Tools.Packaging})
+		return render(t, versionFive)
 	}
 	return render(t, versionFour)
 }

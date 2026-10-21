@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,72 +25,6 @@ func TestInstallBundleMetaValidatesItsCompleteBoundary(t *testing.T) {
 				t.Fatalf("status = %d, want %d", got, test.want)
 			}
 		})
-	}
-}
-
-func TestGovernedEnvironmentMetaValidatesArgumentsBeforeOpeningRepository(t *testing.T) {
-	repoRoot := t.TempDir()
-	tests := []struct {
-		name      string
-		arguments []string
-		want      int
-	}{
-		{name: "unknown-option", arguments: []string{"--unknown"}, want: 2},
-		{name: "missing-output", arguments: nil, want: 2},
-		{name: "positional", arguments: []string{"--output", filepath.Join(t.TempDir(), "receipt.json"), "extra"}, want: 2},
-		{name: "invalid-repository", arguments: []string{"--output", filepath.Join(t.TempDir(), "receipt.json")}, want: 2},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := handleGovernedEnvironmentMeta(invocation{
-				repoRoot: repoRoot, policyRoot: repoRoot, arguments: test.arguments,
-			})
-			if got != test.want {
-				t.Fatalf("status = %d, want %d", got, test.want)
-			}
-		})
-	}
-}
-
-func TestWritePrivateFileCommitsCompletePrivateContent(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "receipt.json")
-	if err := writePrivateFile(path, []byte("receipt\n")); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "receipt\n" {
-		t.Fatalf("content = %q", data)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %o", info.Mode().Perm())
-	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Fatalf("temporary file remains: %v", err)
-	}
-}
-
-func TestWritePrivateFileRejectsInvalidDestinations(t *testing.T) {
-	if err := writePrivateFile("", []byte("receipt")); err == nil {
-		t.Fatal("empty output path was accepted")
-	}
-	root := t.TempDir()
-	if err := writePrivateFile(filepath.Join(root, "missing", "receipt.json"), []byte("receipt")); err == nil {
-		t.Fatal("missing parent was accepted")
-	}
-	destination := filepath.Join(root, "directory")
-	if err := os.Mkdir(destination, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := writePrivateFile(destination, []byte("receipt")); err == nil {
-		t.Fatal("directory destination was accepted")
 	}
 }
 

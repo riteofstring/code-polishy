@@ -64,13 +64,13 @@ func repositorySizeSummaryTable(analysis repository.SizeAnalysis) Table {
 		workspace += " (incomplete)"
 	}
 	rows := [][]string{
-		{workspace, strconv.Itoa(analysis.Workspace.Files), formatSizeBytes(analysis.Workspace.Bytes)},
-		{"governed working tree", strconv.Itoa(analysis.Governed.Files), formatSizeBytes(analysis.Governed.Bytes)},
+		{workspace, strconv.Itoa(analysis.Workspace.Files), FormatSizeBytes(analysis.Workspace.Bytes)},
+		{"governed working tree", strconv.Itoa(analysis.Governed.Files), FormatSizeBytes(analysis.Governed.Bytes)},
 	}
 	if comparison := analysis.Comparison; comparison != nil {
 		rows = append(rows,
-			[]string{"base Git blobs", strconv.Itoa(comparison.Base.Files), formatSizeBytes(comparison.Base.Bytes)},
-			[]string{"current Git blobs", strconv.Itoa(comparison.Current.Files), formatSizeBytes(comparison.Current.Bytes)},
+			[]string{"base Git blobs", strconv.Itoa(comparison.Base.Files), FormatSizeBytes(comparison.Base.Bytes)},
+			[]string{"current Git blobs", strconv.Itoa(comparison.Current.Files), FormatSizeBytes(comparison.Current.Bytes)},
 			[]string{"change from base", signedSizeCount(comparison.DeltaFiles), formatSignedSizeBytes(comparison.DeltaBytes)},
 		)
 	}
@@ -84,7 +84,7 @@ func appendSizeGroupTable(tables []Table, title, label string, groups []reposito
 	}
 	rows := make([][]string, 0, len(groups))
 	for _, group := range groups {
-		rows = append(rows, []string{group.Name, strconv.Itoa(group.Files), formatSizeBytes(group.Bytes), formatSizeShare(group.Bytes, total)})
+		rows = append(rows, []string{group.Name, strconv.Itoa(group.Files), FormatSizeBytes(group.Bytes), formatSizeShare(group.Bytes, total)})
 	}
 	return append(tables, Table{Title: title, Columns: []string{label, "FILES", "SIZE", "SHARE"}, Rows: rows})
 }
@@ -121,7 +121,7 @@ func appendSizeFileTable(tables []Table, title string, files []repository.SizeFi
 	}
 	rows := make([][]string, 0, len(files))
 	for _, file := range files {
-		rows = append(rows, []string{file.Path, file.Category, formatSizeBytes(file.Bytes)})
+		rows = append(rows, []string{file.Path, file.Category, FormatSizeBytes(file.Bytes)})
 	}
 	return append(tables, Table{Title: title, Columns: []string{"PATH", "CATEGORY", "SIZE"}, Rows: rows})
 }
@@ -136,7 +136,7 @@ func appendSizeDeltaTable(tables []Table, title, label string, groups []reposito
 	rows := make([][]string, 0, len(groups))
 	for _, group := range groups {
 		rows = append(rows, []string{
-			group.Name, formatSizeBytes(group.BaseBytes), formatSizeBytes(group.CurrentBytes),
+			group.Name, FormatSizeBytes(group.BaseBytes), FormatSizeBytes(group.CurrentBytes),
 			formatSignedSizeBytes(group.DeltaBytes), signedSizeCount(group.DeltaFiles),
 		})
 	}
@@ -153,8 +153,8 @@ func appendSizeChangeTable(tables []Table, changes []repository.SizeChange) []Ta
 	rows := make([][]string, 0, len(changes))
 	for _, change := range changes {
 		rows = append(rows, []string{
-			change.Path, change.State, formatSizeBytes(change.BaseBytes),
-			formatSizeBytes(change.CurrentBytes), formatSignedSizeBytes(change.DeltaBytes),
+			change.Path, change.State, FormatSizeBytes(change.BaseBytes),
+			FormatSizeBytes(change.CurrentBytes), formatSignedSizeBytes(change.DeltaBytes),
 		})
 	}
 	return append(tables, Table{Title: "LARGEST SIZE CHANGES", Columns: []string{"PATH", "STATE", "BASE", "CURRENT", "CHANGE"}, Rows: rows})
@@ -189,12 +189,12 @@ func signedSizeCount(count int) string {
 
 func formatSignedSizeBytes(bytes int64) string {
 	if bytes > 0 {
-		return "+" + formatSizeBytes(bytes)
+		return "+" + FormatSizeBytes(bytes)
 	}
-	return formatSizeBytes(bytes)
+	return FormatSizeBytes(bytes)
 }
 
-func formatSizeBytes(bytes int64) string {
+func FormatSizeBytes(bytes int64) string {
 	if bytes == 0 {
 		return "0 B"
 	}

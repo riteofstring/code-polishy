@@ -36,7 +36,7 @@ func osvCommand(repo repository.Repository, name, root string) policy.Command {
 
 func osvScanPlan(repo repository.Repository) ([]osvScan, error) {
 	tool := repo.PolicyTool("osv-scanner")
-	if !isExecutable(tool) || len(activeOSVRoots(repo.Config)) == 0 {
+	if !runner.ExecutableFile(tool) || len(activeOSVRoots(repo.Config)) == 0 {
 		return nil, nil
 	}
 	inputs, err := onlineUVInputs(repo)
@@ -170,7 +170,7 @@ func hasUncoveredDependencyInput(repo repository.Repository, root string, files 
 
 func scanOSVWithCommands(ctx context.Context, repo repository.Repository, commands []policy.Command, commandRunner runner.Runner) []policy.Finding {
 	tool := repo.PolicyTool("osv-scanner")
-	if !isExecutable(tool) {
+	if !runner.ExecutableFile(tool) {
 		return []policy.Finding{{
 			Check: "policy.securityScanner", Path: "repository", Subject: "osv-scanner",
 			Message: "pinned OSV-Scanner is unavailable; run ./tools/install-policy-tools.sh",
@@ -250,15 +250,9 @@ func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, 
 }
 
 func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) (runner.Result, runner.Output, error) {
-	if observed, ok := commandRunner.(runner.ReportOutputRunner); ok {
-		return observed.RunWithReportOutput(ctx, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
-			return acceptedOSVReportExit(ctx, repo, scan, result, output, runErr)
-		})
-	}
-	if observed, ok := commandRunner.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, repo.Root, scan.Command)
-	}
-	return runner.Result{}, runner.Output{}, fmt.Errorf("common command runner cannot capture scanner output")
+	return runner.RunWithReport(ctx, commandRunner, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
+		return acceptedOSVReportExit(ctx, repo, scan, result, output, runErr)
+	})
 }
 
 func acceptedOSVReportExit(ctx context.Context, repo repository.Repository, scan osvScan, result runner.Result, output runner.Output, runErr error) bool {
@@ -317,10 +311,6 @@ type osvVulnerability struct {
 	Aliases  []string            `json:"aliases"`
 	Severity []json.RawMessage   `json:"severity"`
 	Affected []osvAffectedRecord `json:"affected"`
-}
-
-func parseOSVReport(repo repository.Repository, root string, payload []byte) ([]policy.Finding, error) {
-	return parseOSVScanReport(repo, osvScan{Root: root}, payload)
 }
 
 func decodeOSVReport(payload []byte) (osvReport, error) {

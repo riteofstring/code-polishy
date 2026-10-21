@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,14 +24,9 @@ type gateProofCaptureRunner struct {
 	stderr   io.Writer
 }
 
-func (commandRunner *gateProofCaptureRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, _, err := commandRunner.RunWithOutput(ctx, root, command)
-	return err
-}
-
-func (commandRunner *gateProofCaptureRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	fmt.Fprintf(commandRunner.stdout, "\n=== %s in %s ===\n", command.Name, root)
-	return runGateCommand(ctx, commandRunner.delegate, root, command, commandRunner.stdout, commandRunner.stderr, true)
+func (commandRunner *gateProofCaptureRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	fmt.Fprintf(commandRunner.stdout, "\n=== %s in %s ===\n", invocation.Command.Name, invocation.Root)
+	return runGateCommand(ctx, commandRunner.delegate, invocation.Root, invocation.Command, commandRunner.stdout, commandRunner.stderr, true)
 }
 
 func (controller *gateRunController) replayBehaviorReview(ctx context.Context, engine *Engine, base string, selection behaviorreview.ReviewSelection) error {
@@ -100,37 +95,12 @@ func behaviorProofFailureCategory(ctx context.Context, err error) runner.Failure
 	return runner.FailureCommandExit
 }
 
-func (commandRunner *gateArtifactRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (commandRunner *gateArtifactRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	result, _, err := commandRunner.runNext(ctx, root, command, gateCommandOutput{})
-	return result, err
-}
-
-func (commandRunner *gateArtifactRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true})
-}
-
-func (commandRunner *gateArtifactRunner) RunWithReportOutput(ctx context.Context, root string, command policy.Command, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true, accept: accept})
-}
-
-func (commandRunner *gateArtifactRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return commandRunner.runNext(ctx, root, command, gateCommandOutput{capture: true})
-}
-
-func (commandRunner *gateArtifactRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
-	if stdout == nil {
-		stdout = io.Discard
+func (commandRunner *gateArtifactRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	output := gateCommandOutput{capture: invocation.Capture != runner.CaptureNone, accept: invocation.Accept}
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		output.stdout, output.stderr = cmp.Or[io.Writer](invocation.Stdout, io.Discard), cmp.Or[io.Writer](invocation.Stderr, io.Discard)
 	}
-	if stderr == nil {
-		stderr = io.Discard
-	}
-	result, _, err := commandRunner.runNext(ctx, root, command, gateCommandOutput{stdout: stdout, stderr: stderr})
-	return result, err
+	return commandRunner.runNext(ctx, invocation.Root, invocation.Command, output)
 }
 
 type gateCommandOutput struct {
@@ -142,9 +112,6 @@ type gateCommandOutput struct {
 
 func (output gateCommandOutput) run(ctx context.Context, delegate runner.Runner, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, runner.Output, error) {
 	if output.stdout != nil {
-		if _, ok := delegate.(runner.StreamRunner); !ok {
-			return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, fmt.Errorf("gate command %q requires streamed output", command.Name)
-		}
 		stdout = io.MultiWriter(stdout, output.stdout)
 		stderr = io.MultiWriter(stderr, output.stderr)
 	}
@@ -390,13 +357,12 @@ func (commandRunner *gateArtifactRunner) runRetry(ctx context.Context, root stri
 	return result, err
 }
 
-func (diagnostic *gateDiagnosticRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := diagnostic.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (diagnostic *gateDiagnosticRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	return diagnostic.parent.runDiagnostic(ctx, root, command)
+func (diagnostic *gateDiagnosticRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return diagnostic.parent.runTestPrerequisite(ctx, invocation.Root, invocation.Command)
+	}
+	result, err := diagnostic.parent.runDiagnostic(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
 }
 
 func (diagnostic *gateDiagnosticRunner) ManagesTestArtifacts() bool { return true }
@@ -405,13 +371,12 @@ func (diagnostic *gateDiagnosticRunner) TestArtifacts(name string, attempt int) 
 	return diagnostic.parent.TestArtifacts(name, attempt)
 }
 
-func (retry *gateRetryRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := retry.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (retry *gateRetryRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	return retry.parent.runRetry(ctx, root, command)
+func (retry *gateRetryRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return retry.parent.runTestPrerequisite(ctx, invocation.Root, invocation.Command)
+	}
+	result, err := retry.parent.runRetry(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
 }
 
 func (retry *gateRetryRunner) ManagesTestArtifacts() bool { return true }
@@ -421,63 +386,11 @@ func (retry *gateRetryRunner) TestArtifacts(name string, attempt int) []testarti
 }
 
 func runGateCommand(ctx context.Context, commandRunner runner.Runner, root string, command policy.Command, stdout, stderr io.Writer, captureOutput bool) (runner.Result, runner.Output, error) {
-	if streamed, ok := commandRunner.(runner.StreamRunner); ok {
-		if !captureOutput {
-			result, err := streamed.RunWithWriters(ctx, root, command, stdout, stderr)
-			return result, runner.Output{}, err
-		}
-		capturedStdout := &gateOutputBuffer{limit: 8 << 20}
-		capturedStderr := &gateOutputBuffer{limit: 64 << 10}
-		result, err := streamed.RunWithWriters(ctx, root, command, io.MultiWriter(stdout, capturedStdout), io.MultiWriter(stderr, capturedStderr))
-		if capturedStdout.truncated || capturedStderr.truncated {
-			err = errors.Join(err, fmt.Errorf("captured command output exceeds its structured output limit"))
-			result.FailureCategory = runner.CaptureFailureCategory(ctx, result, err)
-		}
-		return result, runner.Output{Stdout: capturedStdout.Bytes(), Stderr: capturedStderr.Bytes()}, err
-	}
+	capture := runner.CaptureNone
 	if captureOutput {
-		captured, ok := commandRunner.(runner.OutputRunner)
-		if !ok {
-			return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, fmt.Errorf("gate command %q requires captured output", command.Name)
-		}
-		result, output, err := captured.RunWithOutput(ctx, root, command)
-		_, _ = stdout.Write(output.Stdout)
-		_, _ = stderr.Write(output.Stderr)
-		return result, output, err
+		capture = runner.CaptureOutput
 	}
-	if observed, ok := commandRunner.(interface {
-		RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-	}); ok {
-		result, err := observed.RunWithResult(ctx, root, command)
-		return result, runner.Output{}, err
-	}
-	started := time.Now()
-	err := commandRunner.Run(ctx, root, command)
-	return runner.Result{ExecutionDuration: time.Since(started)}, runner.Output{}, err
-}
-
-type gateOutputBuffer struct {
-	buffer    bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (buffer *gateOutputBuffer) Write(data []byte) (int, error) {
-	remaining := buffer.limit - buffer.buffer.Len()
-	if remaining > 0 {
-		if len(data) < remaining {
-			remaining = len(data)
-		}
-		buffer.buffer.Write(data[:remaining])
-	}
-	if len(data) > remaining {
-		buffer.truncated = true
-	}
-	return len(data), nil
-}
-
-func (buffer *gateOutputBuffer) Bytes() []byte {
-	return append([]byte{}, buffer.buffer.Bytes()...)
+	return commandRunner.Execute(ctx, runner.Invocation{Root: root, Command: command, Capture: capture, Stdout: stdout, Stderr: stderr})
 }
 
 func failureTail(log gaterun.LogResult) string {
@@ -523,12 +436,4 @@ func (commandRunner *gateArtifactRunner) runTestPrerequisite(ctx context.Context
 	}
 	err := fmt.Errorf("test prerequisite %q does not match a failed planned suite", command.Name)
 	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
-}
-
-func (retry *gateRetryRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return retry.parent.runTestPrerequisite(ctx, root, command)
-}
-
-func (diagnostic *gateDiagnosticRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	return diagnostic.parent.runTestPrerequisite(ctx, root, command)
 }

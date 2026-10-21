@@ -84,16 +84,16 @@ type baselineCompatibilityRunner struct {
 	baselineRuns  int
 }
 
-func (baselineRunner *baselineCompatibilityRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := baselineRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (baselineRunner *baselineCompatibilityRunner) RunWithResult(_ context.Context, root string, _ policy.Command) (runner.Result, error) {
+func (baselineRunner *baselineCompatibilityRunner) runResult(_ context.Context, root string, _ policy.Command) (runner.Result, error) {
 	if root == baselineRunner.candidateRoot {
 		baselineRunner.candidateRuns++
 		return runner.Result{ExitStatus: 17, FailureCategory: runner.FailureCommandExit}, errors.New("candidate suite failed")
 	}
 	baselineRunner.baselineRuns++
 	return runner.Result{}, nil
+}
+
+func (double *baselineCompatibilityRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	result, err := double.runResult(ctx, invocation.Root, invocation.Command)
+	return result, runner.Output{}, err
 }

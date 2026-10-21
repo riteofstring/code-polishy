@@ -399,7 +399,7 @@ func assertBehaviorReviewCLICheckpoint(t *testing.T, common []string) {
 
 func assertBehaviorReviewCLIBaseAwarePlan(t *testing.T, common []string, behaviorReview string) {
 	t.Helper()
-	for _, command := range []string{"test-plan", "test-levels"} {
+	for _, command := range []string{"test-levels"} {
 		status, stdout, stderr := runBehaviorReviewCLI(t, append(append([]string{}, common...), command, "--base", "main"))
 		if status != 0 || stderr != "" || strings.Count(stdout, "BEHAVIOR REVIEW:") != 1 ||
 			!strings.Contains(stdout, "BEHAVIOR REVIEW: "+behaviorReview) {

@@ -65,11 +65,6 @@ func ValidateExecutionEvidence(evidence ExecutionEvidence) error {
 	return nil
 }
 
-func ValidatePassedExecution(repositoryRoot string, evidence ExecutionEvidence) error {
-	_, err := LoadPassedExecution(repositoryRoot, evidence)
-	return err
-}
-
 func LoadPassedExecution(repositoryRoot string, evidence ExecutionEvidence) (Report, error) {
 	if err := ValidateExecutionEvidence(evidence); err != nil {
 		return Report{}, err

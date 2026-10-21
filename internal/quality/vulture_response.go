@@ -1,22 +1,16 @@
 package quality
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
-
-func pythonVultureFindings(repo repository.Repository, project repository.PythonProject, data []byte) []policy.Finding {
-	return pythonVultureFindingsForSources(repo, project, project.Files, data)
-}
 
 func pythonVultureFindingsForSources(repo repository.Repository, project repository.PythonProject, sources []string, data []byte) []policy.Finding {
 	response, err := parsePythonVultureResponse(data)
@@ -72,28 +66,11 @@ func parsePythonVultureResponse(data []byte) (pythonVultureResponse, error) {
 }
 
 func decodePythonVultureResponse(data []byte) (pythonVultureResponseWire, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	wire := pythonVultureResponseWire{}
-	if err := decoder.Decode(&wire); err != nil {
+	if err := strictjson.Decode(data, &wire); err != nil {
 		return pythonVultureResponseWire{}, fmt.Errorf("malformed JSON: %w", err)
 	}
-	if err := pythonVultureTrailingJSONError(decoder); err != nil {
-		return pythonVultureResponseWire{}, err
-	}
 	return wire, nil
-}
-
-func pythonVultureTrailingJSONError(decoder *json.Decoder) error {
-	var trailing any
-	err := decoder.Decode(&trailing)
-	if err == io.EOF {
-		return nil
-	}
-	if err == nil {
-		return fmt.Errorf("JSON has trailing data")
-	}
-	return fmt.Errorf("malformed trailing JSON: %w", err)
 }
 
 func pythonVultureResponseFromWire(wire pythonVultureResponseWire) (pythonVultureResponse, error) {

@@ -230,7 +230,6 @@ class _TypeVisitor(ast.NodeVisitor):
         self.by_scope = {"module": self.scopes[0]}
         self.scope = "module"
         self.bindings = []
-        self.reads = []
         self.calls = []
         self.conditional = 0
         self.statement = -1
@@ -360,22 +359,6 @@ class _TypeVisitor(ast.NodeVisitor):
             node.target.id, node.target, activationSite=_end_position(node.value)
         )
         self.scope = previous
-
-    def visit_Subscript(self, node):
-        if (
-            isinstance(node.ctx, ast.Load)
-            and isinstance(node.slice, ast.Constant)
-            and isinstance(node.slice.value, str)
-        ):
-            self.reads.append(
-                {
-                    "scope": self.scope,
-                    "site": _position(node),
-                    "receiver": _expression(node.value),
-                    "key": node.slice.value,
-                }
-            )
-        self.generic_visit(node)
 
     def visit_Call(self, node):
         shape = ast.dump(node, annotate_fields=True, include_attributes=False)
@@ -619,6 +602,5 @@ def type_facts(tree):
     return {
         "scopes": visitor.scopes,
         "bindings": visitor.bindings,
-        "reads": visitor.reads,
         "calls": visitor.calls,
     }

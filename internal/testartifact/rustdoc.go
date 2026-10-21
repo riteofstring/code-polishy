@@ -1,15 +1,14 @@
 package testartifact
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 type rustdocCase struct {
@@ -72,13 +71,8 @@ func CaptureCommandOutput(command policy.Command, stdout []byte) error {
 
 func validateRustdoc(data []byte, suite string, exitStatus int) error {
 	var report rustdocReport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&report); err != nil {
+	if err := strictjson.Decode(data, &report); err != nil {
 		return fmt.Errorf("invalid doctest evidence: %w", err)
-	}
-	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-		return errors.New("doctest evidence contains trailing data")
 	}
 	if !report.matches(suite) {
 		return errors.New("doctest evidence lacks the current suite, compiler or successful Cargo build")

@@ -428,14 +428,6 @@ func analysisPaths(selection repository.Selection) []string {
 	return uniqueStrings(append(append([]string{}, selection.Files...), selection.Candidate.Deleted...))
 }
 
-func Run(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
-	return RunWithEvidence(ctx, repo, commandRunner, plan, reporter).Findings
-}
-
-func RunUntilFailure(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) []policy.Finding {
-	return RunUntilFailureWithEvidence(ctx, repo, commandRunner, plan, reporter).Findings
-}
-
 func RunWithEvidence(ctx context.Context, repo repository.Repository, commandRunner runner.Runner, plan Plan, reporter *ExecutionReporter) RunResult {
 	return run(ctx, repo, commandRunner, plan, reporter, false)
 }
@@ -636,7 +628,7 @@ func executeSuite(ctx context.Context, repo repository.Repository, root string, 
 		}
 		command = prepared
 	}
-	result, resultKnown, err := runSuite(ctx, root, commandRunner, command)
+	result, err := runSuite(ctx, root, commandRunner, command)
 	artifacts := []testartifact.Record{}
 	if artifactExecution != nil {
 		var artifactErr error
@@ -655,7 +647,7 @@ func executeSuite(ctx context.Context, repo repository.Repository, root string, 
 		result.FailureCategory = category
 	}
 	execution := SuiteExecution{
-		Suite: cloneSuite(suite), Result: result, ResultKnown: resultKnown,
+		Suite: cloneSuite(suite), Result: result, ResultKnown: true,
 		FailureCategory: category, Attempt: attempt,
 		Artifacts: append([]testartifact.Record{}, artifacts...),
 	}
@@ -694,21 +686,11 @@ func cloneSuite(suite policy.TestSuite) policy.TestSuite {
 	return suite
 }
 
-type resultRunner interface {
-	RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-}
-
-func runSuite(ctx context.Context, root string, commandRunner runner.Runner, command policy.Command) (runner.Result, bool, error) {
+func runSuite(ctx context.Context, root string, commandRunner runner.Runner, command policy.Command) (runner.Result, error) {
 	if testartifact.NeedsCommandOutput(command) && !runnerManagesTestArtifacts(commandRunner) {
 		return runCapturedSuite(ctx, root, commandRunner, command)
 	}
-	if observed, ok := commandRunner.(resultRunner); ok {
-		result, err := observed.RunWithResult(ctx, root, command)
-		return result, true, err
-	}
-	started := time.Now()
-	err := commandRunner.Run(ctx, root, command)
-	return runner.Result{ExecutionDuration: time.Since(started)}, false, err
+	return runner.RunObserved(ctx, commandRunner, root, command)
 }
 
 func ExecutionPlanForDirectTest(plan Plan) ExecutionPlan {

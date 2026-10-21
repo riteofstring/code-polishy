@@ -46,7 +46,7 @@ func TestResourceLockDescriptorClosesAcrossGovernedChildExec(t *testing.T) {
 	}
 	t.Setenv("CODE_POLISHY_LOCK_FD", strconv.FormatUint(uint64(file.Fd()), 10))
 	t.Setenv("CODE_POLISHY_LOCK_INHERITED", inherited)
-	if err := (OSRunner{}).Run(context.Background(), root, policy.Command{
+	if err := RunCommand(context.Background(), OSRunner{}, root, policy.Command{
 		Name: "governed-child", Argv: []string{"./governed-child.sh"}, Cwd: ".",
 		Environment: []string{"CODE_POLISHY_LOCK_FD", "CODE_POLISHY_LOCK_INHERITED"}, TimeoutSeconds: successfulCommandTimeoutSeconds,
 	}); err != nil {
@@ -92,3 +92,9 @@ func (info resourceLockInfo) Mode() os.FileMode  { return info.mode }
 func (info resourceLockInfo) ModTime() time.Time { return time.Time{} }
 func (info resourceLockInfo) IsDir() bool        { return false }
 func (info resourceLockInfo) Sys() any           { return info.stat }
+
+func TestResourceLockNamespaceIsPartitionedByUser(t *testing.T) {
+	if resourceLockNamespaceForUser(1000) == resourceLockNamespaceForUser(1001) {
+		t.Fatal("resource lock namespace is not partitioned by Unix user")
+	}
+}

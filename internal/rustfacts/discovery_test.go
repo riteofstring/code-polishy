@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -86,16 +85,12 @@ func TestCargoDiscoveryPreservesValidSiblingAfterManifestFailure(t *testing.T) {
 	}
 }
 
-func TestCargoDiscoveryRequiresPinnedToolsAndStructuredOutput(t *testing.T) {
+func TestCargoDiscoveryRequiresPinnedTools(t *testing.T) {
 	t.Parallel()
 	repo := rustRepository(t)
 	write(t, repo.Root, "Cargo.toml", "[package]\nname='app'\nversion='0.1.0'\n")
 	write(t, repo.Root, "src/lib.rs", "pub fn app() {}\n")
 	plan := PlanDiscovery(repo, []string{"Cargo.toml"}, []string{"Cargo.toml"})
-	result := Discover(t.Context(), repo, plan, noOutputRunner{})
-	if len(result.Findings) != 1 || !strings.Contains(result.Findings[0].Message, "bounded Cargo metadata") {
-		t.Fatalf("unstructured discovery = %+v", result)
-	}
 	repo.PolicyRoot = t.TempDir()
 	plan = PlanDiscovery(repo, []string{"Cargo.toml"}, []string{"Cargo.toml"})
 	if len(plan.Commands) != 0 || len(plan.Findings) != 1 || plan.Findings[0].Check != "policy.tool" {
@@ -105,7 +100,7 @@ func TestCargoDiscoveryRequiresPinnedToolsAndStructuredOutput(t *testing.T) {
 
 type noOutputRunner struct{}
 
-func (noOutputRunner) Run(context.Context, string, policy.Command) error {
+func (noOutputRunner) runPlain(context.Context, string, policy.Command) error {
 	return errors.New("unexpected execution")
 }
 
@@ -131,4 +126,8 @@ func write(t *testing.T, root, path, data string) {
 	if err := os.WriteFile(destination, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (double noOutputRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

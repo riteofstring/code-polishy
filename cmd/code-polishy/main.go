@@ -30,6 +30,7 @@ Commands:
   agents <install|sync|check>
   lock --index URL --sha256 DIGEST
   upgrade <plan|apply> [options]
+  cleanup [--reports] [--artifacts] [--dry-run]
   release-manifest <write|verify|satisfies-lock|materialize|archive|rust-archive|rust-notices|publish|index|oci-context> [options]
   change-boundary --base COMMIT --module NAME... [--allow-path PATH...] [--allow-new-path PATH...]
   task-session --module NAME... [options] -- COMMAND [ARG...]
@@ -46,7 +47,6 @@ Commands:
   architecture-review <status|prepare|finalize> --base REF
   regression-proof --base REF --suite NAME --evidence PATH... --id ID [--red-exit STATUS]
   test [--changed [--base REF]|--recommended [--base REF]|--all|--supplemental [--resume]|--module NAME...|--suite NAME...]
-  test-plan [--base REF]
   test-levels [--base REF]
   test-receipts export --output PATH
   test-receipts import --source PATH --sha256 DIGEST
@@ -84,6 +84,9 @@ func run(arguments []string) int {
 	}
 	if status := validateInvocation(invocation); status != 0 {
 		return status
+	}
+	if err := release.RecordRepository(invocation.repoRoot, invocation.policyRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: cleanup cannot record this repository as a release user: %v\n", err)
 	}
 	if status, handled := handleMetaCommand(invocation); handled {
 		return status
@@ -190,12 +193,20 @@ func handleCoreMetaCommand(invocation invocation) (int, bool) {
 		return handlePackMeta(invocation), true
 	case "agents":
 		return handleAgentsMeta(invocation), true
+	default:
+		return handleReleaseMetaCommand(invocation)
+	}
+}
+
+func handleReleaseMetaCommand(invocation invocation) (int, bool) {
+	switch invocation.command {
 	case "lock":
 		return handleLockMeta(invocation), true
 	case "upgrade":
 		return handleUpgradeMeta(invocation), true
+	case "cleanup":
+		return handleCleanupMeta(invocation), true
 	case "install-bundle":
-
 		return handleInstallBundleMeta(invocation), true
 	case "install-rust":
 		return handleInstallRustMeta(invocation), true
@@ -212,12 +223,6 @@ func handleWorkflowMetaCommand(invocation invocation) (int, bool) {
 		return handleChangeBoundaryMeta(invocation), true
 	case "task-session":
 		return handleTaskSessionWorkflowMeta(invocation), true
-	case "task-session-artifacts":
-		return handleTaskSessionArtifactsMeta(invocation), true
-	case "task-session-receipt":
-		return handleTaskSessionReceiptMeta(invocation), true
-	case "governed-environment":
-		return handleGovernedEnvironmentMeta(invocation), true
 	default:
 		return 0, false
 	}
@@ -384,7 +389,6 @@ func commandHandlers() map[string]commandHandler {
 		"fix":                 handleSelectionCommand("format"),
 		"list-files":          handleSelectionCommand("list-files"),
 		"test":                handleTest,
-		"test-plan":           handleTestPlan,
 		"test-levels":         handleTestLevels,
 		"test-receipts":       handleTestReceipts,
 		"verify":              handleVerify,
@@ -490,15 +494,6 @@ func handleTest(ctx context.Context, policyEngine *engine.Engine, arguments []st
 		return commandResult{}, err
 	}
 	report, err := policyEngine.Test(ctx, request)
-	return commandResult{report: report}, err
-}
-
-func handleTestPlan(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	base, err := parseBaseOption("test-plan", arguments)
-	if err != nil {
-		return commandResult{}, commandInputError(err)
-	}
-	report, err := policyEngine.TestPlan(base)
 	return commandResult{report: report}, err
 }
 
@@ -762,10 +757,6 @@ func (values *stringList) Set(value string) error {
 
 func onlyAllowed(arguments []string, allowed string) bool {
 	return len(arguments) == 0 || len(arguments) == 1 && arguments[0] == allowed
-}
-
-func printReportTo(stdout, stderr io.Writer, report engine.Report) {
-	printReportWithMode(stdout, stderr, report, false)
 }
 
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {

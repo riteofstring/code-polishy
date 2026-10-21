@@ -12,6 +12,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const maximumPackBytes = 128 << 20
@@ -188,11 +190,6 @@ func makeWritable(root string) {
 	})
 }
 
-func ReadSource(source string) (Manifest, error) {
-	tree, err := readSourceTree(source, false)
-	return tree.Manifest, err
-}
-
 func readSourceTree(source string, enforcePlatform bool) (sourceTree, error) {
 	root, err := canonicalDirectory(source)
 	if err != nil {
@@ -365,10 +362,8 @@ func readReceipt(canonical string) (Receipt, error) {
 	if err != nil {
 		return Receipt{}, fmt.Errorf("read pack receipt: %w", err)
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
 	receipt := Receipt{}
-	if err := decoder.Decode(&receipt); err != nil {
+	if err := strictjson.Decode(data, &receipt); err != nil {
 		return Receipt{}, fmt.Errorf("parse pack receipt: %w", err)
 	}
 	if receipt.ReceiptVersion != 1 || !identifierPattern.MatchString(receipt.Name) || !semanticVersionPattern.MatchString(receipt.Version) || receipt.Digest != receiptDigest(receipt) {

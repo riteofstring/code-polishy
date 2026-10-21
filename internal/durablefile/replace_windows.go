@@ -1,10 +1,10 @@
 //go:build windows
 
-package engine
+package durablefile
 
 import "golang.org/x/sys/windows"
 
-func replaceAtomicFile(source, destination string) error {
+func Replace(source, destination string) error {
 	sourcePath, err := windows.UTF16PtrFromString(source)
 	if err != nil {
 		return err

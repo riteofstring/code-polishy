@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 caller_root="$(pwd -P)"
 default_prefix="${HOME}/.local/share/code-polishy"
@@ -276,14 +256,7 @@ publish_path_persistence() {
 # shellcheck source=tools/javascript-env.sh
 source "${policy_root}/tools/javascript-env.sh"
 
-release_manifest="${policy_root}/scripts/release-manifest.sh"
 bundle_manifest="${policy_root}/tools/javascript-bundle-manifest.sh"
-
-
-
-
-
-
 
 release_contents=(
   "VERSION"
@@ -295,12 +268,12 @@ release_contents=(
   "templates"
   "artifact-security"
   "scripts/go_version.txt"
-  "scripts/release-manifest.sh"
   "tools/shellcheck.sh"
   "tools/shellcheck-version.txt"
   "tools/node-version.txt"
   "tools/pnpm-version.txt"
   "tools/staticcheck-version.txt"
+  "tools/deadcode-version.txt"
   "tools/govulncheck-version.txt"
   "tools/osv-scanner-version.txt"
   "internal/pythonfacts/pyproject.toml"
@@ -329,11 +302,6 @@ release_contents=(
   "tools/javascript_bundle_inventory.txt"
 )
 
-
-
-
-
-
 case "${javascript_arch_tag}" in
   arm64)
     go_arch_tag="arm64"
@@ -359,22 +327,12 @@ policy_tools=(
   "${rust_tool_dir}"
   ".tools/bin/cargo-nextest"
   ".tools/bin/staticcheck"
+  ".tools/bin/deadcode"
   ".tools/bin/govulncheck"
   ".tools/bin/osv-scanner"
   ".tools/bin/ruff"
   ".tools/bin/ty"
 )
-
-
-
-
-
-
-
-
-
-
-
 
 carried_tools=(
   "go:scripts/go_version.txt"
@@ -382,6 +340,7 @@ carried_tools=(
   "pnpm:tools/pnpm-version.txt"
   "shellcheck:tools/shellcheck-version.txt"
   "staticcheck:tools/staticcheck-version.txt"
+  "deadcode:tools/deadcode-version.txt"
   "govulncheck:tools/govulncheck-version.txt"
   "osv-scanner:tools/osv-scanner-version.txt"
   "astroid:tools/astroid-version.txt"
@@ -404,8 +363,6 @@ carried_markers=(
   "rust:${rust_tool_dir}/.code-polishy-rust-release:tools/rust-version.txt"
 )
 
-
-
 pinned_version() {
   local value
   value="$(tr -d '[:space:]' <"${policy_root}/$1")"
@@ -420,8 +377,6 @@ pinned_identity() {
   value="$(tr -d '[:space:]' <"${policy_root}/$1")"
   printf '%s\n' "${value#v}"
 }
-
-
 
 probed_version() {
   case "$1" in
@@ -445,9 +400,7 @@ probed_version() {
       javascript_sealed_run "${policy_root}/${shellcheck_tool_dir}/shellcheck" --version |
         awk '/^version:/ { print $2 }'
       ;;
-    staticcheck | govulncheck)
-
-
+    staticcheck | deadcode | govulncheck)
 
       javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
         "${policy_root}/.tools/bin/$1" |
@@ -572,8 +525,6 @@ done
 validate_command_link
 plan_path_persistence
 
-
-
 if ! git -C "${policy_root}" rev-parse --git-dir >/dev/null 2>&1; then
   echo "Install Code Polishy from a Git checkout; ${policy_root} is not one." >&2
   exit 1
@@ -603,14 +554,7 @@ for relative in "${release_contents[@]}"; do
   fi
 done
 
-
-
-
-
 code_polishy_version="$("${policy_root}/scripts/release-version.sh" "${policy_root}/VERSION")"
-
-
-
 
 if [[ ! -x "${javascript_node}" || ! -f "${javascript_pnpm}" ]]; then
   echo "The policy-owned JavaScript runtime is not installed at ${javascript_runtime_dir}." >&2
@@ -640,9 +584,6 @@ cleanup() {
     rm -f "${path_profile_staging}"
   fi
 }
-
-
-
 
 interrupted() {
   cleanup
@@ -730,9 +671,6 @@ for relative in "${release_contents[@]}"; do
   cp -RPp "${policy_root}/${relative}" "${staging}/${relative}"
 done
 
-
-
-
 staged_tools="${staging}/.tools"
 staged_javascript="${staged_tools}/javascript"
 mkdir -p "${staged_javascript}"
@@ -742,15 +680,6 @@ for relative in "${policy_tools[@]}"; do
   mkdir -p "$(dirname "${staging}/${relative}")"
   cp -RPp "${policy_root}/${relative}" "${staging}/${relative}"
 done
-
-
-
-
-
-
-
-
-
 
 echo "Searching the staged release for retired paths and commands..."
 retired_paths="$(find "${staging}" -path "${staged_tools}" -prune -o \
@@ -786,8 +715,9 @@ for retired in "check_policy.sh" "git submodule"; do
 done
 
 "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest rust-notices --root "${staging}"
-release_digest="$("${release_manifest}" write "${staging}" "${source_revision}")"
-"${release_manifest}" verify "${staging}"
+release_digest="$("${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest write \
+  --root "${staging}" --source-revision "${source_revision}")"
+"${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest verify --root "${staging}"
 
 if [[ -n "${required_repository}" ]]; then
   "${staging}/bin/code-polishy" --policy-root "${staging}" --repo-root "${required_repository}" \
@@ -816,11 +746,10 @@ destination="${staging_root}/${release_id}"
 
 installed_message="Installed Code Polishy ${code_polishy_version} at ${destination}."
 if [[ -e "${destination}" ]]; then
-  if "${release_manifest}" verify "${destination}" >/dev/null 2>&1; then
+  if "${staging}/bin/code-polishy" --policy-root "${staging}" release-manifest verify \
+    --root "${destination}" >/dev/null 2>&1; then
     installed_message="Code Polishy ${code_polishy_version} is already installed at ${destination}."
   else
-
-
 
     rm -rf "${superseded}"
     mv "${destination}" "${superseded}"
@@ -830,14 +759,6 @@ if [[ -e "${destination}" ]]; then
 else
   mv "${staging}" "${destination}"
 fi
-
-
-
-
-
-
-
-
 
 mkdir -p "${launcher_root}"
 cp -p "${destination}/bin/code-polishy-launcher" "${launcher_staging}"

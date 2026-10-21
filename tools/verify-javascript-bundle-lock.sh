@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
 if [[ "$#" -ne 1 ]]; then
   echo "usage: verify-javascript-bundle-lock.sh <pnpm-lock.yaml>" >&2
   exit 2
@@ -26,8 +17,6 @@ fail() {
   exit 1
 }
 
-
-
 if [[ "$(awk -F': ' '/^lockfileVersion:/ { gsub(/'"'"'/, "", $2); print $2; exit }' "${lockfile}")" != "9.0" ]]; then
   fail "is not lockfile version 9.0"
 fi
@@ -39,8 +28,6 @@ if ! awk '/^settings:/ { in_settings = 1; next }
   END { exit found ? 0 : 1 }' "${lockfile}"; then
   fail "does not record autoInstallPeers: false"
 fi
-
-
 
 importer_count="$(awk '/^importers:/ { in_importers = 1; next }
   /^[^[:space:]]/ { in_importers = 0 }
@@ -59,8 +46,6 @@ while read -r specifier; do
 done < <(awk '/^importers:/ { in_importers = 1; next }
   /^[^[:space:]]/ { in_importers = 0 }
   in_importers && $1 == "specifier:" { print $2 }' "${lockfile}")
-
-
 
 resolutions="$(grep -c '^    resolution: {' "${lockfile}" || true)"
 if [[ "${resolutions}" -lt 1 ]]; then
@@ -82,8 +67,6 @@ for prohibited_key in patchedDependencies overrides packageExtensions \
     fail "declares prohibited key '${prohibited_key}'"
   fi
 done
-
-
 
 for prohibited_source in 'version: git' 'version: https' 'version: http' \
   'version: file:' 'version: link:' 'version: workspace:' 'tarball:' \

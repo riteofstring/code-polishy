@@ -391,7 +391,7 @@ that lock names, verifies it, and passes the target's repository root to it
 separately. The engine reads config and source from the target while resolving
 policy-owned tools from the release beside it. A release carries every pinned
 tool the engine runs — the sealed Node runtime and JavaScript bundle, the Go
-toolchain, ShellCheck, staticcheck, govulncheck, OSV-Scanner, Ruff, Vulture,
+toolchain, ShellCheck, staticcheck, deadcode, govulncheck, OSV-Scanner, Ruff, Vulture,
 `ty`, and carried CPython — and none of them is resolved from an ambient `PATH`,
 a host installation, or an environment override, so what a check decides does
 not depend on the machine it ran on. The release manifest records the exact

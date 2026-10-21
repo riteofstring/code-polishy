@@ -70,7 +70,7 @@ func TestSourceFactsRetainLoaderAndCheckDataFlowWithoutExecutingPython(t *testin
 	if !bound {
 		t.Fatal("loaded value has no exact assignment binding")
 	}
-	if _, err := ResolveTypeProject(t.Context(), python, typeTestModules(project.Sources)); err != nil {
+	if _, err := resolveTypedDictFieldsForTest(t, typeTestModules(project.Sources)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -109,7 +109,7 @@ func TestNestedConsumerCallsRetainDistinctSpans(t *testing.T) {
 	if !bound {
 		t.Fatal("assignment cannot distinguish the outer call from its callee")
 	}
-	if _, err := ResolveTypeProject(t.Context(), python, typeTestModules(project.Sources)); err != nil {
+	if _, err := resolveTypedDictFieldsForTest(t, typeTestModules(project.Sources)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -120,7 +120,7 @@ func TestConsumerCallsSurviveDeterministicProjectPartitions(t *testing.T) {
 	for index := range 1000 {
 		inputs = append(inputs, Input{Path: fmt.Sprintf("filler_%04d.py", index), Source: "# " + strings.Repeat("x", 8500) + "\n"})
 	}
-	inputs = append(inputs, Input{Path: "z_bridge.py", Source: "from pkgutil import resolve_name\nfrom z_contracts import Contract\n"}, Input{Path: "z_contracts.py", Source: runtimeTestProtocolSource}, Input{Path: "z_plugin.py", Source: "class Plugin:\n    def run(self):\n        return 1\n"})
+	inputs = append(inputs, Input{Path: "z_bridge.py", Source: "from pkgutil import resolve_name\nfrom z_contracts import Contract\n"}, Input{Path: "z_contracts.py", Source: "from typing import Protocol, runtime_checkable\n@runtime_checkable\nclass Contract(Protocol):\n    def run(self):\n        ...\n"}, Input{Path: "z_plugin.py", Source: "class Plugin:\n    def run(self):\n        return 1\n"})
 	first, err := AnalyzeProjectSources(t.Context(), python, inputs)
 	if err != nil || len(first.Partitions) < 2 {
 		t.Fatalf("partitioned facts: %v", err)
@@ -134,32 +134,18 @@ func TestConsumerCallsSurviveDeterministicProjectPartitions(t *testing.T) {
 	if err != nil || first.Identity != second.Identity || first.PartitionIdentity != second.PartitionIdentity || !reflect.DeepEqual(first.Sources, second.Sources) {
 		t.Fatalf("reordered partitions changed consumer facts: %v", err)
 	}
-	if _, err := ResolveTypeProject(t.Context(), python, typeTestModules(first.Sources)); err != nil {
+	if _, err := resolveTypedDictFieldsForTest(t, typeTestModules(first.Sources)); err != nil {
 		t.Fatal(err)
 	}
 	declaration := fmt.Sprintf(`{"kind":"target","project":"pyproject.toml","target":{"module":"z_plugin","symbol":"Plugin"},"consumer":{"kind":"callsite","importer":"a_loader.py","module":"a_loader","callable":"load","site":{"line":3,"column":14},"callee":"pkgutil.resolve_name","shape":"module-object-call/v1","argument":"'z_plugin:Plugin'","sourceSha256":"%s"}}`, first.Sources[0].SHA256)
 	requests := []ReachabilityInput{{ID: "configured-consumer", Declaration: json.RawMessage(declaration)}}
-	resolved, err := ResolveReachability(t.Context(), python, typeTestModules(first.Sources), requests)
+	resolved, err := resolveReachabilityForTest(t, typeTestModules(first.Sources), requests)
 	if err != nil || len(resolved.Problems) != 0 || len(resolved.Evidence) != 1 || resolved.Evidence[0].Targets[0].Definitions[0].Path != "z_plugin.py" {
 		t.Fatalf("consumer did not resolve its target across partitions: %+v, %v", resolved, err)
 	}
-	reordered, err := ResolveReachability(t.Context(), python, typeTestModules(second.Sources), requests)
+	reordered, err := resolveReachabilityForTest(t, typeTestModules(second.Sources), requests)
 	if err != nil || !reflect.DeepEqual(resolved, reordered) {
 		t.Fatalf("consumer evidence changed with partition order: %+v, %v", reordered, err)
-	}
-	assertPartitionedObjectImports(t, python, first, second)
-	assertPartitionedRuntimeChecks(t, python, first, second)
-}
-
-func assertPartitionedObjectImports(t *testing.T, python string, first, second SourceProject) {
-	t.Helper()
-	imports, err := ResolveObjectImports(t.Context(), python, ".", typeTestModules(first.Sources), nil)
-	if err != nil || len(imports.Imports) != 1 || len(imports.Imports[0].Targets) != 1 || imports.Imports[0].Targets[0].Module != "z_plugin" {
-		t.Fatalf("cross-partition object import was not resolved independently: %+v, %v", imports, err)
-	}
-	reorderedImports, err := ResolveObjectImports(t.Context(), python, ".", typeTestModules(second.Sources), nil)
-	if err != nil || !reflect.DeepEqual(imports, reorderedImports) {
-		t.Fatalf("object import identity changed with partition order: %+v, %v", reorderedImports, err)
 	}
 }
 
@@ -209,7 +195,7 @@ func TestTypeProjectRejectsMalformedConsumerEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := ResolveTypeProject(t.Context(), python, modules); err == nil {
+			if _, err := resolveTypedDictFieldsForTest(t, modules); err == nil {
 				t.Fatal("malformed consumer evidence was accepted")
 			}
 		})

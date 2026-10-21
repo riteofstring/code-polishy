@@ -1,7 +1,6 @@
 package behaviorreview
 
 import (
-	"bytes"
 	"context"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
@@ -329,17 +329,8 @@ func marshalArtifact(value any) ([]byte, error) {
 }
 
 func decodeStrict(data []byte, value any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
+	if err := strictjson.Decode(data, value); err != nil {
 		return fmt.Errorf("%w: parse JSON: %v", ErrInvalidReview, err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err != nil {
-			return fmt.Errorf("%w: parse JSON: %v", ErrInvalidReview, err)
-		}
-		return fmt.Errorf("%w: JSON contains more than one value", ErrInvalidReview)
 	}
 	return nil
 }

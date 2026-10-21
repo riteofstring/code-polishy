@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -855,20 +856,20 @@ func combineTestQualityReminders(left, right *TestQualityReminder) *TestQualityR
 
 func (engine *Engine) combine(left, right Report) Report {
 	report := Report{
-		RequestedSelection:    combineRequestedSelection(left.RequestedSelection, right.RequestedSelection),
+		RequestedSelection:    cmp.Or(right.RequestedSelection, left.RequestedSelection),
 		AnalysisContext:       append(append([]AnalysisContext{}, left.AnalysisContext...), right.AnalysisContext...),
-		RepositorySize:        combineRepositorySize(left.RepositorySize, right.RepositorySize),
-		RepositoryTrends:      combineRepositoryTrends(left.RepositoryTrends, right.RepositoryTrends),
-		BehaviorReview:        combineBehaviorReview(left.BehaviorReview, right.BehaviorReview),
+		RepositorySize:        cmp.Or(right.RepositorySize, left.RepositorySize),
+		RepositoryTrends:      cmp.Or(right.RepositoryTrends, left.RepositoryTrends),
+		BehaviorReview:        cmp.Or(right.BehaviorReview, left.BehaviorReview),
 		MergePolicy:           combineMergePolicy(left.MergePolicy, right.MergePolicy),
-		CheckpointPolicy:      combineCheckpointPolicy(left.CheckpointPolicy, right.CheckpointPolicy),
-		GateRunPolicy:         combineGateRunPolicy(left.GateRunPolicy, right.GateRunPolicy),
-		ChangedTestScope:      combineChangedTestScope(left.ChangedTestScope, right.ChangedTestScope),
+		CheckpointPolicy:      cmp.Or(right.CheckpointPolicy, left.CheckpointPolicy),
+		GateRunPolicy:         cmp.Or(right.GateRunPolicy, left.GateRunPolicy),
+		ChangedTestScope:      cmp.Or(right.ChangedTestScope, left.ChangedTestScope),
 		TestQualityReminder:   combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		ReliabilityReminder:   combineReliabilityReminders(left.ReliabilityReminder, right.ReliabilityReminder),
-		SourceDependencyGraph: combineSourceDependencyGraph(left.SourceDependencyGraph, right.SourceDependencyGraph),
-		ArchitectureReview:    combineArchitectureReview(left.ArchitectureReview, right.ArchitectureReview),
-		Formatting:            combineFormatting(left.Formatting, right.Formatting),
+		SourceDependencyGraph: cmp.Or(right.SourceDependencyGraph, left.SourceDependencyGraph),
+		ArchitectureReview:    cmp.Or(right.ArchitectureReview, left.ArchitectureReview),
+		Formatting:            cmp.Or(right.Formatting, left.Formatting),
 		TestCommands:          append(append([]TestCommandEvidence{}, left.TestCommands...), right.TestCommands...),
 		TestDiagnostics:       append(append([]TestFailureDiagnostic{}, left.TestDiagnostics...), right.TestDiagnostics...),
 		TestAggregations:      append(append([]testpolicy.SuiteAggregation{}, left.TestAggregations...), right.TestAggregations...),
@@ -881,41 +882,6 @@ func (engine *Engine) combine(left, right Report) Report {
 		Notes:                 append(append([]string{}, left.Notes...), right.Notes...),
 	}
 	return engine.normalizeReport(report)
-}
-
-func combineRepositorySize(left, right *repository.SizeAnalysis) *repository.SizeAnalysis {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
-func combineRepositoryTrends(left, right *RepositoryTrends) *RepositoryTrends {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
-func combineBehaviorReview(left, right *BehaviorReviewStatus) *BehaviorReviewStatus {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
-func combineGateRunPolicy(left, right *GateRunPolicy) *GateRunPolicy {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
-func combineCheckpointPolicy(left, right *CheckpointPolicy) *CheckpointPolicy {
-	if right != nil {
-		return right
-	}
-	return left
 }
 
 func (engine *Engine) withTestQualityReminder(report Report, candidate repository.CandidateDelta) Report {
@@ -935,13 +901,6 @@ func (engine *Engine) withMergeGateTestQualityReminder(ctx context.Context, repo
 	return engine.combine(report, Report{TestQualityReminder: NewTaskAwareTestQualityReminder(
 		nil, receipt.Base, testpolicy.ChangedTestPaths(engine.Repository, taskSelection.Candidate),
 	)})
-}
-
-func combineChangedTestScope(left, right *ChangedTestScope) *ChangedTestScope {
-	if right != nil {
-		return right
-	}
-	return left
 }
 
 func combineMergePolicy(left, right *MergePolicy) *MergePolicy {
@@ -1041,8 +1000,4 @@ func HasFindings(report Report) bool {
 	return slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
 		return (finding.Status == "" || finding.Status == policy.FindingOpen) && (finding.Severity == "" || finding.Severity == policy.FindingError)
 	})
-}
-
-func IncludesCapability(config policy.Config, capability string) bool {
-	return slices.Contains(config.Project.Capabilities, capability)
 }

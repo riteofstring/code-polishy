@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
-
-
 # shellcheck source=tools/javascript-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-env.sh"
 

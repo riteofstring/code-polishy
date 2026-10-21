@@ -165,17 +165,3 @@ type Table struct {
 	Columns []string   `json:"columns"`
 	Rows    [][]string `json:"rows"`
 }
-
-func combineSourceDependencyGraph(left, right *sourcegraph.Graph) *sourcegraph.Graph {
-	if right != nil {
-		return right
-	}
-	return left
-}
-
-func combineRequestedSelection(left, right *repository.RequestedSelection) *repository.RequestedSelection {
-	if right != nil {
-		return right
-	}
-	return left
-}

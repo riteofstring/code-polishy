@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 )
 
 const exampleDigest = "1111111111111111111111111111111111111111111111111111111111111111"
@@ -75,10 +77,10 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Host: host, Features: []string{"javascript-bundle"},
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
-			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0",
+			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Deadcode: "0.50.0",
 			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138",
 		},
-		ContentDigest: releaseEntriesDigest(entries), EntryCount: len(entries), Entries: entries,
+		ContentDigest: EntriesDigest(entries), EntryCount: len(entries), Entries: entries,
 		CapabilityCatalogSHA256: capabilityContentSHA256([]byte(files[CapabilityCatalogPath])),
 	}
 	manifest.ReleaseDigest = manifest.Identity()
@@ -200,7 +202,7 @@ func TestWriteLockAtomicallyReplacesAnExistingLock(t *testing.T) {
 	if err != nil || !present || !slices.Equal(got.Features, want.Features) || got.CodePolishyVersion != want.CodePolishyVersion || got.ReleaseDigest != want.ReleaseDigest {
 		t.Fatalf("lock = %+v, present = %v, error = %v", got, present, err)
 	}
-	temporaries, err := filepath.Glob(filepath.Join(repoRoot, ".code-polishy-lock-*.tmp"))
+	temporaries, err := filepath.Glob(filepath.Join(repoRoot, durablefile.TemporaryPrefix(LockFilename)+"*"))
 	if err != nil || len(temporaries) != 0 {
 		t.Fatalf("temporary locks = %v, error = %v", temporaries, err)
 	}

@@ -144,7 +144,7 @@ func runContractVulture(t *testing.T, sources map[string]string, contracts []pol
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}

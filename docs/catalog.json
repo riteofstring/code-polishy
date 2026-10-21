@@ -343,6 +343,14 @@
       "public": true
     },
     {
+      "id": "repository-cleanup",
+      "path": "docs/design/repository-cleanup.md",
+      "title": "Repository Output Cleanup",
+      "summary": "Understand generated report ownership, completed artifact cleanup, and retained evidence.",
+      "aliases": ["cleanup-design"],
+      "public": true
+    },
+    {
       "id": "repository-size-design",
       "path": "docs/design/repository-size-analysis.md",
       "title": "Repository Size Analysis",

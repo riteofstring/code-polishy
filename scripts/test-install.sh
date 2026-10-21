@@ -115,7 +115,6 @@ build_source_checkout() {
   mkdir -p "${source_root}"
 
   copy_file "${policy_root}/scripts/install.sh" "${source_root}/scripts/install.sh"
-  copy_file "${policy_root}/scripts/release-manifest.sh" "${source_root}/scripts/release-manifest.sh"
   copy_file "${policy_root}/scripts/release-version.sh" "${source_root}/scripts/release-version.sh"
   copy_file "${policy_root}/tools/javascript-env.sh" "${source_root}/tools/javascript-env.sh"
   copy_file "${policy_root}/tools/javascript-bundle-manifest.sh" \
@@ -124,7 +123,7 @@ build_source_checkout() {
     "${source_root}/tools/javascript/bundle-manifest.mjs"
   copy_file "${policy_root}/tools/javascript/source-files.txt" \
     "${source_root}/tools/javascript/source-files.txt"
-  chmod +x "${source_root}/scripts/install.sh" "${source_root}/scripts/release-manifest.sh" \
+  chmod +x "${source_root}/scripts/install.sh" \
     "${source_root}/scripts/release-version.sh" \
     "${source_root}/tools/javascript-bundle-manifest.sh"
 
@@ -197,6 +196,7 @@ EOF
   printf '%s\n' "${pnpm_version}" >"${source_root}/tools/pnpm-version.txt"
   printf '0.11.0\n' >"${source_root}/tools/shellcheck-version.txt"
   printf 'v0.7.0\n' >"${source_root}/tools/staticcheck-version.txt"
+  printf 'v0.50.0\n' >"${source_root}/tools/deadcode-version.txt"
   printf 'v1.3.0\n' >"${source_root}/tools/govulncheck-version.txt"
   printf 'v2.4.0\n' >"${source_root}/tools/osv-scanner-version.txt"
   printf '4.1.2\n' >"${source_root}/tools/astroid-version.txt"
@@ -261,7 +261,7 @@ EOF
   write_file "${source_root}/scripts/code-polishy-stub.sh" <<EOF
 #!/usr/bin/env bash
 for argument in "\$@"; do
-  if [[ "\${argument}" == "satisfies-lock" || "\${argument}" == "rust-notices" ]]; then
+  if [[ "\${argument}" == "satisfies-lock" || "\${argument}" == "rust-notices" || "\${argument}" == "write" || "\${argument}" == "verify" ]]; then
     exec "${engine_binary}" "\$@"
   fi
 done
@@ -349,6 +349,7 @@ EOF
 if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
   case "\${3##*/}" in
     staticcheck) printf '\tmod\thonnef.co/go/tools\tv0.7.0\th1:disposable\n' ;;
+    deadcode) printf '\tmod\tgolang.org/x/tools\tv0.50.0\th1:disposable\n' ;;
     govulncheck) printf '\tmod\tgolang.org/x/vuln\tv1.3.0\th1:disposable\n' ;;
     *)
       echo "unexpected stub go module probe: \$*" >&2
@@ -402,6 +403,7 @@ EOF
   mkdir -p "${source_root}/.tools/python/${platform_tag}/lib/python3.12/site-packages/vulture-2.16.dist-info"
 
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
+  write_stub_tool "${source_root}/.tools/bin/deadcode"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
 
   "${real_git}" -C "${source_root}" init --quiet
@@ -535,7 +537,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
   fail "the release does not record the checkout version"
 
 for carried in go:1.26.9 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
-  staticcheck:0.7.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
+  staticcheck:0.7.0 deadcode:0.50.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
   ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
@@ -553,9 +555,9 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   templates/AGENTS.md templates/behavior-review.md \
   templates/code-polishyw templates/code-polishyw.ps1 \
   artifact-security/scanner-policy.json \
-  scripts/go_version.txt scripts/release-manifest.sh tools/shellcheck.sh \
+  scripts/go_version.txt tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
-  tools/staticcheck-version.txt tools/govulncheck-version.txt \
+  tools/staticcheck-version.txt tools/deadcode-version.txt tools/govulncheck-version.txt \
   tools/osv-scanner-version.txt tools/python-version.txt tools/python_runtime_checksums.txt \
   internal/pythonfacts/pyproject.toml internal/pythonfacts/uv.lock \
   internal/rustfacts/pyproject.toml internal/rustfacts/uv.lock \
@@ -577,7 +579,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
   ".tools/rust/${platform_tag}/bin/rustc" ".tools/rust/${platform_tag}/bin/cargo-clippy" \
-  .tools/bin/staticcheck .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest; do
+  .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
@@ -596,7 +598,7 @@ cmp -s "${source_root}/templates/behavior-review.md" \
 [[ -x "${release}/bin/code-polishy" ]] || fail "the release binary is not executable"
 [[ -L "${release}/.tools/javascript/bundle/node_modules/example-tool" ]] ||
   fail "the release did not keep the bundle's links as links"
-"${release}/scripts/release-manifest.sh" verify "${release}" ||
+"${engine_binary}" release-manifest verify --root "${release}" ||
   fail "a freshly installed release does not verify"
 
 required_target="${fixture_root}/required-target"
@@ -671,7 +673,7 @@ printf 'tampered\n' >>"${release}/bin/code-polishy"
 install_release >"${fixture_root}/replace.log"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "replacing a changed release added a release"
-"${release}/scripts/release-manifest.sh" verify "${release}" ||
+"${engine_binary}" release-manifest verify --root "${release}" ||
   fail "a replaced release does not verify"
 [[ "$(manifest_field "${manifest}" contentDigest)" == "${content_digest}" ]] ||
   fail "replacing a changed release did not restore the recorded bytes"
@@ -969,7 +971,7 @@ fi
 changed="${fixture_root}/changed"
 cp -RPp "${release}" "${changed}"
 printf 'tampered\n' >>"${changed}/bin/code-polishy"
-if "${changed}/scripts/release-manifest.sh" verify "${changed}" >/dev/null 2>&1; then
+if "${engine_binary}" release-manifest verify --root "${changed}" >/dev/null 2>&1; then
   fail "a changed release file verified"
 fi
 rm -rf "${changed}"
@@ -980,7 +982,7 @@ cp -RPp "${release}" "${retargeted}"
 mkdir -p "${retargeted}/.tools/javascript/bundle/node_modules/.pnpm/other-tool"
 printf '// other\n' >"${retargeted}/.tools/javascript/bundle/node_modules/.pnpm/other-tool/index.mjs"
 ln -sf ".pnpm/other-tool" "${retargeted}/.tools/javascript/bundle/node_modules/example-tool"
-if "${retargeted}/scripts/release-manifest.sh" verify "${retargeted}" >/dev/null 2>&1; then
+if "${engine_binary}" release-manifest verify --root "${retargeted}" >/dev/null 2>&1; then
   fail "a retargeted bundle link verified"
 fi
 rm -rf "${retargeted}"
@@ -995,7 +997,7 @@ cp -RPp "${release}" "${foreign}"
 sed "s/\"host\": \"${platform_tag}\"/\"host\": \"${other_host}\"/" \
   "${foreign}/release-manifest.json" >"${foreign}/foreign-manifest.json"
 mv "${foreign}/foreign-manifest.json" "${foreign}/release-manifest.json"
-if "${foreign}/scripts/release-manifest.sh" verify "${foreign}" >/dev/null 2>&1; then
+if "${engine_binary}" release-manifest verify --root "${foreign}" >/dev/null 2>&1; then
   fail "a release recorded for another host verified"
 fi
 rm -rf "${foreign}"
@@ -1004,7 +1006,7 @@ rm -rf "${foreign}"
 unmanaged="${fixture_root}/unmanaged"
 cp -RPp "${release}" "${unmanaged}"
 rm "${unmanaged}/release-manifest.json"
-if "${policy_root}/scripts/release-manifest.sh" verify "${unmanaged}" >/dev/null 2>&1; then
+if "${engine_binary}" release-manifest verify --root "${unmanaged}" >/dev/null 2>&1; then
   fail "a release without a manifest verified"
 fi
 rm -rf "${unmanaged}"
@@ -1018,9 +1020,9 @@ CODE_POLISHY_TEST_BUILD_MARK=second install_release >"${fixture_root}/second-ins
   fail "a second reviewed commit did not install beside the first"
 first_release="$(installed_release 1)"
 second_release="$(installed_release 2)"
-"${first_release}/scripts/release-manifest.sh" verify "${first_release}" ||
+"${engine_binary}" release-manifest verify --root "${first_release}" ||
   fail "the first coexisting release does not verify"
-"${second_release}/scripts/release-manifest.sh" verify "${second_release}" ||
+"${engine_binary}" release-manifest verify --root "${second_release}" ||
   fail "the second coexisting release does not verify"
 [[ "$(manifest_field "${first_release}/release-manifest.json" releaseDigest)" != \
   "$(manifest_field "${second_release}/release-manifest.json" releaseDigest)" ]] ||

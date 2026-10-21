@@ -385,20 +385,14 @@ def _module(value):
 
 def _module_facts(value):
     facts = value["facts"]
-    _exact(facts, ("scopes", "bindings", "reads", "calls"), "source type facts")
+    _exact(facts, ("scopes", "bindings", "calls"), "source type facts")
     scopes = _scopes(facts["scopes"])
-    if not isinstance(facts["bindings"], list) or not isinstance(facts["reads"], list):
-        raise TypeError("source type facts omit bindings or reads")
+    if not isinstance(facts["bindings"], list):
+        raise TypeError("source type facts omit bindings")
     bindings = {}
     for binding in facts["bindings"]:
         _binding(binding, scopes)
         bindings.setdefault((binding["scope"], binding["name"]), []).append(binding)
-    for read in facts["reads"]:
-        _exact(read, ("scope", "site", "receiver", "key"), "literal-key read")
-        if read["scope"] not in scopes or not isinstance(read["key"], str):
-            raise ValueError("literal-key read has invalid scope or key")
-        _site(read["site"])
-        _expression(read["receiver"])
     _calls(facts["calls"], scopes)
     return {**value, "scopes": scopes, "bindings": bindings}
 
@@ -422,8 +416,7 @@ class _Resolver:
             if module["module"]:
                 self.module_roots.add(module["module"].split(".")[0])
             count += sum(
-                len(module["facts"][key])
-                for key in ("scopes", "bindings", "reads", "calls")
+                len(module["facts"][key]) for key in ("scopes", "bindings", "calls")
             )
             count += sum(
                 len(call["arguments"]) + len(call["keywords"]) + 1
@@ -619,44 +612,6 @@ class _Resolver:
             )
         return self.field_type(module, scope, parameters)
 
-    def receiver(self, module, scope, expression, site, seen=frozenset()):
-        if len(seen) >= MAX_DEPTH:
-            raise ValueError("TypedDict receiver alias exceeds resolution depth")
-        if expression["kind"] == "call":
-            return self.definition(self.reference(module, scope, expression["name"]))
-        if expression["kind"] != "name" or "." in expression["name"]:
-            return None
-        binding = self.binding(module, scope, expression["name"])
-        if binding is None:
-            return None
-        identity = module["path"], binding["scope"], binding["name"]
-        if identity in seen or self.late_local_binding(scope, binding, site):
-            return None
-        if binding["kind"] in {"annotated", "parameter"}:
-            annotation = binding["annotation"]
-            if annotation["kind"] not in {"name", "string"}:
-                return None
-            return self.definition(
-                self.reference(module, binding["annotationScope"], annotation["name"])
-            )
-        if binding["kind"] == "alias":
-            return self.receiver(
-                module,
-                binding["scope"],
-                binding["value"],
-                binding["site"],
-                seen | {identity},
-            )
-        return None
-
-    def late_local_binding(self, scope, binding, site):
-        if binding["kind"] == "parameter" or scope != binding["scope"]:
-            return False
-        return (binding["site"]["line"], binding["site"]["column"]) >= (
-            site["line"],
-            site["column"],
-        )
-
     def resolve_definitions(self):
         for module in self.files.values():
             for binding in module["facts"]["bindings"]:
@@ -680,38 +635,9 @@ class _Resolver:
         }
         return [fields[key] for key in sorted(fields)]
 
-    def run(self):
-        self.resolve_definitions()
-        reads = []
-        for module in self.files.values():
-            for read in module["facts"]["reads"]:
-                fields = self.receiver(
-                    module, read["scope"], read["receiver"], read["site"]
-                )
-                if fields is not None and read["key"] in fields:
-                    reads.append(
-                        {
-                            "path": module["path"],
-                            "line": read["site"]["line"],
-                            "column": read["site"]["column"],
-                            "field": fields[read["key"]],
-                        }
-                    )
-        reads.sort(
-            key=lambda value: (
-                value["path"],
-                value["line"],
-                value["column"],
-                value["field"]["path"],
-                value["field"]["line"],
-            )
-        )
-        return reads
 
-
-def typed_dict_reads(modules, facts=None, *, fields=False):
-    resolver = facts or _Resolver(modules)
-    return resolver.fields() if fields else resolver.run()
+def typed_dict_fields(modules):
+    return _Resolver(modules).fields()
 
 
 def _unique_object(pairs):

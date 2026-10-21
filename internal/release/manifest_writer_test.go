@@ -2,9 +2,7 @@ package release
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -28,6 +26,10 @@ func TestWriteManifestPublishesAVerifiableImmutableRelease(t *testing.T) {
 	if err := read.Verify(root); err != nil {
 		t.Fatal(err)
 	}
+	info, err := os.Stat(filepath.Join(root, ManifestFilename))
+	if err != nil || info.Mode().Perm()&0o044 != 0o044 {
+		t.Fatalf("an installed release run as another user cannot read its manifest: info=%v err=%v", info, err)
+	}
 	if _, err := WriteManifest(root, exampleRevision); err == nil {
 		t.Fatal("overwrote an existing manifest")
 	}
@@ -45,7 +47,7 @@ func writableReleaseStage(t *testing.T) string {
 		"tools/packaging-version.txt": "26.3\n",
 		"tools/python-version.txt":    "3.12.13+20260728\n",
 		"tools/ruff-version.txt":      "0.16.0\n", "tools/shellcheck-version.txt": "0.11.0\n",
-		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/ty-version.txt": "0.0.65\n", "tools/vulture-version.txt": "2.16\n",
+		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/deadcode-version.txt": "v0.50.0\n", "tools/ty-version.txt": "0.0.65\n", "tools/vulture-version.txt": "2.16\n",
 		"tools/rust-version.txt": "1.97.1\n", "tools/cargo-nextest-version.txt": "0.9.138\n",
 		BinaryPath: "engine", LauncherBinaryPath: "launcher",
 	}
@@ -61,39 +63,25 @@ func writableReleaseStage(t *testing.T) string {
 	return root
 }
 
-func TestShellManifestBindsTheNativeCatalogIdentity(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the Unix installer uses the shell writer")
-	}
+func TestManifestBindsTheCatalogIdentity(t *testing.T) {
 	root := writableReleaseStage(t)
 	native, err := WriteManifest(root, exampleRevision)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(root, ManifestFilename)); err != nil {
-		t.Fatal(err)
-	}
-	script, err := filepath.Abs("../../scripts/release-manifest.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	output, err := exec.CommandContext(t.Context(), "bash", script, "write", root, exampleRevision).CombinedOutput()
-	if err != nil || strings.TrimSpace(string(output)) != native.ReleaseDigest {
-		t.Fatalf("shell release identity differs from native: output=%s err=%v", output, err)
-	}
 	locked := indexedManifestLock(native)
 	catalog, err := ReadCapabilityCatalog(root, locked)
 	if err != nil || catalog.SHA256 != native.CapabilityCatalogSHA256 {
-		t.Fatalf("shell release catalog: %+v err=%v", catalog, err)
+		t.Fatalf("release catalog: %+v err=%v", catalog, err)
 	}
-	if output, err := exec.CommandContext(t.Context(), "bash", script, "verify", root).CombinedOutput(); err != nil {
-		t.Fatalf("verify shell release: %s: %v", output, err)
+	if err := native.Verify(root); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, CapabilityCatalogPath), []byte(strings.ReplaceAll(fixtureCapabilityCatalog, "Check selected source.", "Changed release capability.")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.CommandContext(t.Context(), "bash", script, "verify", root).CombinedOutput(); err == nil {
-		t.Fatalf("verified changed catalog: %s", output)
+	if err := native.Verify(root); err == nil {
+		t.Fatal("verified changed catalog")
 	}
 	if _, err := ReadCapabilityCatalog(root, locked); err == nil {
 		t.Fatal("read changed catalog using unchanged release identity")

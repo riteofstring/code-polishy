@@ -952,3 +952,7 @@ func TestABoundedWriterKeepsOnlyItsLimit(t *testing.T) {
 		t.Fatalf("expected a truncated %q, got %q truncated=%v", "abcd", bounded.buffer.String(), bounded.truncated)
 	}
 }
+
+func (bundle Bundle) TypeCheck(ctx context.Context, root, project string, paths []string) (TypeCheckResult, error) {
+	return bundle.TypeCheckInherited(ctx, root, project, paths, nil)
+}

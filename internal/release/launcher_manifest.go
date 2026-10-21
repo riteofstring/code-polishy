@@ -66,6 +66,12 @@ type manifestToolsV5 struct {
 	Packaging string `json:"packaging"`
 }
 
+type manifestToolsV7 struct {
+	manifestToolsV5
+	Rust    string `json:"rust"`
+	Nextest string `json:"cargo-nextest"`
+}
+
 func ReadLauncherManifest(releaseDir string) (Manifest, bool, error) {
 	return readManifest(releaseDir, parseLauncherManifest)
 }
@@ -112,6 +118,15 @@ func parseLauncherManifest(data []byte, source string) (Manifest, error) {
 }
 
 func parseHistoricalManifestTools(data []byte, source string, version int) (Tools, error) {
+	if version >= 7 {
+		wire := manifestToolsV7{}
+		if err := decodeExactly(data, source+" tools", &wire); err != nil {
+			return Tools{}, err
+		}
+		result := wire.manifestToolsV4.tools()
+		result.Packaging, result.Rust, result.Nextest = wire.Packaging, wire.Rust, wire.Nextest
+		return result, nil
+	}
 	if version >= 5 {
 		wire := manifestToolsV5{}
 		if err := decodeExactly(data, source+" tools", &wire); err != nil {

@@ -26,7 +26,7 @@ func checkGoOnlineWithCommands(ctx context.Context, repo repository.Repository, 
 		return append(findings, policy.Finding{Check: "policy.supplyChain", Path: module.Manifest, Subject: "online command plan", Message: "Go online supply-chain command plan is incomplete"})
 	}
 	tidy := commands[0]
-	if err := commandRunner.Run(ctx, repo.Root, tidy); err != nil {
+	if err := runner.RunCommand(ctx, commandRunner, repo.Root, tidy); err != nil {
 		findings = append(findings, policy.Finding{Check: "supplyChain.goLock", Path: module.Manifest, Subject: "go mod tidy", Message: err.Error()})
 	}
 	findings = append(findings, goReleaseAgeWithCommand(ctx, repo, module, commands[1], commandRunner)...)
@@ -34,7 +34,7 @@ func checkGoOnlineWithCommands(ctx context.Context, repo repository.Repository, 
 		return append(findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "govulncheck", Message: "pinned govulncheck is unavailable; run ./tools/install-policy-tools.sh"})
 	}
 	vulnerability := commands[2]
-	if err := commandRunner.Run(ctx, repo.Root, vulnerability); err != nil {
+	if err := runner.RunCommand(ctx, commandRunner, repo.Root, vulnerability); err != nil {
 		findings = append(findings, policy.Finding{Check: "supplyChain.goVulnerability", Path: module.Manifest, Subject: "govulncheck", Message: err.Error()})
 	}
 	return findings
@@ -50,7 +50,7 @@ func goOnlineCommands(repo repository.Repository, module repository.GoModule) []
 		Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 900,
 	})
 	govulncheck := repo.PolicyTool("govulncheck")
-	if isExecutable(govulncheck) {
+	if runner.ExecutableFile(govulncheck) {
 		commands = append(commands, policy.Command{
 			Name: "govulncheck-" + safeName(module.Root), Argv: []string{govulncheck, "./..."}, Cwd: module.Root,
 			Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800,
@@ -83,11 +83,7 @@ func goReleaseAgeWithCommand(ctx context.Context, repo repository.Repository, mo
 }
 
 func runCommandWithOutput(ctx context.Context, repo repository.Repository, command policy.Command, commandRunner runner.Runner) (runner.Output, error) {
-	observed, ok := commandRunner.(runner.OutputRunner)
-	if !ok {
-		return runner.Output{}, fmt.Errorf("common command runner cannot capture output for %q", command.Name)
-	}
-	_, output, err := observed.RunWithOutput(ctx, repo.Root, command)
+	_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureOutput)
 	return output, err
 }
 

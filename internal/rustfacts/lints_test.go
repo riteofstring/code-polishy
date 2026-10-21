@@ -11,7 +11,7 @@ import (
 func TestRustLintCollectionCoversCompilerWarningsWithoutLoweringErrors(t *testing.T) {
 	t.Parallel()
 	repo := rustRepository(t)
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, Command(repo, "rust-lint-interface", "rustc", "-W", "help"))
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, Command(repo, "rust-lint-interface", "rustc", "-W", "help"), runner.CaptureStructured)
 	if err != nil {
 		t.Fatalf("compiler lint interface: %v; %s", err, output.Stderr)
 	}
@@ -46,7 +46,7 @@ func TestRustCompilerTailCallWarningRequiresAnUnsupportedFeature(t *testing.T) {
 	t.Parallel()
 	repo := compilationRepository(t, "pub fn answer() {}\n")
 	command := Command(repo, "rust-unstable-lint", "rustc", "src/lib.rs", "--crate-type=lib", "--emit=metadata", "--out-dir", repo.Root, "--force-warn", "tail-call-track-caller")
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil || !strings.Contains(string(output.Stderr), "the `tail_call_track_caller` lint is unstable") {
 		t.Fatalf("excluded lint is no longer feature-gated: %v; %s", err, output.Stderr)
 	}

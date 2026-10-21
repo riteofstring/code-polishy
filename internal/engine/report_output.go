@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 )
 
 func JSONReport(report Report) ([]byte, error) {
@@ -32,7 +34,7 @@ func (engine *Engine) WriteReportOutput(path string, data []byte) (string, error
 	if err := validateReportOutputParent(engine.Repository.Root, destination); err != nil {
 		return "", err
 	}
-	if err := writeAtomic(destination, data, 0o600); err != nil {
+	if err := durablefile.Write(destination, data, 0o600); err != nil {
 		return "", fmt.Errorf("write report output: %w", err)
 	}
 	return normalized, nil

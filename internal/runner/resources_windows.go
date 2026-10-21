@@ -25,10 +25,6 @@ const (
 	resourceWaitProgressInterval = time.Second
 )
 
-func resourceLockNamespaceForUser(userID uint32) string {
-	return fmt.Sprintf("code-polishy-resource-locks-%d", userID)
-}
-
 func acquireResourceFiles(ctx context.Context, resources []string) (resourceLease, error) {
 	directory, err := windowsResourceLockDirectory()
 	if err != nil {

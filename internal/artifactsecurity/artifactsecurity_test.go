@@ -322,10 +322,6 @@ func TestRunFailsClosedBeforeArtifactMutation(t *testing.T) {
 			Targets: []policy.ArtifactTarget{{Name: "agent", Mode: "archive", Archive: "agent.tar"}},
 		}}},
 	}
-	withoutOutput := Run(t.Context(), repo, runOnlyBoundary{})
-	if len(withoutOutput.Findings) != 1 || withoutOutput.Findings[0].Subject != "scanner:command-runner" {
-		t.Fatalf("runner capability failure = %+v", withoutOutput)
-	}
 	unavailable := Run(t.Context(), repo, unavailableScannerBoundary{})
 	if len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:scanner-runtime" ||
 		!strings.Contains(unavailable.Findings[0].Message, "scanner unavailable") {
@@ -375,19 +371,13 @@ type scannerBoundary struct {
 	version    string
 }
 
-type runOnlyBoundary struct{}
-
-func (runOnlyBoundary) Run(context.Context, string, policy.Command) error {
-	return nil
-}
-
 type unavailableScannerBoundary struct{}
 
-func (unavailableScannerBoundary) Run(context.Context, string, policy.Command) error {
+func (unavailableScannerBoundary) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("scanner unavailable")
 }
 
-func (unavailableScannerBoundary) RunWithOutput(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
+func (unavailableScannerBoundary) runOutput(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
 	return runner.Result{}, runner.Output{Stderr: []byte("scanner unavailable")}, fmt.Errorf("scanner unavailable")
 }
 
@@ -439,7 +429,7 @@ func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 	}
 }
 
-func (boundary *scannerBoundary) Run(ctx context.Context, root string, command policy.Command) error {
+func (boundary *scannerBoundary) runPlain(ctx context.Context, root string, command policy.Command) error {
 	if len(command.Argv) > 0 && command.Argv[0] != "docker" {
 		output := ""
 		for _, value := range command.Environment {
@@ -457,11 +447,11 @@ func (boundary *scannerBoundary) Run(ctx context.Context, root string, command p
 		manifest := []byte(`{"version":1,"archive":"image.tar","reference":"produced-image"}`)
 		return os.WriteFile(filepath.Join(output, "manifest.json"), manifest, 0o600)
 	}
-	_, _, err := boundary.RunWithOutput(ctx, root, command)
+	_, _, err := runner.RunCaptured(ctx, boundary, root, command, runner.CaptureOutput)
 	return err
 }
 
-func (boundary *scannerBoundary) RunWithOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *scannerBoundary) runOutput(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	arguments := command.Argv
 	if len(arguments) < 2 || arguments[0] != "docker" {
 		return runner.Result{}, runner.Output{}, fmt.Errorf("unexpected external command %v", arguments)
@@ -650,4 +640,18 @@ func mountSource(arguments []string, target string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (double unavailableScannerBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *scannerBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

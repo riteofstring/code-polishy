@@ -2,6 +2,7 @@ package rustfacts
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ func TestRustSourceStreamUsesPortableRecordTerminators(t *testing.T) {
 	command := plan.Commands[0]
 	command.Argv = append([]string{}, command.Argv...)
 	command.Argv[4] = "import sys;sys.stdout.reconfigure(newline='\\r\\n');" + command.Argv[4]
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +60,7 @@ func TestRustSourceStreamValidatesCompleteBoundedEvidence(t *testing.T) {
 	write(t, repo.Root, "first.rs", "pub fn café() {}\n")
 	write(t, repo.Root, "second.rs", "pub fn second() {}\n")
 	plan := PlanSources(repo, []string{"first.rs", "second.rs"})
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, plan.Commands[0])
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +104,7 @@ type sourceStreamRunner struct {
 	err    error
 }
 
-func (boundary sourceStreamRunner) RunWithWriters(_ context.Context, _ string, _ policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+func (boundary sourceStreamRunner) runStreamed(_ context.Context, _ string, _ policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
 	for remaining := boundary.stdout; len(remaining) > 0; {
 		count := min(31, len(remaining))
 		if _, err := stdout.Write(remaining[:count]); err != nil {
@@ -115,4 +116,13 @@ func (boundary sourceStreamRunner) RunWithWriters(_ context.Context, _ string, _
 		return runner.Result{}, err
 	}
 	return runner.Result{}, boundary.err
+}
+
+func (double sourceStreamRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Stdout != nil || invocation.Stderr != nil {
+		var stdout, stderr bytes.Buffer
+		result, err := double.runStreamed(ctx, invocation.Root, invocation.Command, io.MultiWriter(&stdout, cmp.Or[io.Writer](invocation.Stdout, io.Discard)), io.MultiWriter(&stderr, cmp.Or[io.Writer](invocation.Stderr, io.Discard)))
+		return result, runner.Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, err
+	}
+	return double.OSRunner.Execute(ctx, invocation)
 }

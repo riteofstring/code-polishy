@@ -65,7 +65,7 @@ func TestGateRecordsStreamConsumerFailures(t *testing.T) {
 	plan := rustfacts.PlanSources(repo, []string{"source.rs"})
 	boundary := rustSourceGate(t, repo, plan)
 	planned := &mergeGatePlannedRunner{root: repo.Root, delegate: boundary, expected: boundary.expected}
-	result, err := planned.RunWithWriters(t.Context(), repo.Root, plan.Commands[0], rejectingGateStream{}, io.Discard)
+	result, err := runner.RunStreamed(t.Context(), planned, repo.Root, plan.Commands[0], rejectingGateStream{}, io.Discard)
 	if err == nil || result.FailureCategory != runner.FailureOperational {
 		t.Fatalf("consumer failure was accepted: result=%+v error=%v", result, err)
 	}
@@ -84,7 +84,7 @@ func TestGateRejectsUnplannedRustStream(t *testing.T) {
 	planned := &mergeGatePlannedRunner{root: repo.Root, delegate: boundary, expected: boundary.expected}
 	command := plan.Commands[0]
 	command.Stdin = append(append([]byte{}, command.Stdin...), '\n')
-	result, err := planned.RunWithWriters(t.Context(), repo.Root, command, io.Discard, io.Discard)
+	result, err := runner.RunStreamed(t.Context(), planned, repo.Root, command, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "request") || result.FailureCategory != runner.FailureOperational || boundary.next != 0 {
 		t.Fatalf("unplanned stream reached gate execution: result=%+v next=%d error=%v", result, boundary.next, err)
 	}

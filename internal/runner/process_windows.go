@@ -170,16 +170,6 @@ func waitForEmptyWindowsJob(job windows.Handle) error {
 	}
 }
 
-func handoffHostCommand(specification HostCommand) error {
-	result, err := runHostCommand(context.Background(), specification)
-	if err != nil {
-		return err
-	}
-	if result.ExitStatus != 0 {
-		return fmt.Errorf("handoff command exited with status %d", result.ExitStatus)
-	}
-	return nil
-}
 func lookPathOnHost(name string) (string, error) { return exec.LookPath(name) }
 
 type windowsOutputStreams struct {

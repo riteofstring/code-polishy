@@ -145,6 +145,21 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy upgrade plan --index https://example.invalid/code-polishy-release-index.json --sha256 DIGEST", "code-polishy upgrade apply --plan .code-polishy-reports/capability-upgrades/DIGEST/plan.json"},
 	},
 	{
+		name:    "cleanup",
+		summary: "Remove unused installed releases or selected generated repository outputs.",
+		syntax:  []string{"code-polishy cleanup [--reports] [--artifacts] [--dry-run]"},
+		selectors: []string{
+			"With no scope flags, cleanup rereads each repository lock recorded in the shared prefix and keeps the releases those locks name.",
+			"--reports removes completed managed reports, gate logs, and the test receipt cache. Review evidence, upgrade records, user files outside managed report trees, and incomplete gate runs are retained.",
+			"--artifacts removes completed owned test artifact executions; active, unowned, linked, and special entries are retained. Combine it with --reports to select both repository scopes instead of installed releases.",
+			"--dry-run reports the selected paths and their logical byte sizes without removing them. Run repository cleanup after other Code Polishy commands finish.",
+			"A repository that has never run a command through an installed release is unknown to cleanup; its next wrapper call reports the missing release, and ./code-polishyw setup reinstalls it.",
+		},
+		sideEffects: []string{"Default cleanup removes unlocked installed releases and forgets repositories without a lock. Repository scopes remove only selected outputs; deleting reports discards cached verification evidence and causes verification to rerun as needed. Artifact-only cleanup retains reports and receipts."},
+		exits:       []string{"0 cleanup completed or dry run reported", "2 invalid usage, unreadable release authority, unsafe output roots, or a removal failure"},
+		examples:    []string{"./code-polishyw cleanup --dry-run", "./code-polishyw cleanup", "./code-polishyw cleanup --reports --artifacts --dry-run", "./code-polishyw cleanup --reports --artifacts"},
+	},
+	{
 		name:        "install-rust",
 		summary:     "Install the selected release's authenticated optional Rust tools.",
 		syntax:      []string{"code-polishy install-rust [--source ARCHIVE]"},
@@ -222,44 +237,6 @@ var commandHelpPages = []commandHelpPage{
 		sideEffects: []string{"Creates and removes a disposable worktree, writes external session artifacts, and may promote the original branch."},
 		exits:       []string{"0 session completed", "worker or policy failure uses its reported nonzero status", "2 invalid usage"},
 		examples:    []string{"code-polishy task-session --module cli -- ./scripts/test.sh ./cmd/code-polishy/..."},
-	},
-	{
-		name:    "task-session-artifacts",
-		summary: "Freeze or validate the private artifacts used by a task-session workflow.",
-		syntax: []string{
-			"code-polishy task-session-artifacts freeze --output-dir PATH [--config PATH] --module NAME... [--allow-path PATH...] [--allow-new-path PATH...] -- COMMAND [ARG...]",
-			"code-polishy task-session-artifacts validate --output-dir PATH --scope-digest SHA256 --command-digest SHA256",
-		},
-		selectors: []string{
-			"freeze requires scope options and a command after --.",
-			"validate accepts only the exact expected digests.",
-		},
-		sideEffects: []string{"freeze writes private scope and command artifacts; validate only reads them."},
-		exits:       []string{"0 artifacts frozen or validated", "2 invalid usage or artifact failure"},
-		examples:    []string{"code-polishy task-session-artifacts validate --output-dir /tmp/session --scope-digest SHA256 --command-digest SHA256"},
-	},
-	{
-		name:    "task-session-receipt",
-		summary: "Write the private receipt for a completed task-session workflow.",
-		syntax:  []string{"code-polishy task-session-receipt --output-dir PATH --status VALUE --source-root PATH --source-branch NAME --trusted-base COMMIT --candidate-head COMMIT --config PATH --promote VALUE --policy-binary PATH --policy-digest SHA256 --environment-receipt PATH --environment-digest SHA256 --environment-paths PATH --environment-paths-digest SHA256 --scope-digest SHA256 --workspace PATH --command-digest SHA256 --module NAME... [--exact-path PATH...] [--new-path PATH...]"},
-		selectors: []string{
-			"Every listed single-value option is required exactly once.",
-			"At least one --module NAME is required; --exact-path and --new-path may repeat.",
-		},
-		sideEffects: []string{"Writes the private session receipt in --output-dir."},
-		exits:       []string{"0 receipt written", "2 invalid usage or receipt write failure"},
-		examples:    []string{"code-polishy task-session-receipt --help"},
-	},
-	{
-		name:    "governed-environment",
-		summary: "Freeze the governed command environment into a private receipt.",
-		syntax:  []string{"code-polishy governed-environment --output PATH"},
-		selectors: []string{
-			"--output PATH is required and no positional arguments are accepted.",
-		},
-		sideEffects: []string{"Writes a private environment receipt at --output."},
-		exits:       []string{"0 environment receipt written", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy governed-environment --output /tmp/environment.json"},
 	},
 	{
 		name:    "check",
@@ -383,17 +360,6 @@ var commandHelpPages = []commandHelpPage{
 		sideEffects: []string{"Runs configured test commands with normal streaming output and managed test artifacts; successful eligible suites may write reusable receipts, but no gate report."},
 		exits:       []string{"0 selected suites passed", "1 selected suite failed", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy test --changed --base TASK_BASE", "code-polishy test --supplemental --resume"},
-	},
-	{
-		name:    "test-plan",
-		summary: "Show the impact-based test plan for a working tree or task base.",
-		syntax:  []string{"code-polishy test-plan [--base REF]"},
-		selectors: []string{
-			"--base REF is optional; without it the working tree is compared with HEAD.",
-		},
-		sideEffects: []string{"Reads the repository and configuration; does not run suites or write project files. Its supplemental row is informational and never selects supplemental execution."},
-		exits:       []string{"0 plan produced", "1 policy findings", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy test-plan --base TASK_BASE"},
 	},
 	{
 		name:    "test-receipts",

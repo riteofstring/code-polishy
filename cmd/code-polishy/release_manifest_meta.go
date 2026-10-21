@@ -139,6 +139,13 @@ func verifyReleaseManifest(options releaseManifestOptions) int {
 	if !present {
 		return operationalError(fmt.Errorf("%s has no %s", options.root, release.ManifestFilename))
 	}
+	host, err := release.Host()
+	if err != nil {
+		return operationalError(err)
+	}
+	if manifest.Host != host {
+		return operationalError(fmt.Errorf("the installed Code Polishy release was built for %s, not for %s", manifest.Host, host))
+	}
 	if err := manifest.Verify(options.root); err != nil {
 		return operationalError(err)
 	}

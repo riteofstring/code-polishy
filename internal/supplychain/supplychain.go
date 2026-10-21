@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	workflowfacts "github.com/riteofstring/code-polishy/internal/workflow"
+	"golang.org/x/mod/modfile"
 )
 
 var (
@@ -414,7 +414,7 @@ func ToolFindings(repo repository.Repository, files []string) []policy.Finding {
 	for _, path := range files {
 		if filepath.Base(path) == "go.mod" && !goChecked {
 			goChecked = true
-			if !isExecutable(repo.PolicyTool("govulncheck")) {
+			if !runner.ExecutableFile(repo.PolicyTool("govulncheck")) {
 				findings = append(findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "govulncheck", Message: "pinned govulncheck is unavailable; run ./tools/install-policy-tools.sh"})
 				continue
 			}
@@ -534,62 +534,26 @@ func checkGoModule(repo repository.Repository, path string) []policy.Finding {
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.goModule", Path: path, Subject: path, Message: err.Error()}}
 	}
-	findings := []policy.Finding{}
-	hasRegistryRequirement := false
-	block := ""
-	for lineNumber, raw := range strings.Split(string(data), "\n") {
-		registry, lineFindings := checkGoModuleLine(repo, path, lineNumber+1, raw, &block)
-		hasRegistryRequirement = hasRegistryRequirement || registry
-		findings = append(findings, lineFindings...)
+	file, err := modfile.Parse(path, data, nil)
+	if err != nil {
+		return []policy.Finding{{Check: "supplyChain.goModule", Path: path, Subject: path, Message: err.Error()}}
 	}
-	if hasRegistryRequirement && !regularFile(filepath.Join(repo.Root, filepath.Dir(path), "go.sum")) {
+	findings := []policy.Finding{}
+	for _, replace := range file.Replace {
+		findings = append(findings, goReplaceFindings(repo, path, replace)...)
+	}
+	if len(file.Require) > 0 && !regularFile(filepath.Join(repo.Root, filepath.Dir(path), "go.sum")) {
 		findings = append(findings, policy.Finding{Check: "supplyChain.lockfile", Path: path, Subject: "go.sum", Message: "go.sum is required when go.mod has registry dependencies"})
 	}
 	return findings
 }
 
-func checkGoModuleLine(repo repository.Repository, path string, lineNumber int, raw string, block *string) (bool, []policy.Finding) {
-	line := strings.TrimSpace(strings.SplitN(raw, "//", 2)[0])
-	if line == "require (" || line == "replace (" {
-		*block = strings.TrimSuffix(line, " (")
-		return false, nil
-	}
-	if line == ")" && *block != "" {
-		*block = ""
-		return false, nil
-	}
-	requirement := *block == "require" || strings.HasPrefix(line, "require ")
-	requirementLine := strings.TrimSpace(strings.TrimPrefix(line, "require "))
-	registry, findings := goRequirementFindings(path, lineNumber, requirementLine, requirement)
-	replaceLine := line
-	if *block == "replace" {
-		replaceLine = "replace " + line
-	}
-	findings = append(findings, goReplaceFindings(repo, path, replaceLine)...)
-	return registry, findings
-}
-
-func goRequirementFindings(path string, lineNumber int, line string, requirement bool) (bool, []policy.Finding) {
-	fields := strings.Fields(line)
-	if !requirement || len(fields) < 2 || strings.HasPrefix(fields[0], "./") || strings.HasPrefix(fields[0], "../") {
-		return false, nil
-	}
-	if !goVersion.MatchString(fields[1]) {
-		return true, []policy.Finding{{Check: "supplyChain.goVersion", Path: path, Subject: fields[0], Message: fmt.Sprintf("line %d module requirement must use an exact Go version", lineNumber)}}
-	}
-	return true, nil
-}
-
-func goReplaceFindings(repo repository.Repository, path, line string) []policy.Finding {
-	if !strings.HasPrefix(line, "replace ") || !strings.Contains(line, "=>") {
+func goReplaceFindings(repo repository.Repository, path string, replace *modfile.Replace) []policy.Finding {
+	target := replace.New.Path
+	if replace.New.Version != "" {
 		return nil
 	}
-	target := strings.TrimSpace(strings.SplitN(line, "=>", 2)[1])
-	fields := strings.Fields(target)
-	if len(fields) == 2 && goVersion.MatchString(fields[1]) {
-		return nil
-	}
-	if len(fields) != 1 || !strings.HasPrefix(target, "./") && !strings.HasPrefix(target, "../") {
+	if !strings.HasPrefix(target, "./") && !strings.HasPrefix(target, "../") {
 		return []policy.Finding{{Check: "supplyChain.goReplace", Path: path, Subject: target, Message: "external replacements must use an exact module version"}}
 	}
 	if err := validateRelativeFromManifest(repo, path, target); err != nil {
@@ -603,42 +567,21 @@ func checkGoWorkspace(repo repository.Repository, path string) []policy.Finding 
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.goWorkspace", Path: path, Subject: path, Message: err.Error()}}
 	}
+	file, err := modfile.ParseWork(path, data, nil)
+	if err != nil {
+		return []policy.Finding{{Check: "supplyChain.goWorkspace", Path: path, Subject: path, Message: err.Error()}}
+	}
 	findings := []policy.Finding{}
-	block := ""
-	for lineNumber, raw := range strings.Split(string(data), "\n") {
-		findings = append(findings, goWorkspaceLineFindings(repo, path, lineNumber+1, raw, &block)...)
+	for _, use := range file.Use {
+		if err := validateRelativeFromManifest(repo, path, use.Path); err != nil {
+			message := fmt.Sprintf("line %d workspace module path is invalid: %v", use.Syntax.Start.Line, err)
+			findings = append(findings, policy.Finding{Check: "supplyChain.goWorkspace", Path: path, Subject: use.Path, Message: message})
+		}
+	}
+	for _, replace := range file.Replace {
+		findings = append(findings, goReplaceFindings(repo, path, replace)...)
 	}
 	return findings
-}
-
-func goWorkspaceLineFindings(repo repository.Repository, path string, lineNumber int, raw string, block *string) []policy.Finding {
-	line := strings.TrimSpace(strings.SplitN(raw, "//", 2)[0])
-	if line == "use (" || line == "replace (" {
-		*block = strings.TrimSuffix(line, " (")
-		return nil
-	}
-	if line == ")" && *block != "" {
-		*block = ""
-		return nil
-	}
-	if *block == "replace" {
-		return goReplaceFindings(repo, path, "replace "+line)
-	}
-	if strings.HasPrefix(line, "replace ") {
-		return goReplaceFindings(repo, path, line)
-	}
-	if *block != "use" && !strings.HasPrefix(line, "use ") {
-		return nil
-	}
-	target := strings.TrimSpace(strings.TrimPrefix(line, "use "))
-	if target == "" {
-		return nil
-	}
-	if err := validateRelativeFromManifest(repo, path, target); err != nil {
-		message := fmt.Sprintf("line %d workspace module path is invalid: %v", lineNumber, err)
-		return []policy.Finding{{Check: "supplyChain.goWorkspace", Path: path, Subject: target, Message: message}}
-	}
-	return nil
 }
 
 func checkPythonProject(repo repository.Repository, path string) []policy.Finding {
@@ -875,18 +818,6 @@ func supplyLockfileName(name string) bool {
 	return strings.HasSuffix(lower, ".lock") || strings.Contains(lower, "-lock.") || slices.Contains([]string{"pnpm-lock.yaml", "bun.lockb"}, name)
 }
 
-func parsePythonDependencies(text string) []string {
-	project, err := repository.ParsePythonProject("pyproject.toml", []byte(text))
-	if err != nil {
-		return nil
-	}
-	dependencies := make([]string, 0, len(project.Requirements))
-	for _, requirement := range project.Requirements {
-		dependencies = append(dependencies, requirement.Raw)
-	}
-	return dependencies
-}
-
 func localProtocol(version string, allowed []string) bool {
 	for _, protocol := range allowed {
 		if strings.HasPrefix(version, protocol) {
@@ -964,11 +895,6 @@ func safeName(value string) string {
 		return "root"
 	}
 	return value
-}
-
-func isExecutable(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0)
 }
 
 func regularFile(path string) bool {

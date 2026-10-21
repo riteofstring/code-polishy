@@ -244,11 +244,11 @@ type cargoOSVFailure struct {
 	output runner.Output
 }
 
-func (boundary cargoOSVFailure) Run(context.Context, string, policy.Command) error {
+func (boundary cargoOSVFailure) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("unexpected unstructured scan")
 }
 
-func (boundary cargoOSVFailure) RunWithOutput(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
+func (boundary cargoOSVFailure) runOutput(context.Context, string, policy.Command) (runner.Result, runner.Output, error) {
 	return boundary.result, boundary.output, fmt.Errorf("scanner failed")
 }
 
@@ -296,11 +296,11 @@ type cargoOSVBoundary struct {
 	scans int
 }
 
-func (boundary *cargoOSVBoundary) Run(context.Context, string, policy.Command) error {
+func (boundary *cargoOSVBoundary) runPlain(context.Context, string, policy.Command) error {
 	return fmt.Errorf("unexpected unstructured Cargo scan")
 }
 
-func (boundary *cargoOSVBoundary) RunWithOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
+func (boundary *cargoOSVBoundary) runOutput(_ context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
 	boundary.t.Helper()
 	boundary.scans++
 	input, projected := argumentAfter(command.Argv, "--lockfile")
@@ -350,4 +350,18 @@ func cargoOSVResponse(t *testing.T, projection []byte, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func (double cargoOSVFailure) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func (double *cargoOSVBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture != runner.CaptureNone {
+		return double.runOutput(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

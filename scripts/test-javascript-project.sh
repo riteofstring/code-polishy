@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
-
-
-
 javascript_test_name="test-javascript-project"
 # shellcheck source=scripts/javascript-runner-test-env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-runner-test-env.sh"
@@ -18,9 +8,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/javascript-runner-test-env
 runner_sources=("${bundle_source}"/*.mjs)
 node_version="$(javascript_test_node_version)"
 pnpm_version="$(javascript_test_pnpm_version)"
-
-
-
 
 packages_target="${fixture_root}/packages"
 host_os="${javascript_platform_tag%%-*}"
@@ -168,8 +155,6 @@ packages_response="${fixture_root}/packages.json"
 packages_request "${packages_target}" | run_runner >"${packages_response}" ||
   fail "the runner rejected a well-formed packages request"
 
-
-
 for importer in '"path":".","manifest":"package.json"' \
   '"path":"packages/app","manifest":"packages/app/package.json"' \
   '"path":"packages/lib","manifest":"packages/lib/package.json"'; do
@@ -200,10 +185,6 @@ if grep -qF '"name":"vue"' "${packages_response}"; then
   fail "packages reported a peer declaration: $(cat "${packages_response}")"
 fi
 
-
-
-
-
 for resolved in '"name":"react","version":"18.3.1","source":"registry"' \
   '"name":"@scope/peered","version":"2.0.0","source":"registry"' \
   '"name":"forked","version":"1.0.0","source":"tarball"' \
@@ -213,8 +194,6 @@ for resolved in '"name":"react","version":"18.3.1","source":"registry"' \
     fail "packages did not report ${resolved}: $(cat "${packages_response}")"
   fi
 done
-
-
 
 expect_dependency '"name":"foreign-optional","version":"1.0.0","source":"registry","licenseMetadata":"platform-excluded"' \
   "a foreign-platform optional release whose normal install is absent"
@@ -230,9 +209,6 @@ expect_dependency '"name":"host-compatible-optional","version":"1.0.0","source":
   "a host-compatible optional release whose metadata remains required"
 expect_dependency '"name":"mixed-context","version":"1.0.0","source":"registry","licenseMetadata":"required"' \
   "a release reached through a required snapshot context"
-
-
-
 
 if [[ "${host_os}" == darwin ]]; then
   expect_dependency '"name":"libc-compatible-optional","version":"1.0.0","source":"registry","licenseMetadata":"platform-excluded"' \
@@ -259,9 +235,6 @@ fi
 if [[ -e "${packages_target}/node_modules" ]]; then
   fail "reading pnpm facts wrote into the target tree"
 fi
-
-
-
 
 expect_lock_unsupported() {
   local description="$1" contents="$2" reason="$3"
@@ -315,9 +288,6 @@ if ! grep -qF '"path":"absent/pnpm-lock.yaml","reason":"the file is unreadable' 
   fail "an absent lockfile was not reported as unreadable: $(cat "${fixture_root}/out")"
 fi
 
-
-
-
 malformed_platform_target="${fixture_root}/malformed-platform"
 mkdir -p "${malformed_platform_target}"
 printf '{"name":"malformed","packageManager":"pnpm@%s"}\n' "${pnpm_version}" \
@@ -365,10 +335,6 @@ if grep -qF "${fixture_root}" "${fixture_root}/out"; then
   fail "a malformed platform result leaked a host path: $(cat "${fixture_root}/out")"
 fi
 
-
-
-
-
 workspace_target="${fixture_root}/workspace"
 mkdir -p "${workspace_target}/nested"
 cat >"${workspace_target}/pnpm-workspace.yaml" <<'YAML'
@@ -408,9 +374,6 @@ if ! grep -qF '"unsupported":[]' "${workspace_response}"; then
   fail "a well-formed workspace file reported missing coverage: $(cat "${workspace_response}")"
 fi
 
-
-
-
 expect_workspace_unsupported() {
   local description="$1" contents="$2" reason="$3"
   printf '%s' "${contents}" >"${workspace_target}/nested/pnpm-workspace.yaml"
@@ -435,8 +398,6 @@ if grep -qF "${fixture_root}" "${workspace_response}"; then
   fail "a workspace result leaked a host path: $(cat "${workspace_response}")"
 fi
 
-
-
 printf 'value: 1\n' >"${workspace_target}/other.yaml"
 expect_runner_rejected "a workspace request for another file" \
   "$(workspace_request "${workspace_target}" other.yaml)"
@@ -444,10 +405,6 @@ expect_runner_rejected "a workspace request without a selection" \
   '{"protocolVersion":3,"operation":"workspace","root":"'"${workspace_target}"'"}'
 expect_runner_rejected "an uncontained workspace selection" \
   "$(workspace_request "${workspace_target}" ../pnpm-workspace.yaml)"
-
-
-
-
 
 licenses_target="${fixture_root}/licenses"
 licenses_store="${licenses_target}/node_modules/.pnpm"
@@ -508,8 +465,6 @@ if grep -qF "${fixture_root}" "${licenses_response}"; then
   fail "a licenses result leaked a host path: $(cat "${licenses_response}")"
 fi
 
-
-
 mkdir -p "${licenses_target}/hoisted/node_modules/example"
 licenses_request "${licenses_target}" hoisted | run_runner >"${fixture_root}/out" ||
   fail "an installed tree without a store was not reported"
@@ -529,11 +484,6 @@ expect_runner_rejected "an uncontained licenses directory" \
 expect_runner_rejected "a licenses request with a selection" \
   '{"protocolVersion":3,"operation":"licenses","root":"'"${licenses_target}"'","directory":".","paths":[]}'
 
-
-
-
-
-
 audit_bundle="${fixture_root}/audit/bundle"
 audit_pnpm="${fixture_root}/audit/${javascript_platform_tag}/pnpm/bin"
 mkdir -p "${audit_bundle}" "${audit_pnpm}" "${fixture_root}/audit/project" \
@@ -541,8 +491,6 @@ mkdir -p "${audit_bundle}" "${audit_pnpm}" "${fixture_root}/audit/project" \
 cp "${runner_sources[@]}" "${audit_bundle}/"
 ln -s "${javascript_bundle_dir}/node_modules" "${audit_bundle}/node_modules"
 printf '{"engines":{"node":"%s"}}\n' "${node_version}" >"${audit_bundle}/package.json"
-
-
 
 audit_lock_source="${fixture_root}/audit/project/pnpm-lock.yaml"
 printf "lockfileVersion: '9.0'\n\nimporters:\n  .: {}\n" >"${audit_lock_source}"
@@ -614,8 +562,6 @@ printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' 
   "${fixture_root}/audit" project | javascript_sealed_run "${javascript_node}" "${audit_bundle}/runner.mjs" \
   >"${audit_response}" || fail "the runner rejected a well-formed audit request"
 
-
-
 for reported in '"id":"GHSA-abcd-1234-5678"' '"aliases":["npm:1100"]' \
   '"package":"example"' '"severity":"high"' '"versions":["1.2.3"]' \
   '"id":"npm:1200"' '"aliases":[]' '"versions":["2.0.0"]'; do
@@ -657,9 +603,6 @@ if grep -qxF -- "--ignore-registry-errors" "${audit_arguments}"; then
   fail "the audit ignored a registry failure: $(cat "${audit_arguments}")"
 fi
 
-
-
-
 if grep -qxF -- "${fixture_root}/audit/project" "${audit_arguments}"; then
   fail "the audit pointed the tool at the target directory: $(cat "${audit_arguments}")"
 fi
@@ -674,8 +617,6 @@ if [[ -e "${audited_directory}" ]]; then
   fail "the audit left its scratch directory behind at ${audited_directory}"
 fi
 
-
-
 rm -f "${audit_arguments}"
 mkdir -p "${fixture_root}/audit/unlocked"
 if ! printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
@@ -689,8 +630,6 @@ fi
 if [[ -e "${audit_arguments}" ]]; then
   fail "an audit without a governed lock still ran the tool"
 fi
-
-
 
 if printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" refused | javascript_sealed_run "${javascript_node}" \

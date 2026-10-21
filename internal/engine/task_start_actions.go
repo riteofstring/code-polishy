@@ -19,7 +19,7 @@ func taskStartActions(packet TaskStartPacket) []TaskStartAction {
 	}
 	actions = append(actions,
 		TaskStartAction{Name: "implement", Description: "Implement the least-complex end-to-end solution that meets current needs; add machinery only when it reduces total complexity and lowers total failure risk. Stay within the selected scope and checkpoint task-owned progress during long work."},
-		TaskStartAction{Name: "inspect-verification", Description: "After a coherent change, inspect affected verification without running suites.", Argv: []string{"code-polishy", "test-plan", "--base", packet.TaskBase}},
+		TaskStartAction{Name: "inspect-verification", Description: "After a coherent change, inspect affected verification without running suites.", Argv: []string{"code-polishy", "test-levels", "--base", packet.TaskBase}},
 		TaskStartAction{Name: "verify", Description: "Follow the workflow's event rules: ordinary Markdown needs formatting; source changes need affected exact checks. Supplemental suites require explicit selection."},
 		TaskStartAction{Name: "commit", Description: "After required verification, commit remaining task-owned changes unless the caller requested an uncommitted handoff."},
 	)

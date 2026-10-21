@@ -2,8 +2,6 @@ package policymodule
 
 import (
 	"context"
-	"os"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -159,13 +157,8 @@ func modulesForPythonFiles(repo repository.Repository, files []string) []string 
 	return slices.Compact(modules)
 }
 
-func executableFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0)
-}
-
 func executableVersion(path string, acceptedLines ...string) bool {
-	if !executableFile(path) {
+	if !runner.ExecutableFile(path) {
 		return false
 	}
 	output, err := runner.ToolOutput(path, "--version")
@@ -181,7 +174,7 @@ func executableVersion(path string, acceptedLines ...string) bool {
 }
 
 func tyExecutableVersion(path, pin string) bool {
-	if !executableFile(path) {
+	if !runner.ExecutableFile(path) {
 		return false
 	}
 	output, err := runner.ToolOutput(path, "--version")
@@ -217,13 +210,13 @@ func vultureRuntimeVersion(repo repository.Repository, pin string) bool {
 func pythonRuntimeOutput(repo repository.Repository, source string) string {
 	command := repo.PythonCommand(source)
 	path := command[0]
-	if !executableFile(path) {
+	if !runner.ExecutableFile(path) {
 		return ""
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(context.Background(), repo.Root, policy.Command{
+	_, output, err := runner.RunCaptured(context.Background(), runner.OSRunner{}, repo.Root, policy.Command{
 		Name: "policy-python-runtime-probe", Argv: command, Cwd: ".", TimeoutSeconds: 30,
 		Managed: true, SealedEnvironment: true,
-	})
+	}, runner.CaptureStructured)
 	if err != nil {
 		return ""
 	}

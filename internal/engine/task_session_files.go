@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 )
 
 func writeNULArtifact(path string, values []string) (string, error) {
@@ -22,32 +24,11 @@ func writeNULArtifact(path string, values []string) (string, error) {
 		data.WriteString(value)
 		data.WriteByte(0)
 	}
-	if err := writeAtomic(path, data.Bytes(), 0o600); err != nil {
+	if err := durablefile.Write(path, data.Bytes(), 0o600); err != nil {
 		return "", err
 	}
 	digest := sha256.Sum256(data.Bytes())
 	return hex.EncodeToString(digest[:]), nil
-}
-
-func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".code-polishy-write-*")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(mode); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return replaceAtomicFile(temporaryPath, path)
 }
 
 func copyRegularFile(source, destination string, mode os.FileMode) error {

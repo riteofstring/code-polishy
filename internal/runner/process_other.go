@@ -5,7 +5,6 @@ package runner
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os/exec"
 )
@@ -34,17 +33,6 @@ func runContainedCommand(command *exec.Cmd, stdout, stderr io.Writer) (HostResul
 		result.ExitStatus = command.ProcessState.ExitCode()
 	}
 	return result, runErr
-}
-
-func handoffHostCommand(specification HostCommand) error {
-	result, err := runHostCommand(context.Background(), specification)
-	if err != nil {
-		return err
-	}
-	if result.ExitStatus != 0 {
-		return fmt.Errorf("handoff command exited with status %d", result.ExitStatus)
-	}
-	return nil
 }
 
 func lookPathOnHost(name string) (string, error) {

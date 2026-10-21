@@ -13,16 +13,18 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/durablefile"
 )
 
 var releasePinPaths = struct {
-	version, goVersion, govulncheck, node, osv, pnpm, packaging, python, ruff, shellcheck, staticcheck, ty, vulture, rust, nextest string
+	version, goVersion, govulncheck, node, osv, pnpm, packaging, python, ruff, shellcheck, staticcheck, ty, vulture, rust, nextest, deadcode string
 }{
 	"VERSION", "scripts/go_version.txt", "tools/govulncheck-version.txt", "tools/node-version.txt",
 	"tools/osv-scanner-version.txt", "tools/pnpm-version.txt", "tools/packaging-version.txt", "tools/python-version.txt",
 	"tools/ruff-version.txt", "tools/shellcheck-version.txt", "tools/staticcheck-version.txt",
 	"tools/ty-version.txt", "tools/vulture-version.txt",
-	"tools/rust-version.txt", "tools/cargo-nextest-version.txt",
+	"tools/rust-version.txt", "tools/cargo-nextest-version.txt", "tools/deadcode-version.txt",
 }
 
 func WriteManifest(releaseDir, sourceRevision string) (Manifest, error) {
@@ -63,8 +65,8 @@ func composeReleaseManifest(root, sourceRevision string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	pins := make([]string, 14)
-	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.packaging, releasePinPaths.python, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck, releasePinPaths.ty, releasePinPaths.vulture, releasePinPaths.rust, releasePinPaths.nextest} {
+	pins := make([]string, 15)
+	for index, path := range []string{releasePinPaths.goVersion, releasePinPaths.govulncheck, releasePinPaths.node, releasePinPaths.osv, releasePinPaths.pnpm, releasePinPaths.packaging, releasePinPaths.python, releasePinPaths.ruff, releasePinPaths.shellcheck, releasePinPaths.staticcheck, releasePinPaths.ty, releasePinPaths.vulture, releasePinPaths.rust, releasePinPaths.nextest, releasePinPaths.deadcode} {
 		pins[index], err = readReleasePin(root, path, true)
 		if err != nil {
 			return Manifest{}, err
@@ -118,14 +120,14 @@ func readReleasePin(root, relative string, trimV bool) (string, error) {
 
 func newReleaseManifest(version, sourceRevision, host string, pins []string, entries []Entry) Manifest {
 	manifest := Manifest{ManifestVersion: ManifestVersion, CodePolishyVersion: version, SourceRevision: sourceRevision,
-		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Packaging: pins[5], Python: pins[6], Ruff: pins[7], Shellcheck: pins[8], Staticcheck: pins[9], Ty: pins[10], Vulture: pins[11], Rust: pins[12], Nextest: pins[13]}, Entries: entries, EntryCount: len(entries)}
+		Host: host, Features: []string{"javascript-bundle"}, Tools: Tools{Go: pins[0], Govulncheck: pins[1], Node: pins[2], OSVScanner: pins[3], PNPM: pins[4], Packaging: pins[5], Python: pins[6], Ruff: pins[7], Shellcheck: pins[8], Staticcheck: pins[9], Ty: pins[10], Vulture: pins[11], Rust: pins[12], Nextest: pins[13], Deadcode: pins[14]}, Entries: entries, EntryCount: len(entries)}
 	for _, entry := range entries {
 		if entry.Path == CapabilityCatalogPath && entry.Symlink == "" {
 			manifest.CapabilityCatalogSHA256 = entry.SHA256
 		}
 	}
 	manifest.ReleaseDigest = manifest.Identity()
-	manifest.ContentDigest = releaseEntriesDigest(entries)
+	manifest.ContentDigest = EntriesDigest(entries)
 	return manifest
 }
 
@@ -134,18 +136,7 @@ func writeReleaseManifestFile(root, manifestPath string, manifest Manifest) erro
 	if err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(root, ".release-manifest-*.tmp")
-	if err != nil {
-		return err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	_, writeErr := temporary.Write(append(data, '\n'))
-	closeErr := temporary.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		return err
-	}
-	return os.Rename(temporaryPath, manifestPath)
+	return durablefile.Write(manifestPath, append(data, '\n'), 0o644)
 }
 
 func collectReleaseEntries(root string) ([]Entry, error) {
@@ -162,7 +153,7 @@ func collectReleaseEntries(root string) ([]Entry, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if relative == ManifestFilename || strings.HasPrefix(filepath.Base(relative), ".release-manifest-") {
+		if relative == ManifestFilename || strings.HasPrefix(filepath.Base(relative), durablefile.TemporaryPrefix(ManifestFilename)) {
 			return nil
 		}
 		entry := Entry{Path: relative}
@@ -202,7 +193,7 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func releaseEntriesDigest(entries []Entry) string {
+func EntriesDigest(entries []Entry) string {
 	lines := &bytes.Buffer{}
 	for _, entry := range entries {
 		value := entry.SHA256
@@ -214,5 +205,3 @@ func releaseEntriesDigest(entries []Entry) string {
 	digest := sha256.Sum256(lines.Bytes())
 	return hex.EncodeToString(digest[:])
 }
-
-func EntriesDigest(entries []Entry) string { return releaseEntriesDigest(entries) }

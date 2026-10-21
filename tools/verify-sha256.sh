@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
-
-
-
-
-
-
 if [[ "$#" -ne 3 ]]; then
   echo "usage: verify-sha256.sh <checksum-inventory> <entry-name> <file>" >&2
   exit 2

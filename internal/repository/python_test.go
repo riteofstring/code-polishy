@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/riteofstring/code-polishy/internal/pythonfacts"
 )
 
 func TestParsePythonProjectCollectsTypedRequirements(t *testing.T) {
@@ -481,4 +483,37 @@ func TestPythonProjectInventoryReportsEscapingSourcePaths(t *testing.T) {
 	if len(inventory.Projects) != 0 || len(inventory.Problems) != 1 || inventory.Problems[0].Kind != PythonEscapingPathProblem {
 		t.Fatalf("inventory = %+v", inventory)
 	}
+}
+
+func ParsePythonProject(manifest string, data []byte) (PythonProject, error) {
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		return PythonProject{}, err
+	}
+	return parsePythonProjectWith(python, manifest, data)
+}
+
+func ParsePythonRequirement(value string) (PythonRequirement, error) {
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		return PythonRequirement{}, err
+	}
+	response, err := pythonfacts.Analyze(python, pythonfacts.Request{Requirements: []string{value}})
+	if err != nil {
+		return PythonRequirement{}, err
+	}
+	return pythonRequirementFact(response.Requirements[0])
+}
+
+func pythonRequirementFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
+	requirement, err := pythonRequirementInventoryFact(fact)
+	if err != nil {
+		return PythonRequirement{}, err
+	}
+	if requirement.Kind == PythonGitRequirement {
+		if err := requirement.Git.ValidateExactPin(); err != nil {
+			return PythonRequirement{}, err
+		}
+	}
+	return requirement, nil
 }

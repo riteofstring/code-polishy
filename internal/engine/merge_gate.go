@@ -5,10 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"slices"
-	"time"
 
 	"github.com/riteofstring/code-polishy/internal/architecture"
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
@@ -54,10 +52,6 @@ type mergeGateExecution struct {
 func (engine *Engine) Gate(ctx context.Context) (Report, error) {
 	report, err := engine.fullGate(ctx)
 	return withMergePolicy(report, testpolicy.MergeLevelFull, "", []string{"complete gate requested"}), err
-}
-
-func (engine *Engine) MergeGate(ctx context.Context, base string) (Report, error) {
-	return engine.MergeGateWithOptions(ctx, base, MergeGateOptions{})
 }
 
 func (engine *Engine) MergeGateWithOptions(ctx context.Context, base string, options MergeGateOptions) (Report, error) {
@@ -561,69 +555,11 @@ func (commandRunner *mergeGatePlannedRunner) PrepareSuiteView(suite policy.TestS
 	return "", nil, errors.New("test execution view controller is unavailable")
 }
 
-func (commandRunner *mergeGatePlannedRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, err
+func (commandRunner *mergeGatePlannedRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if err := commandRunner.start(invocation.Root, invocation.Command); err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
-	if observed, ok := commandRunner.delegate.(interface {
-		RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-	}); ok {
-		return observed.RunWithResult(ctx, root, command)
-	}
-	started := time.Now()
-	err := commandRunner.delegate.Run(ctx, root, command)
-	return runner.Result{ExecutionDuration: time.Since(started)}, err
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, runner.Output{}, err
-	}
-	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, root, command)
-	}
-	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture output for %q", command.Name)
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithReportOutput(ctx context.Context, root string, command policy.Command, accept runner.ReportOutcomeAcceptor) (runner.Result, runner.Output, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, runner.Output{}, err
-	}
-	if observed, ok := commandRunner.delegate.(runner.ReportOutputRunner); ok {
-		return observed.RunWithReportOutput(ctx, root, command, accept)
-	}
-	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, root, command)
-	}
-	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture report output for %q", command.Name)
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1}, runner.Output{}, err
-	}
-	if observed, ok := commandRunner.delegate.(runner.StructuredRunner); ok {
-		return observed.RunStructured(ctx, root, command)
-	}
-	if observed, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return observed.RunWithOutput(ctx, root, command)
-	}
-	return runner.Result{ExitStatus: -1}, runner.Output{}, fmt.Errorf("merge gate command runner cannot capture structured output for %q", command.Name)
-}
-
-func (commandRunner *mergeGatePlannedRunner) RunWithWriters(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
-	if err := commandRunner.start(root, command); err != nil {
-		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, err
-	}
-	if observed, ok := commandRunner.delegate.(runner.StreamRunner); ok {
-		return observed.RunWithWriters(ctx, root, command, stdout, stderr)
-	}
-	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, fmt.Errorf("merge gate command runner cannot stream output for %q", command.Name)
+	return commandRunner.delegate.Execute(ctx, invocation)
 }
 
 func (commandRunner *mergeGatePlannedRunner) start(root string, command policy.Command) error {

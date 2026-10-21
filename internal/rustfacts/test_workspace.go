@@ -2,7 +2,6 @@ package rustfacts
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -22,11 +21,7 @@ func ValidateTestWorkspace(ctx context.Context, repo repository.Repository, root
 	if err := configurationProblem(view); err != nil {
 		return Workspace{}, runner.Result{ExitStatus: -1}, err
 	}
-	structured, ok := commandRunner.(runner.StructuredRunner)
-	if !ok {
-		return Workspace{}, runner.Result{ExitStatus: -1}, errors.New("native Rust tests require bounded Cargo workspace discovery")
-	}
-	result, output, err := structured.RunStructured(ctx, root, command)
+	result, output, err := runner.RunCaptured(ctx, commandRunner, root, command, runner.CaptureStructured)
 	if err != nil {
 		return Workspace{}, result, fmt.Errorf("native Rust workspace discovery failed: %w: %s", err, diagnosticOutput(output.Stderr))
 	}

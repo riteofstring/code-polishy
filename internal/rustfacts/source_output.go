@@ -1,16 +1,14 @@
 package rustfacts
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 type SourceLocation struct {
@@ -99,13 +97,8 @@ func ParseSources(repo repository.Repository, inputs []SourceInput, data []byte)
 		GrammarVersion string   `json:"grammarVersion"`
 		Sources        []Source `json:"sources"`
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
+	if err := strictjson.Decode(data, &response); err != nil {
 		return nil, err
-	}
-	if decoder.Decode(new(any)) != io.EOF {
-		return nil, errors.New("rust syntax response contains trailing data")
 	}
 	python, _, _ := strings.Cut(repo.ToolPin("python"), "+")
 	if response.Protocol != SourceProtocol || response.PythonVersion != python || response.ParserVersion != "0.26.0" || response.GrammarVersion != "0.24.2" {

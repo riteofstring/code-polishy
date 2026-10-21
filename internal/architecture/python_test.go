@@ -28,11 +28,11 @@ type pythonGraphRunner struct {
 	exact       bool
 }
 
-func (graphRunner *pythonGraphRunner) Run(context.Context, string, policy.Command) error {
+func (graphRunner *pythonGraphRunner) runPlain(context.Context, string, policy.Command) error {
 	return graphRunner.err
 }
 
-func (graphRunner *pythonGraphRunner) RunStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
+func (graphRunner *pythonGraphRunner) runStructured(_ context.Context, _ string, command policy.Command) (runner.Result, runner.Output, error) {
 	graphRunner.commands = append(graphRunner.commands, command)
 	if graphRunner.err != nil {
 		return runner.Result{}, runner.Output{}, graphRunner.err
@@ -522,4 +522,11 @@ func pythonArchitectureRepository(t *testing.T, modules []policy.Module) reposit
 	policyRoot := t.TempDir()
 	writeArchitectureFile(t, policyRoot, "tools/ruff-version.txt", pythonGraphRuffVersion+"\n")
 	return repository.Repository{Root: t.TempDir(), PolicyRoot: policyRoot, Config: config}
+}
+
+func (double *pythonGraphRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Capture == runner.CaptureStructured {
+		return double.runStructured(ctx, invocation.Root, invocation.Command)
+	}
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

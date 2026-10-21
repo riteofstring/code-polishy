@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -101,6 +102,27 @@ func TestInspectGoModulesRejectsAmbiguousWorkspaceOwnership(t *testing.T) {
 	writeFile(t, repo.Root, "two/go.work", "go 1.26.0\n\nuse ../shared\n")
 	inventory := repo.InspectGoModules([]string{"two/go.work", "shared/go.mod", "one/go.work"})
 	assertGoModuleProblem(t, inventory, "two/go.work", "owned by both \"one/go.work\" and \"two/go.work\"")
+}
+
+func TestGoBuildNamesTheWorkspaceAndModulesEachBuildCompiles(t *testing.T) {
+	t.Parallel()
+	repo := Repository{Root: t.TempDir()}
+	writeFile(t, repo.Root, "go.work", "go 1.26.0\n\nuse (\n\t./app\n\t./library\n)\n")
+	writeFile(t, repo.Root, "app/go.mod", "module example.test/app\n\ngo 1.26.0\n\nrequire example.test/alias v0.0.0\n\nreplace example.test/alias => ../library\n")
+	writeFile(t, repo.Root, "library/go.mod", "module example.test/library\n")
+	writeFile(t, repo.Root, "fixtures/go.mod", "module example.test/fixtures\n")
+	files := []string{"go.work", "app/go.mod", "library/go.mod", "fixtures/go.mod"}
+	modules := repo.GoModules(files)
+	workspace := GoBuild{Workspace: "go.work", Sources: []GoBuildSource{
+		{Root: "app", Paths: []string{"example.test/app"}}, {Root: "library", Paths: []string{"example.test/alias", "example.test/library"}},
+	}}
+	alone := GoBuild{Sources: []GoBuildSource{{Root: "fixtures", Paths: []string{"example.test/fixtures"}}}}
+	want := map[string]GoBuild{"app": workspace, "library": workspace, "fixtures": alone}
+	for _, module := range modules {
+		if build := repo.GoBuild(files, module, modules); !reflect.DeepEqual(build, want[module.Root]) {
+			t.Fatalf("%s build = %+v, want %+v", module.Root, build, want[module.Root])
+		}
+	}
 }
 
 func assertGoModuleProblem(t *testing.T, inventory GoModuleInventory, path, message string) {

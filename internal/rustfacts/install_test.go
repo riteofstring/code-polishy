@@ -143,7 +143,7 @@ func runInstallerContract(t *testing.T, body string) {
 		Name: "rust-parser-installer-contract", Cwd: ".", Managed: true, SealedEnvironment: true, TimeoutSeconds: 30,
 		Argv: repo.PythonCommand(program, filepath.Join(repo.PolicyRoot, "internal", "rustfacts"), repo.PolicyRoot, repo.Root),
 	}
-	_, output, err := (runner.OSRunner{}).RunStructured(t.Context(), repo.Root, command)
+	_, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, command, runner.CaptureStructured)
 	if err != nil {
 		t.Fatalf("installer contract: %v; %s %s", err, output.Stdout, output.Stderr)
 	}

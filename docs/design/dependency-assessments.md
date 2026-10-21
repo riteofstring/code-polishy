@@ -38,8 +38,8 @@ tests that merely repeat an assessment's prose would not close that gap.
 The pinned Go standard library implements the repository's rooted filesystem
 boundary. Go 1.26.6 can follow a Windows junction during `Root.Mkdir` and create
 a directory outside that boundary before the caller's later validation rejects
-the path. Use the official Go 1.26.9 correction across build and carried release
-artifacts. A preliminary path check cannot provide the same protection against
+the path. Retain the official Go 1.26.9 correction in subsequent build and carried
+toolchains. A preliminary path check cannot provide the same protection against
 concurrent filesystem changes.
 
 The exact early admission, affected callers, considered mitigations, upstream
@@ -47,3 +47,15 @@ delta, and fresh-code risk are recorded in the
 [Go toolchain assessment](../security/dependency-assessments.md#go-toolchain).
 The Windows release contract verifies containment, preservation of the outgoing
 lock on rejection, and normal upgrade recovery after removing the junction.
+
+## Go TLS verification
+
+Online release-age decisions use HTTPS metadata through Go's default certificate
+verification. A network attacker with a chain through a compromised intermediate
+can influence those decisions on a host whose trust store still accepts that
+intermediate. Digest authentication of release archives does not authenticate
+registry release dates. Go 1.26.10 applies the upstream denylist to both native
+platform and Go certificate verification, preserving ordinary online checks
+without depending on every consuming host's trust-store update schedule.
+The same exact toolchain assessment records the input trace, alternatives,
+official patch delta, freshness risk, and admission expiry.

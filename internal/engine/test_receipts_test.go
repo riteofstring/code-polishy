@@ -11,6 +11,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
@@ -349,7 +350,7 @@ func TestMergeGateReusesOnlyUnchangedSuitesAcrossCandidates(t *testing.T) {
 
 type countingReceiptRunner struct{ runs int }
 
-func (commandRunner *countingReceiptRunner) Run(context.Context, string, policy.Command) error {
+func (commandRunner *countingReceiptRunner) runPlain(context.Context, string, policy.Command) error {
 	commandRunner.runs++
 	return nil
 }
@@ -374,4 +375,8 @@ func enableReusableContentSuites(t *testing.T, root string) {
 		t.Fatal("content suites were not made reusable")
 	}
 	writeEngineFile(t, root, policy.ConfigFilename, configured, 0o600)
+}
+
+func (double *countingReceiptRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }

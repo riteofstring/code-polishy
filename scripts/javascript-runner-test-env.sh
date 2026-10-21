@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 
-
-
-
-
-
-
-
-
-
 policy_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/javascript-env.sh
 source "${policy_root}/tools/javascript-env.sh"
@@ -21,11 +12,7 @@ javascript_test_pnpm_version() {
   tr -d '[:space:]' <"${policy_root}/tools/pnpm-version.txt"
 }
 
-
-
 javascript_test_name="${javascript_test_name:?the sourcing script must name itself}"
-
-
 
 fixture_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-${javascript_test_name}.XXXXXX")" && pwd -P)"
 cleanup() {
@@ -38,8 +25,6 @@ fail() {
   echo "${javascript_test_name}: $1" >&2
   exit 1
 }
-
-
 
 if [[ ! -x "${javascript_node}" || ! -f "${javascript_runner}" ]]; then
   fail "the policy-owned runtime and bundle are not installed; run ./tools/install-policy-tools.sh"

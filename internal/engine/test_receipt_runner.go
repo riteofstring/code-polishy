@@ -164,27 +164,8 @@ func (controller *testReceiptController) Notes() []string {
 	return notes
 }
 
-func (commandRunner *testReceiptRunner) Run(ctx context.Context, root string, command policy.Command) error {
-	_, err := commandRunner.RunWithResult(ctx, root, command)
-	return err
-}
-
-func (commandRunner *testReceiptRunner) RunWithResult(ctx context.Context, root string, command policy.Command) (runner.Result, error) {
-	if observed, ok := commandRunner.delegate.(interface {
-		RunWithResult(context.Context, string, policy.Command) (runner.Result, error)
-	}); ok {
-		return observed.RunWithResult(ctx, root, command)
-	}
-	started := time.Now()
-	err := commandRunner.delegate.Run(ctx, root, command)
-	return runner.Result{ExecutionDuration: time.Since(started)}, err
-}
-
-func (commandRunner *testReceiptRunner) RunWithOutput(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if captured, ok := commandRunner.delegate.(runner.OutputRunner); ok {
-		return captured.RunWithOutput(ctx, root, command)
-	}
-	return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, errors.New("test receipt runner requires bounded native command output")
+func (commandRunner *testReceiptRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	return commandRunner.delegate.Execute(ctx, invocation)
 }
 
 func (commandRunner *testReceiptRunner) ReuseSuite(suite policy.TestSuite, attempt int) (testpolicy.SuiteExecution, bool, error) {
@@ -201,11 +182,4 @@ func (commandRunner *testReceiptRunner) ReceiptNotes() []string {
 
 func (commandRunner *testReceiptRunner) PrepareSuiteView(suite policy.TestSuite) (string, func() error, error) {
 	return commandRunner.controller.PrepareSuiteView(suite)
-}
-
-func (commandRunner *testReceiptRunner) RunStructured(ctx context.Context, root string, command policy.Command) (runner.Result, runner.Output, error) {
-	if structured, ok := commandRunner.delegate.(runner.StructuredRunner); ok {
-		return structured.RunStructured(ctx, root, command)
-	}
-	return commandRunner.RunWithOutput(ctx, root, command)
 }
