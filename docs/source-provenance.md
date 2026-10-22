@@ -58,7 +58,9 @@ version before staging a release.
 - Trivy is copied from an exact official image digest into the minimal scanner
   image. `artifact-security/scanner-policy.json` records that external source
   and its runtime configuration; the release manifest covers the repository-owned
-  Dockerfile and `artifact-security/scanner.openvex.json`, which records reviewed
+  Dockerfile, the scanner's trust bundle
+  `artifact-security/scanner-ca-certificates.crt`, and
+  `artifact-security/scanner.openvex.json`, which records reviewed
   vulnerability applicability.
 - Portable Linux releases use one digest-pinned Ubuntu base only for the OCI
   transport. The image installs Git and CA certificates, copies an already

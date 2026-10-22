@@ -8,8 +8,9 @@ OpenVEX, SBOM, report, or hardening scripts.
 
 The policy release pins an official Trivy image by digest and verifies that
 digest, the expected Trivy version, the minimal scanner Dockerfile hash, and the
-scanner runtime's OpenVEX hash before use. It copies only the Trivy binary and
-CA bundle into a non-root scratch image.
+scanner runtime's OpenVEX hash before use. It copies only the Trivy binary from
+that image into a non-root scratch image, with a release-owned CA bundle that
+omits roots distrusted after the source image was built.
 
 The scanner image disables Go's HTTP/2 client. Its database download uses
 HTTPS over HTTP/1.1; target scanning remains offline. The release-owned
