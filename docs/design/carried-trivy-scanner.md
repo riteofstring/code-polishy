@@ -69,6 +69,14 @@ network proxy or checksum database produced the same binary
 `linux/arm64`). That rebuild reused the build cache, so it shows identical
 inputs and link output rather than a cold reproduction.
 
+On 2026-10-22 the real macOS arm64 installer also rebuilt the carrier with
+fresh private module and build caches, downloading 381 modules and producing
+the same binary SHA-256. Its completed carrier contains 376 module notice
+directories and 772 notice files totaling 4,927,370 bytes. Installer reuse,
+release-install admission and offline supply-chain verification passed for
+that carrier. This proves a cold reproduction on that host; the amd64 and
+Windows build paths still require their native release verification.
+
 At runtime the scanner image copies the carried binary for the Docker server's
 platform through a named build context. Docker pulls no scanner image, and the
 installed release is only read. A release without a binary for that platform

@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.30.1 - 2026-10-22
 
+- Compile and lint governed Cargo replacement packages through their consuming
+  project, retain forced lint diagnostics, and omit warnings located entirely
+  inside external macro implementations while preserving caller diagnostics.
 - Build the artifact scanner from the official Trivy 0.74.0 Go module with the
   pinned Go 1.26.10 and carry it in each release, so the scanner's database
   download rejects compromised certificate intermediates covered by
@@ -12,6 +15,10 @@
 - Record the carried Trivy in release manifest version 9 and in the release
   SBOM with every Go module linked into it, and carry each module's license
   and notice files.
+- Require the scanner's exact target, compiler, module checksum and build
+  settings, and reject incomplete cached notice layouts during installation.
+- Report the original pnpm failure when JavaScript license listing fails,
+  instead of treating its error response as a package inventory.
 
 ## 0.30.0 - 2026-10-20
 
