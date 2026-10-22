@@ -118,22 +118,39 @@ try {
   }
   function Copy-TrivyNotices([string]$Binary, [string]$ModuleCache, [string]$Destination) {
     $Lines = @(& $Go version -m $Binary)
-    if ($LASTEXITCODE -ne 0) { throw 'Trivy build information is unreadable.' }
+    if ($LASTEXITCODE -ne 0 -or $Lines.Count -eq 0) { throw 'The built Trivy has no readable build information.' }
+    $Modules = @()
     foreach ($Line in $Lines) {
       $Fields = @($Line.Trim() -split '\s+')
       if ($Fields[0] -ceq '=>') { throw 'The built Trivy replaces a module, so its notices cannot be attributed.' }
       if ($Fields[0] -cne 'dep' -and $Fields[0] -cne 'mod') { continue }
-      $Escaped = [regex]::Replace($Fields[1], '[A-Z]', { param($Match) '!' + $Match.Value.ToLowerInvariant() })
-      $Source = Join-Path $ModuleCache "$Escaped@$($Fields[2])"
-      $Target = Join-Path $Destination "$Escaped@$($Fields[2])"
-      New-Item -ItemType Directory -Force -Path $Target | Out-Null
-      $Notices = @(Get-ChildItem -LiteralPath $Source -File | Where-Object { $_.Name -match '^(?i)(licen[cs]e|copying|notice|patents)' })
-      if (@($Notices | Where-Object { $_.Name -match '^(?i)(licen[cs]e|copying)' }).Count -eq 0) {
-        throw "Trivy module $($Fields[1])@$($Fields[2]) carries no license file."
+      if ($Fields.Count -lt 3 -or -not $Fields[1] -or -not $Fields[2]) { throw 'The built Trivy build information has a malformed module record.' }
+      $Modules += , @($Fields[0], $Fields[1], $Fields[2])
+    }
+    if (@($Modules | Where-Object { $_[0] -ceq 'mod' -and $_[1] -ceq 'github.com/aquasecurity/trivy' }).Count -ne 1) {
+      throw 'The built Trivy build information names no Trivy module.'
+    }
+    foreach ($Module in $Modules) {
+      $Escaped = [regex]::Replace($Module[1], '[A-Z]', { param($Match) '!' + $Match.Value.ToLowerInvariant() })
+      $Source = Join-Path $ModuleCache "$Escaped@$($Module[2])"
+      if (-not (Test-Path -LiteralPath $Source -PathType Container)) { throw "Trivy module $($Module[1])@$($Module[2]) has no readable source in the module cache." }
+      $SourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
+      $Target = Join-Path $Destination "$Escaped@$($Module[2])"
+      $Licensed = $false
+      $Notices = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File | Where-Object {
+          $_.Name -match '^(?i)(licen[cs]e|copying|notice|patents)' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)
+        })
+      foreach ($Notice in $Notices) {
+        $Relative = $Notice.FullName.Substring($SourceRoot.Length + 1)
+        if ($Relative -notmatch '[\\/]' -and $Notice.Name -match '^(?i)(licen[cs]e|copying)') { $Licensed = $true }
+        $Copy = Join-Path $Target $Relative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Copy) | Out-Null
+        Copy-Item -LiteralPath $Notice.FullName -Destination $Copy
       }
-      foreach ($Notice in $Notices) { Copy-Item -LiteralPath $Notice.FullName -Destination (Join-Path $Target $Notice.Name) }
+      if (-not $Licensed) { throw "Trivy module $($Module[1])@$($Module[2]) carries no license file at its root." }
     }
   }
+
   if ((Get-TrivyIdentity (Join-Path $TrivyRoot 'trivy')) -cne $TrivyExpected -or
       -not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'licenses') -PathType Container)) {
     $TrivyScratch = Join-Path $Scratch 'trivy'

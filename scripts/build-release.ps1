@@ -132,6 +132,24 @@ try {
   )) { Copy-ReleasePath $Relative }
   Assert-ReleasePythonCarrier $Stage
 
+  $TrivyRoot = Join-Path $Stage '.tools/trivy/linux-amd64'
+  $TrivyExpected = 'go' + (Get-Content -Raw -LiteralPath (Join-Path $Stage 'scripts/go_version.txt')).Trim().TrimStart('g', 'o') +
+    '-X:jsonv2 github.com/aquasecurity/trivy v' + (Get-Content -Raw -LiteralPath (Join-Path $Stage 'tools/trivy-version.txt')).Trim() +
+    ' ' + (Get-Content -Raw -LiteralPath (Join-Path $PolicyRoot 'tools/trivy_module_sum.txt')).Trim()
+  $TrivyBuildInfo = @(& $Go version -m (Join-Path $TrivyRoot 'trivy'))
+  $TrivyIdentity = ''
+  if ($LASTEXITCODE -eq 0 -and $TrivyBuildInfo.Count -gt 0) {
+    $TrivyIdentity = @(($TrivyBuildInfo[0].Trim() -split '\s+')[-1])
+    foreach ($Line in $TrivyBuildInfo) {
+      $Fields = @($Line.Trim() -split '\s+')
+      if ($Fields[0] -ceq 'mod') { $TrivyIdentity += $Fields[1..3] }
+    }
+    $TrivyIdentity = $TrivyIdentity -join ' '
+  }
+  if ($TrivyIdentity -cne $TrivyExpected -or -not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'licenses') -PathType Container)) {
+    throw "The carried Trivy reports '$TrivyIdentity'; the pins require '$TrivyExpected' with module notices."
+  }
+
   $StageBin = Join-Path $Stage '.tools/bin'
   New-Item -ItemType Directory -Force -Path $StageBin | Out-Null
   foreach ($Tool in @('staticcheck.exe','deadcode.exe','govulncheck.exe','osv-scanner.exe','ruff.exe','ty.exe','cargo-nextest.exe')) {

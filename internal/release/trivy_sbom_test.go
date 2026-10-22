@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,13 +41,21 @@ func addTrivyReleaseFixture(t *testing.T, files map[string]string, host string) 
 		t.Fatal(err)
 	}
 	files[directory+"/trivy"] = string(binary)
-	for _, shipped := range trivyFixtureModules(t) {
+	for index, shipped := range trivyFixtureModules(t) {
 		escaped, err := module.EscapePath(shipped.Path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		files[directory+"/licenses/"+escaped+"@"+shipped.Version+"/LICENSE"] = "upstream license\n"
+		if index == 0 {
+			files[directory+"/"+trivyFixtureNestedNotice(t, escaped, shipped.Version)] = "forked component license\n"
+		}
 	}
+}
+
+func trivyFixtureNestedNotice(t *testing.T, escaped, version string) string {
+	t.Helper()
+	return "licenses/" + escaped + "@" + version + "/internal/third_party/forked/LICENSE.txt"
 }
 
 func trivyFixtureModules(t *testing.T) []module.Version {
@@ -102,15 +111,30 @@ func TestReleaseSBOMRecordsCarriedTrivyModulesAndTheirNotices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, shipped := range trivyFixtureModules(t) {
+	for index, shipped := range trivyFixtureModules(t) {
 		ref := "pkg:golang/" + shipped.Path + "@" + shipped.Version
 		component, found := components[ref]
 		if !found || !dependencies[ref] {
 			t.Fatalf("the SBOM does not attribute %s to the carried Trivy", ref)
 		}
-		if component.Properties == nil || len(*component.Properties) != 1 ||
-			!strings.HasPrefix((*component.Properties)[0].Value, directory+"/licenses/") {
-			t.Fatalf("%s has no carried notice: %+v", ref, component.Properties)
+		escaped, err := module.EscapePath(shipped.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wanted := []string{directory + "/licenses/" + escaped + "@" + shipped.Version + "/LICENSE"}
+		if index == 0 {
+			wanted = append(wanted, directory+"/"+trivyFixtureNestedNotice(t, escaped, shipped.Version))
+		}
+		var recorded []string
+		if component.Properties != nil {
+			for _, property := range *component.Properties {
+				recorded = append(recorded, property.Value)
+			}
+		}
+		slices.Sort(wanted)
+		slices.Sort(recorded)
+		if !slices.Equal(recorded, wanted) {
+			t.Fatalf("%s notices = %v, want %v", ref, recorded, wanted)
 		}
 	}
 }
@@ -133,7 +157,7 @@ func TestReleaseSBOMRefusesCarriedTrivyWithoutBuildInformationOrNotices(t *testi
 		name, path, content, problem string
 	}{
 		{"stub binary", directory + "/trivy", "not a Go binary", "build information"},
-		{"missing license", directory + "/licenses/" + escaped + "@" + modules[0].Version + "/LICENSE", "", "has no license notice"},
+		{"nested license only", directory + "/licenses/" + escaped + "@" + modules[0].Version + "/LICENSE", "", "has no root license notice"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			files := map[string]string{BinaryPath: "fixture"}

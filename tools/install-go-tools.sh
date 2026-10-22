@@ -30,30 +30,48 @@ trivy_identity() {
 }
 
 trivy_notices() {
-  local binary="$1" module_cache="$2" destination="$3" module version escaped notice licensed
-  if "${repo_root}/scripts/go.sh" version -m "${binary}" | awk '$1 == "=>" { found = 1 } END { exit !found }'; then
+  local binary="$1" module_cache="$2" destination="$3" build_info modules module version escaped source notices notice relative licensed
+  if ! build_info="$("${repo_root}/scripts/go.sh" version -m "${binary}")"; then
+    echo "The built Trivy has no readable build information." >&2
+    return 1
+  fi
+  if awk '$1 == "=>" { found = 1 } END { exit !found }' <<<"${build_info}"; then
     echo "The built Trivy replaces a module, so its notices cannot be attributed." >&2
     return 1
   fi
+  modules="$(awk '$1 == "dep" || $1 == "mod" { print $2, $3 }' <<<"${build_info}")"
+  if ! awk '$1 == "mod" && $2 == "github.com/aquasecurity/trivy" { found = 1 } END { exit !found }' <<<"${build_info}"; then
+    echo "The built Trivy build information names no Trivy module." >&2
+    return 1
+  fi
   while read -r module version; do
-    escaped="$(printf '%s\n' "${module}" | awk '{ out = ""; for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); out = out (c ~ /[A-Z]/ ? "!" tolower(c) : c) } print out }')"
-    mkdir -p "${destination}/${escaped}@${version}"
-    licensed=false
-    for notice in "${module_cache}/${escaped}@${version}"/*; do
-      [[ -f "${notice}" && ! -L "${notice}" ]] || continue
-      case "$(basename "${notice}")" in
-        [Ll][Ii][Cc][Ee][Nn][CcSs][Ee]* | [Cc][Oo][Pp][Yy][Ii][Nn][Gg]*) licensed=true ;;
-        [Nn][Oo][Tt][Ii][Cc][Ee]* | [Pp][Aa][Tt][Ee][Nn][Tt][Ss]*) ;;
-        *) continue ;;
-      esac
-      cp "${notice}" "${destination}/${escaped}@${version}/"
-      chmod 0644 "${destination}/${escaped}@${version}/$(basename "${notice}")"
-    done
-    if [[ "${licensed}" != true ]]; then
-      echo "Trivy module ${module}@${version} carries no license file." >&2
+    if [[ -z "${module}" || -z "${version}" ]]; then
+      echo "The built Trivy build information has a malformed module record." >&2
       return 1
     fi
-  done < <("${repo_root}/scripts/go.sh" version -m "${binary}" | awk '$1 == "dep" || $1 == "mod" { print $2, $3 }')
+    escaped="$(printf '%s\n' "${module}" | awk '{ out = ""; for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); out = out (c ~ /[A-Z]/ ? "!" tolower(c) : c) } print out }')"
+    source="${module_cache}/${escaped}@${version}"
+    if [[ ! -d "${source}" ]] || ! notices="$(find "${source}" -type f \( -iname 'licen[cs]e*' -o -iname 'copying*' -o -iname 'notice*' -o -iname 'patents*' \) -print)"; then
+      echo "Trivy module ${module}@${version} has no readable source in the module cache." >&2
+      return 1
+    fi
+    licensed=false
+    while IFS= read -r notice; do
+      [[ -n "${notice}" ]] || continue
+      relative="${notice#"${source}/"}"
+      case "${relative}" in
+        */*) ;;
+        [Ll][Ii][Cc][Ee][Nn][CcSs][Ee]* | [Cc][Oo][Pp][Yy][Ii][Nn][Gg]*) licensed=true ;;
+      esac
+      mkdir -p "$(dirname "${destination}/${escaped}@${version}/${relative}")"
+      cp "${notice}" "${destination}/${escaped}@${version}/${relative}"
+      chmod 0644 "${destination}/${escaped}@${version}/${relative}"
+    done <<<"${notices}"
+    if [[ "${licensed}" != true ]]; then
+      echo "Trivy module ${module}@${version} carries no license file at its root." >&2
+      return 1
+    fi
+  done <<<"${modules}"
 }
 
 if [[ -f "${trivy_dir}/trivy" && -d "${trivy_dir}/licenses" && "$(trivy_identity "${trivy_dir}/trivy")" == "${trivy_expected}" ]]; then

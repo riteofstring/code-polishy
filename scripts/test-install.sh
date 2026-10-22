@@ -221,6 +221,7 @@ EOF
   printf '%s\n' 'vulture-2.16-py3-none-any.whl 6e0f1c312cef1c87856957e5c2ca9608834a7c794c2180477f30bf0e4cc58eee' \
     >"${source_root}/tools/vulture_wheel_checksums.txt"
   printf '0.72.0\n' >"${source_root}/tools/trivy-version.txt"
+  printf 'h1:disposable\n' >"${source_root}/tools/trivy_module_sum.txt"
   write_file "${source_root}/tools/ty.toml" <<'EOF'
 [rules]
 EOF
@@ -351,7 +352,10 @@ if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
     staticcheck) printf '\tmod\thonnef.co/go/tools\tv0.7.0\th1:disposable\n' ;;
     deadcode) printf '\tmod\tgolang.org/x/tools\tv0.50.0\th1:disposable\n' ;;
     govulncheck) printf '\tmod\tgolang.org/x/vuln\tv1.3.0\th1:disposable\n' ;;
-    trivy) printf '\tmod\tgithub.com/aquasecurity/trivy\tv%s\th1:disposable\n' "\$(cat "\${3%/*}/fixture-version")" ;;
+    trivy)
+      printf '%s: %s\n\tpath\tgithub.com/aquasecurity/trivy/cmd/trivy\n' "\$3" "\$(cat "\${3%/*}/fixture-go")"
+      printf '\tmod\tgithub.com/aquasecurity/trivy\tv%s\t%s\n' "\$(cat "\${3%/*}/fixture-version")" "\$(cat "\${3%/*}/fixture-sum")"
+      ;;
     *)
       echo "unexpected stub go module probe: \$*" >&2
       exit 1
@@ -411,6 +415,8 @@ EOF
   printf 'fixture license\n' \
     >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0/LICENSE"
   printf '0.72.0\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-version"
+  printf 'go1.26.9-X:jsonv2\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-go"
+  printf 'h1:disposable\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-sum"
 
   "${real_git}" -C "${source_root}" init --quiet
   "${real_git}" -C "${source_root}" config user.email "install-test@example.invalid"
@@ -721,15 +727,25 @@ mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
   fail "a checkout missing a pinned tool changed what is installed"
 
 carried_trivy="${source_root}/.tools/trivy/linux-${go_platform_tag##*-}"
-printf '0.72.1\n' >"${carried_trivy}/fixture-version"
-if install_release >"${fixture_root}/trivy-version.log" 2>&1; then
-  fail "a checkout carrying the wrong Trivy installed a release"
+for wrong in "fixture-version:0.72.1" "fixture-go:go1.26.9" "fixture-sum:h1:other"; do
+  cp "${carried_trivy}/${wrong%%:*}" "${fixture_root}/held-trivy-evidence"
+  printf '%s\n' "${wrong#*:}" >"${carried_trivy}/${wrong%%:*}"
+  if install_release >"${fixture_root}/trivy-identity.log" 2>&1; then
+    fail "a checkout carrying Trivy with the wrong ${wrong%%:*} installed a release"
+  fi
+  grep -q "Trivy carrier.*reports.*${wrong#*:}" "${fixture_root}/trivy-identity.log" ||
+    fail "the carried Trivy with the wrong ${wrong%%:*} was refused without naming it"
+  mv "${fixture_root}/held-trivy-evidence" "${carried_trivy}/${wrong%%:*}"
+done
+mv "${carried_trivy}/licenses" "${fixture_root}/held-trivy-licenses"
+if install_release >"${fixture_root}/trivy-notices.log" 2>&1; then
+  fail "a checkout carrying Trivy without module notices installed a release"
 fi
-grep -q "trivy.*0.72.1" "${fixture_root}/trivy-version.log" ||
-  fail "the wrong carried Trivy was refused without naming it"
-printf '0.72.0\n' >"${carried_trivy}/fixture-version"
+grep -q "with module notices" "${fixture_root}/trivy-notices.log" ||
+  fail "the carried Trivy without module notices was refused for the wrong reason"
+mv "${fixture_root}/held-trivy-licenses" "${carried_trivy}/licenses"
 [[ "$(installed_release_count)" == "1" ]] ||
-  fail "a checkout carrying the wrong Trivy changed what is installed"
+  fail "a checkout carrying an inexact Trivy changed what is installed"
 
 for rust_tool in rustc rustdoc cargo; do
   write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.2 (fixture)"

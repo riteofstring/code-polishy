@@ -354,7 +354,6 @@ carried_tools=(
   "rustdoc:tools/rust-version.txt"
   "cargo:tools/rust-version.txt"
   "cargo-nextest:tools/cargo-nextest-version.txt"
-  "trivy:tools/trivy-version.txt"
 )
 
 carried_markers=(
@@ -407,11 +406,6 @@ probed_version() {
       javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
         "${policy_root}/.tools/bin/$1" |
         awk '$1 == "mod" { sub(/^v/, "", $3); print $3; exit }'
-      ;;
-    trivy)
-      javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
-        "${policy_root}/.tools/trivy/linux-${go_arch_tag}/trivy" |
-        awk '$1 == "mod" && $2 == "github.com/aquasecurity/trivy" { sub(/^v/, "", $3); print $3; exit }'
       ;;
     osv-scanner)
       javascript_sealed_run "${policy_root}/.tools/bin/osv-scanner" --version |
@@ -637,6 +631,21 @@ for carried in "${carried_markers[@]}"; do
     exit 1
   fi
 done
+
+trivy_carrier=".tools/trivy/linux-${go_arch_tag}"
+trivy_expected="go$(pinned_identity scripts/go_version.txt)-X:jsonv2 github.com/aquasecurity/trivy"
+trivy_expected+=" v$(pinned_identity tools/trivy-version.txt) $(pinned_identity tools/trivy_module_sum.txt)"
+if ! trivy_build_info="$(javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
+  "${policy_root}/${trivy_carrier}/trivy")"; then
+  trivy_build_info=""
+fi
+trivy_reported="$(awk 'NR == 1 { identity = $NF } $1 == "mod" { identity = identity " " $2 " " $3 " " $4 } END { print identity }' \
+  <<<"${trivy_build_info}")"
+if [[ "${trivy_reported}" != "${trivy_expected}" || ! -d "${policy_root}/${trivy_carrier}/licenses" ]]; then
+  echo "The Trivy carrier at ${trivy_carrier} reports ${trivy_reported:-no build identity}; the pins require ${trivy_expected} with module notices." >&2
+  echo "Run ./tools/install-policy-tools.sh before installing a release." >&2
+  exit 1
+fi
 
 if ! vulture_metadata_is_exact; then
   echo "The Vulture carrier at ${python_tool_dir} has missing or stale Vulture metadata." >&2

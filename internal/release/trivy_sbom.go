@@ -3,7 +3,6 @@ package release
 import (
 	"debug/buildinfo"
 	"fmt"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -63,14 +62,14 @@ func (inventory *releaseSBOMInventory) addTrivyModuleNotices(manifest Manifest, 
 	licensed := false
 	for _, entry := range manifest.Entries {
 		relative, found := strings.CutPrefix(entry.Path, prefix)
-		if !found || entry.Symlink != "" || entry.SHA256 == "" || strings.Contains(relative, "/") {
+		if !found || entry.Symlink != "" || entry.SHA256 == "" {
 			continue
 		}
-		licensed = licensed || trivyLicenseNotice.MatchString(path.Base(relative))
+		licensed = licensed || !strings.Contains(relative, "/") && trivyLicenseNotice.MatchString(relative)
 		properties = append(properties, cdx.Property{Name: "code-polishy:notice-path", Value: entry.Path})
 	}
 	if !licensed {
-		return fmt.Errorf("carried Trivy module %s@%s has no license notice under %s", modulePath, version, prefix)
+		return fmt.Errorf("carried Trivy module %s@%s has no root license notice under %s", modulePath, version, prefix)
 	}
 	ref := "pkg:golang/" + modulePath + "@" + version
 	component, found := inventory.components[ref]
