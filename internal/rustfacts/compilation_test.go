@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -82,6 +83,30 @@ func TestRustCompilationCollectsLintsDespiteSourceLevels(t *testing.T) {
 				t.Fatalf("source levels hid the governed lint: %+v", report.Findings)
 			}
 		})
+	}
+}
+
+func TestRustCompilationOmitsLibraryExpansionWarningsAndKeepsRepositoryCode(t *testing.T) {
+	t.Parallel()
+	repo := compilationRepository(t, `macro_rules! stop { () => {{ return 0; 1 }} }
+pub fn local_macro() -> u32 { stop!() }
+pub fn after_todo() -> u32 { todo!(); 1 }
+fn really_unused() {}
+#[cfg(test)]
+fn test_helper_unused() {}
+pub fn pinned() -> usize { let future = std::pin::pin!(async { 1u32 }); std::mem::size_of_val(&future) }
+pub fn pinned_input() -> usize { let future = std::pin::pin!(async { return 1u32; 2u32 }); std::mem::size_of_val(&future) }
+`)
+	plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
+	reported := []string{}
+	for _, finding := range Compile(t.Context(), repo, plan, discovery, runner.OSRunner{}) {
+		reported = append(reported, fmt.Sprintf("%s %s:%d", finding.Subject, finding.Path, finding.Line))
+	}
+	slices.Sort(reported)
+	reported = slices.Compact(reported)
+	want := []string{"dead_code src/lib.rs:4", "dead_code src/lib.rs:6", "unreachable_code src/lib.rs:1", "unreachable_code src/lib.rs:3", "unreachable_code src/lib.rs:8"}
+	if !slices.Equal(reported, want) {
+		t.Fatalf("findings = %v, want %v", reported, want)
 	}
 }
 

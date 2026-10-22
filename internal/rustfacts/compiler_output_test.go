@@ -60,6 +60,37 @@ func TestCargoCompilerDiagnosticsRetainMacroAndUnavailableLocations(t *testing.T
 	}
 }
 
+func TestCargoCompilerWarningsOmitOnlyExpansionsOutsideTheRepository(t *testing.T) {
+	t.Parallel()
+	repo, workspace, _ := compilerOutputFixture(t)
+	target := workspace.Packages[0].Targets[0]
+	target.Path = filepath.Join(repo.Root, target.Path)
+	library := compilerSpan{File: "/rustc/toolchain/library/core/src/pin.rs", Line: 9, Column: 9, Primary: true, Expansion: &compilerExpansion{Span: compilerSpan{File: "src/lib.rs", Line: 1, Column: 8}}}
+	repository := compilerSpan{File: "src/lib.rs", Line: 2, Column: 3, Primary: true}
+	cause := compilerSpan{File: "src/lib.rs", Line: 1, Column: 18}
+	libraryCause := compilerSpan{File: library.File, Line: 2, Column: 9, Expansion: library.Expansion}
+	unexpanded := compilerSpan{File: "/unavailable/dependency.rs", Line: 5, Column: 3, Primary: true}
+	for name, test := range map[string]struct {
+		level string
+		spans []compilerSpan
+		kept  bool
+	}{
+		"library expansion":         {"warning", []compilerSpan{library, libraryCause}, false},
+		"repository cause":          {"warning", []compilerSpan{library, cause}, true},
+		"library and repository":    {"warning", []compilerSpan{library, repository}, true},
+		"outside without expansion": {"warning", []compilerSpan{unexpanded}, true},
+		"library expansion error":   {"error", []compilerSpan{library}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			event := compilerEvent{Reason: "compiler-message", PackageID: workspace.Packages[0].ID, Target: target, Message: compilerDiagnostic{Message: "seeded diagnostic", Level: test.level, Code: &compilerCode{Code: "unreachable_code"}, Spans: test.spans}}
+			findings, err := compilerFindings(repo, "Cargo.toml", workspace, event)
+			if err != nil || (len(findings) == 1) != test.kept {
+				t.Fatalf("findings = %+v, %v; kept = %v", findings, err, test.kept)
+			}
+		})
+	}
+}
+
 func TestCargoCompilerOutputRetainsDiagnosticsBeforeTruncation(t *testing.T) {
 	t.Parallel()
 	repo, workspace, _ := compilerOutputFixture(t)
