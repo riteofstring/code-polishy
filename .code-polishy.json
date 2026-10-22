@@ -1058,6 +1058,8 @@
           "templates/**",
           "tools/*-version.txt",
           "tools/install-p*",
+          "tools/install-go-tools.sh",
+          "tools/trivy_module_sum.txt",
           "tools/javascript**",
           "tools/packaging_wheel_checksums.txt",
           "scripts/test-install.sh"

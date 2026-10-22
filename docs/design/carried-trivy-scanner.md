@@ -14,33 +14,50 @@ and build cache, ignoring user Go configuration and private-module exceptions.
 They fetch only from `proxy.golang.org`, verify against `sum.golang.org`, and
 copy the official build's settings: `CGO_ENABLED=0`, `GOEXPERIMENT=jsonv2`, and
 `-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=0.74.0`, adding
-`-trimpath`. The result is accepted only when its build information names
-`go1.26.10-X:jsonv2` and exactly that module version and sum. The pinned module
+`-trimpath`. The result must match the carrier identity below. The pinned module
 content includes Trivy's `go.sum`, so the module graph is frozen. The
 installer keeps the binary in `.tools/trivy/linux-<arch>` for the host
-architecture; Windows releases carry `linux-amd64`. Release installation on
-Linux and macOS, and the Windows release build, refuse a carried binary whose
-build information does not name exactly `go1.26.10-X:jsonv2`, Trivy's module,
-version, and checksum, or that has no module notices. The release manifest
-covers its bytes, so the runtime trusts the installed release rather than
-rechecking them.
+architecture; Windows releases carry `linux-amd64`.
+
+A carrier is admitted only when the binary's build information records exactly
+`go1.26.10-X:jsonv2`, Trivy's module, version, and checksum, and the build
+settings `CGO_ENABLED=0`, the expected `GOARCH`, `GOOS=linux`, and
+`-trimpath=true`, so a same-module build for another platform or with other
+settings is refused. The tool installer's reuse check, release installation on
+Linux and macOS, and the Windows release build apply that identity. The release
+manifest covers the admitted bytes, so the runtime trusts the installed release
+rather than rechecking them.
 
 Distributing the binary distributes every module linked into it. For each
 module the binary's build information names, including Trivy itself, the
-installer copies every license, copying, notice, and patent file anywhere in
-that module's checksum-verified module cache directory into
-`licenses/<escaped module path>@<version>/`, keeping its relative path. Forked
-or vendored code inside a module, such as `zstd/internal/xxhash` in
-`klauspost/compress` or `third_party/forked/golang` in Kubernetes modules,
-keeps its own attribution. Files under test data are included rather than
-pruned by package reachability. Unreadable or empty build information, a module
-missing from the cache or without a root license or copying file, or a replaced
-module fails the build. Release manifest version 9 records Trivy's version as
-a tool. The release SBOM reads the carried binary's build information, lists
-Trivy with every linked module as its dependency, and records each module's
-root and nested notice paths. A release whose carried binary lacks build
-information, or whose module lacks a root license notice, cannot produce an
-SBOM.
+installer copies, with its relative path, every regular file under a
+`LICENSES` directory and every file whose name contains `license`, `licence`,
+`copying`, `notice`, or `patents`. Name matching also covers forms such as
+`APACHE-LICENSE-2.0`, `GO-LICENSE`, `3rdpartylicenses.md`, and
+`*.json.license`, and nested forks such as `zstd/internal/xxhash` or
+`third_party/forked/golang` keep their own attribution. Source, configuration,
+and test-data formats such as `.go`, `.c`, `.sh`, `.rego`, YAML, JSON, and XML
+are not notices and are not copied outside a `LICENSES` directory, even when
+their names mention a license. Each module still needs a non-source license or
+copying file at its root. Unreadable or empty build information, a module
+missing from the cache, a replaced module, or a module without that root
+license fails the build.
+
+The installer writes `notices-layout` containing
+`code-polishy-trivy-notices-v2` only after every module's notices are copied.
+The marker names the notice rules above, not a digest; it distinguishes a
+complete carrier from one copied under earlier rules or interrupted, which the
+identity alone cannot. A missing or different marker makes the installer
+rebuild the carrier, and release installation, the Windows release build, and
+SBOM composition refuse it. There is no compatibility path for earlier
+layouts; changing the copy rules requires a new marker value.
+
+Release manifest version 9 records Trivy's version as a tool. The release SBOM
+reads the carried binary's build information, lists Trivy with every linked
+module as its dependency, and records each module's root and nested notice
+paths. A release whose carried binary lacks build information, whose module
+lacks a root license notice, or whose notices lack the current layout marker
+cannot produce an SBOM.
 
 The resulting graph has the same 375 dependency versions and checksums as the
 official binary in

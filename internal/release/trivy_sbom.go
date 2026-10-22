@@ -3,6 +3,7 @@ package release
 import (
 	"debug/buildinfo"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -11,7 +12,12 @@ import (
 	"golang.org/x/mod/module"
 )
 
-var trivyLicenseNotice = regexp.MustCompile(`(?i)^(licen[cs]e|copying)`)
+const trivyNoticeLayout = "code-polishy-trivy-notices-v2"
+
+var (
+	trivyLicenseNotice = regexp.MustCompile(`(?i)licen[cs]e|copying`)
+	trivySourceFile    = regexp.MustCompile(`(?i)\.(go|s|c|h|cc|cpp|proto|py|js|ts|sh|rego|ya?ml|json|xml|toml|mod|sum|pom|gemspec|jar|golden)$`)
+)
 
 func trivyReleaseDirectory(host string) (string, error) {
 	switch {
@@ -35,6 +41,9 @@ func (inventory *releaseSBOMInventory) addTrivyNotices(root string, manifest Man
 	binary := directory + "/trivy"
 	if !manifestRecordsCapabilityFile(manifest, binary, "") {
 		return fmt.Errorf("carried Trivy is absent from the release manifest: %s", binary)
+	}
+	if err := requireTrivyNoticeLayout(root, manifest, directory); err != nil {
+		return err
 	}
 	info, err := buildinfo.ReadFile(filepath.Join(root, filepath.FromSlash(binary)))
 	if err != nil {
@@ -65,7 +74,7 @@ func (inventory *releaseSBOMInventory) addTrivyModuleNotices(manifest Manifest, 
 		if !found || entry.Symlink != "" || entry.SHA256 == "" {
 			continue
 		}
-		licensed = licensed || !strings.Contains(relative, "/") && trivyLicenseNotice.MatchString(relative)
+		licensed = licensed || !strings.Contains(relative, "/") && trivyLicenseNotice.MatchString(relative) && !trivySourceFile.MatchString(relative)
 		properties = append(properties, cdx.Property{Name: "code-polishy:notice-path", Value: entry.Path})
 	}
 	if !licensed {
@@ -78,5 +87,25 @@ func (inventory *releaseSBOMInventory) addTrivyModuleNotices(manifest Manifest, 
 	}
 	component.Properties = &properties
 	inventory.components[ref] = component
+	return nil
+}
+
+func requireTrivyNoticeLayout(root string, manifest Manifest, directory string) error {
+	marker := directory + "/notices-layout"
+	if !manifestRecordsCapabilityFile(manifest, marker, "") {
+		return fmt.Errorf("carried Trivy notices are incomplete: %s is absent from the release manifest", marker)
+	}
+	sealed, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer sealed.Close()
+	data, err := readCapabilityFile(sealed, marker, 256)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(data)) != trivyNoticeLayout {
+		return fmt.Errorf("carried Trivy notices use layout %q, not %s", strings.TrimSpace(string(data)), trivyNoticeLayout)
+	}
 	return nil
 }

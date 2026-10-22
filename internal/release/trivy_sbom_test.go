@@ -41,21 +41,31 @@ func addTrivyReleaseFixture(t *testing.T, files map[string]string, host string) 
 		t.Fatal(err)
 	}
 	files[directory+"/trivy"] = string(binary)
+	files[directory+"/notices-layout"] = trivyNoticeLayout + "\n"
 	for index, shipped := range trivyFixtureModules(t) {
-		escaped, err := module.EscapePath(shipped.Path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		files[directory+"/licenses/"+escaped+"@"+shipped.Version+"/LICENSE"] = "upstream license\n"
-		if index == 0 {
-			files[directory+"/"+trivyFixtureNestedNotice(t, escaped, shipped.Version)] = "forked component license\n"
+		for _, notice := range trivyFixtureNotices(t, index, shipped) {
+			files[directory+"/"+notice] = "upstream notice\n"
 		}
 	}
 }
 
-func trivyFixtureNestedNotice(t *testing.T, escaped, version string) string {
+func trivyFixtureNotices(t *testing.T, index int, shipped module.Version) []string {
 	t.Helper()
-	return "licenses/" + escaped + "@" + version + "/internal/third_party/forked/LICENSE.txt"
+	escaped, err := module.EscapePath(shipped.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := "licenses/" + escaped + "@" + shipped.Version + "/"
+	switch index {
+	case 0:
+		return []string{prefix + "LICENSE", prefix + "internal/third_party/forked/LICENSE.txt", prefix + "zstd/internal/xxhash/NOTICE.txt"}
+	case 1:
+		return []string{prefix + "APACHE-LICENSE-2.0", prefix + "LICENSES/BSD-3-Clause.txt", prefix + "3rdpartylicenses.md"}
+	case 2:
+		return []string{prefix + "GO-LICENSE", prefix + "schema/cvss-v3.1.json.license"}
+	default:
+		return []string{prefix + "LICENSE"}
+	}
 }
 
 func trivyFixtureModules(t *testing.T) []module.Version {
@@ -76,8 +86,8 @@ func trivyFixtureModules(t *testing.T) []module.Version {
 		}
 		modules = append(modules, module.Version{Path: resolved.Path, Version: resolved.Version})
 	}
-	if len(modules) == 0 {
-		t.Fatal("the fixture binary records no shipped modules")
+	if len(modules) < 3 {
+		t.Fatalf("the fixture binary records only %d shipped modules", len(modules))
 	}
 	return modules
 }
@@ -117,13 +127,9 @@ func TestReleaseSBOMRecordsCarriedTrivyModulesAndTheirNotices(t *testing.T) {
 		if !found || !dependencies[ref] {
 			t.Fatalf("the SBOM does not attribute %s to the carried Trivy", ref)
 		}
-		escaped, err := module.EscapePath(shipped.Path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		wanted := []string{directory + "/licenses/" + escaped + "@" + shipped.Version + "/LICENSE"}
-		if index == 0 {
-			wanted = append(wanted, directory+"/"+trivyFixtureNestedNotice(t, escaped, shipped.Version))
+		var wanted []string
+		for _, notice := range trivyFixtureNotices(t, index, shipped) {
+			wanted = append(wanted, directory+"/"+notice)
 		}
 		var recorded []string
 		if component.Properties != nil {
@@ -148,26 +154,25 @@ func TestReleaseSBOMRefusesCarriedTrivyWithoutBuildInformationOrNotices(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	modules := trivyFixtureModules(t)
-	escaped, err := module.EscapePath(modules[0].Path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	first := directory + "/" + trivyFixtureNotices(t, 0, trivyFixtureModules(t)[0])[0]
 	for _, test := range []struct {
-		name, path, content, problem string
+		name    string
+		change  func(map[string]string)
+		problem string
 	}{
-		{"stub binary", directory + "/trivy", "not a Go binary", "build information"},
-		{"nested license only", directory + "/licenses/" + escaped + "@" + modules[0].Version + "/LICENSE", "", "has no root license notice"},
+		{"stub binary", func(files map[string]string) { files[directory+"/trivy"] = "not a Go binary" }, "build information"},
+		{"nested license only", func(files map[string]string) { delete(files, first) }, "has no root license notice"},
+		{"root Go source named for a license", func(files map[string]string) {
+			delete(files, first)
+			files[strings.TrimSuffix(first, "LICENSE")+"license.go"] = "package license\n"
+		}, "has no root license notice"},
+		{"missing notice layout", func(files map[string]string) { delete(files, directory+"/notices-layout") }, "notices are incomplete"},
+		{"earlier notice layout", func(files map[string]string) { files[directory+"/notices-layout"] = "code-polishy-trivy-notices-v1\n" }, "use layout"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			files := map[string]string{BinaryPath: "fixture"}
 			addTrivyReleaseFixture(t, files, host)
-			if test.content == "" {
-				delete(files, test.path)
-				files[strings.TrimSuffix(test.path, "LICENSE")+"README.md"] = "not a license\n"
-			} else {
-				files[test.path] = test.content
-			}
+			test.change(files)
 			root, manifest := installedRelease(t, files, nil)
 			if _, err := renderReleaseSBOM(manifest, root, "release.zip", exampleDigest); err == nil || !strings.Contains(err.Error(), test.problem) {
 				t.Fatalf("SBOM error = %v, want %q", err, test.problem)
