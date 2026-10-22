@@ -46,11 +46,21 @@ license_flattener="${temporary_dir}/flatten-licenses.mjs"
 cat >"${license_flattener}" <<'EOF'
 let raw = "";
 process.stdin.on("data", (chunk) => (raw += chunk)).on("end", () => {
+  const report = JSON.parse(raw);
+  if (report.error) {
+    process.stderr.write(`pnpm could not list the bundle licenses: ${report.error.code}: ${report.error.message}\n`);
+    process.exit(1);
+  }
   const rows = [];
-  for (const [license, packages] of Object.entries(JSON.parse(raw)))
+  for (const [license, packages] of Object.entries(report)) {
+    if (!Array.isArray(packages)) {
+      process.stderr.write(`pnpm reported an unreadable license list for ${license}\n`);
+      process.exit(1);
+    }
     for (const entry of packages)
       for (const version of entry.versions)
         rows.push(`${entry.name}@${version}\t${license}`);
+  }
   process.stdout.write(rows.sort().join("\n") + "\n");
 });
 EOF
