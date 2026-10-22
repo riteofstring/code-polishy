@@ -116,8 +116,26 @@ try {
     }
     return $Identity -join ' '
   }
+  function Copy-TrivyNotices([string]$Binary, [string]$ModuleCache, [string]$Destination) {
+    $Lines = @(& $Go version -m $Binary)
+    if ($LASTEXITCODE -ne 0) { throw 'Trivy build information is unreadable.' }
+    foreach ($Line in $Lines) {
+      $Fields = @($Line.Trim() -split '\s+')
+      if ($Fields[0] -ceq '=>') { throw 'The built Trivy replaces a module, so its notices cannot be attributed.' }
+      if ($Fields[0] -cne 'dep' -and $Fields[0] -cne 'mod') { continue }
+      $Escaped = [regex]::Replace($Fields[1], '[A-Z]', { param($Match) '!' + $Match.Value.ToLowerInvariant() })
+      $Source = Join-Path $ModuleCache "$Escaped@$($Fields[2])"
+      $Target = Join-Path $Destination "$Escaped@$($Fields[2])"
+      New-Item -ItemType Directory -Force -Path $Target | Out-Null
+      $Notices = @(Get-ChildItem -LiteralPath $Source -File | Where-Object { $_.Name -match '^(?i)(licen[cs]e|copying|notice|patents)' })
+      if (@($Notices | Where-Object { $_.Name -match '^(?i)(licen[cs]e|copying)' }).Count -eq 0) {
+        throw "Trivy module $($Fields[1])@$($Fields[2]) carries no license file."
+      }
+      foreach ($Notice in $Notices) { Copy-Item -LiteralPath $Notice.FullName -Destination (Join-Path $Target $Notice.Name) }
+    }
+  }
   if ((Get-TrivyIdentity (Join-Path $TrivyRoot 'trivy')) -cne $TrivyExpected -or
-      -not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'LICENSE') -PathType Leaf)) {
+      -not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'licenses') -PathType Container)) {
     $TrivyScratch = Join-Path $Scratch 'trivy'
     $TrivyEnvironment = [ordered]@{
       GOENV = 'off'; GOPATH = (Join-Path $TrivyScratch 'gopath'); GOMODCACHE = (Join-Path $TrivyScratch 'gopath/pkg/mod')
@@ -143,7 +161,7 @@ try {
     $TrivyStage = Join-Path $TrivyScratch 'stage'
     New-Item -ItemType Directory -Path $TrivyStage | Out-Null
     Copy-Item -LiteralPath $BuiltTrivy -Destination (Join-Path $TrivyStage 'trivy')
-    Copy-Item -LiteralPath (Join-Path $TrivyScratch "gopath/pkg/mod/github.com/aquasecurity/trivy@v$TrivyVersion/LICENSE") -Destination (Join-Path $TrivyStage 'LICENSE')
+    Copy-TrivyNotices $BuiltTrivy (Join-Path $TrivyScratch 'gopath/pkg/mod') (Join-Path $TrivyStage 'licenses')
     Replace-Directory $TrivyStage $TrivyRoot
   }
 

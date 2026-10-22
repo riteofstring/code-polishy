@@ -72,6 +72,11 @@ type manifestToolsV7 struct {
 	Nextest string `json:"cargo-nextest"`
 }
 
+type manifestToolsV8 struct {
+	manifestToolsV7
+	Deadcode string `json:"deadcode"`
+}
+
 func ReadLauncherManifest(releaseDir string) (Manifest, bool, error) {
 	return readManifest(releaseDir, parseLauncherManifest)
 }
@@ -117,15 +122,25 @@ func parseLauncherManifest(data []byte, source string) (Manifest, error) {
 	return manifest, nil
 }
 
+func parseNativeManifestTools(data []byte, source string, version int) (Tools, error) {
+	wire := manifestToolsV8{}
+	var err error
+	if version >= 8 {
+		err = decodeExactly(data, source+" tools", &wire)
+	} else {
+		err = decodeExactly(data, source+" tools", &wire.manifestToolsV7)
+	}
+	if err != nil {
+		return Tools{}, err
+	}
+	result := wire.manifestToolsV4.tools()
+	result.Packaging, result.Rust, result.Nextest, result.Deadcode = wire.Packaging, wire.Rust, wire.Nextest, wire.Deadcode
+	return result, nil
+}
+
 func parseHistoricalManifestTools(data []byte, source string, version int) (Tools, error) {
 	if version >= 7 {
-		wire := manifestToolsV7{}
-		if err := decodeExactly(data, source+" tools", &wire); err != nil {
-			return Tools{}, err
-		}
-		result := wire.manifestToolsV4.tools()
-		result.Packaging, result.Rust, result.Nextest = wire.Packaging, wire.Rust, wire.Nextest
-		return result, nil
+		return parseNativeManifestTools(data, source, version)
 	}
 	if version >= 5 {
 		wire := manifestToolsV5{}

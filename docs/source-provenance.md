@@ -57,7 +57,8 @@ version before staging a release.
   fixed upstream metadata services; neither comes from a target environment.
 - Trivy is built from the official `github.com/aquasecurity/trivy` module at the
   pinned version and checksum in `tools/trivy_module_sum.txt`, with the pinned
-  Go toolchain, and carried with its license under `.tools/trivy`.
+  Go toolchain, and carried under `.tools/trivy` with the license and notice
+  files of every module linked into it.
   `artifact-security/scanner-policy.json` records its runtime configuration;
   the release manifest covers the carried binary, the repository-owned
   Dockerfile, the scanner's trust bundle

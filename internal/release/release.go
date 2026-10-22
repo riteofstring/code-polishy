@@ -27,7 +27,7 @@ const (
 	MaximumLockBytes = 32 << 10
 
 	LockVersion     = 2
-	ManifestVersion = 8
+	ManifestVersion = 9
 
 	releasesDirectory = "releases"
 )
@@ -111,6 +111,7 @@ type Tools struct {
 	Shellcheck  string `json:"shellcheck"`
 	Staticcheck string `json:"staticcheck"`
 	Deadcode    string `json:"deadcode,omitempty"`
+	Trivy       string `json:"trivy,omitempty"`
 	Ty          string `json:"ty"`
 	Vulture     string `json:"vulture"`
 }
@@ -320,6 +321,9 @@ func (manifest Manifest) Identity() string {
 	if manifest.ManifestVersion >= 8 {
 		fmt.Fprintf(identity, "tool.deadcode=%s\n", manifest.Tools.Deadcode)
 	}
+	if manifest.ManifestVersion >= 9 {
+		fmt.Fprintf(identity, "tool.trivy=%s\n", manifest.Tools.Trivy)
+	}
 	digest := sha256.Sum256([]byte(identity.String()))
 	return hex.EncodeToString(digest[:])
 }
@@ -486,6 +490,9 @@ func validateManifestToolPins(manifest Manifest, source string) error {
 	}
 	if manifest.ManifestVersion >= 8 {
 		pins = append(pins, struct{ tool, version string }{"deadcode", manifest.Tools.Deadcode})
+	}
+	if manifest.ManifestVersion >= 9 {
+		pins = append(pins, struct{ tool, version string }{"Trivy", manifest.Tools.Trivy})
 	}
 	for _, pin := range pins {
 		if !versionPattern.MatchString(pin.version) {

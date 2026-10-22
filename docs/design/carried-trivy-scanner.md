@@ -17,12 +17,23 @@ copy the official build's settings: `CGO_ENABLED=0`, `GOEXPERIMENT=jsonv2`, and
 `-trimpath`. The result is accepted only when its build information names
 `go1.26.10-X:jsonv2` and exactly that module version and sum. The pinned module
 content includes Trivy's `go.sum`, so the module graph is frozen. The
-installer keeps the binary and Trivy's Apache-2.0 `LICENSE` in
-`.tools/trivy/linux-<arch>` for the host architecture; Windows releases carry
-`linux-amd64`. Release installation refuses a carried binary whose module
-version differs from `tools/trivy-version.txt`, and the release manifest covers
-its bytes, so the runtime trusts the installed release rather than rechecking
-them.
+installer keeps the binary in `.tools/trivy/linux-<arch>` for the host
+architecture; Windows releases carry `linux-amd64`. Release installation
+refuses a carried binary whose module version differs from
+`tools/trivy-version.txt`, and the release manifest covers its bytes, so the
+runtime trusts the installed release rather than rechecking them.
+
+Distributing the binary distributes every module linked into it. For each
+module the binary's build information names, including Trivy itself, the
+installer copies the license, copying, notice, and patent files at that
+module's root in the checksum-verified module cache into
+`licenses/<escaped module path>@<version>/`. A module without a license or
+copying file, or a replaced module, fails the build. Release manifest version
+9 records Trivy's version as a tool. The release SBOM reads the carried
+binary's build information, lists Trivy with every linked module as its
+dependency, and records each module's notice paths. A release whose carried
+binary lacks build information or a module's license notice cannot produce an
+SBOM.
 
 The resulting graph has the same 375 dependency versions and checksums as the
 official binary in

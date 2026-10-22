@@ -29,7 +29,34 @@ trivy_identity() {
     awk 'NR == 1 { identity = $NF } $1 == "mod" { identity = identity " " $2 " " $3 " " $4 } END { print identity }'
 }
 
-if [[ -f "${trivy_dir}/trivy" && -f "${trivy_dir}/LICENSE" && "$(trivy_identity "${trivy_dir}/trivy")" == "${trivy_expected}" ]]; then
+trivy_notices() {
+  local binary="$1" module_cache="$2" destination="$3" module version escaped notice licensed
+  if "${repo_root}/scripts/go.sh" version -m "${binary}" | awk '$1 == "=>" { found = 1 } END { exit !found }'; then
+    echo "The built Trivy replaces a module, so its notices cannot be attributed." >&2
+    return 1
+  fi
+  while read -r module version; do
+    escaped="$(printf '%s\n' "${module}" | awk '{ out = ""; for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); out = out (c ~ /[A-Z]/ ? "!" tolower(c) : c) } print out }')"
+    mkdir -p "${destination}/${escaped}@${version}"
+    licensed=false
+    for notice in "${module_cache}/${escaped}@${version}"/*; do
+      [[ -f "${notice}" && ! -L "${notice}" ]] || continue
+      case "$(basename "${notice}")" in
+        [Ll][Ii][Cc][Ee][Nn][CcSs][Ee]* | [Cc][Oo][Pp][Yy][Ii][Nn][Gg]*) licensed=true ;;
+        [Nn][Oo][Tt][Ii][Cc][Ee]* | [Pp][Aa][Tt][Ee][Nn][Tt][Ss]*) ;;
+        *) continue ;;
+      esac
+      cp "${notice}" "${destination}/${escaped}@${version}/"
+      chmod 0644 "${destination}/${escaped}@${version}/$(basename "${notice}")"
+    done
+    if [[ "${licensed}" != true ]]; then
+      echo "Trivy module ${module}@${version} carries no license file." >&2
+      return 1
+    fi
+  done < <("${repo_root}/scripts/go.sh" version -m "${binary}" | awk '$1 == "dep" || $1 == "mod" { print $2, $3 }')
+}
+
+if [[ -f "${trivy_dir}/trivy" && -d "${trivy_dir}/licenses" && "$(trivy_identity "${trivy_dir}/trivy")" == "${trivy_expected}" ]]; then
   echo "Trivy ${trivy_version} for linux/${trivy_arch} is already built at ${trivy_dir}."
 else
   trivy_scratch="$(mktemp -d "${TMPDIR:-/tmp}/code-polishy-trivy.XXXXXX")"
@@ -50,9 +77,8 @@ else
   fi
   mkdir -p "${trivy_scratch}/stage"
   cp "${built}" "${trivy_scratch}/stage/trivy"
-  cp "${trivy_scratch}/gopath/pkg/mod/github.com/aquasecurity/trivy@v${trivy_version}/LICENSE" "${trivy_scratch}/stage/LICENSE"
   chmod 0755 "${trivy_scratch}/stage/trivy"
-  chmod 0644 "${trivy_scratch}/stage/LICENSE"
+  trivy_notices "${built}" "${trivy_scratch}/gopath/pkg/mod" "${trivy_scratch}/stage/licenses"
   mkdir -p "$(dirname "${trivy_dir}")"
   rm -rf "${trivy_dir}"
   mv "${trivy_scratch}/stage" "${trivy_dir}"

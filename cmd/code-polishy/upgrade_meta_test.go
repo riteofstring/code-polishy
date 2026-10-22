@@ -76,7 +76,7 @@ func historicalUpgradeCLIRelease(t *testing.T, root string) release.Lock {
 		t.Fatal(err)
 	}
 	manifest.ManifestVersion = 6
-	manifest.Tools.Rust, manifest.Tools.Nextest, manifest.Tools.Deadcode = "", "", ""
+	manifest.Tools.Rust, manifest.Tools.Nextest, manifest.Tools.Deadcode, manifest.Tools.Trivy = "", "", "", ""
 	manifest.ReleaseDigest = manifest.Identity()
 	data, err := json.Marshal(manifest)
 	if err != nil {

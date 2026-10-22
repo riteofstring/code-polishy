@@ -9,6 +9,9 @@
   version 3 and scanner reports are version 2, without the `sourceImage` field.
 - Give the scanner a release-owned trust bundle that omits the eMudhra roots
   Mozilla distrusted on 2026-10-20.
+- Record the carried Trivy in release manifest version 9 and in the release
+  SBOM with every Go module linked into it, and carry each module's license
+  and notice files.
 
 ## 0.30.0 - 2026-10-20
 

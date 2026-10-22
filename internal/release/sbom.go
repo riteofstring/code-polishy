@@ -59,6 +59,9 @@ func renderReleaseSBOM(manifest Manifest, releaseRoot, archiveName, archiveDiges
 	if err := inventory.addGo(releaseRoot, manifest, rootRef, toolRefs); err != nil {
 		return nil, err
 	}
+	if err := inventory.addTrivyNotices(releaseRoot, manifest); err != nil {
+		return nil, err
+	}
 	components, dependencies, err := inventory.finalize(rootRef)
 	if err != nil {
 		return nil, err
@@ -96,6 +99,9 @@ func releaseSBOMTools(manifest Manifest) map[string]cdx.Component {
 		"deadcode": manifest.Tools.Deadcode,
 		"ty":       manifest.Tools.Ty,
 		"rust":     manifest.Tools.Rust, "cargo-nextest": manifest.Tools.Nextest,
+	}
+	if manifest.Tools.Trivy != "" {
+		versions["trivy"] = manifest.Tools.Trivy
 	}
 	result := make(map[string]cdx.Component, len(versions))
 	for name, version := range versions {

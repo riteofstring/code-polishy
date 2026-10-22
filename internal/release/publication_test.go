@@ -293,6 +293,26 @@ func TestPublicationIndexRequiresEveryHostFromOneSource(t *testing.T) {
 	}
 }
 
+func moveForeignTrivyFixture(t *testing.T, root string, manifest *Manifest, host string) {
+	t.Helper()
+	before, err := trivyReleaseDirectory(manifest.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := trivyReleaseDirectory(host)
+	if err != nil || before == after {
+		return
+	}
+	if err := os.Rename(filepath.Join(root, filepath.FromSlash(before)), filepath.Join(root, filepath.FromSlash(after))); err != nil {
+		t.Fatal(err)
+	}
+	for index := range manifest.Entries {
+		if rest, found := strings.CutPrefix(manifest.Entries[index].Path, before+"/"); found {
+			manifest.Entries[index].Path = after + "/" + rest
+		}
+	}
+}
+
 func foreignRelease(t *testing.T, host string) (string, Manifest) {
 	t.Helper()
 	root, manifest := installedRelease(t, map[string]string{BinaryPath: "engine", LauncherBinaryPath: "launcher"}, nil)
@@ -333,6 +353,7 @@ func foreignRelease(t *testing.T, host string) (string, Manifest) {
 				manifest.Entries[index].Path = after + "/" + rest
 			}
 		}
+		moveForeignTrivyFixture(t, root, &manifest, host)
 	}
 	manifest.Host = host
 	slices.SortFunc(manifest.Entries, func(first, second Entry) int { return strings.Compare(first.Path, second.Path) })

@@ -51,6 +51,11 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 	files[".tools/python/fixture/lib/python3.12/site-packages/packaging-26.3.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: packaging\nVersion: 26.3\n\n"
 	files[".tools/python/fixture/lib/python3.12/site-packages/vulture-2.16.dist-info/METADATA"] = "Metadata-Version: 2.4\nName: vulture\nVersion: 2.16\nRequires-Dist: packaging>=25\n\n"
 	addRustReleaseInventoryFixture(t, files, host)
+	if trivy, err := trivyReleaseDirectory(host); err == nil {
+		if _, present := files[trivy+"/trivy"]; !present {
+			addTrivyReleaseFixture(t, files, host)
+		}
+	}
 	paths := append(slices.Collect(maps.Keys(files)), slices.Collect(maps.Keys(links))...)
 	slices.Sort(paths)
 	entries := []Entry{}
@@ -78,7 +83,7 @@ func installedRelease(t *testing.T, files, links map[string]string) (string, Man
 		Tools: Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
 			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Deadcode: "0.50.0",
-			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138",
+			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138", Trivy: "0.74.0",
 		},
 		ContentDigest: EntriesDigest(entries), EntryCount: len(entries), Entries: entries,
 		CapabilityCatalogSHA256: capabilityContentSHA256([]byte(files[CapabilityCatalogPath])),

@@ -407,7 +407,9 @@ EOF
   write_stub_tool "${source_root}/.tools/bin/deadcode"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
   write_stub_tool "${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/trivy"
-  printf 'fixture license\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/LICENSE"
+  mkdir -p "${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0"
+  printf 'fixture license\n' \
+    >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0/LICENSE"
   printf '0.72.0\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-version"
 
   "${real_git}" -C "${source_root}" init --quiet
@@ -542,7 +544,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
 for carried in go:1.26.9 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
   staticcheck:0.7.0 deadcode:0.50.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
-  ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138; do
+  ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138 trivy:0.72.0; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
 done
@@ -584,7 +586,8 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
   ".tools/rust/${platform_tag}/bin/rustc" ".tools/rust/${platform_tag}/bin/cargo-clippy" \
   .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest \
-  ".tools/trivy/linux-${go_platform_tag##*-}/trivy" ".tools/trivy/linux-${go_platform_tag##*-}/LICENSE"; do
+  ".tools/trivy/linux-${go_platform_tag##*-}/trivy" \
+  ".tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0/LICENSE"; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
