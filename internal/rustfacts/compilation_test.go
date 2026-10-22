@@ -51,32 +51,36 @@ func TestRustCompilationReportsOriginalTypeAndLintLocations(t *testing.T) {
 	}
 }
 
-func TestRustCompilationCollectsLintsDespiteSourceLevels(t *testing.T) {
+func TestRustCompilationRespectsCompilerGeneratedLintScopes(t *testing.T) {
 	t.Parallel()
-	for name, test := range map[string]struct{ source, subject string }{
-		"allow clippy":  {"#[allow(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
-		"expect clippy": {"#[expect(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
-		"deny clippy":   {"#[deny(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
-		"forbid clippy": {"#[forbid(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n", "clippy::needless_bool"},
-		"allow unused":  {"#[allow(dead_code)]\nfn unused() {}\npub fn answer() {}\n", "dead_code"},
-		"expect unused": {"#[expect(dead_code)]\nfn unused() {}\npub fn answer() {}\n", "dead_code"},
-		"allow warning": {"#[allow(unreachable_code)]\npub fn answer() { return; println!(\"unreachable\"); }\n", "unreachable_code"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			repo := compilationRepository(t, test.source)
+	repo := compilationRepository(t, "pub fn answer() -> u32 { 42 }\n")
+	write(t, repo.Root, "src/main.rs", `fn main() { show_answer(); }
+fn show_answer() { println!("{}", app::answer()); }
+#[test]
+fn pinned_future() {
+    let future = std::pin::pin!(async { app::answer() });
+    assert_eq!(std::mem::size_of_val(&future), std::mem::size_of::<usize>());
+}
+`)
+	plan, discovery := compilationDiscovery(t, repo, "src/main.rs")
+	if findings := Compile(t.Context(), repo, plan, discovery, runner.OSRunner{}); len(findings) != 0 {
+		t.Fatalf("compiler-generated test entry and standard macro produced false lints: %+v", findings)
+	}
+}
+
+func TestRustCompilationPreservesDeniedSourceLintsAsFailures(t *testing.T) {
+	t.Parallel()
+	for _, level := range []string{"deny", "forbid"} {
+		t.Run(level, func(t *testing.T) {
+			repo := compilationRepository(t, "#["+level+"(clippy::needless_bool)]\npub fn answer(value: bool) -> bool { if value { true } else { false } }\n")
 			plan, discovery := compilationDiscovery(t, repo, "src/lib.rs")
-			result, output, err := runner.RunCaptured(t.Context(), runner.OSRunner{}, repo.Root, plan.Commands[0], runner.CaptureStructured)
-			if err != nil || result.ExitStatus != 0 {
-				t.Fatalf("lint collection failed compilation: %+v, %v; %s", result, err, output.Stderr)
-			}
-			report, err := ParseCompilation(repo, "Cargo.toml", discovery.Workspaces[0], output.Stdout)
-			if err != nil || !report.Success {
-				t.Fatalf("lint report lacks successful compilation evidence: %+v, %v", report, err)
-			}
-			if !slices.ContainsFunc(report.Findings, func(finding policy.Finding) bool {
-				return finding.Subject == test.subject && finding.Path == "src/lib.rs" && finding.Line > 0
+			findings := Compile(t.Context(), repo, plan, discovery, runner.OSRunner{})
+			if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+				return finding.Subject == "clippy::needless_bool" && finding.Path == "src/lib.rs" && finding.Line > 0
+			}) || !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+				return finding.Subject == "compilation"
 			}) {
-				t.Fatalf("source levels hid the governed lint: %+v", report.Findings)
+				t.Fatalf("source error was lowered or lost: %+v", findings)
 			}
 		})
 	}

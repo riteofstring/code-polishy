@@ -290,11 +290,26 @@ invitation for the check to resolve dependencies.
 
 Checks select the manifest's ordinary Cargo packages, default features and all
 enabled targets, using the governed native host explicitly. They do not enable
-every feature or establish coverage of other target configurations. Compiler
-warnings, Clippy's default lint group and unused-code lints use `--force-warn` at
-the invocation boundary. Source `allow`, `expect`, `deny` and `forbid` attributes
-cannot hide these diagnostics or turn policy lint collection into a compiler
-failure. Code Polishy treats the resulting typed findings as blocking errors,
+every feature or establish coverage of other target configurations.
+
+Compiler selection maps explicitly governed replacement packages to their consumers,
+using the same ownership boundary as locked resolution. Discovery retains the
+replacement's own metadata for source analysis and also discovers its consumer.
+Selecting only replacement source still checks the consumer; selecting both
+does not compile it twice. Replacement development targets and their independent
+locks are not part of the consumer build. Source analysis remains selected for
+the replacement, while compiler evidence covers only dependencies active in the
+consumer's default feature and host configuration.
+
+Compiler warnings, Clippy's default lint group and unused-code lints use `--warn` at
+the invocation boundary. This retains the compiler-generated test-entry and
+standard-library macro lint scopes. Forcing those scopes reports valid binary
+entry points as unused in test builds and deliberate standard-library expansion
+control flow as unreachable user code. Written `allow` and `expect` attributes
+remain blocking findings under the independent parsed source policy, including
+conditional forms. Written `deny` and `forbid` retain compiler failure semantics;
+collection does not lower source errors to warnings. Code Polishy treats the
+resulting typed findings as blocking errors,
 subject to its existing exact exception policy. Failed compilation always adds
 a project failure, even when the compiler also reports typed source diagnostics;
 an excepted lint cannot make a failed build or operational invocation pass.
@@ -307,7 +322,7 @@ The advertised `tail-call-track-caller` warning requires unstable explicit tail
 calls in this release and is not selectable on the supported stable toolchain.
 Its exclusion is verified against the real compiler, not silently ignored at
 runtime.
-Native dead-code coverage uses rustc's forced unused-item/import/macro diagnostics
+Native dead-code coverage uses rustc's unused-item/import/macro diagnostics
 for the selected Cargo configuration. Public library APIs remain legitimate
 entry points; a private item used only by a disabled feature is unused in the
 checked configuration. This is compiler reachability, not a claim that every

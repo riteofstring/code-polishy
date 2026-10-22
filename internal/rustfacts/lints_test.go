@@ -15,11 +15,11 @@ func TestRustLintCollectionCoversCompilerWarningsWithoutLoweringErrors(t *testin
 	if err != nil {
 		t.Fatalf("compiler lint interface: %v; %s", err, output.Stderr)
 	}
-	forced := map[string]bool{}
+	requested := map[string]bool{}
 	arguments := compilationCommand(repo, "Cargo.toml").Argv
 	for index, argument := range arguments[:len(arguments)-1] {
-		if argument == "--force-warn" {
-			forced[arguments[index+1]] = true
+		if argument == "--warn" {
+			requested[arguments[index+1]] = true
 		}
 	}
 	warnings, errors := 0, 0
@@ -33,7 +33,7 @@ func TestRustLintCollectionCoversCompilerWarningsWithoutLoweringErrors(t *testin
 		} else {
 			errors++
 		}
-		if forced[fields[0]] != (fields[1] == "warn") {
+		if requested[fields[0]] != (fields[1] == "warn") {
 			t.Errorf("policy lint collection changes the compiler's %s contract for %s", fields[1], fields[0])
 		}
 	}

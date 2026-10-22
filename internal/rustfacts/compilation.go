@@ -26,7 +26,9 @@ func PlanCompilation(repo repository.Repository, discovery DiscoveryPlan, allFil
 	if len(discovery.Commands) == 0 {
 		return plan
 	}
-	for _, manifest := range discovery.Manifests {
+	manifests, _, findings := cargoResolutionRoots(repo, discovery.Manifests)
+	plan.Findings = append(plan.Findings, findings...)
+	for _, manifest := range manifests {
 		files := compilationSources(repo, manifest, allFiles)
 		native, err := repo.NativeUnit(files, "lint", "typecheck", "dead-code")
 		if err != nil {
@@ -58,9 +60,9 @@ func compilationSources(repo repository.Repository, manifest string, allFiles []
 }
 
 func compilationCommand(repo repository.Repository, manifest string) policy.Command {
-	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--force-warn", "clippy::all", "--force-warn", "unused")
+	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--warn", "clippy::all", "--warn", "unused")
 	for _, lint := range strings.Fields(compilerWarningLints) {
-		command.Argv = append(command.Argv, "--force-warn", lint)
+		command.Argv = append(command.Argv, "--warn", lint)
 	}
 	command.Environment = append(command.Environment, "PATH", "LIB", "INCLUDE", "LIBPATH", "SDKROOT", "DEVELOPER_DIR")
 	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"), "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
