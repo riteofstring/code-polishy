@@ -6,11 +6,13 @@ OpenVEX, SBOM, report, or hardening scripts.
 
 ## Execution contract
 
-The policy release pins an official Trivy image by digest and verifies that
-digest, the expected Trivy version, the minimal scanner Dockerfile hash, and the
-scanner runtime's OpenVEX hash before use. It copies only the Trivy binary from
-that image into a non-root scratch image, with a release-owned CA bundle that
-omits roots distrusted after the source image was built.
+Each policy release carries Trivy built from its exact official Go module with
+the release's pinned Go toolchain, for the host architecture's Linux platform.
+The release manifest covers that binary, the minimal scanner Dockerfile, the
+scanner's OpenVEX, and a release-owned CA bundle that omits distrusted roots.
+The runtime copies only the binary and bundle into a non-root scratch image and
+pulls no scanner image. A Docker server whose platform the release does not
+carry fails before the scanner is built.
 
 The scanner image disables Go's HTTP/2 client. Its database download uses
 HTTPS over HTTP/1.1; target scanning remains offline. The release-owned

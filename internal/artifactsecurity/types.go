@@ -41,7 +41,6 @@ type Result struct {
 type scannerPolicy struct {
 	Version                 int      `json:"version"`
 	TrivyVersion            string   `json:"trivyVersion"`
-	SourceImage             string   `json:"sourceImage"`
 	DatabaseRepository      string   `json:"databaseRepository"`
 	DatabaseSchemaVersion   int      `json:"databaseSchemaVersion"`
 	DatabaseMaximumAgeHours int      `json:"databaseMaximumAgeHours"`
@@ -77,7 +76,6 @@ type artifactReport struct {
 	Reference        string              `json:"reference"`
 	ImageID          string              `json:"imageId"`
 	ScannerVersion   string              `json:"scannerVersion"`
-	SourceImage      string              `json:"sourceImage"`
 	DatabaseSHA256   string              `json:"databaseSha256"`
 	ArchiveSHA256    string              `json:"archiveSha256"`
 	SBOMSHA256       string              `json:"sbomSha256"`
@@ -144,18 +142,11 @@ func (configured scannerPolicy) validateFields(evidence scannerPolicyEvidence) e
 }
 
 func (configured scannerPolicy) validateProvenanceFields(evidence scannerPolicyEvidence) error {
-	if configured.Version != 2 {
-		return errors.New("artifact scanner policy version must be 2")
+	if configured.Version != 3 {
+		return errors.New("artifact scanner policy version must be 3")
 	}
 	if evidence.versionText != configured.TrivyVersion {
 		return errors.New("artifact scanner policy and version pin do not agree")
-	}
-	const imagePrefix = "docker.io/aquasec/trivy@sha256:"
-	if !strings.HasPrefix(configured.SourceImage, imagePrefix) {
-		return errors.New("artifact scanner source image must use the exact official Trivy digest")
-	}
-	if !exactDigest.MatchString(strings.TrimPrefix(configured.SourceImage, imagePrefix)) {
-		return errors.New("artifact scanner source image digest must contain 64 lowercase hexadecimal characters")
 	}
 	if configured.DatabaseRepository != fmt.Sprintf("ghcr.io/aquasecurity/trivy-db:%d", configured.DatabaseSchemaVersion) {
 		return errors.New("artifact scanner database policy is invalid")

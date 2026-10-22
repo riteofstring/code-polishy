@@ -102,6 +102,51 @@ try {
     & $Go install "golang.org/x/vuln/cmd/govulncheck@$(Read-Pin 'tools/govulncheck-version.txt')"
   } finally { $env:GOBIN = $SavedGoBin }
 
+  $TrivyVersion = Read-Pin 'tools/trivy-version.txt'
+  $TrivyExpected = "go$GoVersion-X:jsonv2 github.com/aquasecurity/trivy v$TrivyVersion $(Read-Pin 'tools/trivy_module_sum.txt')"
+  $TrivyRoot = Join-Path $PolicyRoot '.tools/trivy/linux-amd64'
+  function Get-TrivyIdentity([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+    $Lines = @(& $Go version -m $Path 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $Lines.Count -eq 0) { return '' }
+    $Identity = @(($Lines[0].Trim() -split '\s+')[-1])
+    foreach ($Line in $Lines) {
+      $Fields = @($Line.Trim() -split '\s+')
+      if ($Fields[0] -ceq 'mod') { $Identity += $Fields[1..3] }
+    }
+    return $Identity -join ' '
+  }
+  if ((Get-TrivyIdentity (Join-Path $TrivyRoot 'trivy')) -cne $TrivyExpected -or
+      -not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'LICENSE') -PathType Leaf)) {
+    $TrivyScratch = Join-Path $Scratch 'trivy'
+    $TrivyEnvironment = [ordered]@{
+      GOENV = 'off'; GOPATH = (Join-Path $TrivyScratch 'gopath'); GOMODCACHE = (Join-Path $TrivyScratch 'gopath/pkg/mod')
+      GOCACHE = (Join-Path $TrivyScratch 'gocache'); GOPROXY = 'https://proxy.golang.org'; GOSUMDB = 'sum.golang.org'
+      GOFLAGS = '-modcacherw'; GOOS = 'linux'; GOARCH = 'amd64'; CGO_ENABLED = '0'; GOEXPERIMENT = 'jsonv2'
+      GONOSUMDB = $null; GONOSUMCHECK = $null; GOPRIVATE = $null; GONOPROXY = $null; GOINSECURE = $null; GOWORK = $null; GOBIN = $null
+    }
+    $SavedTrivyEnvironment = @{}
+    foreach ($Name in $TrivyEnvironment.Keys) {
+      $SavedTrivyEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
+      [Environment]::SetEnvironmentVariable($Name, $TrivyEnvironment[$Name])
+    }
+    try {
+      & $Go install -trimpath "-ldflags=-s -w -extldflags '-static' -X github.com/aquasecurity/trivy/pkg/version/app.ver=$TrivyVersion" "github.com/aquasecurity/trivy/cmd/trivy@v$TrivyVersion"
+      if ($LASTEXITCODE -ne 0) { throw 'Trivy source build failed.' }
+    } finally {
+      foreach ($Name in $SavedTrivyEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($Name, $SavedTrivyEnvironment[$Name])
+      }
+    }
+    $BuiltTrivy = Join-Path $TrivyScratch 'gopath/bin/linux_amd64/trivy'
+    if ((Get-TrivyIdentity $BuiltTrivy) -cne $TrivyExpected) { throw "The built Trivy does not match $TrivyExpected." }
+    $TrivyStage = Join-Path $TrivyScratch 'stage'
+    New-Item -ItemType Directory -Path $TrivyStage | Out-Null
+    Copy-Item -LiteralPath $BuiltTrivy -Destination (Join-Path $TrivyStage 'trivy')
+    Copy-Item -LiteralPath (Join-Path $TrivyScratch "gopath/pkg/mod/github.com/aquasecurity/trivy@v$TrivyVersion/LICENSE") -Destination (Join-Path $TrivyStage 'LICENSE')
+    Replace-Directory $TrivyStage $TrivyRoot
+  }
+
   $NodeVersion = Read-Pin 'tools/node-version.txt'
   $NodeAsset = "node-v$NodeVersion-win-x64.zip"
   $NodeArchive = Get-Verified $NodeAsset "https://nodejs.org/dist/v$NodeVersion/$NodeAsset"
@@ -502,6 +547,7 @@ with zipfile.ZipFile(wheel) as archive:
   & (Join-Path $Bin 'staticcheck.exe') -version
   & $Go version -m (Join-Path $Bin 'deadcode.exe')
   & (Join-Path $Bin 'govulncheck.exe') -version
+  Write-Host "trivy $(Get-TrivyIdentity (Join-Path $TrivyRoot 'trivy'))"
   & (Join-Path $Bin 'osv-scanner.exe') --version
   & (Join-Path $Bin 'ruff.exe') --version
   & (Join-Path $Bin 'ty.exe') --version

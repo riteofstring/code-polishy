@@ -128,7 +128,7 @@ try {
     'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
     '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64',
-    '.tools/rust/windows-x64'
+    '.tools/rust/windows-x64','.tools/trivy/linux-amd64'
   )) { Copy-ReleasePath $Relative }
   Assert-ReleasePythonCarrier $Stage
 

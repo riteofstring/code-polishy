@@ -17,8 +17,6 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 	commands := []policy.Command{
 		plannedDockerCommand("preflight"),
 		plannedDockerCommand("platform"),
-		plannedDockerCommand("pull-source"),
-		plannedDockerCommand("verify-source"),
 		plannedDockerCommand("build-scanner"),
 	}
 	commands = appendScannerCommands(commands, "scanner-version")

@@ -64,6 +64,10 @@
         "module": "artifactsecurity"
       },
       {
+        "path": "docs/design/carried-trivy-scanner.md",
+        "sourcePaths": ["tools/install-go-tools.sh"]
+      },
+      {
         "path": "docs/design/optional-rust-tools.md",
         "sourcePaths": [
           "internal/release/rust_bundle.go",

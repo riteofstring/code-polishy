@@ -332,6 +332,7 @@ policy_tools=(
   ".tools/bin/osv-scanner"
   ".tools/bin/ruff"
   ".tools/bin/ty"
+  ".tools/trivy/linux-${go_arch_tag}"
 )
 
 carried_tools=(
@@ -353,6 +354,7 @@ carried_tools=(
   "rustdoc:tools/rust-version.txt"
   "cargo:tools/rust-version.txt"
   "cargo-nextest:tools/cargo-nextest-version.txt"
+  "trivy:tools/trivy-version.txt"
 )
 
 carried_markers=(
@@ -405,6 +407,11 @@ probed_version() {
       javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
         "${policy_root}/.tools/bin/$1" |
         awk '$1 == "mod" { sub(/^v/, "", $3); print $3; exit }'
+      ;;
+    trivy)
+      javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
+        "${policy_root}/.tools/trivy/linux-${go_arch_tag}/trivy" |
+        awk '$1 == "mod" && $2 == "github.com/aquasecurity/trivy" { sub(/^v/, "", $3); print $3; exit }'
       ;;
     osv-scanner)
       javascript_sealed_run "${policy_root}/.tools/bin/osv-scanner" --version |

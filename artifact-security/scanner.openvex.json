@@ -1,9 +1,9 @@
 {
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/riteofstring/code-polishy/blob/main/artifact-security/scanner.openvex.json",
-  "author": "Codex",
-  "timestamp": "2026-10-17T19:40:46Z",
-  "version": 2,
+  "author": "Claude Opus 5.5",
+  "timestamp": "2026-10-22T02:31:29Z",
+  "version": 3,
   "statements": [
     {
       "vulnerability": {
@@ -56,45 +56,6 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "The vulnerable operation is xDS server routing of an HTTP/2 request without authority or Host. Code Polishy invokes only version, database download, and standalone offline image-archive scans; it never starts a gRPC or xDS server."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-78667"
-      },
-      "products": [
-        {
-          "@id": "pkg:golang/stdlib@v1.26.6"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The affected net/http file-serving handlers parse attacker-controlled Range request headers. The scanner starts no HTTP server and uses no file-serving transport; its only networked operation is an outgoing HTTPS database download."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-78669"
-      },
-      "products": [
-        {
-          "@id": "pkg:golang/stdlib@v1.26.6"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "inline_mitigations_already_exist",
-      "impact_statement": "The minimal scanner image sets GODEBUG=http2client=0. Trivy clones the standard net/http transport for database downloads, so Go does not negotiate HTTP/2 or process HTTP/2 SETTINGS frames. Archive scans run with --network none and no server mode is enabled."
-    },
-    {
-      "vulnerability": {
-        "name": "CVE-2026-97031"
-      },
-      "products": [
-        {
-          "@id": "pkg:golang/stdlib@v1.26.6"
-        }
-      ],
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The affected crypto/tls decodeInnerClientHello operation processes ECH ClientHello extensions on a TLS server. Code Polishy never starts a TLS server in the scanner: database download is an HTTPS client, and archive scans run without network access."
     }
   ]
 }

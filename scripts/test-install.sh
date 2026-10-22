@@ -351,6 +351,7 @@ if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
     staticcheck) printf '\tmod\thonnef.co/go/tools\tv0.7.0\th1:disposable\n' ;;
     deadcode) printf '\tmod\tgolang.org/x/tools\tv0.50.0\th1:disposable\n' ;;
     govulncheck) printf '\tmod\tgolang.org/x/vuln\tv1.3.0\th1:disposable\n' ;;
+    trivy) printf '\tmod\tgithub.com/aquasecurity/trivy\tv%s\th1:disposable\n' "\$(cat "\${3%/*}/fixture-version")" ;;
     *)
       echo "unexpected stub go module probe: \$*" >&2
       exit 1
@@ -405,6 +406,9 @@ EOF
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
   write_stub_tool "${source_root}/.tools/bin/deadcode"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
+  write_stub_tool "${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/trivy"
+  printf 'fixture license\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/LICENSE"
+  printf '0.72.0\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-version"
 
   "${real_git}" -C "${source_root}" init --quiet
   "${real_git}" -C "${source_root}" config user.email "install-test@example.invalid"
@@ -579,7 +583,8 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
   ".tools/rust/${platform_tag}/bin/rustc" ".tools/rust/${platform_tag}/bin/cargo-clippy" \
-  .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest; do
+  .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest \
+  ".tools/trivy/linux-${go_platform_tag##*-}/trivy" ".tools/trivy/linux-${go_platform_tag##*-}/LICENSE"; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
@@ -711,6 +716,17 @@ grep -q ".tools/bin/osv-scanner" "${fixture_root}/missing-tool.log" ||
 mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout missing a pinned tool changed what is installed"
+
+carried_trivy="${source_root}/.tools/trivy/linux-${go_platform_tag##*-}"
+printf '0.72.1\n' >"${carried_trivy}/fixture-version"
+if install_release >"${fixture_root}/trivy-version.log" 2>&1; then
+  fail "a checkout carrying the wrong Trivy installed a release"
+fi
+grep -q "trivy.*0.72.1" "${fixture_root}/trivy-version.log" ||
+  fail "the wrong carried Trivy was refused without naming it"
+printf '0.72.0\n' >"${carried_trivy}/fixture-version"
+[[ "$(installed_release_count)" == "1" ]] ||
+  fail "a checkout carrying the wrong Trivy changed what is installed"
 
 for rust_tool in rustc rustdoc cargo; do
   write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.2 (fixture)"

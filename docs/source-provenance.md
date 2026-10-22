@@ -55,9 +55,11 @@ version before staging a release.
   the carried runtime. Their exact pins and checksum inventories ship with the
   release, while the online supply-chain gate resolves their release age from
   fixed upstream metadata services; neither comes from a target environment.
-- Trivy is copied from an exact official image digest into the minimal scanner
-  image. `artifact-security/scanner-policy.json` records that external source
-  and its runtime configuration; the release manifest covers the repository-owned
+- Trivy is built from the official `github.com/aquasecurity/trivy` module at the
+  pinned version and checksum in `tools/trivy_module_sum.txt`, with the pinned
+  Go toolchain, and carried with its license under `.tools/trivy`.
+  `artifact-security/scanner-policy.json` records its runtime configuration;
+  the release manifest covers the carried binary, the repository-owned
   Dockerfile, the scanner's trust bundle
   `artifact-security/scanner-ca-certificates.crt`, and
   `artifact-security/scanner.openvex.json`, which records reviewed

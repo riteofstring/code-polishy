@@ -207,9 +207,8 @@ func buildScanOutput(
 	}
 	return scanOutput{
 		report: artifactReport{
-			Version: 1, Target: target.Name, Mode: artifact.mode, Reference: artifact.reference, ImageID: artifact.imageID,
-			ScannerVersion: state.policy.TrivyVersion,
-			SourceImage:    state.policy.SourceImage, DatabaseSHA256: database.SHA256,
+			Version: 2, Target: target.Name, Mode: artifact.mode, Reference: artifact.reference, ImageID: artifact.imageID,
+			ScannerVersion: state.policy.TrivyVersion, DatabaseSHA256: database.SHA256,
 			ArchiveSHA256: archiveHash, SBOMSHA256: bytesSHA256(sbom),
 			StartedAt: started, CompletedAt: time.Now().UTC(), Findings: blocking, AcceptedFindings: accepted,
 		},

@@ -1,7 +1,8 @@
 # Dependency vulnerability assessments
 
 Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
-reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
+reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21; carried Trivy
+build reviewed on 2026-10-22.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -95,6 +96,21 @@ Remove this admission when the exact release reaches 30 days or leaves the
 pins. Reassess immediately if upstream provenance changes or a regression or
 compromise is reported. Do not extend it to another toolchain version or weaken
 vulnerability scanning.
+
+## Carried Trivy scanner
+
+The artifact scanner is now built from the aged official Trivy 0.74.0 module
+with the Go 1.26.10 admitted above, instead of copying Trivy's Go 1.26.6
+binary. The scanner's database download used that binary's vulnerable
+certificate verifier; its trust and the cost of waiting are assessed in
+[Trivy Scanner Assessments](../design/trivy-scanner-assessments.md). This
+admits no new dependency version. The build resolved the 375 module versions
+and checksums that Trivy's checksummed `go.sum` already fixed and the official
+binary already contained. The module proxy dates all of them on or before
+2026-08-13, beyond the 30-day minimum. The `tools/trivy-version.txt` release-age
+artifact and `tools/trivy_module_sum.txt` pin the same release. The Go toolchain
+admission's expiry and removal conditions apply unchanged. Assessed by Claude Opus
+5.5.
 
 ## Brace expansion
 

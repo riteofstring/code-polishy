@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Build the artifact scanner from the official Trivy 0.74.0 Go module with the
+  pinned Go 1.26.10 and carry it in each release, so the scanner's database
+  download rejects compromised certificate intermediates covered by
+  GO-2026-6809. The runtime no longer pulls the Trivy image. Scanner policy is
+  version 3 and scanner reports are version 2, without the `sourceImage` field.
+- Give the scanner a release-owned trust bundle that omits the eMudhra roots
+  Mozilla distrusted on 2026-10-20.
+
 ## 0.30.0 - 2026-10-20
 
 - Build and ship Go 1.26.10 to reject compromised certificate intermediates

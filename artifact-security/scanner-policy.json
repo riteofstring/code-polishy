@@ -1,7 +1,6 @@
 {
-  "version": 2,
+  "version": 3,
   "trivyVersion": "0.74.0",
-  "sourceImage": "docker.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969",
   "databaseRepository": "ghcr.io/aquasecurity/trivy-db:2",
   "databaseSchemaVersion": 2,
   "databaseMaximumAgeHours": 24,
