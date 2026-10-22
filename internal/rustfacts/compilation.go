@@ -60,14 +60,21 @@ func compilationSources(repo repository.Repository, manifest string, allFiles []
 }
 
 func compilationCommand(repo repository.Repository, manifest string) policy.Command {
-	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--warn", "clippy::all", "--warn", "unused")
-	for _, lint := range strings.Fields(compilerWarningLints) {
-		command.Argv = append(command.Argv, "--warn", lint)
-	}
+	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo", "check", "--frozen", "--all-targets", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest)
 	command.Environment = append(command.Environment, "PATH", "LIB", "INCLUDE", "LIBPATH", "SDKROOT", "DEVELOPER_DIR")
-	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"), "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
+	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "RUSTC_WRAPPER="+repo.RustTool("clippy-driver"), "CLIPPY_ARGS="+strings.Join(compilationLintArguments(), clippyArgumentSeparator)+clippyArgumentSeparator, "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
 	return command
 }
+
+func compilationLintArguments() []string {
+	arguments := []string{"--force-warn", "clippy::all", "--force-warn", "unused"}
+	for _, lint := range strings.Fields(compilerWarningLints) {
+		arguments = append(arguments, "--force-warn", lint)
+	}
+	return arguments
+}
+
+const clippyArgumentSeparator = "__CLIPPY_HACKERY__"
 
 func HostTarget() string {
 	architecture := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[runtime.GOARCH]

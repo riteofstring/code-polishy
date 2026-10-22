@@ -281,8 +281,15 @@ handwritten lock or disabled source check cannot replace that boundary.
 
 ## Compiler checks
 
-Compilation uses the matching pinned cargo-clippy executable directly, with an
-absolute Cargo path. This bypasses Cargo's ambient external-subcommand lookup.
+Compilation runs the pinned Cargo's `check` with the matching pinned
+clippy-driver as `RUSTC_WRAPPER` and the policy lint arguments in
+`CLIPPY_ARGS`, the driver interface cargo-clippy itself uses. Cargo-clippy is
+not used: it installs the driver only as the workspace wrapper, so path
+replacements outside the workspace would compile with plain rustc and escape
+Clippy. The wrapper reaches every unit. Cargo still caps lints for registry and
+Git packages, and the driver disables Clippy for those capped units, so
+non-local code stays silent. The pinned driver is selected explicitly; there is
+no ambient external-subcommand lookup.
 The common runner captures Cargo's JSON events with bounded output and process
 tree cancellation. Cargo must retain its reviewed lock and available dependency
 cache through `--frozen`; a missing lock is a preparation failure, never an
@@ -299,20 +306,25 @@ Selecting only replacement source still checks the consumer; selecting both
 does not compile it twice. Replacement development targets and their independent
 locks are not part of the consumer build. Source analysis remains selected for
 the replacement, while compiler evidence covers only dependencies active in the
-consumer's default feature and host configuration.
+consumer's default feature and host configuration. Within that configuration,
+replacement libraries receive the same Clippy, compiler
+warning and unused-code collection as the consumer.
 
-Compiler warnings, Clippy's default lint group and unused-code lints use `--warn` at
-the invocation boundary. This retains the compiler-generated test-entry and
-standard-library macro lint scopes. Forcing those scopes reports valid binary
-entry points as unused in test builds and deliberate standard-library expansion
-control flow as unreachable user code. Written `allow` and `expect` attributes
-remain blocking findings under the independent parsed source policy, including
-conditional forms. Written `deny` and `forbid` retain compiler failure semantics;
-collection does not lower source errors to warnings. Code Polishy treats the
-resulting typed findings as blocking errors,
-subject to its existing exact exception policy. Failed compilation always adds
-a project failure, even when the compiler also reports typed source diagnostics;
-an excepted lint cannot make a failed build or operational invocation pass.
+Compiler warnings, Clippy's default lint group and unused-code lints use
+`--force-warn` at the invocation boundary. Source `allow`, `expect`, `deny` and
+`forbid` attributes, including attributes emitted by macro expansion, cannot
+hide these diagnostics or turn policy lint collection into a compiler failure.
+Forcing also overrides lint scopes the compiler generates itself. The generated
+test harness reports a binary's `main` and its callees as unused, and some
+standard-library macro expansions, such as `std::pin::pin!` of an `async`
+block, report unreachable code at the call site. These diagnostics are false
+and remain unresolved; no exception or source-parser rule hides them. A
+complete proof that macro-expanded suppression is otherwise ineffective is also
+unavailable, so native admission stays blocked on both. Code Polishy treats
+the resulting typed findings as blocking errors, subject to its existing exact
+exception policy. Failed compilation always adds a project failure, even when
+the compiler also reports typed source diagnostics; an excepted lint cannot make a failed build or
+operational invocation pass.
 Rust does not support forcing the aggregate `warnings` group. The release owns
 the concrete warning-by-default lint inventory for its pinned compiler, checked
 against that compiler's advertised lint interface during toolchain tests. Rust
@@ -322,7 +334,7 @@ The advertised `tail-call-track-caller` warning requires unstable explicit tail
 calls in this release and is not selectable on the supported stable toolchain.
 Its exclusion is verified against the real compiler, not silently ignored at
 runtime.
-Native dead-code coverage uses rustc's unused-item/import/macro diagnostics
+Native dead-code coverage uses rustc's forced unused-item/import/macro diagnostics
 for the selected Cargo configuration. Public library APIs remain legitimate
 entry points; a private item used only by a disabled feature is unused in the
 checked configuration. This is compiler reachability, not a claim that every
