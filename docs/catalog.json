@@ -82,6 +82,14 @@
       "public": true
     },
     {
+      "id": "carried-trivy-scanner",
+      "path": "docs/design/carried-trivy-scanner.md",
+      "title": "Carried Trivy Scanner",
+      "summary": "Build and admit the pinned scanner with its exact identity, complete module notices, and release SBOM.",
+      "aliases": ["trivy-build"],
+      "public": true
+    },
+    {
       "id": "behavior-review",
       "path": "docs/policies/behavior-review.md",
       "title": "Behavior and Final-State Review",
