@@ -52,7 +52,7 @@ func writeRepositoryCleanupResult(output io.Writer, result engine.RepositoryClea
 		fmt.Fprintf(output, "%s %s (%s)\n", removal, entry.Path, engine.FormatSizeBytes(entry.Bytes))
 	}
 	if options.Reports && len(result.Removed) > 0 {
-		fmt.Fprintln(output, "NOTE removing reports discards cached gate results and test receipts; verification will rerun as needed.")
+		fmt.Fprintln(output, "NOTE removing reports discards cached gate results, test receipts, and security evidence; verification will rerun as needed.")
 	}
 	if !complete {
 		return

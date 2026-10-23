@@ -16,6 +16,7 @@
   without repeating successful source checks or tests, retain failed refreshes,
   and report scan freshness separately from historical verification. Complete
   deferred providers and actual image scans independently of package reuse.
+  Reclaim security scan and refresh evidence with `cleanup --reports`.
 
 ## 0.31.1 - 2026-10-22
 

@@ -42,6 +42,11 @@ previous last-success time without extending its deadline, and retry on the next
 call. Uncached attempts retain separate artifacts rather than looking up history.
 Known exploitation and release-age decisions remain their existing online work.
 
+`cleanup --reports` reclaims both the security scan and security refresh trees,
+including individual uncached attempts. They use the existing owned-cache cleanup
+rules, dry-run accounting, and protection for linked or special entries. Deleting
+these regenerable records makes subsequent verification collect fresh evidence.
+
 The gate runner retains its planned command order and bounded logs when a raw
 scan is replayed. The report explicitly identifies reused scans and their
 original success times. A cached package scan cannot satisfy a repository
