@@ -14,9 +14,9 @@ CA bundle into a non-root scratch image.
 The scanner image disables Go's HTTP/2 client. Its database download uses
 HTTPS over HTTP/1.1; target scanning remains offline. The release-owned
 [scanner assessments](design/trivy-scanner-assessments.md) document the exact
-remaining findings and their applicability. Linux release builds exercise the
-installed scanner against a minimal scratch image with a fresh database before
-publication.
+remaining findings and their applicability. Ordinary Ubuntu CI and Linux release
+builds use the same verification script to exercise the installed scanner against
+a minimal scratch image with a fresh database before tagging and publication.
 
 Each run:
 

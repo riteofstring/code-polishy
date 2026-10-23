@@ -92,8 +92,8 @@ func validateOpenVEXDocument(document openVEXDocument, now time.Time) error {
 	if err != nil || identifier.Scheme != "https" || identifier.Host == "" {
 		return errors.New("OpenVEX @id must be an absolute HTTPS identity")
 	}
-	if len(document.Statements) == 0 || len(document.Statements) > 256 {
-		return errors.New("OpenVEX document must contain 1-256 bounded statements")
+	if document.Statements == nil || len(document.Statements) > 256 {
+		return errors.New("OpenVEX document must contain an explicit array of at most 256 statements")
 	}
 	return nil
 }

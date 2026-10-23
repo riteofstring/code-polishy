@@ -149,6 +149,9 @@ func (state *scannerRuntime) applyArtifactOpenVEX(
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(document) == 0 {
+		return observed, nil, nil
+	}
 	vexMounts := append(append([]scannerMount{}, mounts...), scannerMount{
 		source: artifact.openVEX, target: "/policy/assessment.openvex.json", readOnly: true,
 	})

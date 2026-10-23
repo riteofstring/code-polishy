@@ -152,13 +152,19 @@ state in a temporary directory. The same scenario runs on all five native hosts;
 it does not rebuild the archive or repeat the ordinary source gate. The fixture's
 URLs cannot acquire a release and never replace a consuming repository's lock.
 
-The Linux release jobs also run artifact security through the freshly installed
-launcher against a non-root scratch image containing one text file. The fixture
+Ordinary Ubuntu CI runs `scripts/verify-installed-artifact-security.sh` through
+a fresh source installation before a candidate can be tagged. The Linux release
+jobs invoke the same verification script through their freshly installed archive.
+Both scan a non-root scratch image containing one text file. The fixture
 has its own manifest-derived lock and downloads a fresh vulnerability database.
 Both the scanner self-report and target report must exist with no blocking
 findings and valid CycloneDX SBOMs. Exact scanner OpenVEX acceptances stay visible;
 the fixture does not freeze advisory counts or suppress newly reported findings.
 This check runs on native Linux amd64 and arm64 before artifact publication.
+It can also run locally against a fresh native installation and a Linux Docker
+server. A local result establishes the installed launcher and scanner integration;
+it does not replace the release's native host checks. Database refresh remains
+required on every invocation, so later advisories can still stop publication.
 
 The [optional tools contract](optional-rust-tools.md) preserves required Rust
 coverage across absent, damaged and repaired installations. The native archive

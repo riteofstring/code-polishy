@@ -22,6 +22,12 @@ manual dispatch authorizes the same operation for an existing tag.
    no commands, and new gate identities may reuse only suite receipts whose
    complete inputs still match.
 
+   The Ubuntu result must include the installed artifact-security check with
+   fresh advisory data. It verifies the scanner itself as well as the minimal
+   target image through `scripts/verify-installed-artifact-security.sh`, the
+   same fixture used by Linux release jobs. Resolve scanner findings before
+   tagging; ordinary source tests alone do not establish this result.
+
 3. Mutation testing is optional for releases. Run it only when explicitly
    requested by the caller or invoked by a checked-in event workflow; the
    release version alone does not select it. When selected, verify the harness

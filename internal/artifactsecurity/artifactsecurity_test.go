@@ -81,6 +81,33 @@ func TestOpenVEXReconciliationIsExactAndRejectsUnusedStatements(t *testing.T) {
 	}
 }
 
+func TestOpenVEXEmptyAssessmentsRetainBlockingFindings(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, statements := range []string{`,"statements":[]`, `,"statements":null`, ""} {
+		path := filepath.Join(t.TempDir(), "assessment.openvex.json")
+		payload := fmt.Sprintf(`{"@context":"https://openvex.dev/ns/v0.2.0","@id":"https://example.test/vex/empty","author":"Security team","timestamp":%q,"version":1%s}`, now.Format(time.RFC3339), statements)
+		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		assessments, err := parseOpenVEX(path, now)
+		if statements != `,"statements":[]` {
+			if err == nil {
+				t.Fatalf("missing assessment array was accepted: %s", payload)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		finding := normalizedFinding{Kind: "vulnerability", ID: "CVE-2026-111943", Severity: "HIGH", PackagePURL: "pkg:golang/stdlib@v1.26.6"}
+		blocking, accepted, err := reconcileOpenVEX([]normalizedFinding{finding}, []normalizedFinding{finding}, assessments)
+		if err != nil || len(blocking) != 1 || len(accepted) != 0 {
+			t.Fatalf("empty policy changed findings: blocking=%+v accepted=%+v err=%v", blocking, accepted, err)
+		}
+	}
+}
+
 func TestParseOpenVEXRequiresBoundedExactAssessment(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "assessment.openvex.json")

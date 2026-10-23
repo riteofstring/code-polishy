@@ -365,7 +365,8 @@
           "scripts/test-installed-release.sh",
           "scripts/test-installed-release-contract.sh",
           "scripts/test-installed-release-architecture.sh",
-          "scripts/test-installed-release-rust.sh"
+          "scripts/test-installed-release-rust.sh",
+          "scripts/verify-installed-artifact-security.sh"
         ]
       },
       {
@@ -1993,6 +1994,19 @@
       }
     ],
     "releaseAgeAssessments": [
+      {
+        "id": "trivy-0-76-1-x509-security-fix",
+        "ecosystem": "artifact",
+        "package": "trivy",
+        "version": "0.76.1",
+        "scope": "tools/trivy-version.txt",
+        "category": "security-fix",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/design/trivy-scanner-assessments.md",
+        "reason": "CVE-2026-111943 affects the scanner's HTTPS database download: compromised certificate intermediates can authenticate forged advisory data. No aged official scanner release contains the fix. Trivy 0.76.1 supplies the upstream Go 1.27.3 correction and updated CA bundle; retaining the vulnerable downloader or disabling fresh advisory checks is riskier than the reviewed official update before its ordinary admission on 2026-11-20.",
+        "owner": "Codex",
+        "reviewed": "2026-10-23",
+        "expires": "2026-11-20"
+      },
       {
         "id": "go-1-26-10-x509-security-fix",
         "ecosystem": "artifact",

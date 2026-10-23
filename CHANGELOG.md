@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.31.1 - 2026-10-22
+
+- Update the pinned scanner to official Trivy 0.76.1, built with Go 1.27.3 and
+  an updated CA bundle, to fix CVE-2026-111943 in advisory database downloads.
+  Remove obsolete scanner vulnerability assessments while retaining blocking
+  self-checks for new findings.
+- Run the installed scanner and minimal-image verification in ordinary Linux CI
+  before tagging, using the same fixture as release publication.
+
 ## 0.31.0 - 2026-10-22
 
 - Keep pre-install dependency review limited to built-in checks. Report repository
