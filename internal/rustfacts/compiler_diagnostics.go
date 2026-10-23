@@ -24,6 +24,9 @@ func compilerFindings(repo repository.Repository, manifest string, workspace Wor
 	default:
 		return nil, errors.New("cargo compiler diagnostic has an unsupported severity")
 	}
+	if diagnostic.Level == "warning" && externalExpansion(repo, workspace, diagnostic.Spans) {
+		return nil, nil
+	}
 	code, check := "rustc", "quality.rustCompiler"
 	if diagnostic.Code != nil && diagnostic.Code.Code != "" {
 		code = diagnostic.Code.Code
@@ -73,4 +76,30 @@ func compilerLocation(repo repository.Repository, workspace Workspace, span comp
 		span = span.Expansion.Span
 	}
 	return policy.FindingLocation{}, false
+}
+
+func externalExpansion(repo repository.Repository, workspace Workspace, spans []compilerSpan) bool {
+	primary := false
+	for _, span := range spans {
+		path := span.File
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(repo.Root, filepath.FromSlash(workspace.Root), path)
+		}
+		if span.Expansion == nil || repositorySource(repo, path) {
+			return false
+		}
+		primary = primary || span.Primary
+	}
+	return primary
+}
+
+func repositorySource(repo repository.Repository, path string) bool {
+	physical, _ := filepath.EvalSymlinks(repo.Root)
+	for _, root := range []string{repo.Root, physical} {
+		if root != "" && withinDirectory(root, path) {
+			repo.Root = root
+			return !withinDirectory(CargoHome(repo), path)
+		}
+	}
+	return false
 }

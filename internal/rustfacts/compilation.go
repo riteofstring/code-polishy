@@ -26,7 +26,9 @@ func PlanCompilation(repo repository.Repository, discovery DiscoveryPlan, allFil
 	if len(discovery.Commands) == 0 {
 		return plan
 	}
-	for _, manifest := range discovery.Manifests {
+	manifests, _, findings := cargoResolutionRoots(repo, discovery.Manifests)
+	plan.Findings = append(plan.Findings, findings...)
+	for _, manifest := range manifests {
 		files := compilationSources(repo, manifest, allFiles)
 		native, err := repo.NativeUnit(files, "lint", "typecheck", "dead-code")
 		if err != nil {
@@ -58,14 +60,21 @@ func compilationSources(repo repository.Repository, manifest string, allFiles []
 }
 
 func compilationCommand(repo repository.Repository, manifest string) policy.Command {
-	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo-clippy", "clippy", "--frozen", "--all-targets", "--no-deps", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest, "--", "--force-warn", "clippy::all", "--force-warn", "unused")
-	for _, lint := range strings.Fields(compilerWarningLints) {
-		command.Argv = append(command.Argv, "--force-warn", lint)
-	}
+	command := Command(repo, manifestCommandName("policy-clippy", manifest), "cargo", "check", "--frozen", "--all-targets", "--message-format=json", "--target", HostTarget(), "--manifest-path", manifest)
 	command.Environment = append(command.Environment, "PATH", "LIB", "INCLUDE", "LIBPATH", "SDKROOT", "DEVELOPER_DIR")
-	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"), "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
+	command.EnvironmentOverrides = append(command.EnvironmentOverrides, "RUSTC_WRAPPER="+repo.RustTool("clippy-driver"), "CLIPPY_ARGS="+strings.Join(compilationLintArguments(), clippyArgumentSeparator)+clippyArgumentSeparator, "CLIPPY_CONF_DIR="+filepath.Join(repo.PolicyRoot, "tools"))
 	return command
 }
+
+func compilationLintArguments() []string {
+	arguments := []string{"--force-warn", "clippy::all", "--force-warn", "unused"}
+	for _, lint := range strings.Fields(compilerWarningLints) {
+		arguments = append(arguments, "--force-warn", lint)
+	}
+	return arguments
+}
+
+const clippyArgumentSeparator = "__CLIPPY_HACKERY__"
 
 func HostTarget() string {
 	architecture := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[runtime.GOARCH]

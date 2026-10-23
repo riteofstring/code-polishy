@@ -16,7 +16,7 @@ func TestRustLintCollectionCoversCompilerWarningsWithoutLoweringErrors(t *testin
 		t.Fatalf("compiler lint interface: %v; %s", err, output.Stderr)
 	}
 	forced := map[string]bool{}
-	arguments := compilationCommand(repo, "Cargo.toml").Argv
+	arguments := compilationLintArguments()
 	for index, argument := range arguments[:len(arguments)-1] {
 		if argument == "--force-warn" {
 			forced[arguments[index+1]] = true

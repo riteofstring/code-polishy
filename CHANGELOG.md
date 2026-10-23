@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.31.3 - 2026-10-23
+
+- Compile and lint governed Cargo replacement packages through their consuming
+  project, retain forced lint diagnostics, and omit warnings located entirely
+  inside external macro implementations while preserving caller diagnostics.
+- Report the original pnpm failure when JavaScript license listing fails,
+  instead of treating its error response as a package inventory.
+
 ## 0.31.2 - 2026-10-23
 
 - Keep raw package scanner output in report artifacts and show bounded summaries.
