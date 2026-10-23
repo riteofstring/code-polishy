@@ -2,6 +2,7 @@ package supplychain
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func TestGitLabInspectionReturnsRecursiveControlsAndStaticFindings(t *testing.T)
 	writeSupplyFile(t, repo.Root, ".gitlab-ci.yml", "include:\n  - local: ci/common.yml\n")
 	writeSupplyFile(t, repo.Root, "ci/common.yml", "image: registry.example/app\n")
 	commit := "0123456789abcdef0123456789abcdef01234567"
-	result := `{"controls":[".gitlab-ci.yml","ci/common.yml"],` +
+	result := `{"scripts":[],"controls":[".gitlab-ci.yml","ci/common.yml"],` +
 		`"images":[{"path":"ci/common.yml","scope":"global:image","image":"registry.example/app"}],` +
 		`"includes":[{"path":".gitlab-ci.yml","kind":"local","local":"ci/common.yml","project":"","file":"","ref":"","remote":"","integrity":"","component":"","template":""},` +
 		`{"path":"ci/common.yml","kind":"project","local":"","project":"group/templates","file":"release.yml","ref":"` + commit + `","remote":"","integrity":"","component":"","template":""}],` +
@@ -84,5 +85,36 @@ func TestGitLabRootPathsIncludeBothSupportedNames(t *testing.T) {
 	writeSupplyFile(t, repo.Root, ".gitlab-ci.yaml", "stages: []\n")
 	if roots := GitLabRootPaths(repo); !slices.Equal(roots, []string{".gitlab-ci.yml", ".gitlab-ci.yaml"}) {
 		t.Fatalf("roots = %v", roots)
+	}
+}
+
+func TestGitLabInspectionPreservesGateRejections(t *testing.T) {
+	repo := supplyRepository(t)
+	writeSupplyFile(t, repo.Root, ".gitlab-ci.yml", "include: ci/gate.yml\n")
+	writeSupplyFile(t, repo.Root, "ci/gate.yml", "gate:\n  script: ./code-polishyw merge-gate --base main\n")
+	result := javascript.GitLabResult{
+		Controls: []string{".gitlab-ci.yml", "ci/gate.yml"}, Images: []javascript.GitLabImage{},
+		Includes: []javascript.GitLabInclude{}, Unsupported: []javascript.Unsupported{},
+		Scripts: []javascript.GitLabScript{
+			{Path: "ci/gate.yml", Job: "setup_gate", Script: "./code-polishyw merge-gate --base main", Reason: "job inherits from .gitlab-ci.yml a nonempty before_script"},
+			{Path: "ci/gate.yml", Job: "compound_gate", Script: "./code-polishyw merge-gate --base main && echo done"},
+		},
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PolicyRoot = installBundle(t, map[string]string{"gitlab": string(data)})
+	inspection := InspectGitLab(t.Context(), repo)
+	if len(inspection.Findings) != 0 || len(inspection.GateRejections) != 2 || len(inspection.UnconditionalScripts) != 1 {
+		t.Fatalf("inspection lost script decisions: %+v", inspection)
+	}
+	for _, finding := range inspection.GateRejections {
+		if finding.Path != "ci/gate.yml" || !strings.HasPrefix(finding.Subject, "job ") || finding.Check != "policy.finalGateOwner" {
+			t.Fatalf("rejection lost job context: %+v", finding)
+		}
+	}
+	if !strings.Contains(inspection.GateRejections[0].Message, "before_script") || !strings.Contains(inspection.GateRejections[1].Message, "trailing syntax") {
+		t.Fatalf("rejection lost its cause: %+v", inspection.GateRejections)
 	}
 }

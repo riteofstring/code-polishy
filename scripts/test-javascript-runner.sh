@@ -142,6 +142,174 @@ for image_scope in 'global:image' 'global:service' 'default:image' 'default:serv
   fi
 done
 
+gitlab_gate_target="${fixture_root}/gitlab-gate"
+mkdir -p "${gitlab_gate_target}"
+cat >"${gitlab_gate_target}/.gitlab-ci.yml" <<'SOURCE'
+.template:
+  script: code-polishy merge-gate --base template
+disabled:
+  rules:
+    - when: never
+  script: code-polishy merge-gate --base disabled
+manual:
+  when: manual
+  script: code-polishy merge-gate --base manual
+gate:
+  allow_failure: false
+  script:
+    - ./code-polishyw merge-gate --base main
+SOURCE
+gitlab_request "${gitlab_gate_target}" | run_runner >"${gitlab_response}" || fail "GitLab script analysis failed"
+python3 - "${gitlab_response}" <<'PY'
+import json
+import sys
+
+result = json.load(open(sys.argv[1], encoding="utf-8"))["result"]
+accepted = [item for item in result["scripts"] if not item["reason"]]
+assert accepted == [{"path": ".gitlab-ci.yml", "job": "gate", "script": "./code-polishyw merge-gate --base main", "reason": ""}], result
+rejected = {item["job"]: item["reason"] for item in result["scripts"] if item["reason"]}
+assert "rules" in rejected["disabled"] and "when" in rejected["manual"], result
+PY
+
+javascript_sealed_run python3 - "${javascript_node}" "${javascript_runner}" "${fixture_root}/gitlab-setup" <<'PY'
+import json
+import pathlib
+import subprocess
+import sys
+
+node, runner, directory = sys.argv[1:]
+gate = "./code-polishyw merge-gate --base main"
+trace_gate = gate
+trace_prefix = "${BASH_ENV:=./setup.sh}"
+cases = [
+    ("job setup", {"gate": {"before_script": ["exit 0"], "script": [gate]}}, {}, ".gitlab-ci.yml", None),
+    ("default setup", {"default": {"before_script": ["exit 0"]}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("global setup", {"before_script": ["exit 0"], "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("job replaces setup", {"default": {"before_script": ["exit 0"]}, "gate": {"before_script": ["echo prepare"], "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("job clears setup", {"before_script": ["exit 0"], "gate": {"before_script": [], "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("inherit disabled", {"default": {"before_script": ["exit 0"]}, "gate": {"inherit": {"default": False}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("inherit selected", {"default": {"before_script": ["exit 0"]}, "gate": {"inherit": {"default": ["before_script"]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("inherit excludes setup", {"default": {"before_script": ["exit 0"]}, "gate": {"inherit": {"default": ["image"]}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("root setup reaches included job", {"include": {"local": "ci/common.yml"}, "default": {"before_script": ["exit 0"]}}, {"gate": {"script": gate}}, "ci/common.yml", None),
+    ("included setup reaches root job", {"include": {"local": "ci/common.yml"}, "gate": {"script": gate}}, {"before_script": ["exit 0"]}, ".gitlab-ci.yml", None),
+    ("root replaces included setup", {"include": {"local": "ci/common.yml"}, "default": {"before_script": []}, "gate": {"script": gate}}, {"default": {"before_script": ["exit 0"]}}, ".gitlab-ci.yml", gate),
+    ("unsupported setup", {"gate": {"before_script": {"command": "exit 0"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("multiple script entries", {"gate": {"script": ["echo prepare", gate]}}, {}, ".gitlab-ci.yml", None),
+    ("trailing script entry", {"gate": {"script": [gate, "echo done"]}}, {}, ".gitlab-ci.yml", None),
+    ("workflow name", {"workflow": {"name": "Checks"}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("workflow auto cancel", {"workflow": {"auto_cancel": {"on_new_commit": "interruptible", "on_job_failure": "all"}}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("empty workflow", {"workflow": {}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("workflow rules", {"workflow": {"rules": [{"if": '$CI_PIPELINE_SOURCE == "push"', "when": "never"}, {"when": "always"}]}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("included workflow metadata", {"include": {"local": "ci/common.yml"}, "gate": {"script": gate}}, {"workflow": {"name": "Checks"}}, ".gitlab-ci.yml", gate),
+    ("metadata preserves included rules", {"include": {"local": "ci/common.yml"}, "workflow": {"name": "Checks"}, "gate": {"script": gate}}, {"workflow": {"rules": [{"when": "never"}]}}, ".gitlab-ci.yml", None),
+    ("invalid workflow", {"workflow": "disabled", "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("job startup hook", {"gate": {"variables": {"BASH_ENV": "./setup.sh"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("global startup hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("startup options", {"variables": {"SHELLOPTS": "noexec"}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("startup expression", {"gate": {"variables": {"BASH_ENV": "$STARTUP"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("job clears startup hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"variables": {"BASH_ENV": ""}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("unrelated variable preserves hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"variables": {"OTHER": "value"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("variable inheritance disabled", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"inherit": {"variables": False}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("variable inheritance selects hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"inherit": {"variables": ["BASH_ENV"]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("variable inheritance excludes hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"inherit": {"variables": ["OTHER"]}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("job hook survives inheritance disable", {"gate": {"inherit": {"variables": False}, "variables": {"BASH_ENV": "./setup.sh"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("unknown variable map", {"variables": "$ENVIRONMENT", "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("variable value object", {"variables": {"BASH_ENV": {"value": "./setup.sh"}}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("empty variable value object", {"variables": {"BASH_ENV": {"value": ""}}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("included startup hook", {"include": {"local": "ci/common.yml"}, "gate": {"script": gate}}, {"variables": {"BASH_ENV": "./setup.sh"}}, ".gitlab-ci.yml", None),
+    ("root startup hook reaches included job", {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": "./setup.sh"}}, {"gate": {"script": gate}}, "ci/common.yml", None),
+    ("root clears included startup hook", {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": ""}, "gate": {"script": gate}}, {"variables": {"BASH_ENV": "./setup.sh"}}, ".gitlab-ci.yml", gate),
+    ("root retains unrelated included hook", {"include": {"local": "ci/common.yml"}, "variables": {"OTHER": "value"}, "gate": {"script": gate}}, {"variables": {"BASH_ENV": "./setup.sh"}}, ".gitlab-ci.yml", None),
+    ("matrix startup hook", {"gate": {"parallel": {"matrix": [{"BASH_ENV": ["./setup.sh"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix scalar hook", {"gate": {"parallel": {"matrix": [{"BASH_ENV": "./setup.sh"}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix startup options", {"gate": {"parallel": {"matrix": [{"SHELLOPTS": ["noexec"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix trace expansion", {"gate": {"parallel": {"matrix": [{"PS4": [trace_prefix]}]}, "script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix overrides empty job hook", {"gate": {"variables": {"BASH_ENV": ""}, "parallel": {"matrix": [{"BASH_ENV": ["./setup.sh"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix ignores global inheritance disable", {"gate": {"inherit": {"variables": False}, "parallel": {"matrix": [{"BASH_ENV": ["./setup.sh"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix mixed startup values", {"gate": {"parallel": {"matrix": [{"BASH_ENV": ["", "./setup.sh"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix row isolation", {"gate": {"parallel": {"matrix": [{"BASH_ENV": ["./setup.sh"]}, {"BASH_ENV": [""]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix missing override retains hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"parallel": {"matrix": [{"BASH_ENV": [""]}, {"TARGET": ["linux"]}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("matrix clears job hook", {"gate": {"variables": {"BASH_ENV": "./setup.sh"}, "parallel": {"matrix": [{"BASH_ENV": [""]}]}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("matrix clears global hook", {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"parallel": {"matrix": [{"BASH_ENV": ""}]}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("matrix replaces trace expansion", {"variables": {"PS4": trace_prefix}, "gate": {"parallel": {"matrix": [{"PS4": ["+ ", "trace: "]}]}, "script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("included matrix clears global hook", {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": "./setup.sh"}}, {"gate": {"parallel": {"matrix": [{"BASH_ENV": [""]}]}, "script": gate}}, "ci/common.yml", gate),
+    ("ordinary matrix", {"gate": {"parallel": {"matrix": [{"TARGET": ["linux", "macos"], "ARCH": "arm64"}]}, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("numeric parallel", {"gate": {"parallel": 4, "script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("matrix preserves unrelated gate", {"unsafe": {"parallel": {"matrix": [{"BASH_ENV": ["./setup.sh"]}]}, "script": gate}, "gate": {"script": gate}}, {}, ".gitlab-ci.yml", gate),
+    ("unknown matrix", {"gate": {"parallel": {"matrix": "$MATRIX"}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("empty matrix", {"gate": {"parallel": {"matrix": []}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("empty matrix row", {"gate": {"parallel": {"matrix": [{}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("empty matrix values", {"gate": {"parallel": {"matrix": [{"TARGET": []}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("unknown matrix value", {"gate": {"parallel": {"matrix": [{"BASH_ENV": {"value": ""}}]}, "script": gate}}, {}, ".gitlab-ci.yml", None),
+    ("job trace expansion", {"gate": {"variables": {"BASH_ENV": "", "PS4": trace_prefix}, "script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("global trace expansion", {"variables": {"PS4": trace_prefix}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("encoded trace expansion", {"variables": {"PS4": r"\044{BASH_ENV:=./setup.sh}"}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("trace command substitution", {"variables": {"PS4": "`prepare`"}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("unknown trace prefix", {"variables": {"PS4": "$PREFIX"}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("constant trace prefix", {"variables": {"PS4": "+ trace: "}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("empty trace prefix", {"variables": {"PS4": ""}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("job replaces trace expansion", {"variables": {"PS4": trace_prefix}, "gate": {"variables": {"PS4": "+ "}, "script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("unrelated override preserves trace expansion", {"variables": {"PS4": trace_prefix}, "gate": {"variables": {"OTHER": "value"}, "script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("trace inheritance disabled", {"variables": {"PS4": trace_prefix}, "gate": {"inherit": {"variables": False}, "script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("trace inheritance selected", {"variables": {"PS4": trace_prefix}, "gate": {"inherit": {"variables": ["PS4"]}, "script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("trace inheritance excluded", {"variables": {"PS4": trace_prefix}, "gate": {"inherit": {"variables": ["OTHER"]}, "script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("trace value object", {"variables": {"PS4": {"value": trace_prefix}}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("constant trace value object", {"variables": {"PS4": {"value": "+ "}}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", trace_gate),
+    ("unknown trace value object", {"variables": {"PS4": {}}, "gate": {"script": trace_gate}}, {}, ".gitlab-ci.yml", None),
+    ("included trace expansion", {"include": {"local": "ci/common.yml"}, "gate": {"script": trace_gate}}, {"variables": {"PS4": trace_prefix}}, ".gitlab-ci.yml", None),
+    ("root replaces included trace expansion", {"include": {"local": "ci/common.yml"}, "variables": {"PS4": "+ "}, "gate": {"script": trace_gate}}, {"variables": {"PS4": trace_prefix}}, ".gitlab-ci.yml", trace_gate),
+]
+for index, (name, document, included, path, script) in enumerate(cases):
+    root = pathlib.Path(directory, str(index))
+    (root / "ci").mkdir(parents=True)
+    (root / ".gitlab-ci.yml").write_text(json.dumps(document), encoding="utf-8")
+    (root / "ci/common.yml").write_text(json.dumps(included), encoding="utf-8")
+    request = {"protocolVersion": 3, "operation": "gitlab", "root": str(root), "paths": [".gitlab-ci.yml"], "governedPaths": [".gitlab-ci.yml", "ci/common.yml"]}
+    response = subprocess.run([node, runner], input=json.dumps(request), capture_output=True, text=True, check=True)
+    result = json.loads(response.stdout)["result"]
+    expected = [] if script is None else [{"path": path, "job": "gate", "script": script, "reason": ""}]
+    accepted = [item for item in result["scripts"] if not item["reason"]]
+    assert accepted == expected, (name, result)
+    if script is None:
+        rejected = [item for item in result["scripts"] if item["reason"]]
+        assert rejected and all(item["job"] == "gate" and item["path"] == path for item in rejected), (name, result)
+    if name == "included setup reaches root job":
+        assert "before_script" in rejected[0]["reason"] and "ci/common.yml" in rejected[0]["reason"], result
+    if name == "matrix startup hook":
+        assert "matrix" in rejected[0]["reason"] and "BASH_ENV" in rejected[0]["reason"], result
+
+roots = [".gitlab-ci.yml", ".gitlab-ci.yaml"]
+root_cases = [
+    ("unrelated empty hook", {roots[0]: {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"script": gate}}, roots[1]: {"variables": {"BASH_ENV": ""}}}, []),
+    ("unrelated empty options", {roots[0]: {"variables": {"SHELLOPTS": "noexec"}, "gate": {"script": gate}}, roots[1]: {"variables": {"SHELLOPTS": ""}}}, []),
+    ("unrelated constant trace prefix", {roots[0]: {"variables": {"PS4": trace_prefix}, "gate": {"script": trace_gate}}, roots[1]: {"variables": {"PS4": "+ "}}}, []),
+    ("unrelated hook preserves clean gate", {roots[0]: {"gate": {"script": gate}}, roots[1]: {"variables": {"BASH_ENV": "./setup.sh"}}}, [(roots[0], gate)]),
+    ("independent job names", {roots[0]: {"gate": {"script": gate}}, roots[1]: {"gate": {"script": gate}}}, [(roots[0], gate), (roots[1], gate)]),
+    ("independent setup", {roots[0]: {"before_script": ["exit 0"], "gate": {"script": gate}}, roots[1]: {"before_script": []}}, []),
+    ("independent default setup", {roots[0]: {"default": {"before_script": ["exit 0"]}, "gate": {"script": gate}}, roots[1]: {"default": {"before_script": []}}}, []),
+    ("independent workflow rules", {roots[0]: {"gate": {"script": gate}}, roots[1]: {"workflow": {"rules": [{"when": "never"}]}, "other": {"script": gate}}}, [(roots[0], gate)]),
+    ("independent external include", {roots[0]: {"gate": {"script": gate}}, roots[1]: {"include": {"template": "Security/SAST.gitlab-ci.yml"}, "other": {"script": gate}}}, [(roots[0], gate)]),
+    ("separate include variables", {roots[0]: {"include": {"local": "ci/hook.yml"}, "gate": {"script": gate}}, roots[1]: {"include": {"local": "ci/empty.yml"}}, "ci/hook.yml": {"variables": {"BASH_ENV": "./setup.sh"}}, "ci/empty.yml": {"variables": {"BASH_ENV": ""}}}, []),
+    ("shared include contexts", {roots[0]: {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": "./setup.sh"}}, roots[1]: {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": ""}}, "ci/common.yml": {"gate": {"script": gate}}}, [("ci/common.yml", gate)]),
+    ("shared transitive include", {roots[0]: {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": "./setup.sh"}}, roots[1]: {"include": {"local": "ci/common.yml"}, "variables": {"BASH_ENV": ""}}, "ci/common.yml": {"include": {"local": "ci/gate.yml"}}, "ci/gate.yml": {"gate": {"script": gate}}}, [("ci/gate.yml", gate)]),
+    ("explicit root include", {roots[0]: {"include": {"local": roots[1]}, "variables": {"BASH_ENV": ""}}, roots[1]: {"variables": {"BASH_ENV": "./setup.sh"}, "gate": {"script": gate}}}, [(roots[1], gate)]),
+]
+for index, (name, documents, expected) in enumerate(root_cases):
+    root = pathlib.Path(directory, "roots-" + str(index))
+    for path, document in documents.items():
+        destination = root / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(document), encoding="utf-8")
+    for paths in (roots, roots[::-1]):
+        request = {"protocolVersion": 3, "operation": "gitlab", "root": str(root), "paths": paths, "governedPaths": list(documents)}
+        response = subprocess.run([node, runner], input=json.dumps(request), capture_output=True, text=True, check=True)
+        result = json.loads(response.stdout)["result"]
+        actual = sorted((item["path"], item["script"]) for item in result["scripts"] if not item["reason"])
+        assert actual == sorted(expected), (name, paths, result)
+        assert result["controls"] == sorted(documents), (name, paths, result)
+        assert result["unsupported"] == [], (name, paths, result)
+PY
+
 gitlab_invalid_target="${fixture_root}/gitlab-invalid"
 mkdir -p "${gitlab_invalid_target}/ci"
 cat >"${gitlab_invalid_target}/.gitlab-ci.yml" <<'SOURCE'

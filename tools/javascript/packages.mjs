@@ -2,6 +2,7 @@ import { basename, join } from "node:path";
 import { join as joinRepositoryPath } from "node:path/posix";
 
 import yaml from "js-yaml";
+import semver from "semver";
 
 import { fail, readTargetFile, unsupported } from "./protocol.mjs";
 
@@ -845,6 +846,16 @@ function settingValues(value, values) {
   return values;
 }
 
+function validAllowBuilds(document) {
+  return (
+    !Object.hasOwn(document, "allowBuilds") ||
+    (isMap(document.allowBuilds) &&
+      Object.entries(document.allowBuilds).every(
+        ([name, value]) => name.trim() !== "" && typeof value === "boolean",
+      ))
+  );
+}
+
 function workspaceSettings(root, path, unsupportedPaths) {
   const text = readTargetFile(join(root, path), path, unsupportedPaths);
   if (text === null) {
@@ -867,6 +878,12 @@ function workspaceSettings(root, path, unsupportedPaths) {
     return null;
   }
   const names = Object.keys(document);
+  if (!validAllowBuilds(document)) {
+    unsupportedPaths.push(
+      unsupported(path, "allowBuilds must map package selectors to booleans"),
+    );
+    return null;
+  }
   if (names.length > MAXIMUM_SETTINGS) {
     fail(
       `the workspace operation covers more than the ${MAXIMUM_SETTINGS} setting limit`,
@@ -893,4 +910,56 @@ export function workspace(request) {
     }
   }
   return { files, unsupported: unsupportedPaths };
+}
+
+function peerRangeMessage(range, version) {
+  if (typeof range !== "string" || semver.validRange(range) === null) {
+    return "peerDependency must declare a valid npm semantic version range";
+  }
+  if (semver.valid(version) !== null && !semver.satisfies(version, range)) {
+    return `devDependency ${JSON.stringify(version)} does not satisfy peer range ${JSON.stringify(range)}`;
+  }
+  return "";
+}
+
+export function peers(request) {
+  const unsupportedPaths = [];
+  const covered = [];
+  const findings = [];
+  let count = 0;
+  for (const path of request.paths) {
+    if (basename(path) !== "package.json") {
+      fail("the peers operation reads only package.json files");
+    }
+    const previous = unsupportedPaths.length;
+    const manifest = declaredDependencies(request.root, path, unsupportedPaths);
+    if (unsupportedPaths.length !== previous) {
+      continue;
+    }
+    if (!isMap(manifest)) {
+      unsupportedPaths.push(
+        unsupported(path, "the package manifest is not an object"),
+      );
+      continue;
+    }
+    for (const [name, range] of Object.entries(
+      mapAt(manifest, "peerDependencies") ?? {},
+    )) {
+      count += 1;
+      if (count > MAXIMUM_DEPENDENCIES) {
+        fail(
+          `the peers operation exceeds the ${MAXIMUM_DEPENDENCIES} dependency limit`,
+        );
+      }
+      const message = peerRangeMessage(
+        range,
+        stringAt(manifest.devDependencies, name),
+      );
+      if (message !== "") {
+        findings.push({ path, name, message });
+      }
+    }
+    covered.push(path);
+  }
+  return { covered, findings, unsupported: unsupportedPaths };
 }

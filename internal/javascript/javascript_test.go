@@ -312,7 +312,7 @@ func TestAParseResultMustAccountForEveryRequestedPath(t *testing.T) {
 
 func TestAGitLabRequestCarriesDistinctRootConfigurations(t *testing.T) {
 	observed := filepath.Join(t.TempDir(), "request.json")
-	result := `{"controls":[".gitlab-ci.yml","ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`
+	result := `{"scripts":[],"controls":[".gitlab-ci.yml","ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`
 	script := "#!/bin/sh\n/bin/cat >" + observed + "\nprintf '%s\\n' '" +
 		`{"protocolVersion":3,"operation":"gitlab","result":` + result + `}'` + "\n"
 	bundle := fakeBundle(t, script)
@@ -340,7 +340,7 @@ func TestAGitLabRequestCarriesDistinctRootConfigurations(t *testing.T) {
 
 func TestAGitLabResultReportsBoundedFactsAndCoverage(t *testing.T) {
 	commit := "0123456789abcdef0123456789abcdef01234567"
-	result := `{"controls":[".gitlab-ci.yml","ci/common.yml"],` +
+	result := `{"scripts":[],"controls":[".gitlab-ci.yml","ci/common.yml"],` +
 		`"images":[{"path":".gitlab-ci.yml","scope":"global:image","image":"registry.example/app@sha256:` + strings.Repeat("a", 64) + `"}],` +
 		`"includes":[` +
 		`{"path":".gitlab-ci.yml","kind":"local","local":"ci/common.yml","project":"","file":"","ref":"","remote":"","integrity":"","component":"","template":""},` +
@@ -360,11 +360,11 @@ func TestAGitLabResultReportsBoundedFactsAndCoverage(t *testing.T) {
 func TestAGitLabResultRejectsUntrustedOrIncompleteFacts(t *testing.T) {
 	for name, result := range map[string]string{
 		"missing fields":      `{}`,
-		"missing root":        `{"controls":["ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`,
-		"unguarded control":   `{"controls":[".gitlab-ci.yml",".git/config"],"images":[],"includes":[],"unsupported":[]}`,
-		"outside image":       `{"controls":[".gitlab-ci.yml"],"images":[{"path":"ci/common.yml","scope":"global:image","image":"registry.example/app"}],"includes":[],"unsupported":[]}`,
-		"incomplete include":  `{"controls":[".gitlab-ci.yml"],"images":[],"includes":[{"path":".gitlab-ci.yml","kind":"local"}],"unsupported":[]}`,
-		"unowned unsupported": `{"controls":[".gitlab-ci.yml"],"images":[],"includes":[],"unsupported":[{"path":"ci/common.yml","reason":"missing"}]}`,
+		"missing root":        `{"scripts":[],"controls":["ci/common.yml"],"images":[],"includes":[],"unsupported":[]}`,
+		"unguarded control":   `{"scripts":[],"controls":[".gitlab-ci.yml",".git/config"],"images":[],"includes":[],"unsupported":[]}`,
+		"outside image":       `{"scripts":[],"controls":[".gitlab-ci.yml"],"images":[{"path":"ci/common.yml","scope":"global:image","image":"registry.example/app"}],"includes":[],"unsupported":[]}`,
+		"incomplete include":  `{"scripts":[],"controls":[".gitlab-ci.yml"],"images":[],"includes":[{"path":".gitlab-ci.yml","kind":"local"}],"unsupported":[]}`,
+		"unowned unsupported": `{"scripts":[],"controls":[".gitlab-ci.yml"],"images":[],"includes":[],"unsupported":[{"path":"ci/common.yml","reason":"missing"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			bundle := fakeBundle(t, respond(`{"protocolVersion":3,"operation":"gitlab","result":`+result+`}`))

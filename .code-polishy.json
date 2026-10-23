@@ -232,6 +232,28 @@
         "module": "workflow"
       },
       {
+        "path": "docs/design/ci-gate-ownership.md",
+        "sourcePaths": [
+          "internal/engine/final_gate_owner.go",
+          "internal/supplychain/gitlab.go",
+          "internal/javascript/gitlab.go",
+          "tools/javascript/gitlab.mjs"
+        ]
+      },
+      {
+        "path": "docs/design/node-admission.md",
+        "sourcePaths": [
+          "internal/supplychain/lockfiles.go",
+          "internal/supplychain/npm_lock.go",
+          "internal/supplychain/node_governance.go",
+          "internal/supplychain/node_runtime.go",
+          "internal/supplychain/node_peers.go",
+          "internal/supplychain/release_artifacts.go",
+          "internal/javascript/peers.go",
+          "tools/javascript/packages.mjs"
+        ]
+      },
+      {
         "path": "docs/design/javascript-import-assets.md",
         "sourcePaths": [
           "tools/javascript/imports.mjs",
@@ -264,10 +286,13 @@
           "internal/agents/wrappers.go",
           "internal/policy/control_inputs.go",
           "internal/release/indexed_release.go",
+          "internal/release/bundle_install.go",
+          "internal/release/upgrade_bootstrap.go",
           "internal/release/release.go",
           "internal/release/upgrade_plan.go",
           "cmd/code-polishy/lock_meta.go",
           "cmd/code-polishy/upgrade_meta.go",
+          "cmd/code-polishy-launcher/main.go",
           "cmd/code-polishy/release_manifest_meta.go",
           "scripts/install.sh",
           "scripts/install.ps1"
@@ -374,6 +399,8 @@
           "internal/repository/contained_directory_test.go",
           "internal/repository/test_ownership.go",
           "internal/engine/engine.go",
+          "internal/engine/supplychain_evidence.go",
+          "internal/engine/dependency_review_test.go",
           "internal/engine/execution_telemetry.go",
           "internal/engine/report_model.go",
           "internal/engine/report_types.go",
@@ -451,7 +478,7 @@
     ]
   },
   "verification": {
-    "finalGateOwner": "local",
+    "finalGateOwner": "ci",
     "mergeGate": {
       "recommendedModules": [
         "policy",
@@ -1080,6 +1107,7 @@
           "VERSION",
           "scripts/prepare-release-tag.sh",
           "scripts/release-preflight.sh",
+          "scripts/release-changelog.sh",
           "scripts/release-version.sh",
           "scripts/test-release-preflight.sh"
         ],

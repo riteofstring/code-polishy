@@ -5,11 +5,42 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/release"
 )
+
+func TestUpgradeHandoffPreservesAuthorityArgumentsAndExitStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX subprocess fixture")
+	}
+	root := t.TempDir()
+	binary := filepath.Join(root, filepath.FromSlash(release.BinaryPath))
+	if err := os.MkdirAll(filepath.Dir(binary), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HANDOFF_ARGUMENTS\"\nexit 17\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "arguments")
+	t.Setenv("HANDOFF_ARGUMENTS", output)
+	invocation := invocation{repoRoot: t.TempDir(), configPath: "config/custom.json"}
+	arguments := []string{"--index", "https://example.invalid/index.json", "--sha256", strings.Repeat("a", 64), "--prefix", t.TempDir()}
+	if status := runUpgradeHandoff(invocation, arguments, root); status != 17 {
+		t.Fatalf("incoming exit status = %d", status)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := append([]string{"--repo-root", invocation.repoRoot, "--policy-root", root, "--config", invocation.configPath, "upgrade", "plan"}, arguments...)
+	if got := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"); !slices.Equal(got, want) {
+		t.Fatalf("handoff lost authority arguments: %q, want %q", got, want)
+	}
+}
 
 func TestUpgradeApplicationAuthenticatesHistoricalOutgoingRelease(t *testing.T) {
 	repo, prefix := t.TempDir(), t.TempDir()
@@ -123,6 +154,22 @@ func TestUpgradeDiagnosticDeltaSeparatesPolicyEffects(t *testing.T) {
 	}
 	if !sameUpgradeDiagnosticDelta(delta, compareUpgradeDiagnostics(before, after)) {
 		t.Fatal("equivalent diagnostic deltas did not compare equal")
+	}
+}
+
+func TestUpgradeDiagnosticsReceiveAnAbsoluteRepositoryRoot(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
+	invocation, status := parseGlobalInvocation([]string{"--repo-root", ".", "upgrade", "plan"})
+	if status != 0 {
+		t.Fatalf("status=%d", status)
+	}
+	arguments := upgradeDiagnosticArguments(invocation, root, release.Lock{}, false)
+	if arguments[1] != root || !filepath.IsAbs(arguments[1]) {
+		t.Fatalf("outgoing diagnostic arguments=%v", arguments)
 	}
 }
 

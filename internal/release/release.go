@@ -263,6 +263,12 @@ func parseManifest(data []byte, source string) (Manifest, error) {
 	if source == "" {
 		source = ManifestFilename
 	}
+	var header struct {
+		Version int `json:"manifestVersion"`
+	}
+	if err := json.Unmarshal(data, &header); err == nil && header.Version > ManifestVersion {
+		return Manifest{}, &NewerManifestError{Version: header.Version, Source: source}
+	}
 	var manifest Manifest
 	if err := decodeExactly(data, source, &manifest); err != nil {
 		return Manifest{}, err

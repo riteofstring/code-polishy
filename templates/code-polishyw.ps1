@@ -68,7 +68,7 @@ if ($Version -cnotmatch '^[0-9A-Za-z][0-9A-Za-z._+-]*$' -or $Digest -cnotmatch '
 if (-not $env:LOCALAPPDATA) { Fail 'LOCALAPPDATA is required to locate the shared Code Polishy installation' }
 $Prefix = Join-Path $env:LOCALAPPDATA 'CodePolishy'
 $ReleaseRoot = Join-Path (Join-Path $Prefix 'releases') "$Version-$Digest"
-$Launcher = Join-Path (Join-Path $Prefix 'bin') 'code-polishy.exe'
+$Launcher = Join-Path (Join-Path $ReleaseRoot 'bin') 'code-polishy-launcher.exe'
 
 function Test-Available {
   if (-not (Test-Path -LiteralPath $ReleaseRoot -PathType Container) -or -not (Test-Path -LiteralPath $Launcher -PathType Leaf)) { return $false }

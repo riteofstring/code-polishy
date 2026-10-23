@@ -354,6 +354,13 @@ jobs:
           fi
           git checkout --detach "${RELEASE_COMMIT}"
 
+      - name: Prepare release changelog
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.identify.outputs.version }}
+        run: |
+          ./scripts/release-changelog.sh "${RELEASE_VERSION}" CHANGELOG.md > "${RUNNER_TEMP}/release-changes.md"
+
       - name: Require an unpublished GitHub release
         shell: bash
         env:
@@ -598,12 +605,16 @@ jobs:
           import json
           import os
           import sys
+          from pathlib import Path
+
+          changes = (Path(os.environ["RUNNER_TEMP"]) / "release-changes.md").read_text(encoding="utf-8").strip()
 
           payload = {
               "tag_name": os.environ["RELEASE_TAG"],
               "target_commitish": os.environ["RELEASE_COMMIT"],
               "name": f"Code Polishy {os.environ['RELEASE_VERSION']}",
               "body": (
+                  f"{changes}\n\n"
                   f"Native archives for Code Polishy {os.environ['RELEASE_VERSION']}.\n\n"
                   f"Source revision: {os.environ['RELEASE_COMMIT']}\n"
                   f"Publication index SHA-256: {os.environ['RELEASE_INDEX_SHA']}\n"

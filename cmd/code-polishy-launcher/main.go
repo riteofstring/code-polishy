@@ -70,7 +70,11 @@ func installPrefix(executable string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve the installed Code Polishy launcher: %w", err)
 	}
-	return filepath.Dir(filepath.Dir(resolved)), nil
+	root := filepath.Dir(filepath.Dir(resolved))
+	if filepath.Base(filepath.Dir(root)) == "releases" && filepath.Base(resolved) == filepath.Base(filepath.FromSlash(release.LauncherBinaryPath)) {
+		return filepath.Dir(filepath.Dir(root)), nil
+	}
+	return root, nil
 }
 
 func parseArguments(arguments []string) (repoRoot string, forwarded []string, err error) {

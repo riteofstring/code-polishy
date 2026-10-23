@@ -65,6 +65,10 @@ type GovernedEnvironment struct {
 }
 
 func Open(root, policyRoot string, config policy.Config) (Repository, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return Repository{}, fmt.Errorf("resolve repository root: %w", err)
+	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return Repository{}, fmt.Errorf("resolve repository root: %w", err)

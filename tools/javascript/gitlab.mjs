@@ -476,7 +476,255 @@ function inspectFile(result, state, path) {
   }
   inspectIncludes(result, state, path, document);
   inspectImages(result, path, document);
+  inspectUnconditionalScripts(result, path, document);
   state.set(path, "visited");
+}
+
+function scriptLines(value) {
+  const lines = typeof value === "string" ? [value] : value;
+  return Array.isArray(lines) && lines.every((line) => typeof line === "string")
+    ? lines
+    : null;
+}
+
+function jobSetup(job, setup) {
+  if (Object.hasOwn(job, "before_script")) {
+    return job.before_script;
+  }
+  const inherited = job.inherit?.default;
+  if (inherited === undefined || inherited === true) {
+    return setup;
+  }
+  if (inherited === false) {
+    return [];
+  }
+  if (
+    !Array.isArray(inherited) ||
+    inherited.some((key) => typeof key !== "string")
+  ) {
+    return null;
+  }
+  return inherited.includes("before_script") ? setup : [];
+}
+
+function inheritedVariable(job, variables, name) {
+  const inherited = job.inherit?.variables;
+  if (
+    inherited === false ||
+    (Array.isArray(inherited) && !inherited.includes(name))
+  ) {
+    return "";
+  }
+  if (
+    inherited !== undefined &&
+    inherited !== true &&
+    !Array.isArray(inherited)
+  ) {
+    return null;
+  }
+  return isMap(variables) ? variables[name] : null;
+}
+
+function jobHasShellStartup(job, variables) {
+  if (job.variables !== undefined && !isMap(job.variables)) {
+    return true;
+  }
+  const matrix = jobMatrixVariables(job);
+  if (matrix === null) {
+    return true;
+  }
+  return ["BASH_ENV", "SHELLOPTS", "PS4"].some((name) => {
+    const value = Object.hasOwn(job.variables ?? {}, name)
+      ? job.variables[name]
+      : inheritedVariable(job, variables, name);
+    return matrix.some((row) => {
+      const values = Object.hasOwn(row, name)
+        ? matrixVariableValues(row[name])
+        : [value];
+      return values.some((value) => shellVariableMayExecute(name, value));
+    });
+  });
+}
+
+function matrixVariableValues(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return values.length > 0 && values.every((item) => typeof item === "string")
+    ? values
+    : null;
+}
+
+function jobMatrixVariables(job) {
+  const parallel = job.parallel;
+  if (parallel === undefined || (Number.isInteger(parallel) && parallel > 0)) {
+    return [{}];
+  }
+  const matrix = isMap(parallel) ? parallel.matrix : null;
+  if (!Array.isArray(matrix) || matrix.length === 0) {
+    return null;
+  }
+  return matrix.every(
+    (row) =>
+      isMap(row) &&
+      Object.keys(row).length > 0 &&
+      Object.values(row).every((value) => matrixVariableValues(value) !== null),
+  )
+    ? matrix
+    : null;
+}
+
+function shellVariableMayExecute(name, value) {
+  if (value === undefined) {
+    return false;
+  }
+  const text = isMap(value) ? value.value : value;
+  if (typeof text !== "string") {
+    return true;
+  }
+  return name === "PS4" ? /[$`\\]/.test(text) : text !== "";
+}
+
+function jobScriptIssue(job, setup, variables) {
+  const conditional = ["rules", "only", "except", "extends", "needs"].find(
+    (key) => Object.hasOwn(job, key),
+  );
+  if (conditional) {
+    return `job uses unsupported execution setting ${conditional}`;
+  }
+  if (jobHasShellStartup(job, variables)) {
+    return "effective variables or parallel matrix contain unsupported BASH_ENV, SHELLOPTS, or PS4 settings";
+  }
+  if (![undefined, false].includes(job.allow_failure)) {
+    return "job permits failure through allow_failure";
+  }
+  if (![undefined, "on_success", "always"].includes(job.when)) {
+    return "job when setting does not establish unconditional execution";
+  }
+  return dedicatedScriptIssue(job, setup);
+}
+
+function dedicatedScriptIssue(job, setup) {
+  const before = scriptLines(jobSetup(job, setup.value));
+  if (before === null) {
+    return "effective before_script is not a supported command list";
+  }
+  if (before.length !== 0) {
+    const origin = Object.hasOwn(job, "before_script")
+      ? "job declares"
+      : `job inherits from ${setup.path}`;
+    return `${origin} a nonempty before_script; move setup to an earlier job`;
+  }
+  const scripts = scriptLines(job.script);
+  if (scripts?.length !== 1) {
+    return "script must contain exactly one dedicated gate command";
+  }
+  return boundedJobScript(job) === ""
+    ? "script must be nonempty, at most 65536 characters, and contain no NUL"
+    : "";
+}
+
+function boundedJobScript(job) {
+  const script = scriptLines(job.script)?.join("\n") ?? "";
+  return script.length > 65536 || script.includes("\0") ? "" : script;
+}
+
+function inspectScriptDefaults(result, path, document) {
+  if (document.variables !== undefined) {
+    result.variables =
+      isMap(result.variables) && isMap(document.variables)
+        ? { ...result.variables, ...document.variables }
+        : null;
+  }
+  if (Object.hasOwn(document, "before_script")) {
+    result.beforeScript = { value: document.before_script, path };
+  }
+  if (
+    isMap(document.default) &&
+    Object.hasOwn(document.default, "before_script")
+  ) {
+    result.defaultBeforeScript = {
+      value: document.default.before_script,
+      path,
+    };
+  }
+}
+
+function workflowRestrictsExecution(workflow) {
+  return (
+    workflow !== undefined &&
+    (!isMap(workflow) || Object.hasOwn(workflow, "rules"))
+  );
+}
+
+function inspectUnconditionalScripts(result, path, document) {
+  if (workflowRestrictsExecution(document.workflow)) {
+    result.workflowIssue = `workflow in ${path} has unsupported execution rules`;
+  }
+  inspectScriptDefaults(result, path, document);
+  for (const [name, job] of Object.entries(document)) {
+    if (GLOBAL_KEYS.has(name) || name.startsWith(".") || !isMap(job)) {
+      continue;
+    }
+    if (result.jobs.has(name)) {
+      result.workflowIssue = `job ${name} is declared more than once across GitLab includes`;
+    }
+    result.jobs.add(name);
+    if (result.scripts.length >= MAXIMUM_GITLAB_FACTS) {
+      fail("the gitlab operation exceeds its script fact limit");
+    }
+    result.scripts.push({ path, name, job });
+  }
+}
+
+function scriptFacts(result) {
+  let reason = result.workflowIssue;
+  if (result.unsupported.length > 0) {
+    reason =
+      "GitLab configuration has unsupported inputs; see supplyChain.gitLabCoverage";
+  }
+  const external = result.includes.find((include) => include.kind !== "local");
+  if (external) {
+    reason = `include in ${external.path} is not local; its execution settings cannot establish gate ownership`;
+  }
+  const setup = result.defaultBeforeScript ?? result.beforeScript;
+  return result.scripts.map(({ path, name, job }) => ({
+    path,
+    job: name,
+    script: boundedJobScript(job),
+    reason: reason || jobScriptIssue(job, setup, result.variables),
+  }));
+}
+
+function inspectRoot(request, root) {
+  const result = {
+    root: request.root,
+    governed: new Set(request.governedPaths),
+    controls: new Set([root]),
+    images: [],
+    includes: [],
+    unsupported: [],
+    scripts: [],
+    beforeScript: { value: [], path: root },
+    defaultBeforeScript: undefined,
+    variables: {},
+    jobs: new Set(),
+    workflowIssue: "",
+  };
+  if (result.governed.has(root)) {
+    inspectFile(result, new Map(), root);
+  } else {
+    addUnsupported(
+      result,
+      root,
+      "the root GitLab configuration is not a governed repository input",
+    );
+  }
+  return {
+    controls: [...result.controls].sort(),
+    images: result.images,
+    includes: result.includes,
+    unsupported: result.unsupported,
+    scripts: scriptFacts(result),
+  };
 }
 
 export function gitlab(request) {
@@ -494,39 +742,17 @@ export function gitlab(request) {
     }
     roots.add(path);
   }
-  const result = {
-    root: request.root,
-    governed: new Set(request.governedPaths),
-    controls: new Set(),
-    images: [],
-    includes: [],
-    unsupported: [],
+  const results = [...roots].map((root) => inspectRoot(request, root));
+  const combined = {
+    controls: [...new Set(results.flatMap((result) => result.controls))].sort(),
   };
-  const state = new Map();
-  for (const root of roots) {
-    result.controls.add(root);
-    if (!result.governed.has(root)) {
-      addUnsupported(
-        result,
-        root,
-        "the root GitLab configuration is not a governed repository input",
-      );
-      continue;
-    }
-    if (state.has(root)) {
-      addUnsupported(
-        result,
-        root,
-        "the root GitLab configuration is already owned by another include",
-      );
-      continue;
-    }
-    inspectFile(result, state, root);
+  for (const field of ["images", "includes", "unsupported", "scripts"]) {
+    combined[field] = results.flatMap((result) => result[field]);
   }
-  return {
-    controls: [...result.controls].sort(),
-    images: result.images,
-    includes: result.includes,
-    unsupported: result.unsupported,
-  };
+  if (
+    Object.values(combined).some((facts) => facts.length > MAXIMUM_GITLAB_FACTS)
+  ) {
+    fail("the gitlab operation exceeds its combined fact limit");
+  }
+  return combined;
 }

@@ -107,7 +107,11 @@ func validateResolvedInventorySource(item resolvedPackage) error {
 	case "local":
 		return validateInventoryLocalPath(item.Scope, item.Source.LocalPath)
 	case "registry":
-		if err := validateDependencyDeclaration(item.Source.Registry); err != nil {
+		identity := item.Source.Registry
+		if item.Source.ArtifactURL != "" {
+			identity = item.Source.ArtifactURL
+		}
+		if err := validateDependencyDeclaration(identity); err != nil {
 			return fmt.Errorf("parse %s: package %q: %w", item.Scope, item.Name, err)
 		}
 	}

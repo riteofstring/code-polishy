@@ -155,3 +155,20 @@ advisory and exact package PURL. Accepted findings remain in the scanner report.
 New or unmatched findings, changed findings, and unused statements remain
 blocking. Target OpenVEX and generic dependency assessments cannot override
 these release-owned decisions.
+
+## Finding ownership
+
+The scanner runtime is owned by the locked Code Polishy release. Its blocking
+findings use the lockfile as their scope and identify the carried Trivy version.
+The locked release authenticates the scanner bytes. Ownership comes from the
+internal scanner artifact mode, not a repository-declared target name.
+Application findings keep their artifact scope,
+so the same advisory in both artifacts produces distinct findings.
+
+Scanner remediation requires a verified Code Polishy release carrying a repaired
+scanner. The scan has no authenticated inventory of newer release contents, so
+it explicitly establishes no fixed Code Polishy/scanner release. A component's
+reported fixed version is not evidence of an available scanner release. Ownership
+changes neither blocking severity nor OpenVEX reconciliation, and does not suggest
+repairing the application, suppressing the finding, or substituting an unverified
+scanner.

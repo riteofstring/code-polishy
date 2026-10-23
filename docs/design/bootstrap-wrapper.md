@@ -37,8 +37,11 @@ reject an installation recorded for another host before reusing it.
 
 Normal wrapper dispatch never clones, downloads, builds, changes `PATH`, or
 selects a fallback release. The wrapper checks that the exact release directory
-and stable launcher are present, then delegates once; the stable launcher
-verifies the installed release before executing the command. Shared storage lets
+and its release-local launcher are present, then delegates once. That launcher
+verifies the installed release before executing the command. Installing an
+older release may replace the convenience launcher in the shared `bin`
+directory, but cannot replace the launcher a repository wrapper selects.
+Shared storage lets
 repositories with the same lock reuse one installation while different locked
 releases coexist. A repository-reviewed archive checksum authenticates bytes
 relative to that repository's lock; it does not establish builder identity or
@@ -86,6 +89,11 @@ same v2 publication authority without redownloading an archive. A
 publication index and checksum are mandatory; source-only adoption is not a
 repository lock mode.
 
+GitHub release publication copies the exact version's changelog section into
+the release body before archive identities. Missing, empty, or duplicate
+sections stop publication so removals and migration instructions cannot be
+lost behind download metadata.
+
 ## Upgrade boundary
 
 Upgrade is deliberately two phase. `upgrade plan` accepts a verified publication
@@ -107,12 +115,21 @@ identities, the first schema that bound a catalog. Earlier releases without that
 evidence report an unavailable capability delta rather than inferred changes.
 Incoming installation and verification still require the current schema.
 
-An old engine cannot interpret future manifest fields. When the outgoing planner
-cannot read the candidate, the caller verifies the incoming archive against the
-authenticated publication index, uses that archive's own engine to install it,
-then runs plan and apply directly through the installed incoming engine. The
-repository wrapper continues to select the outgoing release until apply commits
-the lock, so it cannot perform this bootstrap by choosing a newer release.
+An engine cannot interpret future manifest fields. The planner distinguishes a
+newer schema from a malformed supported schema without treating future fields
+as validated. For a newer schema it authenticates the complete archive against
+the publication index, extracts one bounded installer binary, and invokes that
+binary's `install-bundle` command. The incoming installer owns verification of
+its schema and complete tree. Its installed manifest must match the index before
+planning hands off to that incoming engine. The handoff retains the original
+index, checksum, configuration, and installation prefix. Supported-schema
+errors still fail without a bootstrap fallback.
+
+Repository roots are made absolute before invoking either diagnostic engine.
+This also preserves compatibility with historical engines whose report
+containment checks require absolute roots. The repository lock and outgoing
+guidance remain authoritative throughout planning. Older clients without this
+handoff can use the documented authenticated manual bootstrap.
 
 `upgrade apply` revalidates the outgoing lock, installed candidate, and incoming
 diagnostic snapshot. New error diagnostics require an explicit acceptance or a

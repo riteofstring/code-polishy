@@ -344,7 +344,7 @@ packages:
 minimumReleaseAge: 43200
 minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade
-onlyBuiltDependencies: []
+allowBuilds: {}
 minimumReleaseAgeExclude:
   - example@1.2.3
   - 'other@2.0.0'
@@ -363,7 +363,7 @@ for setting in '"path":"pnpm-workspace.yaml"' \
   '{"name":"minimumReleaseAge","values":["43200"]}' \
   '{"name":"minimumReleaseAgeStrict","values":["true"]}' \
   '{"name":"trustPolicy","values":["no-downgrade"]}' \
-  '{"name":"onlyBuiltDependencies","values":[]}' \
+  '{"name":"allowBuilds","values":[]}' \
   '{"name":"minimumReleaseAgeExclude","values":["example@1.2.3","other@2.0.0"]}' \
   '{"name":"catalog","values":["19.0.0"]}'; do
   if ! grep -qF "${setting}" "${workspace_response}"; then
@@ -388,7 +388,29 @@ expect_workspace_unsupported "a malformed workspace file" "packages: [
 expect_workspace_unsupported "a workspace file that is not a map" "- one
 " "the workspace file is not a YAML map"
 expect_workspace_unsupported "an empty workspace file" "" '"settings":[]'
+expect_workspace_unsupported "a lifecycle sequence" "allowBuilds: []" 'allowBuilds must map package selectors to booleans'
+expect_workspace_unsupported "a lifecycle string value" "allowBuilds: {esbuild: 'true'}" 'allowBuilds must map package selectors to booleans'
+expect_workspace_unsupported "a lifecycle boolean map" "allowBuilds: {esbuild: true, sharp: false}" '"name":"allowBuilds","values":["true","false"]'
 rm -rf "${workspace_target}/nested"
+
+peers_target="${fixture_root}/peers"
+mkdir -p "${peers_target}"
+cat >"${peers_target}/package.json" <<'JSON'
+{
+  "peerDependencies": {"union": "^18 || ^19", "hyphen": "1.2.0 - 2.3.4", "wildcard": "*", "mismatch": "^18", "invalid": "not a range", "prerelease": "^19.0.0"},
+  "devDependencies": {"union": "19.1.0", "hyphen": "2.3.4", "wildcard": "0.1.0", "mismatch": "19.1.0", "invalid": "1.0.0", "prerelease": "19.1.0-beta.1"}
+}
+JSON
+printf '{"protocolVersion":3,"operation":"peers","root":"%s","paths":["package.json"]}' "${peers_target}" |
+  run_runner >"${fixture_root}/peers.json" || fail "peer range analysis failed"
+python3 - "${fixture_root}/peers.json" <<'PY'
+import json
+import sys
+
+result = json.load(open(sys.argv[1], encoding="utf-8"))["result"]
+assert result["covered"] == ["package.json"] and result["unsupported"] == [], result
+assert {entry["name"] for entry in result["findings"]} == {"mismatch", "invalid", "prerelease"}, result
+PY
 workspace_request "${workspace_target}" nested/pnpm-workspace.yaml |
   run_runner >"${fixture_root}/out" || fail "an absent workspace file was not reported"
 if ! grep -qF '"path":"nested/pnpm-workspace.yaml","reason":"the file is unreadable' "${fixture_root}/out"; then

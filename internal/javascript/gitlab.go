@@ -12,6 +12,14 @@ type GitLabResult struct {
 	Images      []GitLabImage   `json:"images"`
 	Includes    []GitLabInclude `json:"includes"`
 	Unsupported []Unsupported   `json:"unsupported"`
+	Scripts     []GitLabScript  `json:"scripts"`
+}
+
+type GitLabScript struct {
+	Path   string `json:"path"`
+	Job    string `json:"job"`
+	Script string `json:"script"`
+	Reason string `json:"reason"`
 }
 
 type GitLabImage struct {
@@ -38,6 +46,7 @@ type gitLabResultWire struct {
 	Images      *[]gitLabImageWire   `json:"images"`
 	Includes    *[]gitLabIncludeWire `json:"includes"`
 	Unsupported *[]Unsupported       `json:"unsupported"`
+	Scripts     *[]GitLabScript      `json:"scripts"`
 }
 
 type gitLabImageWire struct {
@@ -138,14 +147,29 @@ func decodeGitLabResult(data []byte, requested, governedPaths []string) (GitLabR
 	if err != nil {
 		return GitLabResult{}, err
 	}
-	return GitLabResult{Controls: *wire.Controls, Images: images, Includes: includes, Unsupported: unsupported}, nil
+	if err := validateGitLabScripts(*wire.Scripts, controls); err != nil {
+		return GitLabResult{}, err
+	}
+	return GitLabResult{Controls: *wire.Controls, Images: images, Includes: includes, Unsupported: unsupported, Scripts: *wire.Scripts}, nil
+}
+
+func validateGitLabScripts(scripts []GitLabScript, controls map[string]bool) error {
+	for _, script := range scripts {
+		if !controls[script.Path] || !validGitLabText(script.Job, 1024) || len(script.Script) > 65536 || strings.ContainsRune(script.Script, '\x00') {
+			return fmt.Errorf("the gitlab result has an invalid script fact")
+		}
+		if script.Reason != "" && !validGitLabText(script.Reason, 4096) || script.Script == "" && script.Reason == "" {
+			return fmt.Errorf("the gitlab result has an invalid script rejection reason")
+		}
+	}
+	return nil
 }
 
 func validateGitLabResultWire(wire gitLabResultWire) error {
-	if wire.Controls == nil || wire.Images == nil || wire.Includes == nil || wire.Unsupported == nil {
+	if wire.Controls == nil || wire.Images == nil || wire.Includes == nil || wire.Unsupported == nil || wire.Scripts == nil {
 		return fmt.Errorf("the gitlab result is missing required fields")
 	}
-	counts := []int{len(*wire.Controls), len(*wire.Images), len(*wire.Includes), len(*wire.Unsupported)}
+	counts := []int{len(*wire.Controls), len(*wire.Images), len(*wire.Includes), len(*wire.Unsupported), len(*wire.Scripts)}
 	for _, count := range counts {
 		if count > maximumOperationPaths {
 			return fmt.Errorf("the gitlab result exceeds the %d fact limit", maximumOperationPaths)

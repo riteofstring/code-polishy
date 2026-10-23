@@ -42,10 +42,11 @@ manual dispatch authorizes the same operation for an existing tag.
    ./scripts/prepare-release-tag.sh
    ```
 
-   It verifies the current commit, clean worktree, version, changelog heading,
-   configured `main` upstream, exact pushed candidate, and absence of the
-   version tag both locally and remotely. It performs no mutation and prints
-   the candidate-specific maintainer commands only after every check passes.
+   It verifies the current commit, clean worktree, version, exactly one dated,
+   nonempty changelog section, configured `main` upstream, exact pushed
+   candidate, and absence of the version tag both locally and remotely. It
+   performs no mutation and prints the candidate-specific maintainer commands
+   only after every check passes.
 
 5. Run only the commands printed by release preparation. They create the
    annotated tag, rerun the exact-candidate preflight, and push only that tag.
@@ -84,7 +85,9 @@ manual dispatch authorizes the same operation for an existing tag.
    directories and reuses the verified Linux x64 archive's engine to combine
    their descriptors into `code-polishy-release-index.json`. It records the
    canonical index SHA-256, creates an index checksum sidecar, and requires the
-   complete 32-file publication.
+   complete 32-file publication. Before any publication, the job extracts the
+   release changelog with the same validator used by preflight. Empty or
+   duplicate sections fail before an immutable image tag can be created.
 
 8. The same job gives Buildx an exact BuildKit image and the retained Linux x64
    archive. It does not rebuild source, rerun the native archive contract, or
@@ -100,7 +103,8 @@ manual dispatch authorizes the same operation for an existing tag.
    existing release is never overwritten. The workflow uses neither `gh` nor a
    maintainer credential. Its repository-scoped token receives package-write
    access only in the final publish job. Release notes publish the source
-   revision, index SHA-256, and digest-pinned OCI image.
+   revision, index SHA-256, and digest-pinned OCI image alongside the prepared
+   changelog entries, including migration notes.
 
 9. Move each consuming repository with a publication-backed
    `upgrade plan --index URL --sha256 DIGEST`, inspect its capability and

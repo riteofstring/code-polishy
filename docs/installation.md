@@ -618,8 +618,12 @@ rollback-capable transaction with the lock last. New errors can be acknowledged
 without fixing them by adding `--accept-new-findings`. Neither phase edits
 application source, runs tests, or runs a merge gate.
 
-When the outgoing release has a v2 lock but predates `upgrade` or cannot read the
-incoming manifest schema, bootstrap through the incoming release. Obtain the
+Current planners automatically hand off to the authenticated incoming release
+when its manifest schema is newer. The incoming installer verifies its own
+schema and tree, and planning leaves the outgoing lock in place.
+
+When an older outgoing release predates `upgrade` or automatic schema handoff,
+bootstrap through the incoming release. Obtain the
 exact publication index and verify its separately published SHA-256. Download
 its current-host archive and verify the archive's SHA-256 against that index
 before extracting or executing it. For checksum verification, use
@@ -634,10 +638,10 @@ prefix that contains the outgoing release:
   --source /absolute/path/code-polishy-<version>-<host>.zip \
   --sha256 <archive-sha256> --prefix <installation-prefix>
 <installation-prefix>/releases/<version>-<release-digest>/bin/code-polishy \
-  --repo-root <repository> upgrade plan \
+  --repo-root /absolute/path/to/repository upgrade plan \
   --index <https-index-url> --sha256 <index-sha256> --prefix <installation-prefix>
 <installation-prefix>/releases/<version>-<release-digest>/bin/code-polishy \
-  --repo-root <repository> upgrade apply --plan <reported-plan-path>
+  --repo-root /absolute/path/to/repository upgrade apply --plan <reported-plan-path>
 ```
 
 On Windows, use `code-polishy.exe` and PowerShell invocation syntax. Invoke both
@@ -666,8 +670,10 @@ automated migration; Git retains the rollback path.
 
 ## Selecting a release
 
-`<prefix>/bin/code-polishy` is the launcher, and it is the only Code Polishy
-command a target runs. It reads the target's lock, resolves the one release that
+Repository wrappers invoke the launcher inside their locked release directory.
+The shared `<prefix>/bin/code-polishy` remains a convenience entry point;
+another repository's older setup cannot replace the release-local launcher.
+The selected launcher reads the target's lock, resolves the one release that
 lock names, and confirms that release records the same version, digest, and
 required features and was built for this host.
 

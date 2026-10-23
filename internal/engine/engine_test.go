@@ -1304,7 +1304,7 @@ func TestDependencyReviewUsesMergeBaseAndRendersChangeTable(t *testing.T) {
 	if len(report.Tables) != 1 || report.Tables[0].Title != "DEPENDENCY REVIEW" || len(report.Tables[0].Rows) != 0 {
 		t.Fatalf("tables = %+v", report.Tables)
 	}
-	if len(commandRunner.commands) != 1 || !slices.Contains(commandRunner.commands, "offline-supply") {
+	if len(commandRunner.commands) != 0 {
 		t.Fatalf("commands = %v", commandRunner.commands)
 	}
 }

@@ -216,8 +216,9 @@ Both satisfy the age minimum; module checksums authenticate the downloads.
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
 affects `braces` 3.0.3 in both graphs. Its iterative parser accepts deeply nested
 brace and parenthesis nodes that overflow recursive compilation or expansion.
-The ordinary pattern-length limit does not stop the attack. There is no published
-fixed release at this review.
+The ordinary pattern-length limit does not stop the attack. On 2026-10-23 UTC,
+the GitHub advisory still lists no patched version and the npm registry still
+lists 3.0.3 as the latest release.
 
 The provider's `resolveGlob` in
 [`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
@@ -280,7 +281,8 @@ are removed. Its [npm publication](https://registry.npmjs.org/smol-toml) was
 2026-09-22 at 17:15:34.756 UTC, so the 2026-10-23 update meets the 30-day minimum.
 Registry-integrity-verified archives confirm that the package still has no
 runtime dependencies or install lifecycle scripts. The parser replaces the
-quadratic key search; no other dependency or manifest changes in either graph.
+quadratic key search; this TOML remediation changed only the transitive
+smol-toml resolution in each graph.
 The newer 1.9.1 only corrects numeric exponent parsing in the shipped runtime;
 it is not yet aged, and this analyzer does not expose the TOML parse path.
 No early admission is needed. Reassess if configuration loading or plugin

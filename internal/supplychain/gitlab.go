@@ -12,11 +12,14 @@ import (
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	workflowfacts "github.com/riteofstring/code-polishy/internal/workflow"
 )
 
 type GitLabInspection struct {
-	ControlInputs []string
-	Findings      []policy.Finding
+	ControlInputs        []string
+	Findings             []policy.Finding
+	UnconditionalScripts []string
+	GateRejections       []policy.Finding
 }
 
 func InspectGitLab(ctx context.Context, repo repository.Repository) GitLabInspection {
@@ -45,7 +48,34 @@ func InspectGitLab(ctx context.Context, repo repository.Repository) GitLabInspec
 		}
 	}
 	findings := gitLabFindings(reported)
-	return GitLabInspection{ControlInputs: reported.Controls, Findings: uniqueFindings(findings)}
+	scripts := []string{}
+	rejections := []policy.Finding{}
+	for _, script := range reported.Scripts {
+		if script.Reason == "" {
+			scripts = append(scripts, script.Script)
+		}
+		if rejection := gitLabGateRejection(script); rejection != nil {
+			rejections = append(rejections, *rejection)
+		}
+	}
+	return GitLabInspection{ControlInputs: reported.Controls, Findings: uniqueFindings(findings), UnconditionalScripts: scripts, GateRejections: rejections}
+}
+
+func gitLabGateRejection(script javascript.GitLabScript) *policy.Finding {
+	if script.Script != "" && !strings.Contains(script.Script, "merge-gate") {
+		return nil
+	}
+	reason := script.Reason
+	if reason == "" {
+		reason = workflowfacts.MergeGateCommandIssue(script.Script, "sh")
+	}
+	if reason == "" {
+		return nil
+	}
+	return &policy.Finding{
+		Check: "policy.finalGateOwner", Path: script.Path, Subject: "job " + script.Job,
+		Message: "cannot establish CI gate ownership: " + reason,
+	}
 }
 
 func GitLabRootPaths(repo repository.Repository) []string {

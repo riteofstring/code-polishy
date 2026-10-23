@@ -58,6 +58,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 			{Path: bundleLink, Symlink: "../.pnpm/tool"},
 			{Path: bundleFile, SHA256: digestOf(engine + " runner")},
 			{Path: release.BinaryPath, SHA256: digestOf(engine)},
+			{Path: release.LauncherBinaryPath, SHA256: digestOf("launcher")},
 			{Path: "docs/agent-workflows.md", SHA256: digestOf("# Agent workflows\n")},
 			{Path: release.CapabilityCatalogPath, SHA256: digestOf(catalog)},
 		},
@@ -68,6 +69,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 	lock := launcherLockForManifest(manifest)
 	directory := installed.releaseRoot(lock)
 	writeFile(t, directory, release.BinaryPath, engine)
+	writeFile(t, directory, release.LauncherBinaryPath, "launcher")
 	writeFile(t, directory, bundleFile, engine+" runner")
 	writeFile(t, directory, release.CapabilityCatalogPath, catalog)
 	writeFile(t, directory, "docs/agent-workflows.md", "# Agent workflows\n")
@@ -261,6 +263,23 @@ func TestLauncherRunsInstalledReleasesWithHistoricalManifests(t *testing.T) {
 		if status != 0 || len(argv) == 0 {
 			t.Fatalf("manifest version %d: status=%d stderr=%s argv=%v", version, status, stderr, argv)
 		}
+	}
+}
+
+func TestReleaseLocalLauncherIgnoresSharedLauncherReplacement(t *testing.T) {
+	installed := newStore(t)
+	lock := installed.install(t, exampleRevision(1), engineBytes)
+	repo := repositoryWith(t, &lock)
+	writeFile(t, installed.prefix, "bin/code-polishy", "older launcher")
+	directory := installed.releaseRoot(lock)
+	stderr := &bytes.Buffer{}
+	launched := ""
+	status := run(filepath.Join(directory, filepath.FromSlash(release.LauncherBinaryPath)), []string{"--repo-root", repo, "version"}, stderr, func(binary string, arguments []string) (int, error) {
+		launched = binary
+		return 0, nil
+	})
+	if status != 0 || launched != filepath.Join(directory, filepath.FromSlash(release.BinaryPath)) {
+		t.Fatalf("status=%d binary=%q error=%s", status, launched, stderr)
 	}
 }
 

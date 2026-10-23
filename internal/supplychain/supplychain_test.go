@@ -397,7 +397,7 @@ func TestResolvedLockParsersIncludeTransitivePackages(t *testing.T) {
 
 func TestReleaseMetadataParsersKeepExactVersionTimes(t *testing.T) {
 	t.Parallel()
-	node, err := decodeNodeReleaseTimes(strings.NewReader(`{"time":{"1.2.3":"2026-07-01T12:00:00Z"}}`))
+	node, err := decodeNodeReleaseTimes(strings.NewReader(`{"time":{"1.2.3":"2026-07-01T12:00:00Z"}}`), nil)
 	if err != nil || node["1.2.3"].IsZero() {
 		t.Fatalf("node times=%v err=%v", node, err)
 	}
@@ -597,7 +597,7 @@ func TestPNPMNativeSecuritySettingsAreVersionGated(t *testing.T) {
 		workspaceSetting("trustPolicy", "no-downgrade"),
 		workspaceSetting("trustLockfile", "false"),
 		workspaceSetting("blockExoticSubdeps", "true"),
-		workspaceSetting("ignoredBuiltDependencies"),
+		workspaceSetting("allowBuilds"),
 	}
 	settings := func(replacement ...string) string {
 		declared := slices.Clone(hardened)

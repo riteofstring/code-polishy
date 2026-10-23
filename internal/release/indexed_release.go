@@ -106,7 +106,8 @@ func installPublicationHost(ctx context.Context, client *http.Client, indexURL *
 		return Manifest{}, "", err
 	}
 	manifest, installed, err := installedPublicationHost(canonicalPrefix, artifact)
-	if err != nil {
+	var newer *NewerManifestError
+	if err != nil && !errors.As(err, &newer) {
 		return Manifest{}, "", err
 	}
 	if installed {
@@ -117,11 +118,21 @@ func installPublicationHost(ctx context.Context, client *http.Client, indexURL *
 		return Manifest{}, "", err
 	}
 	defer os.Remove(archive)
-	manifest, err = InstallLocalBundle(archive, artifact.Archive.SHA256, canonicalPrefix)
-	if err != nil {
-		return Manifest{}, "", err
+	manifest, err = installIndexedArchive(ctx, archive, canonicalPrefix, artifact)
+	return manifest, canonicalPrefix, err
+}
+
+func installIndexedArchive(ctx context.Context, archive, prefix string, artifact PublicationArtifact) (Manifest, error) {
+	manifest, err := installAuthenticatedBundle(archive, prefix)
+	var newer *NewerManifestError
+	if !errors.As(err, &newer) {
+		return manifest, err
 	}
-	return manifest, canonicalPrefix, nil
+	root, err := bootstrapIndexedArchive(ctx, archive, prefix, artifact)
+	if err != nil {
+		return Manifest{}, err
+	}
+	return Manifest{}, &UpgradeHandoff{Root: root}
 }
 
 func installedPublicationHost(prefix string, artifact PublicationArtifact) (Manifest, bool, error) {

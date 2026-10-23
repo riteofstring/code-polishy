@@ -34,7 +34,14 @@ func checkResolvedNodeReleaseAge(ctx context.Context, repo repository.Repository
 			Version: manifest.ManagerVersion, Scope: owner,
 		})
 	}
-	return releaseAgeFindings(ctx, repo, packages, time.Now().UTC())
+	findings := releaseAgeFindings(ctx, repo, packages, time.Now().UTC())
+	if manifest.Manager == "npm" && gitLockPackages(packages) {
+		findings = append(findings, policy.Finding{
+			Check: "supplyChain.gitSourceCoverage", Path: packages[0].Scope, Severity: policy.FindingWarning,
+			Message: "Git dependency release ages are unverified; npm registry publication times do not establish the age of Git contents",
+		})
+	}
+	return findings
 }
 
 func resolvedPythonFindings(ctx context.Context, repo repository.Repository, scope string, packages []resolvedPackage, now time.Time) []policy.Finding {
@@ -234,14 +241,15 @@ func lookupReleaseGroup(ctx context.Context, client *http.Client, repo repositor
 		return nil, fmt.Errorf("release metadata request failed with HTTP %d", response.StatusCode)
 	}
 	if group.Kind == "node" {
-		return decodeNodeReleaseTimes(response.Body)
+		return decodeNodeReleaseTimes(response.Body, group.Items)
 	}
 	return decodePyPIReleaseTimes(response.Body)
 }
 
-func decodeNodeReleaseTimes(reader io.Reader) (map[string]time.Time, error) {
+func decodeNodeReleaseTimes(reader io.Reader, packages []resolvedPackage) (map[string]time.Time, error) {
 	var payload struct {
-		Time map[string]string `json:"time"`
+		Time     map[string]string             `json:"time"`
+		Versions map[string]npmReleaseArtifact `json:"versions"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(reader, 64<<20))
 	if err := decoder.Decode(&payload); err != nil {
@@ -249,6 +257,13 @@ func decodeNodeReleaseTimes(reader io.Reader) (map[string]time.Time, error) {
 	}
 	if err := requireOneJSONValue(decoder); err != nil {
 		return nil, err
+	}
+	for _, item := range packages {
+		if item.Source.ArtifactURL != "" {
+			if err := validateNPMReleaseArtifact(item, payload.Versions[item.Version]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	times := map[string]time.Time{}
 	for version, value := range payload.Time {

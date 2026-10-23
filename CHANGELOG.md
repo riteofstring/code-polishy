@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.1 - 2026-10-23
+## 0.31.1 - 2026-10-23
 
 - Compile and lint governed Cargo replacement packages through their consuming
   project, retain forced lint diagnostics, and omit warnings located entirely
@@ -19,9 +19,40 @@
   settings, and reject incomplete cached notice layouts during installation.
 - Report the original pnpm failure when JavaScript license listing fails,
   instead of treating its error response as a package inventory.
-- Resolve the aged smol-toml 1.9.0 security fix in both JavaScript graphs and
-  remove its temporary vulnerability assessments. Reassess the unchanged
-  braces depth guard while no official fixed release is available.
+
+## 0.31.0 - 2026-10-22
+
+- Keep pre-install dependency review limited to built-in checks. Report repository
+  providers, artifact scans, and installed license checks deferred until after
+  frozen installation, while retaining them in full supply-chain verification.
+- Attribute scanner self-check findings to the locked Code Polishy release and
+  identify the pinned scanner. Direct remediation to a verified patched release,
+  explicitly report when no fixed release is established, and retain scan failures.
+- Hand off upgrade planning to the authenticated incoming release when its
+  manifest schema is newer, while keeping supported-schema parsing strict.
+  Resolve relative repository roots before running either release's diagnostics.
+- Have new repository wrappers use the launcher inside their locked release,
+  so installing an older release for another repository cannot replace it.
+- Enforce pnpm security and lifecycle settings against the pinned pnpm version,
+  including `allowBuilds` and removed settings in pnpm 11.
+- Require common Node pin files and `setup-node` selections to be covered by
+  the release-artifact inventory. Check upstream Node support dates online in
+  addition to release age, and reject missing lifecycle evidence.
+- Verify that exact development dependencies satisfy their npm peer ranges.
+- Update both JavaScript dependency graphs to the aged `smol-toml` 1.9.0 fix
+  for quadratic key parsing and remove the corresponding vulnerability assessments.
+- Look up npm alias release dates by the canonical package name, validate the
+  package and download URL against registry metadata, and retain installation paths.
+  Keep Git and local sources distinct, and allow dependency review to compare
+  and remove historical registry entries independently of current admission.
+  Preserve arbitrary npm artifact URL layouts and report changes to their URLs.
+- Require a supported gate command in a dedicated CI step, including repository
+  wrappers. Keep setup in earlier steps or jobs; reject arbitrary shell scripts,
+  disabled or optional gates, and schedule-only declarations.
+  Report rejected declarations at their workflow and job, with the specific
+  setting or command form that prevents CI ownership.
+- Include the version's changelog in GitHub release notes, including removals
+  and migration instructions. Validate the complete section before publication.
 
 ## 0.30.0 - 2026-10-20
 

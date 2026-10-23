@@ -721,6 +721,24 @@ func TestConciseReportHidesRoutineNotes(t *testing.T) {
 	}
 }
 
+func TestConciseDependencyReviewShowsDeferredChecks(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	printReportTo(stdout, stderr, engine.Report{Command: "dependency-review", Notes: []string{
+		"deferred repository provider frontend-lock-sync",
+		"after frozen script-disabled installation, run code-polishy supply-chain without --offline",
+	}})
+	for _, required := range []string{"frontend-lock-sync", "after frozen script-disabled installation", "code-polishy supply-chain without --offline"} {
+		if !strings.Contains(stdout.String(), required) {
+			t.Errorf("default review output hid %q: %s", required, stdout.String())
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("deferring checks failed the pre-install review: %s", stderr.String())
+	}
+}
+
 func TestPrintReportDisclosesTrustedChangeBoundary(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}

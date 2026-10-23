@@ -284,6 +284,57 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	}
 }
 
+func TestScannerFindingsIdentifyReleaseOwnership(t *testing.T) {
+	root := t.TempDir()
+	policyRoot := carriedScannerPolicyRoot(t)
+	if err := os.WriteFile(filepath.Join(root, "application.tar"), []byte("application image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.Repository{Root: root, PolicyRoot: policyRoot, Config: policy.Config{
+		SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{Targets: []policy.ArtifactTarget{
+			{Name: "application", Mode: "archive", Archive: "application.tar"},
+		}}},
+	}}
+	boundary := newScannerBoundary(t, policyRoot)
+	boundary.blockingFindings = []map[string]any{{
+		"VulnerabilityID": "CVE-2026-111943", "PkgName": "stdlib",
+		"PkgIdentifier":    map[string]any{"PURL": "pkg:golang/stdlib@v1.26.6"},
+		"InstalledVersion": "v1.26.6", "FixedVersion": "1.26.10", "Severity": "HIGH",
+		"Title": "crypto/x509: Man-in-the-middle attacks via untrusted intermediate certificates",
+	}}
+	result := Run(t.Context(), repo, boundary)
+	if len(result.Findings) != 2 {
+		t.Fatalf("scanner and application vulnerabilities did not both remain blocking: %+v", result)
+	}
+	scanner := policy.NormalizeFinding(result.Findings[0])
+	application := policy.NormalizeFinding(result.Findings[1])
+	for _, finding := range []policy.Finding{scanner, application} {
+		if finding.Check != "artifactSecurity.vulnerability" || finding.Severity != policy.FindingError ||
+			finding.Vulnerability == nil || finding.Vulnerability.Advisory != "CVE-2026-111943" {
+			t.Fatalf("vulnerability was hidden or replaced: %+v", finding)
+		}
+	}
+	requireScannerFindingOwnership(t, scanner, boundary.version)
+	if application.Path != "application.tar" || application.Vulnerability.Scope != "application.tar" ||
+		strings.Contains(application.Message, "Code Polishy's scanner") || !strings.Contains(application.Remediation.Summary, "rebuild the declared target") ||
+		application.Fingerprint == scanner.Fingerprint {
+		t.Fatalf("application finding acquired scanner ownership: %+v", application)
+	}
+}
+
+func requireScannerFindingOwnership(t *testing.T, scanner policy.Finding, version string) {
+	t.Helper()
+	if scanner.Path != policy.LockFilename || scanner.Vulnerability.Scope != policy.LockFilename ||
+		!strings.Contains(scanner.Message, "Code Polishy's scanner (carried Trivy "+version+")") {
+		t.Fatalf("scanner vulnerability did not identify its release owner and exact scanner: %+v", scanner)
+	}
+	for _, phrase := range []string{"verified Code Polishy release", "No fixed Code Polishy/scanner release has been established", "Rebuilding application artifacts cannot repair"} {
+		if !strings.Contains(scanner.Remediation.Summary, phrase) {
+			t.Errorf("scanner remediation omitted %q: %s", phrase, scanner.Remediation.Summary)
+		}
+	}
+}
+
 func TestArtifactSecurityCoverageAndToolsFailClosed(t *testing.T) {
 	root := t.TempDir()
 	repo := repository.Repository{
@@ -416,11 +467,12 @@ func TestPlannedArtifactAuthorizationIsExactAtTheSecurityBoundary(t *testing.T) 
 }
 
 type scannerBoundary struct {
-	t          *testing.T
-	containers map[string][]string
-	findings   []map[string]any
-	imageID    string
-	version    string
+	t                *testing.T
+	containers       map[string][]string
+	findings         []map[string]any
+	blockingFindings []map[string]any
+	imageID          string
+	version          string
 }
 
 type unavailableScannerBoundary struct{}
@@ -646,11 +698,11 @@ func (boundary *scannerBoundary) writeVulnerabilityReport(arguments []string) er
 	if !ok {
 		return fmt.Errorf("vulnerability scan omitted report path")
 	}
-	findings := []map[string]any{}
+	findings := append([]map[string]any{}, boundary.blockingFindings...)
 	archive, archiveFound := mountSource(arguments, "/input/image.tar")
 	if archiveFound && !slices.Contains(arguments, "--vex") {
 		if filepath.Base(filepath.Dir(archive)) == "code-polishy-scanner" {
-			findings = boundary.findings
+			findings = append(findings, boundary.findings...)
 		}
 	}
 	report := map[string]any{

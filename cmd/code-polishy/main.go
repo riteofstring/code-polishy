@@ -366,8 +366,12 @@ func parseGlobalInvocation(arguments []string) (invocation, int) {
 	if err := global.Parse(arguments[:commandIndex]); err != nil {
 		return invocation{}, 2
 	}
+	absoluteRoot, err := filepath.Abs(*repoRoot)
+	if err != nil {
+		return invocation{}, operationalError(fmt.Errorf("resolve repository root: %w", err))
+	}
 	return invocation{
-		repoRoot: *repoRoot, policyRoot: *policyRoot, configPath: *configPath,
+		repoRoot: absoluteRoot, policyRoot: *policyRoot, configPath: *configPath,
 		command: arguments[commandIndex], arguments: arguments[commandIndex+1:], verbose: *verbose,
 	}, 0
 }
@@ -789,7 +793,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
 	}
 	printReportTables(stdout, report.Tables)
-	printReportNotes(stdout, report.Notes, verbose)
+	printReportNotes(stdout, report.Notes, verbose || report.Command == "dependency-review")
 	if report.ReportPath != "" {
 		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
 	}

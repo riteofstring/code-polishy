@@ -1,0 +1,25 @@
+{
+  "name": "registry-url-fixture",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "registry-url-fixture",
+      "version": "1.0.0",
+      "dependencies": {
+        "@fixture/tool": "1.2.3",
+        "tool-alias": "npm:@fixture/tool@1.2.3"
+      }
+    },
+    "node_modules/@fixture/tool": {
+      "version": "1.2.3",
+      "resolved": "https://registry.example/download/@fixture/tool/1.2.3/artifact"
+    },
+    "node_modules/tool-alias": {
+      "name": "@fixture/tool",
+      "version": "1.2.3",
+      "resolved": "https://registry.example/download/@fixture/tool/1.2.3/artifact"
+    }
+  }
+}

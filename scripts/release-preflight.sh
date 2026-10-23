@@ -57,13 +57,7 @@ fi
 version="$("${policy_root}/scripts/release-version.sh" "${policy_root}/VERSION")"
 tag_name="v${version}"
 
-if [[ ! -f "${policy_root}/CHANGELOG.md" ]]; then
-  fail "The candidate has no CHANGELOG.md to record the ${version} release in."
-fi
-if ! grep -Eq "^## ${version//./\\.} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "${policy_root}/CHANGELOG.md"; then
-  fail "CHANGELOG.md has no released-version heading for ${version}." \
-    "Move this release's entries out of \`## Unreleased\` and under an exact \`## ${version} - <YYYY-MM-DD>\` heading."
-fi
+"${policy_root}/scripts/release-changelog.sh" "${version}" "${policy_root}/CHANGELOG.md" >/dev/null
 
 tag_command="git tag -a ${tag_name} -m \"Code Polishy ${version}\" ${candidate}"
 if git -C "${policy_root}" rev-parse --verify --quiet "refs/tags/${tag_name}" >/dev/null; then
@@ -94,5 +88,5 @@ fi
 echo "Release preflight passed for Code Polishy ${version} at ${candidate}:"
 echo "- the requested candidate is the current commit and the worktree carries no drift;"
 echo "- VERSION stores exactly ${version} and derives the tag name ${tag_name};"
-echo "- CHANGELOG.md records the exact \`## ${version}\` released-version heading;"
+echo "- CHANGELOG.md records exactly one dated, nonempty release section for ${version};"
 echo "- ${tag_state}"

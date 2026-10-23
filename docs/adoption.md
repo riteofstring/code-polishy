@@ -787,7 +787,7 @@ Every repository gets the documentation-only merge level by default. For other
 candidates, most repositories should keep the complete gate. A mixed
 content-and-code repository may opt in to
 `verification.mergeGate.recommendedModules` and run
-`code-polishy merge-gate --base "$TRUSTED_BASE_SHA"`. CI, not an agent,
+`code-polishy merge-gate --base="$TRUSTED_BASE_SHA"`. CI, not an agent,
 must derive that SHA from the pull-request base or push-before event. The
 command accepts no file list or requested level and automatically escalates
 control, product-input, mixed, policy, dependency, workflow, container,
@@ -804,8 +804,14 @@ configuration or lock fails closed. See
 
 Choose one final-gate owner. Omission means `local`; CI-owned delivery declares
 `"finalGateOwner": "ci"` under `verification` and checks in a GitHub or governed
-GitLab workflow containing the literal `code-polishy merge-gate --base`
-command. This avoids routine duplicate local and CI gates without waiving the
+GitLab workflow with a dedicated `code-polishy merge-gate --base REF` step,
+including the repository-wrapper form. Keep one supported command in the step,
+with a standard named shell; move setup to earlier steps or jobs. The
+[supported command format](design/ci-gate-ownership.md) excludes arbitrary shell
+scripts. The command must belong to an active
+merge-related GitHub job or an unconditional GitLab job; see
+[CI ownership evidence](policies/verification.md) for the
+surrounding verification contract. This avoids routine duplicate local and CI gates without waiving the
 gate.
 
 Each checkpoint or merge gate that executes work writes a managed versioned JSON

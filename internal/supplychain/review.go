@@ -275,6 +275,11 @@ func resolvedDependencyReviewIdentity(item resolvedPackage) (string, string) {
 		return "git", item.Source.Git.InventoryIdentity()
 	case "local":
 		return "file", "file:" + item.Source.LocalPath
+	case "registry":
+		if item.Source.ArtifactURL != "" {
+			return item.Ecosystem, item.Source.ArtifactURL + "@" + item.Version
+		}
+		return item.Ecosystem, item.Version
 	default:
 		return item.Ecosystem, item.Version
 	}

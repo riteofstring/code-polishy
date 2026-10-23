@@ -98,6 +98,10 @@ func planUpgrade(invocation invocation, arguments []string) int {
 		return commandUsageError("upgrade", err.Error())
 	}
 	result, err := prepareUpgradePlan(invocation, options)
+	var handoff *release.UpgradeHandoff
+	if errors.As(err, &handoff) {
+		return runUpgradeHandoff(invocation, arguments, handoff.Root)
+	}
 	if err != nil {
 		return operationalError(err)
 	}
@@ -110,6 +114,28 @@ func planUpgrade(invocation invocation, arguments []string) int {
 		fmt.Println("New error diagnostics require cleanup, a new plan, or apply --accept-new-findings.")
 	}
 	return 0
+}
+
+func runUpgradeHandoff(invocation invocation, arguments []string, root string) int {
+	command := exec.Command(filepath.Join(root, filepath.FromSlash(release.BinaryPath)),
+		append([]string{"--repo-root", invocation.repoRoot, "--policy-root", root}, appendUpgradeArguments(invocation, arguments)...)...)
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := command.Run(); err != nil {
+		var exited *exec.ExitError
+		if errors.As(err, &exited) {
+			return exited.ExitCode()
+		}
+		return operationalError(err)
+	}
+	return 0
+}
+
+func appendUpgradeArguments(invocation invocation, arguments []string) []string {
+	forwarded := []string{}
+	if invocation.configPath != "" {
+		forwarded = append(forwarded, "--config", invocation.configPath)
+	}
+	return append(append(forwarded, "upgrade", "plan"), arguments...)
 }
 
 func parseUpgradePlanOptions(arguments []string) (upgradePlanOptions, error) {
