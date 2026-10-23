@@ -285,7 +285,7 @@ checkpoint delta ---> unchanged ---> no-op
                  ---> complete pass ---> accepted-HEAD receipt
 
 merge execution ---> gate-run owner ---> immutable command attempts + failure evidence
-                                      ---> exact passed identity ---> already-passed, no commands
+                                      ---> exact passed identity ---> retain source/tests, evaluate security
                                       ---> exact suite receipt ---> reuse matching ordinary test
                                       ---> explicit failed-run resume ---> matching passed tests
                                       ---> proofs/checks/builds/security execute for new identities

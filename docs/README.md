@@ -57,6 +57,8 @@ and aliases. Search is local, bounded, and deterministic.
 
 - [Dependency Assessment Decisions](design/dependency-assessments.md) explains
   applicability, agent ownership, and the risk comparison before early admission.
+- [Security Evidence Lifetime](design/security-evidence.md) explains bounded
+  scan reuse and security refreshes without repeating source verification.
 - [Current JavaScript Dependency Assessments](security/dependency-assessments.md)
   records exact advisory call paths and scheduled remediation for this repository.
 - [Canonical Agent Guidance Design](design/agent-guidance.md) defines what

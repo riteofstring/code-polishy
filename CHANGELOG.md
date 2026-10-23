@@ -1,12 +1,31 @@
 # Changelog
 
-## 0.31.2 - 2026-10-23
+## 0.31.3 - 2026-10-23
 
 - Compile and lint governed Cargo replacement packages through their consuming
   project, retain forced lint diagnostics, and omit warnings located entirely
   inside external macro implementations while preserving caller diagnostics.
 - Report the original pnpm failure when JavaScript license listing fails,
   instead of treating its error response as a package inventory.
+
+## 0.31.2 - 2026-10-23
+
+- Keep raw package scanner output in report artifacts and show bounded summaries.
+  Recognize authenticated outgoing canonical wrappers during upgrade previews,
+  and explain selected test suites and bounded upgrade verification.
+- Read upstream OSV severity labels and report their provenance and disagreement.
+  Allow exact, evidence-backed critical `not-affected` assessments for at most
+  seven days, retaining blocks for unknown severity, known exploitation and
+  critical risk acceptance. Preserve dependency release-age requirements.
+- Reuse matching sealed pnpm audits and explicit OSV uv/Cargo inventory scans for
+  at most 24 hours across review and verification stages. Identify and scan the
+  same captured inputs, and reevaluate current assessments on every invocation.
+  Always execute recursive OSV scans without cache lookup. Evaluate security on
+  every unchanged online gate through that raw-result cache, without repeating
+  successful source checks or tests. Retain failed refreshes and report scan
+  freshness separately from historical verification. Complete deferred providers
+  and actual image scans independently of package reuse.
+  Reclaim security scan and refresh evidence with `cleanup --reports`.
 
 ## 0.31.1 - 2026-10-22
 

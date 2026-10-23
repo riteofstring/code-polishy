@@ -38,9 +38,19 @@ type Engine struct {
 	PackDataRoot         string
 	execution            *executionRecorder
 	gitLabInspection     supplychain.GitLabInspection
+	securityScans        *securityScanRunner
+	securityClock        func() time.Time
 }
 
 func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
+	return openRepository(repoRoot, policyRoot, configPath, "")
+}
+
+func OpenUpgradePreview(repoRoot, policyRoot, configPath, outgoingRoot string) (*Engine, error) {
+	return openRepository(repoRoot, policyRoot, configPath, outgoingRoot)
+}
+
+func openRepository(repoRoot, policyRoot, configPath, outgoingRoot string) (*Engine, error) {
 	config, err := policy.Load(repoRoot, configPath)
 	if err != nil {
 		return nil, err
@@ -48,6 +58,12 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 	repo, err := repository.Open(repoRoot, policyRoot, config)
 	if err != nil {
 		return nil, err
+	}
+	if outgoingRoot != "" {
+		repo, err = repo.WithUpgradeWrappers(outgoingRoot)
+		if err != nil {
+			return nil, err
+		}
 	}
 	gitLabInspection := supplychain.InspectGitLab(context.Background(), repo)
 	repo, err = repo.WithDynamicControlInputs(gitLabInspection.ControlInputs)
@@ -444,7 +460,34 @@ func (engine *Engine) testPlanReport(
 	report := engine.finish(nil, testPlanNotes(base, selection, advice, ordinaryNotes))
 	report.MergePolicy = mergePolicy
 	report.Tables = []Table{testLevelsTable(advice, selectedLevel, base != "")}
+	if reasons := testSelectionReasons(advice, selectedLevel, selection); len(reasons.Rows) > 0 {
+		report.Tables = append(report.Tables, reasons)
+	}
 	return report
+}
+
+func testSelectionReasons(advice testpolicy.Advice, level string, selection repository.Selection) Table {
+	rows := [][]string{}
+	for _, suite := range testPlanSuites(advice, level) {
+		reason := "repository suite matches the selected paths and profile"
+		if suite.Scope == "module" {
+			modules := []string{}
+			for _, module := range suite.Modules {
+				if slices.Contains(advice.ImpactedModules, module) {
+					modules = append(modules, module)
+				}
+			}
+			reason = "impacted production modules: " + strings.Join(modules, ", ")
+		}
+		if level == testpolicy.MergeLevelFull {
+			reason = "required by the full verification profile"
+		}
+		if selection.All {
+			reason += "; impact includes the whole repository"
+		}
+		rows = append(rows, []string{suite.Name, reason})
+	}
+	return Table{Title: "TEST SELECTION REASONS", Columns: []string{"SUITE", "SELECTED BECAUSE"}, Rows: rows}
 }
 
 func testPlanNotes(base string, selection repository.Selection, advice testpolicy.Advice, ordinaryNotes []string) []string {
@@ -655,25 +698,36 @@ func (engine *Engine) supplyChain(ctx context.Context, mode supplyChainMode) (Re
 		static = supplychain.DependencyReviewStatic
 	}
 	findings = append(findings, static(ctx, engine.Repository, files)...)
+	defaultFindingPhase(findings, policy.VerificationSource)
 	selection := repository.Selection{Files: files, All: true}
 	notes := []string{}
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
+	var security *policy.SecurityVerification
 	if mode == supplyChainOffline {
 		findings = append(findings, supplychain.CheckCargoResolution(ctx, engine.Repository, files, true, engine.Runner)...)
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
 	if mode != supplyChainOffline {
-		onlineFindings, evidence, onlineNotes := engine.onlineSupplyChain(ctx, files, findings, mode)
+		onlineFindings, evidence, onlineNotes, verified := engine.onlineSupplyChain(ctx, files, findings, mode)
 		findings = onlineFindings
 		gitEvidence = evidence
+		security = verified
 		notes = append(notes, onlineNotes...)
 	}
 	notes = append([]string{"completed " + string(mode)}, notes...)
 	if mode == supplyChainOffline {
-		return engine.finish(findings, notes), nil
+		report := engine.finishWithAssessments(findings, notes, false, policy.VerificationSecurity)
+		report.Security = &policy.SecurityVerification{Status: "not-run"}
+		return report, nil
 	}
-	report := engine.finishWithAssessments(findings, notes, true)
+	report := engine.finishWithAssessments(findings, notes, true, policy.VerificationSecurity)
 	report.GitEvidence = gitEvidence
+	report.Security = security
+	if security != nil && HasFindings(report) {
+		security.Status = "failed"
+	} else if security != nil && mode == dependencyReviewMode {
+		security.Status = "partial"
+	}
 	return report, nil
 }
 
@@ -691,6 +745,7 @@ func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report
 		return report, err
 	}
 	report.Findings = append(report.Findings, advisoryFindings(supplychain.NewDependencyAgeAdvisories(ctx, engine.Repository, changes))...)
+	defaultFindingPhase(report.Findings, policy.VerificationSecurity)
 	report = engine.normalizeReport(report)
 	report.Tables = append([]Table{dependencyReviewTable(changes)}, report.Tables...)
 	report.Notes = append([]string{fmt.Sprintf("dependency review base: %s (%s)", base, mergeBase)}, report.Notes...)
@@ -712,7 +767,7 @@ func dependencyReviewTable(changes []supplychain.DependencyChange) Table {
 
 func (engine *Engine) ArtifactSecurity(ctx context.Context) Report {
 	result := artifactsecurity.Run(ctx, engine.Repository, engine.Runner)
-	return engine.finishWithAssessments(result.Findings, result.Notes, false)
+	return engine.finishWithAssessments(result.Findings, result.Notes, false, policy.VerificationSecurity)
 }
 
 func withCheckpointPolicy(report Report, scope, base, candidate, receiptPath string) Report {
@@ -725,13 +780,15 @@ func (engine *Engine) finish(findings []policy.Finding, notes []string) Report {
 }
 
 func (engine *Engine) finishWithAdvisories(findings []policy.Finding, advisories []policy.Advisory, notes []string) Report {
-	report := engine.finishWithAssessments(findings, notes, false)
+	report := engine.finishWithAssessments(findings, notes, false, policy.VerificationSource)
 	report.Findings = append(report.Findings, advisoryFindings(advisories)...)
 	return engine.normalizeReport(report)
 }
 
-func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool) Report {
-	ordered := engine.normalizeFindings(append([]policy.Finding{}, findings...), nil)
+func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool, phase policy.VerificationPhase) Report {
+	ordered := append([]policy.Finding{}, findings...)
+	defaultFindingPhase(ordered, phase)
+	ordered = engine.normalizeFindings(ordered, nil)
 	sortFindings(ordered)
 	ordered = compactFindings(ordered)
 	kept, releaseAges := policy.ApplyReleaseAgeAssessments(
@@ -740,7 +797,9 @@ func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []s
 	kept, assessed := policy.ApplyVulnerabilityAssessments(
 		kept, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, time.Now().UTC(), enforceUnused,
 	)
+	defaultFindingPhase(kept, phase)
 	kept, suppressed := policy.ApplyExceptions(kept, engine.Repository.Config.Exceptions, time.Now().UTC())
+	defaultFindingPhase(kept, phase)
 	sortFindings(kept)
 	kept = compactFindings(kept)
 	sort.Slice(suppressed, func(left, right int) bool {
@@ -811,9 +870,9 @@ func findingLocationKey(location policy.FindingLocation) string {
 
 func findingKey(finding policy.Finding) string {
 	if finding.Fingerprint == "" {
-		return policy.NormalizeFinding(finding).Fingerprint
+		finding = policy.NormalizeFinding(finding)
 	}
-	return finding.Fingerprint
+	return string(finding.VerificationPhase) + "\x00" + finding.Fingerprint
 }
 
 func NewTestQualityReminder(paths []string) *TestQualityReminder {
@@ -873,6 +932,7 @@ func (engine *Engine) combine(left, right Report) Report {
 		MergePolicy:           combineMergePolicy(left.MergePolicy, right.MergePolicy),
 		CheckpointPolicy:      cmp.Or(right.CheckpointPolicy, left.CheckpointPolicy),
 		GateRunPolicy:         cmp.Or(right.GateRunPolicy, left.GateRunPolicy),
+		Security:              cmp.Or(right.Security, left.Security),
 		ChangedTestScope:      cmp.Or(right.ChangedTestScope, left.ChangedTestScope),
 		TestQualityReminder:   combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		ReliabilityReminder:   combineReliabilityReminders(left.ReliabilityReminder, right.ReliabilityReminder),

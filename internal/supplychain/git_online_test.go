@@ -141,6 +141,9 @@ func (boundary *gitOnlineBoundary) runOutput(_ context.Context, root string, com
 }
 
 func (double *gitOnlineBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Snapshot != nil {
+		return runner.ExecuteSnapshot(ctx, double, invocation)
+	}
 	if invocation.Capture != runner.CaptureNone {
 		return double.runOutput(ctx, invocation.Root, invocation.Command)
 	}

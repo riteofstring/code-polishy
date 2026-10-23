@@ -26,12 +26,27 @@ const (
 )
 
 type Invocation struct {
-	Root    string
-	Command policy.Command
-	Capture Capture
-	Stdout  io.Writer
-	Stderr  io.Writer
-	Accept  ReportOutcomeAcceptor
+	Root     string
+	Command  policy.Command
+	Capture  Capture
+	Stdout   io.Writer
+	Stderr   io.Writer
+	Accept   ReportOutcomeAcceptor
+	Snapshot InputSnapshot
+}
+
+type InputSnapshot interface {
+	Identity(policy.Command) (string, error)
+	Execute(context.Context, Runner, Invocation) (Result, Output, error)
+}
+
+func ExecuteSnapshot(ctx context.Context, commandRunner Runner, invocation Invocation) (Result, Output, error) {
+	if invocation.Snapshot == nil {
+		return commandRunner.Execute(ctx, invocation)
+	}
+	snapshot := invocation.Snapshot
+	invocation.Snapshot = nil
+	return snapshot.Execute(ctx, commandRunner, invocation)
 }
 
 type Runner interface {
@@ -65,7 +80,7 @@ func RunStreamed(ctx context.Context, commandRunner Runner, root string, command
 }
 
 func RunWithReport(ctx context.Context, commandRunner Runner, root string, command policy.Command, accept ReportOutcomeAcceptor) (Result, Output, error) {
-	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: CaptureOutput, Accept: accept})
+	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: CaptureStructured, Accept: accept})
 }
 
 type CommandPhase struct {
@@ -144,6 +159,9 @@ const (
 )
 
 func (runner OSRunner) Execute(parent context.Context, invocation Invocation) (Result, Output, error) {
+	if invocation.Snapshot != nil {
+		return ExecuteSnapshot(parent, runner, invocation)
+	}
 	stdout, stderr := runner.Stdout, runner.Stderr
 	if invocation.Stdout != nil || invocation.Stderr != nil {
 		stdout, stderr = invocation.Stdout, invocation.Stderr
@@ -379,6 +397,13 @@ func asciiLetter(character rune) bool {
 
 func asciiDigit(character rune) bool {
 	return character >= '0' && character <= '9'
+}
+
+func SnapshotEnvironment(command policy.Command) (policy.Command, error) {
+	environment, err := applyEnvironmentOverrides(explicitlySelectedEnvironment(command.Environment), command.EnvironmentOverrides)
+	command.Environment = nil
+	command.EnvironmentOverrides = environment
+	return command, err
 }
 
 func explicitlySelectedEnvironment(requested []string) []string {

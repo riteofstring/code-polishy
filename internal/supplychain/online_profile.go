@@ -114,6 +114,7 @@ func pnpmAuditCommands(repo repository.Repository, files []string) ([]policy.Com
 		command := policy.Command{
 			Name: "pnpm-audit-" + safeName(manifest.Root), Argv: append([]string{}, invocation.Argv...), Cwd: invocation.Cwd,
 			SealedEnvironment: invocation.SealedEnvironment, TimeoutSeconds: invocation.TimeoutSeconds,
+			Paths: []string{lockPath(manifest.Root)},
 		}
 		commands = append(commands, command)
 	}

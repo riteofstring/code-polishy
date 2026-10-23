@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/architecture/sourcegraph"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -26,6 +27,76 @@ func TestReportCoalescesMessageChangesAndCountsWarnings(t *testing.T) {
 	}, []policy.Advisory{{Check: "portability.machinePath", Path: "src/app.go", Subject: "path", Message: "warning"}}, nil)
 	if len(report.Findings) != 2 || report.Summary.Errors != 1 || report.Summary.Warnings != 1 || !HasFindings(report) {
 		t.Fatalf("report = %+v", report)
+	}
+}
+
+func TestSecurityRefreshReplacesOnlySecurityOwnedOutcomes(t *testing.T) {
+	t.Parallel()
+	for _, sourceRule := range []string{"supplyChain.source", "provider.shared"} {
+		t.Run(sourceRule, func(t *testing.T) {
+			policyEngine := &Engine{}
+			source := verificationOutcomes(sourceRule, policy.VerificationSource)
+			stale := verificationOutcomes("provider.shared", policy.VerificationSecurity)
+			combined := policyEngine.combine(source, stale)
+			data, err := json.Marshal(combined)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var retained Report
+			if err := json.Unmarshal(data, &retained); err != nil {
+				t.Fatal(err)
+			}
+			retained.GateRunPolicy = &GateRunPolicy{Status: "already-passed"}
+			fresh := verificationOutcomes("provider.current", policy.VerificationSecurity)
+			result := policyEngine.withRefreshedSecurity(retained, fresh, "security-refreshed")
+			if len(result.Findings) != 2 || len(result.Suppressed) != 2 || len(result.Assessed) != 2 || len(result.ReleaseAges) != 2 {
+				t.Fatalf("refresh lost source outcomes or retained stale security: %+v", result)
+			}
+			findings := append(slices.Clone(result.Findings), result.Suppressed[0].Finding, result.Suppressed[1].Finding,
+				result.Assessed[0].Finding, result.Assessed[1].Finding, result.ReleaseAges[0].Finding, result.ReleaseAges[1].Finding)
+			for _, finding := range findings {
+				if finding.VerificationPhase == policy.VerificationSource && finding.Check == sourceRule {
+					continue
+				}
+				if finding.VerificationPhase != policy.VerificationSecurity || finding.Check != "provider.current" {
+					t.Fatalf("refresh classified ownership from a rule name: %+v", finding)
+				}
+			}
+		})
+	}
+}
+
+func verificationOutcomes(rule string, phase policy.VerificationPhase) Report {
+	finding := policy.Finding{Check: rule, VerificationPhase: phase, Path: "repository", Subject: "fixture", Message: "verification outcome", Severity: policy.FindingWarning}
+	return Report{
+		Findings:    []policy.Finding{finding},
+		Suppressed:  []policy.Suppressed{{Finding: finding, Exception: policy.Exception{ID: "exception"}}},
+		Assessed:    []policy.AssessedVulnerability{{Finding: finding, Assessment: policy.VulnerabilityAssessment{ID: "vulnerability"}}},
+		ReleaseAges: []policy.AssessedReleaseAge{{Finding: finding, Assessment: policy.ReleaseAgeAssessment{ID: "release-age"}}},
+	}
+}
+
+func TestAssessmentOutcomesRetainTheirProducingPhase(t *testing.T) {
+	t.Parallel()
+	policyEngine := &Engine{}
+	addGateOutcomeEvidence(policyEngine, time.Now().UTC().Truncate(24*time.Hour))
+	findings := append(slices.Clone(policyEngine.PolicyModuleFindings),
+		policy.Finding{Check: "source.configuration", VerificationPhase: policy.VerificationSource, Path: "repository", Message: "static source outcome", Severity: policy.FindingWarning},
+		policy.Finding{Check: "provider.scan", Path: "repository", Message: "online provider outcome", Severity: policy.FindingWarning},
+	)
+	report := policyEngine.finishWithAssessments(findings, nil, true, policy.VerificationSecurity)
+	if len(report.Findings) != 2 || len(report.Suppressed) != 1 || len(report.Assessed) != 1 || len(report.ReleaseAges) != 1 {
+		t.Fatalf("phase selection changed policy decisions: %+v", report)
+	}
+	outcomes := append(slices.Clone(report.Findings), report.Suppressed[0].Finding, report.Assessed[0].Finding, report.ReleaseAges[0].Finding)
+	for _, finding := range outcomes {
+		expected := policy.VerificationSecurity
+		if finding.Check == "source.configuration" {
+			expected = policy.VerificationSource
+		}
+		if finding.VerificationPhase != expected {
+			t.Fatalf("assessment processing reassigned the producing phase: %+v", finding)
+		}
 	}
 }
 

@@ -40,6 +40,8 @@ const (
 	MaximumExceptionDays                    = 366
 )
 
+const MaximumCriticalNotAffectedVulnerabilityDays = 7
+
 var DefaultExcludes = []string{
 	".git/**", ".tools/**", ".code-polishy-reports/**", ".code-polishy-artifacts/**", "node_modules/**", "**/node_modules/**",
 	".venv/**", "**/.venv/**",
@@ -581,6 +583,7 @@ func (date *Date) UnmarshalJSON(data []byte) error {
 
 type Finding struct {
 	Check               string                     `json:"ruleId"`
+	VerificationPhase   VerificationPhase          `json:"verificationPhase,omitempty"`
 	Fingerprint         string                     `json:"fingerprint"`
 	Severity            FindingSeverity            `json:"severity"`
 	Status              FindingStatus              `json:"status"`
@@ -604,6 +607,13 @@ type Finding struct {
 	ReleaseAge          *ReleaseAgeIdentity        `json:"releaseAge,omitempty"`
 	SemanticIdentity    []string                   `json:"semanticIdentity,omitempty"`
 }
+
+type VerificationPhase string
+
+const (
+	VerificationSource   VerificationPhase = "source"
+	VerificationSecurity VerificationPhase = "security"
+)
 
 type DependencyComponent struct {
 	Protocol       string           `json:"protocol"`

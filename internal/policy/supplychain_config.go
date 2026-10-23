@@ -221,6 +221,8 @@ func validateVulnerabilityReviewWindow(assessment VulnerabilityAssessment, label
 		maximumDays = MaximumModerateVulnerabilityDays
 	case "high":
 		maximumDays = MaximumHighNotAffectedVulnerabilityDays
+	case "critical":
+		maximumDays = MaximumCriticalNotAffectedVulnerabilityDays
 	}
 	if assessment.Expires.After(assessment.Reviewed.AddDate(0, 0, maximumDays)) {
 		return fmt.Errorf("%s.expires must be within %d days of reviewed for %s severity", label, maximumDays, assessment.Severity)

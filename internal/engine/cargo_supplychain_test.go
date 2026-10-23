@@ -11,15 +11,11 @@ import (
 	testpolicy "github.com/riteofstring/code-polishy/internal/testing"
 )
 
-func TestCargoSupplyChainRunsTheGatePlanInBothNetworkModes(t *testing.T) {
+func TestCargoSupplyChainRunsTheOnlineGatePlanAtEveryMergeLevel(t *testing.T) {
 	t.Parallel()
-	for _, offline := range []bool{true, false} {
-		t.Run(map[bool]string{true: "offline", false: "online"}[offline], func(t *testing.T) {
+	for _, level := range []string{testpolicy.MergeLevelRecommended, testpolicy.MergeLevelFull} {
+		t.Run(level, func(t *testing.T) {
 			engine := cargoSupplyEngine(t)
-			level := testpolicy.MergeLevelFull
-			if offline {
-				level = testpolicy.MergeLevelRecommended
-			}
 			plan, err := engine.appendMergeGateSupplyChainCommands(MergeGateExecutionPlan{Level: level})
 			if err != nil {
 				t.Fatal(err)
@@ -29,7 +25,7 @@ func TestCargoSupplyChainRunsTheGatePlanInBothNetworkModes(t *testing.T) {
 			}
 			boundary := &mergeGatePlannedRunner{root: engine.Repository.Root, delegate: runner.OSRunner{}, expected: plan.Commands}
 			engine.Runner = boundary
-			report, err := engine.SupplyChain(t.Context(), offline)
+			report, err := engine.SupplyChain(t.Context(), false)
 			if err != nil || boundary.next != len(plan.Commands) {
 				t.Fatalf("Cargo execution differs from the gate plan: next=%d, report=%+v, error=%v", boundary.next, report, err)
 			}

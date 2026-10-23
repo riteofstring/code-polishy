@@ -86,8 +86,8 @@ func TestReusedMergeGateRetainsCanonicalWarningCounts(t *testing.T) {
 	}
 	executed := len(commandRunner.commands)
 	reused, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "already-passed" || len(commandRunner.commands) != executed {
-		t.Fatalf("gate reuse reran work: %+v, error = %v, commands = %v", reused, err, commandRunner.commands)
+	if err != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "security-refreshed" || len(commandRunner.commands) != executed+1 || commandRunner.commands[executed] != "offline-supply" {
+		t.Fatalf("repeated gate did not limit execution to security: %+v, error = %v, commands = %v", reused, err, commandRunner.commands)
 	}
 	if reused.Summary.Warnings != first.Summary.Warnings || reused.Summary.Information != first.Summary.Information || len(reused.Findings) != len(first.Findings) {
 		t.Fatalf("gate reuse discarded canonical findings: first=%+v, reused=%+v", first, reused)

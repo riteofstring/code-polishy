@@ -14,8 +14,11 @@ external issue is not intrinsic to the decision.
 
 `not-affected` establishes why the advisory's input and API prerequisites cannot
 occur. `risk-accepted` permits a bounded, justified residual risk only for low
-and moderate severity. High findings permit only demonstrated non-exposure;
-critical, unknown-severity, and known-exploited findings remain blocking.
+and moderate severity. High and critical findings permit only demonstrated
+non-exposure. Critical assessments expire within seven days, retain their
+critical severity, and require renewed review when the traced integration or
+its input authority changes. Unknown-severity and known-exploited findings
+remain blocking.
 Reports identify the actual assessment owner without implying human approval.
 Exact matching, expiry, severity ceilings, and unused-assessment checks still
 apply to both dispositions.
@@ -32,6 +35,16 @@ The validator can check the record's structure, not the truth of a call-path
 analysis or risk comparison. Source review and the detailed dependency workflow
 own those judgments. Additional free-text fields, URL-shaped placeholders, and
 tests that merely repeat an assessment's prose would not close that gap.
+
+OSV severity uses the scanner's group score and matching advisories' categorical
+`database_specific.severity` metadata. GitHub-reviewed advisories may provide a
+severity without a CVSS vector. Missing group scores therefore do not erase an
+available upstream classification. Diagnostics identify the exact sources;
+disagreement retains the highest recognized severity, while unsupported values
+or unnormalized CVSS metadata without a usable score or categorical label stay
+unknown. Metadata from
+unrelated advisories cannot influence a group. No network lookup or operator
+override is needed to repair metadata already present in the scanner response.
 
 ## Go toolchain containment
 

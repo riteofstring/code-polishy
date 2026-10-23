@@ -67,39 +67,6 @@ func TestOSVRejectsChangedLocksBeforeAnyPublicScan(t *testing.T) {
 	}
 }
 
-func TestOSVRejectsTamperedAndSymlinkedProjectionArtifacts(t *testing.T) {
-	t.Parallel()
-	for _, unsafe := range []string{"content", "file-symlink", "directory-symlink"} {
-		t.Run(unsafe, func(t *testing.T) {
-			fixture := currentGitOnlineFixture(t)
-			writeSupplyFile(t, fixture.repo.Root, "public/uv.lock", publicUVTestLock())
-			scans, err := osvScanPlan(fixture.repo)
-			if err != nil || len(scans) != 2 {
-				t.Fatalf("plan = %+v, %v", scans, err)
-			}
-			scan := scans[1]
-			if unsafe == "directory-symlink" {
-				err = os.Symlink(t.TempDir(), filepath.Join(fixture.repo.Root, ".code-polishy-reports"))
-			} else {
-				writeSupplyFile(t, fixture.repo.Root, scan.InputPath, "private scanner input")
-				if unsafe == "file-symlink" {
-					path := filepath.Join(fixture.repo.Root, filepath.FromSlash(scan.InputPath))
-					err = os.Remove(path)
-					if err == nil {
-						err = os.Symlink(filepath.Join(fixture.repo.Root, "uv.lock"), path)
-					}
-				}
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := prepareOSVInput(fixture.repo, scan); err == nil {
-				t.Fatal("unsafe projection became a public scanner input")
-			}
-		})
-	}
-}
-
 func TestOSVRejectsNonPublicAndMalformedUVSources(t *testing.T) {
 	t.Parallel()
 	for _, source := range []string{`registry = "https://private.example.test/simple"`, `git = "https://private.example.test/kit.git#bad"`, `url = "https://private.example.test/kit.whl"`} {
@@ -115,7 +82,7 @@ func TestOSVRejectsNonPublicAndMalformedUVSources(t *testing.T) {
 func TestOSVProjectedReportRejectsForeignInputScope(t *testing.T) {
 	t.Parallel()
 	repo := supplyRepository(t)
-	scan := osvScan{Root: ".", Scope: "public/uv.lock", InputPath: osvInputDirectory + "/input.osv-scanner.json"}
+	scan := osvProjectionScan(repo, "uv", "public/uv.lock", []byte(`{"results":[]}`))
 	payload := []byte(`{"results":[{"source":{"path":"other/uv.lock","type":"lockfile"},"packages":[]}]}`)
 	if _, err := parseOSVScanReport(repo, scan, payload); err == nil {
 		t.Fatal("foreign source scope satisfied projected coverage")

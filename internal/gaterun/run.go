@@ -379,6 +379,7 @@ func (run *Run) finalReport(options FinalizeOptions) (Report, error) {
 	}
 	report := Report{
 		SourceDependencyGraph: sourcegraph.Clone(options.SourceDependencyGraph),
+		Security:              options.Security.Clone(),
 		Version:               Version, Identity: cloneIdentity(run.identity), IdentitySHA256: run.runSHA256, ExecutionID: run.executionID,
 		Status: options.Status, StartedAt: run.startedAt, CompletedAt: completedAt,
 		Commands: commands, Findings: cloneFindings(options.Findings), Notes: cloneStrings(options.Notes),

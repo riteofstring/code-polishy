@@ -14,11 +14,11 @@ import (
 const osvInputDirectory = ".code-polishy-reports/supply-chain/osv-inputs"
 
 type osvScan struct {
-	Command    policy.Command
-	Root       string
-	Scope      string
-	InputPath  string
-	Projection []byte
+	Command   policy.Command
+	Root      string
+	Scope     string
+	InputPath string
+	Snapshot  *osvInputSnapshot
 }
 
 type osvLockInput struct {
@@ -126,11 +126,14 @@ func publicLockProjection(input osvLockInput, ecosystem, registry string) ([]byt
 }
 
 func osvProjectionScan(repo repository.Repository, kind, scope string, projection []byte) osvScan {
-	path := osvInputDirectory + "/" + gitEvidenceDigest(projection) + ".osv-scanner.json"
+	digest := gitEvidenceDigest(projection)
+	path := osvInputDirectory + "/" + digest + ".osv-scanner.json"
 	command := osvCommand(repo, "osv-"+kind+"-"+safeName(scope), ".")
-	command.Argv = append(command.Argv, "--no-resolve", "--lockfile", "osv-scanner:"+path)
+	command.Argv = append(command.Argv, "--no-resolve", "--all-packages", "--no-call-analysis", "rust", "--config", "osv-scanner.toml", "--lockfile", "osv-scanner:"+path)
 	command.Paths = []string{scope}
-	return osvScan{Command: command, Root: ".", Scope: scope, InputPath: path, Projection: projection}
+	command.SealedEnvironment = true
+	snapshot := &osvInputSnapshot{data: string(projection), digest: digest, path: path}
+	return osvScan{Command: command, Root: ".", Scope: scope, InputPath: path, Snapshot: snapshot}
 }
 
 func publicPythonRegistry(registry string) bool {

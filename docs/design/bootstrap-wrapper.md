@@ -106,6 +106,16 @@ capability delta and runs the outgoing and incoming engines against the same
 repository. The durable plan identifies added, removed, and changed diagnostics
 so a policy bump cannot disguise application cleanup as a simple version edit.
 
+The incoming diagnostic preview authenticates the outgoing installed release
+against the repository lock before recognizing its exact canonical wrappers as
+managed control artifacts. Recognition happens before language-module discovery,
+so an outgoing launcher path does not create incoming application ownership or
+tool-coverage requirements. The preview changes no repository bytes or authority.
+Customized wrappers remain executable source with ordinary coverage checks;
+ordinary checks accept only the current release's canonical templates. Apply
+repeats the authenticated preview and still performs the normal transactional
+wrapper replacement at cutover.
+
 The incoming planner verifies an outgoing installation with the launcher's
 existing historical manifest readers. Each reader preserves that schema's
 original tool fields and identity calculation; the complete installed tree and

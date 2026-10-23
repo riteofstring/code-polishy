@@ -45,7 +45,7 @@ func osvUnmaintainedGroup(group osvGroup, observed osvPackageResult, identifiers
 }
 
 func osvUnmaintainedAdvisory(advisory osvVulnerability, name string) bool {
-	if !strings.HasPrefix(advisory.ID, "RUSTSEC-") || len(advisory.Severity) != 0 {
+	if !strings.HasPrefix(advisory.ID, "RUSTSEC-") || len(advisory.Severity) != 0 || advisory.DatabaseSpecific.Severity != "" {
 		return false
 	}
 	matched := false

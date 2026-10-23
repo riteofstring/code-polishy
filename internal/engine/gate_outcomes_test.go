@@ -21,8 +21,8 @@ func TestReusedGateRetainsSuppressedAndReviewedOutcomes(t *testing.T) {
 	}
 	executed := len(commandRunner.commands)
 	reused, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "already-passed" || len(commandRunner.commands) != executed {
-		t.Fatalf("outcome inspection reran the gate: %+v, error=%v", reused, err)
+	if err != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "security-refreshed" || len(commandRunner.commands) != executed+1 || commandRunner.commands[executed] != "offline-supply" {
+		t.Fatalf("repeated gate did not limit execution to security: %+v, error=%v", reused, err)
 	}
 	if !reflect.DeepEqual(reused.Suppressed, first.Suppressed) || !reflect.DeepEqual(reused.Assessed, first.Assessed) || !reflect.DeepEqual(reused.ReleaseAges, first.ReleaseAges) {
 		t.Fatalf("gate reuse lost canonical outcome evidence: first=%+v, reused=%+v", first, reused)

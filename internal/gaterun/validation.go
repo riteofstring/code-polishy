@@ -956,6 +956,7 @@ func cloneTestEvidencePointer(evidence *TestEvidence) *TestEvidence {
 }
 
 func cloneReport(report Report) Report {
+	report.Security = report.Security.Clone()
 	report.Identity = cloneIdentity(report.Identity)
 	report.SourceDependencyGraph = sourcegraph.Clone(report.SourceDependencyGraph)
 	commands := report.Commands

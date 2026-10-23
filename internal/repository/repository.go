@@ -25,6 +25,7 @@ type Repository struct {
 	pythonProjectCache   *pythonProjectInventoryCache
 	pathFactCache        *pathFactCache
 	analysisProfile      string
+	upgradeWrappers      map[string][]byte
 }
 
 const DesignDocumentationCheck = "policy.designDocumentation"

@@ -299,13 +299,17 @@ A merge reminder always preserves the merge-target-wide changed-test count. If
 a valid checkpoint receipt is bound to the candidate, it also names the latest
 task slice and its base. This advisory data never changes merge selection.
 
-An identical passed merge-gate identity reports `already-passed` and executes no
-validation commands. A new gate automatically reuses successful suite receipts
-only when the suite explicitly declares `reusable: true`, its sealed read-only
+An identical passed merge-gate identity retains source and test verification.
+Every repeated online gate reevaluates the normal supply-chain profile without
+rerunning unchanged source checks or tests. Eligible package scans reuse raw
+evidence; providers, recursive scans and image preparation execute as required.
+A new gate automatically reuses successful suite receipts only when the suite explicitly declares `reusable: true`, its sealed read-only
 execution view was enforced, and its complete release, platform, toolchain,
 command, configuration, environment, ownership, and file-input identities still
-match. All non-test phases, behavior-proof replays, failed commands, and
-non-reusable suites execute.
+match. Non-test phases evaluate normally. Sealed pnpm audits and explicit OSV
+uv/Cargo inventory scans from an installed release can reuse their captured input
+scan for at most 24 hours; recursive OSV scans execute. Behavior-proof replays,
+failed commands and non-reusable suites execute for the new candidate.
 
 Use `code-polishy merge-gate --base <merge-target> --resume` after repairing a
 failed gate without changing the candidate. It reuses eligible successful

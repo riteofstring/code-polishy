@@ -167,7 +167,7 @@
           "pattern": "^[^*?\\[\\]<>=~^|,\\s]+$"
         },
         "scope": { "$ref": "code-polishy.schema.json#/$defs/concretePath" },
-        "severity": { "enum": ["low", "moderate", "high"] },
+        "severity": { "enum": ["low", "moderate", "high", "critical"] },
         "reason": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "impact": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "evidence": { "type": "string", "pattern": "^https://" },

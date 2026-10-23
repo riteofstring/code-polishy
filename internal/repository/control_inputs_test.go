@@ -96,3 +96,33 @@ func TestCanonicalBootstrapWrappersAreControlArtifacts(t *testing.T) {
 		t.Fatal("nested lookalike was classified as a managed control artifact")
 	}
 }
+
+func TestUpgradePreviewClassifiesOnlyExactOutgoingWrappers(t *testing.T) {
+	t.Parallel()
+	root, outgoing, incoming := t.TempDir(), t.TempDir(), t.TempDir()
+	for _, name := range []string{"code-polishyw", "code-polishyw.ps1"} {
+		old := "#!/bin/sh\nCODE_POLISHY_MANAGED_WRAPPER=1\nexec old-launcher\n"
+		next := "#!/bin/sh\nCODE_POLISHY_MANAGED_WRAPPER=1\nexec new-launcher\n"
+		writeFile(t, root, name, old)
+		writeFile(t, outgoing, "templates/"+name, old)
+		writeFile(t, incoming, "templates/"+name, next)
+	}
+	repo := (Repository{Root: root, PolicyRoot: incoming}).WithPathFactCache()
+	if !repo.IsExecutableSource("code-polishyw") {
+		t.Fatal("ordinary incoming check accepted an outgoing wrapper")
+	}
+	preview, err := repo.WithUpgradeWrappers(outgoing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"code-polishyw", "code-polishyw.ps1"} {
+		if preview.IsExecutableSource(name) || !preview.IsControlInput(name) {
+			t.Fatalf("canonical outgoing wrapper %s needs application ownership", name)
+		}
+	}
+	writeFile(t, root, "code-polishyw", "#!/bin/sh\nCODE_POLISHY_MANAGED_WRAPPER=1\nexec custom-launcher\n")
+	preview = preview.WithPathFactCache()
+	if !preview.IsExecutableSource("code-polishyw") || !repo.IsExecutableSource("code-polishyw") {
+		t.Fatal("upgrade preview exempted a customized wrapper")
+	}
+}

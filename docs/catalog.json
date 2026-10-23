@@ -143,6 +143,14 @@
       "public": true
     },
     {
+      "id": "security-evidence",
+      "path": "docs/design/security-evidence.md",
+      "title": "Security evidence lifetime",
+      "summary": "Understand bounded scan reuse, security refreshes, and the separation from historical source verification.",
+      "aliases": ["scan-freshness"],
+      "public": true
+    },
+    {
       "id": "dependency-assessments",
       "path": "docs/security/dependency-assessments.md",
       "title": "Dependency vulnerability assessments",

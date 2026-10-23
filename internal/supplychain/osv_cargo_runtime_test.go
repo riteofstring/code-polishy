@@ -46,12 +46,12 @@ func testOSVCargoPinnedRuntimeProjection(t *testing.T, aliased bool) {
 	}
 	cache := cargoOSVDatabase(t)
 	for _, scan := range scans {
+		if scan.InputPath != "" {
+			writeSupplyFile(t, repo.Root, "osv-scanner.toml", "invalid repository configuration")
+		}
 		scan.Command.Argv = append(scan.Command.Argv, "--offline")
 		scan.Command.SealedEnvironment = true
 		scan.Command.EnvironmentOverrides = []string{"OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=" + cache}
-		if err := prepareOSVInput(repo, scan); err != nil {
-			t.Fatal(err)
-		}
 		findings := scanOSVRoot(t.Context(), repo, scan, runner.OSRunner{})
 		if scan.InputPath == "" {
 			if len(findings) != 0 {

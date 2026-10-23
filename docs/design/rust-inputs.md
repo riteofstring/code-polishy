@@ -141,11 +141,14 @@ local and Git packages never become registry requests. Optional Git policy keeps
 its visible warning, and requiring Git evidence does not hide public registry
 advisories from a mixed Cargo lock.
 
-Cargo reuses the existing immutable projection artifacts and common scanner
-runner. Separate locks preserve their own original finding scopes. Planning does
-not write artifacts; execution verifies their regular-file containment and exact
-planned bytes. No transitive resolution or Rust call analysis is enabled, so an
-advisory scan does not execute build scripts or procedural macros.
+Cargo uses captured public inventories and the common scanner runner. Separate
+locks preserve their own original finding scopes. Planning does not write
+artifacts; execution supplies the captured bytes through an isolated read-only
+snapshot with explicit scanner configuration. No transitive resolution or Rust
+call analysis is enabled, so an advisory scan does not execute build scripts or
+procedural macros.
+The shared [security evidence policy](security-evidence.md) defines which
+online commands may reuse raw results and how their complete inputs are bound.
 
 Scanner scope must contain the actual workspace lock established by Cargo. A
 member-only scope cannot claim an ancestor lock's public dependencies; it needs

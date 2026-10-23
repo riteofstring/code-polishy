@@ -1,77 +1,150 @@
 package supplychain
 
 import (
-	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
 
-func prepareOSVInput(repo repository.Repository, scan osvScan) error {
+type osvInputSnapshot struct {
+	data   string
+	digest string
+	path   string
+}
+
+func (snapshot *osvInputSnapshot) Identity(command policy.Command) (string, error) {
+	input, present := osvInputArgument(command.Argv, "--lockfile")
+	config, configured := osvInputArgument(command.Argv, "--config")
+	if !present || input != "osv-scanner:"+snapshot.path || !configured || config != "osv-scanner.toml" || !command.SealedEnvironment || command.Cwd != "." || !slices.Contains(command.Argv, "--no-resolve") {
+		return "", errors.New("OSV command does not match its isolated input snapshot")
+	}
+	if slices.Contains(command.Argv, "--offline") || slices.Contains(command.Argv, "--offline-vulnerabilities") {
+		return "", nil
+	}
+	return snapshot.digest, nil
+}
+
+func osvInputArgument(arguments []string, name string) (string, bool) {
+	index := slices.Index(arguments, name)
+	if index < 0 || index+1 >= len(arguments) {
+		return "", false
+	}
+	return arguments[index+1], true
+}
+
+func (snapshot *osvInputSnapshot) Execute(ctx context.Context, commandRunner runner.Runner, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if _, err := snapshot.Identity(invocation.Command); err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+	}
+	root, cleanup, err := snapshot.prepare()
+	if err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+	}
+	defer cleanup()
+	invocation.Root = root
+	result, output, runErr := commandRunner.Execute(ctx, invocation)
+	if len(output.Stdout) != 0 {
+		normalized, err := normalizeOSVSnapshotReport(output.Stdout, root, snapshot.path)
+		if err != nil {
+			result.FailureCategory = runner.CaptureFailureCategory(ctx, result, runErr)
+			return result, output, errors.Join(runErr, err)
+		}
+		output.Stdout = normalized
+	}
+	return result, output, runErr
+}
+
+func (snapshot *osvInputSnapshot) prepare() (string, func(), error) {
+	root, err := os.MkdirTemp("", "code-polishy-osv-snapshot-")
+	if err != nil {
+		return "", nil, err
+	}
+	path := filepath.Join(root, filepath.FromSlash(snapshot.path))
+	config := filepath.Join(root, "osv-scanner.toml")
+	cleanup := func() {
+		_ = os.Chmod(path, 0o600)
+		_ = os.Chmod(config, 0o600)
+		_ = os.RemoveAll(root)
+	}
+	err = os.MkdirAll(filepath.Dir(path), 0o700)
+	if err == nil {
+		err = os.WriteFile(path, []byte(snapshot.data), 0o400)
+	}
+	if err == nil {
+		err = os.WriteFile(config, nil, 0o400)
+	}
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("create isolated OSV inputs: %w", err)
+	}
+	return root, cleanup, nil
+}
+
+func normalizeOSVSnapshotReport(payload []byte, root, inputPath string) ([]byte, error) {
+	var report map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &report); err != nil {
+		return nil, err
+	}
+	var results []map[string]json.RawMessage
+	if err := json.Unmarshal(report["results"], &results); err != nil {
+		return nil, err
+	}
+	for _, result := range results {
+		var source map[string]json.RawMessage
+		if err := json.Unmarshal(result["source"], &source); err != nil {
+			return nil, err
+		}
+		var path string
+		if err := json.Unmarshal(source["path"], &path); err != nil {
+			return nil, err
+		}
+		scope, err := osvScope(repository.Repository{Root: root}, ".", path)
+		if err != nil || scope != inputPath {
+			return nil, errors.New("OSV result refers outside its isolated input snapshot")
+		}
+		source["path"], _ = json.Marshal(inputPath)
+		result["source"], _ = json.Marshal(source)
+	}
+	report["results"], _ = json.Marshal(results)
+	return json.Marshal(report)
+}
+
+func validateOSVInventoryReport(scan osvScan, report osvReport) error {
 	if scan.InputPath == "" {
 		return nil
 	}
-	root, err := os.OpenRoot(repo.Root)
-	if err != nil {
-		return fmt.Errorf("open OSV input repository: %w", err)
+	if scan.Snapshot == nil {
+		return errors.New("public package inventory snapshot is missing")
 	}
-	defer root.Close()
-	if err := ensureOSVInputDirectory(root); err != nil {
-		return err
+	var projected osvReport
+	if err := json.Unmarshal([]byte(scan.Snapshot.data), &projected); err != nil {
+		return fmt.Errorf("planned public package projection is malformed")
 	}
-	file, err := root.OpenFile(filepath.FromSlash(scan.InputPath), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if errors.Is(err, os.ErrExist) {
-		return verifyOSVInput(root, scan)
-	}
-	if err != nil {
-		return fmt.Errorf("create bounded OSV input: %w", err)
-	}
-	_, writeErr := file.Write(scan.Projection)
-	closeErr := file.Close()
-	if err := errors.Join(writeErr, closeErr); err != nil {
-		_ = root.Remove(filepath.FromSlash(scan.InputPath))
-		return fmt.Errorf("write bounded OSV input: %w", err)
-	}
-	return verifyOSVInput(root, scan)
-}
-
-func ensureOSVInputDirectory(root *os.Root) error {
-	segments := strings.Split(osvInputDirectory, "/")
-	for index := range segments {
-		path := filepath.Join(segments[:index+1]...)
-		if err := root.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("create OSV input directory: %w", err)
-		}
-		info, err := root.Lstat(path)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("OSV input directory must contain only regular directories")
+	expected := map[string]bool{}
+	for _, result := range projected.Results {
+		for _, pkg := range result.Packages {
+			expected[pkg.Package.Ecosystem+"\x00"+pkg.Package.Name+"\x00"+pkg.Package.Version] = true
 		}
 	}
-	return nil
-}
-
-func verifyOSVInput(root *os.Root, scan osvScan) error {
-	info, err := root.Lstat(filepath.FromSlash(scan.InputPath))
-	if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(scan.Projection)) {
-		return fmt.Errorf("OSV input does not match its planned regular file")
+	for _, result := range report.Results {
+		for _, pkg := range result.Packages {
+			key := pkg.Package.Ecosystem + "\x00" + pkg.Package.Name + "\x00" + pkg.Package.Version
+			if !expected[key] {
+				return fmt.Errorf("scanner report repeats a package or refers outside its public package projection")
+			}
+			delete(expected, key)
+		}
 	}
-	file, err := root.Open(filepath.FromSlash(scan.InputPath))
-	if err != nil {
-		return fmt.Errorf("open planned OSV input: %w", err)
-	}
-	defer file.Close()
-	opened, err := file.Stat()
-	if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() {
-		return fmt.Errorf("OSV input changed during opening")
-	}
-	data, err := io.ReadAll(io.LimitReader(file, int64(len(scan.Projection))+1))
-	if err != nil || !bytes.Equal(data, scan.Projection) {
-		return fmt.Errorf("OSV input content differs from its public package projection")
+	if len(expected) != 0 {
+		return fmt.Errorf("scanner report omitted packages from its complete locked registry inventory")
 	}
 	return nil
 }

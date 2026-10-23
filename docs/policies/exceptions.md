@@ -55,8 +55,9 @@ if the originally matched file is not in the current change.
   affected version, lockfile scope, and an assessed severity ceiling. Low and
   moderate findings may be `risk-accepted`; a high finding may only be an exact
   `not-affected` decision with a `false-positive` or `unreachable` basis and a
-  30-day maximum. Critical, unknown, and CISA-known-exploited findings remain
-  blocking. Technical evidence, an accountable owner, a remediation plan, and
+  30-day maximum. Critical findings permit the same proven non-exposure
+  disposition with a seven-day maximum. Unknown and CISA-known-exploited
+  findings remain blocking. Technical evidence, an accountable owner, a remediation plan, and
   a severity-bounded expiry are mandatory. Agents may own either assessment
   without human sign-off or separate external tracking. Accepted findings
   remain visible in reports.

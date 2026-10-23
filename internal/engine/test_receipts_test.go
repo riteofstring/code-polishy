@@ -248,7 +248,7 @@ func TestExactSuitePassComposesWithMergeGate(t *testing.T) {
 	}
 }
 
-func TestMergeGateReturnsAlreadyPassedForExactSuccessfulIdentity(t *testing.T) {
+func TestMergeGateReevaluatesSecurityForExactSuccessfulIdentity(t *testing.T) {
 	root := reusableContentRepository(t, nil)
 	installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
 	installBehaviorReviewTestGuidance(t, root)
@@ -270,10 +270,10 @@ func TestMergeGateReturnsAlreadyPassedForExactSuccessfulIdentity(t *testing.T) {
 	}
 	firstCommands := append([]string{}, commandRunner.commands...)
 	second, err := policyEngine.MergeGate(t.Context(), "main")
-	if err != nil || len(second.Findings) != 0 || second.GateRunPolicy == nil || second.GateRunPolicy.Status != "already-passed" {
+	if err != nil || len(second.Findings) != 0 || second.GateRunPolicy == nil || second.GateRunPolicy.Status != "security-refreshed" {
 		t.Fatalf("second report = %+v, error = %v", second, err)
 	}
-	if !slices.Equal(commandRunner.commands, firstCommands) || second.GateRunPolicy.ReportPath == "" ||
+	if !slices.Equal(commandRunner.commands, append(slices.Clone(firstCommands), "offline-supply")) || second.GateRunPolicy.ReportPath == "" ||
 		!slices.Equal(second.GateRunPolicy.ReusedPhases, []string{"focused"}) {
 		t.Fatalf("commands = %v, first = %v, policy = %+v", commandRunner.commands, firstCommands, second.GateRunPolicy)
 	}

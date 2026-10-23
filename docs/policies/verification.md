@@ -274,9 +274,13 @@ be declared non-reusable and executes for every candidate.
 Merge gates automatically reuse exact matching receipts from explicitly
 reusable suites, including after an unrelated change that leaves the complete
 suite identity unchanged. An identical already-passed merge-gate identity
-executes no validation commands and reports `already-passed`. Checks, builds,
-security work, behavior proofs, failed suites, and non-reusable suites always
-execute.
+retains source and test verification. Ordinary gates additionally require
+current online security evaluation on every invocation, without repeating those
+tests. Eligible pnpm audits and explicit OSV uv/Cargo inventory scans reuse raw
+results across verification stages; providers, recursive scans and image
+preparation execute as required. Checks, builds,
+behavior proofs, failed suites and non-reusable suites
+execute for a new candidate.
 
 `test --supplemental --resume` gives the same exact reuse to an explicitly
 selected supplemental retry. Ordinary direct `test` commands execute normally
@@ -573,10 +577,10 @@ use the narrow lane.
 
 The recommended execution profile consists of strict doctor, applicable gate
 checks for the derived selection, recommended tests for changed modules and
-reverse dependents, applicable build providers, and offline supply-chain
-verification. The full decision invokes the unchanged complete gate with
-repository-wide checks, full ordinary tests and builds, online supply-chain,
-and artifact enforcement. Supplemental mutation and risk suites are distinct
+reverse dependents, applicable build providers, and online supply-chain and
+artifact verification. The full decision adds repository-wide checks, full
+ordinary tests and builds. Both profiles apply the same security freshness
+rules. Supplemental mutation and risk suites are distinct
 from every ordinary level. `test --supplemental` runs them as a separate stage
 only when an explicit caller request, event-specific checked-in workflow, or
 stable-candidate release checklist selects it; release retry evidence follows
@@ -609,12 +613,16 @@ configuration path proved absent at the base.
 ### Gate reuse and failed-run resume
 
 Every merge gate first checks for an exact prior passed gate identity. If one
-exists, it reports `already-passed` and executes no validation command. The
-saved report retains the canonical source graph and its validated fact inputs;
+exists, source and test verification is retained while the normal online
+supply-chain profile evaluates current security policy. Successful evaluation
+reports `security-refreshed`; eligible package scans may reuse raw results, but
+a prior accepted security report never skips evaluation. The saved report retains
+the canonical source graph and its validated fact inputs;
 the report digest binds this evidence. Reuse preserves it in JSON and SARIF
 without rerunning graph analyzers. For a new gate identity, exact matching
 receipts from suites that explicitly declare
-`reusable: true` may still be reused while all non-test phases execute. This is
+`reusable: true` may still be reused while non-test phases evaluate normally,
+including permitted reuse of recent package-scan output. This is
 automatic and fails closed under the reusable evidence contract above.
 
 Saved gate reports have a 128 MiB encoding limit, checked before publication
@@ -626,8 +634,18 @@ The identity includes the current expiry state of configured exceptions,
 vulnerability and release-age assessments, and disabled policy modules.
 Acceptance remains valid through its declared UTC expiry date; the following
 day cannot reuse a pass based on that acceptance. The gate checks this state
-again before publication and before returning a cached pass. Calendar time
-alone does not invalidate a repository with no timed acceptances.
+again before publication and before returning a cached pass. Online security
+evidence also expires after at most 24 hours, even without timed acceptances.
+Recommended and full merge gates run the online supply-chain profile. An exact
+historical gate pass runs only that profile on each invocation, preserving
+source and test evidence. Reports distinguish historical verification from
+current security acceptance and expose the last scan, refresh deadline and raw
+report locations. A failed refresh remains blocking and retries normally;
+the historical pass cannot hide it. Recursive OSV scans execute on gate reuse
+because their complete input set is not established by the gate's source
+inventory. Configured image targets are also prepared and scanned because
+package evidence cannot establish the current image's identity.
+Documentation-only verification retains its documentation boundary.
 
 A reused pass retains its suppressed and reviewed findings, their exact
 exception or assessment evidence, and their summary counts. Repeated phases

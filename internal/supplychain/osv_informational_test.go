@@ -58,6 +58,7 @@ func TestOSVUnmaintainedClassificationPreservesUncertainAndSecurityFindings(t *t
 		"wrong affected ecosystem": func(p *osvPackageResult) { p.Vulnerabilities[0].Affected[0].Package.Ecosystem = "npm" },
 		"wrong observed ecosystem": func(p *osvPackageResult) { p.Package.Ecosystem = "npm" },
 		"group severity":           func(p *osvPackageResult) { p.Groups[0].MaxSeverity = "high" },
+		"categorical severity":     func(p *osvPackageResult) { p.Vulnerabilities[0].DatabaseSpecific.Severity = "LOW" },
 		"advisory severity": func(p *osvPackageResult) {
 			p.Vulnerabilities[0].Severity = []json.RawMessage{json.RawMessage(`{"type":"CVSS_V3","score":"CVSS:3.1/AV:N"}`)}
 		},

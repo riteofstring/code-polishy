@@ -24,7 +24,7 @@ func TestGitEvidenceReportsRetainVerifiedIdentityAcrossJSONAndSARIF(t *testing.T
 	for _, scope := range []string{"uv.lock", "Cargo.lock"} {
 		t.Run(scope, func(t *testing.T) {
 			engine := gitEvidenceEngine(t, scope)
-			findings, evidence, _ := engine.onlineSupplyChain(t.Context(), []string{scope}, nil, supplyChainOnline)
+			findings, evidence, _, _ := engine.onlineSupplyChain(t.Context(), []string{scope}, nil, supplyChainOnline)
 			if len(findings) != 0 || len(evidence) != 1 || evidence[0].Scope != scope {
 				t.Fatalf("online evidence = %+v, %+v", findings, evidence)
 			}
@@ -62,7 +62,7 @@ func TestGitEvidenceChangesDuringConfiguredSecurityChecksPreventAcceptance(t *te
 			engine := gitEvidenceEngine(t, scope)
 			engine.Repository.Config.Checks = []policy.Command{{Name: "security", Argv: []string{"assess"}, Cwd: ".", RunOn: []string{"security"}, TimeoutSeconds: 30}}
 			engine.Runner = gitEvidenceChangingRunner{}
-			findings, receipts, _ := engine.onlineSupplyChain(t.Context(), []string{scope}, nil, supplyChainOnline)
+			findings, receipts, _, _ := engine.onlineSupplyChain(t.Context(), []string{scope}, nil, supplyChainOnline)
 			if len(findings) != 1 || findings[0].Check != "supplyChain.gitEvidence" || findings[0].Subject != "verification-state" || len(receipts) != 0 {
 				t.Fatalf("changed evidence was accepted after a configured security check: %+v, %+v", findings, receipts)
 			}

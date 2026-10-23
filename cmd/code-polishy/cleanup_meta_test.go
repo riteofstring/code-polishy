@@ -39,7 +39,7 @@ func TestCleanupRepositoryScopesDoNotRequireAnInstalledRelease(t *testing.T) {
 	arguments := []string{"--repo-root", root, "cleanup", "--reports", "--artifacts"}
 	status, stdout, stderr := captureRunOutput(t, append(arguments, "--dry-run"))
 	if status != 0 || stderr != "" || !strings.Contains(stdout, "removing 1 repository output would free") ||
-		!strings.Contains(stdout, "discards cached gate results and test receipts") {
+		!strings.Contains(stdout, "discards cached gate results, test receipts, and security evidence") {
 		t.Fatalf("preview status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(report.ReportPath))); err != nil {

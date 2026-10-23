@@ -63,6 +63,20 @@ func (engine *Engine) MergeGateWithOptions(ctx context.Context, base string, opt
 }
 
 func (engine *Engine) executeMergeGatePlan(ctx context.Context, base string, plan MergeGateExecutionPlan, options MergeGateOptions) (Report, error) {
+	if plan.Level != testpolicy.MergeLevelDocumentation {
+		scoped := *engine
+		files, err := engine.Repository.AllFiles()
+		if err != nil {
+			return Report{}, err
+		}
+		commands, err := supplychain.OnlineCommands(engine.Repository, files)
+		if err != nil {
+			return Report{}, err
+		}
+		scoped.securityScans = newSecurityScanRunner(engine, commands)
+		scoped.Runner = scoped.securityScans
+		engine = &scoped
+	}
 	execution, err := engine.prepareMergeGateExecution(ctx, base, plan, options)
 	if err != nil {
 		return withMergePolicy(Report{}, plan.Level, base, plan.Reasons), err
@@ -106,7 +120,12 @@ func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, p
 		BehaviorReview:        &controller.behaviorStatus,
 		GitEvidence:           evidence,
 		GateRunPolicy:         &GateRunPolicy{Status: "already-passed", ReportPath: controller.alreadyPassedPath, ReusedPhases: reused},
+		Security:              controller.alreadyPassed.Security,
 		Notes:                 []string{"the exact gate identity already passed; no validation commands executed"},
+	}
+	if plan.Level != testpolicy.MergeLevelDocumentation {
+		refreshed, err := engine.refreshGateSecurity(ctx, controller, report)
+		return engine.withMergeGateMetadata(ctx, refreshed, base, plan), err
 	}
 	return engine.withMergeGateMetadata(ctx, report, base, plan), nil
 }
@@ -334,11 +353,6 @@ func (engine *Engine) appendMergeGateSupplyChainCommands(plan MergeGateExecution
 	supplySelection, err := engine.Repository.Select("all", nil)
 	if err != nil {
 		return MergeGateExecutionPlan{}, err
-	}
-	if plan.Level != testpolicy.MergeLevelFull {
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, supplychain.CargoResolutionCommands(engine.Repository, supplySelection.Files, true))...)
-		plan.Commands = append(plan.Commands, mergeGateCheckCommands(gaterun.SupplyChain, quality.CommandsForProfiles(engine.Repository, supplySelection, "supply-chain"))...)
-		return plan, nil
 	}
 	onlineCommands, err := supplychain.OnlineCommands(engine.Repository, supplySelection.Files)
 	if err != nil {
@@ -707,7 +721,7 @@ func (engine *Engine) recommendedMergeGateWithTests(ctx context.Context, selecti
 	if HasFindings(built) {
 		return report, nil
 	}
-	supply, err := engine.SupplyChain(ctx, true)
+	supply, err := engine.SupplyChain(ctx, false)
 	return engine.combine(report, supply), err
 }
 

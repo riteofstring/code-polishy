@@ -254,6 +254,10 @@ func (nativeRustGateRunner) runPlain(ctx context.Context, root string, command p
 }
 
 func (nativeRustGateRunner) runStreamed(ctx context.Context, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, error) {
+	if command.ReportProtocol == policy.OSVVulnerabilityReportProtocol {
+		_, err := io.WriteString(stdout, `{"results":[]}`)
+		return runner.Result{ExitStatus: 0}, err
+	}
 	if command.Managed {
 		return runner.RunStreamed(ctx, runner.OSRunner{}, root, command, stdout, stderr)
 	}

@@ -264,6 +264,7 @@ type CommandOutcome struct {
 }
 
 type Report struct {
+	Security              *policy.SecurityVerification   `json:"security,omitempty"`
 	SourceDependencyGraph *sourcegraph.Graph             `json:"source_dependency_graph,omitempty"`
 	Version               int                            `json:"version"`
 	Identity              Identity                       `json:"identity"`
@@ -341,6 +342,7 @@ type SuiteSatisfaction struct {
 }
 
 type FinalizeOptions struct {
+	Security              *policy.SecurityVerification
 	SourceDependencyGraph *sourcegraph.Graph
 	Status                RunStatus
 	Findings              []policy.Finding

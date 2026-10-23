@@ -36,7 +36,8 @@ func reportCleanupCandidates(root *os.Root) ([]string, []CleanupKept, error) {
 			kept = append(kept, CleanupKept{Path: relative, Reason: "user files or retained review and upgrade evidence"})
 			continue
 		}
-		if command == "test-receipts" {
+		switch command {
+		case "test-receipts", "security-scans", "security-refresh":
 			candidates = append(candidates, relative)
 			continue
 		}
