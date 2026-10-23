@@ -4,9 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"slices"
-	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
@@ -22,38 +20,9 @@ func defaultFindingPhase(findings []policy.Finding, phase policy.VerificationPha
 	}
 }
 
-func currentSecurityEvidence(evidence *policy.SecurityVerification, now time.Time) bool {
-	return evidence != nil && evidence.Status == "current" && !evidence.CheckedAt.After(now) &&
-		evidence.RefreshAfter.After(evidence.CheckedAt) && !evidence.RefreshAfter.After(evidence.CheckedAt.Add(policy.SecurityEvidenceLifetime)) && now.Before(evidence.RefreshAfter)
-}
-
-func (engine *Engine) reuseGateSecurity(ctx context.Context, controller *gateRunController, report Report) (Report, error) {
+func (engine *Engine) refreshGateSecurity(ctx context.Context, controller *gateRunController, report Report) (Report, error) {
 	prior := controller.alreadyPassed
 	path := ".code-polishy-reports/security-refresh/" + prior.SHA256 + "/report.json"
-	requiresScan := len(engine.Repository.Config.SupplyChain.ArtifactSecurity.Targets) > 0 || slices.ContainsFunc(engine.Repository.Config.ActivePolicyModules, func(module policy.ActivePolicyModule) bool {
-		return module.Name == "osv"
-	})
-	if requiresScan {
-		return engine.refreshGateSecurity(ctx, controller, report, path)
-	}
-	var refreshed securityRefreshRecord
-	present, err := readSecurityEvidence(engine.Repository, path, &refreshed)
-	if err != nil {
-		return Report{}, err
-	}
-	if present && refreshed.GateSHA256 != prior.SHA256 {
-		return Report{}, fmt.Errorf("security refresh does not match the historical verification pass")
-	}
-	if !present && currentSecurityEvidence(prior.Security, engine.securityNow()) {
-		return report, nil
-	}
-	if present && currentSecurityEvidence(refreshed.Report.Security, engine.securityNow()) && !HasFindings(refreshed.Report) {
-		return engine.withRefreshedSecurity(report, refreshed.Report, "already-passed"), nil
-	}
-	return engine.refreshGateSecurity(ctx, controller, report, path)
-}
-
-func (engine *Engine) refreshGateSecurity(ctx context.Context, controller *gateRunController, report Report, path string) (Report, error) {
 	supply, scanErr := engine.SupplyChain(ctx, false)
 	scanErr = errors.Join(scanErr, controller.candidateIntegrityError(engine))
 	if supply.Security == nil {

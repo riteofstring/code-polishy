@@ -9,12 +9,12 @@
   Allow exact, evidence-backed critical `not-affected` assessments for at most
   seven days, retaining blocks for unknown severity, known exploitation and
   critical risk acceptance. Preserve dependency release-age requirements.
-- Reuse matching sealed pnpm audit evidence with explicit lockfile inputs for at
-  most 24 hours across review and verification stages. Identify and scan the same
-  captured lockfile bytes. Always execute recursive OSV scans without cache
-  lookup. Refresh explicitly owned security results on unchanged gates
-  without repeating successful source checks or tests, retain failed refreshes,
-  and report scan freshness separately from historical verification. Complete
+- Reuse matching sealed pnpm audits and explicit OSV uv/Cargo inventory scans for
+  at most 24 hours across review and verification stages. Identify and scan the
+  same captured inputs, and reevaluate current assessments on every invocation.
+  Always execute recursive OSV scans without cache lookup. Evaluate security on every unchanged online gate through that raw-result
+  cache, without repeating successful source checks or tests. Retain failed
+  refreshes and report scan freshness separately from historical verification. Complete
   deferred providers and actual image scans independently of package reuse.
   Reclaim security scan and refresh evidence with `cleanup --reports`.
 

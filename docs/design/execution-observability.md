@@ -113,9 +113,13 @@ command-name blacklist or new declaration claiming arbitrary code is read-only.
 
 Scanner source paths can use either the caller's repository-root spelling or
 its physical path. Scope normalization resolves only the repository root and
-still rejects paths outside it. Projected scans require the exact planned input
-path before attributing findings to the original lockfile; a root alias does not
-authorize another projection or source.
+still rejects paths outside it. Projected scans validate the exact private input path before normalizing it to
+the logical projection and attributing findings to the original lockfile; a root
+alias does not authorize another projection or source. Captured scan inputs travel
+through the planned runner with their logical commands. The snapshot owner alone
+materializes and consumes the private input; the gate retains normal command
+accounting on both execution and raw-result replay. See [Security evidence
+lifetime](security-evidence.md).
 
 Vulnerability reports identify the actual owner for every assessment, including
 agent-owned decisions, without implying human sign-off. Assessed findings stay

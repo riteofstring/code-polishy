@@ -87,13 +87,17 @@ func (boundary *optionalGitBoundary) runOutput(_ context.Context, root string, c
 		boundary.t.Fatalf("incorrect public inventory: %s", data)
 	}
 	if !boundary.vulnerable {
-		return runner.Result{}, runner.Output{Stdout: []byte(`{"results":[]}`)}, nil
+		payload := fmt.Sprintf(`{"results":[{"source":{"path":%q,"type":"lockfile"},"packages":[{"package":{"name":"support-lib","version":"2.0.0","ecosystem":"PyPI"}}]}]}`, path)
+		return runner.Result{}, runner.Output{Stdout: []byte(payload)}, nil
 	}
 	payload := fmt.Sprintf(`{"results":[{"source":{"path":%q,"type":"lockfile"},"packages":[{"package":{"name":"support-lib","version":"2.0.0","ecosystem":"PyPI"},"vulnerabilities":[{"id":"GHSA-test-public"}]}]}]}`, path)
 	return runner.Result{ExitStatus: 1}, runner.Output{Stdout: []byte(payload)}, fmt.Errorf("vulnerability found")
 }
 
 func (double *optionalGitBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Snapshot != nil {
+		return runner.ExecuteSnapshot(ctx, double, invocation)
+	}
 	if invocation.Capture != runner.CaptureNone {
 		return double.runOutput(ctx, invocation.Root, invocation.Command)
 	}

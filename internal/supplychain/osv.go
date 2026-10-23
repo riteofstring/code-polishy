@@ -194,10 +194,6 @@ func scanOSVWithCommands(ctx context.Context, repo repository.Repository, comman
 		}
 	}
 	for _, scan := range scans {
-		if err := prepareOSVInput(repo, scan); err != nil {
-			findings = append(findings, policy.Finding{Check: "policy.securityScanner", Path: scan.Scope, Subject: "osv-scanner", Message: err.Error()})
-			continue
-		}
 		findings = append(findings, scanOSVRoot(ctx, repo, scan, commandRunner)...)
 	}
 	return uniqueFindings(findings)
@@ -251,9 +247,13 @@ func scanOSVRoot(ctx context.Context, repo repository.Repository, scan osvScan, 
 }
 
 func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, scan osvScan, commandRunner runner.Runner) (runner.Result, runner.Output, error) {
-	return runner.RunWithReport(ctx, commandRunner, repo.Root, scan.Command, func(result runner.Result, output runner.Output, runErr error) bool {
+	invocation := runner.Invocation{Root: repo.Root, Command: scan.Command, Capture: runner.CaptureStructured, Accept: func(result runner.Result, output runner.Output, runErr error) bool {
 		return acceptedOSVReportExit(ctx, repo, scan, result, output, runErr)
-	})
+	}}
+	if scan.Snapshot != nil {
+		invocation.Snapshot = scan.Snapshot
+	}
+	return commandRunner.Execute(ctx, invocation)
 }
 
 func acceptedOSVReportExit(ctx context.Context, repo repository.Repository, scan osvScan, result runner.Result, output runner.Output, runErr error) bool {
@@ -348,7 +348,7 @@ func parseOSVScanReport(repo repository.Repository, scan osvScan, payload []byte
 	if err != nil {
 		return nil, err
 	}
-	if err := validateOSVCargoReport(scan, report); err != nil {
+	if err := validateOSVInventoryReport(scan, report); err != nil {
 		return nil, err
 	}
 	findings := []policy.Finding{}

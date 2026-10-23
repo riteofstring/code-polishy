@@ -129,7 +129,7 @@ func TestOSVCargoRejectsIncompleteOrForeignPackageReports(t *testing.T) {
 	for _, mutation := range []string{"missing", "duplicate", "foreign-version", "foreign-ecosystem", "foreign-source", "empty"} {
 		t.Run(mutation, func(t *testing.T) {
 			var report osvReport
-			if err := json.Unmarshal(scan.Projection, &report); err != nil {
+			if err := json.Unmarshal([]byte(scan.Snapshot.data), &report); err != nil {
 				t.Fatal(err)
 			}
 			report.Results[0].Source.Path = scan.InputPath
@@ -153,7 +153,7 @@ func TestOSVCargoAssessmentAndReportExitUseObservedExactCoordinates(t *testing.T
 		t.Fatal(err)
 	}
 	scan := scans[1]
-	output := runner.Output{Stdout: cargoOSVResponse(t, scan.Projection, scan.InputPath)}
+	output := runner.Output{Stdout: cargoOSVResponse(t, []byte(scan.Snapshot.data), scan.InputPath)}
 	failure := errors.New("advisories found")
 	result := runner.Result{ExitStatus: 1, FailureCategory: runner.FailureCommandExit}
 	if !acceptedOSVReportExit(t.Context(), repo, scan, result, output, failure) {
@@ -224,7 +224,7 @@ func TestOSVCargoKeepsOperationalFailuresBesideValidAdvisories(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan := scans[1]
-	output := runner.Output{Stdout: cargoOSVResponse(t, scan.Projection, scan.InputPath)}
+	output := runner.Output{Stdout: cargoOSVResponse(t, []byte(scan.Snapshot.data), scan.InputPath)}
 	for _, result := range []runner.Result{
 		{ExitStatus: 1, FailureCategory: runner.FailureOperational},
 		{ExitStatus: 2, FailureCategory: runner.FailureCommandExit},
@@ -360,6 +360,9 @@ func (double cargoOSVFailure) Execute(ctx context.Context, invocation runner.Inv
 }
 
 func (double *cargoOSVBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if invocation.Snapshot != nil {
+		return runner.ExecuteSnapshot(ctx, double, invocation)
+	}
 	if invocation.Capture != runner.CaptureNone {
 		return double.runOutput(ctx, invocation.Root, invocation.Command)
 	}

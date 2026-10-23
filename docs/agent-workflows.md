@@ -300,18 +300,16 @@ a valid checkpoint receipt is bound to the candidate, it also names the latest
 task slice and its base. This advisory data never changes merge selection.
 
 An identical passed merge-gate identity retains source and test verification.
-It reports `already-passed` without validation commands only while required
-security evidence is current and neither recursive OSV scans nor image
-preparation are required. Those scans and expired security evidence refresh the
-online supply-chain profile without rerunning unchanged tests. A new gate
-automatically reuses successful suite receipts
-only when the suite explicitly declares `reusable: true`, its sealed read-only
+Every repeated online gate reevaluates the normal supply-chain profile without
+rerunning unchanged source checks or tests. Eligible package scans reuse raw
+evidence; providers, recursive scans and image preparation execute as required.
+A new gate automatically reuses successful suite receipts only when the suite explicitly declares `reusable: true`, its sealed read-only
 execution view was enforced, and its complete release, platform, toolchain,
 command, configuration, environment, ownership, and file-input identities still
-match. Non-test phases evaluate normally. Sealed pnpm audits from an installed
-release can reuse their explicitly bound lockfile scan for at most 24 hours;
-OSV source scans execute. Behavior-proof replays, failed commands and non-reusable
-suites execute for the new candidate.
+match. Non-test phases evaluate normally. Sealed pnpm audits and explicit OSV
+uv/Cargo inventory scans from an installed release can reuse their captured input
+scan for at most 24 hours; recursive OSV scans execute. Behavior-proof replays,
+failed commands and non-reusable suites execute for the new candidate.
 
 Use `code-polishy merge-gate --base <merge-target> --resume` after repairing a
 failed gate without changing the candidate. It reuses eligible successful

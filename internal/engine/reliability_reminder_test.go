@@ -93,7 +93,7 @@ func TestCheckpointAndMergeGatesAttachReliabilityReminder(t *testing.T) {
 			}
 			if mode == "merge" {
 				reused, reuseErr := policyEngine.MergeGate(t.Context(), "main")
-				if reuseErr != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "already-passed" || reused.ReliabilityReminder == nil {
+				if reuseErr != nil || reused.GateRunPolicy == nil || reused.GateRunPolicy.Status != "security-refreshed" || reused.ReliabilityReminder == nil {
 					t.Fatalf("reused gate report = %+v, error = %v", reused, reuseErr)
 				}
 			}

@@ -96,7 +96,7 @@ func behaviorProofFailureCategory(ctx context.Context, err error) runner.Failure
 }
 
 func (commandRunner *gateArtifactRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
-	output := gateCommandOutput{capture: invocation.Capture != runner.CaptureNone, accept: invocation.Accept}
+	output := gateCommandOutput{capture: invocation.Capture != runner.CaptureNone, accept: invocation.Accept, snapshot: invocation.Snapshot}
 	if invocation.Stdout != nil || invocation.Stderr != nil {
 		output.stdout, output.stderr = cmp.Or[io.Writer](invocation.Stdout, io.Discard), cmp.Or[io.Writer](invocation.Stderr, io.Discard)
 	}
@@ -104,10 +104,11 @@ func (commandRunner *gateArtifactRunner) Execute(ctx context.Context, invocation
 }
 
 type gateCommandOutput struct {
-	capture bool
-	accept  runner.ReportOutcomeAcceptor
-	stdout  io.Writer
-	stderr  io.Writer
+	capture  bool
+	accept   runner.ReportOutcomeAcceptor
+	snapshot runner.InputSnapshot
+	stdout   io.Writer
+	stderr   io.Writer
 }
 
 func (output gateCommandOutput) run(ctx context.Context, delegate runner.Runner, root string, command policy.Command, stdout, stderr io.Writer) (runner.Result, runner.Output, error) {
@@ -119,7 +120,7 @@ func (output gateCommandOutput) run(ctx context.Context, delegate runner.Runner,
 	if output.capture || testartifact.NeedsCommandOutput(command) {
 		capture = runner.CaptureOutput
 	}
-	return delegate.Execute(ctx, runner.Invocation{Root: root, Command: command, Capture: capture, Stdout: stdout, Stderr: stderr, Accept: output.accept})
+	return delegate.Execute(ctx, runner.Invocation{Root: root, Command: command, Capture: capture, Stdout: stdout, Stderr: stderr, Accept: output.accept, Snapshot: output.snapshot})
 }
 
 func (commandRunner *gateArtifactRunner) ManagesTestArtifacts() bool { return true }

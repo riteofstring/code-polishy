@@ -70,7 +70,7 @@ func securityEvidenceFinding(err error) policy.Finding {
 func newSecurityScanRunner(engine *Engine, commands []policy.Command) *securityScanRunner {
 	selected := map[string]policy.Command{}
 	for _, command := range commands {
-		if strings.HasPrefix(command.Name, "osv-scan-") || strings.HasPrefix(command.Name, "pnpm-audit-") {
+		if command.ReportProtocol == policy.OSVVulnerabilityReportProtocol || strings.HasPrefix(command.Name, "pnpm-audit-") {
 			selected[command.Name] = command
 		}
 	}
@@ -83,7 +83,7 @@ func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation ru
 		return scanRunner.delegate.Execute(ctx, invocation)
 	}
 	files := supplychain.SecurityScanInputs(invocation.Command)
-	if len(files) == 0 {
+	if len(files) == 0 && invocation.Snapshot == nil {
 		return scanRunner.scanUncached(ctx, invocation)
 	}
 	tool, err := scanRunner.toolIdentity(invocation.Command.Argv[0])
@@ -93,20 +93,39 @@ func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation ru
 	if tool == "" {
 		return scanRunner.scanUncached(ctx, invocation)
 	}
-	return scanRunner.audit(ctx, invocation, files[0], tool)
+	invocation, digest, err := scanRunner.captureInput(invocation)
+	if err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+	}
+	if digest == "" {
+		return scanRunner.scanUncached(ctx, invocation)
+	}
+	return scanRunner.cached(ctx, invocation, digest, tool)
+}
+
+func (scanRunner *securityScanRunner) captureInput(invocation runner.Invocation) (runner.Invocation, string, error) {
+	var err error
+	if invocation.Snapshot == nil {
+		invocation.Snapshot, err = supplychain.CaptureAuditSnapshot(scanRunner.repo, invocation.Command)
+		if err != nil {
+			return invocation, "", err
+		}
+	}
+	invocation.Command, err = runner.SnapshotEnvironment(invocation.Command)
+	if err != nil {
+		return invocation, "", err
+	}
+	digest, err := invocation.Snapshot.Identity(invocation.Command)
+	return invocation, digest, err
 }
 
 func (scanRunner *securityScanRunner) scanUncached(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
 	path := ".code-polishy-reports/security-scans/uncached/" + rand.Text() + "/scan.json"
-	return scanRunner.scan(ctx, invocation, "", path, securityScanRecord{}, nil)
+	return scanRunner.scan(ctx, invocation, "", path, securityScanRecord{})
 }
 
-func (scanRunner *securityScanRunner) audit(ctx context.Context, invocation runner.Invocation, inputPath, tool string) (runner.Result, runner.Output, error) {
-	data, err := scanRunner.repo.ReadContainedFile(inputPath, 128<<20)
-	if err != nil {
-		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, fmt.Errorf("security input %s: %w", inputPath, err)
-	}
-	key, err := scanRunner.identity(invocation.Command, data, tool)
+func (scanRunner *securityScanRunner) cached(ctx context.Context, invocation runner.Invocation, digest, tool string) (runner.Result, runner.Output, error) {
+	key, err := scanRunner.identity(invocation.Command, digest, tool)
 	if err != nil {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
@@ -131,7 +150,7 @@ func (scanRunner *securityScanRunner) audit(ctx context.Context, invocation runn
 		result.ExecutionDuration, result.ResourceWait = 0, 0
 		return result, output, err
 	}
-	return scanRunner.scan(ctx, invocation, key, path, previous, data)
+	return scanRunner.scan(ctx, invocation, key, path, previous)
 }
 
 func reusableSecurityScan(ctx context.Context, invocation runner.Invocation, record securityScanRecord, now time.Time) bool {
@@ -151,20 +170,13 @@ func reusableSecurityScan(ctx context.Context, invocation runner.Invocation, rec
 	return runErr == nil
 }
 
-func (scanRunner *securityScanRunner) scan(ctx context.Context, invocation runner.Invocation, key, path string, previous securityScanRecord, snapshot []byte) (runner.Result, runner.Output, error) {
+func (scanRunner *securityScanRunner) scan(ctx context.Context, invocation runner.Invocation, key, path string, previous securityScanRecord) (runner.Result, runner.Output, error) {
 	actual := invocation
 	actual.Capture = runner.CaptureOutput
 	if actual.Stdout == nil && actual.Stderr == nil {
 		actual.Stdout, actual.Stderr = io.Discard, io.Discard
 	}
-	var result runner.Result
-	var output runner.Output
-	var runErr error
-	if key == "" {
-		result, output, runErr = scanRunner.delegate.Execute(ctx, actual)
-	} else {
-		result, output, runErr = supplychain.RunAuditSnapshot(ctx, scanRunner.repo, scanRunner.delegate, actual, snapshot)
-	}
+	result, output, runErr := runner.ExecuteSnapshot(ctx, scanRunner.delegate, actual)
 	succeeded := runErr == nil
 	if invocation.Accept != nil {
 		succeeded = invocation.Accept(result, output, runErr)
@@ -200,7 +212,7 @@ func replaySecurityOutput(invocation runner.Invocation, output runner.Output) er
 
 func (scanRunner *securityScanRunner) record(command policy.Command, path string, record securityScanRecord, status string) {
 	tool := strings.Split(command.Name, "-")[0]
-	if strings.HasPrefix(command.Name, "osv-scan-") {
+	if command.ReportProtocol == policy.OSVVulnerabilityReportProtocol {
 		tool = "osv-scanner"
 	}
 	version, _ := os.ReadFile(filepath.Join(scanRunner.repo.PolicyRoot, "tools", tool+"-version.txt"))
@@ -211,14 +223,12 @@ func (scanRunner *securityScanRunner) record(command policy.Command, path string
 	scanRunner.scans = append(scanRunner.scans, policy.SecurityScan{Name: command.Name, Status: status, ScannerVersion: strings.TrimSpace(string(version)), LastSucceededAt: record.LastSucceededAt, RefreshAfter: refreshAfter, ReportPath: path})
 }
 
-func (scanRunner *securityScanRunner) identity(command policy.Command, snapshot []byte, tool string) (string, error) {
-	environment := runner.EnvironmentWithPath(command.Environment, scanRunner.repo.CommandEnvironment().PathEntries)
+func (scanRunner *securityScanRunner) identity(command policy.Command, digest, tool string) (string, error) {
 	payload, err := json.Marshal(struct {
 		Protocol, Tool, Input string
-		Configuration         policy.Config
 		Command               policy.Command
-		Environment           []string
-	}{"security-scan/v4", tool, gaterun.ContentSHA256(snapshot), scanRunner.repo.Config, command, environment})
+		Overrides             []string
+	}{"security-scan/v5", tool, digest, command, command.EnvironmentOverrides})
 	if err != nil {
 		return "", err
 	}

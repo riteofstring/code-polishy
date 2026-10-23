@@ -275,9 +275,10 @@ Merge gates automatically reuse exact matching receipts from explicitly
 reusable suites, including after an unrelated change that leaves the complete
 suite identity unchanged. An identical already-passed merge-gate identity
 retains source and test verification. Ordinary gates additionally require
-current online security evidence; expired evidence, recursive OSV scans and
-image preparation refresh that evidence without repeating those tests. Eligible
-pnpm lockfile audits may be reused across verification stages. Checks, builds,
+current online security evaluation on every invocation, without repeating those
+tests. Eligible pnpm audits and explicit OSV uv/Cargo inventory scans reuse raw
+results across verification stages; providers, recursive scans and image
+preparation execute as required. Checks, builds,
 behavior proofs, failed suites and non-reusable suites
 execute for a new candidate.
 
@@ -612,10 +613,11 @@ configuration path proved absent at the base.
 ### Gate reuse and failed-run resume
 
 Every merge gate first checks for an exact prior passed gate identity. If one
-exists, its required security evidence is current, and neither recursive OSV
-scans nor image preparation are required, it reports
-`already-passed` and executes no validation command. The
-saved report retains the canonical source graph and its validated fact inputs;
+exists, source and test verification is retained while the normal online
+supply-chain profile evaluates current security policy. Successful evaluation
+reports `security-refreshed`; eligible package scans may reuse raw results, but
+a prior accepted security report never skips evaluation. The saved report retains
+the canonical source graph and its validated fact inputs;
 the report digest binds this evidence. Reuse preserves it in JSON and SARIF
 without rerunning graph analyzers. For a new gate identity, exact matching
 receipts from suites that explicitly declare
@@ -635,7 +637,7 @@ day cannot reuse a pass based on that acceptance. The gate checks this state
 again before publication and before returning a cached pass. Online security
 evidence also expires after at most 24 hours, even without timed acceptances.
 Recommended and full merge gates run the online supply-chain profile. An exact
-historical gate pass with expired evidence runs only that profile, preserving
+historical gate pass runs only that profile on each invocation, preserving
 source and test evidence. Reports distinguish historical verification from
 current security acceptance and expose the last scan, refresh deadline and raw
 report locations. A failed refresh remains blocking and retries normally;

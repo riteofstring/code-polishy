@@ -823,9 +823,9 @@ and the affected log path. Retain the JSON report and logs when CI needs audit
 evidence; do not make archived verbose terminal output the audit surface.
 
 An exact already-passed merge gate retains successful source and test evidence.
-Stale security evidence refreshes online without repeating those checks, and
-configured image targets still require preparation and scanning. With current
-security evidence and no image target, it executes no commands. New gate identities
+Each invocation evaluates current online security without repeating those
+checks. Eligible package scans reuse raw evidence; providers, recursive OSV scans
+and configured image targets still execute as required. New gate identities
 reuse successful suites only when the suite explicitly declares
 `"reusable": true`, its complete receipt identity still matches, and its sealed
 read-only execution view was enforced. Suites that omit the flag execute for

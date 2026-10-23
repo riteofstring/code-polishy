@@ -124,7 +124,7 @@ func (engine *Engine) alreadyPassedMergeGate(ctx context.Context, base string, p
 		Notes:                 []string{"the exact gate identity already passed; no validation commands executed"},
 	}
 	if plan.Level != testpolicy.MergeLevelDocumentation {
-		refreshed, err := engine.reuseGateSecurity(ctx, controller, report)
+		refreshed, err := engine.refreshGateSecurity(ctx, controller, report)
 		return engine.withMergeGateMetadata(ctx, refreshed, base, plan), err
 	}
 	return engine.withMergeGateMetadata(ctx, report, base, plan), nil
