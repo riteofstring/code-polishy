@@ -7,22 +7,24 @@ therefore bounded to 24 hours, independently of source identity and assessment
 expiry. Recommended and full merge gates evaluate the online profile; ordinary
 checks and documentation-only verification do not claim online coverage.
 
-OSV and pnpm audit commands reuse raw output, rather than
-an accepted vulnerability decision. The evidence identity binds dependency and
-control inputs, exact commands and environments, composed policy and scanner
-identity. Applicable root and nested `.gitignore` files also participate, even
-when an ignore file is itself ignored and untracked. They are discovered from
-the inventory's ancestor directories because tracked SBOMs remain in that
-inventory when ignore rules change OSV's view. Editing or removing an applicable
-ignore file invalidates reuse. The identity format version prevents older
-evidence that omitted these inputs from satisfying this contract.
-Source-aware Go analysis runs normally because package inventory alone
-cannot identify its complete source and compilation inputs.
-Installed releases supply their authoritative release identity; development
-scanner binaries use their own executable identity. Development pnpm audits
-always execute because a Node executable alone cannot identify its JavaScript
-bundle; installed release identity covers both. Raw output remains in a
-bounded report artifact. Every consumer parses it again and applies current
+Only policy-owned pnpm audit commands with a sealed environment and an explicit
+lockfile input reuse raw output, rather than an accepted vulnerability decision.
+The audit adapter copies that single lockfile into a temporary directory and
+does not load repository configuration or discover additional dependency files.
+Its command plan declares the same lockfile path. Evidence binds its exact bytes,
+command and environment, composed policy, and installed release identity, which
+covers both Node and the JavaScript bundle. Development pnpm audits always
+execute because a Node executable alone cannot identify the bundle.
+
+OSV source scans and source-aware Go analysis execute normally. Recursive OSV
+extractors can follow references to arbitrary filenames, including ignored
+requirements files; filename rules and Git inventories cannot establish their
+complete inputs. Cache eligibility does not attempt to duplicate those parsers
+or ignore rules. Changing an included file or an ignore rule is observed by the
+next scan, and even unchanged recursive scans execute. The identity format
+version prevents earlier, broader cache entries from satisfying the narrowed
+contract. Raw output remains in a bounded report artifact. Every consumer
+parses it again and applies current
 assessment and exploitation rules. Invalid output, operational failures,
 cancellation and timeout cannot establish a reusable scan.
 
@@ -42,14 +44,16 @@ historical gate pass, because that pass cannot identify a newly produced image.
 This keeps the reuse boundary small and avoids inventing input declarations for
 arbitrary repository commands or container builders.
 
-When security expires for an otherwise identical passed gate, only the online
-supply-chain profile runs. Its current outcomes replace the historical security
-outcomes while source/test evidence and source exceptions remain intact. The
+When security expires for an otherwise identical passed gate, or the repository
+requires recursive OSV or image scans, only the online supply-chain profile
+runs. Its current outcomes replace the historical security outcomes while
+source/test evidence and source exceptions remain intact. The
 refresh record binds the immutable original gate report, so changing that gate
 cannot inherit another candidate's acceptance. A failed refresh remains visible
 and cannot fall back to the historical pass. Fresh successful refreshes are
-reusable within their deadline when no image needs preparation. Expired policy
-assessments still invalidate the gate identity through the existing rules.
+reusable within their deadline when no recursive OSV scan or image preparation
+is required. Expired policy assessments still invalidate the gate identity
+through the existing rules.
 Before publishing a refresh, the gate revalidates its candidate, policy expiry,
 Git evidence and source-analysis evidence. A provider that changes governed
 inputs cannot retain the historical source/test pass; restoring the exact

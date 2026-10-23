@@ -275,9 +275,10 @@ Merge gates automatically reuse exact matching receipts from explicitly
 reusable suites, including after an unrelated change that leaves the complete
 suite identity unchanged. An identical already-passed merge-gate identity
 retains source and test verification. Ordinary gates additionally require
-current online security evidence; expired security evidence refreshes without
-repeating those tests. Fresh package scans may be reused across verification
-stages. Checks, builds, behavior proofs, failed suites and non-reusable suites
+current online security evidence; expired evidence, recursive OSV scans and
+image preparation refresh that evidence without repeating those tests. Eligible
+pnpm lockfile audits may be reused across verification stages. Checks, builds,
+behavior proofs, failed suites and non-reusable suites
 execute for a new candidate.
 
 `test --supplemental --resume` gives the same exact reuse to an explicitly
@@ -611,8 +612,8 @@ configuration path proved absent at the base.
 ### Gate reuse and failed-run resume
 
 Every merge gate first checks for an exact prior passed gate identity. If one
-exists, its required security evidence is current, and no image target needs
-preparation, it reports
+exists, its required security evidence is current, and neither recursive OSV
+scans nor image preparation are required, it reports
 `already-passed` and executes no validation command. The
 saved report retains the canonical source graph and its validated fact inputs;
 the report digest binds this evidence. Reuse preserves it in JSON and SARIF
@@ -638,9 +639,11 @@ historical gate pass with expired evidence runs only that profile, preserving
 source and test evidence. Reports distinguish historical verification from
 current security acceptance and expose the last scan, refresh deadline and raw
 report locations. A failed refresh remains blocking and retries normally;
-the historical pass cannot hide it. Configured image targets are prepared and
-scanned on reuse because package evidence cannot establish the current image's
-identity. Documentation-only verification retains its documentation boundary.
+the historical pass cannot hide it. Recursive OSV scans execute on gate reuse
+because their complete input set is not established by the gate's source
+inventory. Configured image targets are also prepared and scanned because
+package evidence cannot establish the current image's identity.
+Documentation-only verification retains its documentation boundary.
 
 A reused pass retains its suppressed and reviewed findings, their exact
 exception or assessment evidence, and their summary counts. Repeated phases

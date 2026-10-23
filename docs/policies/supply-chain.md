@@ -755,10 +755,14 @@ audits, and all target `supply-chain`, `supply-chain-online`, and `security`
 providers. Each configured command runs at most once per profile invocation.
 Release, merge, and dependency-update workflows should use the online profile.
 
-Built-in OSV and pnpm audit results may reuse matching
-raw scan evidence for at most 24 hours. Inputs bind exact dependency files,
-scanner identity, command, environment and current policy. Source-aware
-govulncheck analysis runs normally. Findings are parsed and current assessments,
+Policy-owned pnpm audits may reuse matching raw scan evidence for at most 24
+hours only with an explicit complete input, a sealed environment, and installed
+release identity. The audit reads its declared lockfile in isolation; evidence
+binds its exact bytes, scanner identity, command, environment and current policy.
+OSV source scans and source-aware govulncheck analysis execute normally.
+Recursive OSV scans can follow dependency references outside a filename-based
+inventory, so neither unchanged files nor a previous gate pass authorize their
+reuse. Findings are parsed and current assessments,
 expiry rules and known-exploitation checks are applied on every evaluation.
 Reports retain complete scanner output under `.code-polishy-reports/security-scans/`
 and show bounded terminal summaries, last-success times, refresh deadlines and

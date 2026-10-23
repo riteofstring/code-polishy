@@ -27,7 +27,7 @@ type securityScanRunner struct {
 	commands map[string]policy.Command
 	now      func() time.Time
 	scans    []policy.SecurityScan
-	inputs   string
+	inputs   map[string]string
 	tools    map[string]string
 }
 
@@ -76,7 +76,7 @@ func newSecurityScanRunner(engine *Engine, commands []policy.Command) *securityS
 			selected[command.Name] = command
 		}
 	}
-	return &securityScanRunner{delegate: engine.Runner, repo: engine.Repository, commands: selected, now: engine.securityNow, tools: map[string]string{}}
+	return &securityScanRunner{delegate: engine.Runner, repo: engine.Repository, commands: selected, now: engine.securityNow, inputs: map[string]string{}, tools: map[string]string{}}
 }
 
 func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
@@ -183,26 +183,17 @@ func (scanRunner *securityScanRunner) record(command policy.Command, path string
 }
 
 func (scanRunner *securityScanRunner) identity(command policy.Command) (string, bool, error) {
-	if scanRunner.inputs == "" {
-		files, err := supplychain.SecurityScanInputs(scanRunner.repo)
-		if err != nil {
-			return "", false, err
-		}
-		hash := sha256.New()
-		configuration, err := json.Marshal(scanRunner.repo.Config)
-		if err != nil {
-			return "", false, err
-		}
-		_, _ = hash.Write(configuration)
-		for _, path := range files {
+	files := supplychain.SecurityScanInputs(command)
+	inputs := map[string]string{}
+	for _, path := range files {
+		if scanRunner.inputs[path] == "" {
 			data, err := scanRunner.repo.ReadContainedFile(path, 128<<20)
 			if err != nil {
 				return "", false, fmt.Errorf("security input %s: %w", path, err)
 			}
-			_, _ = fmt.Fprintf(hash, "\x00%s\x00%d\x00", path, len(data))
-			_, _ = hash.Write(data)
+			scanRunner.inputs[path] = gaterun.ContentSHA256(data)
 		}
-		scanRunner.inputs = hex.EncodeToString(hash.Sum(nil))
+		inputs[path] = scanRunner.inputs[path]
 	}
 	tool, err := scanRunner.toolIdentity(command.Argv[0])
 	if err != nil {
@@ -210,14 +201,16 @@ func (scanRunner *securityScanRunner) identity(command policy.Command) (string, 
 	}
 	environment := runner.EnvironmentWithPath(command.Environment, scanRunner.repo.CommandEnvironment().PathEntries)
 	payload, err := json.Marshal(struct {
-		Protocol, Inputs, Tool string
-		Command                policy.Command
-		Environment            []string
-	}{"security-scan/v2", scanRunner.inputs, tool, command, environment})
+		Protocol, Tool string
+		Inputs         map[string]string
+		Configuration  policy.Config
+		Command        policy.Command
+		Environment    []string
+	}{"security-scan/v3", tool, inputs, scanRunner.repo.Config, command, environment})
 	if err != nil {
 		return "", false, err
 	}
-	reusable := !strings.HasPrefix(command.Name, "pnpm-audit-") || strings.HasPrefix(tool, "release:")
+	reusable := len(files) > 0 && strings.HasPrefix(tool, "release:")
 	return gaterun.ContentSHA256(payload), reusable, nil
 }
 

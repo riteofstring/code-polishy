@@ -146,6 +146,8 @@ runner. Separate locks preserve their own original finding scopes. Planning does
 not write artifacts; execution verifies their regular-file containment and exact
 planned bytes. No transitive resolution or Rust call analysis is enabled, so an
 advisory scan does not execute build scripts or procedural macros.
+The shared [security evidence policy](security-evidence.md) defines which
+online commands may reuse raw results and how their complete inputs are bound.
 
 Scanner scope must contain the actual workspace lock established by Cargo. A
 member-only scope cannot claim an ancestor lock's public dependencies; it needs

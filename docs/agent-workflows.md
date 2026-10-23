@@ -301,14 +301,16 @@ task slice and its base. This advisory data never changes merge selection.
 
 An identical passed merge-gate identity retains source and test verification.
 It reports `already-passed` without validation commands only while required
-security evidence is current and no image target needs preparation. Expired
-security evidence refreshes the online supply-chain profile without rerunning
-unchanged tests. A new gate automatically reuses successful suite receipts
+security evidence is current and neither recursive OSV scans nor image
+preparation are required. Those scans and expired security evidence refresh the
+online supply-chain profile without rerunning unchanged tests. A new gate
+automatically reuses successful suite receipts
 only when the suite explicitly declares `reusable: true`, its sealed read-only
 execution view was enforced, and its complete release, platform, toolchain,
 command, configuration, environment, ownership, and file-input identities still
-match. Non-test phases evaluate normally and can reuse matching package scans
-for at most 24 hours. Behavior-proof replays, failed commands and non-reusable
+match. Non-test phases evaluate normally. Sealed pnpm audits from an installed
+release can reuse their explicitly bound lockfile scan for at most 24 hours;
+OSV source scans execute. Behavior-proof replays, failed commands and non-reusable
 suites execute for the new candidate.
 
 Use `code-polishy merge-gate --base <merge-target> --resume` after repairing a

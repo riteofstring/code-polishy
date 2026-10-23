@@ -9,8 +9,9 @@
   Allow exact, evidence-backed critical `not-affected` assessments for at most
   seven days, retaining blocks for unknown severity, known exploitation and
   critical risk acceptance. Preserve dependency release-age requirements.
-- Reuse matching package scan evidence for at most 24 hours across review and
-  verification stages. Refresh stale security evidence on unchanged gates
+- Reuse matching sealed pnpm audit evidence with explicit lockfile inputs for at
+  most 24 hours across review and verification stages. Always execute recursive
+  OSV scans. Refresh required security scans on unchanged gates
   without repeating successful source checks or tests, retain failed refreshes,
   and report scan freshness separately from historical verification. Complete
   deferred providers and actual image scans independently of package reuse.
