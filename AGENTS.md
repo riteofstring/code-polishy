@@ -40,7 +40,7 @@
 - Pin dependencies and package managers exactly; use frozen locks. Generate
   update locks without scripts. Before installation, run
   `code-polishy dependency-review --base <merge-target>`; then install frozen
-  with scripts off, run `code-polishy supply-chain --offline`, and test.
+  with scripts off, complete its reported deferred checks, and test.
 - Agents own dependency assessments; no human sign-off. Trace advisory inputs
   to API and impact; presence is not exposure. Retain aged versions if unaffected.
   Admit fixes under 30 days only if waiting is riskier and no aged fix or practical
