@@ -49,7 +49,12 @@ func TestRustCompilationLintsGovernedReplacementsAndCapsNonLocalDependencies(t *
 	repo := consumedReplacementRepository(t)
 	remote := t.TempDir()
 	write(t, remote, "Cargo.toml", "[package]\nname='remote'\nversion='1.0.0'\nedition='2021'\n")
-	write(t, remote, "src/lib.rs", "pub fn value() -> u32 { if needless(true) { 1 } else { 2 } }\nfn needless(value: bool) -> bool { if value { true } else { false } }\nfn remote_unused() {}\n")
+	write(t, remote, "src/lib.rs", `pub fn value() -> u32 { if needless(true) { 1 } else { 2 } }
+fn needless(value: bool) -> bool { if value { true } else { false } }
+fn remote_unused() {}
+#[macro_export]
+macro_rules! remote_stop { () => {{ return 0u32; 1u32 }}; }
+`)
 	for _, arguments := range [][]string{{"init", "-q"}, {"add", "."}, {"-c", "user.name=fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"}} {
 		if output, err := exec.Command("git", append([]string{"-C", remote}, arguments...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git fixture: %v; %s", err, output)
@@ -57,7 +62,7 @@ func TestRustCompilationLintsGovernedReplacementsAndCapsNonLocalDependencies(t *
 	}
 	manifest := string(readRustFile(t, repo, "Cargo.toml"))
 	write(t, repo.Root, "Cargo.toml", string(bytes.Replace([]byte(manifest), []byte("[patch.crates-io]"), []byte("remote={git='file://"+filepath.ToSlash(remote)+"'}\n[patch.crates-io]"), 1)))
-	write(t, repo.Root, "src/lib.rs", "pub fn value() -> u32 { patch_source::value() + remote::value() }\n")
+	write(t, repo.Root, "src/lib.rs", "pub fn value() -> u32 { patch_source::value() + remote::value() }\npub fn remote_macro() -> u32 { remote::remote_stop!() }\n")
 	write(t, repo.Root, "vendor/patch-source/src/lib.rs", "pub fn value() -> u32 { if needless(true) { patch_leaf::value() } else { 2 } }\nfn needless(value: bool) -> bool { if value { true } else { false } }\n#[allow(dead_code)]\nfn source_unused() {}\n")
 	write(t, repo.Root, "vendor/leaf/src/lib.rs", "macro_rules! quiet { ($i:item) => { #[allow(dead_code, clippy::needless_bool)] $i }; }\nquiet! { fn leaf_needless(value: bool) -> bool { if value { true } else { false } } }\npub fn value() -> u32 { 42 }\n")
 	lock := exec.Command(repo.RustTool("cargo"), "generate-lockfile", "--manifest-path", filepath.Join(repo.Root, "Cargo.toml"))

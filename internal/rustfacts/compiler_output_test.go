@@ -70,6 +70,10 @@ func TestCargoCompilerWarningsOmitOnlyExpansionsOutsideTheRepository(t *testing.
 	cause := compilerSpan{File: "src/lib.rs", Line: 1, Column: 18}
 	libraryCause := compilerSpan{File: library.File, Line: 2, Column: 9, Expansion: library.Expansion}
 	unexpanded := compilerSpan{File: "/unavailable/dependency.rs", Line: 5, Column: 3, Primary: true}
+	cached := library
+	cached.File = filepath.Join(CargoHome(repo), "registry", "src", "source-id", "dependency-1.0.0", "src", "lib.rs")
+	nearCache := library
+	nearCache.File = filepath.Join(CargoHome(repo)+"-local", "src", "lib.rs")
 	for name, test := range map[string]struct {
 		level string
 		spans []compilerSpan
@@ -80,6 +84,10 @@ func TestCargoCompilerWarningsOmitOnlyExpansionsOutsideTheRepository(t *testing.
 		"library and repository":    {"warning", []compilerSpan{library, repository}, true},
 		"outside without expansion": {"warning", []compilerSpan{unexpanded}, true},
 		"library expansion error":   {"error", []compilerSpan{library}, true},
+		"cached registry expansion": {"warning", []compilerSpan{cached}, false},
+		"cached caller input":       {"warning", []compilerSpan{cached, repository}, true},
+		"cached expansion error":    {"error", []compilerSpan{cached}, true},
+		"similar local directory":   {"warning", []compilerSpan{nearCache}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			event := compilerEvent{Reason: "compiler-message", PackageID: workspace.Packages[0].ID, Target: target, Message: compilerDiagnostic{Message: "seeded diagnostic", Level: test.level, Code: &compilerCode{Code: "unreachable_code"}, Spans: test.spans}}

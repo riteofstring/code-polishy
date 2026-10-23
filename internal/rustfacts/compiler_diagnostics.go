@@ -85,7 +85,7 @@ func externalExpansion(repo repository.Repository, workspace Workspace, spans []
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(repo.Root, filepath.FromSlash(workspace.Root), path)
 		}
-		if span.Expansion == nil || withinRepository(repo, path) {
+		if span.Expansion == nil || repositorySource(repo, path) {
 			return false
 		}
 		primary = primary || span.Primary
@@ -93,7 +93,13 @@ func externalExpansion(repo repository.Repository, workspace Workspace, spans []
 	return primary
 }
 
-func withinRepository(repo repository.Repository, path string) bool {
-	physical, err := filepath.EvalSymlinks(repo.Root)
-	return withinDirectory(repo.Root, path) || err == nil && withinDirectory(physical, path)
+func repositorySource(repo repository.Repository, path string) bool {
+	physical, _ := filepath.EvalSymlinks(repo.Root)
+	for _, root := range []string{repo.Root, physical} {
+		if root != "" && withinDirectory(root, path) {
+			repo.Root = root
+			return !withinDirectory(CargoHome(repo), path)
+		}
+	}
+	return false
 }
