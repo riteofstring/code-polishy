@@ -29,6 +29,19 @@ malformed or unsupported historical evidence fails comparison. Required base
 features and their suites survive removal from the candidate, so policy edits
 cannot silently remove the review obligations being evaluated.
 
+## npm dependency comparison
+
+Modern npm lock inventory preserves canonical package names, installation paths,
+and source identity independently of the current registry configuration. A Git
+commit change remains visible even when the package version stays the same.
+Artifact URL changes remain visible even when the package version is unchanged;
+the comparison retains the complete observed URL without assuming a registry
+download layout. Removing or replacing a dependency from a former private
+registry requires no access to that registry. Candidate source admission remains
+separate: the currently configured registry must identify the exact package and
+artifact before its publication time can be used. Malformed or contradictory
+identities and credential-bearing sources remain comparison errors.
+
 ## Cargo dependency comparison
 
 Dependency review reads Cargo declarations and lock records through the shared

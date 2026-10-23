@@ -37,6 +37,7 @@ type Engine struct {
 	PolicyModuleNotes    []string
 	PackDataRoot         string
 	execution            *executionRecorder
+	gitLabInspection     supplychain.GitLabInspection
 }
 
 func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
@@ -79,6 +80,7 @@ func Open(repoRoot, policyRoot, configPath string) (*Engine, error) {
 		PolicyModuleFindings: append(append(moduleResolution.Findings, packResolution.Findings...), gitLabInspection.Findings...),
 		PolicyModuleNotes:    append(policymodule.Notes(moduleResolution.Active), packResolution.Notes...),
 		PackDataRoot:         dataRoot,
+		gitLabInspection:     gitLabInspection,
 	}, nil
 }
 
@@ -138,7 +140,7 @@ func (engine *Engine) Doctor(ctx context.Context) (Report, error) {
 		}
 	}
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
-	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
+	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles, engine.gitLabInspection)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, quality.LineBudgetFindings(engine.Repository)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
@@ -230,7 +232,7 @@ func (engine *Engine) coverageFindings() []policy.Finding {
 	}
 	findings := engine.Repository.DesignDocumentFindings()
 	findings = append(findings, hiddenInputFindings(engine.Repository, rawFiles)...)
-	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles)...)
+	findings = append(findings, finalGateOwnerFindings(engine.Repository, rawFiles, engine.gitLabInspection)...)
 	findings = append(findings, quality.CoverageFindings(engine.Repository, files)...)
 	findings = append(findings, quality.LineBudgetFindings(engine.Repository)...)
 	findings = append(findings, architecture.CoverageFindings(engine.Repository, files)...)
@@ -626,10 +628,22 @@ func (engine *Engine) verify(ctx context.Context, testsOnly, stopAfterFailure bo
 }
 
 func (engine *Engine) SupplyChain(ctx context.Context, offline bool) (Report, error) {
-	return engine.supplyChain(ctx, offline, true)
+	mode := supplyChainOnline
+	if offline {
+		mode = supplyChainOffline
+	}
+	return engine.supplyChain(ctx, mode)
 }
 
-func (engine *Engine) supplyChain(ctx context.Context, offline, includeInstalledLicenses bool) (Report, error) {
+type supplyChainMode string
+
+const (
+	supplyChainOnline    supplyChainMode = "online supply-chain profile"
+	supplyChainOffline   supplyChainMode = "offline supply-chain profile"
+	dependencyReviewMode supplyChainMode = "pre-install dependency review"
+)
+
+func (engine *Engine) supplyChain(ctx context.Context, mode supplyChainMode) (Report, error) {
 	files, err := engine.Repository.AllFiles()
 	if err != nil {
 		return Report{}, err
@@ -637,30 +651,25 @@ func (engine *Engine) supplyChain(ctx context.Context, offline, includeInstalled
 	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
 	findings = append(findings, supplychain.CoverageFindings(engine.Repository, files)...)
 	static := supplychain.Static
-	if !includeInstalledLicenses {
+	if mode == dependencyReviewMode {
 		static = supplychain.DependencyReviewStatic
 	}
 	findings = append(findings, static(ctx, engine.Repository, files)...)
 	selection := repository.Selection{Files: files, All: true}
-	mode := "online"
 	notes := []string{}
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
-	if offline {
-		mode = "offline"
+	if mode == supplyChainOffline {
 		findings = append(findings, supplychain.CheckCargoResolution(ctx, engine.Repository, files, true, engine.Runner)...)
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
-	if !offline {
-		onlineFindings, evidence, onlineNotes := engine.onlineSupplyChain(ctx, files, findings)
+	if mode != supplyChainOffline {
+		onlineFindings, evidence, onlineNotes := engine.onlineSupplyChain(ctx, files, findings, mode)
 		findings = onlineFindings
 		gitEvidence = evidence
 		notes = append(notes, onlineNotes...)
 	}
-	notes = append([]string{"completed " + mode + " supply-chain profile"}, notes...)
-	if !includeInstalledLicenses {
-		notes = append(notes, "installed dependency license evidence is deferred until the candidate tree is installed; run code-polishy supply-chain --offline after frozen script-disabled installation")
-	}
-	if offline {
+	notes = append([]string{"completed " + string(mode)}, notes...)
+	if mode == supplyChainOffline {
 		return engine.finish(findings, notes), nil
 	}
 	report := engine.finishWithAssessments(findings, notes, true)
@@ -677,7 +686,7 @@ func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report
 	if err != nil {
 		return Report{}, err
 	}
-	report, err := engine.supplyChain(ctx, false, false)
+	report, err := engine.supplyChain(ctx, dependencyReviewMode)
 	if err != nil {
 		return report, err
 	}

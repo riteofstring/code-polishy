@@ -5,10 +5,10 @@
 # The bundle is one package, so it declares no workspace members.
 packages: []
 
-# No dependency in the bundle may run a build script. The list is empty rather
+# No dependency in the bundle may run a build script. The map is empty rather
 # than absent so that a future dependency needing one fails installation instead
 # of being approved implicitly.
-onlyBuiltDependencies: []
+allowBuilds: {}
 strictDepBuilds: true
 
 # No dependency lifecycle script runs during fetch, install, or use.

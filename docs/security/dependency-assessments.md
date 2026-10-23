@@ -2,6 +2,7 @@
 
 Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
+Guarded glob expansion and the aged TOML fix reviewed on 2026-10-23 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -199,8 +200,9 @@ Both satisfy the age minimum; module checksums authenticate the downloads.
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
 affects `braces` 3.0.3 in both graphs. Its iterative parser accepts deeply nested
 brace and parenthesis nodes that overflow recursive compilation or expansion.
-The ordinary pattern-length limit does not stop the attack. There is no published
-fixed release at this review.
+The ordinary pattern-length limit does not stop the attack. On 2026-10-23 UTC,
+the GitHub advisory still lists no patched version and the npm registry still
+lists 3.0.3 as the latest release.
 
 The provider's `resolveGlob` in
 [`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
@@ -226,8 +228,10 @@ produces a native operational failure or provider incomplete coverage, never a
 passing empty result. Regressions exercise real source globs, workspace globs,
 package scripts, ordinary nested alternatives, and escaped literal paths.
 
-Retain exact high-severity `not-affected` assessments on the basis that the
-exploit prerequisite is now unreachable. They expire on 2026-10-22. Check for an
+Reinspection on 2026-10-23 UTC confirms the same Knip 5.55.1 and fast-glob 3.3.3
+callers and the same guard binding in both analyzers. Retain exact high-severity
+`not-affected` assessments because the exploit prerequisite remains unreachable.
+They expire on 2026-11-06. Check for an
 official fix by that date and reassess before renewal; adopt an aged fix when
 available. Reassess immediately if Knip, fast-glob, braces, the shared guard,
 or any expansion caller changes. See the
@@ -250,12 +254,19 @@ package manifests as JSON. Both explicitly disable every Knip plugin.
 script-referenced configuration for a disabled plugin becomes an entry path,
 not a call to its configuration loader. TOML parsing receives no target input.
 
-Retain exact moderate-severity `not-affected` assessments in both locks until
-2026-10-22. Update to official 1.9.0 on or after 17:15:35 UTC that day, 30 days
-after its [npm publication](https://registry.npmjs.org/smol-toml), and remove the
-assessments. With no enabled parse call, waiting avoids admitting fresh parser
-code without exposing the analyzer to this advisory. Reassess if configuration
-loading or plugin activation changes.
+Both locks now resolve official 1.9.0 and the exact TOML assessments are removed.
+The [npm registry](https://registry.npmjs.org/smol-toml) records publication at
+2026-09-22 17:15:34.756 UTC, so it meets the 30-day minimum. Registry-integrity
+verification and inspection of the old and new package sources confirm that
+`parseKey` advances through the current key instead of repeatedly searching the
+remaining document. Neither release adds dependencies or installation scripts.
+
+Only the smol-toml resolution changes in each generated lock; direct dependencies
+and Knip's compatible range remain unchanged. Frozen installation keeps scripts
+disabled. The aged fix removes the advisory without an early admission or a
+replacement vulnerability assessment. The existing policy-owned configuration
+boundary remains in place; reassess future advisories if configuration loading
+or plugin activation changes.
 
 ## Source maps
 

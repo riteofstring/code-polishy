@@ -317,7 +317,19 @@ Declare the one final-gate owner explicitly when CI owns delivery:
 ```
 
 The default is `local`. `ci` requires a checked-in GitHub or governed GitLab
-workflow containing the literal `code-polishy merge-gate --base` command.
+workflow with a dedicated `code-polishy merge-gate --base REF` step; the
+repository wrappers also count. The step contains one supported command with a
+standard named shell. Move setup to earlier steps or jobs; extra commands,
+assignments, shell operators, and unsupported argument syntax are rejected
+without interpreting them. See the [dedicated command format](../design/ci-gate-ownership.md).
+GitHub jobs and their dependencies must be
+statically active for a push, pull-request, or merge-queue event. GitLab proof
+requires a visible unconditional job in a fully local configuration, with one
+script entry and no effective `before_script`. Quoted
+instructions, comments, disabled or optional jobs, and schedule-only workflows
+do not establish CI ownership. Unknown conditions or inherited commands require
+a direct verifiable gate job; this check does not prove remote branch protection
+or successful execution.
 Choosing an owner avoids routinely running the same final gate twice; it never
 waives the gate.
 

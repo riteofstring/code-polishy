@@ -2,11 +2,40 @@ package agents
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestWrapperRunsItsLockedLauncherAfterAnOlderSetup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX wrapper execution")
+	}
+	root, userDirectory := t.TempDir(), t.TempDir()
+	contents, err := os.ReadFile(filepath.Join("..", "..", "templates", "code-polishyw"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "code-polishyw"), contents, 0o755)
+	digest := strings.Repeat("a", 64)
+	writeFile(t, filepath.Join(root, ".code-polishy.lock.json"), []byte("{\n\"lockVersion\": 2,\n\"codePolishyVersion\": \"9.9.9\",\n\"releaseDigest\": \""+digest+"\"\n}\n"), 0o600)
+	prefix := filepath.Join(userDirectory, ".local", "share", "code-polishy")
+	for _, directory := range []string{filepath.Join(prefix, "bin"), filepath.Join(prefix, "releases", "9.9.9-"+digest, "bin")} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, filepath.Join(prefix, "bin", "code-polishy"), []byte("#!/bin/sh\nexit 73\n"), 0o755)
+	writeFile(t, filepath.Join(prefix, "releases", "9.9.9-"+digest, "bin", "code-polishy-launcher"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\"\n"), 0o755)
+	command := exec.Command(filepath.Join(root, "code-polishyw"), "version")
+	command.Env = append(os.Environ(), "HOME="+userDirectory)
+	output, err := command.CombinedOutput()
+	if err != nil || !strings.Contains(string(output), "--repo-root\n") || !strings.HasSuffix(string(output), "\nversion\n") {
+		t.Fatalf("wrapper failed: %v %s", err, output)
+	}
+}
 
 func TestInstallPreservesAConflictingWrapperAndEveryOtherTarget(t *testing.T) {
 	t.Parallel()

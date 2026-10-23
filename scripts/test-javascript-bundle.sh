@@ -80,7 +80,7 @@ if grep -q '"scripts"' "${manifest}"; then
 fi
 
 for required_setting in \
-  "onlyBuiltDependencies: []" \
+  "allowBuilds: {}" \
   "strictDepBuilds: true" \
   "ignoreScripts: true" \
   "enablePrePostScripts: false" \

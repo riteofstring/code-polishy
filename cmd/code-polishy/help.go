@@ -428,7 +428,7 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"Exactly one --base REF is required.",
 		},
-		sideEffects: []string{"Reads dependency inputs and runs the configured dependency review; does not write project files."},
+		sideEffects: []string{"Reads dependency inputs and runs built-in online admission checks without installing dependencies or executing repository providers. Reports provider and artifact checks deferred until after installation."},
 		exits:       []string{"0 review passed", "1 dependency findings", "2 invalid usage or operational failure"},
 		examples:    []string{"code-polishy dependency-review --base origin/main"},
 	},

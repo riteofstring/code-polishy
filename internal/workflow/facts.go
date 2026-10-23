@@ -21,6 +21,8 @@ const maximumJobs = 512
 const maximumSteps = 4096
 const maximumStringBytes = 64 * 1024
 
+var shellExecutionVariables = []string{"BASH_ENV", "SHELLOPTS", "PS4"}
+
 type Facts struct {
 	ProtocolVersion string     `json:"protocolVersion"`
 	ParserIdentity  string     `json:"parserIdentity"`
@@ -47,6 +49,7 @@ type Job struct {
 	ID             string   `json:"id"`
 	Needs          []string `json:"needs"`
 	Condition      string   `json:"condition,omitempty"`
+	AllowsFailure  bool     `json:"allowsFailure,omitempty"`
 	RunsOnSchedule bool     `json:"runsOnSchedule"`
 	Uses           string   `json:"uses,omitempty"`
 	Line           int      `json:"line"`
@@ -55,13 +58,17 @@ type Job struct {
 }
 
 type Step struct {
-	ID             string `json:"id,omitempty"`
-	Condition      string `json:"condition,omitempty"`
-	RunsOnSchedule bool   `json:"runsOnSchedule"`
-	Uses           string `json:"uses,omitempty"`
-	Run            string `json:"run,omitempty"`
-	Line           int    `json:"line"`
-	Column         int    `json:"column"`
+	ID                  string            `json:"id,omitempty"`
+	Condition           string            `json:"condition,omitempty"`
+	AllowsFailure       bool              `json:"allowsFailure,omitempty"`
+	RunsOnSchedule      bool              `json:"runsOnSchedule"`
+	Uses                string            `json:"uses,omitempty"`
+	Run                 string            `json:"run,omitempty"`
+	Shell               string            `json:"shell,omitempty"`
+	ShellStartupUnknown bool              `json:"shellStartupUnknown,omitempty"`
+	Inputs              map[string]string `json:"inputs,omitempty"`
+	Line                int               `json:"line"`
+	Column              int               `json:"column"`
 }
 
 type conditionTruth uint8
@@ -155,7 +162,7 @@ func extractFacts(path string, parsed *actionlint.Workflow) (Facts, error) {
 	if len(triggers) > maximumTriggers || len(schedules) > maximumSchedules || len(parsed.Jobs) > maximumJobs {
 		return Facts{}, errors.New("workflow fact count exceeds the adapter limit")
 	}
-	facts.Jobs, err = extractJobs(parsed.Jobs)
+	facts.Jobs, err = extractJobs(parsed.Jobs, defaultRunShell(parsed.Defaults), parsed.Env)
 	if err != nil {
 		return Facts{}, err
 	}
@@ -204,7 +211,7 @@ func extractSchedules(entries []*actionlint.ScheduleEntry) ([]Schedule, error) {
 	return schedules, nil
 }
 
-func extractJobs(sources map[string]*actionlint.Job) ([]Job, error) {
+func extractJobs(sources map[string]*actionlint.Job, defaultShell string, environment *actionlint.Env) ([]Job, error) {
 	jobIDs := make([]string, 0, len(sources))
 	for id := range sources {
 		jobIDs = append(jobIDs, id)
@@ -213,7 +220,7 @@ func extractJobs(sources map[string]*actionlint.Job) ([]Job, error) {
 	steps := 0
 	jobs := make([]Job, 0, len(jobIDs))
 	for _, id := range jobIDs {
-		job, err := extractJob(id, sources[id])
+		job, err := extractJob(id, sources[id], defaultShell, environment)
 		if err != nil {
 			return nil, err
 		}
@@ -226,14 +233,15 @@ func extractJobs(sources map[string]*actionlint.Job) ([]Job, error) {
 	return jobs, nil
 }
 
-func extractJob(id string, source *actionlint.Job) (Job, error) {
+func extractJob(id string, source *actionlint.Job, defaultShell string, environment *actionlint.Env) (Job, error) {
 	line, column := position(source.Pos)
 	if err := validatePosition(line, column); err != nil {
 		return Job{}, err
 	}
 	job := Job{ID: id, Needs: []string{}, RunsOnSchedule: conditionRunsOnSchedule(source.If), Line: line, Column: column, Steps: []Step{}}
+	job.AllowsFailure = allowsFailure(source.ContinueOnError)
 	for _, need := range source.Needs {
-		job.Needs = append(job.Needs, need.Value)
+		job.Needs = append(job.Needs, strings.ToLower(need.Value))
 	}
 	if source.If != nil {
 		job.Condition = source.If.Value
@@ -241,11 +249,13 @@ func extractJob(id string, source *actionlint.Job) (Job, error) {
 	if source.WorkflowCall != nil && source.WorkflowCall.Uses != nil {
 		job.Uses = source.WorkflowCall.Uses.Value
 	}
+	defaultShell = jobRunShell(source, defaultShell)
 	for _, sourceStep := range source.Steps {
-		step, err := extractStep(sourceStep)
+		step, err := extractStep(sourceStep, defaultShell)
 		if err != nil {
 			return Job{}, err
 		}
+		step.ShellStartupUnknown = jobStepShellStartup(source, sourceStep, environment)
 		job.Steps = append(job.Steps, step)
 	}
 	values := append([]string{job.ID, job.Condition, job.Uses}, job.Needs...)
@@ -255,12 +265,56 @@ func extractJob(id string, source *actionlint.Job) (Job, error) {
 	return job, nil
 }
 
-func extractStep(source *actionlint.Step) (Step, error) {
+func jobStepShellStartup(job *actionlint.Job, step *actionlint.Step, workflowEnvironment *actionlint.Env) bool {
+	environments := []*actionlint.Env{nil, workflowEnvironment, job.Env, step.Env}
+	if job.Container != nil {
+		environments[0] = job.Container.Env
+	}
+	for _, name := range shellExecutionVariables {
+		if shellEnvironmentMayExecute(name, environments) {
+			return true
+		}
+	}
+	return false
+}
+
+func shellEnvironmentMayExecute(name string, environments []*actionlint.Env) bool {
+	mayExecute := false
+	for _, environment := range environments {
+		if environment == nil {
+			continue
+		}
+		if environment.Expression != nil {
+			return true
+		}
+		variable := environment.Vars[strings.ToLower(name)]
+		if variable == nil {
+			continue
+		}
+		unsafe := shellVariableMayExecute(name, variable.Value.Value)
+		if variable.Name.Value == name {
+			mayExecute = unsafe
+		} else {
+			mayExecute = mayExecute || unsafe
+		}
+	}
+	return mayExecute
+}
+
+func shellVariableMayExecute(name, value string) bool {
+	if name == "PS4" {
+		return strings.ContainsAny(value, "$`\\")
+	}
+	return value != ""
+}
+
+func extractStep(source *actionlint.Step, defaultShell string) (Step, error) {
 	line, column := position(source.Pos)
 	if err := validatePosition(line, column); err != nil {
 		return Step{}, err
 	}
 	step := Step{RunsOnSchedule: conditionRunsOnSchedule(source.If), Line: line, Column: column}
+	step.AllowsFailure = allowsFailure(source.ContinueOnError)
 	if source.ID != nil {
 		step.ID = source.ID.Value
 	}
@@ -272,33 +326,104 @@ func extractStep(source *actionlint.Step) (Step, error) {
 		if execution.Uses != nil {
 			step.Uses = execution.Uses.Value
 		}
+		step.Inputs = map[string]string{}
+		for name, input := range execution.Inputs {
+			if err := validateStrings(name, input.Value.Value); err != nil {
+				return Step{}, err
+			}
+			step.Inputs[name] = input.Value.Value
+		}
 	case *actionlint.ExecRun:
+		step.Shell = stepRunShell(execution, defaultShell)
 		if execution.Run != nil {
 			step.Run = execution.Run.Value
 		}
 	}
-	if err := validateStrings(step.ID, step.Condition, step.Uses, step.Run); err != nil {
+	if err := validateStrings(step.ID, step.Condition, step.Uses, step.Run, step.Shell); err != nil {
 		return Step{}, err
 	}
 	return step, nil
+}
+
+func stepRunShell(execution *actionlint.ExecRun, defaultShell string) string {
+	if execution.Shell != nil {
+		return execution.Shell.Value
+	}
+	return defaultShell
+}
+
+func defaultRunShell(defaults *actionlint.Defaults) string {
+	if defaults != nil && defaults.Run != nil && defaults.Run.Shell != nil {
+		return defaults.Run.Shell.Value
+	}
+	return ""
+}
+
+func jobRunShell(source *actionlint.Job, workflowShell string) string {
+	if shell := defaultRunShell(source.Defaults); shell != "" {
+		return shell
+	}
+	if workflowShell != "" {
+		return workflowShell
+	}
+	if source.Container != nil {
+		return "sh"
+	}
+	shell := ""
+	if source.RunsOn != nil {
+		for _, label := range source.RunsOn.Labels {
+			candidate := runnerLabelShell(label.Value)
+			if candidate == "" {
+				continue
+			}
+			if shell != "" && shell != candidate {
+				return ""
+			}
+			shell = candidate
+		}
+	}
+	return shell
+}
+
+func runnerLabelShell(label string) string {
+	label = strings.ToLower(label)
+	switch {
+	case label == "windows", strings.HasPrefix(label, "windows-"):
+		return "pwsh"
+	case label == "linux", label == "macos", strings.HasPrefix(label, "ubuntu-"), strings.HasPrefix(label, "macos-"):
+		return "bash"
+	default:
+		return ""
+	}
+}
+
+func allowsFailure(value *actionlint.Bool) bool {
+	return value != nil && (value.Value || value.Expression != nil)
 }
 
 func conditionRunsOnSchedule(condition *actionlint.String) bool {
 	if condition == nil {
 		return true
 	}
-	source := strings.TrimSpace(condition.Value)
-	if condition.IsExpressionAssigned() {
+	return ConditionRunsOnEvent(condition.Value, "schedule")
+}
+
+func ConditionRunsOnEvent(source, event string) bool {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return true
+	}
+	if strings.HasPrefix(source, "${{") && strings.HasSuffix(source, "}}") {
 		source = strings.TrimSpace(source[len("${{") : len(source)-len("}}")])
 	}
 	expression, err := actionlint.NewExprParser().Parse(actionlint.NewExprLexer(source + "}}"))
 	if err != nil {
 		return false
 	}
-	return evaluateScheduleCondition(expression) == conditionTrue
+	return evaluateEventCondition(expression, event) == conditionTrue
 }
 
-func evaluateScheduleCondition(expression actionlint.ExprNode) conditionTruth {
+func evaluateEventCondition(expression actionlint.ExprNode, event string) conditionTruth {
 	switch typed := expression.(type) {
 	case *actionlint.BoolNode:
 		if typed.Value {
@@ -306,22 +431,22 @@ func evaluateScheduleCondition(expression actionlint.ExprNode) conditionTruth {
 		}
 		return conditionFalse
 	case *actionlint.NotOpNode:
-		return invertCondition(evaluateScheduleCondition(typed.Operand))
+		return invertCondition(evaluateEventCondition(typed.Operand, event))
 	case *actionlint.CompareOpNode:
-		return evaluateScheduleComparison(typed)
+		return evaluateEventComparison(typed, event)
 	case *actionlint.LogicalOpNode:
-		return evaluateScheduleLogical(typed)
+		return evaluateEventLogical(typed, event)
 	case *actionlint.FuncCallNode:
-		if strings.EqualFold(typed.Callee, "always") && len(typed.Args) == 0 {
+		if (strings.EqualFold(typed.Callee, "always") || strings.EqualFold(typed.Callee, "success")) && len(typed.Args) == 0 {
 			return conditionTrue
 		}
 	}
 	return conditionUnknown
 }
 
-func evaluateScheduleLogical(expression *actionlint.LogicalOpNode) conditionTruth {
-	left := evaluateScheduleCondition(expression.Left)
-	right := evaluateScheduleCondition(expression.Right)
+func evaluateEventLogical(expression *actionlint.LogicalOpNode, event string) conditionTruth {
+	left := evaluateEventCondition(expression.Left, event)
+	right := evaluateEventCondition(expression.Right, event)
 	if expression.Kind == actionlint.LogicalOpNodeKindAnd {
 		if left == conditionFalse || right == conditionFalse {
 			return conditionFalse
@@ -353,12 +478,12 @@ func invertCondition(value conditionTruth) conditionTruth {
 	}
 }
 
-func evaluateScheduleComparison(expression *actionlint.CompareOpNode) conditionTruth {
+func evaluateEventComparison(expression *actionlint.CompareOpNode, event string) conditionTruth {
 	if expression.Kind != actionlint.CompareOpNodeKindEq && expression.Kind != actionlint.CompareOpNodeKindNotEq {
 		return conditionUnknown
 	}
-	left, leftKnown := scheduleConditionValue(expression.Left)
-	right, rightKnown := scheduleConditionValue(expression.Right)
+	left, leftKnown := eventConditionValue(expression.Left, event)
+	right, rightKnown := eventConditionValue(expression.Right, event)
 	if !leftKnown || !rightKnown {
 		return conditionUnknown
 	}
@@ -372,14 +497,14 @@ func evaluateScheduleComparison(expression *actionlint.CompareOpNode) conditionT
 	return conditionFalse
 }
 
-func scheduleConditionValue(expression actionlint.ExprNode) (string, bool) {
+func eventConditionValue(expression actionlint.ExprNode, event string) (string, bool) {
 	switch typed := expression.(type) {
 	case *actionlint.StringNode:
 		return typed.Value, true
 	case *actionlint.ObjectDerefNode:
 		variable, ok := typed.Receiver.(*actionlint.VariableNode)
 		if ok && strings.EqualFold(variable.Name, "github") && strings.EqualFold(typed.Property, "event_name") {
-			return "schedule", true
+			return event, true
 		}
 	}
 	return "", false

@@ -111,14 +111,16 @@ prefix=""
 while (($#)); do
   if [[ "$1" == --prefix ]]; then prefix=$2; shift 2; else shift; fi
 done
-mkdir -p "$prefix/releases/9.9.9-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "$prefix/bin"
-cat >"$prefix/bin/code-polishy" <<'LAUNCHER'
+release_root="$prefix/releases/9.9.9-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+mkdir -p "$release_root/bin" "$prefix/bin"
+cat >"$release_root/bin/code-polishy-launcher" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${CODE_POLISHY_WRAPPER_TEST_LOG:?}"
 if [[ "$*" == *" version" ]]; then printf 'code-polishy 9.9.9\n'; fi
 LAUNCHER
-chmod +x "$prefix/bin/code-polishy"
+chmod +x "$release_root/bin/code-polishy-launcher"
+cp "$release_root/bin/code-polishy-launcher" "$prefix/bin/code-polishy"
 BOOTSTRAP
 `), 0o755)
 	t.Setenv("CODE_POLISHY_WRAPPER_TEST_ARCHIVE", archive)
@@ -196,8 +198,9 @@ done
 [[ -n "$prefix" && -n "$repository" ]]
 version=$(sed -n 's/.*"codePolishyVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$repository/.code-polishy.lock.json")
 digest=$(sed -n 's/.*"releaseDigest"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$repository/.code-polishy.lock.json")
-mkdir -p "$prefix/releases/$version-$digest" "$prefix/bin"
-cat >"$prefix/bin/code-polishy" <<'LAUNCHER'
+release_root="$prefix/releases/$version-$digest"
+mkdir -p "$release_root/bin" "$prefix/bin"
+cat >"$release_root/bin/code-polishy-launcher" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${CODE_POLISHY_WRAPPER_TEST_LOG:?}"
@@ -205,7 +208,8 @@ if [[ "$*" == *" version" ]]; then
   printf 'code-polishy 9.9.9\n'
 fi
 LAUNCHER
-chmod +x "$prefix/bin/code-polishy"
+chmod +x "$release_root/bin/code-polishy-launcher"
+cp "$release_root/bin/code-polishy-launcher" "$prefix/bin/code-polishy"
 printf 'install-prefix=%s\ninstall-repository=%s\n' "$prefix" "$repository" >>"${CODE_POLISHY_WRAPPER_TEST_LOG:?}"
 `), 0o755)
 	runGit(t, root, "init", "--quiet")

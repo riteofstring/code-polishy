@@ -73,7 +73,7 @@ jobs:
   policy:
     name: Policy and tests (ubuntu-24.04)
     needs: classify
-    if: always() && !cancelled()
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Check out requested commit
@@ -115,20 +115,19 @@ jobs:
 
       - name: Build policy engine
         shell: bash
-        run: ./scripts/build.sh
+        run: |
+          ./scripts/build.sh
+          printf '%s/.tools/bin\n' "${GITHUB_WORKSPACE}" >>"${GITHUB_PATH}"
 
       - name: Run selected policy gate
-        if: github.event_name != 'schedule'
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         shell: bash
-        env:
-          DOCUMENTATION_ONLY: ${{ needs.classify.result == 'success' && needs.classify.outputs.documentation == 'true' }}
-        run: |
-          set -euo pipefail
-          if [[ "${DOCUMENTATION_ONLY}" == true && -n "${CODE_POLISHY_MERGE_BASE}" ]]; then
-            ./.tools/bin/code-polishy merge-gate --base "${CODE_POLISHY_MERGE_BASE}"
-          else
-            ./.tools/bin/code-polishy gate
-          fi
+        run: code-polishy merge-gate --base="$CODE_POLISHY_MERGE_BASE"
+
+      - name: Run manually requested full policy gate
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: ./.tools/bin/code-polishy gate
 
       - name: Run weekly online dependency security scan
         if: github.event_name == 'schedule'

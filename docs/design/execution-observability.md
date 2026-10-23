@@ -99,6 +99,18 @@ Standalone scanner calls use the same exit conditions. A timeout or operational
 failure remains a scanner finding even when an advisory was emitted before the
 failure; assessing that advisory cannot erase the failed scan.
 
+Dependency review is a separate pre-install phase. It compares historical
+inventory and runs built-in candidate checks, with the same Git-evidence lifetime
+as the full online profile. Repository provider capabilities do not establish
+whether their commands install dependencies or invoke build backends. This phase
+therefore never executes those providers, pack adapters, or artifact preparation.
+It reports every deferred check and the required post-install command in both
+normal terminal output and the durable report; installed license evidence is
+also deferred. Coverage still validates provider
+declarations. Full supply-chain verification and merge gates retain provider
+execution and scanner self-checks. The boundary is phase selection, with no
+command-name blacklist or new declaration claiming arbitrary code is read-only.
+
 Scanner source paths can use either the caller's repository-root spelling or
 its physical path. Scope normalization resolves only the repository root and
 still rejects paths outside it. Projected scans require the exact planned input

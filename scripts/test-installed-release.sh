@@ -149,7 +149,7 @@ write_pnpm_workspace() {
       printf 'packages: []\n'
     fi
     cat <<'EOF'
-onlyBuiltDependencies: []
+allowBuilds: {}
 minimumReleaseAge: 43200
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false

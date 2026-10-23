@@ -15,6 +15,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"golang.org/x/mod/semver"
 )
 
 func nodeManifestGovernanceFindings(repo repository.Repository, path, manager string, payload packageJSON) []policy.Finding {
@@ -183,7 +184,7 @@ func pnpmRootGovernanceFindings(ctx context.Context, repo repository.Repository,
 	}
 	findings := lifecycleDeclarationFindings(owner, payload, workspace)
 	manager, version, found := strings.Cut(payload.PackageManager, "@")
-	if !found || manager != "pnpm" || !exactVersion.MatchString(version) || semverBefore(version, "10.16.0") {
+	if !found || manager != "pnpm" || !exactVersion.MatchString(version) {
 		return findings
 	}
 	return append(findings, pnpmRootSecurityFindings(repo.Config, root, version, workspace)...)
@@ -191,13 +192,21 @@ func pnpmRootGovernanceFindings(ctx context.Context, repo repository.Repository,
 
 func pnpmRootSecurityFindings(config policy.Config, root, version string, workspace pnpmWorkspace) []policy.Finding {
 	if workspace.Path == "" {
+		if semverBefore(version, "10.16.0") {
+			return nil
+		}
 		message := "pnpm 10.16+ requires one pnpm-workspace.yaml or pnpm-workspace.yml owner for native supply-chain settings"
 		return []policy.Finding{{
 			Check: "supplyChain.pnpmSecurity", Path: packageJSONPath(root), Subject: "pnpm-workspace", Message: message,
 		}}
 	}
 	path, settings := workspace.Path, workspace.Settings
-	findings := pnpmMinimumAgeFindings(config, root, path, version, settings)
+	findings := []policy.Finding{}
+	if semverBefore(version, "10.16.0") {
+		findings = append(findings, requiredPNPMSetting(path, settings, "minimumReleaseAge", "", false)...)
+	} else {
+		findings = append(findings, pnpmMinimumAgeFindings(config, root, path, version, settings)...)
+	}
 	findings = append(findings, requiredPNPMSetting(path, settings, "trustPolicy", "no-downgrade", !semverBefore(version, "10.21.0"))...)
 	findings = append(findings, requiredPNPMSetting(path, settings, "blockExoticSubdeps", "true", !semverBefore(version, "10.26.0"))...)
 	findings = append(findings, requiredPNPMSetting(path, settings, "minimumReleaseAgeIgnoreMissingTime", "false", !semverBefore(version, "11.0.0"))...)
@@ -257,6 +266,10 @@ func pnpmMinimumAgeFindings(config policy.Config, root, path, version string, se
 
 func requiredPNPMSetting(path string, settings map[string][]string, name, want string, supported bool) []policy.Finding {
 	if !supported {
+		if _, exists := settings[name]; exists {
+			return []policy.Finding{{Check: "supplyChain.pnpmSecurity", Path: path, Subject: name,
+				Message: "the pinned pnpm version does not support " + name + "; remove the ineffective setting or select a reviewed version that supports it"}}
+		}
 		return nil
 	}
 	values := settings[name]
@@ -289,24 +302,7 @@ func hasReleaseAgeAssessment(assessments []policy.ReleaseAgeAssessment, ecosyste
 }
 
 func semverBefore(observed, required string) bool {
-	left := semverNumbers(observed)
-	right := semverNumbers(required)
-	for index := range left {
-		if left[index] != right[index] {
-			return left[index] < right[index]
-		}
-	}
-	return false
-}
-
-func semverNumbers(version string) [3]int {
-	version = strings.SplitN(version, "-", 2)[0]
-	parts := strings.Split(version, ".")
-	result := [3]int{}
-	for index := 0; index < len(result) && index < len(parts); index++ {
-		result[index], _ = strconv.Atoi(parts[index])
-	}
-	return result
+	return semver.Compare("v"+observed, "v"+required) < 0
 }
 
 func pnpmLifecycleRoots(repo repository.Repository, files []string) []string {
@@ -336,28 +332,68 @@ func packageJSONPath(root string) string {
 }
 
 func lifecycleDeclarationFindings(owner string, payload packageJSON, workspace pnpmWorkspace) []policy.Finding {
+	_, version, _ := strings.Cut(payload.PackageManager, "@")
+	modern := workspace.declares("allowBuilds")
+	if exactVersion.MatchString(version) && !semverBefore(version, "11.0.0") {
+		return modernPNPMLifecycleFindings(owner, payload, workspace)
+	}
 	findings := []policy.Finding{}
-	packageOnly := payload.PNPM.OnlyBuiltDependencies != nil
-	packageIgnored := payload.PNPM.IgnoredBuiltDependencies != nil
-	if packageOnly && packageIgnored {
-		message := "pnpm.onlyBuiltDependencies and pnpm.ignoredBuiltDependencies are mutually exclusive lifecycle policies"
-		findings = append(findings, lifecycleFinding(owner, "pnpm:ambiguous", message))
+	if modern && semverBefore(version, "10.26.0") {
+		findings = append(findings, lifecycleFinding(workspace.Path, "allowBuilds", "the pinned pnpm version does not support allowBuilds; it requires pnpm 10.26.0 or later"))
+		modern = false
 	}
-	workspaceOnly := workspace.declares("onlyBuiltDependencies")
-	workspaceIgnored := workspace.declares("ignoredBuiltDependencies")
-	if workspaceOnly && workspaceIgnored {
-		message := "top-level onlyBuiltDependencies and ignoredBuiltDependencies are mutually exclusive lifecycle policies"
-		findings = append(findings, lifecycleFinding(workspace.Path, "pnpm:ambiguous", message))
+	return append(findings, legacyPNPMLifecycleFindings(owner, payload, workspace, modern)...)
+}
+
+func legacyPNPMLifecycleFindings(owner string, payload packageJSON, workspace pnpmWorkspace, modern bool) []policy.Finding {
+	owners := []struct {
+		path          string
+		only, ignored bool
+	}{
+		{owner, payload.PNPM.OnlyBuiltDependencies != nil, payload.PNPM.IgnoredBuiltDependencies != nil},
+		{workspace.Path, workspace.declares("onlyBuiltDependencies"), workspace.declares("ignoredBuiltDependencies")},
 	}
-	packageDeclared := packageOnly || packageIgnored
-	workspaceDeclared := workspaceOnly || workspaceIgnored
-	if packageDeclared && workspaceDeclared {
+	findings := []policy.Finding{}
+	declared := 0
+	for _, location := range owners {
+		if location.only && location.ignored {
+			findings = append(findings, lifecycleFinding(location.path, "pnpm:ambiguous", "onlyBuiltDependencies and ignoredBuiltDependencies are mutually exclusive lifecycle policies"))
+		}
+		if location.only || location.ignored {
+			declared++
+		}
+	}
+	if modern {
+		if declared > 0 {
+			findings = append(findings, lifecycleFinding(workspace.Path, "pnpm:ambiguous", "allowBuilds must be the single lifecycle policy owner"))
+		}
+		return findings
+	}
+	if declared > 1 {
 		message := "dependency lifecycle policy must have one owner: package.json pnpm fields or pnpm-workspace.yaml top-level fields, not both"
 		findings = append(findings, lifecycleFinding(workspace.Path, "pnpm:duplicate-owner", message))
 	}
-	if !packageDeclared && !workspaceDeclared {
+	if declared == 0 {
 		message := "pnpm lifecycle scripts must be governed by package.json pnpm.onlyBuiltDependencies/pnpm.ignoredBuiltDependencies or a top-level onlyBuiltDependencies/ignoredBuiltDependencies field in pnpm-workspace.yaml"
 		findings = append(findings, lifecycleFinding(owner, "pnpm", message))
+	}
+	return findings
+}
+
+func modernPNPMLifecycleFindings(owner string, payload packageJSON, workspace pnpmWorkspace) []policy.Finding {
+	findings := []policy.Finding{}
+	for _, name := range []string{"onlyBuiltDependencies", "ignoredBuiltDependencies", "neverBuiltDependencies", "onlyBuiltDependenciesFile", "ignoreDepScripts"} {
+		if workspace.declares(name) {
+			findings = append(findings, lifecycleFinding(workspace.Path, name, "pnpm 11 no longer reads "+name+"; use allowBuilds in pnpm-workspace.yaml"))
+		}
+	}
+	if payload.PNPM.OnlyBuiltDependencies != nil || payload.PNPM.IgnoredBuiltDependencies != nil ||
+		payload.PNPM.NeverBuiltDependencies != nil || payload.PNPM.OnlyBuiltDependenciesFile != nil ||
+		payload.PNPM.IgnoreDepScripts != nil || payload.PNPM.AllowBuilds != nil {
+		findings = append(findings, lifecycleFinding(owner, "pnpm", "pnpm 11 no longer reads package.json pnpm settings; use allowBuilds in pnpm-workspace.yaml"))
+	}
+	if !workspace.declares("allowBuilds") {
+		findings = append(findings, lifecycleFinding(owner, "allowBuilds", "pnpm 11 lifecycle scripts require an explicit allowBuilds map in pnpm-workspace.yaml"))
 	}
 	return findings
 }

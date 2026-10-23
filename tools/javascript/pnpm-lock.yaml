@@ -32,6 +32,9 @@ importers:
       prettier:
         specifier: 3.9.5
         version: 3.9.5
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -893,8 +896,8 @@ packages:
     resolution: {integrity: sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==}
     engines: {node: '>= 0.4'}
 
-  smol-toml@1.7.1:
-    resolution: {integrity: sha512-PPlsspAZ4jbMBu5DMFhfUGDQLu/vrL4SyBROVS37x8ynnVmFIs1VPBz1Co8Xks3TvpIaZXmU85y4DrQ+UyVFoQ==}
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
     engines: {node: '>= 18'}
 
   stop-iteration-iterator@1.1.0:
@@ -1825,7 +1828,7 @@ snapshots:
       minimist: 1.2.8
       picocolors: 1.1.1
       picomatch: 4.0.5
-      smol-toml: 1.7.1
+      smol-toml: 1.9.0
       strip-json-comments: 5.0.1
       typescript: 6.0.3
       zod: 3.25.76
@@ -2050,7 +2053,7 @@ snapshots:
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
 
-  smol-toml@1.7.1: {}
+  smol-toml@1.9.0: {}
 
   stop-iteration-iterator@1.1.0:
     dependencies:

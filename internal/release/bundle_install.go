@@ -27,6 +27,10 @@ func InstallLocalBundle(source, expectedSHA256, prefix string) (Manifest, error)
 		return Manifest{}, err
 	}
 	defer cleanup()
+	return installAuthenticatedBundle(archive, canonicalPrefix)
+}
+
+func installAuthenticatedBundle(archive, canonicalPrefix string) (Manifest, error) {
 	staging, err := os.MkdirTemp(canonicalPrefix, ".code-polishy-release-")
 	if err != nil {
 		return Manifest{}, err

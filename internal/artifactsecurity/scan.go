@@ -203,7 +203,7 @@ func buildScanOutput(
 	sortNormalizedFindings(blocking)
 	findings := make([]policy.Finding, 0, len(blocking))
 	for _, finding := range blocking {
-		findings = append(findings, policyFinding(target, finding))
+		findings = append(findings, state.policyFinding(target, artifact, finding))
 	}
 	return scanOutput{
 		report: artifactReport{
@@ -410,11 +410,16 @@ func validateCycloneDX(payload []byte) error {
 	return nil
 }
 
-func policyFinding(target policy.ArtifactTarget, finding normalizedFinding) policy.Finding {
-	path := targetScope(target)
+func (state *scannerRuntime) policyFinding(target policy.ArtifactTarget, artifact preparedArtifact, finding normalizedFinding) policy.Finding {
 	result := policy.Finding{
-		Check: "artifactSecurity." + finding.Kind, Path: path,
+		Check: "artifactSecurity." + finding.Kind, Path: targetScope(target),
 		Subject: finding.Artifact + ":" + finding.ID, Message: finding.Severity + " " + finding.Title,
+	}
+	if artifact.mode == "scanner" {
+		result.Path = policy.LockFilename
+		result.Message = fmt.Sprintf("Code Polishy's scanner (Trivy %s, %s): %s", state.policy.TrivyVersion, state.policy.SourceImage, result.Message)
+		result.Remediation.Summary = "Upgrade the locked tool to a verified Code Polishy release carrying a scanner that resolves this finding, then rerun artifact-security. " +
+			"No fixed Code Polishy/scanner release has been established by this scan. Rebuilding application artifacts cannot repair Code Polishy's scanner."
 	}
 	if finding.Kind == "vulnerability" {
 		packageID := finding.Package
@@ -423,7 +428,7 @@ func policyFinding(target policy.ArtifactTarget, finding normalizedFinding) poli
 		}
 		identity := policy.VulnerabilityIdentity{
 			Ecosystem: "container", Advisory: finding.ID, Package: packageID,
-			AffectedVersion: finding.AffectedVersion, Scope: path,
+			AffectedVersion: finding.AffectedVersion, Scope: result.Path,
 			Severity: policy.NormalizeVulnerabilitySeverity(finding.Severity),
 		}
 		result.Subject = policy.VulnerabilitySubject(identity)

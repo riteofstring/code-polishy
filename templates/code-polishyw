@@ -26,7 +26,7 @@ digest=$(value releaseDigest)
 [[ -n "${HOME:-}" ]] || fail 'HOME is required to locate the shared Code Polishy installation'
 prefix="${HOME}/.local/share/code-polishy"
 release_root="${prefix}/releases/${version}-${digest}"
-launcher="${prefix}/bin/code-polishy"
+launcher="${release_root}/bin/code-polishy-launcher"
 
 available() {
   [[ -d "$release_root" && ! -L "$release_root" && -x "$launcher" && ! -L "$launcher" ]]

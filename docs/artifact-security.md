@@ -38,6 +38,18 @@ HIGH and CRITICAL vulnerabilities, secrets, image-config misconfigurations,
 and end-of-life operating systems are blocking. Secret matches are never copied
 into normalized findings or reports.
 
+Scanner self-check findings identify **Code Polishy's scanner**, its Trivy
+version, and its pinned source image. They point to `.code-polishy.lock.json`,
+because the locked Code Polishy release owns that runtime. Application findings
+retain their declared artifact scope and remediation. Both remain blocking.
+
+Repair a scanner finding by upgrading to a verified Code Polishy release carrying
+a patched scanner; rebuilding an application image cannot repair it. The scan
+does not establish the availability of a fixed Code Polishy/scanner release and
+reports that explicitly. A component's fixed version in Trivy output alone does
+not prove that a verified scanner release contains it. The self-check and its
+release-owned OpenVEX policy remain required.
+
 Built images are saved by immutable Docker identity. Trivy reports must match
 the configuration digest from that exact saved archive; see
 [Container Archive Identity](design/artifact-identity.md).

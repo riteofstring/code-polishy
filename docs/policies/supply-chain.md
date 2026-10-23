@@ -8,7 +8,9 @@ or CI.
 
 - Pin every direct registry dependency exactly.
 - Treat Node `peerDependencies` as compatibility declarations, but test each
-  peer through a matching exact `devDependency`.
+  peer through a matching exact `devDependency`. The pinned npm semver parser
+  must accept the peer range and confirm that the development version satisfies
+  it, including npm's ordinary prerelease rules.
 - Pin the owning package manager with `packageManager` and commit its lockfile.
 - Pin Git dependencies to full commits, GitHub Actions to full 40-character
   commits, and container images/actions to full SHA-256 digests.
@@ -280,6 +282,16 @@ adoption.
   graph. For example, Code Polishy's pnpm archive pin must equal the
   `packageManager` release its JavaScript manifest already ages; it does not
   create a second artifact identity.
+- Governed `.node-version` and `.nvmrc` files must each have a `node-runtime`
+  release-artifact entry. GitHub `actions/setup-node` must select a declared
+  `versionFile`, or a literal exact version matching one. A dynamic matrix,
+  floating version, or ambient selection cannot establish runtime coverage;
+  use an inventoried exact version file for the governed runtime.
+- Online checks also read the Node project's official release schedule and
+  reject a runtime line on or after its end-of-life date. Unknown, malformed,
+  or unavailable lifecycle evidence fails. Release age does not establish
+  ongoing support, and release-age assessments do not waive end of life.
+  Offline checks establish inventory coverage without claiming current support.
 
 ```json
 {
@@ -359,13 +371,17 @@ for the investigation workflow.
 
 Dependency lifecycle scripts execute third-party code on developer and CI
 machines. A pnpm lock-owning workspace with dependencies anywhere beneath it
-must declare `onlyBuiltDependencies` or `ignoredBuiltDependencies` at that
-owner, even when the selected list is empty.
+must declare one lifecycle policy, including an explicit empty policy when no
+dependency builds are allowed:
 
-For pnpm, lifecycle ownership may be declared either in the lock owner's
-`package.json` `pnpm` object or as a top-level field in its
-`pnpm-workspace.yaml`/`pnpm-workspace.yml`. Declaring both forms, both lifecycle
-fields, or both workspace filenames is an error rather than an ambiguous merge.
+- pnpm before 10.26 uses `onlyBuiltDependencies` or `ignoredBuiltDependencies`
+  in the owner's `package.json` `pnpm` object or workspace settings.
+- pnpm 10.26 through 10.x also supports an `allowBuilds` map in workspace
+  settings. Every map value must be a boolean; `{}` is an explicit empty policy.
+- pnpm 11 requires `allowBuilds` in `pnpm-workspace.yaml`/`.yml` and rejects
+  obsolete lifecycle fields, including the old `package.json` owner.
+
+Declaring multiple policy owners or both workspace filenames is an error.
 
 Normal bootstrap and lock checks should use frozen inputs and disable scripts.
 That normal installation is also the pnpm license-coverage input; do not add
@@ -382,7 +398,14 @@ transitive-source blocking. Native age exclusions must identify one exact
 package version and match a current `releaseAgeAssessment`; broad package or
 scope patterns fail.
 
-Both settings are read from the workspace file by the sealed JavaScript tool
+Configuring a protection before its introducing version is an error even if
+the older pnpm silently ignores it. `minimumReleaseAge` requires 10.16,
+`trustPolicy` 10.21, `blockExoticSubdeps` 10.26, strict age and missing-time
+handling 11.0, and `trustLockfile` 11.3. Remove an ineffective setting or select
+a reviewed pnpm version that implements it; an absent unsupported setting
+does not claim that protection.
+
+These settings are read from the workspace file by the sealed JavaScript tool
 bundle, with the parser pnpm itself reads it with, and that file is found in the
 governed tree rather than in the selected files: changing a manifest alone still
 reads the settings that govern it. A workspace file the reader cannot read is a
@@ -688,7 +711,9 @@ documented risk comparison and lack of practical alternatives described above.
 6. Install the candidate tree from the frozen lock with lifecycle scripts
    disabled.
 7. Run `code-polishy supply-chain --offline` so installed metadata proves the
-   candidate's license policy and local lock policy.
+   candidate's license policy and local lock policy. When dependency review lists
+   deferred repository providers or artifact scans, run `code-polishy supply-chain`
+   without `--offline` instead to complete those checks as well.
 8. Run focused tests for affected modules.
 9. Resolve the trusted merge target and run
    `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes
@@ -728,11 +753,22 @@ code-polishy dependency-review --base origin/main
 
 Dependency review compares the candidate manifests and complete supported lock
 graphs with the merge base, prints a stable direct/transitive change table, and
-runs online candidate checks. It does not install dependencies or execute
-dependency lifecycle scripts, so it explicitly defers installed-package license
-evidence. After the frozen, script-disabled install, `supply-chain --offline`
-checks that candidate's installed license metadata without repeating online
-audits.
+runs built-in online candidate checks. It does not install dependencies, execute
+dependency lifecycle scripts, or run repository-configured providers and artifact
+builders. Provider declarations describe capabilities, not whether their commands
+install or build dependencies; dependency review therefore defers all of them,
+including pack adapters and commands described as read-only. It lists each deferred
+provider and artifact target instead of claiming a completed online profile.
+
+After the frozen, script-disabled install, run `supply-chain` without `--offline`
+when the review lists deferred providers or artifact scans. This runs their
+lock-consistency, release-age, security, and artifact checks, including the scanner
+self-check, along with installed-package license validation. A successful
+pre-install review does not establish results for these deferred checks. When
+none are deferred, `supply-chain --offline` checks installed license metadata and
+local lock policy without repeating online audits. Required provider declarations
+remain coverage requirements in both phases; deferring execution does not remove
+them from the full supply-chain profile or merge gate.
 
 Historical inputs are dependency inventory, not candidate admission evidence.
 The comparison accepts syntactically valid historical Git tags, branches,
@@ -748,8 +784,9 @@ and ambiguity checks. Each inventory accepts at most 4,096 UTF-8 inputs, 8 MiB
 per input, and 128 MiB in total; parser-specific limits also apply. Malformed,
 unsafe, oversized, or unsupported historical inputs stop comparison with a
 coverage error naming the affected path when available. The complete
-candidate still receives the online profile's exact-pin, lock-consistency,
-security, age, and other admission checks, including unchanged dependencies.
+candidate still receives built-in exact-pin, lock-consistency, security, and age
+checks, including unchanged dependencies. Checks supplied by repository providers
+remain explicitly deferred until after installation.
 Successful inventory comparison alone grants no admission.
 
 Recurring external monitoring is optional and defaults off. Set

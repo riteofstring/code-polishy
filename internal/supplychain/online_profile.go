@@ -52,6 +52,7 @@ func OnlineWithCommands(ctx context.Context, repo repository.Repository, files [
 		return []policy.Finding{{Check: "policy.supplyChain", Path: "repository", Subject: "online command plan", Message: "online supply-chain command plan differs from policy-derived commands"}}
 	}
 	findings := releaseArtifactAgeFindings(ctx, repo, registryClient(), time.Now().UTC())
+	findings = append(findings, nodeRuntimeSupportFindings(ctx, repo, registryClient(), time.Now().UTC())...)
 	findings, commandIndex := onlineGoModuleFindings(ctx, repo, files, commands, commandRunner, findings)
 	findings, commandIndex = onlineCargoFindings(ctx, repo, files, commands, commandRunner, findings, commandIndex)
 	findings, commandIndex = onlineNodeFindings(ctx, repo, files, commands, commandRunner, findings, commandIndex)

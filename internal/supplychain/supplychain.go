@@ -44,10 +44,14 @@ type packageJSON struct {
 	Overrides            json.RawMessage   `json:"overrides"`
 	AuditConfig          nodeAuditConfig   `json:"auditConfig"`
 	PNPM                 struct {
-		OnlyBuiltDependencies    []string        `json:"onlyBuiltDependencies"`
-		IgnoredBuiltDependencies []string        `json:"ignoredBuiltDependencies"`
-		Overrides                json.RawMessage `json:"overrides"`
-		AuditConfig              nodeAuditConfig `json:"auditConfig"`
+		OnlyBuiltDependencies     []string        `json:"onlyBuiltDependencies"`
+		IgnoredBuiltDependencies  []string        `json:"ignoredBuiltDependencies"`
+		NeverBuiltDependencies    []string        `json:"neverBuiltDependencies"`
+		OnlyBuiltDependenciesFile *string         `json:"onlyBuiltDependenciesFile"`
+		IgnoreDepScripts          *bool           `json:"ignoreDepScripts"`
+		AllowBuilds               json.RawMessage `json:"allowBuilds"`
+		Overrides                 json.RawMessage `json:"overrides"`
+		AuditConfig               nodeAuditConfig `json:"auditConfig"`
 	} `json:"pnpm"`
 }
 
@@ -72,6 +76,7 @@ func static(ctx context.Context, repo repository.Repository, files []string, inc
 		findings = append(findings, staticPathFindings(repo, path)...)
 	}
 	findings = append(findings, pnpmGovernanceFindings(ctx, repo, files)...)
+	findings = append(findings, nodePeerRangeFindings(ctx, repo, files)...)
 	findings = append(findings, pnpmProjectFindings(ctx, repo, files, includeInstalledLicenses)...)
 	if includeInstalledLicenses {
 		findings = append(findings, cargoLicenseFindings(ctx, repo, files)...)
@@ -136,6 +141,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, customDependencyCoverageFindings(repo.Config)...)
 	findings = append(findings, DependencyOverrideGovernanceFindings(repo, files)...)
 	findings = append(findings, securityMonitoringFindings(repo, files)...)
+	findings = append(findings, nodeRuntimeCoverageFindings(repo, files)...)
 	return uniqueFindings(findings)
 }
 

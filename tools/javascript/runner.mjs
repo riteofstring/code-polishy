@@ -25,7 +25,7 @@ import { imports } from "./imports.mjs";
 import { gitlab } from "./gitlab.mjs";
 import { licenses } from "./licenses.mjs";
 import { lintPage } from "./lint-pages.mjs";
-import { packages, workspace } from "./packages.mjs";
+import { packages, peers, workspace } from "./packages.mjs";
 import {
   MAXIMUM_REQUEST_BYTES,
   PROTOCOL_VERSION,
@@ -70,6 +70,7 @@ const OPERATIONS = {
   gitlab: { fields: ["root", "paths", "governedPaths"], run: gitlab },
   packages: { fields: ["root", "directory"], run: packages },
   workspace: { fields: ["root", "paths"], run: workspace },
+  peers: { fields: ["root", "paths"], run: peers },
   licenses: { fields: ["root", "directory"], run: licenses },
   audit: { fields: ["root", "directory"], run: audit },
 };

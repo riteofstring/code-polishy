@@ -44,6 +44,8 @@ const (
 
 	OperationWorkspace Operation = "workspace"
 
+	OperationPeers Operation = "peers"
+
 	OperationLicenses Operation = "licenses"
 
 	OperationAudit Operation = "audit"
@@ -163,21 +165,28 @@ func decodeParseResult(data []byte, requested []string) (ParseResult, error) {
 	if wire.Covered == nil || wire.Unsupported == nil {
 		return ParseResult{}, fmt.Errorf("the parse result is missing required fields")
 	}
-	requestedPaths, err := parseRequestedPaths(requested)
-	if err != nil {
+	if err := validateParseCoverage(*wire.Covered, *wire.Unsupported, requested); err != nil {
 		return ParseResult{}, err
-	}
-	reportedPaths := map[string]bool{}
-	if err := addParseCoveredPaths(*wire.Covered, requestedPaths, reportedPaths); err != nil {
-		return ParseResult{}, err
-	}
-	if err := addParseUnsupportedPaths(*wire.Unsupported, requestedPaths, reportedPaths); err != nil {
-		return ParseResult{}, err
-	}
-	if len(reportedPaths) != len(requestedPaths) {
-		return ParseResult{}, fmt.Errorf("the parse result does not account for every requested path")
 	}
 	return ParseResult{Covered: *wire.Covered, Unsupported: *wire.Unsupported}, nil
+}
+
+func validateParseCoverage(covered []string, unsupported []Unsupported, requested []string) error {
+	requestedPaths, err := parseRequestedPaths(requested)
+	if err != nil {
+		return err
+	}
+	reportedPaths := map[string]bool{}
+	if err := addParseCoveredPaths(covered, requestedPaths, reportedPaths); err != nil {
+		return err
+	}
+	if err := addParseUnsupportedPaths(unsupported, requestedPaths, reportedPaths); err != nil {
+		return err
+	}
+	if len(reportedPaths) != len(requestedPaths) {
+		return fmt.Errorf("the parse result does not account for every requested path")
+	}
+	return nil
 }
 
 func parseRequestedPaths(requested []string) (map[string]bool, error) {

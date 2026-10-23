@@ -471,6 +471,22 @@
       "public": true
     },
     {
+      "id": "ci-gate-ownership",
+      "path": "docs/design/ci-gate-ownership.md",
+      "title": "CI final-gate ownership",
+      "summary": "Validate dedicated gate steps and statically active workflow jobs.",
+      "aliases": [],
+      "public": true
+    },
+    {
+      "id": "node-admission",
+      "path": "docs/design/node-admission.md",
+      "title": "Node dependency and runtime admission",
+      "summary": "Enforce versioned pnpm settings, npm peer ranges, and Node runtime support.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "workflow-facts",
       "path": "docs/design/workflow-facts.md",
       "title": "Workflow facts and runner declarations",

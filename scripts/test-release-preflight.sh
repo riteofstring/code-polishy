@@ -34,9 +34,11 @@ build_source_checkout() {
   mkdir -p "${source_root}/scripts"
   cp "${policy_root}/scripts/prepare-release-tag.sh" "${source_root}/scripts/prepare-release-tag.sh"
   cp "${policy_root}/scripts/release-preflight.sh" "${source_root}/scripts/release-preflight.sh"
+  cp "${policy_root}/scripts/release-changelog.sh" "${source_root}/scripts/release-changelog.sh"
   cp "${policy_root}/scripts/release-version.sh" "${source_root}/scripts/release-version.sh"
   chmod +x "${source_root}/scripts/prepare-release-tag.sh" \
     "${source_root}/scripts/release-preflight.sh" \
+    "${source_root}/scripts/release-changelog.sh" \
     "${source_root}/scripts/release-version.sh"
   printf '9.9.9\n' >"${source_root}/VERSION"
   write_file "${source_root}/CHANGELOG.md" <<'EOF'
@@ -200,7 +202,7 @@ grep -qF "git tag -a v9.9.9 -m \"Code Polishy 9.9.9\" ${candidate}" "${output}" 
 
 
 printf '9.9.9-beta.1\n' >"${source_root}/VERSION"
-printf '# Changelog\n\n## 9.9.9-beta.1 - 2026-09-07\n' >"${source_root}/CHANGELOG.md"
+printf '# Changelog\n\n## 9.9.9-beta.1 - 2026-09-07\n\n- A prerelease entry.\n' >"${source_root}/CHANGELOG.md"
 commit_checkout "disposable prerelease candidate"
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 expect_pass "an exact prerelease candidate" "${candidate}"
@@ -210,7 +212,7 @@ for invalid_version in '9.9.9-beta.01' '9.9.9-' '9.9.9-beta..1'; do
   candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
   expect_fail "a malformed prerelease" "not a strict MAJOR.MINOR.PATCH semantic version" "${candidate}"
 done
-printf '# Changelog\n\n## 9.9.9 - 2026-09-07\n' >"${source_root}/CHANGELOG.md"
+printf '# Changelog\n\n## 9.9.9 - 2026-09-07\n\n- A release entry.\n' >"${source_root}/CHANGELOG.md"
 
 printf '9.9\n' >"${source_root}/VERSION"
 commit_checkout "disposable malformed version"
@@ -255,6 +257,52 @@ expect_fail "a changelog without the released-version heading" \
   "no released-version heading for 9.9.9" "${candidate}"
 grep -qF '## 9.9.9 - <YYYY-MM-DD>' "${output}" ||
   fail "the changelog was refused without the exact heading to add"
+
+for body in '' $' \t\n' $'\302\240\n' $'\n## 9.9.8 - 2026-08-19\n\n- Earlier release.\n'; do
+  printf '# Changelog\n\n## 9.9.9 - 2026-08-20\n%s' "${body}" >"${source_root}/CHANGELOG.md"
+  commit_checkout "disposable empty release section"
+  candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+  expect_fail "an empty release section" "release section for 9.9.9 is empty" "${candidate}"
+done
+
+for date in 2026-08-20 invalid; do
+  printf '# Changelog\n\n## 9.9.9 - 2026-08-20\n\n- First entry.\n\n## 9.9.9 - %s\n\n- Duplicate entry.\n' "${date}" >"${source_root}/CHANGELOG.md"
+  commit_checkout "disposable duplicate release section"
+  candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+  expect_fail "duplicate release sections" "exactly one release section for 9.9.9" "${candidate}"
+done
+
+printf '# Changelog\n\n## 9.9.9 - 2026-08-20\n\n- Invalid byte: \377\n' >"${source_root}/CHANGELOG.md"
+commit_checkout "disposable invalid UTF-8 release section"
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+LC_ALL=C expect_fail "an invalid UTF-8 changelog" "must be valid UTF-8" "${candidate}"
+
+write_file "${source_root}/CHANGELOG.md" <<'EOF'
+# Changelog
+
+## Unreleased
+
+- Future change.
+
+## 9.9.9 - 2026-08-20
+
+- Release change.
+
+### Migration notes
+
+- Update the configuration.
+
+## 9.9.9-beta.1 - 2026-08-19
+
+- Prerelease change.
+EOF
+commit_checkout "disposable release with migration notes"
+candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
+expect_pass "a release with migration notes and adjacent sections" "${candidate}"
+changes="$("${source_root}/scripts/release-changelog.sh" 9.9.9 "${source_root}/CHANGELOG.md")"
+[[ "${changes}" == $'- Release change.\n\n### Migration notes\n\n- Update the configuration.' ]] ||
+  fail "release notes lost migration content or included another section: ${changes}"
+
 build_source_checkout
 candidate="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 

@@ -21,11 +21,12 @@ type resolvedPackage struct {
 }
 
 type resolvedSource struct {
-	Kind      string
-	Registry  string
-	LocalPath string
-	Reason    string
-	Git       repository.PythonGitSource
+	Kind        string
+	Registry    string
+	ArtifactURL string
+	LocalPath   string
+	Reason      string
+	Git         repository.PythonGitSource
 }
 
 func resolvedNodePackages(ctx context.Context, repo repository.Repository, manifest nodeManifest) ([]resolvedPackage, error) {
@@ -50,7 +51,16 @@ func resolvedNodePackages(ctx context.Context, repo repository.Repository, manif
 	if manifest.Manager != "npm" {
 		return nil, fmt.Errorf("resolved release-age inspection does not support %s", manifest.Manager)
 	}
-	return parsePackageLock(data, path, manifest.Manager)
+	packages, err := parsePackageLock(data, path, manifest.Manager)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range packages {
+		if err := validateNPMResolvedSource(repo, item); err != nil {
+			return nil, fmt.Errorf("%s: package %q: %w", item.Scope, item.Name, err)
+		}
+	}
+	return packages, nil
 }
 
 func nodeLockPath(repo repository.Repository, root, manager string) (string, bool) {
@@ -103,13 +113,21 @@ func parsePackageLock(data []byte, scope, ecosystem string) ([]resolvedPackage, 
 	packages := []resolvedPackage{}
 	if document.Packages != nil {
 		for path, entry := range document.Packages {
-			name := packageLockName(path, entry.Name)
-			if name == "" || entry.Link || !exactVersion.MatchString(entry.Version) {
+			installed := packageLockName(path)
+			if installed == "" || entry.Link || !exactVersion.MatchString(entry.Version) {
 				continue
+			}
+			name := entry.Name
+			if name == "" {
+				name = installed
+			}
+			source, err := packageLockSource(installed, name, entry)
+			if err != nil {
+				return nil, fmt.Errorf("parse %s at %s: %w", scope, path, err)
 			}
 			packages = append(packages, resolvedPackage{
 				Ecosystem: ecosystem, Name: name, Version: entry.Version, Scope: scope,
-				Locations: []string{filepath.ToSlash(path)},
+				Locations: []string{filepath.ToSlash(path)}, Source: source,
 			})
 		}
 	} else {
@@ -118,8 +136,7 @@ func parsePackageLock(data []byte, scope, ecosystem string) ([]resolvedPackage, 
 	return uniqueResolvedPackages(packages), nil
 }
 
-func packageLockName(path, declared string) string {
-	_ = declared
+func packageLockName(path string) string {
 	marker := "node_modules/"
 	index := strings.LastIndex(filepath.ToSlash(path), marker)
 	if index >= 0 {
@@ -286,7 +303,7 @@ func resolvedSourceKey(source resolvedSource) string {
 	case "git":
 		return source.Kind + "\x00" + source.Git.InventoryIdentity()
 	case "registry":
-		return source.Kind + "\x00" + source.Registry
+		return source.Kind + "\x00" + source.Registry + "\x00" + source.ArtifactURL
 	case "local":
 		return source.Kind + "\x00" + source.LocalPath
 	default:
