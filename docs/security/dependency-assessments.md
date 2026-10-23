@@ -197,18 +197,18 @@ Both satisfy the age minimum; module checksums authenticate the downloads.
 
 ## Guarded glob expansion
 
+GitHub withdrew
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-affects `braces` 3.0.3 in both graphs. Its iterative parser accepts deeply nested
-brace and parenthesis nodes that overflow recursive compilation or expansion.
-The ordinary pattern-length limit does not stop the attack. On 2026-10-23 UTC,
-the GitHub advisory still lists no patched version and the npm registry still
-lists 3.0.3 as the latest release.
+on 2026-10-23 at 12:53:02 UTC, stating that it is not practically exploitable.
+The tooling and provider assessments for `braces` 3.0.3 are removed because
+current vulnerability scans no longer report this advisory. Dependency versions
+and the existing bounded glob-input behavior remain unchanged.
 
 The provider's `resolveGlob` in
 [`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
 `import.meta.glob` patterns. Both analyzers also use Knip 5.55.1, whose workspace
 discovery and package-script entries reach `fast-glob` 3.3.3. Its task generator
-calls `micromatch` 4.0.8 brace expansion, which invokes the affected `braces` API.
+calls `micromatch` 4.0.8 brace expansion, which invokes the `braces` API.
 These are reachable input paths; disabled plugins alone do not protect them.
 
 [`glob-inputs.mjs`](../../tools/javascript/glob-inputs.mjs) now rejects more than
@@ -222,19 +222,17 @@ Knip's `util/map-workspaces.js`, `util/glob.js`, and `util/glob-core.js` confirm
 these are its expansion entry points, including entries extracted from scripts
 even when plugins are disabled. Methods are restored during cleanup.
 
-The advisory's excessive-depth payload therefore cannot reach the recursive
+Excessive-depth input therefore cannot reach the recursive
 walkers. Normal matching still uses the original library and pattern. Rejection
 produces a native operational failure or provider incomplete coverage, never a
 passing empty result. Regressions exercise real source globs, workspace globs,
 package scripts, ordinary nested alternatives, and escaped literal paths.
 
 Reinspection on 2026-10-23 UTC confirms the same Knip 5.55.1 and fast-glob 3.3.3
-callers and the same guard binding in both analyzers. Retain exact high-severity
-`not-affected` assessments because the exploit prerequisite remains unreachable.
-They expire on 2026-11-06. Check for an
-official fix by that date and reassess before renewal; adopt an aged fix when
-available. Reassess immediately if Knip, fast-glob, braces, the shared guard,
-or any expansion caller changes. See the
+callers and the same guard binding in both analyzers. The bounds still provide
+predictable handling of excessive nesting in repository-selected patterns.
+Reassess any new advisory against its actual prerequisites and these callers.
+See the
 [boundary design](../design/javascript-glob-inputs.md) for the binding scope.
 
 ## TOML parsing
