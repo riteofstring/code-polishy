@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.31.2 - 2026-10-23
 
 - Keep raw package scanner output in report artifacts and show bounded summaries.
   Recognize authenticated outgoing canonical wrappers during upgrade previews,
@@ -12,10 +12,11 @@
 - Reuse matching sealed pnpm audits and explicit OSV uv/Cargo inventory scans for
   at most 24 hours across review and verification stages. Identify and scan the
   same captured inputs, and reevaluate current assessments on every invocation.
-  Always execute recursive OSV scans without cache lookup. Evaluate security on every unchanged online gate through that raw-result
-  cache, without repeating successful source checks or tests. Retain failed
-  refreshes and report scan freshness separately from historical verification. Complete
-  deferred providers and actual image scans independently of package reuse.
+  Always execute recursive OSV scans without cache lookup. Evaluate security on
+  every unchanged online gate through that raw-result cache, without repeating
+  successful source checks or tests. Retain failed refreshes and report scan
+  freshness separately from historical verification. Complete deferred providers
+  and actual image scans independently of package reuse.
   Reclaim security scan and refresh evidence with `cleanup --reports`.
 
 ## 0.31.1 - 2026-10-22
