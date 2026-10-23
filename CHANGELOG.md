@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.1 - 2026-10-22
+## 0.30.1 - 2026-10-23
 
 - Compile and lint governed Cargo replacement packages through their consuming
   project, retain forced lint diagnostics, and omit warnings located entirely
@@ -19,6 +19,9 @@
   settings, and reject incomplete cached notice layouts during installation.
 - Report the original pnpm failure when JavaScript license listing fails,
   instead of treating its error response as a package inventory.
+- Resolve the aged smol-toml 1.9.0 security fix in both JavaScript graphs and
+  remove its temporary vulnerability assessments. Reassess the unchanged
+  braces depth guard while no official fixed release is available.
 
 ## 0.30.0 - 2026-10-20
 

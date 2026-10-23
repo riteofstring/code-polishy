@@ -34,7 +34,9 @@
   },
   "quality": {
     "allowComments": false,
-    "lineBudget": { "production": 100000 }
+    "lineBudget": {
+      "production": 100000
+    }
   },
   "documentation": {
     "design": [
@@ -2000,25 +2002,8 @@
         "impact": "Excessive-depth payloads cannot reach the recursive braces walkers; rejected input produces failed or incomplete analysis.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-08",
-        "expires": "2026-10-22"
-      },
-      {
-        "id": "tooling-toml-parser-unreachable",
-        "ecosystem": "pnpm",
-        "advisory": "GHSA-r4xh-jqrq-34v2",
-        "package": "smol-toml",
-        "affectedVersion": "1.7.1",
-        "scope": "tools/javascript/pnpm-lock.yaml",
-        "severity": "moderate",
-        "status": "not-affected",
-        "basis": "unreachable",
-        "reason": "Knip uses policy-owned configuration and all plugins are disabled. Manifests use JSON or YAML; disabled script-referenced plugin configs become entry paths without invoking the TOML loader.",
-        "impact": "No repository-controlled TOML reaches smol-toml.parse or its quadratic key parser.",
-        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
-        "owner": "Codex",
-        "reviewed": "2026-10-08",
-        "expires": "2026-10-22"
+        "reviewed": "2026-10-23",
+        "expires": "2026-11-06"
       },
       {
         "id": "provider-glob-depth-unreachable",
@@ -2034,25 +2019,8 @@
         "impact": "Excessive-depth payloads cannot reach the recursive braces walkers; rejected input produces failed or incomplete analysis.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-08",
-        "expires": "2026-10-22"
-      },
-      {
-        "id": "provider-toml-parser-unreachable",
-        "ecosystem": "pnpm",
-        "advisory": "GHSA-r4xh-jqrq-34v2",
-        "package": "smol-toml",
-        "affectedVersion": "1.7.1",
-        "scope": "providers/javascript/pnpm-lock.yaml",
-        "severity": "moderate",
-        "status": "not-affected",
-        "basis": "unreachable",
-        "reason": "Knip uses policy-owned configuration and all plugins are disabled. Manifests use JSON or YAML; disabled script-referenced plugin configs become entry paths without invoking the TOML loader.",
-        "impact": "No repository-controlled TOML reaches smol-toml.parse or its quadratic key parser.",
-        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
-        "owner": "Codex",
-        "reviewed": "2026-10-08",
-        "expires": "2026-10-22"
+        "reviewed": "2026-10-23",
+        "expires": "2026-11-06"
       },
       {
         "id": "provider-source-map-unreachable",
