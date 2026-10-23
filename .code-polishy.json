@@ -2046,7 +2046,7 @@
     ],
     "vulnerabilityAssessments": [
       {
-        "id": "tooling-zod-invalid-collections-unreachable",
+        "id": "tooling-zod-configuration-unreachable",
         "ecosystem": "pnpm",
         "advisory": "GHSA-mrhx-c7xc-m3w5",
         "package": "zod",
@@ -2055,15 +2055,15 @@
         "severity": "high",
         "status": "not-affected",
         "basis": "unreachable",
-        "reason": "Knip validates only generated configuration containing validated string paths and disabled plugins. The explicit private JSON config prevents target Knip configuration from supplying malformed array elements; manifests use JSON parsing outside Zod.",
-        "impact": "Repository data cannot cause Zod to accumulate per-element validation failures through the enabled Knip configuration path. Normal work proportional to valid source inventory remains possible.",
+        "reason": "Knip validates an explicit policy-generated configuration containing validated path strings and fixed plugin flags. Target Knip configuration is never loaded, and native dead-code requests select at most 4096 paths.",
+        "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the sealed native analyzer.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
         "reviewed": "2026-10-23",
-        "expires": "2026-11-11"
+        "expires": "2026-11-06"
       },
       {
-        "id": "provider-zod-invalid-collections-unreachable",
+        "id": "provider-zod-configuration-unreachable",
         "ecosystem": "pnpm",
         "advisory": "GHSA-mrhx-c7xc-m3w5",
         "package": "zod",
@@ -2072,12 +2072,12 @@
         "severity": "high",
         "status": "not-affected",
         "basis": "unreachable",
-        "reason": "The provider replaces Knip configuration initialization with generated string-path arrays, disabled plugins and its own compiler function. Target Knip configuration is not loaded, manifests use JSON parsing, and compiler arguments and output are strings.",
-        "impact": "Repository data cannot supply failing collection elements to the enabled Zod schema or compiler wrappers. Normal work proportional to valid source inventory remains possible.",
+        "reason": "The provider replaces Knip configuration initialization with its generated path-string arrays, fixed plugin flags and trusted Astro compiler. Repository Knip configuration and package.json knip fields never supply the Zod input.",
+        "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the provider's configuration boundary.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
         "reviewed": "2026-10-23",
-        "expires": "2026-11-11"
+        "expires": "2026-11-06"
       },
       {
         "id": "provider-source-map-unreachable",

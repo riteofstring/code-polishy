@@ -26,6 +26,9 @@
   freshness separately from historical verification. Complete deferred providers
   and actual image scans independently of package reuse.
   Reclaim security scan and refresh evidence with `cleanup --reports`.
+- Retire assessments for the withdrawn braces advisory and record exact,
+  expiring Zod non-exposure assessments for the generated Knip configurations
+  in both JavaScript graphs, preserving their aged dependency versions.
 
 ## 0.31.1 - 2026-10-22
 

@@ -2,8 +2,8 @@
 
 Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
-Guarded glob expansion and the aged TOML fix reviewed on 2026-10-23 UTC.
-Zod collection validation reviewed on 2026-10-23 UTC.
+The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
+reviewed on 2026-10-23 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -198,18 +198,19 @@ Both satisfy the age minimum; module checksums authenticate the downloads.
 
 ## Guarded glob expansion
 
-GitHub withdrew
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-on 2026-10-23 at 12:53:02 UTC, stating that it is not practically exploitable.
-The tooling and provider assessments for `braces` 3.0.3 are removed because
-current vulnerability scans no longer report this advisory. Dependency versions
-and the existing bounded glob-input behavior remain unchanged.
+was withdrawn on 2026-10-23 at 12:53:02 UTC because upstream no longer considers
+it a practically exploitable vulnerability. Both exact `braces` 3.0.3
+assessments have been removed because current scanners no longer report it.
+The existing input-depth boundary remains: the iterative parser can construct
+deeply nested brace and parenthesis nodes that overflow recursive compilation
+or expansion, even within the ordinary pattern-length limit.
 
 The provider's `resolveGlob` in
 [`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
 `import.meta.glob` patterns. Both analyzers also use Knip 5.55.1, whose workspace
 discovery and package-script entries reach `fast-glob` 3.3.3. Its task generator
-calls `micromatch` 4.0.8 brace expansion, which invokes the `braces` API.
+calls `micromatch` 4.0.8 brace expansion, which invokes the affected `braces` API.
 These are reachable input paths; disabled plugins alone do not protect them.
 
 [`glob-inputs.mjs`](../../tools/javascript/glob-inputs.mjs) now rejects more than
@@ -223,18 +224,72 @@ Knip's `util/map-workspaces.js`, `util/glob.js`, and `util/glob-core.js` confirm
 these are its expansion entry points, including entries extracted from scripts
 even when plugins are disabled. Methods are restored during cleanup.
 
-Excessive-depth input therefore cannot reach the recursive
+The advisory's excessive-depth payload therefore cannot reach the recursive
 walkers. Normal matching still uses the original library and pattern. Rejection
 produces a native operational failure or provider incomplete coverage, never a
 passing empty result. Regressions exercise real source globs, workspace globs,
 package scripts, ordinary nested alternatives, and escaped literal paths.
 
 Reinspection on 2026-10-23 UTC confirms the same Knip 5.55.1 and fast-glob 3.3.3
-callers and the same guard binding in both analyzers. The bounds still provide
-predictable handling of excessive nesting in repository-selected patterns.
-Reassess any new advisory against its actual prerequisites and these callers.
+callers and the same guard binding in both analyzers. There is no active
+vulnerability acceptance for this withdrawn advisory. Review the input boundary
+when Knip, fast-glob, braces, the shared guard, or an expansion caller changes.
 See the
 [boundary design](../design/javascript-glob-inputs.md) for the binding scope.
+
+## Zod configuration validation
+
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+also CVE-2023-54404, reports memory exhaustion from oversized arrays whose
+elements fail Zod validation. Its reviewed package range was updated on
+2026-10-23 and includes the `zod` 3.25.76 resolved in both JavaScript locks.
+The resolved v3 `ZodArray._parse` visits every element and accumulates issues;
+a bounded local check produced 512 issues for 512 invalid elements. Package
+presence is real, and this assessment does not dispute the vulnerable parser.
+
+Both graphs resolve Zod through Knip 5.55.1 and its error formatter,
+`zod-validation-error` 3.5.4. Knip's `ConfigurationChief.init` calls
+`knipConfigurationSchema.parse`; `schema/plugins.js` accepts path arrays through
+`z.array(z.string())`. The error formatter consumes validation errors rather
+than parsing a repository-supplied collection. The relevant authority boundary
+is the configuration passed to that schema:
+
+- The native analyzer's
+  [`requireWorkspaces` and `configurationFor`](../../tools/javascript/deadcode.mjs)
+  validate contained string paths and limit selected files to 4096. They build
+  workspace `entry` and `project` arrays from those paths and set each plugin
+  flag to `false`. `analyze` writes that configuration to its private
+  `policy-knip.json` and passes its exact path with `--config`. Knip therefore
+  parses the generated file instead of target `knip.json` or `package.json#knip`.
+- The provider's
+  [`configurationFor`](../../providers/javascript/deadcode.mjs) builds arrays of
+  escaped path strings and fixed plugin flags from resolved source units.
+  [`bindKnip`](../../providers/javascript/reachability.mjs) replaces configuration
+  initialization and passes only that object plus its trusted Astro compiler
+  to the schema. Target Knip settings are never merged into it. The compiler's
+  Zod function wrapper validates two string arguments, not an arbitrary array.
+
+Repository bytes can influence path-string contents, but cannot introduce
+invalid element types into these arrays. Plugin schemas receive fixed booleans.
+The advisory's unbounded accumulation of per-element validation failures is
+therefore unreachable through either integration. A temporary native-boundary
+check placed 512 invalid elements in each of `entry`, `project`, and `ignore`
+in both target configuration sources; analysis still reported the expected
+unused source file with complete coverage. Existing native and provider
+boundary suites exercise actual dead-code analysis with the resolved packages.
+
+Retain the aged 3.25.76 under exact high-severity `not-affected/unreachable`
+assessments owned by Codex, reviewed on 2026-10-23 and expiring on 2026-11-06.
+The [npm registry](https://registry.npmjs.org/zod) dates the fixed 4.6.6 to
+2026-10-11 at 16:18:23.878 UTC; it reaches the conservative 30-day admission
+boundary on 2026-11-11 UTC. Knip currently requires Zod `^3.22.4`, so forcing
+Zod 4 into this graph would also cross its declared compatibility boundary.
+Neither fresh-code admission nor a major-version override is justified by an
+unreachable prerequisite. Check for a compatible official fix by 2026-11-06
+and adopt an aged compatible dependency graph when available. Reassess before
+expiry or immediately if a Zod consumer, generated configuration, input
+validation, or Knip configuration-loading path changes. Known exploitation
+and unknown severity remain blocking.
 
 ## TOML parsing
 
@@ -266,69 +321,6 @@ disabled. The aged fix removes the advisory without an early admission or a
 replacement vulnerability assessment. The existing policy-owned configuration
 boundary remains in place; reassess future advisories if configuration loading
 or plugin activation changes.
-
-## Zod collection validation
-
-[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
-also CVE-2023-54404, reports memory exhaustion while Zod accumulates validation
-issues for oversized collections. Its affected range includes the exact
-`zod` 3.25.76 resolved through Knip 5.55.1 in both JavaScript locks. The
-[upstream correction](https://github.com/colinhacks/zod/commit/a0ebf970f2d752e5f58527cd2942ff48be4f46bd)
-rejects oversized bounded v4 arrays, maps and sets before parsing their elements;
-it leaves unbounded containers unchanged. The advisory description also refers
-to unbounded arrays. This assessment covers the broader failing-element
-accumulation prerequisite rather than relying on that discrepancy or assuming
-that the v3 API is immune.
-
-The resolved Knip source imports Zod in `dist/schema/configuration.js`,
-`dist/schema/plugins.js` and `dist/util/errors.js`. Its configuration initializer
-calls `knipConfigurationSchema.parse`; the error utility formats existing
-`ZodError` instances through `zod-validation-error` 3.5.4. Neither dependency
-validates package-manifest collections with Zod. The lock graphs contain no other
-Zod consumer. Knip's root import resolves to Zod's v3 implementation, which also
-walks invalid array elements and accumulates their issues.
-
-The native analyzer's
-[`configurationFor`](../../tools/javascript/deadcode.mjs) constructs only
-workspace records whose `entry` and `project` arrays contain normalized string
-paths, then sets every plugin to `false`. Its protocol validates path types and
-ownership before construction and limits the selected source inventory to 4,096
-paths. `analyze` writes this configuration in a private temporary directory and
-passes its exact path through `--config`; target `knip.json`, executable Knip
-configuration and `package.json#knip` cannot replace it. Workspace manifests and
-optional workspace YAML are read separately and are not passed to this schema.
-
-The provider's
-[`configurationFor`](../../providers/javascript/deadcode.mjs) likewise builds
-string-only arrays from selected source paths and disables every plugin.
-[`bindKnip`](../../providers/javascript/reachability.mjs) replaces
-`ConfigurationChief.init` with this in-memory configuration, so no target Knip
-configuration is loaded. It reads the manifest as JSON and adds only its own
-Astro compiler. Zod's compiler wrappers validate a fixed argument tuple of two
-strings and a string result; repository source contents do not become an array
-of schema elements. Disabled plugin configuration cannot add another schema
-input path.
-
-Thus the schema is reachable, but the malformed collection elements required
-for issue amplification cannot reach it. A diagnostic probe against the
-installed Knip schema accepted a generated 4,096-path configuration with zero
-issues; a control using 4,096 numbers against `z.array(z.string())` produced
-4,096 issues. This corroborates the input-type distinction, not a general
-memory bound. Large valid inventories still require proportional work, and
-this assessment makes no general denial-of-service claim about source analysis.
-
-Retain the aged 3.25.76 under two exact high-severity `not-affected` assessments,
-one per lockfile, expiring on 2026-11-11. Findings remain visible. The
-[npm registry](https://registry.npmjs.org/zod) dates the first advertised fix,
-4.6.6, to 2026-10-11 16:18:23.878 UTC; it reaches the conservative 30-day
-minimum on 2026-11-11 UTC. It is a different major from Knip's `^3.22.4` range
-and `zod-validation-error`'s `^3.24.4` peer range. A forced override would change
-schema APIs and is not a compatible patch. By expiry, evaluate an aged,
-compatible Knip/Zod update or an official v3 correction and repeat this trace.
-Reassess immediately if configuration authority, plugin activation, compiler
-wrappers, schema consumers or advisory prerequisites change. No early-release
-admission or risk acceptance is made: the decision rests on absent failing
-inputs, not on tolerating reachable exhaustion.
 
 ## Source maps
 
