@@ -73,7 +73,10 @@ func TestDockerArchiveRejectsMissingAmbiguousAndUnboundedIdentity(t *testing.T) 
 
 func TestRunRejectsScannerConfigurationMismatch(t *testing.T) {
 	root := t.TempDir()
-	policyRoot := carriedScannerPolicyRoot(t)
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
 	repo := repository.Repository{
 		Root: root, PolicyRoot: policyRoot,
 		Config: policy.Config{SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{

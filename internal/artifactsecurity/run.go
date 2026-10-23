@@ -163,7 +163,7 @@ func artifactOperationalFinding(target, subject string, err error) policy.Findin
 
 func prepareScannerRuntime(ctx context.Context, repo repository.Repository, configured scannerPolicy, commandRunner runner.Runner) (*scannerRuntime, error) {
 	client := dockerClient{root: repo.Root, executor: commandRunner}
-	platform, err := prepareScannerPlatform(ctx, client)
+	platform, err := prepareScannerSource(ctx, client, configured.SourceImage)
 	if err != nil {
 		return nil, err
 	}
@@ -178,11 +178,21 @@ func prepareScannerRuntime(ctx context.Context, repo repository.Repository, conf
 	return state, nil
 }
 
-func prepareScannerPlatform(ctx context.Context, client dockerClient) (string, error) {
+func prepareScannerSource(ctx context.Context, client dockerClient, sourceImage string) (string, error) {
 	if _, err := client.run(ctx, governedDockerCommandPrefix+"preflight", "version", "--format", "{{.Server.Version}}"); err != nil {
 		return "", fmt.Errorf("docker server preflight: %w", err)
 	}
-	return dockerPlatform(ctx, client, governedDockerCommandPrefix+"platform")
+	platform, err := dockerPlatform(ctx, client, governedDockerCommandPrefix+"platform")
+	if err != nil {
+		return "", err
+	}
+	if _, err := client.run(ctx, governedDockerCommandPrefix+"pull-source", "image", "pull", "--platform", platform, sourceImage); err != nil {
+		return "", fmt.Errorf("pull pinned Trivy source image: %w", err)
+	}
+	if err := verifyPinnedSourceImage(ctx, client, governedDockerCommandPrefix+"verify-source", sourceImage); err != nil {
+		return "", err
+	}
+	return platform, nil
 }
 
 func newScannerRuntime(client dockerClient, configured scannerPolicy, platform string) (*scannerRuntime, error) {
@@ -217,13 +227,9 @@ func newScannerRuntime(client dockerClient, configured scannerPolicy, platform s
 func (state *scannerRuntime) buildAndVerify(ctx context.Context, policyRoot string) error {
 	dockerfile := filepath.Join(policyRoot, filepath.FromSlash(scannerDockerfilePath))
 	contextRoot := filepath.Dir(dockerfile)
-	carried := filepath.Join(policyRoot, ".tools", "trivy", strings.ReplaceAll(state.platform, "/", "-"))
-	if info, err := os.Lstat(filepath.Join(carried, "trivy")); err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("this Code Polishy release carries no Trivy scanner for %s", state.platform)
-	}
 	_, err := state.client.run(ctx, governedDockerCommandPrefix+"build-scanner",
 		"image", "build", "--network", "none", "--pull=false", "--provenance=false",
-		"--platform", state.platform, "--file", dockerfile, "--build-context", "trivy="+carried,
+		"--platform", state.platform, "--file", dockerfile,
 		"--label", "com.code-polishy.security.role=scanner", "--tag", state.image, contextRoot,
 	)
 	if err != nil {
@@ -252,6 +258,18 @@ func dockerPlatform(ctx context.Context, client dockerClient, name string) (stri
 	default:
 		return "", fmt.Errorf("unsupported Docker server architecture %q", strings.TrimSpace(result.stdout))
 	}
+}
+
+func verifyPinnedSourceImage(ctx context.Context, client dockerClient, name, image string) error {
+	result, err := client.run(ctx, name, "image", "inspect", "--format", "{{json .RepoDigests}}", image)
+	if err != nil {
+		return err
+	}
+	_, digest, _ := strings.Cut(image, "@")
+	if !strings.Contains(result.stdout, "@"+digest) {
+		return errors.New("pulled Trivy source image did not retain the configured digest")
+	}
+	return nil
 }
 
 func currentUserID() string {

@@ -1,9 +1,8 @@
 # Dependency vulnerability assessments
 
-Brace expansion and URI processing resolved with aged fixes on 2026-10-15;
-TOML parsing resolved with an aged fix and the braces depth guard reassessed on
-2026-10-23. Other JavaScript and Go module findings were reviewed on 2026-10-08;
-Go toolchain admission on 2026-10-21; carried Trivy build on 2026-10-22.
+Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
+reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
+Guarded glob expansion and the aged TOML fix reviewed on 2026-10-23 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -97,21 +96,6 @@ Remove this admission when the exact release reaches 30 days or leaves the
 pins. Reassess immediately if upstream provenance changes or a regression or
 compromise is reported. Do not extend it to another toolchain version or weaken
 vulnerability scanning.
-
-## Carried Trivy scanner
-
-The artifact scanner is now built from the aged official Trivy 0.74.0 module
-with the Go 1.26.10 admitted above, instead of copying Trivy's Go 1.26.6
-binary. The scanner's database download used that binary's vulnerable
-certificate verifier; its trust and the cost of waiting are assessed in
-[Trivy Scanner Assessments](../design/trivy-scanner-assessments.md). This
-admits no new dependency version. The build resolved the 375 module versions
-and checksums that Trivy's checksummed `go.sum` already fixed and the official
-binary already contained. The module proxy dates all of them on or before
-2026-08-13, beyond the 30-day minimum. The `tools/trivy-version.txt` release-age
-artifact and `tools/trivy_module_sum.txt` pin the same release. The Go toolchain
-admission's expiry and removal conditions apply unchanged. Assessed by Claude Opus
-5.5.
 
 ## Brace expansion
 
@@ -244,19 +228,13 @@ produces a native operational failure or provider incomplete coverage, never a
 passing empty result. Regressions exercise real source globs, workspace globs,
 package scripts, ordinary nested alternatives, and escaped literal paths.
 
-The 2026-10-23 review reconfirmed that the advisory has no patched version and
-the [npm registry](https://registry.npmjs.org/braces) still publishes 3.0.3 as
-latest. Inspection of the installed Knip 5.55.1 call sites and both analyzer
-bindings confirms that the same three guarded methods own expansion. Neither
-those packages nor the guard changes in this release. Existing native and
-packaged-provider regressions cover deeply nested workspace, script and source
-patterns, ordinary alternatives, and escaped literal paths.
-
-Retain the two exact high-severity `not-affected` assessments because the
-exploit prerequisite remains unreachable. Their next review is due by
-2026-11-06. Check for an official fix by that date and reassess before renewal;
-adopt an aged fix when available. Reassess immediately if Knip, fast-glob,
-braces, the shared guard, or any expansion caller changes. See the
+Reinspection on 2026-10-23 UTC confirms the same Knip 5.55.1 and fast-glob 3.3.3
+callers and the same guard binding in both analyzers. Retain exact high-severity
+`not-affected` assessments because the exploit prerequisite remains unreachable.
+They expire on 2026-11-06. Check for an
+official fix by that date and reassess before renewal; adopt an aged fix when
+available. Reassess immediately if Knip, fast-glob, braces, the shared guard,
+or any expansion caller changes. See the
 [boundary design](../design/javascript-glob-inputs.md) for the binding scope.
 
 ## TOML parsing
@@ -276,17 +254,19 @@ package manifests as JSON. Both explicitly disable every Knip plugin.
 script-referenced configuration for a disabled plugin becomes an entry path,
 not a call to its configuration loader. TOML parsing receives no target input.
 
-Both locks now resolve official 1.9.0 and the two moderate-severity assessments
-are removed. Its [npm publication](https://registry.npmjs.org/smol-toml) was
-2026-09-22 at 17:15:34.756 UTC, so the 2026-10-23 update meets the 30-day minimum.
-Registry-integrity-verified archives confirm that the package still has no
-runtime dependencies or install lifecycle scripts. The parser replaces the
-quadratic key search; this TOML remediation changed only the transitive
-smol-toml resolution in each graph.
-The newer 1.9.1 only corrects numeric exponent parsing in the shipped runtime;
-it is not yet aged, and this analyzer does not expose the TOML parse path.
-No early admission is needed. Reassess if configuration loading or plugin
-activation changes.
+Both locks now resolve official 1.9.0 and the exact TOML assessments are removed.
+The [npm registry](https://registry.npmjs.org/smol-toml) records publication at
+2026-09-22 17:15:34.756 UTC, so it meets the 30-day minimum. Registry-integrity
+verification and inspection of the old and new package sources confirm that
+`parseKey` advances through the current key instead of repeatedly searching the
+remaining document. Neither release adds dependencies or installation scripts.
+
+Only the smol-toml resolution changes in each generated lock; direct dependencies
+and Knip's compatible range remain unchanged. Frozen installation keeps scripts
+disabled. The aged fix removes the advisory without an early admission or a
+replacement vulnerability assessment. The existing policy-owned configuration
+boundary remains in place; reassess future advisories if configuration loading
+or plugin activation changes.
 
 ## Source maps
 

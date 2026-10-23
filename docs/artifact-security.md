@@ -6,20 +6,17 @@ OpenVEX, SBOM, report, or hardening scripts.
 
 ## Execution contract
 
-Each policy release carries Trivy built from its exact official Go module with
-the release's pinned Go toolchain, for the host architecture's Linux platform.
-The release manifest covers that binary, the minimal scanner Dockerfile, the
-scanner's OpenVEX, and a release-owned CA bundle that omits distrusted roots.
-The runtime copies only the binary and bundle into a non-root scratch image and
-pulls no scanner image. A Docker server whose platform the release does not
-carry fails before the scanner is built.
+The policy release pins an official Trivy image by digest and verifies that
+digest, the expected Trivy version, the minimal scanner Dockerfile hash, and the
+scanner runtime's OpenVEX hash before use. It copies only the Trivy binary and
+CA bundle into a non-root scratch image.
 
 The scanner image disables Go's HTTP/2 client. Its database download uses
 HTTPS over HTTP/1.1; target scanning remains offline. The release-owned
 [scanner assessments](design/trivy-scanner-assessments.md) document the exact
-remaining findings and their applicability. Linux release builds exercise the
-installed scanner against a minimal scratch image with a fresh database before
-publication.
+remaining findings and their applicability. Ordinary Ubuntu CI and Linux release
+builds use the same verification script to exercise the installed scanner against
+a minimal scratch image with a fresh database before tagging and publication.
 
 Each run:
 
@@ -41,8 +38,8 @@ HIGH and CRITICAL vulnerabilities, secrets, image-config misconfigurations,
 and end-of-life operating systems are blocking. Secret matches are never copied
 into normalized findings or reports.
 
-Scanner self-check findings identify **Code Polishy's scanner** and its carried
-Trivy version. They point to `.code-polishy.lock.json`,
+Scanner self-check findings identify **Code Polishy's scanner**, its Trivy
+version, and its pinned source image. They point to `.code-polishy.lock.json`,
 because the locked Code Polishy release owns that runtime. Application findings
 retain their declared artifact scope and remediation. Both remain blocking.
 

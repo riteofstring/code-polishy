@@ -134,6 +134,13 @@ jobs:
         shell: bash
         run: ./.tools/bin/code-polishy supply-chain
 
+      - name: Verify installed artifact security before tagging
+        if: github.event_name != 'schedule' && needs.classify.outputs.documentation != 'true'
+        shell: bash
+        run: |
+          ./scripts/install.sh --prefix "${RUNNER_TEMP}/artifact-security-installation"
+          ./scripts/verify-installed-artifact-security.sh "${RUNNER_TEMP}/artifact-security-installation" "${RUNNER_TEMP}/artifact-security-fixture"
+
   macos:
     name: Policy and tests (macos-15)
     needs: classify

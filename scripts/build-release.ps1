@@ -128,37 +128,9 @@ try {
     'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
     '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64',
-    '.tools/rust/windows-x64','.tools/trivy/linux-amd64'
+    '.tools/rust/windows-x64'
   )) { Copy-ReleasePath $Relative }
   Assert-ReleasePythonCarrier $Stage
-
-  $TrivyRoot = Join-Path $Stage '.tools/trivy/linux-amd64'
-  $TrivyExpected = 'go' + (Get-Content -Raw -LiteralPath (Join-Path $Stage 'scripts/go_version.txt')).Trim().TrimStart('g', 'o') +
-    '-X:jsonv2 github.com/aquasecurity/trivy v' + (Get-Content -Raw -LiteralPath (Join-Path $Stage 'tools/trivy-version.txt')).Trim() +
-    ' ' + (Get-Content -Raw -LiteralPath (Join-Path $PolicyRoot 'tools/trivy_module_sum.txt')).Trim() +
-    ' CGO_ENABLED=0 GOARCH=amd64 GOOS=linux -trimpath=true'
-  $TrivyBuildInfo = @(& $Go version -m (Join-Path $TrivyRoot 'trivy'))
-  $TrivyIdentity = ''
-  if ($LASTEXITCODE -eq 0 -and $TrivyBuildInfo.Count -gt 0) {
-    $TrivyModule = ''
-    $TrivySettings = @{}
-    foreach ($Line in $TrivyBuildInfo) {
-      $Fields = @($Line.Trim() -split '\s+')
-      if ($Fields[0] -ceq 'mod') { $TrivyModule = $Fields[1..3] -join ' ' }
-      if ($Fields[0] -ceq 'build' -and $Fields.Count -ge 2 -and $Fields[1] -cmatch '^(CGO_ENABLED|GOARCH|GOOS|-trimpath)=') {
-        $TrivySettings[$Fields[1].Split('=')[0]] = $Fields[1]
-      }
-    }
-    $TrivyIdentity = (@(($TrivyBuildInfo[0].Trim() -split '\s+')[-1], $TrivyModule) +
-      @('CGO_ENABLED', 'GOARCH', 'GOOS', '-trimpath' | ForEach-Object { $TrivySettings[$_] })) -join ' '
-  }
-  if ($TrivyIdentity -cne $TrivyExpected) { throw "The carried Trivy reports '$TrivyIdentity'; the pins require '$TrivyExpected'." }
-  $TrivyLayout = Join-Path $TrivyRoot 'notices-layout'
-  if (-not (Test-Path -LiteralPath (Join-Path $TrivyRoot 'licenses') -PathType Container) -or
-      -not (Test-Path -LiteralPath $TrivyLayout -PathType Leaf) -or
-      (Get-Content -Raw -LiteralPath $TrivyLayout).Trim() -cne 'code-polishy-trivy-notices-v2') {
-    throw 'The carried Trivy lacks complete code-polishy-trivy-notices-v2 module notices.'
-  }
 
   $StageBin = Join-Path $Stage '.tools/bin'
   New-Item -ItemType Directory -Force -Path $StageBin | Out-Null

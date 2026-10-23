@@ -48,7 +48,7 @@ func writableReleaseStage(t *testing.T) string {
 		"tools/python-version.txt":    "3.12.13+20260728\n",
 		"tools/ruff-version.txt":      "0.16.0\n", "tools/shellcheck-version.txt": "0.11.0\n",
 		"tools/staticcheck-version.txt": "v0.7.0\n", "tools/deadcode-version.txt": "v0.50.0\n", "tools/ty-version.txt": "0.0.65\n", "tools/vulture-version.txt": "2.16\n",
-		"tools/rust-version.txt": "1.97.1\n", "tools/cargo-nextest-version.txt": "0.9.138\n", "tools/trivy-version.txt": "0.74.0\n",
+		"tools/rust-version.txt": "1.97.1\n", "tools/cargo-nextest-version.txt": "0.9.138\n",
 		BinaryPath: "engine", LauncherBinaryPath: "launcher",
 	}
 	for relative, content := range files {

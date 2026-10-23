@@ -43,19 +43,6 @@ func TestLauncherManifestRejectsDeadcodeInHistoricalSchemas(t *testing.T) {
 	}
 }
 
-func TestLauncherManifestReadsVersion8AndRejectsItsLaterTrivyField(t *testing.T) {
-	t.Parallel()
-	data, manifest := historicalManifest(t, 8)
-	parsed, err := parseLauncherManifest(data, ManifestFilename)
-	if err != nil || parsed.Tools.Deadcode != manifest.Tools.Deadcode || parsed.Tools.Trivy != "" {
-		t.Fatalf("version 8 manifest = %+v, error = %v", parsed.Tools, err)
-	}
-	changed := strings.Replace(string(data), `"tools":{`, `"tools":{"trivy":"0.74.0",`, 1)
-	if _, err := parseLauncherManifest([]byte(changed), ManifestFilename); err == nil {
-		t.Fatal("version 8 accepted the later trivy tool field")
-	}
-}
-
 func TestLauncherManifestRejectsUnsupportedSchemas(t *testing.T) {
 	t.Parallel()
 	_, manifest := exampleRelease(t)
@@ -87,10 +74,7 @@ func historicalManifest(t *testing.T, version int) ([]byte, Manifest) {
 	if version < 6 {
 		manifest.CapabilityCatalogSHA256 = ""
 	}
-	manifest.Tools.Trivy = ""
-	if version < 8 {
-		manifest.Tools.Deadcode = ""
-	}
+	manifest.Tools.Deadcode = ""
 	if version < 7 {
 		manifest.Tools.Rust = ""
 		manifest.Tools.Nextest = ""
@@ -147,12 +131,8 @@ func historicalManifestTools(t *testing.T, manifest Manifest) json.RawMessage {
 		Ty: manifest.Tools.Ty, Python: manifest.Tools.Python, Vulture: manifest.Tools.Vulture,
 	}
 	versionFive := manifestToolsV5{manifestToolsV4: versionFour, Packaging: manifest.Tools.Packaging}
-	versionSeven := manifestToolsV7{manifestToolsV5: versionFive, Rust: manifest.Tools.Rust, Nextest: manifest.Tools.Nextest}
-	if manifest.ManifestVersion >= 8 {
-		return render(t, manifestToolsV8{manifestToolsV7: versionSeven, Deadcode: manifest.Tools.Deadcode})
-	}
 	if manifest.ManifestVersion >= 7 {
-		return render(t, versionSeven)
+		return render(t, manifestToolsV7{manifestToolsV5: versionFive, Rust: manifest.Tools.Rust, Nextest: manifest.Tools.Nextest})
 	}
 	if manifest.ManifestVersion >= 5 {
 		return render(t, versionFive)

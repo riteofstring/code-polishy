@@ -52,7 +52,7 @@ func (installed store) install(t *testing.T, revision, engine string) release.Lo
 		Tools: release.Tools{
 			Go: "1.26.6", Govulncheck: "1.3.0", Node: "24.18.0", OSVScanner: "2.4.0",
 			PNPM: "11.13.0", Packaging: "26.3", Python: "3.12.13+20260728", Ruff: "0.16.0", Shellcheck: "0.11.0", Staticcheck: "0.7.0", Deadcode: "0.50.0",
-			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138", Trivy: "0.74.0",
+			Ty: "0.0.65", Vulture: "2.16", Rust: "1.97.1", Nextest: "0.9.138",
 		},
 		Entries: []release.Entry{
 			{Path: bundleLink, Symlink: "../.pnpm/tool"},

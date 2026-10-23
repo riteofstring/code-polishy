@@ -1,24 +1,21 @@
 # Changelog
 
-## 0.31.1 - 2026-10-23
+## 0.31.2 - 2026-10-23
 
 - Compile and lint governed Cargo replacement packages through their consuming
   project, retain forced lint diagnostics, and omit warnings located entirely
   inside external macro implementations while preserving caller diagnostics.
-- Build the artifact scanner from the official Trivy 0.74.0 Go module with the
-  pinned Go 1.26.10 and carry it in each release, so the scanner's database
-  download rejects compromised certificate intermediates covered by
-  GO-2026-6809. The runtime no longer pulls the Trivy image. Scanner policy is
-  version 3 and scanner reports are version 2, without the `sourceImage` field.
-- Give the scanner a release-owned trust bundle that omits the eMudhra roots
-  Mozilla distrusted on 2026-10-20.
-- Record the carried Trivy in release manifest version 9 and in the release
-  SBOM with every Go module linked into it, and carry each module's license
-  and notice files.
-- Require the scanner's exact target, compiler, module checksum and build
-  settings, and reject incomplete cached notice layouts during installation.
 - Report the original pnpm failure when JavaScript license listing fails,
   instead of treating its error response as a package inventory.
+
+## 0.31.1 - 2026-10-22
+
+- Update the pinned scanner to official Trivy 0.76.1, built with Go 1.27.3 and
+  an updated CA bundle, to fix CVE-2026-111943 in advisory database downloads.
+  Remove obsolete scanner vulnerability assessments while retaining blocking
+  self-checks for new findings.
+- Run the installed scanner and minimal-image verification in ordinary Linux CI
+  before tagging, using the same fixture as release publication.
 
 ## 0.31.0 - 2026-10-22
 

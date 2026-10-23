@@ -61,14 +61,8 @@ func authenticateCapabilityProof(proof *capabilityCatalogProof, expected Lock) (
 	return AuthenticatedCapabilityCatalog{Release: expected, SHA256: digest, Catalog: catalog, proof: proof}, nil
 }
 
-func recordsLaterManifestTools(manifest Manifest) bool {
-	return manifest.ManifestVersion < 7 && (manifest.Tools.Rust != "" || manifest.Tools.Nextest != "") ||
-		manifest.ManifestVersion < 8 && manifest.Tools.Deadcode != "" ||
-		manifest.ManifestVersion < 9 && manifest.Tools.Trivy != ""
-}
-
 func validateCapabilityProofIdentity(manifest Manifest, expected Lock) error {
-	if recordsLaterManifestTools(manifest) {
+	if manifest.ManifestVersion < 7 && (manifest.Tools.Rust != "" || manifest.Tools.Nextest != "") || manifest.ManifestVersion < 8 && manifest.Tools.Deadcode != "" {
 		return fmt.Errorf("capability evidence records tools absent from its historical manifest schema")
 	}
 	if !revisionPattern.MatchString(manifest.SourceRevision) {

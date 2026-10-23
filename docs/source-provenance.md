@@ -55,15 +55,10 @@ version before staging a release.
   the carried runtime. Their exact pins and checksum inventories ship with the
   release, while the online supply-chain gate resolves their release age from
   fixed upstream metadata services; neither comes from a target environment.
-- Trivy is built from the official `github.com/aquasecurity/trivy` module at the
-  pinned version and checksum in `tools/trivy_module_sum.txt`, with the pinned
-  Go toolchain, and carried under `.tools/trivy` with the license and notice
-  files of every module linked into it.
-  `artifact-security/scanner-policy.json` records its runtime configuration;
-  the release manifest covers the carried binary, the repository-owned
-  Dockerfile, the scanner's trust bundle
-  `artifact-security/scanner-ca-certificates.crt`, and
-  `artifact-security/scanner.openvex.json`, which records reviewed
+- Trivy is copied from an exact official image digest into the minimal scanner
+  image. `artifact-security/scanner-policy.json` records that external source
+  and its runtime configuration; the release manifest covers the repository-owned
+  Dockerfile and `artifact-security/scanner.openvex.json`, which records reviewed
   vulnerability applicability.
 - Portable Linux releases use one digest-pinned Ubuntu base only for the OCI
   transport. The image installs Git and CA certificates, copies an already

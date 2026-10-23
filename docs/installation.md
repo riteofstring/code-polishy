@@ -320,8 +320,8 @@ One release identity has one self-contained policy root per supported host:
   rustfmt, Clippy, the host standard library and Nextest `0.9.138`;
 - every other pinned tool the engine runs: the Go toolchain, ShellCheck,
   staticcheck, deadcode, govulncheck, OSV-Scanner, Ruff, PyPA `packaging` `26.3`, Vulture
-  `2.16`, `ty`, the carried CPython `3.12.13+20260728` runtime from
-  python-build-standalone, and the Linux Trivy artifact scanner. A
+  `2.16`, `ty`, and the carried CPython `3.12.13+20260728` runtime from
+  python-build-standalone. A
   target installs no policy tooling, and none of these is ever taken from an
   ambient `PATH`, a host installation, or an environment override, so a check
   decides the same thing on every machine that has the matching host release;
@@ -420,11 +420,6 @@ in its optional companion; target repositories install them with `install-rust`.
 libraries reside in the carried Python runtime with their exact dependency
 manifest, lock, and distribution metadata. Changing either executable pin changes
 the cross-host release identity.
-
-Manifest version 9 adds `tools.trivy` for the carried artifact scanner, a Linux
-build of Trivy `0.74.0` for the host architecture with the license and notice
-files of every Go module linked into it. The release SBOM lists those modules
-from the binary's build information.
 
 `code-polishy release-manifest verify --root <release-dir>` recomputes the
 core entry evidence. Optional Rust tool integrity is required before Rust

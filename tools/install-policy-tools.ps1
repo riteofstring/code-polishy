@@ -102,110 +102,6 @@ try {
     & $Go install "golang.org/x/vuln/cmd/govulncheck@$(Read-Pin 'tools/govulncheck-version.txt')"
   } finally { $env:GOBIN = $SavedGoBin }
 
-  $TrivyVersion = Read-Pin 'tools/trivy-version.txt'
-  $TrivyExpected = "go$GoVersion-X:jsonv2 github.com/aquasecurity/trivy v$TrivyVersion $(Read-Pin 'tools/trivy_module_sum.txt')" +
-    ' CGO_ENABLED=0 GOARCH=amd64 GOOS=linux -trimpath=true'
-  $TrivyNoticeLayout = 'code-polishy-trivy-notices-v2'
-  $TrivyRoot = Join-Path $PolicyRoot '.tools/trivy/linux-amd64'
-  function Get-TrivyIdentity([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
-    $Lines = @(& $Go version -m $Path 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $Lines.Count -eq 0) { return '' }
-    $GoIdentity = ($Lines[0].Trim() -split '\s+')[-1]
-    $ModuleIdentity = ''
-    $Settings = @{}
-    foreach ($Line in $Lines) {
-      $Fields = @($Line.Trim() -split '\s+')
-      if ($Fields[0] -ceq 'mod') { $ModuleIdentity = $Fields[1..3] -join ' ' }
-      if ($Fields[0] -ceq 'build' -and $Fields.Count -ge 2 -and $Fields[1] -cmatch '^(CGO_ENABLED|GOARCH|GOOS|-trimpath)=') {
-        $Settings[$Fields[1].Split('=')[0]] = $Fields[1]
-      }
-    }
-    return (@($GoIdentity, $ModuleIdentity) + @('CGO_ENABLED', 'GOARCH', 'GOOS', '-trimpath' | ForEach-Object { $Settings[$_] })) -join ' '
-  }
-  function Get-TrivyNoticeCandidates([string]$SourceRoot) {
-    foreach ($File in @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File | Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })) {
-      $Relative = $File.FullName.Substring($SourceRoot.Length + 1)
-      $Parts = @($Relative.ToLowerInvariant() -split '[\\/]')
-      $Name = $Parts[-1]
-      $Source = [IO.Path]::GetExtension($Name) -match '^\.(go|s|c|h|cc|cpp|proto|py|js|ts|sh|rego|ya?ml|json|xml|toml|mod|sum|pom|gemspec|jar|golden)$'
-      $LicensedDirectory = $Parts.Count -gt 1 -and @($Parts[0..($Parts.Count - 2)] | Where-Object { $_ -ceq 'licenses' }).Count -gt 0
-      if ($LicensedDirectory -or ($Name -match 'licen[cs]e|copying|notice|patents' -and -not $Source)) {
-        [pscustomobject]@{
-          File = $File; Relative = $Relative
-          RootLicense = $Parts.Count -eq 1 -and $Name -match 'licen[cs]e|copying' -and -not $Source
-        }
-      }
-    }
-  }
-  function Copy-TrivyNotices([string]$Binary, [string]$ModuleCache, [string]$Carrier) {
-    $Lines = @(& $Go version -m $Binary)
-    if ($LASTEXITCODE -ne 0 -or $Lines.Count -eq 0) { throw 'The built Trivy has no readable build information.' }
-    $Modules = @()
-    foreach ($Line in $Lines) {
-      $Fields = @($Line.Trim() -split '\s+')
-      if ($Fields[0] -ceq '=>') { throw 'The built Trivy replaces a module, so its notices cannot be attributed.' }
-      if ($Fields[0] -cne 'dep' -and $Fields[0] -cne 'mod') { continue }
-      if ($Fields.Count -lt 3 -or -not $Fields[1] -or -not $Fields[2]) { throw 'The built Trivy build information has a malformed module record.' }
-      $Modules += , @($Fields[0], $Fields[1], $Fields[2])
-    }
-    if (@($Modules | Where-Object { $_[0] -ceq 'mod' -and $_[1] -ceq 'github.com/aquasecurity/trivy' }).Count -ne 1) {
-      throw 'The built Trivy build information names no Trivy module.'
-    }
-    foreach ($Module in $Modules) {
-      $Escaped = [regex]::Replace($Module[1], '[A-Z]', { param($Match) '!' + $Match.Value.ToLowerInvariant() })
-      $Source = Join-Path $ModuleCache "$Escaped@$($Module[2])"
-      if (-not (Test-Path -LiteralPath $Source -PathType Container)) { throw "Trivy module $($Module[1])@$($Module[2]) has no readable source in the module cache." }
-      $SourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
-      $Target = Join-Path $Carrier "licenses/$Escaped@$($Module[2])"
-      $Licensed = $false
-      foreach ($Candidate in @(Get-TrivyNoticeCandidates $SourceRoot)) {
-        if ($Candidate.RootLicense) { $Licensed = $true }
-        $Copy = Join-Path $Target $Candidate.Relative
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Copy) | Out-Null
-        Copy-Item -LiteralPath $Candidate.File.FullName -Destination $Copy
-      }
-      if (-not $Licensed) { throw "Trivy module $($Module[1])@$($Module[2]) carries no license file at its root." }
-    }
-    Set-Content -LiteralPath (Join-Path $Carrier 'notices-layout') -Value $TrivyNoticeLayout
-  }
-  function Test-TrivyCarrier([string]$Carrier) {
-    $Layout = Join-Path $Carrier 'notices-layout'
-    return (Get-TrivyIdentity (Join-Path $Carrier 'trivy')) -ceq $TrivyExpected -and
-      (Test-Path -LiteralPath (Join-Path $Carrier 'licenses') -PathType Container) -and
-      (Test-Path -LiteralPath $Layout -PathType Leaf) -and (Get-Content -Raw -LiteralPath $Layout).Trim() -ceq $TrivyNoticeLayout
-  }
-
-  if (-not (Test-TrivyCarrier $TrivyRoot)) {
-    $TrivyScratch = Join-Path $Scratch 'trivy'
-    $TrivyEnvironment = [ordered]@{
-      GOENV = 'off'; GOPATH = (Join-Path $TrivyScratch 'gopath'); GOMODCACHE = (Join-Path $TrivyScratch 'gopath/pkg/mod')
-      GOCACHE = (Join-Path $TrivyScratch 'gocache'); GOPROXY = 'https://proxy.golang.org'; GOSUMDB = 'sum.golang.org'
-      GOFLAGS = '-modcacherw'; GOOS = 'linux'; GOARCH = 'amd64'; CGO_ENABLED = '0'; GOEXPERIMENT = 'jsonv2'
-      GONOSUMDB = $null; GONOSUMCHECK = $null; GOPRIVATE = $null; GONOPROXY = $null; GOINSECURE = $null; GOWORK = $null; GOBIN = $null
-    }
-    $SavedTrivyEnvironment = @{}
-    foreach ($Name in $TrivyEnvironment.Keys) {
-      $SavedTrivyEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
-      [Environment]::SetEnvironmentVariable($Name, $TrivyEnvironment[$Name])
-    }
-    try {
-      & $Go install -trimpath "-ldflags=-s -w -extldflags '-static' -X github.com/aquasecurity/trivy/pkg/version/app.ver=$TrivyVersion" "github.com/aquasecurity/trivy/cmd/trivy@v$TrivyVersion"
-      if ($LASTEXITCODE -ne 0) { throw 'Trivy source build failed.' }
-    } finally {
-      foreach ($Name in $SavedTrivyEnvironment.Keys) {
-        [Environment]::SetEnvironmentVariable($Name, $SavedTrivyEnvironment[$Name])
-      }
-    }
-    $BuiltTrivy = Join-Path $TrivyScratch 'gopath/bin/linux_amd64/trivy'
-    if ((Get-TrivyIdentity $BuiltTrivy) -cne $TrivyExpected) { throw "The built Trivy does not match $TrivyExpected." }
-    $TrivyStage = Join-Path $TrivyScratch 'stage'
-    New-Item -ItemType Directory -Path $TrivyStage | Out-Null
-    Copy-Item -LiteralPath $BuiltTrivy -Destination (Join-Path $TrivyStage 'trivy')
-    Copy-TrivyNotices $BuiltTrivy (Join-Path $TrivyScratch 'gopath/pkg/mod') $TrivyStage
-    Replace-Directory $TrivyStage $TrivyRoot
-  }
-
   $NodeVersion = Read-Pin 'tools/node-version.txt'
   $NodeAsset = "node-v$NodeVersion-win-x64.zip"
   $NodeArchive = Get-Verified $NodeAsset "https://nodejs.org/dist/v$NodeVersion/$NodeAsset"
@@ -606,7 +502,6 @@ with zipfile.ZipFile(wheel) as archive:
   & (Join-Path $Bin 'staticcheck.exe') -version
   & $Go version -m (Join-Path $Bin 'deadcode.exe')
   & (Join-Path $Bin 'govulncheck.exe') -version
-  Write-Host "trivy $(Get-TrivyIdentity (Join-Path $TrivyRoot 'trivy'))"
   & (Join-Path $Bin 'osv-scanner.exe') --version
   & (Join-Path $Bin 'ruff.exe') --version
   & (Join-Path $Bin 'ty.exe') --version

@@ -149,6 +149,9 @@ func (state *scannerRuntime) applyArtifactOpenVEX(
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(document) == 0 {
+		return observed, nil, nil
+	}
 	vexMounts := append(append([]scannerMount{}, mounts...), scannerMount{
 		source: artifact.openVEX, target: "/policy/assessment.openvex.json", readOnly: true,
 	})
@@ -207,8 +210,9 @@ func buildScanOutput(
 	}
 	return scanOutput{
 		report: artifactReport{
-			Version: 2, Target: target.Name, Mode: artifact.mode, Reference: artifact.reference, ImageID: artifact.imageID,
-			ScannerVersion: state.policy.TrivyVersion, DatabaseSHA256: database.SHA256,
+			Version: 1, Target: target.Name, Mode: artifact.mode, Reference: artifact.reference, ImageID: artifact.imageID,
+			ScannerVersion: state.policy.TrivyVersion,
+			SourceImage:    state.policy.SourceImage, DatabaseSHA256: database.SHA256,
 			ArchiveSHA256: archiveHash, SBOMSHA256: bytesSHA256(sbom),
 			StartedAt: started, CompletedAt: time.Now().UTC(), Findings: blocking, AcceptedFindings: accepted,
 		},
@@ -416,7 +420,7 @@ func (state *scannerRuntime) policyFinding(target policy.ArtifactTarget, artifac
 	}
 	if artifact.mode == "scanner" {
 		result.Path = policy.LockFilename
-		result.Message = fmt.Sprintf("Code Polishy's scanner (carried Trivy %s): %s", state.policy.TrivyVersion, result.Message)
+		result.Message = fmt.Sprintf("Code Polishy's scanner (Trivy %s, %s): %s", state.policy.TrivyVersion, state.policy.SourceImage, result.Message)
 		result.Remediation.Summary = "Upgrade the locked tool to a verified Code Polishy release carrying a scanner that resolves this finding, then rerun artifact-security. " +
 			"No fixed Code Polishy/scanner release has been established by this scan. Rebuilding application artifacts cannot repair Code Polishy's scanner."
 	}

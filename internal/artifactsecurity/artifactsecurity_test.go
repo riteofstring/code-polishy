@@ -81,6 +81,33 @@ func TestOpenVEXReconciliationIsExactAndRejectsUnusedStatements(t *testing.T) {
 	}
 }
 
+func TestOpenVEXEmptyAssessmentsRetainBlockingFindings(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, statements := range []string{`,"statements":[]`, `,"statements":null`, ""} {
+		path := filepath.Join(t.TempDir(), "assessment.openvex.json")
+		payload := fmt.Sprintf(`{"@context":"https://openvex.dev/ns/v0.2.0","@id":"https://example.test/vex/empty","author":"Security team","timestamp":%q,"version":1%s}`, now.Format(time.RFC3339), statements)
+		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		assessments, err := parseOpenVEX(path, now)
+		if statements != `,"statements":[]` {
+			if err == nil {
+				t.Fatalf("missing assessment array was accepted: %s", payload)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		finding := normalizedFinding{Kind: "vulnerability", ID: "CVE-2026-111943", Severity: "HIGH", PackagePURL: "pkg:golang/stdlib@v1.26.6"}
+		blocking, accepted, err := reconcileOpenVEX([]normalizedFinding{finding}, []normalizedFinding{finding}, assessments)
+		if err != nil || len(blocking) != 1 || len(accepted) != 0 {
+			t.Fatalf("empty policy changed findings: blocking=%+v accepted=%+v err=%v", blocking, accepted, err)
+		}
+	}
+}
+
 func TestParseOpenVEXRequiresBoundedExactAssessment(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "assessment.openvex.json")
@@ -132,8 +159,8 @@ func TestWriteArtifactsPublishesHashedNormalizedEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	scanned := scanOutput{
 		report: artifactReport{
-			Version: 2, Target: "agent", Mode: "archive", Reference: "registry.example/agent:9.9.9",
-			ImageID: "sha256:" + strings.Repeat("d", 64), ScannerVersion: "0.72.0",
+			Version: 1, Target: "agent", Mode: "archive", Reference: "registry.example/agent:9.9.9",
+			ImageID: "sha256:" + strings.Repeat("d", 64), ScannerVersion: "0.72.0", SourceImage: "scanner@example",
 			ArchiveSHA256: strings.Repeat("a", 64), DatabaseSHA256: strings.Repeat("b", 64), SBOMSHA256: strings.Repeat("c", 64),
 			StartedAt: now.Add(-time.Second), CompletedAt: now,
 		},
@@ -221,7 +248,7 @@ func readPublishedArtifactReport(t *testing.T, directory string) publishedArtifa
 
 func requirePublishedArtifactReport(t *testing.T, report publishedArtifactReport) {
 	t.Helper()
-	if report.Version != 2 || report.Target != "agent" || report.Mode != "archive" ||
+	if report.Version != 1 || report.Target != "agent" || report.Mode != "archive" ||
 		report.Reference != "registry.example/agent:9.9.9" || report.ImageID != "sha256:"+strings.Repeat("d", 64) ||
 		report.ScannerVersion != "0.72.0" || report.ArchiveSHA256 != strings.Repeat("a", 64) ||
 		report.DatabaseSHA256 != strings.Repeat("b", 64) || report.SBOMSHA256 != strings.Repeat("c", 64) ||
@@ -243,7 +270,10 @@ func requireMarkdownArtifactIdentity(t *testing.T, directory, reference, imageID
 
 func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	root := t.TempDir()
-	policyRoot := carriedScannerPolicyRoot(t)
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
 	archive := filepath.Join(root, "agent.tar")
 	if err := os.WriteFile(archive, []byte("target image"), 0o600); err != nil {
 		t.Fatal(err)
@@ -286,7 +316,10 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 
 func TestScannerFindingsIdentifyReleaseOwnership(t *testing.T) {
 	root := t.TempDir()
-	policyRoot := carriedScannerPolicyRoot(t)
+	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "application.tar"), []byte("application image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +358,8 @@ func TestScannerFindingsIdentifyReleaseOwnership(t *testing.T) {
 func requireScannerFindingOwnership(t *testing.T, scanner policy.Finding, version string) {
 	t.Helper()
 	if scanner.Path != policy.LockFilename || scanner.Vulnerability.Scope != policy.LockFilename ||
-		!strings.Contains(scanner.Message, "Code Polishy's scanner (carried Trivy "+version+")") {
+		!strings.Contains(scanner.Message, "Code Polishy's scanner") || !strings.Contains(scanner.Message, version) ||
+		!strings.Contains(scanner.Message, "docker.io/aquasec/trivy@sha256:") {
 		t.Fatalf("scanner vulnerability did not identify its release owner and exact scanner: %+v", scanner)
 	}
 	for _, phrase := range []string{"verified Code Polishy release", "No fixed Code Polishy/scanner release has been established", "Rebuilding application artifacts cannot repair"} {
@@ -374,61 +408,6 @@ func TestRunFailsClosedBeforeArtifactMutation(t *testing.T) {
 	if len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:scanner-runtime" ||
 		!strings.Contains(unavailable.Findings[0].Message, "scanner unavailable") {
 		t.Fatalf("scanner startup failure = %+v", unavailable)
-	}
-}
-
-func TestRunRefusesAReleaseWithoutTheCarriedScannerForTheDockerPlatform(t *testing.T) {
-	root := t.TempDir()
-	policyRoot := carriedScannerPolicyRoot(t)
-	if err := os.Remove(filepath.Join(policyRoot, ".tools", "trivy", "linux-amd64", "trivy")); err != nil {
-		t.Fatal(err)
-	}
-	repo := repository.Repository{
-		Root: root, PolicyRoot: policyRoot,
-		Config: policy.Config{SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{
-			Targets: []policy.ArtifactTarget{{Name: "agent", Mode: "archive", Archive: "agent.tar"}},
-		}}},
-	}
-	result := Run(t.Context(), repo, newScannerBoundary(t, policyRoot))
-	if len(result.Findings) != 1 || result.Findings[0].Subject != "scanner:scanner-runtime" ||
-		!strings.Contains(result.Findings[0].Message, "carries no Trivy scanner for linux/amd64") {
-		t.Fatalf("missing carried scanner = %+v", result)
-	}
-}
-
-func carriedScannerPolicyRoot(t *testing.T) string {
-	t.Helper()
-	source, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	entries, err := os.ReadDir(filepath.Join(source, "artifact-security"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	copied := []string{filepath.Join("tools", "trivy-version.txt")}
-	for _, entry := range entries {
-		copied = append(copied, filepath.Join("artifact-security", entry.Name()))
-	}
-	for _, relative := range copied {
-		payload, readErr := os.ReadFile(filepath.Join(source, relative))
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		writeTestFile(t, filepath.Join(root, relative), payload)
-	}
-	writeTestFile(t, filepath.Join(root, ".tools", "trivy", "linux-amd64", "trivy"), []byte("carried scanner"))
-	return root
-}
-
-func writeTestFile(t *testing.T, path string, payload []byte) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -589,18 +568,13 @@ func (boundary *scannerBoundary) imageCommand(arguments []string) (runner.Output
 		return runner.Output{}, fmt.Errorf("missing image operation")
 	}
 	switch arguments[0] {
-	case "build":
-		if label, _ := flagValue(arguments, "--label"); label != "com.code-polishy.security.role=scanner" {
-			return runner.Output{}, nil
-		}
-		if carried, _ := flagValue(arguments, "--build-context"); !strings.HasPrefix(carried, "trivy=") ||
-			!strings.HasSuffix(filepath.ToSlash(carried), "/.tools/trivy/linux-amd64") {
-			return runner.Output{}, fmt.Errorf("scanner build omitted the carried Trivy for its platform: %v", arguments)
-		}
-		return runner.Output{}, nil
-	case "rm":
+	case "pull", "build", "rm":
 		return runner.Output{}, nil
 	case "inspect":
+		format, _ := flagValue(arguments, "--format")
+		if strings.Contains(format, "RepoDigests") {
+			return runner.Output{Stdout: []byte(`["` + arguments[len(arguments)-1] + `"]` + "\n")}, nil
+		}
 		return runner.Output{Stdout: []byte("sha256:" + strings.Repeat("b", 64) + "\n")}, nil
 	case "save":
 		path, ok := flagValue(arguments, "--output")

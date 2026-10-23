@@ -332,7 +332,6 @@ policy_tools=(
   ".tools/bin/osv-scanner"
   ".tools/bin/ruff"
   ".tools/bin/ty"
-  ".tools/trivy/linux-${go_arch_tag}"
 )
 
 carried_tools=(
@@ -631,31 +630,6 @@ for carried in "${carried_markers[@]}"; do
     exit 1
   fi
 done
-
-trivy_carrier=".tools/trivy/linux-${go_arch_tag}"
-trivy_expected="go$(pinned_identity scripts/go_version.txt)-X:jsonv2 github.com/aquasecurity/trivy"
-trivy_expected+=" v$(pinned_identity tools/trivy-version.txt) $(pinned_identity tools/trivy_module_sum.txt)"
-trivy_expected+=" CGO_ENABLED=0 GOARCH=${go_arch_tag} GOOS=linux -trimpath=true"
-if ! trivy_build_info="$(javascript_sealed_run "${policy_root}/${go_tool_dir}/go/bin/go" version -m \
-  "${policy_root}/${trivy_carrier}/trivy")"; then
-  trivy_build_info=""
-fi
-trivy_reported="$(awk 'NR == 1 { go = $NF }
-  $1 == "mod" { module = $2 " " $3 " " $4 }
-  $1 == "build" && $2 ~ /^(CGO_ENABLED|GOARCH|GOOS|-trimpath)=/ { split($2, setting, "="); value[setting[1]] = $2 }
-  END { print go " " module " " value["CGO_ENABLED"] " " value["GOARCH"] " " value["GOOS"] " " value["-trimpath"] }' \
-  <<<"${trivy_build_info}")"
-if [[ "${trivy_reported}" != "${trivy_expected}" ]]; then
-  echo "The Trivy carrier at ${trivy_carrier} reports ${trivy_reported}; the pins require ${trivy_expected}." >&2
-  echo "Run ./tools/install-policy-tools.sh before installing a release." >&2
-  exit 1
-fi
-if [[ ! -d "${policy_root}/${trivy_carrier}/licenses" ||
-  "$(cat "${policy_root}/${trivy_carrier}/notices-layout" 2>/dev/null || true)" != "code-polishy-trivy-notices-v2" ]]; then
-  echo "The Trivy carrier at ${trivy_carrier} lacks complete code-polishy-trivy-notices-v2 module notices." >&2
-  echo "Run ./tools/install-policy-tools.sh before installing a release." >&2
-  exit 1
-fi
 
 if ! vulture_metadata_is_exact; then
   echo "The Vulture carrier at ${python_tool_dir} has missing or stale Vulture metadata." >&2

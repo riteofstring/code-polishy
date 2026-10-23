@@ -221,7 +221,6 @@ EOF
   printf '%s\n' 'vulture-2.16-py3-none-any.whl 6e0f1c312cef1c87856957e5c2ca9608834a7c794c2180477f30bf0e4cc58eee' \
     >"${source_root}/tools/vulture_wheel_checksums.txt"
   printf '0.72.0\n' >"${source_root}/tools/trivy-version.txt"
-  printf 'h1:disposable\n' >"${source_root}/tools/trivy_module_sum.txt"
   write_file "${source_root}/tools/ty.toml" <<'EOF'
 [rules]
 EOF
@@ -352,11 +351,6 @@ if [[ "\${1:-}" == "version" && "\${2:-}" == "-m" ]]; then
     staticcheck) printf '\tmod\thonnef.co/go/tools\tv0.7.0\th1:disposable\n' ;;
     deadcode) printf '\tmod\tgolang.org/x/tools\tv0.50.0\th1:disposable\n' ;;
     govulncheck) printf '\tmod\tgolang.org/x/vuln\tv1.3.0\th1:disposable\n' ;;
-    trivy)
-      printf '%s: %s\n\tpath\tgithub.com/aquasecurity/trivy/cmd/trivy\n' "\$3" "\$(cat "\${3%/*}/fixture-go")"
-      printf '\tmod\tgithub.com/aquasecurity/trivy\tv%s\t%s\n' "\$(cat "\${3%/*}/fixture-version")" "\$(cat "\${3%/*}/fixture-sum")"
-      cat "\${3%/*}/fixture-build"
-      ;;
     *)
       echo "unexpected stub go module probe: \$*" >&2
       exit 1
@@ -411,16 +405,6 @@ EOF
   write_stub_tool "${source_root}/.tools/bin/staticcheck"
   write_stub_tool "${source_root}/.tools/bin/deadcode"
   write_stub_tool "${source_root}/.tools/bin/govulncheck"
-  write_stub_tool "${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/trivy"
-  mkdir -p "${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0"
-  printf 'fixture license\n' \
-    >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0/LICENSE"
-  printf '0.72.0\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-version"
-  printf 'go1.26.9-X:jsonv2\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-go"
-  printf 'h1:disposable\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-sum"
-  printf '\tbuild\t%s\n' CGO_ENABLED=0 "GOARCH=${go_platform_tag##*-}" GOOS=linux -trimpath=true \
-    >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/fixture-build"
-  printf 'code-polishy-trivy-notices-v2\n' >"${source_root}/.tools/trivy/linux-${go_platform_tag##*-}/notices-layout"
 
   "${real_git}" -C "${source_root}" init --quiet
   "${real_git}" -C "${source_root}" config user.email "install-test@example.invalid"
@@ -554,7 +538,7 @@ expected_revision="$("${real_git}" -C "${source_root}" rev-parse HEAD)"
 
 for carried in go:1.26.9 node:24.18.0 pnpm:11.13.0 packaging:26.3 shellcheck:0.11.0 \
   staticcheck:0.7.0 deadcode:0.50.0 govulncheck:1.3.0 osv-scanner:2.4.0 python:3.12.13+20260728 \
-  ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138 trivy:0.72.0; do
+  ruff:0.16.0 ty:0.0.65 vulture:2.16 rust:1.97.1 cargo-nextest:0.9.138; do
   [[ "$(manifest_field "${manifest}" "${carried%%:*}")" == "${carried##*:}" ]] ||
     fail "the release does not record which ${carried%%:*} it carries"
 done
@@ -595,9 +579,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   ".tools/go/${go_platform_tag}/go/bin/gofmt" \
   ".tools/shellcheck/${shellcheck_platform_tag}/shellcheck" \
   ".tools/rust/${platform_tag}/bin/rustc" ".tools/rust/${platform_tag}/bin/cargo-clippy" \
-  .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest \
-  ".tools/trivy/linux-${go_platform_tag##*-}/trivy" \
-  ".tools/trivy/linux-${go_platform_tag##*-}/licenses/github.com/aquasecurity/trivy@v0.72.0/LICENSE"; do
+  .tools/bin/staticcheck .tools/bin/deadcode .tools/bin/govulncheck .tools/bin/osv-scanner .tools/bin/ruff .tools/bin/ty .tools/bin/cargo-nextest; do
   [[ -e "${release}/${required}" ]] || fail "the release is missing ${required}"
 done
 [[ ! -e "${release}/scripts/automation" ]] ||
@@ -729,112 +711,6 @@ grep -q ".tools/bin/osv-scanner" "${fixture_root}/missing-tool.log" ||
 mv "${fixture_root}/held-osv-scanner" "${source_root}/.tools/bin/osv-scanner"
 [[ "$(installed_release_count)" == "1" ]] ||
   fail "a checkout missing a pinned tool changed what is installed"
-
-notice_root="${fixture_root}/trivy-notices"
-mkdir -p "${notice_root}/repo/scripts"
-write_file "${notice_root}/repo/scripts/go.sh" <<'EOF'
-#!/usr/bin/env bash
-[[ -f "${TRIVY_FIXTURE_BUILD_INFO}" ]] || exit 1
-cat "${TRIVY_FIXTURE_BUILD_INFO}"
-EOF
-chmod +x "${notice_root}/repo/scripts/go.sh"
-sed -n '/^trivy_notice_layout=/p; /^trivy_notice_candidates()/,/^}/p; /^trivy_notices()/,/^}/p' \
-  "${policy_root}/tools/install-go-tools.sh" >"${notice_root}/functions.sh"
-grep -q '^trivy_notices()' "${notice_root}/functions.sh" || fail "the Trivy notice copier was not found"
-notice_cache="${notice_root}/cache"
-write_notice_source() {
-  mkdir -p "$(dirname "${notice_cache}/$1")"
-  printf '%s\n' "$1" >"${notice_cache}/$1"
-}
-for source_file in \
-  github.com/aquasecurity/trivy@v0.74.0/LICENSE github.com/aquasecurity/trivy@v0.74.0/NOTICE \
-  github.com/aquasecurity/trivy@v0.74.0/pkg/licensing/license.go \
-  github.com/aquasecurity/trivy@v0.74.0/pkg/x/testdata/valid-license-id.json \
-  'example.com/!forked@v1.0.0/APACHE-LICENSE-2.0' 'example.com/!forked@v1.0.0/LICENSES/BSD-3-Clause.txt' \
-  'example.com/!forked@v1.0.0/LICENSES/MIT.txt' 'example.com/!forked@v1.0.0/3rdpartylicenses.md' \
-  'example.com/!forked@v1.0.0/zstd/internal/xxhash/LICENSE.txt' 'example.com/!forked@v1.0.0/cvss3enums.go' \
-  example.com/pathspec@v1.3.0/GO-LICENSE example.com/pathspec@v1.3.0/schema/cvss-v3.1.json.license \
-  example.com/sourceonly@v1.0.0/license.go example.com/sourceonly@v1.0.0/third_party/LICENSE; do
-  write_notice_source "${source_file}"
-done
-write_notice_build_info() {
-  {
-    printf 'trivy: go1.26.10-X:jsonv2\n\tmod\tgithub.com/aquasecurity/trivy\tv0.74.0\th1:x\n'
-    printf '\tdep\texample.com/Forked\tv1.0.0\th1:y\n\tdep\texample.com/pathspec\tv1.3.0\th1:z\n'
-    [[ "$1" != source-only ]] || printf '\tdep\texample.com/sourceonly\tv1.0.0\th1:w\n'
-    [[ "$1" != missing ]] || printf '\tdep\texample.com/absent\tv1.0.0\th1:v\n'
-  } >"${notice_root}/build-info"
-}
-copy_trivy_notices() {
-  rm -rf "${notice_root}/carrier"
-  mkdir -p "${notice_root}/carrier"
-  repo_root="${notice_root}/repo" TRIVY_FIXTURE_BUILD_INFO="$1" bash -c \
-    'set -euo pipefail; source "$1"; trivy_notices trivy "$2" "$3"' _ \
-    "${notice_root}/functions.sh" "${notice_cache}" "${notice_root}/carrier" >"${notice_root}/copy.log" 2>&1
-}
-write_notice_build_info complete
-copy_trivy_notices "${notice_root}/build-info" ||
-  fail "the Trivy notice copier rejected complete notices: $(cat "${notice_root}/copy.log")"
-expected_notices="$(printf '%s\n' \
-  'example.com/!forked@v1.0.0/3rdpartylicenses.md' 'example.com/!forked@v1.0.0/APACHE-LICENSE-2.0' \
-  'example.com/!forked@v1.0.0/LICENSES/BSD-3-Clause.txt' 'example.com/!forked@v1.0.0/LICENSES/MIT.txt' \
-  'example.com/!forked@v1.0.0/zstd/internal/xxhash/LICENSE.txt' example.com/pathspec@v1.3.0/GO-LICENSE \
-  example.com/pathspec@v1.3.0/schema/cvss-v3.1.json.license github.com/aquasecurity/trivy@v0.74.0/LICENSE \
-  github.com/aquasecurity/trivy@v0.74.0/NOTICE | LC_ALL=C sort)"
-copied_notices="$(cd "${notice_root}/carrier/licenses" && find . -type f | sed 's#^\./##' | LC_ALL=C sort)"
-[[ "${copied_notices}" == "${expected_notices}" ]] ||
-  fail "the Trivy notice copier copied: ${copied_notices}"
-cmp -s "${notice_cache}/example.com/!forked@v1.0.0/LICENSES/MIT.txt" \
-  "${notice_root}/carrier/licenses/example.com/!forked@v1.0.0/LICENSES/MIT.txt" ||
-  fail "the Trivy notice copier changed a notice"
-[[ "$(cat "${notice_root}/carrier/notices-layout")" == code-polishy-trivy-notices-v2 ]] ||
-  fail "complete Trivy notices did not record their layout"
-for failure in "source-only:example.com/sourceonly@v1.0.0 carries no license file at its root" \
-  "missing:example.com/absent@v1.0.0 has no readable source" "unreadable:no readable build information"; do
-  write_notice_build_info "${failure%%:*}"
-  build_info="${notice_root}/build-info"
-  [[ "${failure%%:*}" != unreadable ]] || build_info="${notice_root}/absent-build-info"
-  if copy_trivy_notices "${build_info}"; then
-    fail "the Trivy notice copier accepted ${failure%%:*} evidence"
-  fi
-  grep -qF "${failure#*:}" "${notice_root}/copy.log" ||
-    fail "the Trivy notice copier refused ${failure%%:*} evidence without naming it: $(cat "${notice_root}/copy.log")"
-  [[ ! -e "${notice_root}/carrier/notices-layout" ]] ||
-    fail "the Trivy notice copier recorded a layout for ${failure%%:*} evidence"
-done
-
-carried_trivy="${source_root}/.tools/trivy/linux-${go_platform_tag##*-}"
-for wrong in "fixture-version:0.72.1" "fixture-go:go1.26.9" "fixture-sum:h1:other"; do
-  cp "${carried_trivy}/${wrong%%:*}" "${fixture_root}/held-trivy-evidence"
-  printf '%s\n' "${wrong#*:}" >"${carried_trivy}/${wrong%%:*}"
-  if install_release >"${fixture_root}/trivy-identity.log" 2>&1; then
-    fail "a checkout carrying Trivy with the wrong ${wrong%%:*} installed a release"
-  fi
-  grep -q "Trivy carrier.*reports.*${wrong#*:}" "${fixture_root}/trivy-identity.log" ||
-    fail "the carried Trivy with the wrong ${wrong%%:*} was refused without naming it"
-  mv "${fixture_root}/held-trivy-evidence" "${carried_trivy}/${wrong%%:*}"
-done
-cp "${carried_trivy}/fixture-build" "${fixture_root}/held-trivy-build"
-sed 's/GOARCH=.*/GOARCH=s390x/' "${fixture_root}/held-trivy-build" >"${carried_trivy}/fixture-build"
-if install_release >"${fixture_root}/trivy-arch.log" 2>&1; then
-  fail "a checkout carrying Trivy for another architecture installed a release"
-fi
-grep -q "Trivy carrier.*reports.*GOARCH=s390x" "${fixture_root}/trivy-arch.log" ||
-  fail "the carried Trivy for another architecture was refused without naming it"
-mv "${fixture_root}/held-trivy-build" "${carried_trivy}/fixture-build"
-for stale in missing code-polishy-trivy-notices-v1; do
-  mv "${carried_trivy}/notices-layout" "${fixture_root}/held-trivy-layout"
-  [[ "${stale}" == missing ]] || printf '%s\n' "${stale}" >"${carried_trivy}/notices-layout"
-  if install_release >"${fixture_root}/trivy-notices.log" 2>&1; then
-    fail "a checkout carrying Trivy with ${stale} notice layout installed a release"
-  fi
-  grep -q "lacks complete code-polishy-trivy-notices-v2 module notices" "${fixture_root}/trivy-notices.log" ||
-    fail "the carried Trivy with ${stale} notice layout was refused for the wrong reason"
-  rm -f "${carried_trivy}/notices-layout"
-  mv "${fixture_root}/held-trivy-layout" "${carried_trivy}/notices-layout"
-done
-[[ "$(installed_release_count)" == "1" ]] ||
-  fail "a checkout carrying an inexact Trivy changed what is installed"
 
 for rust_tool in rustc rustdoc cargo; do
   write_version_tool "${source_root}/.tools/rust/${platform_tag}/bin/${rust_tool}" --version "${rust_tool} 1.97.2 (fixture)"
