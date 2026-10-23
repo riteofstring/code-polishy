@@ -2,7 +2,8 @@
 
 Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other JavaScript and Go module findings
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
-Guarded glob expansion and the aged TOML fix reviewed on 2026-10-23 UTC.
+The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
+reviewed on 2026-10-23 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -198,11 +199,12 @@ Both satisfy the age minimum; module checksums authenticate the downloads.
 ## Guarded glob expansion
 
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-affects `braces` 3.0.3 in both graphs. Its iterative parser accepts deeply nested
-brace and parenthesis nodes that overflow recursive compilation or expansion.
-The ordinary pattern-length limit does not stop the attack. On 2026-10-23 UTC,
-the GitHub advisory still lists no patched version and the npm registry still
-lists 3.0.3 as the latest release.
+was withdrawn on 2026-10-23 at 12:53:02 UTC because upstream no longer considers
+it a practically exploitable vulnerability. Both exact `braces` 3.0.3
+assessments have been removed because current scanners no longer report it.
+The existing input-depth boundary remains: the iterative parser can construct
+deeply nested brace and parenthesis nodes that overflow recursive compilation
+or expansion, even within the ordinary pattern-length limit.
 
 The provider's `resolveGlob` in
 [`imports.mjs`](../../providers/javascript/imports.mjs) accepts source-selected
@@ -229,13 +231,65 @@ passing empty result. Regressions exercise real source globs, workspace globs,
 package scripts, ordinary nested alternatives, and escaped literal paths.
 
 Reinspection on 2026-10-23 UTC confirms the same Knip 5.55.1 and fast-glob 3.3.3
-callers and the same guard binding in both analyzers. Retain exact high-severity
-`not-affected` assessments because the exploit prerequisite remains unreachable.
-They expire on 2026-11-06. Check for an
-official fix by that date and reassess before renewal; adopt an aged fix when
-available. Reassess immediately if Knip, fast-glob, braces, the shared guard,
-or any expansion caller changes. See the
+callers and the same guard binding in both analyzers. There is no active
+vulnerability acceptance for this withdrawn advisory. Review the input boundary
+when Knip, fast-glob, braces, the shared guard, or an expansion caller changes.
+See the
 [boundary design](../design/javascript-glob-inputs.md) for the binding scope.
+
+## Zod configuration validation
+
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
+also CVE-2023-54404, reports memory exhaustion from oversized arrays whose
+elements fail Zod validation. Its reviewed package range was updated on
+2026-10-23 and includes the `zod` 3.25.76 resolved in both JavaScript locks.
+The resolved v3 `ZodArray._parse` visits every element and accumulates issues;
+a bounded local check produced 512 issues for 512 invalid elements. Package
+presence is real, and this assessment does not dispute the vulnerable parser.
+
+Both graphs resolve Zod through Knip 5.55.1 and its error formatter,
+`zod-validation-error` 3.5.4. Knip's `ConfigurationChief.init` calls
+`knipConfigurationSchema.parse`; `schema/plugins.js` accepts path arrays through
+`z.array(z.string())`. The error formatter consumes validation errors rather
+than parsing a repository-supplied collection. The relevant authority boundary
+is the configuration passed to that schema:
+
+- The native analyzer's
+  [`requireWorkspaces` and `configurationFor`](../../tools/javascript/deadcode.mjs)
+  validate contained string paths and limit selected files to 4096. They build
+  workspace `entry` and `project` arrays from those paths and set each plugin
+  flag to `false`. `analyze` writes that configuration to its private
+  `policy-knip.json` and passes its exact path with `--config`. Knip therefore
+  parses the generated file instead of target `knip.json` or `package.json#knip`.
+- The provider's
+  [`configurationFor`](../../providers/javascript/deadcode.mjs) builds arrays of
+  escaped path strings and fixed plugin flags from resolved source units.
+  [`bindKnip`](../../providers/javascript/reachability.mjs) replaces configuration
+  initialization and passes only that object plus its trusted Astro compiler
+  to the schema. Target Knip settings are never merged into it. The compiler's
+  Zod function wrapper validates two string arguments, not an arbitrary array.
+
+Repository bytes can influence path-string contents, but cannot introduce
+invalid element types into these arrays. Plugin schemas receive fixed booleans.
+The advisory's unbounded accumulation of per-element validation failures is
+therefore unreachable through either integration. A temporary native-boundary
+check placed 512 invalid elements in each of `entry`, `project`, and `ignore`
+in both target configuration sources; analysis still reported the expected
+unused source file with complete coverage. Existing native and provider
+boundary suites exercise actual dead-code analysis with the resolved packages.
+
+Retain the aged 3.25.76 under exact high-severity `not-affected/unreachable`
+assessments owned by Codex, reviewed on 2026-10-23 and expiring on 2026-11-06.
+The [npm registry](https://registry.npmjs.org/zod) dates the fixed 4.6.6 to
+2026-10-11 at 16:18:23.878 UTC; it reaches the conservative 30-day admission
+boundary on 2026-11-11 UTC. Knip currently requires Zod `^3.22.4`, so forcing
+Zod 4 into this graph would also cross its declared compatibility boundary.
+Neither fresh-code admission nor a major-version override is justified by an
+unreachable prerequisite. Check for a compatible official fix by 2026-11-06
+and adopt an aged compatible dependency graph when available. Reassess before
+expiry or immediately if a Zod consumer, generated configuration, input
+validation, or Knip configuration-loading path changes. Known exploitation
+and unknown severity remain blocking.
 
 ## TOML parsing
 
