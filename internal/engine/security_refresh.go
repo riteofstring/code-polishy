@@ -1,11 +1,11 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -14,6 +14,12 @@ import (
 type securityRefreshRecord struct {
 	GateSHA256 string `json:"gateSha256"`
 	Report     Report `json:"report"`
+}
+
+func defaultFindingPhase(findings []policy.Finding, phase policy.VerificationPhase) {
+	for index := range findings {
+		findings[index].VerificationPhase = cmp.Or(findings[index].VerificationPhase, phase)
+	}
 }
 
 func currentSecurityEvidence(evidence *policy.SecurityVerification, now time.Time) bool {
@@ -71,12 +77,13 @@ func (engine *Engine) refreshGateSecurity(ctx context.Context, controller *gateR
 func (engine *Engine) withRefreshedSecurity(report, security Report, status string) Report {
 	report.Findings = slices.DeleteFunc(slices.Clone(report.Findings), securityOutcome)
 	report.Suppressed = slices.DeleteFunc(slices.Clone(report.Suppressed), func(outcome policy.Suppressed) bool { return securityOutcome(outcome.Finding) })
-	report.Assessed, report.ReleaseAges = nil, nil
+	report.Assessed = slices.DeleteFunc(slices.Clone(report.Assessed), func(outcome policy.AssessedVulnerability) bool { return securityOutcome(outcome.Finding) })
+	report.ReleaseAges = slices.DeleteFunc(slices.Clone(report.ReleaseAges), func(outcome policy.AssessedReleaseAge) bool { return securityOutcome(outcome.Finding) })
 	report.Notes = []string{"historical source and test verification retained; current security acceptance is reported separately"}
 	report.GateRunPolicy.Status = status
 	return engine.combine(report, security)
 }
 
 func securityOutcome(finding policy.Finding) bool {
-	return finding.Vulnerability != nil || finding.ReleaseAge != nil || strings.HasPrefix(finding.Check, "supplyChain.") || strings.HasPrefix(finding.Check, "artifactSecurity.") || strings.HasPrefix(finding.Check, "policy.security")
+	return finding.VerificationPhase == policy.VerificationSecurity
 }

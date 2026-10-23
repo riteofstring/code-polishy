@@ -122,6 +122,12 @@ agent-owned decisions, without implying human sign-off. Assessed findings stay
 visible with their disposition and expiry. See
 [Dependency assessment decisions](dependency-assessments.md).
 
+Findings also retain their producing verification phase, source or security,
+through report composition and serialization. Coalescing preserves separate
+observations across those phases so a security refresh replaces only its own
+outcomes, including suppressed and assessed findings. Rule names do not confer
+ownership. See [Security evidence lifetime](security-evidence.md).
+
 Contained asset links have a read-only identity shared by formatting snapshots
 and provider context. It binds link text, canonical target, and bounded target-file
 hashes. Targets must contain owned image, media, font, or PDF assets; escaping,

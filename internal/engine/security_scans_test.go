@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -371,6 +373,170 @@ func TestPNPMAuditsReuseOnlyTheirDeclaredLockfile(t *testing.T) {
 	}
 }
 
+func TestPNPMAuditCacheBindsTheScannedSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, directory := range []string{".", "packages/web"} {
+		t.Run(directory, func(t *testing.T) {
+			root, now := t.TempDir(), time.Now().UTC()
+			command := auditSecurityCommand(t, root, directory)
+			vulnerable := "lockfileVersion: '9.0'\npackages:\n  example@1.2.3: {}\n"
+			clean := "lockfileVersion: '9.0'\npackages:\n  example@2.0.0: {}\n"
+			writeEngineFile(t, root, command.Paths[0], vulnerable, 0o600)
+			scanner := &lockReadingAuditRunner{root: root, path: command.Paths[0], original: vulnerable, replacement: clean, restore: directory != "."}
+			first := auditSecurityScanRunner(t, root, scanner, &now, command)
+			if result := runAuditSecurityScan(t, first, command); len(result.Advisories) != 1 {
+				t.Fatalf("audit scanned replacement bytes under the vulnerable lock's identity: %+v", result)
+			}
+			for _, step := range []struct {
+				lock     string
+				findings int
+				status   string
+			}{{vulnerable, 1, "reused"}, {clean, 0, "scanned"}, {vulnerable, 1, "reused"}} {
+				writeEngineFile(t, root, command.Paths[0], step.lock, 0o600)
+				scans := auditSecurityScanRunner(t, root, scanner, &now, command)
+				result := runAuditSecurityScan(t, scans, command)
+				if len(result.Advisories) != step.findings || scans.scans[0].Status != step.status {
+					t.Fatalf("restoring a lock reused evidence for different bytes: %+v %+v", result, scans.scans)
+				}
+			}
+			if len(scanner.scanner.commands) != 2 {
+				t.Fatalf("unchanged snapshots did not reuse their own results: %v", scanner.scanner.commands)
+			}
+			for _, snapshot := range scanner.reads {
+				if _, err := os.Stat(snapshot); !os.IsNotExist(err) {
+					t.Fatalf("audit snapshot was not removed: %s %v", snapshot, err)
+				}
+			}
+		})
+	}
+}
+
+func TestPNPMAuditSnapshotFailureRetainsExpiryAndAllowsRecovery(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"unavailable", "canceled"} {
+		t.Run(failure, func(t *testing.T) {
+			root, now := t.TempDir(), time.Now().UTC()
+			command := auditSecurityCommand(t, root, "packages/web")
+			lock := "lockfileVersion: '9.0'\npackages: {}\n"
+			writeEngineFile(t, root, command.Paths[0], lock, 0o600)
+			scanner := &lockReadingAuditRunner{root: root, path: command.Paths[0], replacement: lock}
+			first := auditSecurityScanRunner(t, root, scanner, &now, command)
+			runAuditSecurityScan(t, first, command)
+			previous := first.scans[0]
+			now = now.Add(25 * time.Hour)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if failure == "canceled" {
+				scanner.cancel = cancel
+			} else {
+				scanner.scanner.unavailable = true
+			}
+			failed := auditSecurityScanRunner(t, root, scanner, &now, command)
+			_, _, _ = runner.RunCaptured(ctx, failed, root, command, runner.CaptureStructured)
+			if len(failed.scans) != 1 || failed.scans[0].Status != "unavailable" || !failed.scans[0].LastSucceededAt.Equal(previous.LastSucceededAt) || !failed.scans[0].RefreshAfter.Equal(previous.RefreshAfter) {
+				t.Fatalf("failed audit extended successful evidence: %+v", failed.scans)
+			}
+			scanner.cancel, scanner.scanner.unavailable = nil, false
+			recovered := auditSecurityScanRunner(t, root, scanner, &now, command)
+			runAuditSecurityScan(t, recovered, command)
+			if len(scanner.scanner.commands) != 3 || recovered.scans[0].Status != "scanned" || !recovered.scans[0].LastSucceededAt.Equal(now) {
+				t.Fatalf("audit could not recover after a failed snapshot scan: %+v", recovered.scans)
+			}
+			for _, snapshot := range scanner.reads {
+				if _, err := os.Stat(snapshot); !os.IsNotExist(err) {
+					t.Fatalf("audit snapshot was not removed: %s %v", snapshot, err)
+				}
+			}
+		})
+	}
+}
+
+func TestGateRecordsPlannedAuditAcrossSnapshotExecutionAndReuse(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"scanned", "reused"} {
+		t.Run(status, func(t *testing.T) {
+			root, now := t.TempDir(), time.Now().UTC()
+			command := auditSecurityCommand(t, root, "packages/web")
+			lock := "lockfileVersion: '9.0'\npackages: {}\n"
+			writeEngineFile(t, root, command.Paths[0], lock, 0o600)
+			scanner := &lockReadingAuditRunner{root: root, path: command.Paths[0], replacement: lock}
+			if status == "reused" {
+				runAuditSecurityScan(t, auditSecurityScanRunner(t, root, scanner, &now, command), command)
+			}
+			scans := auditSecurityScanRunner(t, root, scanner, &now, command)
+			planned := MergeGateExecutionCommand{Root: root, Category: gaterun.SupplyChain, Scope: "repository", Cost: "quick", Command: command}
+			identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
+				Gate: gaterun.MergeGate, RequestedBase: "main", ExactBase: strings.Repeat("a", 40), Candidate: strings.Repeat("b", 40), PolicyLevel: "recommended",
+				Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
+				Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{gateRunCommandSpec(planned, nil)},
+				Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{}, BehaviorReview: testGateRunBehaviorReview(),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := gaterun.Start(gaterun.StartOptions{RepositoryRoot: root, Identity: identity})
+			if err != nil {
+				t.Fatal(err)
+			}
+			boundary := &gateArtifactRunner{delegate: scans, run: run, expected: []MergeGateExecutionCommand{planned}, progress: io.Discard}
+			result, output, err := runner.RunCaptured(t.Context(), boundary, root, command, runner.CaptureStructured)
+			if err != nil || result.ExitStatus != 0 {
+				t.Fatalf("gate rejected the declared audit: %+v %v", result, err)
+			}
+			if _, err := javascript.ParseAuditOutput(output.Stdout); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, BehaviorReview: testGateRunBehaviorReview()}); err != nil {
+				t.Fatal(err)
+			}
+			report, err := gaterun.LoadReport(root, identity)
+			if err != nil || len(report.Commands) != 1 || report.Commands[0].Name != command.Name || report.Commands[0].Status != gaterun.Passed {
+				t.Fatalf("gate lost the planned audit evidence: %+v %v", report.Commands, err)
+			}
+			if scans.scans[0].Status != status || len(scanner.scanner.commands) != 1 || scanner.reads[0] == filepath.Join(root, command.Paths[0]) {
+				t.Fatalf("gate lost snapshot isolation or reuse: %+v %v", scans.scans, scanner.reads)
+			}
+		})
+	}
+}
+
+type lockReadingAuditRunner struct {
+	scanner               changingSecurityRunner
+	root, path            string
+	original, replacement string
+	restore               bool
+	reads                 []string
+	cancel                context.CancelFunc
+}
+
+func (scanner *lockReadingAuditRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if len(scanner.scanner.commands) == 0 {
+		if err := os.WriteFile(filepath.Join(scanner.root, scanner.path), []byte(scanner.replacement), 0o600); err != nil {
+			return runner.Result{}, runner.Output{}, err
+		}
+	}
+	var request struct{ Root, Directory string }
+	if err := json.Unmarshal([]byte(invocation.Command.Argv[len(invocation.Command.Argv)-1]), &request); err != nil {
+		return runner.Result{}, runner.Output{}, err
+	}
+	path := filepath.Join(request.Root, request.Directory, "pnpm-lock.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return runner.Result{}, runner.Output{}, err
+	}
+	scanner.reads = append(scanner.reads, path)
+	if scanner.restore {
+		if err := os.WriteFile(filepath.Join(scanner.root, scanner.path), []byte(scanner.original), 0o600); err != nil {
+			return runner.Result{}, runner.Output{}, err
+		}
+	}
+	scanner.scanner.advisory = strings.Contains(string(data), "example@1.2.3:")
+	if scanner.cancel != nil {
+		scanner.cancel()
+	}
+	return scanner.scanner.Execute(ctx, invocation)
+}
+
 func TestPNPMAuditsWithoutCompleteIdentityAlwaysExecute(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"undeclared-input", "unsealed-environment", "development-bundle"} {
@@ -406,7 +572,11 @@ func auditSecurityCommand(t *testing.T, root, directory string) policy.Command {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return policy.Command{Name: "pnpm-audit-" + directory, Argv: invocation.Argv, Cwd: invocation.Cwd, SealedEnvironment: invocation.SealedEnvironment, Paths: []string{filepath.ToSlash(filepath.Join(directory, "pnpm-lock.yaml"))}}
+	return policy.Command{
+		Name: "pnpm-audit-" + strings.ReplaceAll(directory, "/", "-"), Argv: invocation.Argv, Cwd: invocation.Cwd,
+		SealedEnvironment: invocation.SealedEnvironment, TimeoutSeconds: invocation.TimeoutSeconds,
+		Paths: []string{filepath.ToSlash(filepath.Join(directory, "pnpm-lock.yaml"))},
+	}
 }
 
 func auditSecurityScanRunner(t *testing.T, root string, scanner runner.Runner, now *time.Time, commands ...policy.Command) *securityScanRunner {

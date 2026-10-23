@@ -10,8 +10,9 @@
   seven days, retaining blocks for unknown severity, known exploitation and
   critical risk acceptance. Preserve dependency release-age requirements.
 - Reuse matching sealed pnpm audit evidence with explicit lockfile inputs for at
-  most 24 hours across review and verification stages. Always execute recursive
-  OSV scans. Refresh required security scans on unchanged gates
+  most 24 hours across review and verification stages. Identify and scan the same
+  captured lockfile bytes. Always execute recursive OSV scans without cache
+  lookup. Refresh explicitly owned security results on unchanged gates
   without repeating successful source checks or tests, retain failed refreshes,
   and report scan freshness separately from historical verification. Complete
   deferred providers and actual image scans independently of package reuse.

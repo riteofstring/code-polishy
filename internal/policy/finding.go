@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 const FindingProtocol = "code-polishy-finding/v1"
 
 func NormalizeFinding(finding Finding) Finding {
+	finding.VerificationPhase = cmp.Or(finding.VerificationPhase, VerificationSource)
 	finding.Path = normalizedFindingPath(finding.Path)
 	finding.SemanticIdentity = slices.Clone(finding.SemanticIdentity)
 	sort.Strings(finding.SemanticIdentity)

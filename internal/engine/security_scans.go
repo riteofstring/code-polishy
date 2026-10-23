@@ -2,8 +2,7 @@ package engine
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,7 +26,6 @@ type securityScanRunner struct {
 	commands map[string]policy.Command
 	now      func() time.Time
 	scans    []policy.SecurityScan
-	inputs   map[string]string
 	tools    map[string]string
 }
 
@@ -66,7 +64,7 @@ func (scanRunner *securityScanRunner) verification() *policy.SecurityVerificatio
 }
 
 func securityEvidenceFinding(err error) policy.Finding {
-	return policy.Finding{Check: "policy.securityEvidence", Path: "repository", Message: "current security evidence is unavailable: " + err.Error()}
+	return policy.Finding{Check: "policy.securityEvidence", VerificationPhase: policy.VerificationSecurity, Path: "repository", Message: "current security evidence is unavailable: " + err.Error()}
 }
 
 func newSecurityScanRunner(engine *Engine, commands []policy.Command) *securityScanRunner {
@@ -76,7 +74,7 @@ func newSecurityScanRunner(engine *Engine, commands []policy.Command) *securityS
 			selected[command.Name] = command
 		}
 	}
-	return &securityScanRunner{delegate: engine.Runner, repo: engine.Repository, commands: selected, now: engine.securityNow, inputs: map[string]string{}, tools: map[string]string{}}
+	return &securityScanRunner{delegate: engine.Runner, repo: engine.Repository, commands: selected, now: engine.securityNow, tools: map[string]string{}}
 }
 
 func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
@@ -84,7 +82,31 @@ func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation ru
 	if !selected || !samePolicyCommand(expected, invocation.Command) {
 		return scanRunner.delegate.Execute(ctx, invocation)
 	}
-	key, reusable, err := scanRunner.identity(invocation.Command)
+	files := supplychain.SecurityScanInputs(invocation.Command)
+	if len(files) == 0 {
+		return scanRunner.scanUncached(ctx, invocation)
+	}
+	tool, err := scanRunner.toolIdentity(invocation.Command.Argv[0])
+	if err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
+	}
+	if tool == "" {
+		return scanRunner.scanUncached(ctx, invocation)
+	}
+	return scanRunner.audit(ctx, invocation, files[0], tool)
+}
+
+func (scanRunner *securityScanRunner) scanUncached(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	path := ".code-polishy-reports/security-scans/uncached/" + rand.Text() + "/scan.json"
+	return scanRunner.scan(ctx, invocation, "", path, securityScanRecord{}, nil)
+}
+
+func (scanRunner *securityScanRunner) audit(ctx context.Context, invocation runner.Invocation, inputPath, tool string) (runner.Result, runner.Output, error) {
+	data, err := scanRunner.repo.ReadContainedFile(inputPath, 128<<20)
+	if err != nil {
+		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, fmt.Errorf("security input %s: %w", inputPath, err)
+	}
+	key, err := scanRunner.identity(invocation.Command, data, tool)
 	if err != nil {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, err
 	}
@@ -98,7 +120,7 @@ func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation ru
 	if present && previous.InputSHA256 != key {
 		return runner.Result{ExitStatus: -1, FailureCategory: runner.FailureOperational}, runner.Output{}, errors.New("security scan evidence does not match its inputs")
 	}
-	if reusable && reusableSecurityScan(ctx, invocation, previous, now) {
+	if reusableSecurityScan(ctx, invocation, previous, now) {
 		output := runner.Output{Stdout: []byte(previous.Stdout), Stderr: []byte(previous.Stderr)}
 		err := replaySecurityOutput(invocation, output)
 		if err == nil && previous.Result.ExitStatus != 0 {
@@ -109,7 +131,7 @@ func (scanRunner *securityScanRunner) Execute(ctx context.Context, invocation ru
 		result.ExecutionDuration, result.ResourceWait = 0, 0
 		return result, output, err
 	}
-	return scanRunner.scan(ctx, invocation, key, path, previous)
+	return scanRunner.scan(ctx, invocation, key, path, previous, data)
 }
 
 func reusableSecurityScan(ctx context.Context, invocation runner.Invocation, record securityScanRecord, now time.Time) bool {
@@ -129,13 +151,20 @@ func reusableSecurityScan(ctx context.Context, invocation runner.Invocation, rec
 	return runErr == nil
 }
 
-func (scanRunner *securityScanRunner) scan(ctx context.Context, invocation runner.Invocation, key, path string, previous securityScanRecord) (runner.Result, runner.Output, error) {
+func (scanRunner *securityScanRunner) scan(ctx context.Context, invocation runner.Invocation, key, path string, previous securityScanRecord, snapshot []byte) (runner.Result, runner.Output, error) {
 	actual := invocation
 	actual.Capture = runner.CaptureOutput
 	if actual.Stdout == nil && actual.Stderr == nil {
 		actual.Stdout, actual.Stderr = io.Discard, io.Discard
 	}
-	result, output, runErr := scanRunner.delegate.Execute(ctx, actual)
+	var result runner.Result
+	var output runner.Output
+	var runErr error
+	if key == "" {
+		result, output, runErr = scanRunner.delegate.Execute(ctx, actual)
+	} else {
+		result, output, runErr = supplychain.RunAuditSnapshot(ctx, scanRunner.repo, scanRunner.delegate, actual, snapshot)
+	}
 	succeeded := runErr == nil
 	if invocation.Accept != nil {
 		succeeded = invocation.Accept(result, output, runErr)
@@ -182,36 +211,18 @@ func (scanRunner *securityScanRunner) record(command policy.Command, path string
 	scanRunner.scans = append(scanRunner.scans, policy.SecurityScan{Name: command.Name, Status: status, ScannerVersion: strings.TrimSpace(string(version)), LastSucceededAt: record.LastSucceededAt, RefreshAfter: refreshAfter, ReportPath: path})
 }
 
-func (scanRunner *securityScanRunner) identity(command policy.Command) (string, bool, error) {
-	files := supplychain.SecurityScanInputs(command)
-	inputs := map[string]string{}
-	for _, path := range files {
-		if scanRunner.inputs[path] == "" {
-			data, err := scanRunner.repo.ReadContainedFile(path, 128<<20)
-			if err != nil {
-				return "", false, fmt.Errorf("security input %s: %w", path, err)
-			}
-			scanRunner.inputs[path] = gaterun.ContentSHA256(data)
-		}
-		inputs[path] = scanRunner.inputs[path]
-	}
-	tool, err := scanRunner.toolIdentity(command.Argv[0])
-	if err != nil {
-		return "", false, err
-	}
+func (scanRunner *securityScanRunner) identity(command policy.Command, snapshot []byte, tool string) (string, error) {
 	environment := runner.EnvironmentWithPath(command.Environment, scanRunner.repo.CommandEnvironment().PathEntries)
 	payload, err := json.Marshal(struct {
-		Protocol, Tool string
-		Inputs         map[string]string
-		Configuration  policy.Config
-		Command        policy.Command
-		Environment    []string
-	}{"security-scan/v3", tool, inputs, scanRunner.repo.Config, command, environment})
+		Protocol, Tool, Input string
+		Configuration         policy.Config
+		Command               policy.Command
+		Environment           []string
+	}{"security-scan/v4", tool, gaterun.ContentSHA256(snapshot), scanRunner.repo.Config, command, environment})
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
-	reusable := len(files) > 0 && strings.HasPrefix(tool, "release:")
-	return gaterun.ContentSHA256(payload), reusable, nil
+	return gaterun.ContentSHA256(payload), nil
 }
 
 func (scanRunner *securityScanRunner) toolIdentity(executable string) (string, error) {
@@ -225,17 +236,6 @@ func (scanRunner *securityScanRunner) toolIdentity(executable string) (string, e
 	identity := ""
 	if present {
 		identity = "release:" + manifest.ReleaseDigest
-	} else {
-		file, err := os.Open(executable)
-		if err != nil {
-			return "", err
-		}
-		defer file.Close()
-		hash := sha256.New()
-		if _, err := io.Copy(hash, file); err != nil {
-			return "", err
-		}
-		identity = hex.EncodeToString(hash.Sum(nil))
 	}
 	scanRunner.tools[executable] = identity
 	return identity, nil

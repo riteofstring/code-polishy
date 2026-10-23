@@ -757,8 +757,10 @@ Release, merge, and dependency-update workflows should use the online profile.
 
 Policy-owned pnpm audits may reuse matching raw scan evidence for at most 24
 hours only with an explicit complete input, a sealed environment, and installed
-release identity. The audit reads its declared lockfile in isolation; evidence
-binds its exact bytes, scanner identity, command, environment and current policy.
+release identity. The audit consumes a private snapshot of its declared
+lockfile; evidence identifies those same captured bytes, scanner identity,
+command, environment and current policy. Concurrent lockfile edits cannot
+publish evidence for bytes the audit did not read.
 OSV source scans and source-aware govulncheck analysis execute normally.
 Recursive OSV scans can follow dependency references outside a filename-based
 inventory, so neither unchanged files nor a previous gate pass authorize their

@@ -698,6 +698,7 @@ func (engine *Engine) supplyChain(ctx context.Context, mode supplyChainMode) (Re
 		static = supplychain.DependencyReviewStatic
 	}
 	findings = append(findings, static(ctx, engine.Repository, files)...)
+	defaultFindingPhase(findings, policy.VerificationSource)
 	selection := repository.Selection{Files: files, All: true}
 	notes := []string{}
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
@@ -715,11 +716,11 @@ func (engine *Engine) supplyChain(ctx context.Context, mode supplyChainMode) (Re
 	}
 	notes = append([]string{"completed " + string(mode)}, notes...)
 	if mode == supplyChainOffline {
-		report := engine.finish(findings, notes)
+		report := engine.finishWithAssessments(findings, notes, false, policy.VerificationSecurity)
 		report.Security = &policy.SecurityVerification{Status: "not-run"}
 		return report, nil
 	}
-	report := engine.finishWithAssessments(findings, notes, true)
+	report := engine.finishWithAssessments(findings, notes, true, policy.VerificationSecurity)
 	report.GitEvidence = gitEvidence
 	report.Security = security
 	if security != nil && HasFindings(report) {
@@ -744,6 +745,7 @@ func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report
 		return report, err
 	}
 	report.Findings = append(report.Findings, advisoryFindings(supplychain.NewDependencyAgeAdvisories(ctx, engine.Repository, changes))...)
+	defaultFindingPhase(report.Findings, policy.VerificationSecurity)
 	report = engine.normalizeReport(report)
 	report.Tables = append([]Table{dependencyReviewTable(changes)}, report.Tables...)
 	report.Notes = append([]string{fmt.Sprintf("dependency review base: %s (%s)", base, mergeBase)}, report.Notes...)
@@ -765,7 +767,7 @@ func dependencyReviewTable(changes []supplychain.DependencyChange) Table {
 
 func (engine *Engine) ArtifactSecurity(ctx context.Context) Report {
 	result := artifactsecurity.Run(ctx, engine.Repository, engine.Runner)
-	return engine.finishWithAssessments(result.Findings, result.Notes, false)
+	return engine.finishWithAssessments(result.Findings, result.Notes, false, policy.VerificationSecurity)
 }
 
 func withCheckpointPolicy(report Report, scope, base, candidate, receiptPath string) Report {
@@ -778,13 +780,15 @@ func (engine *Engine) finish(findings []policy.Finding, notes []string) Report {
 }
 
 func (engine *Engine) finishWithAdvisories(findings []policy.Finding, advisories []policy.Advisory, notes []string) Report {
-	report := engine.finishWithAssessments(findings, notes, false)
+	report := engine.finishWithAssessments(findings, notes, false, policy.VerificationSource)
 	report.Findings = append(report.Findings, advisoryFindings(advisories)...)
 	return engine.normalizeReport(report)
 }
 
-func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool) Report {
-	ordered := engine.normalizeFindings(append([]policy.Finding{}, findings...), nil)
+func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool, phase policy.VerificationPhase) Report {
+	ordered := append([]policy.Finding{}, findings...)
+	defaultFindingPhase(ordered, phase)
+	ordered = engine.normalizeFindings(ordered, nil)
 	sortFindings(ordered)
 	ordered = compactFindings(ordered)
 	kept, releaseAges := policy.ApplyReleaseAgeAssessments(
@@ -793,7 +797,9 @@ func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []s
 	kept, assessed := policy.ApplyVulnerabilityAssessments(
 		kept, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, time.Now().UTC(), enforceUnused,
 	)
+	defaultFindingPhase(kept, phase)
 	kept, suppressed := policy.ApplyExceptions(kept, engine.Repository.Config.Exceptions, time.Now().UTC())
+	defaultFindingPhase(kept, phase)
 	sortFindings(kept)
 	kept = compactFindings(kept)
 	sort.Slice(suppressed, func(left, right int) bool {
@@ -864,9 +870,9 @@ func findingLocationKey(location policy.FindingLocation) string {
 
 func findingKey(finding policy.Finding) string {
 	if finding.Fingerprint == "" {
-		return policy.NormalizeFinding(finding).Fingerprint
+		finding = policy.NormalizeFinding(finding)
 	}
-	return finding.Fingerprint
+	return string(finding.VerificationPhase) + "\x00" + finding.Fingerprint
 }
 
 func NewTestQualityReminder(paths []string) *TestQualityReminder {
