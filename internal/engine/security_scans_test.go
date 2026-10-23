@@ -150,6 +150,62 @@ func TestSecurityScanInputChangesInvalidateEvidence(t *testing.T) {
 	}
 }
 
+func TestSecurityScansInvalidateWhenTrackedSBOMIgnoreRulesChange(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, ignore      string
+		untracked, remove bool
+	}{
+		{"root edited", ".gitignore", false, false},
+		{"root removed", ".gitignore", false, true},
+		{"nested edited", "content/.gitignore", false, false},
+		{"nested removed", "content/.gitignore", false, true},
+		{"ignored ignore file edited", "content/.gitignore", true, false},
+		{"ignored ignore file removed", "content/.gitignore", true, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			policyEngine, scanner, _ := securityTestEngine(t)
+			root := policyEngine.Repository.Root
+			sbom := filepath.Join(filepath.Dir(test.ignore), "inventory.cdx.json")
+			writeEngineFile(t, root, sbom, `{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"library","name":"example","version":"1.2.3","purl":"pkg:npm/example@1.2.3"}]}`, 0o600)
+			gitEngineOutput(t, root, "add", "--force", "--", sbom)
+			remaining := ".code-polishy-reports/\n"
+			if test.untracked {
+				remaining += ".gitignore\n"
+			}
+			writeEngineFile(t, root, test.ignore, remaining+"inventory.cdx.json\n", 0o600)
+			if !test.untracked {
+				gitEngineOutput(t, root, "add", "--force", "--", test.ignore)
+			}
+			first, err := policyEngine.SupplyChain(t.Context(), false)
+			requireSuccessfulSecurityReport(t, first, err)
+			scanner.advisory = true
+			unchanged, err := policyEngine.SupplyChain(t.Context(), false)
+			requireSuccessfulSecurityReport(t, unchanged, err)
+			if countCommand(scanner.commands, "osv-scan-root") != 1 {
+				t.Fatal("unchanged inputs did not reuse the recent clean scan")
+			}
+			if test.remove {
+				if err := os.Remove(filepath.Join(root, test.ignore)); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				writeEngineFile(t, root, test.ignore, remaining, 0o600)
+			}
+			included, err := policyEngine.SupplyChain(t.Context(), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := slices.ContainsFunc(included.Findings, func(finding policy.Finding) bool {
+				return finding.Vulnerability != nil && finding.Vulnerability.Advisory == "GHSA-new-advisory"
+			})
+			if !found || countCommand(scanner.commands, "osv-scan-root") != 2 {
+				t.Fatalf("ignore change reused a clean scan and concealed the included vulnerability: %+v commands=%v", included, scanner.commands)
+			}
+		})
+	}
+}
+
 func TestSecurityRefreshRejectsCandidateMutationAndRecoversAfterRestoration(t *testing.T) {
 	t.Parallel()
 	policyEngine, scanner, now := securityTestEngine(t)

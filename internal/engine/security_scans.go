@@ -213,7 +213,7 @@ func (scanRunner *securityScanRunner) identity(command policy.Command) (string, 
 		Protocol, Inputs, Tool string
 		Command                policy.Command
 		Environment            []string
-	}{"security-scan/v1", scanRunner.inputs, tool, command, environment})
+	}{"security-scan/v2", scanRunner.inputs, tool, command, environment})
 	if err != nil {
 		return "", false, err
 	}

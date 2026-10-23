@@ -10,7 +10,13 @@ checks and documentation-only verification do not claim online coverage.
 OSV and pnpm audit commands reuse raw output, rather than
 an accepted vulnerability decision. The evidence identity binds dependency and
 control inputs, exact commands and environments, composed policy and scanner
-identity. Source-aware Go analysis runs normally because package inventory alone
+identity. Applicable root and nested `.gitignore` files also participate, even
+when an ignore file is itself ignored and untracked. They are discovered from
+the inventory's ancestor directories because tracked SBOMs remain in that
+inventory when ignore rules change OSV's view. Editing or removing an applicable
+ignore file invalidates reuse. The identity format version prevents older
+evidence that omitted these inputs from satisfying this contract.
+Source-aware Go analysis runs normally because package inventory alone
 cannot identify its complete source and compilation inputs.
 Installed releases supply their authoritative release identity; development
 scanner binaries use their own executable identity. Development pnpm audits
