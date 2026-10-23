@@ -55,8 +55,24 @@ func (repo Repository) isManagedBootstrapWrapper(path string) bool {
 	if err != nil {
 		return false
 	}
+	if expected, present := repo.upgradeWrappers[template]; present && bytes.Equal(wrapperBytes, expected) {
+		return true
+	}
 	templateBytes, err := os.ReadFile(filepath.Join(repo.PolicyRoot, "templates", template))
 	return err == nil && bytes.Equal(wrapperBytes, templateBytes)
+}
+
+func (repo Repository) WithUpgradeWrappers(outgoingRoot string) (Repository, error) {
+	wrappers := map[string][]byte{}
+	for _, name := range []string{"code-polishyw", "code-polishyw.ps1"} {
+		contents, err := os.ReadFile(filepath.Join(outgoingRoot, "templates", name))
+		if err != nil {
+			return Repository{}, fmt.Errorf("read outgoing wrapper %s: %w", name, err)
+		}
+		wrappers[name] = contents
+	}
+	repo.upgradeWrappers = wrappers
+	return repo.WithPathFactCache(), nil
 }
 
 func (repo Repository) isDynamicControlInput(path string) bool {

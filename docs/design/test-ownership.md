@@ -32,3 +32,10 @@ required-kind, and gate rules select execution. Changing a test or its helper
 still selects the owner's focused coverage; the full profile retains its
 declared integration suites. The ownership record, including a distinct
 execution suite, participates in existing review and receipt identities.
+
+Test planning explains each selected suite using its impacted module boundary
+or repository profile, and identifies when impact includes the whole repository.
+Managed control upgrades retain those selection rules; a declared focused
+control suite is usable only when it satisfies the repository's actual upgrade
+requirements. Planning does not execute application tests or create a blanket
+upgrade exemption.

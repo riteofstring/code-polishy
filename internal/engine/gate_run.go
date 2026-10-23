@@ -486,6 +486,7 @@ func (controller *gateRunController) finalizeOptions(status gaterun.RunStatus, r
 	}
 	return gaterun.FinalizeOptions{
 		SourceDependencyGraph: report.SourceDependencyGraph,
+		Security:              report.Security,
 		Status:                status, Findings: report.Findings, TestEvidence: gateRunTestEvidence(report.TestCommands),
 		Suppressed: report.Suppressed, Assessed: report.Assessed, ReleaseAges: report.ReleaseAges,
 		Notes: append([]string{}, report.Notes...), TestDiagnostics: gateRunTestDiagnostics(report.TestDiagnostics),

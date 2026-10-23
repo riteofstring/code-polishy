@@ -437,6 +437,10 @@ missing-coverage finding, never a workspace that declared nothing.
 - Policy-pinned OSV-Scanner runs as an independent source advisory lane whenever
   a supported dependency graph is detected. Its JSON is parsed centrally and
   all reported vulnerable versions, including unknown-severity results, block.
+  Diagnostics identify the scanner score and matching upstream advisory severity
+  labels. Available categorical labels remain usable without a scanner CVSS
+  score; disagreeing recognized values retain the highest severity. Missing or
+  unsupported severity stays explicit and cannot establish non-exposure.
   RustSec `unmaintained` notices remain visible maintenance warnings when every
   advisory in the group explicitly classifies the matching crates.io package
   that way and reports no severity or CVSS score. Missing or conflicting evidence,
@@ -456,10 +460,13 @@ missing-coverage finding, never a workspace that declared nothing.
   Both require a remediation plan, which may share the checked-in technical
   evidence document. Agents can make either decision within the severity and
   expiry limits below; neither requires human approval or an external tracker.
-- Low and moderate findings are assessable. A high finding is assessable only as
-  an exact `not-affected` decision; it is never a high risk acceptance. Low
+- Low and moderate findings are assessable. High and critical findings are assessable only as
+  an exact `not-affected` decision; neither permits risk acceptance. Low
   assessments may last at most 90 days from review; moderate assessments and
-  high `not-affected` assessments at most 30 days. Critical, unknown-severity,
+  high `not-affected` assessments at most 30 days; critical `not-affected`
+  assessments at most seven days. Critical assessments must trace the enabled
+  caller, input authority, vulnerable API and absent prerequisite, and identify
+  integration changes that require renewed review. Unknown-severity findings
   and CISA Known Exploited Vulnerabilities remain blocking. When an assessment
   can match a CVE-addressable finding, the online profile refreshes CISA's
   catalog and fails closed if it cannot be validated.
@@ -467,7 +474,8 @@ missing-coverage finding, never a workspace that declared nothing.
   `risk-accepted` assessments remain limited to low and moderate findings and
   require `mitigated` or `temporary-no-fix`. Scanner disagreement is
   conservative: a high `not-affected` assessment may cover matching low,
-  moderate, or high reports, but a critical, unknown, or known-exploited report
+  moderate, or high reports; a critical report requires a critical assessment.
+  An unknown or known-exploited report
   remains blocking.
 - Applied assessments remain visible as `VULN-ACCEPTANCE` findings, including
   disposition, actual owner, and expiry. Changed, expired, and unused
@@ -747,6 +755,25 @@ audits, and all target `supply-chain`, `supply-chain-online`, and `security`
 providers. Each configured command runs at most once per profile invocation.
 Release, merge, and dependency-update workflows should use the online profile.
 
+Built-in OSV and pnpm audit results may reuse matching
+raw scan evidence for at most 24 hours. Inputs bind exact dependency files,
+scanner identity, command, environment and current policy. Source-aware
+govulncheck analysis runs normally. Findings are parsed and current assessments,
+expiry rules and known-exploitation checks are applied on every evaluation.
+Reports retain complete scanner output under `.code-polishy-reports/security-scans/`
+and show bounded terminal summaries, last-success times, refresh deadlines and
+scanner versions when available. Missing or unsupported upstream database
+version metadata is not invented; the original response remains available.
+Failed scans are not reusable and do not renew a previous success.
+
+Package-scan reuse never executes or satisfies a deferred repository provider,
+artifact builder, image scan or scanner self-check. Those remain part of the
+post-install online profile. Image targets are always prepared and scanned;
+an old package scan cannot establish a previously unexamined image's safety.
+`check` and `supply-chain --offline` explicitly report that online security was
+not run. See [verification freshness](verification.md#gate-reuse-and-failed-run-resume)
+for refresh of an unchanged historical gate pass.
+
 ```sh
 code-polishy dependency-review --base origin/main
 ```
@@ -805,6 +832,29 @@ unavailable-evidence contract in
 When the option is enabled, missing recurring coverage is a non-suppressible
 `policy.securityMonitoring` failure. The option does not change local or CI
 vulnerability and supply-chain checks.
+
+For GitHub Actions, add a daily trigger to an existing workflow whose pinned
+Code Polishy image and checkout already satisfy repository policy:
+
+```yaml
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+```
+
+In that workflow's existing pinned job, run an online step after checkout and
+any required frozen installation:
+
+```yaml
+- name: Refresh security evidence
+  run: code-polishy supply-chain
+```
+
+Keep failures visible in CI and inspect the report's last successful scan and
+refresh deadline. A schedule declaration is configuration evidence, not proof
+of a successful run; monitor disabled workflows and failed scheduled jobs.
+The 24-hour evidence limit applies even when recurring monitoring is disabled.
 
 Built-in Go dependency subprocesses receive the same small operational
 environment as other commands. If a private module needs additional variables

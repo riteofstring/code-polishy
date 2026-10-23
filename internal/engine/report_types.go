@@ -42,6 +42,7 @@ type Report struct {
 	Assessed                []policy.AssessedVulnerability            `json:"vulnerabilityAssessments"`
 	ReleaseAges             []policy.AssessedReleaseAge               `json:"releaseAgeAssessments"`
 	GitEvidence             []supplychain.GitEvidenceReceipt          `json:"gitEvidence,omitempty"`
+	Security                *policy.SecurityVerification              `json:"security,omitempty"`
 	Tables                  []Table                                   `json:"tables"`
 	Notes                   []string                                  `json:"notes"`
 }

@@ -115,7 +115,11 @@ func (output gateCommandOutput) run(ctx context.Context, delegate runner.Runner,
 		stdout = io.MultiWriter(stdout, output.stdout)
 		stderr = io.MultiWriter(stderr, output.stderr)
 	}
-	return runGateCommand(ctx, delegate, root, command, stdout, stderr, output.capture || testartifact.NeedsCommandOutput(command))
+	capture := runner.CaptureNone
+	if output.capture || testartifact.NeedsCommandOutput(command) {
+		capture = runner.CaptureOutput
+	}
+	return delegate.Execute(ctx, runner.Invocation{Root: root, Command: command, Capture: capture, Stdout: stdout, Stderr: stderr, Accept: output.accept})
 }
 
 func (commandRunner *gateArtifactRunner) ManagesTestArtifacts() bool { return true }

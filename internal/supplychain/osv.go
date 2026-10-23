@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -257,7 +258,11 @@ func runOSVCommandWithOutput(ctx context.Context, repo repository.Repository, sc
 
 func acceptedOSVReportExit(ctx context.Context, repo repository.Repository, scan osvScan, result runner.Result, output runner.Output, runErr error) bool {
 	findings, err := parseOSVScanReport(repo, scan, output.Stdout)
-	return err == nil && acceptedOSVFindingExit(ctx, result, findings, runErr)
+	return err == nil && ctx.Err() == nil && !scannerCoverageFailure(findings) && (runErr == nil || acceptedOSVFindingExit(ctx, result, findings, runErr))
+}
+
+func scannerCoverageFailure(findings []policy.Finding) bool {
+	return slices.ContainsFunc(findings, func(finding policy.Finding) bool { return finding.Check == "policy.securityScanner" })
 }
 
 func acceptedOSVFindingExit(ctx context.Context, result runner.Result, findings []policy.Finding, runErr error) bool {
@@ -307,10 +312,13 @@ type osvGroup struct {
 }
 
 type osvVulnerability struct {
-	ID       string              `json:"id"`
-	Aliases  []string            `json:"aliases"`
-	Severity []json.RawMessage   `json:"severity"`
-	Affected []osvAffectedRecord `json:"affected"`
+	ID               string              `json:"id"`
+	Aliases          []string            `json:"aliases"`
+	Severity         []json.RawMessage   `json:"severity"`
+	Affected         []osvAffectedRecord `json:"affected"`
+	DatabaseSpecific struct {
+		Severity string `json:"severity"`
+	} `json:"database_specific"`
 }
 
 func decodeOSVReport(payload []byte) (osvReport, error) {
@@ -419,15 +427,15 @@ func osvPackageFindings(scope string, observed osvPackageResult) []policy.Findin
 		if advisory == "" {
 			advisory = "OSV:unknown"
 		}
-		severity := policy.NormalizeVulnerabilitySeverity(group.MaxSeverity)
+		severity, source := osvSeverity(group, observed.Vulnerabilities, identifiers)
 		identity := policy.VulnerabilityIdentity{
 			Ecosystem: ecosystem, Advisory: advisory, Aliases: identifiers, Package: observed.Package.Name,
 			AffectedVersion: observed.Package.Version, Scope: scope, Severity: severity,
 		}
-		message := fmt.Sprintf("OSV reports %s in %s@%s (severity %s)", advisory, observed.Package.Name, observed.Package.Version, severity)
+		message := fmt.Sprintf("OSV reports %s in %s@%s (severity %s; %s)", advisory, observed.Package.Name, observed.Package.Version, severity, source)
 		findings = append(findings, policy.Finding{
 			Check: "supplyChain.osvVulnerability", Path: scope, Subject: policy.VulnerabilitySubject(identity),
-			Message: message, Vulnerability: &identity,
+			Message: message, Vulnerability: &identity, Fields: map[string]string{"severitySource": source},
 		})
 	}
 	return findings

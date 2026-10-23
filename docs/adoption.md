@@ -509,8 +509,8 @@ that waiting is materially riskier than fresh code and no adequate aged fix or
 practical mitigation exists. A high finding can only be an exact `not-affected`
 decision with a `false-positive` or `unreachable` basis and a 30-day maximum;
 it is never high risk acceptance. General exceptions cannot waive either
-control, and critical, unknown-severity, or known-exploited findings remain
-blocking.
+control. Critical findings permit only proven non-exposure with a seven-day
+maximum; unknown-severity and known-exploited findings remain blocking.
 
 Go, Shell, Python, and common Node stacks gain the built-in or conditional
 coverage above. Any capability still shown as missing needs a module-scoped
@@ -822,11 +822,16 @@ status. Terminal output stays concise: phase progress, a bounded failure tail,
 and the affected log path. Retain the JSON report and logs when CI needs audit
 evidence; do not make archived verbose terminal output the audit surface.
 
-An exact already-passed merge gate executes no commands. New gate identities
+An exact already-passed merge gate retains successful source and test evidence.
+Stale security evidence refreshes online without repeating those checks, and
+configured image targets still require preparation and scanning. With current
+security evidence and no image target, it executes no commands. New gate identities
 reuse successful suites only when the suite explicitly declares
 `"reusable": true`, its complete receipt identity still matches, and its sealed
 read-only execution view was enforced. Suites that omit the flag execute for
-every candidate and never write reusable receipts. All non-test phases run.
+every candidate and never write reusable receipts. Non-test phases evaluate
+normally; matching built-in package-scan evidence may be reused for at most
+24 hours, independently of reusable test receipts.
 `merge-gate --base REF --resume` additionally resumes eligible ordinary suites
 from the same failed gate identity. When an environment repair produces no
 matching run, it executes the complete gate; malformed matching evidence still
@@ -928,3 +933,15 @@ floating `main` or let a check select a release the lock does not name.
 The outgoing lock and guidance retain authority through planning. Apply stages
 incoming guidance and wrappers with the lock, rolls back the group on failure,
 and renames the lock last. That final replacement activates incoming guidance.
+
+For a managed-tool-only upgrade, `upgrade plan` and `upgrade apply` already
+bound the control-file comparison and transaction without running application
+tests. After application, use `agents check` and `doctor` to verify installed
+guidance, wrappers, release inventory and declarations. Inspect
+`test-levels --base TASK_BASE` before scheduling suites: its selection table
+explains every selected suite, and control, dependency, workflow or toolchain
+changes may expand impact to all modules. A declared upgrade control suite can
+be run by its exact name with `test --suite NAME` when its coverage satisfies
+the repository's upgrade requirements. These control checks do not waive
+required application verification or establish that a changed runtime/compiler
+has no application impact. Supplemental suites remain separately selected.

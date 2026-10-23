@@ -284,7 +284,7 @@ var commandHelpPages = []commandHelpPage{
 		syntax:  []string{"code-polishy merge-gate --base REF [--resume]"},
 		selectors: []string{
 			"Exactly one --base REF is required.",
-			"An exact already-passed identity executes no commands; new identities may reuse only complete matching suite receipts.",
+			"An exact passed identity retains source and tests; stale security evidence refreshes online without repeating them.",
 			"--resume reuses eligible successful ordinary test suites from a matching failed merge gate. Without a matching run it executes the complete gate; damaged matching evidence is an error.",
 		},
 		sideEffects: []string{"Reads exact prior evidence; when work is required, runs merge policy and writes managed logs and a JSON run report below .code-polishy-reports/merge-gate/."},

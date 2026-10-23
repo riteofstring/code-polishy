@@ -74,7 +74,10 @@ only be recorded as an
 exact `not-affected` decision with a `false-positive` or `unreachable` basis;
 it is never a high risk acceptance. Severity alone is not a rationale: record
 applicability, impact, technical evidence, and the remediation plan.
-Critical, unknown-severity, and known-exploited findings are never accepted.
+Critical findings also permit proven non-exposure, with an exact assessment
+expiring within seven days and renewed review when the integration changes.
+Actual critical exposure cannot be risk-accepted. Unknown-severity and
+known-exploited findings remain blocking.
 Early admission of a security fix also requires demonstrating that waiting
 poses materially greater risk than fresh code, with no adequate aged fix or
 practical mitigation. A severity label alone cannot justify that tradeoff.

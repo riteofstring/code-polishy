@@ -12,12 +12,22 @@ import (
 	"github.com/riteofstring/code-polishy/internal/supplychain"
 )
 
-func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, findings []policy.Finding, mode supplyChainMode) ([]policy.Finding, []supplychain.GitEvidenceReceipt, []string) {
+func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, findings []policy.Finding, mode supplyChainMode) ([]policy.Finding, []supplychain.GitEvidenceReceipt, []string, *policy.SecurityVerification) {
 	before, err := supplychain.ReadGitEvidenceState(engine.Repository, time.Now().UTC())
 	if err != nil {
-		return append(findings, gitEvidenceStateFinding(err)), nil, nil
+		return append(findings, gitEvidenceStateFinding(err)), nil, nil, nil
 	}
-	findings = append(findings, supplychain.Online(ctx, engine.Repository, files, engine.Runner)...)
+	commands, err := supplychain.OnlineCommands(engine.Repository, files)
+	if err != nil {
+		return append(findings, securityEvidenceFinding(err)), nil, nil, nil
+	}
+	scans := engine.securityScans
+	commandRunner := engine.Runner
+	if scans == nil {
+		scans = newSecurityScanRunner(engine, commands)
+		commandRunner = scans
+	}
+	findings = append(findings, supplychain.Online(ctx, engine.Repository, files, commandRunner)...)
 	selection := repository.Selection{Files: files, All: true}
 	var notes []string
 	if mode == dependencyReviewMode {
@@ -31,9 +41,13 @@ func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, fin
 	findings = supplychain.ClassifyKnownExploited(ctx, engine.Repository, findings)
 	after, err := engine.currentGitEvidence(before.IdentitySHA256)
 	if err != nil {
-		return append(findings, gitEvidenceStateFinding(err)), nil, notes
+		return append(findings, gitEvidenceStateFinding(err)), nil, notes, scans.verification()
 	}
-	return findings, after, notes
+	verification := scans.verification()
+	if verification.Status == "unavailable" {
+		findings = append(findings, securityEvidenceFinding(fmt.Errorf("a package scan failed or its evidence expired during verification")))
+	}
+	return findings, after, notes, verification
 }
 
 func (engine *Engine) deferredSupplyChainChecks(selection repository.Selection) []string {

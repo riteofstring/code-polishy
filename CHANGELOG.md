@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Keep raw package scanner output in report artifacts and show bounded summaries.
+  Recognize authenticated outgoing canonical wrappers during upgrade previews,
+  and explain selected test suites and bounded upgrade verification.
+- Read upstream OSV severity labels and report their provenance and disagreement.
+  Allow exact, evidence-backed critical `not-affected` assessments for at most
+  seven days, retaining blocks for unknown severity, known exploitation and
+  critical risk acceptance. Preserve dependency release-age requirements.
+- Reuse matching package scan evidence for at most 24 hours across review and
+  verification stages. Refresh stale security evidence on unchanged gates
+  without repeating successful source checks or tests, retain failed refreshes,
+  and report scan freshness separately from historical verification. Complete
+  deferred providers and actual image scans independently of package reuse.
+
 ## 0.31.1 - 2026-10-22
 
 - Update the pinned scanner to official Trivy 0.76.1, built with Go 1.27.3 and

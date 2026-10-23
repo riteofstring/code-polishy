@@ -28,6 +28,7 @@
     "command": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "reportPath": { "type": "string" },
     "execution": { "$ref": "#/$defs/executionTelemetry" },
+    "security": { "$ref": "#/$defs/securityVerification" },
     "requestedSelection": { "$ref": "#/$defs/requestedSelection" },
     "analysisContext": {
       "type": "array",
@@ -135,6 +136,35 @@
     }
   },
   "$defs": {
+    "securityVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": ["not-run", "partial", "current", "failed", "unavailable"]
+        },
+        "checkedAt": { "type": "string", "format": "date-time" },
+        "refreshAfter": { "type": "string", "format": "date-time" },
+        "reportPath": { "type": "string" },
+        "scans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "status", "reportPath"],
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "enum": ["scanned", "reused", "unavailable"] },
+              "scannerVersion": { "type": "string" },
+              "lastSucceededAt": { "type": "string", "format": "date-time" },
+              "refreshAfter": { "type": "string", "format": "date-time" },
+              "reportPath": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "executionTelemetry": {
       "type": "object",
       "additionalProperties": false,

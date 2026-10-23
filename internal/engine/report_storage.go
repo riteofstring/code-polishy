@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/durablefile"
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
@@ -40,6 +41,9 @@ func (engine *Engine) FinalizeReport(command string, report Report) (Report, err
 		return Report{}, fmt.Errorf("invalid report command %q", command)
 	}
 	report.Command = command
+	if command == "check" && report.Security == nil {
+		report.Security = &policy.SecurityVerification{Status: "not-run"}
+	}
 	report.ReportPath = ""
 	report = engine.normalizeReport(report)
 	identityData, err := json.Marshal(report)

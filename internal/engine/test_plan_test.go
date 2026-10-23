@@ -18,6 +18,9 @@ func TestTestPlanDoesNotExecuteSuites(t *testing.T) {
 	assertTestPlanLevels(t, table)
 	assertTestLevelHasSuites(t, table, "supplemental")
 	assertSupplementalTestPlanRow(t, table)
+	if len(report.Tables) < 2 || len(report.Tables[1].Rows) != 2 || !strings.Contains(report.Tables[1].Rows[0][1], "full verification profile") {
+		t.Fatalf("planner omitted suite selection explanations: %+v", report.Tables)
+	}
 }
 
 func testPlanWithoutExecutingSuites(t *testing.T) (Report, *recordingEngineRunner) {

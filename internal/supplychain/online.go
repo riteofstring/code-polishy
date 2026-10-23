@@ -83,7 +83,7 @@ func goReleaseAgeWithCommand(ctx context.Context, repo repository.Repository, mo
 }
 
 func runCommandWithOutput(ctx context.Context, repo repository.Repository, command policy.Command, commandRunner runner.Runner) (runner.Output, error) {
-	_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureOutput)
+	_, output, err := runner.RunCaptured(ctx, commandRunner, repo.Root, command, runner.CaptureStructured)
 	return output, err
 }
 
@@ -142,7 +142,10 @@ func auditNodeWithCommand(ctx context.Context, repo repository.Repository, manif
 			Message: "native audit requires an exact supported lockfile",
 		}}
 	}
-	output, runErr := runCommandWithOutput(ctx, repo, command, commandRunner)
+	_, output, runErr := runner.RunWithReport(ctx, commandRunner, repo.Root, command, func(_ runner.Result, output runner.Output, runErr error) bool {
+		result, err := javascript.ParseAuditOutput(output.Stdout)
+		return runErr == nil && err == nil && !scannerCoverageFailure(nodeAuditFindings(repo.Config.SupplyChain.AuditLevel, result, scope))
+	})
 	result, err := javascript.ParseAuditOutput(output.Stdout)
 	if err != nil {
 		message := err.Error()

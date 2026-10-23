@@ -40,6 +40,8 @@ const (
 	MaximumExceptionDays                    = 366
 )
 
+const MaximumCriticalNotAffectedVulnerabilityDays = 7
+
 var DefaultExcludes = []string{
 	".git/**", ".tools/**", ".code-polishy-reports/**", ".code-polishy-artifacts/**", "node_modules/**", "**/node_modules/**",
 	".venv/**", "**/.venv/**",

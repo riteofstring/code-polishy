@@ -91,8 +91,25 @@
           "internal/release/capability_upgrade_storage.go",
           "internal/release/capability_upgrade_windows_test.go",
           "internal/policy/supplychain_config.go",
+          "internal/policy/vulnerability_assessment_test.go",
           "internal/policy/vulnerability.go",
-          "internal/policy/release_age.go"
+          "internal/policy/release_age.go",
+          "internal/supplychain/osv_severity.go",
+          "internal/supplychain/osv_severity_test.go"
+        ]
+      },
+      {
+        "path": "docs/design/security-evidence.md",
+        "sourcePaths": [
+          "internal/engine/security_scans.go",
+          "internal/engine/security_scan_storage.go",
+          "internal/engine/security_refresh.go",
+          "internal/engine/security_scans_test.go",
+          "internal/engine/report_storage.go",
+          "internal/policy/security_evidence.go",
+          "internal/supplychain/security_inputs.go",
+          "internal/supplychain/online.go",
+          "cmd/code-polishy/security_report_test.go"
         ]
       },
       {
@@ -215,6 +232,7 @@
         "path": "docs/design/test-ownership.md",
         "sourcePaths": [
           "internal/policy/test_ownership.go",
+          "internal/engine/test_plan_test.go",
           "internal/policy/model.go",
           "internal/testing/ownership.go",
           "internal/testing/ownership_diagnostics.go",
@@ -286,6 +304,7 @@
           "internal/release/upgrade_plan.go",
           "cmd/code-polishy/lock_meta.go",
           "cmd/code-polishy/upgrade_meta.go",
+          "internal/repository/control_inputs_test.go",
           "cmd/code-polishy-launcher/main.go",
           "cmd/code-polishy/release_manifest_meta.go",
           "scripts/install.sh",
@@ -714,7 +733,8 @@
         "testartifact",
         "testreceipt",
         "testing",
-        "durablefile"
+        "durablefile",
+        "strictjson"
       ]
     },
     {

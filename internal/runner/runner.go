@@ -65,7 +65,7 @@ func RunStreamed(ctx context.Context, commandRunner Runner, root string, command
 }
 
 func RunWithReport(ctx context.Context, commandRunner Runner, root string, command policy.Command, accept ReportOutcomeAcceptor) (Result, Output, error) {
-	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: CaptureOutput, Accept: accept})
+	return commandRunner.Execute(ctx, Invocation{Root: root, Command: command, Capture: CaptureStructured, Accept: accept})
 }
 
 type CommandPhase struct {

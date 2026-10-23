@@ -174,6 +174,38 @@ func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedRele
 	}
 }
 
+func printSecurityEvidence(output io.Writer, security *policy.SecurityVerification) {
+	if security == nil {
+		return
+	}
+	if security.Status == "not-run" {
+		fmt.Fprintln(output, "SECURITY: online dependency-security checks were not run; use code-polishy supply-chain")
+		return
+	}
+	fmt.Fprintf(output, "SECURITY: %s; checked %s; refresh due %s\n", security.Status, securityTimestamp(security.CheckedAt), securityTimestamp(security.RefreshAfter))
+	for index, scan := range security.Scans {
+		if index == 8 {
+			fmt.Fprintf(output, "SECURITY: %d more scan records in the complete report\n", len(security.Scans)-index)
+			break
+		}
+		version := ""
+		if scan.ScannerVersion != "" {
+			version = "; scanner " + scan.ScannerVersion
+		}
+		fmt.Fprintf(output, "SECURITY SCAN: %s %s%s; last succeeded %s; report %s\n", scan.Name, scan.Status, version, securityTimestamp(scan.LastSucceededAt), scan.ReportPath)
+	}
+	if security.ReportPath != "" {
+		fmt.Fprintln(output, "SECURITY REPORT:", security.ReportPath)
+	}
+}
+
+func securityTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return "unavailable"
+	}
+	return value.Format(time.RFC3339)
+}
+
 func printGitEvidence(output io.Writer, report engine.Report) {
 	for index, receipt := range report.GitEvidence {
 		if index == 8 {

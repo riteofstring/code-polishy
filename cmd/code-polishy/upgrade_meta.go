@@ -337,7 +337,19 @@ func verifyUpgradeSnapshotRelease(policyRoot string, options upgradeSnapshotOpti
 }
 
 func collectUpgradeDiagnostics(invocation invocation) (upgradeDiagnosticSnapshot, []byte, error) {
-	policyEngine, err := engine.Open(invocation.repoRoot, invocation.policyRoot, invocation.configPath)
+	outgoing, _, err := readUpgradeOutgoingLock(invocation.repoRoot)
+	if err != nil {
+		return upgradeDiagnosticSnapshot{}, nil, err
+	}
+	prefix, err := resolveUpgradePrefix(invocation.policyRoot, "")
+	if err != nil {
+		return upgradeDiagnosticSnapshot{}, nil, err
+	}
+	outgoingRoot := release.Directory(prefix, outgoing)
+	if err := verifyUpgradeRelease(outgoingRoot, outgoing, true); err != nil {
+		return upgradeDiagnosticSnapshot{}, nil, fmt.Errorf("outgoing upgrade preview release: %w", err)
+	}
+	policyEngine, err := engine.OpenUpgradePreview(invocation.repoRoot, invocation.policyRoot, invocation.configPath, outgoingRoot)
 	if err != nil {
 		return upgradeDiagnosticSnapshot{}, nil, err
 	}

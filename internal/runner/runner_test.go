@@ -77,6 +77,21 @@ func TestOSRunnerKeepsStructuredProtocolOutputOutOfHumanOutput(t *testing.T) {
 	}
 }
 
+func TestReportBearingScannerKeepsJSONOutOfTerminal(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "scanner.sh"), []byte("#!/bin/sh\nprintf '{\"results\":[]}'\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var terminal bytes.Buffer
+	result, output, err := RunWithReport(t.Context(), OSRunner{Stdout: &terminal, Stderr: &terminal}, root, policy.Command{
+		Name: "scanner", Argv: []string{"./scanner.sh"}, Cwd: ".", TimeoutSeconds: successfulCommandTimeoutSeconds,
+	}, func(Result, Output, error) bool { return false })
+	if err == nil || result.ExitStatus != 1 || string(output.Stdout) != `{"results":[]}` || terminal.Len() != 0 {
+		t.Fatalf("scanner output escaped capture: result=%+v output=%+v terminal=%q error=%v", result, output, terminal.String(), err)
+	}
+}
+
 func TestOSRunnerRunWithWritersUsesOnlyTheRequestedDestinations(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
