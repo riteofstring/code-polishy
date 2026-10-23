@@ -137,9 +137,9 @@ contracts remain the compatibility evidence.
 
 ## URI processing
 
-The JavaScript provider graph now resolves `fast-uri` 3.1.8. This official
+The JavaScript provider graph retains `fast-uri` 3.1.8. This official
 release retains the malformed-authority and port-injection fixes and corrects
-the remaining host-case advisory. All exact fast-uri assessments have been
+the older host-case advisory. Assessments for those three fixed advisories were
 removed. The
 [npm registry](https://registry.npmjs.org/fast-uri) records publication at
 2026-09-15 07:36:25.444 UTC, so it meets the 30-day minimum. The lock changes
@@ -171,9 +171,58 @@ before folding the decoded reg-name to lowercase, then restores uppercase
 escape digits. It also moves host normalization outside scheme-specific path
 normalization. Neither release declares dependencies or install lifecycle
 scripts. The update follows the original dated remediation plan now that the
-fix is aged; no early-admission or replacement vulnerability assessment is
-needed. Enabling the YAML service, full Astro language server or another URI
-consumer still requires a new applicability review of any future advisories.
+fix is aged; that update needed no early admission.
+
+Four additional advisories were published on 2026-10-23 between 21:36 and
+21:41 UTC. They affect 3.1.8 and are assessed separately as not affected because
+their APIs are unreachable through the provider's enabled services:
+
+| Advisory                                                                                   | Required application behavior                                                                                            | Observed severity |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| [GHSA-wjr9-j795-jxcr](https://github.com/advisories/GHSA-wjr9-j795-jxcr) / CVE-2026-110180 | Use fast-uri's canonicalized HTTP-family host after applying host policy to a different representation                   | Moderate          |
+| [GHSA-333x-w4r6-6crp](https://github.com/advisories/GHSA-333x-w4r6-6crp) / CVE-2026-110725 | Serialize or normalize untrusted input with `reference: 'suffix'`, then use the result as a URI                          | Low               |
+| [GHSA-w74x-v6f9-j3xg](https://github.com/advisories/GHSA-w74x-v6f9-j3xg) / CVE-2026-110306 | Screen a raw scheme before fast-uri decodes it, then render the result or use it for authorization                       | Moderate          |
+| [GHSA-xhq7-xmqj-769h](https://github.com/advisories/GHSA-xhq7-xmqj-769h) / CVE-2026-110095 | Normalize relative references before resolution, or use the altered references as resource, cache, or authorization keys | Low               |
+
+The review reproduced all four parser behaviors using the 3.1.8 archive
+authenticated against the provider lock's integrity. Those results confirm the
+vulnerable version range; the assessment rests on the enabled service boundary.
+The same integrity
+check bound the inspected Astro, Volar YAML service, YAML language server, and
+Ajv archives to their exact resolved versions. The enabled provider imports
+Astro's `dist/core/index.js`, `dist/plugins/typescript/index.js`, and
+`dist/plugins/astro.js`; its checker receives TypeScript services plus Astro
+diagnostics. Astro's separate `dist/languageServerPlugin.js` imports and enables
+`dist/plugins/yaml.js`, which reaches `volar-service-yaml`,
+`yaml-language-server`, Ajv 8.20.0, and `fast-uri`. That full plugin is not used.
+Repository source and type declarations remain data for the selected services
+and cannot enable this omitted service. The provider does not use fast-uri
+for network authorization, executable URL generation, or resource identity.
+
+A temporary build from the frozen provider lock corroborated the source trace.
+Its fast-uri entry point was replaced with a load counter and an unconditional
+failure. All 39 existing provider boundary tests passed with zero loads,
+including valid and defective TypeScript and Astro cases. A direct import then
+triggered the counter and failure, confirming the probe was active. The
+temporary dependency was restored afterward. This exercises the existing
+provider contract without changing production dependencies or test sources.
+
+All four advisories are fixed in the official 3.1.9 release, published on
+2026-10-19 at 23:05:26.357 UTC. It reaches the 30-day minimum on 2026-11-18 at
+23:05:26.357 UTC. The alternative fixed lines, 2.4.8 and 4.2.3, were also
+published on October 19 and provide no aged replacement. Introducing fresh
+parser code now would add supply-chain and regression risk without removing a
+reachable vulnerability from the enabled provider. Retain the aged 3.1.8
+resolution with four exact assessments owned by Codex, reviewed October 23,
+and expiring November 19. On November 19, review and admit 3.1.9 or a later
+aged fixed candidate, generate the minimal lock change without scripts, run
+dependency review, install frozen with scripts disabled, verify the provider
+boundary and security profile, and remove these assessments.
+
+Enabling Astro's full language server, the YAML service, an Ajv 8 consumer, or
+another fast-uri caller invalidates this conclusion and requires a new exposure
+review. Changed versions or advisory severity and known exploitation remain
+subject to the ordinary blocking policy.
 
 ## Aged security updates
 
