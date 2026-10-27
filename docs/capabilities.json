@@ -274,11 +274,7 @@
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],
-      "workflows": [
-        "docs/capabilities.md",
-        "docs/agent-workflows.md",
-        "docs/operational-handoffs.md"
-      ]
+      "workflows": ["docs/agent-workflows.md"]
     },
     {
       "name": "task-session",

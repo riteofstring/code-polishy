@@ -441,7 +441,7 @@ func observedDependencyAgeAdvisory(observation releaseObservation, cutoff time.T
 		return nil
 	}
 	item := observation.Package
-	message := fmt.Sprintf("new direct runtime dependency was released %s; prefer at least %d days of observation when practical", observation.Released.Format(time.RFC3339), preferredDays)
+	message := fmt.Sprintf("new direct runtime dependency %s@%s was released %s; prefer at least %d days of observation when practical", item.Name, item.Version, observation.Released.Format(time.RFC3339), preferredDays)
 	return &policy.Advisory{
 		Check: "supplyChain.newDependencyAge", Path: item.Scope, Subject: item.Name + "@" + item.Version, Message: message,
 	}
@@ -466,7 +466,7 @@ func newGoDependencyAgeAdvisory(ctx context.Context, repo repository.Repository,
 	if !metadata.Time.After(time.Now().UTC().AddDate(0, 0, -repo.Config.SupplyChain.PreferredNewDependencyAgeDays)) {
 		return policy.Advisory{}, false
 	}
-	message := fmt.Sprintf("new direct runtime dependency was released %s; prefer at least %d days of observation when practical", metadata.Time.Format(time.RFC3339), repo.Config.SupplyChain.PreferredNewDependencyAgeDays)
+	message := fmt.Sprintf("new direct runtime dependency %s@%s was released %s; prefer at least %d days of observation when practical", change.Package, change.To, metadata.Time.Format(time.RFC3339), repo.Config.SupplyChain.PreferredNewDependencyAgeDays)
 	return policy.Advisory{
 		Check: "supplyChain.newDependencyAge", Path: change.Scope,
 		Subject: change.Package + "@" + change.To, Message: message,

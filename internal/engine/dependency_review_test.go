@@ -8,7 +8,30 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/supplychain"
 )
+
+func TestDependencyReviewSeparatesRemovalsWithoutLosingChanges(t *testing.T) {
+	t.Parallel()
+	changes := []supplychain.DependencyChange{
+		{Ecosystem: "pypi", Directness: "direct", Usage: "runtime", Change: "added", Package: "numpy", From: "-", To: "2.3.0", Scope: "pyproject.toml"},
+		{Ecosystem: "pypi", Directness: "direct", Usage: "runtime", Change: "removed", Package: "pillow", From: "11.0.0", To: "-", Scope: "pyproject.toml"},
+		{Ecosystem: "pypi", Directness: "transitive", Usage: "resolved", Change: "updated", Package: "torch", From: "2.7.0", To: "2.8.0", Scope: "uv.lock"},
+	}
+	tables := dependencyReviewTables(changes)
+	if len(tables) != 2 || tables[0].Title != "DEPENDENCIES REMOVED" || len(tables[0].Rows) != 1 || len(tables[1].Rows) != 2 {
+		t.Fatalf("dependency tables = %+v", tables)
+	}
+	if !slices.Equal(tables[0].Rows[0], []string{"pypi/direct", "runtime", "removed", "pillow", "11.0.0", "-", "pyproject.toml"}) ||
+		!slices.Equal(tables[1].Rows[0], []string{"pypi/direct", "runtime", "added", "numpy", "-", "2.3.0", "pyproject.toml"}) ||
+		!slices.Equal(tables[1].Rows[1], []string{"pypi/transitive", "resolved", "updated", "torch", "2.7.0", "2.8.0", "uv.lock"}) {
+		t.Fatalf("dependency changes lost their identity or scope: %+v", tables)
+	}
+	tables = dependencyReviewTables(changes[1:2])
+	if len(tables) != 1 || tables[0].Title != "DEPENDENCIES REMOVED" || len(tables[0].Rows) != 1 {
+		t.Fatalf("removal-only review emitted unrelated rows: %+v", tables)
+	}
+}
 
 func TestDependencyReviewRunsBuiltInCandidateAdmissionAfterHistoricalComparison(t *testing.T) {
 	t.Parallel()

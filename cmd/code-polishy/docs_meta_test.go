@@ -41,7 +41,9 @@ func TestDocsEngineListsFindsAndReadsWithoutRepositoryInitialization(t *testing.
 	status, stdout, stderr = captureRunOutput(t, []string{
 		"--repo-root", missingRepository, "--policy-root", policyRoot, "docs", "read", "agents",
 	})
-	if status != 0 || stderr != "" || stdout != "# Agent Workflows\n\nRun the same policy.\n" {
+	notice, content, separated := strings.Cut(stdout, "\n\n")
+	if status != 0 || stderr != "" || !separated || content != "# Agent Workflows\n\nRun the same policy.\n" ||
+		!strings.Contains(notice, "./code-polishyw") || !strings.Contains(notice, `.\code-polishyw.ps1`) {
 		t.Fatalf("read: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 	if _, err := os.Stat(missingRepository); !os.IsNotExist(err) {
@@ -125,7 +127,8 @@ func TestCheckedInDocsCLIReadsTheSourceCatalog(t *testing.T) {
 		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 	status, stdout, stderr = captureRunOutput(t, []string{"--policy-root", root, "docs", "read", "agent-workflows"})
-	if status != 0 || stderr != "" || !strings.HasPrefix(stdout, "# Agent Workflows\n") || !strings.HasSuffix(stdout, "\n") {
+	_, content, separated := strings.Cut(stdout, "\n\n")
+	if status != 0 || stderr != "" || !separated || !strings.HasPrefix(content, "# Agent Workflows\n") || !strings.HasSuffix(stdout, "\n") {
 		t.Fatalf("status=%d stdout-prefix=%q stderr=%q", status, firstBytes(stdout, 80), stderr)
 	}
 }

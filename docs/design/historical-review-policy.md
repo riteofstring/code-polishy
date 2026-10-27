@@ -71,3 +71,13 @@ non-HTTPS registries can be compared for removal without becoming authenticated
 or admitted sources. Exact new public runtime and optional declarations
 use the shared preferred-age advisory; unused workspace definitions and unresolved
 inheritance are not described as new runtime dependencies.
+
+## Dependency comparison presentation
+
+The explicit base remains authoritative for comparison. A pre-adoption base
+has no lock graph, so a branch-wide review cannot describe removals of packages
+that appeared only later on that branch. A separate explicit task-base review
+provides that narrower delta without substituting for branch-wide admission.
+Removals appear in their own table before additions and updates, preserving all
+rows and their manifest or lock scopes. Preferred-age warnings name the exact
+package and version in both their subject and message.

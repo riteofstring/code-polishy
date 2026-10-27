@@ -2,6 +2,16 @@
 
 ## 0.31.5 - 2026-10-26
 
+- Shorten the mandatory agent workflow and route conditional work to its specific
+  procedures. Make dependency-update gate instructions honor the actual event
+  and configured local or CI owner.
+- Keep ordinary task-start output focused on selected context and follow-ups;
+  disclose optional review in one line and select workflow documents from actual
+  situations, handoffs, and review requirements.
+- Explain wrapper invocation in rendered documentation and expose the canonical
+  JSON verdict contract through report help and documentation.
+- Show dependency removals separately and name packages directly in preferred-age
+  warnings. Document task-local comparisons without weakening merge-wide review.
 - Preserve MkDocs admonitions and expandable details during Markdown formatting,
   including `!!!`, `???`, and `???+` blocks with or without a blank line before
   their content. Keep nested blocks, containing lists and blockquotes, and

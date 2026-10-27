@@ -35,7 +35,7 @@ func TestTaskStartCapturesExactIntentAndComposesAuthoritativeContext(t *testing.
 		t.Fatalf("exact capture missing from journal: %s error=%v", journal, err)
 	}
 	assertTaskStartDidNotExecute(t, root)
-	assertTaskStartDeliveryBoundary(t, packet.NextActions)
+	assertTaskStartScopedActions(t, packet.NextActions)
 }
 
 func assertSelectedTaskStartPacket(t *testing.T, packet engine.TaskStartPacket) {
@@ -44,6 +44,11 @@ func assertSelectedTaskStartPacket(t *testing.T, packet engine.TaskStartPacket) 
 		!slices.Equal(packet.Intent.Capture.Features, []string{"checkout"}) || !slices.Equal(packet.Intent.SelectedFeatures, []string{"checkout"}) ||
 		packet.TaskBase != packet.Intent.Capture.Commit || !slices.Equal(packet.RequestedSelection.Expanded, []string{"value.go"}) {
 		t.Fatalf("packet selection or explicit activation: %+v", packet)
+	}
+	for _, document := range []string{"docs/agent-reviews.md", "docs/policies/behavior-review.md", "docs/release-checklist.md", "docs/operational-handoffs.md"} {
+		if !slices.Contains(packet.WorkflowDocuments, document) {
+			t.Fatalf("selected review or release procedure missing: %s: %v", document, packet.WorkflowDocuments)
+		}
 	}
 }
 
@@ -157,7 +162,7 @@ func TestTaskStartOptionalSelectionCreatesNoIntentJournalOrReviewActions(t *test
 	}) {
 		t.Fatalf("optional packet scheduled review work: %+v", packet.NextActions)
 	}
-	assertTaskStartDeliveryBoundary(t, packet.NextActions)
+	assertTaskStartScopedActions(t, packet.NextActions)
 	if _, err := os.Lstat(filepath.Join(root, ".code-polishy-reports", "behavior-review")); !os.IsNotExist(err) {
 		t.Fatalf("optional task start created behavior review artifacts: %v", err)
 	}
@@ -239,18 +244,22 @@ func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
 	status, stdout, stderr := captureRunOutput(t, arguments)
 	for _, expected := range []string{
 		"TASK START: task-start/v2",
-		"INTENT: captured=false willBeUsed=false",
+		"REVIEW: optional; no intent captured; configured guards=",
 		"DESIGN DOCUMENT: docs/design/current.md",
-		"CONFIGURED GUARDS:",
 		"MERGE CHECKPOINT GATE OWNER (inactive for ordinary task delivery): local",
-		"NEXT deliver:",
+		"NEXT read-context:",
 	} {
 		if !strings.Contains(stdout, expected) {
 			t.Fatalf("human task start omitted %q: %s", expected, stdout)
 		}
 	}
-	if status != 0 || stderr != "" || len(stdout) > 16<<10 || strings.Contains(stdout, `"configuredGuards"`) || strings.Contains(stdout, "absent/**") || strings.Contains(stdout, "NEXT final-gate:") {
+	if status != 0 || stderr != "" || len(stdout) > 2<<10 || strings.Contains(stdout, `"configuredGuards"`) || strings.Contains(stdout, "absent/**") || strings.Contains(stdout, "NEXT final-gate:") {
 		t.Fatalf("human task start was not bounded: status=%d bytes=%d stdout=%q stderr=%q", status, len(stdout), stdout, stderr)
+	}
+	for _, repeated := range []string{"INTENT REASON:", "SELECTED FEATURES:", "CONFIGURED GUARDS:", "NEXT implement:", "NEXT verify:", "NEXT commit:", "NEXT deliver:"} {
+		if strings.Contains(stdout, repeated) {
+			t.Fatalf("optional task repeated unused or default guidance %q: %s", repeated, stdout)
+		}
 	}
 	status, explicit, stderr := captureRunOutput(t, append(arguments, "--format", "human"))
 	if status != 0 || stderr != "" || explicit != stdout {
@@ -258,32 +267,53 @@ func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
 	}
 }
 
+func TestTaskStartSelectsProceduresFromExplicitSituations(t *testing.T) {
+	for name, test := range map[string]struct {
+		situations []string
+		documents  []string
+	}{
+		"ordinary":     {documents: []string{"docs/agent-workflows.md"}},
+		"dependencies": {situations: []string{"dependencies"}, documents: []string{"docs/agent-workflows.md", "docs/policies/supply-chain.md"}},
+		"upgrade":      {situations: []string{"adoption", "upgrade"}, documents: []string{"docs/agent-workflows.md", "docs/ai-adoption.md"}},
+		"release":      {situations: []string{"release"}, documents: []string{"docs/agent-workflows.md", "docs/operational-handoffs.md", "docs/release-checklist.md"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root, policyRoot, _ := newTaskStartCLIRepository(t)
+			arguments := append(taskStartCLIArguments(root, policyRoot, ""), "--files", "docs/design/current.md")
+			for _, situation := range test.situations {
+				arguments = append(arguments, "--situation", situation)
+			}
+			status, stdout, stderr := captureRunOutput(t, arguments)
+			var packet engine.TaskStartPacket
+			if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || stderr != "" {
+				t.Fatalf("task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)
+			}
+			if !slices.Equal(packet.WorkflowDocuments, test.documents) || packet.Intent.WillBeUsed {
+				t.Fatalf("unexpected selected procedures: %v, review=%t", packet.WorkflowDocuments, packet.Intent.WillBeUsed)
+			}
+			assertTaskStartScopedActions(t, packet.NextActions)
+			assertTaskStartDidNotExecute(t, root)
+		})
+	}
+}
+
 func TestTaskStartMarkdownDeliveryDoesNotSelectMergeGate(t *testing.T) {
 	root, policyRoot, _ := newTaskStartCLIRepository(t)
 	arguments := []string{"--repo-root", root, "--policy-root", policyRoot, "task-start", "--files", "docs/design/current.md"}
 	status, stdout, stderr := captureRunOutput(t, arguments)
-	if status != 0 || stderr != "" || !strings.Contains(stdout, "NEXT deliver:") ||
+	if status != 0 || stderr != "" || strings.Contains(stdout, "NEXT deliver:") ||
 		strings.Contains(stdout, "NEXT final-gate:") || strings.Contains(stdout, "merge-gate --base") {
 		t.Fatalf("Markdown task selected a merge gate: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 }
 
-func assertTaskStartDeliveryBoundary(t *testing.T, actions []engine.TaskStartAction) {
+func assertTaskStartScopedActions(t *testing.T, actions []engine.TaskStartAction) {
 	t.Helper()
-	if !slices.ContainsFunc(actions, func(action engine.TaskStartAction) bool {
-		return action.Name == "implement" && strings.Contains(action.Description, "least-complex end-to-end solution") &&
-			strings.Contains(action.Description, "reduces total complexity and lowers total failure risk")
-	}) {
-		t.Fatalf("task implementation simplicity boundary is missing: %+v", actions)
-	}
-	if len(actions) == 0 || actions[len(actions)-1].Name != "deliver" ||
-		!strings.Contains(actions[len(actions)-1].Description, "Ordinary task completion and a requested commit do not select a merge gate") {
-		t.Fatalf("task delivery boundary is missing: %+v", actions)
-	}
-	if slices.ContainsFunc(actions, func(action engine.TaskStartAction) bool {
-		return action.Name == "final-gate" || slices.Contains(action.Argv, "merge-gate")
-	}) {
-		t.Fatalf("task start selected a merge gate: %+v", actions)
+	for _, action := range actions {
+		if slices.Contains([]string{"read-workflow", "implement", "inspect-verification", "verify", "commit", "deliver", "complete-reviews", "final-gate"}, action.Name) ||
+			slices.Contains(action.Argv, "merge-gate") {
+			t.Fatalf("task start repeated the default sequence or selected a gate: %+v", actions)
+		}
 	}
 }
 

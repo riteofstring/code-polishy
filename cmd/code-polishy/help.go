@@ -51,8 +51,9 @@ var commandHelpPages = []commandHelpPage{
 		selectors: []string{
 			"Choose one or more contained files or directories, or repeat --module for every declared module in scope. File and module selectors cannot be mixed; change-aware and repository-wide selectors are not accepted.",
 			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
+			"Situations dependencies, adoption, upgrade, and release select their workflow documents; matching repository handoffs and review requirements add their own guidance. They do not select a merge gate.",
 			"Intent is required only when configured policy or an explicit feature selects behavior review. Use --intent-file - for bounded UTF-8 standard input.",
-			"Do not supply intent when review is optional; output reports captured and willBeUsed separately.",
+			"Do not supply intent when review is optional; human output gives one review summary while JSON retains captured and willBeUsed separately.",
 			"Human output is the bounded default. Use --format json for the complete task-start/v2 packet and configured guard catalog.",
 		},
 		sideEffects: []string{"Emits a bounded human summary by default or one complete task-start/v2 JSON document with --format json. It atomically appends the intent journal only when selected review will consume that intent, and runs no tests, reviews, package operations, or repository commands."},
@@ -563,7 +564,7 @@ func printCommandHelp(output io.Writer, command string) bool {
 func (page commandHelpPage) writeTo(output io.Writer) {
 	if reportOutputCommand(page.name) {
 		page.selectors = append(append([]string{}, page.selectors...), reportOutputHelp()...)
-		page.sideEffects = append(append([]string{}, page.sideEffects...), "Writes a complete versioned JSON report below .code-polishy-reports even when the displayed view is filtered or truncated.")
+		page.sideEffects = append(append([]string{}, page.sideEffects...), "Writes a complete versioned JSON report below .code-polishy-reports even when the displayed view is filtered or truncated. Its canonical verdict is summary.status; see code-polishy docs read reports.")
 	}
 	writeHelpSection(output, "Usage", page.syntax)
 	fmt.Fprintf(output, "\n%s\n", page.summary)

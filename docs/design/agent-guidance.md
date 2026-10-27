@@ -137,7 +137,7 @@ maintenance and runtime cost without adding authority.
 The end-to-end simplicity rule addresses another recurring failure: individually
 defensible boundaries that collectively add machinery and total failure risk
 disproportionate to the current problem. Canonical guidance states the default,
-the agent workflow and task-start output repeat it when a solution is chosen,
+the short agent workflow states it when a solution is chosen,
 architecture policy supplies the decision test, and an explicitly requested
 architecture review examines material violations. Those surfaces serve different
 decisions; the repetition is deliberate rather than a substitute for enforcement.

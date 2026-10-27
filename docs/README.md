@@ -27,8 +27,11 @@ and aliases. Search is local, bounded, and deterministic.
 
 ## Operating Code Polishy
 
-- [Agent Workflows](agent-workflows.md) covers ordinary interactive work,
-  native subagents, and optional task sessions.
+- [Agent Workflows](agent-workflows.md) is the short mandatory entry point for
+  ordinary work, event-selected verification, and conditional procedures.
+- [Agent Reviews](agent-reviews.md) defines boundaries for selected reviews.
+- [Machine-readable Reports](reports.md) defines the canonical verdict and
+  complete results for automation.
 - [Isolated Task Sessions](task-sessions.md) specifies disposable-worktree
   boundaries, promotion, and artifacts.
 - [Artifact Security](artifact-security.md) documents shared container scanning,

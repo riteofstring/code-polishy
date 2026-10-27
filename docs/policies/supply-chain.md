@@ -364,7 +364,7 @@ bounded by the admission date.
 An uncertain result requires further investigation; it is not a justification
 for either non-exposure or early admission. When no disposition is permitted,
 remove exposure or leave verification blocked rather than invent an exception. See
-[Dependency security decisions](../agent-workflows.md#dependency-security-decisions)
+[Dependency security decisions](#dependency-security-decisions)
 for the investigation workflow.
 
 ## Lifecycle scripts
@@ -704,6 +704,71 @@ an advisory that cannot affect the sealed analyzer warrants an exact
 `not-affected` assessment. Early `security-fix` admission additionally needs the
 documented risk comparison and lack of practical alternatives described above.
 
+## Dependency security decisions
+
+Read the locked supply-chain policy before changing a dependency to address an
+advisory. The 30-day admission window measures the exact package release's age,
+not the advisory's publication date. Check the existing version's exposure
+before choosing an upgrade or a vulnerability assessment.
+
+Agents own the technical investigation and decision within these policy limits;
+neither vulnerability nor release-age assessments require human sign-off. Name
+the actual assessor as owner instead of attributing a review to the caller.
+Do not ask the caller to choose between assessment categories or supply approval
+URLs. This authority does not waive mandatory checks, other external approval
+gates, or authorization for publishing and other out-of-scope operations.
+
+Trace the advisory's prerequisites through the actual application: the input
+source and its authority, the enabled caller and vulnerable API, and the
+security-sensitive use or impact. A dependency in a lockfile, a loaded module,
+or a call to another API from the same package does not establish exposure.
+Distinguish a glob's pattern from the filename it matches, enabled features
+from installed optional services, and URI parsing from a host authorization
+decision. Use the resolved package source and current configuration; a package
+name or dependency-tree listing is not enough.
+
+Choose one evidence-backed outcome:
+
+- Affected: first seek an aged fixed release or a practical mitigation that
+  removes exposure. Admit a younger fix only when the risk comparison below
+  demonstrates that waiting is worse.
+- Not affected: retain the aged release under an exact `not-affected`
+  vulnerability assessment, document why the prerequisite cannot occur, and
+  plan the update when the fixed release becomes eligible.
+- Uncertain: continue the investigation and report what remains unknown.
+  Failure to demonstrate exposure does not prove non-exposure, and uncertainty
+  alone does not justify either assessment.
+
+The waiting period protects against compromised releases and other fresh-code
+risk that clean scanners may not yet detect. Breaking it is exceptional, not
+the default response to a reachable advisory or a high severity label. Record:
+
+- The concrete reachable harm, attacker prerequisites, exploitation evidence,
+  deployment exposure, and how long remains before the fix ages in.
+- The aged fixes, feature disablement, input restrictions, or other practical
+  mitigations considered, and why they cannot safely cover that interval.
+- The exact official fix's provenance, relevant source delta, dependency and
+  lifecycle-script changes, and remaining supply-chain uncertainty.
+- Why the demonstrated risk of waiting materially outweighs admitting that
+  fresh release, with the smallest effective update and bounded expiry.
+
+Use an exact `security-fix` release-age assessment only when that case holds.
+Otherwise keep the aged version with an allowed, evidence-backed vulnerability
+assessment and remediation plan, remove exposure, or leave verification blocked
+if neither is permitted. Never manufacture non-exposure or stretch an assessment
+past its severity or known-exploited limits just to keep the gate green.
+
+Keep the analysis and remediation plan in a checked-in technical record linked
+from the assessment. An upstream advisory explains the vulnerability; it does
+not record this repository's exposure analysis or decision. Do not invent
+external records, human approval, or certainty that source inspection and
+scanners cannot establish.
+
+Report release-age admissions and vulnerability assessments separately.
+Assessed findings remain findings, even when policy accepts them. A passing
+scanner or gate validates its mechanical checks, not the truth of a manually
+written reachability claim.
+
 ## Dependency updates
 
 1. For a security update, establish advisory-specific applicability and choose
@@ -723,10 +788,13 @@ documented risk comparison and lack of practical alternatives described above.
    deferred repository providers or artifact scans, run `code-polishy supply-chain`
    without `--offline` instead to complete those checks as well.
 8. Run focused tests for affected modules.
-9. Resolve the trusted merge target and run
-   `code-polishy merge-gate --base MERGE_TARGET`; dependency-input changes
-   normally select its complete full gate, including online supply-chain work,
-   without a user level-selection question.
+9. At a genuine merge or release checkpoint, follow the
+   [workflow event and final-gate-owner rules](../agent-workflows.md#choose-verification-from-the-event).
+   The configured owner runs `code-polishy merge-gate --base MERGE_TARGET`;
+   dependency-input changes normally select its full profile. A dependency
+   update alone does not select another gate or local execution when CI owns it.
+   Dependency review, frozen installation, deferred checks, and affected tests
+   remain required independently.
 10. Keep each assessed finding's exact identity, severity, technical analysis,
     actual owner, remediation plan, and bounded expiry visible. Document both
     vulnerability and fresh-release risks when considering early admission.
@@ -788,7 +856,8 @@ code-polishy dependency-review --base origin/main
 ```
 
 Dependency review compares the candidate manifests and complete supported lock
-graphs with the merge base, prints a stable direct/transitive change table, and
+graphs with the merge base of the explicit reference, prints removals separately
+from additions and updates, and
 runs built-in online candidate checks. It does not install dependencies, execute
 dependency lifecycle scripts, or run repository-configured providers and artifact
 builders. Provider declarations describe capabilities, not whether their commands
@@ -805,6 +874,15 @@ none are deferred, `supply-chain --offline` checks installed license metadata an
 local lock policy without repeating online audits. Required provider declarations
 remain coverage requirements in both phases; deferring execution does not remove
 them from the full supply-chain profile or merge gate.
+
+For a task on a long-lived branch, an additional
+`dependency-review --base TASK_BASE` (or the previous accepted checkpoint)
+isolates that task's edits. Keep the required merge-target review for branch-wide
+admission. A merge target predating adoption has no historical lock graph, so
+all current lock entries correctly appear as additions; that comparison cannot
+show packages introduced and then removed within the branch. Choose and record
+the base explicitly rather than silently narrowing the admission boundary.
+The preferred-age warnings likewise describe additions relative to that base.
 
 Historical inputs are dependency inventory, not candidate admission evidence.
 The comparison accepts syntactically valid historical Git tags, branches,

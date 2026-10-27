@@ -17,8 +17,10 @@ preserves the exact packet for machine consumers. Both views derive from the
 same packet; the CLI performs no separate selection or mapping.
 
 Task-start owns an ordinary task boundary, not a merge decision. Its next
-actions end with event-selected verification, commit, and delivery; neither the
-human nor JSON view schedules a merge gate. The configured final-gate owner
+actions contain only scope-specific follow-ups: selected context, mapping gaps,
+reliability guidance, and required review status. The short mandatory workflow
+owns the default implementation, verification, commit, and delivery sequence;
+neither view repeats it or schedules a merge gate. The configured final-gate owner
 remains a packet fact for a separately established genuine merge or release
 checkpoint, whose workflow supplies the trusted merge target.
 
@@ -53,3 +55,15 @@ context selection supports them. Execution-oriented module selection continues
 to require governed files. Document digests identify the retrieved contents;
 agents reuse context while the scope, mappings, and relevant contents remain
 unchanged. Progress commits and test runs alone do not make context stale.
+
+Workflow references follow actual selection. Explicit situation identifiers
+select dependency, adoption, upgrade, or release procedures. Matching handoffs
+and configured review/reminders add their respective guidance. Module names,
+source filenames, and request keywords do not infer those events. The release
+capability catalog retains command and feature references, while the engine
+uses the context resolver's existing situation facts. Optional review collapses
+to one human line; JSON retains complete intent and guard facts.
+
+Rendered documentation states the wrapper substitution once before its original
+content. The CLI does not rewrite examples or infer an executable from ambient
+PATH, and documentation discovery still works without opening a target repository.

@@ -967,3 +967,23 @@ be run by its exact name with `test --suite NAME` when its coverage satisfies
 the repository's upgrade requirements. These control checks do not waive
 required application verification or establish that a changed runtime/compiler
 has no application impact. Supplemental suites remain separately selected.
+
+## Removing or renaming modules
+
+Treat the policy model as one change: update the module declaration and incoming
+`dependsOn` references, command and suite module selectors, test ownership,
+design mappings, handoffs, review-feature selectors, and any other configured
+module references. Remove obsolete commands and suites only when no surviving
+module needs them. Retarget surviving tests by the behavior they verify.
+Run `code-polishy doctor` after the edits; configuration validation rejects
+unknown module references in checks, suites, ownership, and design mappings.
+The test ownership checks also reject stale or uncovered path declarations.
+
+Suite `paths` declare selection and ownership coverage; `argv` is the command
+that actually runs. The tool does not append `paths` to arbitrary commands or
+prove their execution by comparing strings. Prefer a runner's discovery command
+when it can select the intended boundary, such as
+`python -m unittest discover -s tests/MODULE -p 'test_*.py'`, instead of repeating
+every test module in `argv`. Keep the discovery boundary aligned with suite paths
+and verify the runner's executed tests when retargeting a suite. Arbitrary shell
+wrappers and runtime-generated test selection require behavioral evidence.

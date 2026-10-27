@@ -108,9 +108,19 @@ artifact-affecting corrections with the component command.
 The default output is a bounded human summary. It reports intent custody and
 review selection, selection and mapping counts, selected document and handoff
 identities, any matched reliability reminder, the configured guard count,
-workflow references, the merge-checkpoint gate owner, and ordered next actions.
+selected workflow references, the merge-checkpoint gate owner, and scoped follow-ups.
 Large path inventories, document contents, and the complete guard catalog do not
-flood an interactive task start.
+flood an interactive task start. Optional review, absent intent, and the guard
+count share one line. The ordinary implementation, verification, commit, and
+delivery sequence lives in the short [workflow entry point](agent-workflows.md)
+and is not repeated as generic next actions.
+
+Explicit situations select additional procedures: `dependencies` selects the
+supply-chain guide, `adoption` and `upgrade` select the adoption runbook, and
+`release` selects the release checklist. Matching handoffs select their operating
+guide; selected review and reliability reminders select their own policies.
+A situation selects guidance, not a gate or an external operation. Filenames,
+module names, and request keywords do not infer a lifecycle event.
 
 Use `--format json` when automation needs the complete `task-start/v2` packet,
 which remains bounded to 16 MiB. It contains the task base, locked release and
@@ -118,8 +128,8 @@ catalog identity, any capture identity and canonical features, requested and
 expanded selection, current design documents, selected operational handoffs,
 workflow references, any structured reliability reminder, configured
 guards and verification requirements,
-final-gate owner, and ordered next actions. Task-start ends at ordinary task
-delivery and never selects a merge gate; that requires a separately established
+final-gate owner, and scoped next actions. Ordinary delivery follows the workflow
+entry point. Task-start never selects a merge gate; that requires a separately established
 genuine merge or release checkpoint. Optional tasks omit review-status actions.
 Guard entries preserve capability discovery's availability and enforcement
 facts; listing a guard does not execute or activate it. Document selection uses

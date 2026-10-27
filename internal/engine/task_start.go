@@ -171,7 +171,7 @@ func (engine *Engine) taskStartPacket(request ContextRequest, requestedFeatures 
 	packet := TaskStartPacket{
 		Protocol: "task-start/v2", TaskBase: taskBase, LockedRelease: *inventory.LockedRelease, CatalogSHA256: inventory.ReleaseCatalog.SHA256,
 		Intent: engine.taskStartIntent(selection, features), RequestedSelection: *contextReport.RequestedSelection, RepositoryContext: contextReport.RepositoryContext,
-		WorkflowDocuments: []string{"docs/agent-workflows.md"}, ConfiguredGuards: []CapabilityEntry{},
+		WorkflowDocuments: taskStartWorkflowDocuments(contextReport.RepositoryContext), ConfiguredGuards: []CapabilityEntry{},
 		ReliabilityReminder: engine.reliabilityReminder(selection.Candidate),
 		Verification:        engine.Repository.Config.Verification,
 		FinalGateOwner:      engine.Repository.Config.Verification.EffectiveFinalGateOwner(),
@@ -223,6 +223,9 @@ func (engine *Engine) taskStartRequiresFullCandidate(selection repository.Select
 }
 
 func (packet *TaskStartPacket) collectGuards(entries []CapabilityEntry) {
+	if packet.Intent.WillBeUsed {
+		packet.WorkflowDocuments = append(packet.WorkflowDocuments, "docs/agent-reviews.md")
+	}
 	if packet.ReliabilityReminder != nil {
 		packet.WorkflowDocuments = append(packet.WorkflowDocuments, packet.ReliabilityReminder.PolicyDocument)
 	}

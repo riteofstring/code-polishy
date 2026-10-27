@@ -1,480 +1,96 @@
 # Agent Workflows
 
-Read this guide from the repository's locked release with:
-
-```sh
-code-polishy docs read agent-workflows
-```
-
-Use `code-polishy docs find QUERY...` to locate another exact policy reference.
-
-## Choose a workflow
-
-| Task                                   | First command                                                             |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| Read-only capability question          | `code-polishy capabilities --query "QUERY"`                               |
-| Repository footprint question          | `code-polishy size [--base MERGE_TARGET]`                                 |
-| Repository quality trend question      | `code-polishy trends [--since DATE] [--branch NAME]`                      |
-| Ordinary implementation                | `code-polishy task-start --module NAME`                                   |
-| Explicit behavior-sensitive change     | `code-polishy task-start --intent-file - --module NAME --feature FEATURE` |
-| Requested isolation or unattended work | `code-polishy task-session --module NAME -- WORKER ARGS...`               |
-| Dependency change                      | `code-polishy docs read supply-chain`                                     |
-| Release or upgrade                     | `code-polishy docs read release-checklist`                                |
-| Genuine merge or release checkpoint    | `code-polishy merge-gate --base MERGE_TARGET`                             |
-
-Use one or more file or directory operands with `--files PATH...`, or repeat
-`--module NAME` for every module in a cross-module task. Do not mix the two
-selector kinds. `task-start` returns current design context
-and operational handoffs in a bounded human summary. Use `--format json` only
-when automation needs the complete `task-start/v2` packet and configured guard
-catalog. Its intent status states whether selected behavior review retained the
-request. Optional tasks create no intent journal and schedule no review-status
-action. If configured policy selects review, rerun the unchanged task-start
-command with `--intent-file -` and supply the exact request on standard input
-before editing.
-Do not recapture a request already captured by task-start. The first command
-does not replace selected reviews or event-required verification. Read-only
-questions require no capture or tests. Ordinary task completion, a requested
-commit, and delivery do not select a merge gate. At a separately established
-merge or release checkpoint, follow the configured final-gate owner. Capability
-queries identify candidates only; explicit feature operands require the caller's
-intended canonical name or exact declared alias. See [Capability
-Discovery](capabilities.md).
-
-Ordinary interactive work may use the caller's current checkout. The primary
-agent owns task decomposition, subagent delegation, integration, and
-verification.
-
-For a repository-size question, use `code-polishy size`. Add `--base` when the
-question concerns growth or a candidate change. Treat its composition and delta
-as evidence; project context determines whether the result is reasonable. The
-command neither sends repository facts to an AI provider nor includes file
-contents in its report.
-
-For a question about how the repository's code is holding up over time, use
-`code-polishy trends`. Add `--branch` when work happens on a long-lived branch
-instead of the default branch. Treat its weekly values as trends: they describe
-change but do not show what caused it. The command reads Git history and local
-gate records only, and its report includes no file contents.
-
-Use `code-polishy task-session` when the caller requests isolation or when an
-unattended bounded task benefits from a disposable worktree. Select every
-allowed module and exact artifact path before the worker starts.
-
-## Interactive work
-
-Optimize for end-to-end simplicity rather than maximum formalism at each local
-boundary. Before adding an abstraction, layer, adapter, generator, state,
-configuration surface, validation path, or evidence mechanism, name the concrete
-current requirement or failure, compare the direct solution, and assess the
-resulting coordination burden and total failure risk across implementation,
-tests, operation, and recovery. Add machinery only when it reduces total
-complexity and risk. Do not generalize for hypothetical reuse, scale,
-portability, extensibility, or future requirements.
-
-When `quality.reliabilityReminder` matches the planned modules or exact source
-paths, task-start displays the release-owned end-to-end reliability reminder and
-selects its policy document. Apply its four questions before adding or
-tightening defensive machinery. The reminder is advisory: it creates no answer
-artifact, review, receipt, finding, authorization, or command. Checkpoint and
-merge gates repeat it only when the actual candidate matches. See
-[End-to-End Reliability](policies/end-to-end-reliability.md).
-
-When adopting Code Polishy or restructuring architecture, capture the request
-and read its current design context before drafting module ownership. Automated
-ownership, import, cycle, and dependency checks still apply. Architecture agent
-review is optional: run `code-polishy architecture-review prepare --base
-REVIEW_BASE` only when the caller explicitly requests that review. Supply the
-packet to a clean-context reviewer and finalize its result. Ordinary checkpoints
-and merge gates do not require or consume architecture-review receipts. See the
-[Architecture Policy](policies/architecture.md#architecture-review-workflow).
-
-An unmanaged repository needs the [two-phase adoption bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base)
-first: record the original Git base, install the exact lock and minimal policy
-scaffold, and commit only that scaffold. Then run task-start from the clean
-bootstrap commit before expanding ownership or changing product source. Capture
-the caller's original request at that point only when selected review uses it.
-The bootstrap commit is explicitly incomplete adoption, not a verification pass;
-do not submit the first request as a dirty-candidate correction.
-
-Before changing governed source, run `code-polishy design-context --files` with
-the exact planned paths, or `code-polishy design-context --module` with the
-selected modules. Read only the returned current design documents. The command
-does not select plans, historical evidence, or superseded decisions; open those
-only when the task specifically requires them.
-
-Retrieve context once for the planned scope. Context already supplied by
-`task-start` for that scope satisfies this requirement. Reuse what you have
-read until the scope, design mappings, or relevant document contents change.
-Another edit, test run, status request, or commit does not require another
-lookup. Refresh the affected context when changing those inputs.
-
-If no useful rationale is mapped, inspect the selected module boundaries and
-existing current documentation. During adoption or changes to ownership,
-invariants, dependency direction, or consequential tradeoffs, create or update
-the relevant repository-owned rationale and its `documentation.design`
-mapping as part of the work. Explain decisions that source cannot readily
-convey; do not invent decisions or manufacture a document for every module.
-Shared guidance is appropriate for shared constraints. An empty mapping alone
-does not block routine work or require boilerplate. Keep mapped rationale
-current when the design changes; the maintainer need not request this upkeep
-in each task.
-
-Design-context explains each module or exact-source match and identifies
-unmapped selected paths and modules, including partial module coverage. Module
-guidance remains relevant when an additional source-specific document matches.
-The JSON report's `repositoryContext.designResolution` contains the complete
-matches, selection counts, and coverage gaps; the human output abbreviates long
-path lists. Task-start includes that same resolution and adds an action to
-consider missing rationale when gaps exist. Empty scope, unmapped work, and
-invalid selected documents are distinct outcomes. A lookup ignores unrelated
-stale documents; doctor validates the complete mapping inventory.
-
-The same context command selects relevant repository operational handoffs from
-`documentation.handoffs`. Read each selected procedure before its associated
-operation. Add an exact `--situation authentication`, `--situation release`, or
-`--situation deployment` when that operational situation applies; repositories
-may declare other exact identifiers. File and module triggers select matching
-handoffs automatically. Context lists their paths and selection reasons, while
-`--format json` includes their bounded contents and SHA-256 identities. An
-invalid selected handoff blocks context composition. Discovery does not execute
-procedure commands, obtain credentials, or grant approval. Keep managed
-`AGENTS.md` canonical; see [Operational Handoffs](operational-handoffs.md).
-
-Intent is review evidence, not task memory. Capture the original request only
-when checked-in policy or an explicitly selected feature requires behavior
-review. A harness can supply the exact request without a transport file:
-
-```sh
-code-polishy behavior-review capture-intent --intent-file -
-```
-
-`task-start` performs the same bounded standard-input or regular-file capture
-only when its selected scope will use the intent. If selected review reaches
-implementation without a capture at the task base, stop and report the missing
-boundary instead of inventing a summary. See [Capability
-Discovery](capabilities.md#start-a-task).
-
-An upgrade has one explicit authority transition. The outgoing locked release
-and its installed guidance govern until the exact verified incoming release's
-`lock` command atomically replaces `.code-polishy.lock.json`. That command may
-run while the outgoing lock is active and is the only incoming mutation allowed
-before the cutover. Incoming guidance governs immediately afterward. If
-incoming policy selects review that outgoing guidance did not capture, capture
-the caller's exact upgrade request from the new clean lock commit before any
-further target change.
-
-While selected review remains active, capture a later user message only when it
-changes final artifacts, observable behavior, or acceptance criteria. Do not
-capture status questions, approvals, authentication or publication directions,
-or other operational coordination. An artifact-affecting correction may be
-captured from standard input while files are staged, unstaged, deleted, or
-untracked; the append records the current HEAD and candidate-state digest.
-
-Choose verification from the event that actually changed risk:
-
-| Event                                                     | Action                                            |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| Read-only, conversational, or status request              | None                                              |
-| Ordinary prose-only Markdown change                       | Format and documentation checks only              |
-| Checkout, fetch, clean merge or rebase, tag, or push prep | None                                              |
-| Manually resolved source conflict                         | One affected exact test                           |
-| Coherent runnable source change                           | One affected exact test                           |
-| Completed source task with no final gate next             | `test --changed --base TASK_BASE`                 |
-| Genuine merge or release candidate                        | One base-aware merge gate, owned locally or by CI |
-| Stable release candidate                                  | Only explicitly selected supplemental suites      |
-
-Use the first applicable row. Ordinary task completion, a requested commit, and
-delivery do not themselves select tests, a review, or a checkpoint gate. A
-conflict resolution is a new change only for the files edited to resolve it; a
-prose-only conflict stays documentation-only.
-Do not run `test --changed` immediately before a final merge gate over the same
-candidate because the gate already selects changed-impact tests.
-
-Resolve the merge base from an explicit target, checked-in guidance,
-`origin/HEAD`, then `origin/main` or `origin/master`.
-
-Without `--base`, changed-scope tests compare the working tree with `HEAD`;
-with `TASK_BASE`, they compare `merge-base(TASK_BASE, HEAD)` plus the working
-tree. On a long-lived branch, finish each completed code-changing task with
-`code-polishy checkpoint-gate --base <previous-checkpoint>` after committing
-and completing any selected behavior review. At a genuine merge checkpoint,
-run one `code-polishy merge-gate --base <merge-target>` for the unchanged final
-candidate. Local and CI execution need separate final gates only when the caller
-explicitly requests independent evidence. Honor `verification.finalGateOwner`:
-`local` is the default, while `ci` means the checked-in workflow owns that one
-final execution.
-
-A stable release candidate is the exact committed tree intended for tagging,
-with ordinary verification green and no planned source or policy edits. Run
-`code-polishy test --supplemental` only when the caller explicitly requests it,
-a checked-in workflow invokes it for that event, or the release checklist
-selects it. Declarations, including `tests.requiredSupplementalKinds`, do not
-schedule execution. After a supplemental failure, rerun only failed suites and
-passes invalidated by changes to their tested production files or tests, or
-their own commands or configuration. Exact `test --suite` evidence composes
-with still-valid passes. Repeat every suite only when shared mutation
-infrastructure, toolchain, or selection changes, or impact cannot be bounded.
-Ordinary development, gates, guidance synchronization, and lock upgrades leave
-unselected supplemental hardening `NOT RUN`.
-
-When added or modified test files are in the candidate, the default or
-change-aware checkpoints show one prominent, non-blocking test-quality reminder.
-Use it to check both new and existing tests for tautological and change-detector
-behavior. It neither changes the selected work nor requests authorization; see
-[Verification and Testing Policy](policies/verification.md#test-quality-reminder)
-for its exact trigger and quiet modes.
-
-## Dependency security decisions
-
-Read the locked supply-chain policy before changing a dependency to address an
-advisory. The 30-day admission window measures the exact package release's age,
-not the advisory's publication date. Check the existing version's exposure
-before choosing an upgrade or a vulnerability assessment.
-
-Agents own the technical investigation and decision within these policy limits;
-neither vulnerability nor release-age assessments require human sign-off. Name
-the actual assessor as owner instead of attributing a review to the caller.
-Do not ask the caller to choose between assessment categories or supply approval
-URLs. This authority does not waive mandatory checks, other external approval
-gates, or authorization for publishing and other out-of-scope operations.
-
-Trace the advisory's prerequisites through the actual application: the input
-source and its authority, the enabled caller and vulnerable API, and the
-security-sensitive use or impact. A dependency in a lockfile, a loaded module,
-or a call to another API from the same package does not establish exposure.
-Distinguish a glob's pattern from the filename it matches, enabled features
-from installed optional services, and URI parsing from a host authorization
-decision. Use the resolved package source and current configuration; a package
-name or dependency-tree listing is not enough.
-
-Choose one evidence-backed outcome:
-
-- Affected: first seek an aged fixed release or a practical mitigation that
-  removes exposure. Admit a younger fix only when the risk comparison below
-  demonstrates that waiting is worse.
-- Not affected: retain the aged release under an exact `not-affected`
-  vulnerability assessment, document why the prerequisite cannot occur, and
-  plan the update when the fixed release becomes eligible.
-- Uncertain: continue the investigation and report what remains unknown.
-  Failure to demonstrate exposure does not prove non-exposure, and uncertainty
-  alone does not justify either assessment.
-
-The waiting period protects against compromised releases and other fresh-code
-risk that clean scanners may not yet detect. Breaking it is exceptional, not
-the default response to a reachable advisory or a high severity label. Record:
-
-- The concrete reachable harm, attacker prerequisites, exploitation evidence,
-  deployment exposure, and how long remains before the fix ages in.
-- The aged fixes, feature disablement, input restrictions, or other practical
-  mitigations considered, and why they cannot safely cover that interval.
-- The exact official fix's provenance, relevant source delta, dependency and
-  lifecycle-script changes, and remaining supply-chain uncertainty.
-- Why the demonstrated risk of waiting materially outweighs admitting that
-  fresh release, with the smallest effective update and bounded expiry.
-
-Use an exact `security-fix` release-age assessment only when that case holds.
-Otherwise keep the aged version with an allowed, evidence-backed vulnerability
-assessment and remediation plan, remove exposure, or leave verification blocked
-if neither is permitted. Never manufacture non-exposure or stretch an assessment
-past its severity or known-exploited limits just to keep the gate green.
-
-Keep the analysis and remediation plan in a checked-in technical record linked
-from the assessment. An upstream advisory explains the vulnerability; it does
-not record this repository's exposure analysis or decision. Do not invent
-external records, human approval, or certainty that source inspection and
-scanners cannot establish.
-
-Report release-age admissions and vulnerability assessments separately.
-Assessed findings remain findings, even when policy accepts them. A passing
-scanner or gate validates its mechanical checks, not the truth of a manually
-written reachability claim.
-
-## Gate evidence and retries
-
-Checkpoint and merge gates keep terminal output short: phase progress, a final
-result, and, on failure, a bounded tail with the managed log path. Each gate
-that executes work writes a versioned JSON report and bounded command logs
-below `.code-polishy-reports/<gate>/`. Use those files for durable evidence and
-machine inspection instead of parsing terminal output.
-
-An accepted checkpoint receipt binds the exact passed run identity, execution,
-and report digest. It remains valid only while that report is the current,
-fully validated checkpoint report. Receipt or report publication failures are
-operational failures and cannot leave readable checkpoint acceptance.
-
-A merge reminder always preserves the merge-target-wide changed-test count. If
-a valid checkpoint receipt is bound to the candidate, it also names the latest
-task slice and its base. This advisory data never changes merge selection.
-
-An identical passed merge-gate identity retains source and test verification.
-Every repeated online gate reevaluates the normal supply-chain profile without
-rerunning unchanged source checks or tests. Eligible package scans reuse raw
-evidence; providers, recursive scans and image preparation execute as required.
-A new gate automatically reuses successful suite receipts only when the suite explicitly declares `reusable: true`, its sealed read-only
-execution view was enforced, and its complete release, platform, toolchain,
-command, configuration, environment, ownership, and file-input identities still
-match. Non-test phases evaluate normally. Sealed pnpm audits and explicit OSV
-uv/Cargo inventory scans from an installed release can reuse their captured input
-scan for at most 24 hours; recursive OSV scans execute. Behavior-proof replays,
-failed commands and non-reusable suites execute for the new candidate.
-
-Use `code-polishy merge-gate --base <merge-target> --resume` after repairing a
-failed gate without changing the candidate. It reuses eligible successful
-ordinary suites when an exact failed report exists. If an environment repair
-changes the gate identity and no matching report exists, it safely executes the
-complete gate. Incomplete or damaged matching evidence remains an error. For an
-explicitly selected supplemental retry, use
-`code-polishy test --supplemental --resume`.
-
-CI may export current unexpired local receipts and import one bundle whose
-SHA-256 arrives through a trusted CI boundary:
-
-```sh
-code-polishy test-receipts export --output /tmp/test-receipts.json
-code-polishy test-receipts import \
-  --source /tmp/test-receipts.json \
-  --sha256 <trusted-bundle-sha256>
-```
-
-The bundle composes exact evidence; it does not aggregate partial shards or
-turn an incompatible receipt into a pass.
-
-Commit task-owned progress at meaningful milestones, such as finishing a
-subtask or reaching a useful stopping point before switching focus. During
-long tasks, aim for a checkpoint roughly every one to two hours of active
-editing. Use judgment about the boundary; do not create a commit for every
-small edit or let hours of accumulated changes wait for the entire goal to
-finish.
-
-A progress commit may contain unfinished work or known failures. State what it
-captures, what remains, and which checks passed, failed, or have not run in its
-message. Commit related work together and exclude unrelated user changes.
-Verification follows the events above; a progress commit does not require a
-new test run, a clean full suite, a review, or a gate. Continue any verification
-already required by the work. The checkpoint gate applies when a code-changing
-task is complete, not to every progress commit within that task.
-
-Atomic public API cutovers must be coherent at merge or release. Intermediate
-branch commits may record incomplete implementation without adding temporary
-compatibility code merely to make each checkpoint complete. Before final
-delivery, finish required verification and commit remaining task-owned changes
-unless the caller explicitly requests an uncommitted handoff. Push, publish,
-and pull-request operations require the caller's explicit authorization.
-
-## Agent reviews
-
-Agent reviews report only major or severe, evidence-backed defects. Do not turn
-nitpicks, preferences, optional refactors, minor prose issues, or speculative
-concerns into blocking findings. Behavior/final-state review retains its existing
-explicit-request and repository-configuration opt-ins. Architecture review
-requires an explicit caller request. Code Polishy does not launch review agents.
-
-Perform one review for the selected request or configured review event. Present
-unresolved findings and their consequences to the caller; do not automatically
-repeat review after fixes, choose a different reviewer to obtain acceptance, or
-start a new review cycle. Any follow-up requires explicit caller authorization
-and stays within the requested scope. A required behavior review remains failed
-until resolved; stopping iteration never fabricates acceptance or waives checks.
-
-A requested ordinary agent review binds to an explicit trusted base and exact
-candidate. A dirty-worktree review covers committed, staged, unstaged, and
-untracked changes so it cannot miss candidate state.
-
-Keep structured evidence in the task's review record. Report actionable
-findings or one concise no-findings outcome to the user; omit empty sections,
-machine sentinels, and duplicates of automated checks. Distinguish repository
-contract concerns from requested-outcome concerns and tie each finding to its
-source instruction or objective and affected file or hunk. Agent review is
-non-deterministic evidence and does not replace policy checks or human approval.
-
-## Behavior and final-state review
-
-Use the [Behavior and Final-State Review Policy](policies/behavior-review.md) when a
-repository rule or explicit task request selects review. Optional review that
-was skipped reports `NOT RUN` and does not block. A selected clean-context
-subagent review becomes gate-checkable evidence without making the subagent a
-policy engine:
-
-1. When task-start reports `intent.willBeUsed: true`, capture the exact request
-   at the task base through task-start or `behavior-review capture-intent
---intent-file -`. Capture later messages only when they alter artifacts,
-   behavior, or acceptance criteria. Later captures may occur with a dirty
-   candidate and bind its exact state. Repeat `--feature` only for configured
-   features the user explicitly named. Capture runs no tests or AI review.
-2. If the user adds review coverage later, commit the clean candidate and run
-   `code-polishy behavior-review require --base TASK_BASE --feature NAME`.
-   Requirements are additive and cannot be removed. Never infer a feature from
-   request keywords.
-3. Commit the candidate, run the read-only behavior-review status command for
-   `REVIEW_BASE`, and keep it clean apart from excluded review reports. If
-   status is optional, continue to the gate without creating a packet.
-4. When selected, run `code-polishy behavior-review prepare --base REVIEW_BASE`.
-   Start a
-   review subagent with no inherited conversation and give it only the generated
-   packet. If the harness cannot start subagents, use a separate clean AI
-   invocation with only that packet.
-5. For every behavior the review subagent classifies as `requested`, the primary
-   agent runs one or more `code-polishy regression-proof` commands that fail on
-   the declared pre-fix base and pass on the candidate. Run them after
-   preparation and do not choose a pre-fix revision older than the packet's
-   reviewed merge base. Each behavior names its selected feature scope, and its
-   proofs use only suites allowed by that scope.
-6. The same reviewer checks observable behavior, durable prose, and executable
-   correction residue. Every final-state finding must cite an exact packet path,
-   line, patch hunk, and relevant intent ID. Save the strict result at the
-   packet's result path, then run `code-polishy behavior-review finalize` to
-   write the receipt. Any final-state finding blocks finalization.
-7. Run `code-polishy checkpoint-gate --base <previous-checkpoint>` after a
-   completed source task on a long-lived branch, or
-   `code-polishy merge-gate --base <merge-target>` at a separately established
-   genuine merge checkpoint.
-   Either gate validates the receipt and independently reruns every cited
-   proof. The checkpoint gate then runs changed-scope checks and focused tests
-   and records the accepted HEAD; the merge gate runs its selected
-   documentation, recommended, or full workflow. The report and logs record
-   the executed phases separately from the behavior-review receipt.
-
-Keep `.code-polishy-reports/behavior-review` in the same workspace from intent
-capture through the gate. A multi-job CI run may transfer the complete
-directory only as an explicit trusted artifact. Ordinary Markdown-only
-candidates stay optional unless a task request or deliberately configured
-feature selects them. Ordinary agent reviews remain useful advisory evidence.
-Local digests do not authenticate the source of the request, subagent identity,
-or subagent context; see the policy's trust limits.
-
-After no gate or evidence transfer needs the review artifacts, remove their
-plaintext and derived evidence explicitly with `code-polishy behavior-review
-cleanup`. Running cleanup earlier intentionally invalidates the selected review.
-
-## Isolated task sessions
-
-A task session executes one worker command in a disposable Git worktree:
-
-```sh
-code-polishy task-session \
-  --module application \
-  --module documentation \
-  --promote \
-  -- WORKER [ARG...]
-```
-
-Before the worker starts, the session freezes the trusted base, caller-selected
-edit boundary, exact release executable, worker command, and governed command
-environment. It validates committed, staged, unstaged, deleted, renamed, and
-untracked paths against that boundary.
-
-The worker may use runner-native subagents. The primary worker owns their scope,
-integration, commits, and quiescence. Every subagent operates in the same
-worktree and task boundary. `CODE_POLISHY_TASK_SESSION=1` forbids nested task
-sessions.
-
-`--promote` fast-forwards the unchanged clean source branch only after the
-worker exits successfully with a clean committed candidate inside the frozen
-boundary. The session stores its receipt, command log, boundary report, and any
-rejected patch outside the repository. An interruption or workspace-identity
-failure retains the worktree for manual inspection.
-
-Task sessions provide isolation and path enforcement. The worker remains
-responsible for implementation quality, tests, and any requested independent
-review.
+Read this entry point from the locked release before changing the repository.
+Use `./code-polishyw` for every `code-polishy` command below; in PowerShell use
+`.\code-polishyw.ps1`. The wrapper selects the repository's exact release.
+Read the conditional procedures only when their stated trigger applies.
+
+## Start and complete ordinary work
+
+1. Use the caller's checkout and preserve unrelated changes. Read-only questions
+   need no intent capture, task session, or tests.
+2. Start from a clean task base with `code-polishy task-start --files PATH...`
+   or repeated `--module NAME` operands. Do not mix selector kinds. Retain its
+   `TASK BASE` for task-scoped verification. If review is selected, rerun with
+   `--intent-file -` and supply the exact request before editing. Optional tasks
+   create no intent journal. Never recapture a request already captured.
+3. Read the returned design documents, operational handoffs, and any additional
+   selected workflow documents. Task-start satisfies design-context retrieval
+   for that scope. Reuse it until scope, mappings, or relevant documents change;
+   then refresh only the affected context with `design-context`.
+4. Implement the simplest end-to-end fix for the demonstrated need. Add machinery
+   only when it reduces total complexity and failure risk. Honor
+   `quality.allowComments`. Update mapped rationale when ownership, invariants,
+   dependency direction, or consequential tradeoffs change. Mapping gaps alone
+   do not block routine edits or require a document for every module.
+5. Verify according to the event table below. Complete any selected review using
+   its conditional procedure. A selected review that lacks intent at the task
+   base must stop and report that missing boundary, not reconstruct the request.
+6. Commit task-owned progress at meaningful milestones, roughly every one to two
+   hours during long work. Progress commits may be unfinished or failing; record
+   what remains and verification status. Finish required verification and commit
+   remaining task-owned changes before delivery unless the caller requested an
+   uncommitted handoff. Public API cutovers must be coherent at merge or release.
+   Push, publish, and pull-request operations require explicit authorization.
+
+`task-start` prints scope-specific follow-ups rather than repeating this sequence.
+Its complete packet remains available with `--format json`. It does not infer
+features from prose or decide that an ordinary task is a merge checkpoint.
+Select a behavior feature only by the caller's intended canonical name or exact
+alias. See [task selection and intent](capabilities.md#start-a-task).
+
+## Choose verification from the event
+
+| Event                                                                                                | Action                                                                        |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Read-only question, status request, checkout, fetch, clean merge or rebase, tag, or push preparation | None                                                                          |
+| Ordinary prose-only Markdown change                                                                  | Format and documentation checks                                               |
+| Coherent runnable source change or manually resolved source conflict                                 | One affected exact test                                                       |
+| Completed source task with no final gate immediately next                                            | `test --changed --base TASK_BASE`                                             |
+| Completed source task on a long-lived branch                                                         | `checkpoint-gate --base PREVIOUS_CHECKPOINT` after commit and selected review |
+| Genuine merge or release checkpoint                                                                  | One `merge-gate --base MERGE_TARGET` through its configured owner             |
+| Stable release candidate                                                                             | Only explicitly selected supplemental suites                                  |
+
+Control Markdown and product-input Markdown follow source verification. A
+prose-only conflict remains documentation-only. Do not test after every edit or
+chat turn, or run changed-scope tests immediately before the same final gate.
+
+Ordinary task completion, a requested commit, and delivery do not select a merge
+gate. At a genuine merge or release checkpoint, honor
+`verification.finalGateOwner`: `local` is the default; `ci` assigns that one
+execution to CI. Duplicate it only when the caller requests independent evidence.
+Resolve the merge target from an explicit target, checked-in guidance,
+`origin/HEAD`, then `origin/main` or `origin/master`. Task-scoped commands keep the
+recorded task base; they do not substitute the merge target automatically.
+
+Supplemental suites require an explicit caller request, a checked-in workflow
+for the event, or a release-checklist selection. Declarations, including
+`tests.requiredSupplementalKinds`, never schedule them. Use
+`test --supplemental --resume` for selected retries. Run all only without trusted
+evidence or after shared infrastructure, toolchain, selection, or unbounded-impact
+changes. Credentialed, destructive, or live-provider probes require named
+external approval. See [verification and evidence](policies/verification.md).
+
+## Read conditional procedures when selected
+
+Use `code-polishy docs read TOPIC` for the exact release-owned document.
+`docs find QUERY...` locates other policy references. Add `--situation NAME` to
+`task-start` when the named situation actually applies; it selects guidance and
+matching repository handoffs without authorizing their operations.
+
+| Trigger                                                                  | Topic and procedure                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependency change or advisory investigation (`--situation dependencies`) | `supply-chain`: [dependency updates](policies/supply-chain.md#dependency-updates) and [security decisions](policies/supply-chain.md#dependency-security-decisions)                                                          |
+| Adoption or upgrade (`--situation adoption` or `upgrade`)                | `ai-adoption`: [bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base) and [upgrades](ai-adoption.md#upgrades)                                                                                                            |
+| Release preparation (`--situation release`)                              | `release-checklist`: [release procedure](release-checklist.md)                                                                                                                                                              |
+| Selected behavior review                                                 | `behavior-review`: [intent and corrections](policies/behavior-review.md#bind-a-task-request), then [review and proofs](policies/behavior-review.md#complete-a-selected-review)                                              |
+| Requested agent or architecture review                                   | `agent-reviews`: [review boundaries](agent-reviews.md); `architecture`: [architecture review](policies/architecture.md#architecture-review-workflow)                                                                        |
+| Selected reliability reminder                                            | `end-to-end-reliability`: [decision questions](policies/end-to-end-reliability.md)                                                                                                                                          |
+| Matching repository operational handoff                                  | `operational-handoffs`: [context selection and authority](operational-handoffs.md)                                                                                                                                          |
+| Genuine checkpoint, gate retry, or evidence transfer                     | `verification`: [checkpoints](policies/verification.md#verification-checkpoints), [receipts](policies/verification.md#reusable-test-evidence), and [retry rules](policies/verification.md#gate-reuse-and-failed-run-resume) |
+| Requested isolation or unattended work                                   | `task-sessions`: [scope and lifecycle](task-sessions.md)                                                                                                                                                                    |
+
+During upgrades, outgoing guidance governs until the exact verified incoming
+release atomically rewrites the lock. Only that incoming lock mutation is allowed
+before cutover. Incoming guidance applies immediately afterward; follow the
+upgrade procedure for any newly selected review requirement.
