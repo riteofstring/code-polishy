@@ -85,7 +85,17 @@ export const markdownPlugin = {
             path.node.value.split("\n"),
           );
         }
-        return printers.mdast.print(path, options, print);
+        const printed = printers.mdast.print(path, options, print);
+        const last =
+          path.node.type === "root" ? path.node.children.at(-1) : null;
+        if (last?.type !== PRESERVED) {
+          return printed;
+        }
+        const newlines = Math.max(1, last.value.match(/\n*$/)[0].length);
+        return [
+          doc.utils.stripTrailingHardline(printed),
+          Array(newlines).fill(doc.builders.literalline),
+        ];
       },
     },
   },

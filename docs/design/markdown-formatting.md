@@ -19,9 +19,12 @@ formatting and embedded-language behavior.
 
 The preserved node prints literal lines, retaining the marker, body, internal
 blank lines, leading indentation, and nested content. The existing formatter
-normalizes document line endings. Check and write operations share the same
-plugin, and parser or printer failures retain the existing unsupported-format
-result without writing that file.
+normalizes document line endings. When a preserved node ends the document, the
+printer replaces the root's default trailing line break with the preserved
+ending, adding one only when absent. This keeps unclosed code fences from
+accumulating blank lines and preserves trailing spaces in their content. Check
+and write operations share the same plugin, and parser or printer failures retain
+the existing unsupported-format result without writing that file.
 
 This supports preservation of these constructs without loading target plugins,
 executing MkDocs configuration, or adding a dependency or dialect setting. It
@@ -29,4 +32,5 @@ does not validate extension semantics or add extension-aware link analysis.
 The runner contract exercises actual check and write operations on temporary
 files, verifies unchanged block content alongside formatted surrounding content,
 and covers nested containers, neighboring ordered and unordered lists, code
-examples, blank lines, and repeated runs.
+examples, unclosed fences with differing terminal whitespace, blank lines, and
+repeated runs.

@@ -8,6 +8,8 @@
   fenced Markdown examples intact while formatting surrounding content.
 - Preserve adjoining list markers around extension blocks so separately numbered
   or bulleted lists cannot merge during formatting.
+- Keep EOF-terminated fenced examples stable across formatting passes while
+  preserving their trailing spaces and blank lines.
 - Use the same preservation in formatting checks and writes, preventing valid
   extension blocks from being reported as needing a destructive rewrite.
 - Reserve time within Unix process cleanup for forced termination and pipe

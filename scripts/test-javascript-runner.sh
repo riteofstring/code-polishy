@@ -130,6 +130,16 @@ for name, block in blocks.items():
     path = name + '.md'
     originals[path] = before + block + after
     expected[path] = expected_before + block + expected_after
+for name in ['reported', 'fenced', 'list', 'quote']:
+    path = name + '-eof.md'
+    originals[path] = before + blocks[name] + '\n'
+    expected[path] = expected_before + blocks[name] + '\n'
+for kind, fence in [('backtick', '```markdown'), ('tilde', '~~~markdown')]:
+    for index, ending in enumerate(['\n', '', '\n\n', '\n \n']):
+        block = fence + '\n??? note "Example"\n    - Content  '
+        path = f'unclosed-{kind}-{index}.md'
+        originals[path] = before + block + ending
+        expected[path] = expected_before + block + (ending or '\n')
 originals['frontmatter.MARKDOWN'] = '---\ntitle: Example\n---\n\n' + before + blocks['reported'] + after
 expected['frontmatter.MARKDOWN'] = '---\ntitle: Example\n---\n\n' + expected_before + blocks['reported'] + expected_after
 originals['ordinary.md'] = '#   Heading\n\n+ First\n+ Second\n\n__Bold__ ??? note\n\n```markdown\n#   Example\n```\n'
