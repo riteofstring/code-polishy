@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.6 - 2026-10-27
+
+- Authorize command producers to receive the private artifact output path and
+  override inherited output settings so generated artifacts stay within the
+  private evidence directory.
+
 ## 0.31.5 - 2026-10-26
 
 - Shorten the mandatory agent workflow and route conditional work to its specific

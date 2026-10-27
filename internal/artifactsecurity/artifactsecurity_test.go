@@ -416,7 +416,7 @@ func TestPlannedArtifactAuthorizationIsExactAtTheSecurityBoundary(t *testing.T) 
 		{Name: "archive", Mode: "archive"},
 		{Name: "image", Mode: "dockerfile"},
 		{Name: "producer", Mode: "command", Producer: &policy.ArtifactProducer{
-			Argv: []string{"build-artifact"}, Cwd: "build", Environment: []string{"MODE=release"}, TimeoutSeconds: 60,
+			Argv: []string{"build-artifact"}, Cwd: "build", Environment: []string{"MODE"}, TimeoutSeconds: 60,
 		}},
 	}}}}}
 	plans := PlannedCommands(repo)
@@ -428,8 +428,7 @@ func TestPlannedArtifactAuthorizationIsExactAtTheSecurityBoundary(t *testing.T) 
 		if strings.HasPrefix(expected.Name, governedDockerCommandPrefix) {
 			actual.Argv = []string{"docker", "version"}
 		} else {
-			actual.Environment = append([]string{}, expected.Environment...)
-			actual.Environment[len(actual.Environment)-1] = "CODE_POLISHY_ARTIFACT_OUTPUT=/private/output"
+			actual.EnvironmentOverrides = []string{"CODE_POLISHY_ARTIFACT_OUTPUT=/private/output"}
 		}
 		if !MatchesPlannedCommand(expected, actual) {
 			t.Fatalf("authorized artifact command was refused: expected=%+v actual=%+v", expected, actual)
@@ -515,7 +514,7 @@ func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 func (boundary *scannerBoundary) runPlain(ctx context.Context, root string, command policy.Command) error {
 	if len(command.Argv) > 0 && command.Argv[0] != "docker" {
 		output := ""
-		for _, value := range command.Environment {
+		for _, value := range command.EnvironmentOverrides {
 			if path, found := strings.CutPrefix(value, "CODE_POLISHY_ARTIFACT_OUTPUT="); found {
 				output = path
 			}
@@ -737,4 +736,53 @@ func (double *scannerBoundary) Execute(ctx context.Context, invocation runner.In
 		return double.runOutput(ctx, invocation.Root, invocation.Command)
 	}
 	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func TestCommandProducerPublishesThroughPrivateOutput(t *testing.T) {
+	t.Setenv("CODE_POLISHY_PRODUCER_PROCESS", "1")
+	t.Setenv("CODE_POLISHY_PRODUCER_SELECTED", "selected")
+	t.Setenv("CODE_POLISHY_PRODUCER_UNSELECTED", "hidden")
+	t.Setenv("CODE_POLISHY_ARTIFACT_OUTPUT", "wrong-inherited-output")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	state := &scannerRuntime{root: t.TempDir(), client: dockerClient{executor: runner.OSRunner{Stdout: os.Stdout, Stderr: os.Stderr}}, policy: scannerPolicy{MaximumArchiveBytes: 1024}}
+	target := policy.ArtifactTarget{Name: "process", Mode: "command", Producer: &policy.ArtifactProducer{
+		Argv: []string{executable, "-test.run=^TestArtifactProducerProcess$"}, Cwd: ".", Manifest: "manifest.json", TimeoutSeconds: 30,
+		Environment: []string{"CODE_POLISHY_PRODUCER_PROCESS", "CODE_POLISHY_PRODUCER_SELECTED", "CODE_POLISHY_ARTIFACT_OUTPUT"},
+	}}
+	artifact, err := prepareCommandArtifact(t.Context(), repository.Repository{Root: root}, state, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(state.root, "targets", target.Name)
+	if artifact.archive != filepath.Join(output, "image.tar") || artifact.reference != "process-image" {
+		t.Fatalf("artifact = %+v", artifact)
+	}
+	data, err := os.ReadFile(artifact.archive)
+	if err != nil || string(data) != output {
+		t.Fatalf("producer output = %q, error = %v", data, err)
+	}
+}
+
+func TestArtifactProducerProcess(t *testing.T) {
+	if os.Getenv("CODE_POLISHY_PRODUCER_PROCESS") != "1" {
+		return
+	}
+	output := os.Getenv("CODE_POLISHY_ARTIFACT_OUTPUT")
+	info, err := os.Stat(output)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("private output %q: %v", output, err)
+	}
+	if os.Getenv("CODE_POLISHY_PRODUCER_SELECTED") != "selected" || os.Getenv("CODE_POLISHY_PRODUCER_UNSELECTED") != "" {
+		t.Fatal("producer environment selection changed")
+	}
+	if err := os.WriteFile(filepath.Join(output, "image.tar"), []byte(output), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(output, "manifest.json"), []byte(`{"version":1,"archive":"image.tar","reference":"process-image"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
