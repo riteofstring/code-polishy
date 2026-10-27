@@ -12,6 +12,10 @@
   JSON verdict contract through report help and documentation.
 - Show dependency removals separately and name packages directly in preferred-age
   warnings. Document task-local comparisons without weakening merge-wide review.
+- Allow exact `SPDX-License-Identifier` and `SPDX-FileCopyrightText` notices in
+  a source file's leading comment header under `quality.allowComments: false`.
+  Identifiers must be valid SPDX expressions; other SPDX tags, trailing prose,
+  and notices after code remain findings.
 - Preserve MkDocs admonitions and expandable details during Markdown formatting,
   including `!!!`, `???`, and `???+` blocks with or without a blank line before
   their content. Keep nested blocks, containing lists and blockquotes, and

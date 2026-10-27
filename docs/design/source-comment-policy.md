@@ -30,6 +30,15 @@ code it controls. The closed registry in the
 [code-quality policy](../policies/code-quality.md#source-comments-and-docstrings)
 separates those machine inputs from prose.
 
+License notices are the one non-tool exception. Licenses such as BSD require
+source redistributions to retain copyright notices, and SPDX tags are the
+conventional machine-readable form. The strict policy therefore admits only the
+`SPDX-License-Identifier` and `SPDX-FileCopyrightText` tags in a file's leading
+comment header. Expressions must parse against the bundled SPDX list, and a
+copyright value must start like a notice, which keeps the allowance from
+carrying explanatory prose. Modification narratives and full license texts
+belong in distributed notice files.
+
 ## Design-context workflow
 
 `documentation.design` maps a current document under `docs/design/` to one

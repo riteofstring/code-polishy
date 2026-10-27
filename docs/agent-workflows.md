@@ -8,7 +8,9 @@ Read the conditional procedures only when their stated trigger applies.
 ## Start and complete ordinary work
 
 1. Use the caller's checkout and preserve unrelated changes. Read-only questions
-   need no intent capture, task session, or tests.
+   need no intent capture, task session, or tests. Answer capability, footprint,
+   and quality-trend questions with `capabilities --query "QUERY"`,
+   `size [--base MERGE_TARGET]`, and `trends [--since DATE] [--branch NAME]`.
 2. Start from a clean task base with `code-polishy task-start --files PATH...`
    or repeated `--module NAME` operands. Do not mix selector kinds. Retain its
    `TASK BASE` for task-scoped verification. If review is selected, rerun with

@@ -371,6 +371,16 @@
         ]
       },
       {
+        "path": "docs/design/source-comment-policy.md",
+        "sourcePaths": [
+          "internal/quality/comments_license.go",
+          "internal/quality/comments_python.go",
+          "internal/quality/comments_shell.go",
+          "internal/quality/comments_shell_parser.go",
+          "internal/quality/comments_web.go"
+        ]
+      },
+      {
         "path": "docs/design/design-context.md",
         "sourcePaths": [
           "internal/repository/design_context.go",
@@ -668,6 +678,7 @@
         "repository",
         "runner",
         "rustfacts",
+        "spdx",
         "strictjson"
       ]
     },

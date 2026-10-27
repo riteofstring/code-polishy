@@ -79,17 +79,25 @@ func strictSourceCommentFindings(repo repository.Repository, files []string) []p
 			findings = append(findings, sourceCommentCoverageFinding(path, language, result.err.Error()))
 			continue
 		}
-		source := newSourceText(data)
-		for _, annotation := range result.annotations {
-			if annotation.allowed || sourceAnnotationAllowed(repo, path, language, data, annotation) {
-				continue
-			}
-			line, column := source.location(annotation.offset)
-			findings = append(findings, policy.Finding{
-				Check: "policy.sourceComment", Path: path, Subject: fmt.Sprintf("%d:%d", line, column),
-				Message: "prose comments and docstrings are forbidden; move durable context to a design document or use an allowed machine directive",
-			})
+		findings = append(findings, sourceAnnotationFindings(repo, path, language, data, result.annotations)...)
+	}
+	return findings
+}
+
+func sourceAnnotationFindings(repo repository.Repository, path, language string, data []byte, annotations []sourceAnnotation) []policy.Finding {
+	findings := []policy.Finding{}
+	source := newSourceText(data)
+	headerEnd := sourceHeaderEnd(data, annotations)
+	for _, annotation := range annotations {
+		if annotation.allowed || sourceAnnotationAllowed(repo, path, language, data, annotation) ||
+			licenseNoticeAllowed(language, data, headerEnd, annotation) {
+			continue
 		}
+		line, column := source.location(annotation.offset)
+		findings = append(findings, policy.Finding{
+			Check: "policy.sourceComment", Path: path, Subject: fmt.Sprintf("%d:%d", line, column),
+			Message: "prose comments and docstrings are forbidden; move durable context to a design document or use an allowed machine directive",
+		})
 	}
 	return findings
 }

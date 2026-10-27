@@ -18,9 +18,7 @@ func rustSourceFindings(ctx context.Context, repo repository.Repository, files [
 	findings := result.Findings
 	for _, source := range result.Files {
 		if repo.NativeAnalysis(source.Path, "lint") && !repo.Config.Quality.CommentsAllowed() {
-			for _, comment := range source.Comments {
-				findings = append(findings, rustCommentFinding(source.Path, comment))
-			}
+			findings = append(findings, rustProseCommentFindings(repo, source)...)
 		}
 		if repo.NativeAnalysis(source.Path, "lint") {
 			findings = append(findings, rustTestEvidenceFindings(source)...)
@@ -28,6 +26,26 @@ func rustSourceFindings(ctx context.Context, repo repository.Repository, files [
 		findings = append(findings, rustAttributeFindings(repo, source.Path, source.Attributes)...)
 		if repo.NativeAnalysis(source.Path, "complexity") {
 			findings = append(findings, rustComplexityFindings(repo, source)...)
+		}
+	}
+	return findings
+}
+
+func rustProseCommentFindings(repo repository.Repository, source rustfacts.Source) []policy.Finding {
+	data, err := repo.Read(source.Path)
+	annotations := make([]sourceAnnotation, 0, len(source.Comments))
+	for _, comment := range source.Comments {
+		annotation := sourceAnnotation{offset: comment.StartByte}
+		if err == nil && 0 <= comment.StartByte && comment.StartByte <= comment.EndByte && comment.EndByte <= len(data) {
+			annotation.text = string(data[comment.StartByte:comment.EndByte])
+		}
+		annotations = append(annotations, annotation)
+	}
+	headerEnd := sourceHeaderEnd(data, annotations)
+	findings := []policy.Finding{}
+	for index, comment := range source.Comments {
+		if !licenseNoticeAllowed("rust", data, headerEnd, annotations[index]) {
+			findings = append(findings, rustCommentFinding(source.Path, comment))
 		}
 	}
 	return findings

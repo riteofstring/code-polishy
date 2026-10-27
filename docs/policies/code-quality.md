@@ -295,6 +295,15 @@ validated by the named language or tool; it is never a place to append prose.
 Where a directive has a required location, matching its bytes alone is
 insufficient.
 
+- License notices in the leading comment header, before any code, docstring,
+  or markup, as exact single-line comments starting at column one:
+  `SPDX-License-Identifier: <SPDX expression>` validated against the bundled
+  SPDX license list, or `SPDX-FileCopyrightText: <notice>` whose notice begins
+  with `Copyright `, `© `, `(c) `, `(C) `, or a four-digit year and stays
+  within 256 bytes. Use `# ` in Python, shell, and PowerShell; `// ` in Go,
+  JavaScript, TypeScript, and Rust; `/* ` and ` */` in CSS; and `<!-- ` and
+  ` -->` in HTML. Other SPDX tags and text after the value are prose. Put
+  modification narratives and longer notices in a distributed notice file.
 - A first-byte shebang, `#!<non-empty command>`, where the source language
   recognizes a shebang. A shell shebang also classifies a file whose extension
   is otherwise unknown, including multi-extension templates such as
@@ -354,7 +363,7 @@ insufficient.
 Lint, coverage, type-check, and test suppressions, TODO markers, commented-out
 code, explanatory headers, and near-misses of an allowed directive are prose
 violations. Python module, class, and function docstrings are prose comments.
-CSS and HTML have no allowed directive. A canonical HTML doctype remains markup,
+CSS and HTML allow only license notices. A canonical HTML doctype remains markup,
 while a non-empty inline `script` or `style` body requires its owning source
 scanner and fails coverage in the HTML lane. Invalid directive grammar or
 placement is a source-comment finding; a scanner or parser that cannot decide
@@ -369,7 +378,9 @@ source, run `code-polishy design-context --files <path...>` or
 repository-relative paths only and returns no more than one current document
 per selected file. It deliberately excludes plans, historical evidence, and
 superseded decisions; see [Adopting Code Polishy](../adoption.md#map-current-design-rationale)
-for the mapping schema.
+for the mapping schema. Its JSON report's `repositoryContext.designResolution`
+contains the complete matches, selection counts, and coverage gaps; human output
+abbreviates long path lists.
 
 ## Lint, type checking, and syntax
 

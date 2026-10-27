@@ -706,8 +706,8 @@ documented risk comparison and lack of practical alternatives described above.
 
 ## Dependency security decisions
 
-Read the locked supply-chain policy before changing a dependency to address an
-advisory. The 30-day admission window measures the exact package release's age,
+Apply this section before changing a dependency to address an advisory. The
+30-day admission window measures the exact package release's age,
 not the advisory's publication date. Check the existing version's exposure
 before choosing an upgrade or a vulnerability assessment.
 

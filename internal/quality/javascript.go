@@ -296,7 +296,13 @@ func javascriptLintViolationFinding(violation javascript.LintViolation) policy.F
 func javascriptSourceCommentAllowed(repo repository.Repository, comment javascript.LintComment) bool {
 	return javascriptShebangAllowed(comment) ||
 		javascriptTypeScriptReferenceAllowed(comment) ||
-		javascriptVitestEnvironmentAllowed(repo, comment)
+		javascriptVitestEnvironmentAllowed(repo, comment) ||
+		javascriptLicenseNoticeAllowed(comment)
+}
+
+func javascriptLicenseNoticeAllowed(comment javascript.LintComment) bool {
+	return comment.Complete && comment.Kind == "Line" && comment.BeforeCode && comment.Column == 1 &&
+		licenseNoticeComment("javascript", comment.Raw)
 }
 
 func javascriptShebangAllowed(comment javascript.LintComment) bool {
