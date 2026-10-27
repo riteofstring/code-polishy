@@ -8,8 +8,9 @@
 - Keep ordinary task-start output focused on selected context and follow-ups;
   disclose optional review in one line and select workflow documents from actual
   situations, handoffs, and review requirements.
-- Explain wrapper invocation in rendered documentation and expose the canonical
-  JSON verdict contract through report help and documentation.
+- State wrapper invocation at the top of the mandatory workflow entry point and
+  expose the canonical JSON verdict contract through report help and
+  documentation.
 - Show dependency removals separately and name packages directly in preferred-age
   warnings. Document task-local comparisons without weakening merge-wide review.
 - Allow exact `SPDX-License-Identifier` and `SPDX-FileCopyrightText` notices in

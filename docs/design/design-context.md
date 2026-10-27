@@ -64,6 +64,7 @@ capability catalog retains command and feature references, while the engine
 uses the context resolver's existing situation facts. Optional review collapses
 to one human line; JSON retains complete intent and guard facts.
 
-Rendered documentation states the wrapper substitution once before its original
-content. The CLI does not rewrite examples or infer an executable from ambient
-PATH, and documentation discovery still works without opening a target repository.
+`docs read` returns the release-owned document bytes unchanged, which installed
+release checks compare exactly. The mandatory workflow entry point therefore
+states the wrapper substitution in its own opening paragraph instead of the CLI
+prepending a notice or rewriting examples.

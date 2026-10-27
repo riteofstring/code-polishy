@@ -109,9 +109,6 @@ func readDocumentation(library *versioneddocs.Library, topic string) int {
 	if err != nil {
 		return documentationError(err)
 	}
-	if _, err := fmt.Fprint(os.Stdout, "> In a managed repository, run `code-polishy` examples through `./code-polishyw` (PowerShell: `.\\code-polishyw.ps1`) so the repository lock selects the release.\n\n"); err != nil {
-		return operationalError(fmt.Errorf("write documentation invocation: %w", err))
-	}
 	if _, err := os.Stdout.Write(document.Content); err != nil {
 		return operationalError(fmt.Errorf("write documentation topic: %w", err))
 	}
