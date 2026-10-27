@@ -84,7 +84,7 @@ func TestAdapterFailsClosedForSyntaxIdentityAndResourceBoundaries(t *testing.T) 
 	response, err := Analyze(python, Request{
 		Manifests: []Input{{Path: "pyproject.toml", Source: "[project\n"}},
 		Metadata:  []Input{{Path: "broken.dist-info/METADATA", Source: "Metadata-Version: 2.4\nName:\nVersion: no version spaces\n\n"}},
-		Sources:   []Input{{Path: "future.py", Source: "type Alias[T = int] = list[T]\n"}},
+		Sources:   []Input{{Path: "future.py", Source: "\n\ntype Alias[T = int] = list[T]\n"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,8 +92,11 @@ func TestAdapterFailsClosedForSyntaxIdentityAndResourceBoundaries(t *testing.T) 
 	if response.Manifests[0].Error == "" || response.Metadata[0].Error == "" || response.Sources[0].Error == "" {
 		t.Fatalf("response = %+v", response)
 	}
-	if !strings.Contains(response.Sources[0].Error, "CPython 3.12 analyzer") || !strings.Contains(response.Sources[0].Error, "parser upgrade") {
-		t.Fatalf("unsupported syntax has no analyzer diagnosis: %s", response.Sources[0].Error)
+	diagnostic := response.Sources[0].Error
+	for _, expected := range []string{"future.py, line 3", "CPython 3.12 analyzer", "parser upgrade"} {
+		if !strings.Contains(diagnostic, expected) {
+			t.Fatalf("syntax error lacks %q: %s", expected, diagnostic)
+		}
 	}
 	if _, err := Analyze(python, Request{Requirements: []string{strings.Repeat("x", maximumRequestSize)}}); err == nil {
 		t.Fatal("oversized request was accepted")

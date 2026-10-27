@@ -19,11 +19,11 @@ def parse_source(path, source):
             source, filename=path, type_comments=True, feature_version=(3, 12)
         )
     except SyntaxError as error:
-        error.msg += (
-            "; source must parse with the bundled CPython 3.12 analyzer; "
-            "newer Python syntax requires a Code Polishy parser upgrade"
-        )
-        raise
+        raise SyntaxError(
+            f"{error.msg}; source must parse with the bundled CPython 3.12 analyzer; "
+            "newer Python syntax requires a Code Polishy parser upgrade",
+            *error.args[1:],
+        ) from error
     count = 0
     stack = [(tree, 1)]
     while stack:
