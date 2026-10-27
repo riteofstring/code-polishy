@@ -25,6 +25,7 @@ import { imports } from "./imports.mjs";
 import { gitlab } from "./gitlab.mjs";
 import { licenses } from "./licenses.mjs";
 import { lintPage } from "./lint-pages.mjs";
+import { markdownPlugin } from "./markdown.mjs";
 import { packages, peers, workspace } from "./packages.mjs";
 import {
   MAXIMUM_REQUEST_BYTES,
@@ -107,6 +108,7 @@ async function format(request, write) {
       formatted = await prettier.format(source, {
         ...FORMAT_OPTIONS,
         filepath: path,
+        plugins: [markdownPlugin],
       });
     } catch (error) {
       unsupportedPaths.push(unsupported(path, error.message));

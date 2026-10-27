@@ -4,6 +4,7 @@ pnpm-workspace.yaml
 .npmrc
 runner.mjs
 lint-pages.mjs
+markdown.mjs
 data-modules.mjs
 protocol.mjs
 audit.mjs

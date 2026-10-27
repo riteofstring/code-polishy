@@ -18,6 +18,7 @@ const (
 	executableBusyRetryInterval = 25 * time.Millisecond
 	executableBusyRetryTimeout  = time.Second
 	processGroupPollInterval    = 10 * time.Millisecond
+	processGroupDrainReserve    = commandCleanupDelay / 2
 )
 
 var errProcessGroupEscape = errors.New("governed command escaped its process group")
@@ -124,7 +125,7 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 		_ = signalProcessGroup(command.Process.Pid, syscall.SIGTERM)
 		select {
 		case waitErr = <-wait:
-		case <-time.After(time.Until(cleanupDeadline)):
+		case <-time.After(time.Until(cleanupDeadline.Add(-processGroupDrainReserve))):
 			_ = signalProcessGroup(command.Process.Pid, syscall.SIGKILL)
 			waitErr = <-wait
 		}
@@ -302,7 +303,7 @@ func cleanupProcessGroup(processID int, deadline time.Time, witness *processTree
 				return processGroupSignalError(err, witness)
 			}
 		}
-		if time.Now().After(deadline) {
+		if time.Now().After(deadline.Add(-processGroupDrainReserve)) {
 			if err := signalProcessGroup(processID, syscall.SIGKILL); err != nil {
 				return processGroupSignalError(err, witness)
 			}

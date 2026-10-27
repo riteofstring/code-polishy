@@ -81,6 +81,73 @@ if [[ "$(cat "${target}/src/formatted.ts")" != 'const value = 1;' ]]; then
   fail "format-write rewrote an already formatted file"
 fi
 
+javascript_sealed_run python3 - "${javascript_node}" "${javascript_runner}" "${fixture_root}/markdown" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+node, runner, directory = sys.argv[1:]
+root = Path(directory)
+root.mkdir()
+blocks = {
+    "reported": '??? note "Supported Loss Functions"\n    - [AngularLoss](losses.md#angularloss)\n    - [CircleLoss](losses.md#circleloss)',
+    "blank-line": '??? note "Title"\n\n    - First\n    - Second',
+    "expanded": '???+ tip "Title"\n    - First\n    - Second',
+    "admonition": '!!! warning "Title"\n    - First\n    - Second',
+    "admonition-blank-line": '!!! warning "Title"\n\n    - First\n    - Second',
+    "nested": '??? note "Title"\n\n    !!! warning "Nested"\n        - First\n\n        ???+ tip "Deeper"\n            More content.',
+    "list": '- Parent\n\n    ??? note "Title"\n        - First\n        - Second\n\n- Sibling',
+    "quote": '> ??? note "Title"\n>\n>     - First\n>     - Second',
+    "quoted-list": '- > Introduction\n  > ??? note "Title"\n  >     - First',
+    "fenced": '```markdown\n??? note "Title"\n    - First\n    - Second\n```',
+    "tilde-fenced": '~~~md\n!!! note "Title"\n    - First\n~~~',
+    "fenced-container": '```markdown\n- > ??? note "Title"\n  >     - First\n```',
+    "fenced-nested": '??? note "Title"\n\n    ```markdown\n    ??? note "Nested"\n        - First\n    ```',
+    "adjacent": '??? note "First"\n\n    - First\n\n???+ tip "Second"\n    - Second',
+    "leading-indent": '   ??? note "Title"\n       - First',
+    "tab-indent": '??? note "Title"\n\n\t- First',
+    "paragraph": 'Introduction\n??? note "Title"\n    First paragraph.\n\n    Second paragraph.',
+}
+before = '#   Before\n\n'
+after = '\n\n##   After\n\n```js\nconst value=1\n```\n'
+expected_before = '# Before\n\n'
+expected_after = '\n\n## After\n\n```js\nconst value = 1;\n```\n'
+originals = {}
+expected = {}
+for name, block in blocks.items():
+    path = name + '.md'
+    originals[path] = before + block + after
+    expected[path] = expected_before + block + expected_after
+originals['frontmatter.MARKDOWN'] = '---\ntitle: Example\n---\n\n' + before + blocks['reported'] + after
+expected['frontmatter.MARKDOWN'] = '---\ntitle: Example\n---\n\n' + expected_before + blocks['reported'] + expected_after
+originals['ordinary.md'] = '#   Heading\n\n+ First\n+ Second\n\n__Bold__ ??? note\n\n```markdown\n#   Example\n```\n'
+expected['ordinary.md'] = '# Heading\n\n- First\n- Second\n\n**Bold** ??? note\n\n```markdown\n# Example\n```\n'
+for path, content in originals.items():
+    (root / path).write_text(content, encoding='utf-8')
+
+def request(operation):
+    payload = {'protocolVersion': 3, 'operation': operation, 'root': str(root), 'paths': list(originals)}
+    completed = subprocess.run([node, runner], input=json.dumps(payload), capture_output=True, text=True, check=True)
+    result = json.loads(completed.stdout)['result']
+    assert result['unsupported'] == [], result
+    return result
+
+checked = request('format')
+assert set(checked['changed']) == set(originals), checked
+for path, content in originals.items():
+    assert (root / path).read_text(encoding='utf-8') == content, path
+written = request('format-write')
+assert set(written['changed']) == set(originals), written
+for path, content in expected.items():
+    actual = (root / path).read_text(encoding='utf-8')
+    assert actual == content, (path, actual, content)
+assert request('format')['changed'] == []
+assert request('format-write')['changed'] == []
+for path, content in expected.items():
+    assert (root / path).read_text(encoding='utf-8') == content, path
+PY
+
 gitlab_target="${fixture_root}/gitlab"
 mkdir -p "${gitlab_target}/ci" "${gitlab_target}/.git"
 gitlab_digest="sha256:$(printf 'a%.0s' {1..64})"

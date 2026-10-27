@@ -136,6 +136,12 @@ specific coverage finding, never a silent pass. A
 target without JavaScript or TypeScript launches the bundle only when Markdown
 is selected and formats its remaining file types with configured providers.
 
+Markdown formatting preserves MkDocs `!!!`, `???`, and `???+` blocks, including
+their indented bodies, nested content, and fenced examples. An affected list or
+blockquote is preserved with its contents. Surrounding Markdown continues to
+receive ordinary formatting. This preservation does not validate MkDocs
+extension semantics.
+
 ### Generated producers
 
 Declare each generated executable's authoritative inputs and exact commands

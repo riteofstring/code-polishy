@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.31.5 - 2026-10-26
+
+- Preserve MkDocs admonitions and expandable details during Markdown formatting,
+  including `!!!`, `???`, and `???+` blocks with or without a blank line before
+  their content. Keep nested blocks, containing lists and blockquotes, and
+  fenced Markdown examples intact while formatting surrounding content.
+- Use the same preservation in formatting checks and writes, preventing valid
+  extension blocks from being reported as needing a destructive rewrite.
+- Reserve time within Unix process cleanup for forced termination and pipe
+  drainage, preventing a cancelled process that ignores TERM from being
+  misreported as an escaped descendant after KILL.
+
 ## 0.31.4 - 2026-10-26
 
 - Match PyPI release timestamps by PEP 440 version identity, including equivalent

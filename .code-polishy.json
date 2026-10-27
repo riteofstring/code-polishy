@@ -39,6 +39,10 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/markdown-formatting.md",
+        "sourcePaths": ["tools/javascript/markdown.mjs"]
+      },
+      {
         "path": "docs/design/python-adoption.md",
         "sourcePaths": [
           "internal/pythonfacts/adapter.py",

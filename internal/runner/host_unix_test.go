@@ -202,10 +202,14 @@ func TestHostRuntimeCancellationAndEscalation(t *testing.T) {
 			}{result, err}
 		}()
 		waitForHostMarker(t, ready)
+		started := time.Now()
 		cancel()
 		outcome := <-resultChannel
 		if !errors.Is(outcome.err, context.Canceled) || !outcome.result.Started || !outcome.result.Quiescent || outcome.result.ExitStatus != -1 {
 			t.Fatalf("result=%+v error=%v", outcome.result, outcome.err)
+		}
+		if elapsed := time.Since(started); elapsed >= 5*time.Second {
+			t.Fatalf("forced termination exhausted the cleanup budget: %s", elapsed)
 		}
 	})
 }

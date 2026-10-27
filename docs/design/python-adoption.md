@@ -43,7 +43,11 @@ five-second cleanup budget now covers group termination, witness closure, and
 output drainage together. A daemon that closes every inherited descriptor
 within that budget permits quiescence; persistent holders still fail. Output
 readers also close at the deadline so an escaped stdout/stderr holder cannot
-block failure reporting indefinitely. Diagnostics retain the launched command,
+block failure reporting indefinitely. TERM receives the first half of the
+budget before escalation to KILL, reserving the remaining half for process exit,
+witness closure, and output drainage. Waiting until the final deadline to kill
+a process can misclassify its pending pipe EOF as an escaped descendant.
+Diagnostics retain the launched command,
 leader PID and process group, and elapsed cleanup time. The witness establishes
 that a descendant retains a descriptor but does not identify that descendant's
 PID; the diagnostic does not invent one.
