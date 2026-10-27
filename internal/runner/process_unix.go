@@ -18,7 +18,6 @@ const (
 	executableBusyRetryInterval = 25 * time.Millisecond
 	executableBusyRetryTimeout  = time.Second
 	processGroupPollInterval    = 10 * time.Millisecond
-	processTreeWitnessDelay     = 100 * time.Millisecond
 )
 
 var errProcessGroupEscape = errors.New("governed command escaped its process group")
@@ -106,7 +105,7 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 	if err := command.Start(); err != nil {
 		witness.closeWriter()
 		streams.closeWriters()
-		return HostResult{ExitStatus: -1}, errors.Join(err, witness.wait(), streams.wait())
+		return HostResult{ExitStatus: -1}, errors.Join(err, witness.wait(time.Now().Add(commandCleanupDelay)), streams.wait())
 	}
 	witness.closeWriter()
 	streams.closeWriters()
@@ -114,12 +113,14 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 	go func() { wait <- command.Wait() }()
 	var waitErr error
 	var cancellationErr error
+	cleanupStarted := time.Time{}
 	cleanupDeadline := time.Time{}
 	select {
 	case waitErr = <-wait:
 	case <-ctx.Done():
 		cancellationErr = ctx.Err()
-		cleanupDeadline = time.Now().Add(commandCleanupDelay)
+		cleanupStarted = time.Now()
+		cleanupDeadline = cleanupStarted.Add(commandCleanupDelay)
 		_ = signalProcessGroup(command.Process.Pid, syscall.SIGTERM)
 		select {
 		case waitErr = <-wait:
@@ -128,15 +129,23 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 			waitErr = <-wait
 		}
 	}
+	if cleanupStarted.IsZero() {
+		cleanupStarted = time.Now()
+		cleanupDeadline = cleanupStarted.Add(commandCleanupDelay)
+	}
 	cleanupErr := cleanupProcessGroup(command.Process.Pid, cleanupDeadline, witness)
-	witnessErr := witness.wait()
-	streamErr := streams.wait()
+	witnessErr := witness.wait(cleanupDeadline)
+	streamErr := streams.finish(cleanupDeadline)
+	cleanupErr = errors.Join(cleanupErr, witnessErr, streamErr)
+	if cleanupErr != nil {
+		cleanupErr = fmt.Errorf("command %q (pid=%d, process-group=%d) cleanup after %s: %w", command.Args[0], command.Process.Pid, command.Process.Pid, time.Since(cleanupStarted).Round(time.Millisecond), cleanupErr)
+	}
 	result := HostResult{
 		Started:    true,
-		Quiescent:  cleanupErr == nil && witnessErr == nil && streamErr == nil,
+		Quiescent:  cleanupErr == nil,
 		ExitStatus: command.ProcessState.ExitCode(),
 	}
-	return result, errors.Join(cancellationErr, waitErr, cleanupErr, witnessErr, streamErr)
+	return result, errors.Join(cancellationErr, waitErr, cleanupErr)
 }
 
 type processTreeWitness struct {
@@ -170,12 +179,18 @@ func (witness *processTreeWitness) closeWriter() {
 	_ = witness.writer.Close()
 }
 
-func (witness *processTreeWitness) wait() error {
+func (witness *processTreeWitness) wait(deadline time.Time) error {
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
 	select {
 	case <-witness.done:
 		_ = witness.reader.Close()
 		return witness.err
-	case <-time.After(processTreeWitnessDelay):
+	case <-timer.C:
+		if witness.quiescent() {
+			_ = witness.reader.Close()
+			return witness.err
+		}
 		_ = witness.reader.Close()
 		<-witness.done
 		return errProcessGroupEscape
@@ -193,6 +208,7 @@ func (witness *processTreeWitness) quiescent() bool {
 
 type commandOutputStreams struct {
 	writers []*os.File
+	readers []*os.File
 	waiters sync.WaitGroup
 	mu      sync.Mutex
 	errs    []error
@@ -207,6 +223,7 @@ func (streams *commandOutputStreams) add(output io.Writer) (*os.File, error) {
 		return nil, fmt.Errorf("create command output pipe: %w", err)
 	}
 	streams.writers = append(streams.writers, writer)
+	streams.readers = append(streams.readers, reader)
 	streams.waiters.Add(1)
 	go streams.drain(reader, output)
 	return writer, nil
@@ -223,6 +240,16 @@ func (streams *commandOutputStreams) wait() error {
 	streams.mu.Lock()
 	defer streams.mu.Unlock()
 	return errors.Join(streams.errs...)
+}
+
+func (streams *commandOutputStreams) finish(deadline time.Time) error {
+	timer := time.AfterFunc(time.Until(deadline), func() {
+		for _, reader := range streams.readers {
+			_ = reader.Close()
+		}
+	})
+	defer timer.Stop()
+	return streams.wait()
 }
 
 func (streams *commandOutputStreams) drain(reader *os.File, output io.Writer) {

@@ -243,7 +243,7 @@ func lookupReleaseGroup(ctx context.Context, client *http.Client, repo repositor
 	if group.Kind == "node" {
 		return decodeNodeReleaseTimes(response.Body, group.Items)
 	}
-	return decodePyPIReleaseTimes(response.Body)
+	return decodePyPIReleaseTimes(response.Body, group.Items)
 }
 
 func decodeNodeReleaseTimes(reader io.Reader, packages []resolvedPackage) (map[string]time.Time, error) {
@@ -275,11 +275,13 @@ func decodeNodeReleaseTimes(reader io.Reader, packages []resolvedPackage) (map[s
 	return times, nil
 }
 
-func decodePyPIReleaseTimes(reader io.Reader) (map[string]time.Time, error) {
+type pypiReleaseFile struct {
+	UploadTime time.Time `json:"upload_time_iso_8601"`
+}
+
+func decodePyPIReleaseTimes(reader io.Reader, packages []resolvedPackage) (map[string]time.Time, error) {
 	var payload struct {
-		Releases map[string][]struct {
-			UploadTime time.Time `json:"upload_time_iso_8601"`
-		} `json:"releases"`
+		Releases map[string][]pypiReleaseFile `json:"releases"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(reader, 64<<20))
 	if err := decoder.Decode(&payload); err != nil {
@@ -288,16 +290,51 @@ func decodePyPIReleaseTimes(reader io.Reader) (map[string]time.Time, error) {
 	if err := requireOneJSONValue(decoder); err != nil {
 		return nil, err
 	}
-	times := map[string]time.Time{}
-	for version, files := range payload.Releases {
-		for _, file := range files {
-			if file.UploadTime.IsZero() || !times[version].IsZero() && !file.UploadTime.Before(times[version]) {
-				continue
-			}
-			times[version] = file.UploadTime
+	versions := make([]string, 0, len(payload.Releases)+len(packages))
+	for version := range payload.Releases {
+		versions = append(versions, version)
+	}
+	for _, item := range packages {
+		versions = append(versions, item.Version)
+	}
+	identities, err := repository.NormalizePythonVersions(versions)
+	if err != nil {
+		return nil, err
+	}
+	times, identitiesCount := pypiReleaseTimestamps(payload.Releases, identities)
+	result := map[string]time.Time{}
+	for _, item := range packages {
+		if identitiesCount[identities[item.Version]] > 1 {
+			return nil, fmt.Errorf("ambiguous PyPI release metadata for version %q", item.Version)
+		}
+		if released, exists := times[identities[item.Version]]; exists {
+			result[item.Version] = released
 		}
 	}
-	return times, nil
+	return result, nil
+}
+
+func pypiReleaseTimestamps(releases map[string][]pypiReleaseFile, identities map[string]string) (map[string]time.Time, map[string]int) {
+	times := map[string]time.Time{}
+	identitiesCount := map[string]int{}
+	for version, files := range releases {
+		identity := identities[version]
+		if identity == "" {
+			continue
+		}
+		var released time.Time
+		for _, file := range files {
+			if file.UploadTime.IsZero() || !released.IsZero() && !file.UploadTime.Before(released) {
+				continue
+			}
+			released = file.UploadTime
+		}
+		if !released.IsZero() {
+			identitiesCount[identity]++
+			times[identity] = released
+		}
+	}
+	return times, identitiesCount
 }
 
 func errorsNewReleaseTime(item resolvedPackage) error {

@@ -53,6 +53,12 @@ Explicit environment selection uses operating-system name lookup: Windows names
 are case-insensitive, while Unix names remain case-sensitive. Only requested
 names are inherited, including values explicitly set to an empty string.
 
+Test command validation unwraps literal `env NAME=value` prefixes before
+applying the existing no-op, shell-evaluation, and empty-test checks. These
+assignments are process-local values; they do not change the host inheritance
+declaration or invoke a shell. Managed virtualenv executable resolution and
+bounded Unix descendant cleanup follow the [Python runtime boundaries](python-adoption.md).
+
 Repository-wide Python dead-code analysis runs only for an explicit complete
 selection or merge gate. Focused Python checks run selected Ruff and ty work;
 they do not construct global reachability evidence that cannot establish a

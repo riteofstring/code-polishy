@@ -102,8 +102,9 @@ func TestHostRuntimeRejectsIncompleteCommand(t *testing.T) {
 }
 
 func TestHostRuntimeDetectsProcessGroupEscape(t *testing.T) {
-	environment := hostTestEnvironment(t, "escape", nil)
+	environment := hostTestEnvironment(t, "escape", map[string]string{"CODE_POLISHY_ESCAPE_STREAMS": "1"})
 	var stdout, stderr bytes.Buffer
+	started := time.Now()
 	result, err := Run(context.Background(), HostCommand{
 		Path:        os.Args[0],
 		Argv:        []string{"code-polishy escape helper", "-test.run=^TestHostRuntimeEscapeHelper$"},
@@ -122,6 +123,27 @@ func TestHostRuntimeDetectsProcessGroupEscape(t *testing.T) {
 	}()
 	if !errors.Is(err, errProcessGroupEscape) || !result.Started || result.Quiescent || result.ExitStatus != 0 {
 		t.Fatalf("result=%+v error=%v stderr=%q", result, err, stderr.String())
+	}
+	if time.Since(started) > 10*time.Second || !strings.Contains(err.Error(), "pid=") || !strings.Contains(err.Error(), "cleanup after") {
+		t.Fatalf("escape did not report bounded cleanup: elapsed=%s error=%v", time.Since(started), err)
+	}
+}
+
+func TestHostRuntimeWaitsForBoundedDaemonCleanup(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "daemon-cleaned")
+	var stdout bytes.Buffer
+	result, err := Run(t.Context(), HostCommand{
+		Path: os.Args[0], Argv: []string{"code-polishy daemon helper", "-test.run=^TestHostRuntimeEscapeHelper$"},
+		Environment: hostTestEnvironment(t, "escape", map[string]string{
+			"CODE_POLISHY_DAEMON_CLEANED": marker, "CODE_POLISHY_ESCAPE_STREAMS": "1",
+		}),
+		Stdout: &stdout, Stderr: io.Discard,
+	})
+	if err != nil || !result.Started || !result.Quiescent || result.ExitStatus != 0 {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("returned before daemon cleanup: %v", err)
 	}
 }
 
@@ -361,7 +383,11 @@ func TestHostRuntimeEscapeHelper(t *testing.T) {
 	command.Stdin = nil
 	command.Stdout = nil
 	command.Stderr = nil
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if os.Getenv("CODE_POLISHY_ESCAPE_STREAMS") == "1" {
+		command.Stdout = os.Stdout
+		command.Stderr = os.Stderr
+	}
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := command.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(70)
@@ -373,6 +399,11 @@ func TestHostRuntimeEscapeHelper(t *testing.T) {
 func TestHostRuntimeEscapedDescendant(t *testing.T) {
 	if os.Getenv("CODE_POLISHY_HOST_HELPER") != "escaped-descendant" {
 		return
+	}
+	if marker := os.Getenv("CODE_POLISHY_DAEMON_CLEANED"); marker != "" {
+		time.Sleep(2 * time.Second)
+		writeHostMarker(marker)
+		os.Exit(0)
 	}
 	for {
 		time.Sleep(time.Hour)

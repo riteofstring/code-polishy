@@ -517,8 +517,13 @@ func supplementalOnlyKind(kind string) bool {
 }
 
 func validateTestCommandArgv(argv []string, label string) error {
+	command, err := testCommandAfterEnvironment(argv)
+	if err != nil {
+		return fmt.Errorf("%s.argv: %w", label, err)
+	}
+	argv = command
 	executable := strings.ToLower(filepath.Base(argv[0]))
-	if slices.Contains([]string{"false", "noop", "printf", "pwd", "test", "true", "echo", "env"}, executable) {
+	if slices.Contains([]string{"false", "noop", "printf", "pwd", "test", "true", "echo"}, executable) {
 		return fmt.Errorf("%s.argv must execute a test-strength command, not obvious no-op %q", label, argv[0])
 	}
 	for index, argument := range argv {
@@ -535,6 +540,43 @@ func validateTestCommandArgv(argv []string, label string) error {
 		}
 	}
 	return nil
+}
+
+func testCommandAfterEnvironment(argv []string) ([]string, error) {
+	for len(argv) > 0 && strings.EqualFold(filepath.Base(argv[0]), "env") {
+		var err error
+		argv, err = commandAfterEnvAssignments(argv[1:])
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateCommandArgv(argv, "wrapped test command"); err != nil {
+		return nil, err
+	}
+	return argv, nil
+}
+
+func commandAfterEnvAssignments(argv []string) ([]string, error) {
+	if len(argv) > 0 && argv[0] == "--" {
+		argv = argv[1:]
+	}
+	for len(argv) > 0 {
+		name, _, assignment := strings.Cut(argv[0], "=")
+		if !assignment {
+			break
+		}
+		if !generationEnvironmentName.MatchString(name) {
+			return nil, fmt.Errorf("env requires a literal NAME=value assignment, got %q", argv[0])
+		}
+		argv = argv[1:]
+	}
+	if len(argv) == 0 {
+		return nil, errors.New("env must execute a test-strength command, not an empty environment-only invocation")
+	}
+	if strings.HasPrefix(argv[0], "-") {
+		return nil, fmt.Errorf("unsupported env option %q; use literal NAME=value assignments", argv[0])
+	}
+	return argv, nil
 }
 
 func validateCommand(config *Config, command *Command, label string, names map[string]bool) error {

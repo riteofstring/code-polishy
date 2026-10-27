@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/pythonfacts"
@@ -25,6 +26,29 @@ func NormalizePythonPackageName(name string) (string, error) {
 		return "", fmt.Errorf("package name %q is invalid: %s", name, result.Error)
 	}
 	return result.Normalized, nil
+}
+
+func NormalizePythonVersions(versions []string) (map[string]string, error) {
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		return nil, err
+	}
+	versions = slices.Clone(versions)
+	slices.Sort(versions)
+	versions = slices.Compact(versions)
+	result := map[string]string{}
+	for batch := range slices.Chunk(versions, 4096) {
+		response, err := pythonfacts.Analyze(python, pythonfacts.Request{Versions: batch})
+		if err != nil {
+			return nil, err
+		}
+		for _, version := range response.Versions {
+			if version.Error == "" && version.Normalized != "" {
+				result[version.Input] = version.Normalized
+			}
+		}
+	}
+	return result, nil
 }
 
 func pythonRequirementInventoryFact(fact pythonfacts.Requirement) (PythonRequirement, error) {

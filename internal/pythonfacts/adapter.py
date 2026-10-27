@@ -206,18 +206,19 @@ def _ruff_target(value):
         candidates.update(_version_patches(parsed))
     if lower is None or len(lower.release) < 2:
         return _ruff_error(value, "specifier has no minimum supported Python version")
-    if lower.release[:2] < (3, 7) or lower.release[:2] > (3, 12):
+    if lower.release[:2] < (3, 7) or lower.release[:2] > (3, 15):
         message = (
-            "minimum Python version is outside the carried parser range "
-            "of 3.7 through 3.12"
+            "minimum Python version is outside the pinned Ruff target range "
+            "of 3.7 through 3.15; upgrade the Code Polishy Ruff analyzer "
+            "before selecting a newer target"
         )
         return _ruff_error(value, message)
     target = _supported_ruff_target(specifiers, lower, candidates)
     if target:
         return {"input": value, "target": target, "error": ""}
     message = (
-        "specifier has no stable Python version supported by the carried "
-        "CPython 3.12 parser"
+        "specifier has no stable Python version supported by the pinned "
+        "Ruff targets (3.7 through 3.15)"
     )
     return _ruff_error(value, message)
 
@@ -257,7 +258,7 @@ def _version_patches(version):
 
 
 def _supported_ruff_target(specifiers, lower, patches):
-    for minor in range(lower.release[1], 13):
+    for minor in range(lower.release[1], 16):
         for patch in sorted(patches):
             candidate = Version(f"3.{minor}.{patch}")
             if specifiers.contains(candidate, prereleases=False):

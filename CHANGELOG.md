@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.31.4 - 2026-10-26
+
+- Match PyPI release timestamps by PEP 440 version identity, including equivalent
+  wheel spellings such as `13.0.3.0` and `13.0.3`, while rejecting missing or
+  ambiguous evidence.
+- Select the pinned Ruff's Python 3.13, 3.14, and 3.15 targets independently of
+  the bundled CPython 3.12 source parser. Report unsupported source syntax as an
+  analyzer-upgrade requirement.
+- Validate test commands after literal `env NAME=value` assignments, retaining
+  rejection of empty commands, no-ops, shell evaluation, and empty-test flags.
+- Support project virtualenv interpreter symlinks whose `pyvenv.cfg` home and
+  version agree with an exact adjacent `.python-version`, using the same
+  resolution in doctor and execution while retaining virtualenv identity.
+- Allow bounded Unix daemon cleanup within the existing five-second budget,
+  retain failures for persistent escaped descendants, bound inherited output
+  drainage, and report the launched process and elapsed cleanup time.
+- Document the first-adoption bootstrap commit and subsequent clean request
+  capture without weakening final coverage or verification requirements.
+
 ## 0.31.3 - 2026-10-23
 
 - Compile and lint governed Cargo replacement packages through their consuming

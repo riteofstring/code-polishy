@@ -783,6 +783,13 @@ tests. These intentionally cheap checks are not semantic proof. Optional supplem
 establish whether realistic production changes make the tests fail. See
 [Test Strength and Executable Specification](test-strength.md).
 
+A test argv may start with `env`, an optional `--`, and literal `NAME=value`
+assignments. Validation applies to the command that follows, including nested
+`env` prefixes. Environment-only invocations, wrapped no-ops, shell evaluation,
+and pass-with-no-tests flags remain invalid. Options such as `env -S` are not
+supported; assignments are passed literally without shell expansion. The
+`environment` declaration still selects variable names to inherit from the host.
+
 Gherkin remains optional. When governed `.feature` files exist, they must feed
 a full executable acceptance suite. A separate supplemental acceptance-mutation
 suite is optional hardening. Feature text describes domain behavior, not

@@ -70,6 +70,28 @@ Subsequent commands go through the same wrapper and do not require a global
 `PATH` entry. `setup --source PATH` may recover the exact release already named
 by the lock from a local checkout.
 
+For a first installation, commit this minimal policy scaffold before
+task-start. Follow the [two-phase bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base)
+to retain the unmanaged comparison base and capture any selected original
+intent from the clean bootstrap commit before completing ownership or changing
+product source. A bootstrap commit may have incomplete coverage; adoption is
+complete only after the final required checks pass.
+
+Python's runtime minimum and the analysis runtime are separate. The pinned
+Ruff accepts targets through Python 3.15, including projects declaring
+`>=3.13`. Source facts and dead-code analysis still use bundled CPython 3.12;
+syntax newer than that parser supports requires a Code Polishy parser upgrade
+and remains a coverage failure. Do not lower the project's advertised minimum
+to hide an analyzer limitation.
+
+A Unix project may invoke its own `.venv/bin/python` directly in checks and
+tests. An interpreter symlink outside the checkout is supported when the
+contained `.venv/pyvenv.cfg` identifies its external `home` and exact version,
+and the adjacent project `.python-version` pins the same `3.MINOR.PATCH`.
+Both uv's `version_info` and standard venv's `version` metadata are supported.
+The runner keeps the virtualenv invocation path so Python retains its virtualenv
+identity. Other repository script links must still resolve inside the checkout.
+
 ## 3. Declare project capabilities
 
 `project.kind` is descriptive and open-ended. `project.capabilities` activates

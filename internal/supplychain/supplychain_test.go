@@ -401,7 +401,7 @@ func TestReleaseMetadataParsersKeepExactVersionTimes(t *testing.T) {
 	if err != nil || node["1.2.3"].IsZero() {
 		t.Fatalf("node times=%v err=%v", node, err)
 	}
-	pypi, err := decodePyPIReleaseTimes(strings.NewReader(`{"releases":{"1.2.3":[{"upload_time_iso_8601":"2026-07-02T12:00:00Z"},{"upload_time_iso_8601":"2026-07-01T12:00:00Z"}]}}`))
+	pypi, err := decodePyPIReleaseTimes(strings.NewReader(`{"releases":{"1.2.3":[{"upload_time_iso_8601":"2026-07-02T12:00:00Z"},{"upload_time_iso_8601":"2026-07-01T12:00:00Z"}]}}`), []resolvedPackage{{Version: "1.2.3"}})
 	if err != nil || pypi["1.2.3"].Format(time.RFC3339) != "2026-07-01T12:00:00Z" {
 		t.Fatalf("pypi times=%v err=%v", pypi, err)
 	}

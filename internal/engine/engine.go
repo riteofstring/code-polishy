@@ -1031,7 +1031,7 @@ func configuredCommandFinding(repo repository.Repository, command policy.Command
 	}
 	executable := command.Argv[0]
 	if strings.ContainsAny(executable, "/\\") {
-		return checkedInCommandFinding(repo, command.Name, executable)
+		return repositoryCommandFinding(repo, command.Name, executable)
 	}
 	if _, lookupErr := exec.LookPath(configuredToolPath(repo, executable)); lookupErr != nil {
 		message := fmt.Sprintf("command %q requires unavailable executable %q", command.Name, executable)
@@ -1040,14 +1040,12 @@ func configuredCommandFinding(repo repository.Repository, command policy.Command
 	return policy.Finding{}, false
 }
 
-func checkedInCommandFinding(repo repository.Repository, name, executable string) (policy.Finding, bool) {
-	resolved, resolveErr := filepath.EvalSymlinks(filepath.Join(repo.Root, filepath.FromSlash(executable)))
-	info, statErr := os.Stat(resolved)
-	notExecutable := statErr != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0
-	if resolveErr == nil && inside(repo.Root, resolved) && !notExecutable {
+func repositoryCommandFinding(repo repository.Repository, name, executable string) (policy.Finding, bool) {
+	_, err := runner.RepositoryExecutable(repo.Root, executable)
+	if err == nil {
 		return policy.Finding{}, false
 	}
-	message := "checked-in command is missing, non-executable, or escapes the repository"
+	message := fmt.Sprintf("repository command %q is unavailable: %v", executable, err)
 	return policy.Finding{Check: "policy.command", Path: policy.ConfigFilename, Subject: name, Message: message}, true
 }
 

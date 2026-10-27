@@ -89,6 +89,14 @@ packet to a clean-context reviewer and finalize its result. Ordinary checkpoints
 and merge gates do not require or consume architecture-review receipts. See the
 [Architecture Policy](policies/architecture.md#architecture-review-workflow).
 
+An unmanaged repository needs the [two-phase adoption bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base)
+first: record the original Git base, install the exact lock and minimal policy
+scaffold, and commit only that scaffold. Then run task-start from the clean
+bootstrap commit before expanding ownership or changing product source. Capture
+the caller's original request at that point only when selected review uses it.
+The bootstrap commit is explicitly incomplete adoption, not a verification pass;
+do not submit the first request as a dirty-candidate correction.
+
 Before changing governed source, run `code-polishy design-context --files` with
 the exact planned paths, or `code-polishy design-context --module` with the
 selected modules. Read only the returned current design documents. The command

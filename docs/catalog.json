@@ -311,6 +311,14 @@
       "public": true
     },
     {
+      "id": "python-adoption",
+      "path": "docs/design/python-adoption.md",
+      "title": "Python Runtime and Release Evidence",
+      "summary": "Understand PEP 440 release identity, Python runtime support, virtualenv execution, and bounded daemon cleanup.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "python-contract-evidence",
       "path": "docs/design/python-contract-evidence.md",
       "title": "Python Contract Evidence",

@@ -245,7 +245,7 @@ func (runner OSRunner) resolveExecutable(root, executable string) (string, error
 		return resolved, nil
 	}
 	if strings.ContainsAny(executable, "/\\") {
-		return containedPath(root, executable)
+		return RepositoryExecutable(root, executable)
 	}
 	resolved, err := lookPath(executable, runner.PathEntries)
 	if err != nil {

@@ -92,6 +92,9 @@ func TestAdapterFailsClosedForSyntaxIdentityAndResourceBoundaries(t *testing.T) 
 	if response.Manifests[0].Error == "" || response.Metadata[0].Error == "" || response.Sources[0].Error == "" {
 		t.Fatalf("response = %+v", response)
 	}
+	if !strings.Contains(response.Sources[0].Error, "CPython 3.12 analyzer") || !strings.Contains(response.Sources[0].Error, "parser upgrade") {
+		t.Fatalf("unsupported syntax has no analyzer diagnosis: %s", response.Sources[0].Error)
+	}
 	if _, err := Analyze(python, Request{Requirements: []string{strings.Repeat("x", maximumRequestSize)}}); err == nil {
 		t.Fatal("oversized request was accepted")
 	}
