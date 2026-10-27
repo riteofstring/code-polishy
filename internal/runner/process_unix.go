@@ -134,7 +134,7 @@ func runContainedCommand(ctx context.Context, command *exec.Cmd, stdout, stderr 
 		cleanupStarted = time.Now()
 		cleanupDeadline = cleanupStarted.Add(commandCleanupDelay)
 	}
-	cleanupErr := cleanupProcessGroup(command.Process.Pid, cleanupDeadline, witness)
+	cleanupErr := cleanupProcessGroup(command.Process.Pid, cleanupDeadline, witness, syscall.Kill)
 	witnessErr := witness.wait(cleanupDeadline)
 	streamErr := streams.finish(cleanupDeadline)
 	cleanupErr = errors.Join(cleanupErr, witnessErr, streamErr)
@@ -285,15 +285,15 @@ func (streams *commandOutputStreams) record(err error) {
 	streams.errs = append(streams.errs, err)
 }
 
-func cleanupProcessGroup(processID int, deadline time.Time, witness *processTreeWitness) error {
+func cleanupProcessGroup(processID int, deadline time.Time, witness *processTreeWitness, kill func(int, syscall.Signal) error) error {
 	if deadline.IsZero() {
 		deadline = time.Now().Add(commandCleanupDelay)
 	}
-	if err := signalProcessGroup(processID, syscall.SIGTERM); err != nil && !retryableProcessGroupPermission(err, witness, deadline) {
+	if err := kill(-processID, syscall.SIGTERM); err != nil && !retryableProcessGroupPermission(err, witness, deadline) {
 		return processGroupSignalError(err, witness)
 	}
 	for {
-		err := syscall.Kill(-processID, 0)
+		err := kill(-processID, 0)
 		if errors.Is(err, syscall.ESRCH) {
 			return nil
 		}
@@ -304,7 +304,7 @@ func cleanupProcessGroup(processID int, deadline time.Time, witness *processTree
 			}
 		}
 		if time.Now().After(deadline.Add(-processGroupDrainReserve)) {
-			if err := signalProcessGroup(processID, syscall.SIGKILL); err != nil {
+			if err := kill(-processID, syscall.SIGKILL); err != nil && !retryableProcessGroupPermission(err, witness, deadline) {
 				return processGroupSignalError(err, witness)
 			}
 		}
@@ -317,6 +317,9 @@ func retryableProcessGroupPermission(err error, witness *processTreeWitness, dea
 }
 
 func processGroupSignalError(err error, witness *processTreeWitness) error {
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
 	if errors.Is(err, syscall.EPERM) && witness.quiescent() {
 		return nil
 	}

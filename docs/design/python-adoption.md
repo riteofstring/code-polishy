@@ -47,6 +47,10 @@ block failure reporting indefinitely. TERM receives the first half of the
 budget before escalation to KILL, reserving the remaining half for process exit,
 witness closure, and output drainage. Waiting until the final deadline to kill
 a process can misclassify its pending pipe EOF as an escaped descendant.
+Permission errors from probes, TERM, or KILL remain retryable until the full
+cleanup deadline while the witness stays open. A descendant running under
+another UID may close its descriptors during that interval even when the runner
+cannot signal it. A still-open witness at the deadline retains the failure.
 Diagnostics retain the launched command,
 leader PID and process group, and elapsed cleanup time. The witness establishes
 that a descendant retains a descriptor but does not identify that descendant's

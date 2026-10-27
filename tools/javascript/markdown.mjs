@@ -27,16 +27,29 @@ function indentedBlock(source, node) {
   return /^(?: {4}|\t)/.test(source.slice(lineStart(source, node)));
 }
 
+function takePreviousLists(children, first) {
+  while (children.at(-1)?.type === "list") {
+    first = children.pop();
+  }
+  return first;
+}
+
 function preserveAdmonitions(source, options) {
   const root = parsers.markdown.parse(source, options);
   const children = [];
   for (let index = 0; index < root.children.length; index++) {
-    const first = root.children[index];
+    let first = root.children[index];
     if (!containsAdmonition(first, source)) {
       children.push(first);
       continue;
     }
     let last = first;
+    if (first.type === "list") {
+      first = takePreviousLists(children, first);
+      while (root.children[index + 1]?.type === "list") {
+        last = root.children[++index];
+      }
+    }
     while (
       index + 1 < root.children.length &&
       indentedBlock(source, root.children[index + 1])

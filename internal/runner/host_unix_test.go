@@ -235,6 +235,40 @@ func TestHostRuntimeSignalHelperExitsWhenParentDoes(t *testing.T) {
 	waitForHostProcessExit(t, processID)
 }
 
+func TestProcessGroupCleanupRetriesDeniedEscalation(t *testing.T) {
+	witness := &processTreeWitness{done: make(chan struct{})}
+	deniedEscalation := false
+	kill := func(_ int, signal syscall.Signal) error {
+		if signal == 0 && deniedEscalation {
+			close(witness.done)
+		}
+		if signal == syscall.SIGKILL {
+			deniedEscalation = true
+		}
+		return syscall.EPERM
+	}
+	if err := cleanupProcessGroup(1, time.Now().Add(time.Second), witness, kill); err != nil {
+		t.Fatalf("recoverable permission error: %v", err)
+	}
+	if !witness.quiescent() {
+		t.Fatal("cleanup returned before the descendant closed its witness")
+	}
+}
+
+func TestProcessGroupCleanupRejectsPersistentDeniedEscalation(t *testing.T) {
+	witness := &processTreeWitness{done: make(chan struct{})}
+	deadline := time.Now().Add(3 * processGroupPollInterval)
+	err := cleanupProcessGroup(1, deadline, witness, func(_ int, _ syscall.Signal) error {
+		return syscall.EPERM
+	})
+	if !errors.Is(err, syscall.EPERM) || witness.quiescent() {
+		t.Fatalf("persistent permission error = %v, quiescent = %v", err, witness.quiescent())
+	}
+	if time.Now().Before(deadline) {
+		t.Fatal("cleanup failed before its recovery deadline")
+	}
+}
+
 func TestHostRuntimeCleansLeaderFirstProcessTreeBeforeReturn(t *testing.T) {
 	root := t.TempDir()
 	ready := filepath.Join(root, "tree-ready")

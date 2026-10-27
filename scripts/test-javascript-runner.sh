@@ -108,7 +108,18 @@ blocks = {
     "leading-indent": '   ??? note "Title"\n       - First',
     "tab-indent": '??? note "Title"\n\n\t- First',
     "paragraph": 'Introduction\n??? note "Title"\n    First paragraph.\n\n    Second paragraph.',
+    "list-chain": '1) Before\n\n1. Middle\n\n    ??? note "Example"\n        - Content\n\n1) After\n\n1. Last',
 }
+for markers in [('1.', '1)'), ('-', '+', '*')]:
+    for left in markers:
+        for right in markers:
+            if left == right:
+                continue
+            for protected in ['left', 'right']:
+                body = '\n\n    ??? note "Example"\n        - Content'
+                first = left + ' First' + (body if protected == 'left' else '')
+                second = right + ' Second' + (body if protected == 'right' else '')
+                blocks[f'list-boundary-{len(blocks)}-{protected}'] = first + '\n\n' + second
 before = '#   Before\n\n'
 after = '\n\n##   After\n\n```js\nconst value=1\n```\n'
 expected_before = '# Before\n\n'

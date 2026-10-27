@@ -11,8 +11,11 @@ containing its original source. It includes following indented blocks, so a blan
 line between the marker and its body does not split the preserved region. When
 an admonition appears in a list, blockquote, or code example, its containing node
 is preserved. This keeps the surrounding container's indentation and fence
-boundaries together without implementing another Markdown grammar. Other
-top-level nodes use Prettier's normal formatting and embedded-language behavior.
+boundaries together without implementing another Markdown grammar. A preserved
+list includes every immediately adjoining list on either side. Their original
+markers distinguish separate lists; normalizing a neighboring marker can merge
+them even when blank lines remain. Other top-level nodes use Prettier's normal
+formatting and embedded-language behavior.
 
 The preserved node prints literal lines, retaining the marker, body, internal
 blank lines, leading indentation, and nested content. The existing formatter
@@ -25,4 +28,5 @@ executing MkDocs configuration, or adding a dependency or dialect setting. It
 does not validate extension semantics or add extension-aware link analysis.
 The runner contract exercises actual check and write operations on temporary
 files, verifies unchanged block content alongside formatted surrounding content,
-and covers nested containers, code examples, blank lines, and repeated runs.
+and covers nested containers, neighboring ordered and unordered lists, code
+examples, blank lines, and repeated runs.
