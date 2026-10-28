@@ -11,6 +11,16 @@
         "preferredNewDependencyAgeDays": { "type": "integer", "minimum": 30 },
         "auditLevel": { "const": "low" },
         "recurringSecurityMonitoring": { "type": "boolean", "default": false },
+        "pythonLibraries": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "allOf": [
+              { "$ref": "code-polishy.schema.json#/$defs/concretePath" },
+              { "pattern": "(^|/)pyproject\\.toml$" }
+            ]
+          }
+        },
         "allowedDependencyProtocols": {
           "type": "array",
           "uniqueItems": true,

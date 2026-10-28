@@ -74,6 +74,12 @@ inheritance are not described as new runtime dependencies.
 
 ## Dependency comparison presentation
 
+For declared Python libraries, [compatibility contracts](python-library-dependencies.md)
+retain runtime and optional groups, dependency extras and environment markers.
+Changing these declarations remains a package API change even without a new
+resolved version. Registry constraints are inventoried separately; frozen
+resolution owns their satisfiability.
+
 The explicit base remains authoritative for comparison. A pre-adoption base
 has no lock graph, so a branch-wide review cannot describe removals of packages
 that appeared only later on that branch. A separate explicit task-base review

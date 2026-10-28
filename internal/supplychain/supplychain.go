@@ -142,6 +142,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	findings = append(findings, DependencyOverrideGovernanceFindings(repo, files)...)
 	findings = append(findings, securityMonitoringFindings(repo, files)...)
 	findings = append(findings, nodeRuntimeCoverageFindings(repo, files)...)
+	findings = append(findings, pythonLibraryCoverageFindings(repo, files)...)
 	return uniqueFindings(findings)
 }
 
@@ -595,10 +596,14 @@ func checkPythonProject(repo repository.Repository, path string) []policy.Findin
 	if err != nil {
 		return []policy.Finding{{Check: "supplyChain.pythonManifest", Path: path, Subject: path, Message: err.Error()}}
 	}
+	if slices.Contains(repo.Config.SupplyChain.PythonLibraries, path) && !project.HasProjectTable {
+		return []policy.Finding{{Check: "policy.pythonLibrary", Path: path, Subject: path, Message: "published Python library requires a [project] table"}}
+	}
 	if !project.IsPythonProject() {
 		return nil
 	}
 	findings := pythonDependencyFindings(repo, path, project.Requirements)
+	findings = append(findings, pythonLibraryFindings(repo, project)...)
 	lockPath := pythonLockPath(project.Root)
 	if !regularFile(filepath.Join(repo.Root, filepath.FromSlash(lockPath))) {
 		return append(findings, policy.Finding{Check: "supplyChain.lockfile", Path: path, Subject: lockPath, Message: "uv.lock is required for Python projects"})
@@ -626,6 +631,9 @@ func pythonDependencyFindings(repo repository.Repository, path string, dependenc
 	for _, dependency := range dependencies {
 		switch dependency.Kind {
 		case repository.PythonRegistryRequirement:
+			if pythonCompatibilityDeclaration(repo, path, dependency) {
+				continue
+			}
 			if _, exact := dependency.ExactRegistryVersion(); exact {
 				continue
 			}

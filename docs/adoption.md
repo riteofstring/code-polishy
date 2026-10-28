@@ -111,6 +111,13 @@ surface, and other lowercase identifiers when a target config needs them.
 Unknown capabilities remain descriptive; built-in capabilities have the test
 requirements documented in the verification policy.
 
+For a published Python library, also list its exact `pyproject.toml` path in
+`supplyChain.pythonLibraries`. This enables compatibility ranges in published
+runtime and optional metadata while retaining compatible exact development
+requirements and frozen locks. `project.kind = "library"` alone does not select
+this policy. Follow [Published Python libraries](policies/supply-chain.md#published-python-libraries)
+for extras, marker coverage and wheel verification.
+
 ## 4. Model modules and direction
 
 Each executable file must match exactly one module. A module may contain more

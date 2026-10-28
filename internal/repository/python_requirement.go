@@ -51,6 +51,30 @@ func NormalizePythonVersions(versions []string) (map[string]string, error) {
 	return result, nil
 }
 
+func PythonDevelopmentRequirements(requirement PythonRequirement, dependencies []PythonRequirement) []PythonRequirement {
+	pins := []PythonRequirement{}
+	for _, dependency := range dependencies {
+		if dependency.Usage != "development" || dependency.Name != requirement.Name ||
+			(dependency.Marker != "" && dependency.Marker != requirement.Marker) {
+			continue
+		}
+		_, exact := dependency.ExactRegistryVersion()
+		if exact && pythonExtrasCovered(requirement.Extras, dependency.Extras) {
+			pins = append(pins, dependency)
+		}
+	}
+	return pins
+}
+
+func pythonExtrasCovered(required, tested []string) bool {
+	for _, extra := range required {
+		if !slices.Contains(tested, extra) {
+			return false
+		}
+	}
+	return true
+}
+
 func pythonRequirementInventoryFact(fact pythonfacts.Requirement) (PythonRequirement, error) {
 	if fact.Error != "" {
 		return PythonRequirement{}, fmt.Errorf("invalid Python requirement: %s", fact.Error)

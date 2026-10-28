@@ -259,8 +259,8 @@
     {
       "name": "supply-chain",
       "kind": "command",
-      "description": "Inspect dependency versions, licenses, release age, and vulnerabilities.",
-      "aliases": ["dependency policy"],
+      "description": "Inspect dependency versions, Python library compatibility, licenses, release age, and vulnerabilities.",
+      "aliases": ["dependency policy", "Python library compatibility"],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],

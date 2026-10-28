@@ -936,6 +936,9 @@ func pythonRequirementsContradict(left, right PythonRequirement) bool {
 	if left.Name != right.Name || (left.Usage == "build") != (right.Usage == "build") {
 		return false
 	}
+	if left.Kind == PythonRegistryRequirement && right.Kind == PythonRegistryRequirement {
+		return false
+	}
 	if !pythonMarkersOverlap(left, right) {
 		return false
 	}

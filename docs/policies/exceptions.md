@@ -40,6 +40,9 @@ if the originally matched file is not in the current change.
 
 - Fix formatting, syntax, floating versions, missing lockfiles, and unpinned CI
   inputs instead of exempting them.
+- Published compatibility declarations admitted by the
+  [supply-chain policy](supply-chain.md#published-python-libraries) are supported
+  metadata, with exact tested environment requirements; they need no exception.
 - Never exempt `*` paths or subjects for convenience.
 - Configuration validity, tool prerequisites, and `policy.*` coverage findings
   cannot be exempted.

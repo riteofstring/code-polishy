@@ -79,6 +79,43 @@ func TestPythonPluginDependenciesRequireDirectExactAdmittedSources(t *testing.T)
 	}
 }
 
+func TestPythonPluginLibraryDependenciesBindCompatibleDevelopmentPins(t *testing.T) {
+	t.Parallel()
+	for name, fixture := range map[string]struct {
+		requirement string
+		pin         string
+		locked      string
+		valid       bool
+	}{
+		"compatible range": {"plug-dist>=1,<2", "plug-dist==1.5", "1.5.0", true},
+		"local version":    {"plug-dist>=1", "plug-dist==1.5+local", "1.5+local", true},
+		"extras":           {"plug-dist[fast]>=1", "plug-dist[fast]==1.5", "1.5", true},
+		"missing extras":   {"plug-dist[fast]>=1", "plug-dist==1.5", "1.5", false},
+		"missing pin":      {"plug-dist>=1", "other==1.5", "1.5", false},
+		"outside range":    {"plug-dist>=2", "plug-dist==1.5", "1.5", false},
+		"lock drift":       {"plug-dist>=1", "plug-dist==1.5", "1.6", false},
+		"marker gap":       {"plug-dist>=1", `plug-dist==1.5; sys_platform == "win32"`, "1.5", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo, project := pluginDependencyRepository(t, fixture.requirement, fixture.locked, "registry = 'https://pypi.org/simple'")
+			repo.Config.SupplyChain.PythonLibraries = []string{project.Manifest}
+			manifest := pluginDependencyManifest(fixture.requirement) + "[dependency-groups]\ndev = ['" + fixture.pin + "']\n"
+			writeFile(t, repo.Root, project.Manifest, manifest)
+			result, err := repo.PythonPluginDependencies(project, []string{"plug-dist"})
+			if err != nil || len(result.Dependencies) != 1 {
+				t.Fatalf("library plug-in evidence = %+v, error = %v", result, err)
+			}
+			if (result.Dependencies[0].Error == "") != fixture.valid {
+				t.Fatalf("library plug-in admission = %+v", result.Dependencies)
+			}
+			if fixture.valid && (result.Dependencies[0].Version != fixture.locked || result.Dependencies[0].Source != "https://pypi.org/simple") {
+				t.Fatalf("library evidence lost resolved identity: %+v", result.Dependencies)
+			}
+		})
+	}
+}
+
 func TestPythonPluginDependenciesRejectBuildAndDevelopmentOnlyDeclarations(t *testing.T) {
 	t.Parallel()
 	for name, group := range map[string]string{

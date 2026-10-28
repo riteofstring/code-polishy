@@ -6,11 +6,15 @@ or CI.
 
 ## Immutable inputs
 
-- Pin every direct registry dependency exactly.
+- Pin every direct registry dependency exactly, except the published
+  compatibility declarations described below.
 - Treat Node `peerDependencies` as compatibility declarations, but test each
   peer through a matching exact `devDependency`. The pinned npm semver parser
   must accept the peer range and confirm that the development version satisfies
   it, including npm's ordinary prerelease rules.
+- Published Python libraries may declare PEP 508 compatibility requirements in
+  their project metadata when each is paired with a compatible exact development
+  requirement. Declare their exact manifests in `supplyChain.pythonLibraries`.
 - Pin the owning package manager with `packageManager` and commit its lockfile.
 - Pin Git dependencies to full commits, GitHub Actions to full 40-character
   commits, and container images/actions to full SHA-256 digests.
@@ -37,7 +41,8 @@ The built-in engine currently provides:
 - Go module/sum ownership, exact module versions, contained local replacements,
   `go mod tidy -diff`, module release age, and pinned `govulncheck`;
 - Python PEP 508 runtime, optional, dependency-group, and build-system direct
-  requirements; exact registry and full-commit Git source policy; `uv.lock`
+  requirements; published-library compatibility and development-pin agreement;
+  exact environment and full-commit Git source policy; `uv.lock`
   presence and Git source/commit agreement; and resolved registry-release age;
 - standalone executable release age from exact checked-in version pins and
   fixed upstream metadata protocols for Go, Node, Go modules, npm, PyPI,
@@ -94,12 +99,14 @@ Code Polishy reads complete PEP 508 requirements from
 `[project].dependencies`, every `[project.optional-dependencies]` and
 `[dependency-groups]` group, and `[build-system].requires`. It preserves the
 normalized package identity, extras, marker, source kind, version or URL, and
-source location. Malformed TOML or requirements, contradictory declarations,
-and unsupported forms are findings; a parse error never becomes an empty
-dependency list.
+source location. Malformed TOML or requirements and unsupported forms are
+findings; a parse error never becomes an empty dependency list. Registry
+constraints retain their separate runtime, optional and development roles;
+the frozen lock provider rejects incompatible resolutions.
 
-A registry requirement must use one exact `==` version. Markers may limit where
-that requirement applies, but cannot weaken the pin. A direct `file:`
+A registry requirement must use one exact `==` version unless it is published
+metadata of a declared library as described below. Markers may limit where
+an environment requirement applies, but cannot weaken its pin. A direct `file:`
 requirement remains allowed only when `supplyChain.allowedDependencyProtocols`
 includes `file:` and its relative path is contained by the manifest boundary.
 Other direct URLs are unsupported.
@@ -129,6 +136,80 @@ project therefore still declares a module-scoped frozen `lock-sync` provider.
 That provider owns the honest installation/lock agreement for facts the lock
 does not encode; it cannot be replaced by a claim that the partial static
 reader proved the full build graph.
+
+### Published Python libraries
+
+List each published library's exact repository-relative manifest in
+`.code-polishy.json`:
+
+```json
+{
+  "supplyChain": {
+    "pythonLibraries": ["pyproject.toml"]
+  }
+}
+```
+
+`project.kind` remains descriptive. The explicit manifest list supports mixed
+application/library repositories; it grants no relaxation to other manifests.
+Each listed file must be a governed `pyproject.toml` with a `[project]` table.
+
+Registry requirements in that manifest's `[project].dependencies` and
+`[project.optional-dependencies]` describe consumer compatibility. They may use
+PEP 508 constraints, including ranges, exclusions and compatible-release
+specifiers. Every such declaration, even an exact one, must have a matching
+exact `==` requirement in `[dependency-groups]` in the same manifest:
+
+```toml
+[project]
+dependencies = ["numpy>=2.5.3", "torch>=2.14.0"]
+
+[project.optional-dependencies]
+faiss = ["faiss-cpu>=1.15.1"]
+
+[dependency-groups]
+dev = ["numpy==2.5.3", "torch==2.14.0", "faiss-cpu==1.15.1"]
+```
+
+Pairing uses normalized distribution names. The development requirement must
+include every dependency extra requested by the compatibility declaration and
+must have either no marker or the identical normalized PEP 508 marker. For
+example, `requests[socks]>=2` needs a pin such as `requests[socks]==2.32.0`.
+Each conditional branch needs its own matching pin, or a shared unconditional
+pin that satisfies it. Matching covers declared branches on every platform;
+it does not evaluate only the current host or infer equivalence between
+different marker expressions. Optional dependency groups are checked even when
+they are not enabled on the current host.
+
+The carried, pinned `packaging` parser verifies that each matching development
+version satisfies the compatibility constraint. It owns PEP 440 semantics,
+including prereleases, epochs and local versions. In `packaging` 26.3, an
+explicitly tested prerelease can satisfy a constraint that admits that version;
+a prerelease below a stable lower bound still fails. `torch==2.14.0` can match
+`2.14.0+cu130`, while an explicitly specified local suffix retains its identity.
+
+Development and build-system requirements remain exact. Package managers, CI
+inputs, immutable Git references and local-source containment retain their
+existing rules. Keep the complete development graph in a frozen `uv.lock` and
+retain a `lock-sync` provider that verifies manifest agreement across all
+declared groups, extras and markers. An install with `uv sync --frozen` alone
+skips checking whether the manifest changed; pair frozen installation with
+lock validation such as the pinned uv's `uv lock --check`. The complete resolved
+graph keeps its source, age, vulnerability and configured license checks.
+
+Dependency review preserves compatibility constraints, groups, extras and
+markers, and labels published runtime and optional changes as package API
+changes even when `uv.lock` is unchanged. A raised floor or narrowed range can
+break consumers; widening support requires appropriate compatibility evidence.
+The label does not automatically assign a semantic-version bump.
+
+Choose supported floors from evidence. Before releasing a library, test the
+built wheel in a clean environment at the declared minimums, without development
+dependencies masking missing requirements, and exercise its supported extras.
+A pin satisfying a range establishes declaration consistency, not compatibility
+with every future version. This supported library mode requires no exception.
+
+### Policy-owned and Git dependency evidence
 
 Code Polishy's own `python-facts/v3` adapter follows the same rule. Its dedicated
 `pyproject.toml` and frozen `uv.lock` contain only the virtual first-party owner

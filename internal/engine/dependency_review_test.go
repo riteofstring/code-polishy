@@ -33,6 +33,17 @@ func TestDependencyReviewSeparatesRemovalsWithoutLosingChanges(t *testing.T) {
 	}
 }
 
+func TestDependencyReviewLabelsPublishedCompatibilityChanges(t *testing.T) {
+	t.Parallel()
+	tables := dependencyReviewTables([]supplychain.DependencyChange{{
+		Ecosystem: "pypi", Directness: "direct", Usage: "optional:faiss", Change: "updated",
+		Package: "faiss-cpu", From: ">=1.14", To: ">=1.15", Scope: "pyproject.toml", PackageAPI: true,
+	}})
+	if len(tables) != 1 || len(tables[0].Rows) != 1 || tables[0].Rows[0][1] != "optional:faiss (package API)" {
+		t.Fatalf("published compatibility change was not identified: %+v", tables)
+	}
+}
+
 func TestDependencyReviewRunsBuiltInCandidateAdmissionAfterHistoricalComparison(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

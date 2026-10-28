@@ -10,6 +10,13 @@ of the resulting verification state. Keeping these responsibilities separate
 prevents a Python resolver from inventing dependency authority or a report
 renderer from deciding reachability.
 
+For a [declared published library](python-library-dependencies.md), a runtime
+or optional registry constraint selects its matching exact development-group
+requirements through the shared extras and marker pairing. The pinned PEP 440
+parser verifies range membership before those pins can establish one resolved
+distribution identity. Missing pins, conflicting versions and lock drift still
+fail. A development-only dependency cannot supply a runtime contract.
+
 An external consumer preserves one local method only when two independently
 resolved facts connect: the local implementation uses the named external
 contract, and the admitted distribution defines the corresponding contract.

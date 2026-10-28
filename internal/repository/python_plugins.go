@@ -63,7 +63,7 @@ func (repo Repository) PythonPluginDependencies(project PythonProject, distribut
 	manifestSHA, lockSHA := sha256.Sum256(manifestData), sha256.Sum256(lockData)
 	result := PythonPluginDependencyFacts{Project: project.Manifest, Lock: lockPath, ManifestSHA256: hex.EncodeToString(manifestSHA[:]), LockSHA256: hex.EncodeToString(lockSHA[:]), Dependencies: []PythonPluginDependency{}}
 	for _, distribution := range distributions {
-		dependency, err := pythonPluginDependency(manifest.Requirements, lock.Packages, distribution, versions)
+		dependency, err := pythonPluginDependency(manifest.Requirements, lock.Packages, distribution, versions, slices.Contains(repo.Config.SupplyChain.PythonLibraries, project.Manifest))
 		if err != nil {
 			dependency = PythonPluginDependency{Distribution: distribution, Error: err.Error()}
 		}
@@ -123,8 +123,8 @@ func pythonPluginVersionFacts(requirements []PythonRequirement, packages []Pytho
 	return result, nil
 }
 
-func pythonPluginDependency(requirements []PythonRequirement, packages []PythonLockPackage, distribution string, versions map[string]string) (PythonPluginDependency, error) {
-	requirement, err := pythonPluginDirectRequirement(requirements, distribution, versions)
+func pythonPluginDependency(requirements []PythonRequirement, packages []PythonLockPackage, distribution string, versions map[string]string, library bool) (PythonPluginDependency, error) {
+	requirement, err := pythonPluginDirectRequirement(requirements, distribution, versions, library)
 	if err != nil {
 		return PythonPluginDependency{}, err
 	}
@@ -148,13 +148,14 @@ func pythonPluginDependency(requirements []PythonRequirement, packages []PythonL
 	return PythonPluginDependency{Distribution: distribution, Version: candidate.Version, Kind: string(requirement.Kind), Source: source}, nil
 }
 
-func pythonPluginDirectRequirement(requirements []PythonRequirement, distribution string, versions map[string]string) (PythonRequirement, error) {
+func pythonPluginDirectRequirement(requirements []PythonRequirement, distribution string, versions map[string]string, library bool) (PythonRequirement, error) {
+	requirements, err := pythonPluginRuntimeRequirements(requirements, distribution, library)
+	if err != nil {
+		return PythonRequirement{}, err
+	}
 	var selected PythonRequirement
 	identity := ""
 	for _, requirement := range requirements {
-		if requirement.Name != distribution || requirement.Usage != "runtime" && requirement.Usage != "optional" {
-			continue
-		}
 		current, err := pythonPluginRequirementIdentity(requirement, versions)
 		if err != nil {
 			return PythonRequirement{}, err
@@ -168,6 +169,50 @@ func pythonPluginDirectRequirement(requirements []PythonRequirement, distributio
 		return PythonRequirement{}, fmt.Errorf("external plug-in distribution is not a declared direct runtime or optional dependency")
 	}
 	return selected, nil
+}
+
+func pythonPluginRuntimeRequirements(requirements []PythonRequirement, distribution string, library bool) ([]PythonRequirement, error) {
+	selected := []PythonRequirement{}
+	for _, requirement := range requirements {
+		if requirement.Name != distribution || requirement.Usage != "runtime" && requirement.Usage != "optional" {
+			continue
+		}
+		if !library || requirement.Kind != PythonRegistryRequirement {
+			selected = append(selected, requirement)
+			continue
+		}
+		pins := PythonDevelopmentRequirements(requirement, requirements)
+		if err := pythonPluginCompatibility(requirement, pins); err != nil {
+			return nil, err
+		}
+		selected = append(selected, pins...)
+	}
+	return selected, nil
+}
+
+func pythonPluginCompatibility(requirement PythonRequirement, pins []PythonRequirement) error {
+	if len(pins) == 0 {
+		return fmt.Errorf("external plug-in library requirement needs a matching exact development pin covering its extras and marker")
+	}
+	python, err := pythonfacts.DefaultInterpreter()
+	if err != nil {
+		return err
+	}
+	checks := []pythonfacts.VersionCheck{}
+	for _, pin := range pins {
+		version, _ := pin.ExactRegistryVersion()
+		checks = append(checks, pythonfacts.VersionCheck{Specifier: requirement.Version, Version: version})
+	}
+	matches, err := pythonfacts.MatchVersions(python, checks)
+	if err != nil {
+		return err
+	}
+	for _, match := range matches {
+		if match.Error != "" || !match.Matches {
+			return fmt.Errorf("external plug-in development pin %q does not satisfy published constraint %q", match.Version, match.Specifier)
+		}
+	}
+	return nil
 }
 
 func pythonPluginRequirementIdentity(requirement PythonRequirement, versions map[string]string) (string, error) {

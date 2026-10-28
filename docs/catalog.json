@@ -343,6 +343,14 @@
       "public": true
     },
     {
+      "id": "python-library-dependencies",
+      "path": "docs/design/python-library-dependencies.md",
+      "title": "Published Python dependency contracts",
+      "summary": "Separate published compatibility ranges from exact tested environments, marker coverage, and frozen lock evidence.",
+      "aliases": ["python-library-compatibility"],
+      "public": true
+    },
+    {
       "id": "release-checklist",
       "path": "docs/release-checklist.md",
       "title": "Release Checklist",

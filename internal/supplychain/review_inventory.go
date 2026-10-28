@@ -58,6 +58,15 @@ func addResolvedInventoryRecords(inventory dependencyInventoryMap, direct map[st
 
 func pythonInventoryRecord(manifest string, dependency repository.PythonRequirement) (dependencyRecord, error) {
 	record := dependencyRecord{Scope: manifest, Directness: "direct", Usage: dependency.Usage, Name: dependency.Name}
+	if dependency.Location.Group != "" {
+		record.Usage += ":" + dependency.Location.Group
+	}
+	if len(dependency.Extras) > 0 {
+		record.Usage += " [" + strings.Join(dependency.Extras, ",") + "]"
+	}
+	if dependency.Marker != "" {
+		record.Usage += "; " + dependency.Marker
+	}
 	switch dependency.Kind {
 	case repository.PythonRegistryRequirement:
 		record.Ecosystem, record.Version = "pypi", pythonInventoryVersion(dependency)

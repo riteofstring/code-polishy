@@ -39,6 +39,16 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/python-library-dependencies.md",
+        "sourcePaths": [
+          "internal/pythonfacts/specifiers.go",
+          "internal/pythonfacts/specifiers_test.go",
+          "internal/supplychain/python_library.go",
+          "internal/supplychain/python_library_test.go",
+          "internal/engine/dependency_review.go"
+        ]
+      },
+      {
         "path": "docs/design/markdown-formatting.md",
         "sourcePaths": ["tools/javascript/markdown.mjs"]
       },
@@ -711,6 +721,7 @@
       "dependsOn": [
         "javascript",
         "policy",
+        "pythonfacts",
         "repository",
         "runner",
         "rustfacts",

@@ -49,6 +49,9 @@ func validateSupplyChain(supply SupplyChain) error {
 }
 
 func validateSupplyChainInputs(supply SupplyChain) error {
+	if err := validatePythonLibraries(supply.PythonLibraries); err != nil {
+		return err
+	}
 	if err := ValidateGitEvidence(supply.GitEvidence); err != nil {
 		return err
 	}
@@ -60,6 +63,23 @@ func validateSupplyChainInputs(supply SupplyChain) error {
 	}
 	if err := validateReleaseArtifacts(supply.ReleaseArtifacts); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validatePythonLibraries(manifests []string) error {
+	seen := map[string]bool{}
+	for _, manifest := range manifests {
+		if err := repositoryPath(manifest, "supplyChain.pythonLibraries"); err != nil {
+			return err
+		}
+		if filepath.Base(manifest) != "pyproject.toml" || filepath.ToSlash(filepath.Clean(manifest)) != manifest || strings.Contains(manifest, ":") {
+			return fmt.Errorf("supplyChain.pythonLibraries must name canonical repository-relative pyproject.toml files")
+		}
+		if seen[manifest] {
+			return fmt.Errorf("duplicate supplyChain.pythonLibraries manifest %q", manifest)
+		}
+		seen[manifest] = true
 	}
 	return nil
 }

@@ -27,8 +27,12 @@ func dependencyReviewTables(changes []supplychain.DependencyChange) []Table {
 func dependencyReviewTable(changes []supplychain.DependencyChange) Table {
 	rows := make([][]string, 0, len(changes))
 	for _, change := range changes {
+		usage := change.Usage
+		if change.PackageAPI {
+			usage += " (package API)"
+		}
 		rows = append(rows, []string{
-			change.Ecosystem + "/" + change.Directness, change.Usage, change.Change,
+			change.Ecosystem + "/" + change.Directness, usage, change.Change,
 			change.Package, change.From, change.To, change.Scope,
 		})
 	}

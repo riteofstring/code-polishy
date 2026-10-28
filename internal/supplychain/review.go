@@ -26,6 +26,7 @@ type DependencyChange struct {
 	Package    string
 	From       string
 	To         string
+	PackageAPI bool
 }
 
 func DependencyChanges(ctx context.Context, repo repository.Repository, baseRevision string) ([]DependencyChange, error) {
@@ -63,6 +64,7 @@ type dependencyRecord struct {
 	Usage      string
 	Name       string
 	Version    string
+	PackageAPI bool
 }
 
 type dependencyInventoryMap map[string]map[string]dependencyRecord
@@ -84,7 +86,7 @@ func dependencyInventory(ctx context.Context, repo repository.Repository, source
 		case "package.json":
 			records, err = directNodeRecords(source, fileSet, path)
 		case "pyproject.toml":
-			records, err = directPythonRecords(source, path)
+			records, err = directPythonRecords(source, path, slices.Contains(repo.Config.SupplyChain.PythonLibraries, path))
 		case "go.mod":
 			records, err = directGoRecords(source, path)
 		case "Cargo.toml":
@@ -175,7 +177,7 @@ func inheritedManagerFromSource(source inventorySource, files map[string]bool, p
 	return ""
 }
 
-func directPythonRecords(source inventorySource, path string) ([]dependencyRecord, error) {
+func directPythonRecords(source inventorySource, path string, library bool) ([]dependencyRecord, error) {
 	data, err := source.read(path)
 	if err != nil {
 		return nil, err
@@ -190,6 +192,7 @@ func directPythonRecords(source inventorySource, path string) ([]dependencyRecor
 		if err != nil {
 			return nil, err
 		}
+		record.PackageAPI = library && (dependency.Usage == "runtime" || dependency.Usage == "optional")
 		records = append(records, record)
 	}
 	return records, nil
@@ -354,6 +357,7 @@ func dependencyChange(record dependencyRecord, change, from, to string) Dependen
 	return DependencyChange{
 		Ecosystem: record.Ecosystem, Scope: record.Scope, Directness: record.Directness,
 		Usage: record.Usage, Change: change, Package: record.Name, From: from, To: to,
+		PackageAPI: record.PackageAPI,
 	}
 }
 
@@ -420,7 +424,7 @@ func NewDependencyAgeAdvisories(ctx context.Context, repo repository.Repository,
 func newDependencyAgeCandidate(change DependencyChange) bool {
 	return change.Directness == "direct" &&
 		strings.Contains(" added updated ", " "+change.Change+" ") &&
-		strings.Contains(" runtime optional ", " "+change.Usage+" ") &&
+		strings.Contains(" runtime optional ", " "+dependencyUsageKind(change.Usage)+" ") &&
 		change.To != "-" &&
 		dependencyAgeVersion(change) &&
 		strings.Contains(" go npm pnpm pypi crates.io ", " "+change.Ecosystem+" ")
@@ -434,6 +438,13 @@ func dependencyAgeVersion(change DependencyChange) bool {
 		return change.To != "" && !strings.ContainsAny(change.To, "<>=~*,")
 	}
 	return exactVersion.MatchString(change.To)
+}
+
+func dependencyUsageKind(usage string) string {
+	if index := strings.IndexAny(usage, ": [;"); index >= 0 {
+		return usage[:index]
+	}
+	return usage
 }
 
 func observedDependencyAgeAdvisory(observation releaseObservation, cutoff time.Time, preferredDays int) *policy.Advisory {

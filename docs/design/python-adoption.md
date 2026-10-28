@@ -1,5 +1,8 @@
 # Python Runtime and Release Evidence
 
+[Published Python dependency contracts](python-library-dependencies.md) define
+the separate version-specifier operation and exact development-pin pairing.
+
 PyPI release spelling is not package version identity. Locked wheel versions
 and registry release keys are compared with the carried `packaging` PEP 440
 implementation, including trailing release zeros, epochs, prereleases, and local

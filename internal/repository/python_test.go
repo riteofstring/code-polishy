@@ -127,12 +127,11 @@ func TestParsePythonRequirementRejectsUnsafeGitURLs(t *testing.T) {
 	}
 }
 
-func TestParsePythonProjectRejectsMalformedAndContradictoryDeclarations(t *testing.T) {
+func TestParsePythonProjectRejectsMalformedDeclarations(t *testing.T) {
 	t.Parallel()
 	cases := []string{
 		"[project]\ndependencies = [\"requests==2.32.0\"\n",
 		"[project]\ndependencies = [\"requests==2.32.0\", 4]\n",
-		"[project]\ndependencies = [\"requests==2.32.0\"]\n[project.optional-dependencies]\ntest = [\"requests==2.33.0\"]\n",
 		"[project]\ndependencies = [\"requests==2.32.0 ; python_version ==\"]\n",
 	}
 	for _, manifest := range cases {
@@ -220,8 +219,9 @@ dependencies = ["requests==2.32.0 ; sys_platform == 'linux'"]
 [project.optional-dependencies]
 test = ["requests==2.33.0 ; python_version >= '3.10'"]
 `
-	if _, err := ParsePythonProject("pyproject.toml", []byte(overlapping)); err == nil {
-		t.Fatal("overlapping marker declarations were accepted")
+	parsed, err := ParsePythonProject("pyproject.toml", []byte(overlapping))
+	if err != nil || len(parsed.Requirements) != 2 || parsed.Requirements[0].Marker == parsed.Requirements[1].Marker {
+		t.Fatalf("marker constraints were lost before frozen resolution: %+v, error = %v", parsed.Requirements, err)
 	}
 	disjoint := `[project]
 dependencies = ["requests==2.32.0 ; sys_platform == 'linux'"]
@@ -231,6 +231,22 @@ test = ["requests==2.33.0 ; sys_platform == 'win32'"]
 `
 	if _, err := ParsePythonProject("pyproject.toml", []byte(disjoint)); err != nil {
 		t.Fatalf("disjoint marker declarations were rejected: %v", err)
+	}
+}
+
+func TestParsePythonProjectPreservesCompatibilityAndDevelopmentConstraints(t *testing.T) {
+	t.Parallel()
+	project, err := ParsePythonProject("pyproject.toml", []byte(`[project]
+dependencies = ["torch>=2.14.0"]
+[dependency-groups]
+dev = ["torch==2.14.0+cu130"]
+`))
+	if err != nil || len(project.Requirements) != 2 {
+		t.Fatalf("library requirements = %+v, error = %v", project.Requirements, err)
+	}
+	if project.Requirements[0].Usage != "runtime" || project.Requirements[0].Version != ">=2.14.0" ||
+		project.Requirements[1].Usage != "development" || project.Requirements[1].Version != "==2.14.0+cu130" {
+		t.Fatalf("distinct contracts lost identity: %+v", project.Requirements)
 	}
 }
 

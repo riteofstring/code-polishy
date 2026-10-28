@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.31.6 - 2026-10-28
+
+- Support published Python library compatibility constraints in runtime and
+  optional metadata through exact `supplyChain.pythonLibraries` manifest paths.
+  Require matching exact development-group pins covering dependency extras and
+  environment markers, and check version membership with the pinned PEP 440
+  parser, including prereleases and local version suffixes.
+- Use the same tested development pins for external Python dependency contracts,
+  retaining exact lock and installed-distribution evidence with library ranges.
+- Preserve distinct Python registry constraints through inventory and retain
+  frozen lock verification for dependency resolution. Development requirements,
+  build requirements, tool pins and resolved dependency audits remain enforced.
+- Preserve Python dependency groups, extras and markers in dependency review,
+  and identify published compatibility changes as package API changes even when
+  the lock is unchanged.
+- Document library adoption and clean-wheel minimum-version verification.
+  Consumers must upgrade their Code Polishy lock before declaring
+  `supplyChain.pythonLibraries`; existing configurations retain exact-pin policy.
+
 ## 0.31.5 - 2026-10-26
 
 - Shorten the mandatory agent workflow and route conditional work to its specific

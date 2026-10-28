@@ -80,6 +80,12 @@ Use `code-polishy docs read TOPIC` for the exact release-owned document.
 `task-start` when the named situation actually applies; it selects guidance and
 matching repository handoffs without authorizing their operations.
 
+Published Python libraries use the [library dependency policy](policies/supply-chain.md#published-python-libraries):
+declare exact manifests in `supplyChain.pythonLibraries`, keep consumer
+compatibility ranges, and pair them with compatible exact development-group
+pins and frozen locks. Build requirements and tool inputs remain exact.
+Treat changes to compatibility metadata as package API changes.
+
 | Trigger                                                                  | Topic and procedure                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dependency change or advisory investigation (`--situation dependencies`) | `supply-chain`: [dependency updates](policies/supply-chain.md#dependency-updates) and [security decisions](policies/supply-chain.md#dependency-security-decisions)                                                          |

@@ -89,6 +89,8 @@ var findingRemediationRules = []struct {
 	{"supplyChain.auditIgnore supplyChain.pnpmSecurity supplyChain.lifecycleScripts", "Remove undeclared audit bypasses or lifecycle execution and restore frozen, script-free dependency admission under the locked security policy."},
 	{"supplyChain.dependencyOverride", "Remove the undeclared override or supply its exact current digest-bound policy assessment, then review the resulting complete dependency graph."},
 	{"supplyChain.peerDependency", "Declare and lock a compatible exact peer dependency in the correct importer scope rather than borrowing an unrelated workspace resolution."},
+	{"supplyChain.pythonCompatibility", "Pair each published Python compatibility declaration with an exact dependency-group pin covering its extras and marker, verify range membership, and validate the complete frozen development lock."},
+	{"policy.pythonLibrary", "Declare the exact governed pyproject.toml path of each published Python library in supplyChain.pythonLibraries."},
 	{"artifactSecurity.vulnerability", "Update or remove the affected component in the authoritative artifact inputs, rebuild the declared target, and rescan the exact resulting artifact for the reported advisory."},
 	{"artifactSecurity.secret", "Remove the exposed secret from the authoritative artifact inputs and arrange credential revocation through the authorized owner; rebuild and rescan without copying the secret into reports."},
 	{"artifactSecurity.misconfiguration", "Correct the reported security setting in the authoritative image or artifact configuration, then rebuild and rescan the declared target."},

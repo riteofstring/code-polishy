@@ -581,6 +581,35 @@ def _version_fact(value):
         return {"input": value, "normalized": "", "error": str(error)}
 
 
+def _version_matches(request):
+    _exact_object(request, {"protocol", "operation", "checks"}, "version checks")
+    if request["protocol"] != PROTOCOL:
+        raise ValueError("version checks have an invalid protocol identity")
+    checks = request["checks"]
+    if not isinstance(checks, list) or len(checks) > MAX_ITEMS:
+        raise ValueError("version checks have an invalid count")
+    matches = []
+    for check in checks:
+        _exact_object(check, {"specifier", "version"}, "version check")
+        for value in check.values():
+            if not isinstance(value, str) or len(value.encode("utf-8")) > 65536:
+                raise ValueError("version check is invalid")
+        result = {**check, "matches": False, "error": ""}
+        try:
+            result["matches"] = SpecifierSet(check["specifier"]).contains(
+                Version(check["version"])
+            )
+        except (InvalidSpecifier, InvalidVersion) as error:
+            result["error"] = str(error)
+        matches.append(result)
+    return {
+        "protocol": PROTOCOL,
+        "pythonVersion": ".".join(str(value) for value in sys.version_info[:3]),
+        "packagingVersion": importlib.metadata.version("packaging"),
+        "matches": matches,
+    }
+
+
 def _main():
     if sys.version_info[:2] != (3, 12):
         raise ValueError("python-facts requires CPython 3.12")
@@ -590,9 +619,15 @@ def _main():
     if len(data) > MAX_INPUT_BYTES:
         raise ValueError("request exceeds the byte limit")
     request = json.loads(data, object_pairs_hook=_object)
+    result = (
+        _version_matches(request)
+        if isinstance(request, dict)
+        and request.get("operation") == "version-specifiers"
+        else _analyze(request)
+    )
     response = (
         json.dumps(
-            _analyze(request),
+            result,
             ensure_ascii=False,
             separators=(",", ":"),
             allow_nan=False,

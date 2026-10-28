@@ -715,7 +715,10 @@ inheritance, expressions, bindings, or registrations fail rather than infer
 duck typing.
 
 The direct requirement and version 1 `uv.lock` must admit one exact registry
-version or Git repository, commit, and subdirectory. Contract definitions come
+version or Git repository, commit, and subdirectory. For a declared published
+Python library, its compatibility requirement must admit the matching exact
+development pin under the [library dependency policy](supply-chain.md#published-python-libraries).
+The pin must still identify one authoritative lock package. Contract definitions come
 from that distribution in the project's contained `.venv`. Code Polishy reads
 bounded UTF-8 Python sources and stubs through `METADATA` and SHA-256 `RECORD`
 entries without importing dependency code. Owned aliases, re-exports, and
