@@ -758,7 +758,11 @@ func TestCommandProducerPublishesThroughPrivateOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := filepath.Join(state.root, "targets", target.Name)
-	if artifact.archive != filepath.Join(output, "image.tar") || artifact.reference != "process-image" {
+	expectedArchive, err := filepath.EvalSymlinks(filepath.Join(output, "image.tar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact.archive != expectedArchive || artifact.reference != "process-image" {
 		t.Fatalf("artifact = %+v", artifact)
 	}
 	data, err := os.ReadFile(artifact.archive)
