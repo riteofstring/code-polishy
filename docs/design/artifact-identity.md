@@ -19,3 +19,12 @@ configuration ID is
 `sha256:0cf74d99b5a97c3748ef2e9f91839752b96b00d2427cb57f18919e8ed7d01ad6`;
 the distinct Docker manifest ID is
 `sha256:13c9308faace219384c34d1108b928face27e7e1881b1d9b0dd0ec1e84569c68`.
+
+## Command producer output
+
+Command producers receive the engine-created private output directory through
+`EnvironmentOverrides`. Their configured `Environment` remains a selection of
+parent variable names; assignments there are not exported by the runner. Planned
+command authorization preserves that selection and permits only the generated
+output assignment. The engine reads the producer manifest and archive from the
+same private directory after the process succeeds.

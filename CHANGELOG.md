@@ -18,6 +18,14 @@
 - Document library adoption and clean-wheel minimum-version verification.
   Consumers must upgrade their Code Polishy lock before declaring
   `supplyChain.pythonLibraries`; existing configurations retain exact-pin policy.
+- Authorize command producers to receive the private artifact output path and
+  override inherited output settings so generated artifacts stay within the
+  private evidence directory. Contributed by
+  [Jeff Musgrave](https://github.com/JeffMusgrave) in
+  [#18](https://github.com/riteofstring/code-polishy/pull/18).
+- Assess CVE-2026-116587 for the pinned scanner's isolated execution paths with
+  an exact OpenVEX statement and source-backed review. Preserve the observed
+  finding in the accepted-findings report.
 
 ## 0.31.5 - 2026-10-26
 

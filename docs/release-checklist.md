@@ -15,6 +15,15 @@ manual dispatch authorizes the same operation for an existing tag.
    plans and obsolete docs. Use focused checks while editing; do not run a full
    gate against a changing worktree.
 
+   When the caller requests complete local verification, run the full ordinary
+   gate and `scripts/verify-installed-artifact-security.sh` against a fresh
+   installation of the clean candidate before recommending a push. This is
+   explicitly requested local evidence alongside the CI-owned final gate.
+   Routine test suites do not include the installed scanner's fresh advisory
+   check. That check works with a local Linux Docker server, including Docker
+   Desktop on macOS. Report an unavailable prerequisite as incomplete
+   verification. Mutation testing remains separately selected.
+
 2. Stop changing the candidate, push that exact commit to `main`, and complete
    its one ordinary final gate. Honor `verification.finalGateOwner`: run locally
    for `local`, or retain the native CI result for `ci`. Ubuntu, macOS, and

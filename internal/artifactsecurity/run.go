@@ -420,8 +420,9 @@ func runArtifactProducer(ctx context.Context, repo repository.Repository, client
 	}
 	command := policy.Command{
 		Name: "artifact-security-producer-" + targetName, Argv: append([]string{}, producer.Argv...), Cwd: producer.Cwd,
-		Environment:        append(append([]string{}, producer.Environment...), "CODE_POLISHY_ARTIFACT_OUTPUT="+directory),
-		ExclusiveResources: []string{"artifact-security"}, TimeoutSeconds: producer.TimeoutSeconds,
+		Environment:          append([]string{}, producer.Environment...),
+		EnvironmentOverrides: []string{"CODE_POLISHY_ARTIFACT_OUTPUT=" + directory},
+		ExclusiveResources:   []string{"artifact-security"}, TimeoutSeconds: producer.TimeoutSeconds,
 	}
 	if err := runner.RunCommand(ctx, client.executor, repo.Root, command); err != nil {
 		return fmt.Errorf("artifact producer %s: %w", targetName, err)

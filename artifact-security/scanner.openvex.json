@@ -2,7 +2,17 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/riteofstring/code-polishy/blob/main/artifact-security/scanner.openvex.json",
   "author": "Codex",
-  "timestamp": "2026-10-23T01:40:36Z",
-  "version": 3,
-  "statements": []
+  "timestamp": "2026-10-28T20:24:49Z",
+  "version": 4,
+  "statements": [
+    {
+      "vulnerability": { "name": "CVE-2026-116587" },
+      "products": [
+        { "@id": "pkg:golang/github.com/go-jose/go-jose/v4@v4.1.5" }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Codex reviewed Trivy 0.76.1 at e713f67f7d54decdcd9b3132c9751833dcced698 on 2026-10-28. The vulnerable RSA JWK parser is reached through configured SPIFFE/JWK credential loading. Code Polishy invokes only version, anonymous database download over go-containerregistry/net/http, and local archive scans. These operations do not select gRPC/xDS SPIFFE credentials or Sigstore OIDC token flows. Scanner containers receive no caller credentials, bootstrap configuration, trust-bundle files or environment; target archives are analyzed as data. The image-configuration analyzer's OPA JWT built-ins use a separate JWK implementation. No enabled input reaches go-jose's RSA private-key validation. Reassess by 2026-11-13 UTC and whenever the scanner image, invocation, mounts, environment, transport or advisory changes. Evidence: https://github.com/riteofstring/code-polishy/blob/main/docs/design/trivy-scanner-assessments.md"
+    }
+  ]
 }

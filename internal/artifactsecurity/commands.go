@@ -43,8 +43,9 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 			producer := *target.Producer
 			commands = append(commands, policy.Command{
 				Name: "artifact-security-producer-" + target.Name, Argv: append([]string{}, producer.Argv...), Cwd: producer.Cwd,
-				Environment:        append(append([]string{}, producer.Environment...), "CODE_POLISHY_ARTIFACT_OUTPUT=${artifact-output}"),
-				ExclusiveResources: []string{"artifact-security"}, TimeoutSeconds: producer.TimeoutSeconds,
+				Environment:          append([]string{}, producer.Environment...),
+				EnvironmentOverrides: []string{"CODE_POLISHY_ARTIFACT_OUTPUT=${artifact-output}"},
+				ExclusiveResources:   []string{"artifact-security"}, TimeoutSeconds: producer.TimeoutSeconds,
 			})
 		}
 		commands = appendScannerCommands(commands, prefix+"observed")
@@ -102,14 +103,11 @@ func artifactSecurityResource(command policy.Command) bool {
 }
 
 func matchesPlannedProducerCommand(expected, actual policy.Command) bool {
-	if !strings.HasPrefix(expected.Name, "artifact-security-producer-") || !samePlannedArtifactCommandBoundary(expected, actual) ||
-		!sameStrings(expected.Argv, actual.Argv) || !sameStrings(expected.ExclusiveResources, actual.ExclusiveResources) ||
-		len(expected.Environment) == 0 || len(expected.Environment) != len(actual.Environment) {
-		return false
-	}
-	last := len(expected.Environment) - 1
-	return sameStrings(expected.Environment[:last], actual.Environment[:last]) && expected.Environment[last] == "CODE_POLISHY_ARTIFACT_OUTPUT=${artifact-output}" &&
-		strings.HasPrefix(actual.Environment[last], "CODE_POLISHY_ARTIFACT_OUTPUT=") && strings.TrimPrefix(actual.Environment[last], "CODE_POLISHY_ARTIFACT_OUTPUT=") != ""
+	return strings.HasPrefix(expected.Name, "artifact-security-producer-") && samePlannedArtifactCommandBoundary(expected, actual) &&
+		sameStrings(expected.Argv, actual.Argv) && sameStrings(expected.ExclusiveResources, actual.ExclusiveResources) &&
+		sameStrings(expected.Environment, actual.Environment) && len(expected.EnvironmentOverrides) == 1 && len(actual.EnvironmentOverrides) == 1 &&
+		expected.EnvironmentOverrides[0] == "CODE_POLISHY_ARTIFACT_OUTPUT=${artifact-output}" &&
+		strings.HasPrefix(actual.EnvironmentOverrides[0], "CODE_POLISHY_ARTIFACT_OUTPUT=") && strings.TrimPrefix(actual.EnvironmentOverrides[0], "CODE_POLISHY_ARTIFACT_OUTPUT=") != ""
 }
 
 func samePlannedArtifactCommandBoundary(expected, actual policy.Command) bool {
