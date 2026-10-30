@@ -35,7 +35,11 @@
       "name": "artifact-security",
       "kind": "command",
       "description": "Verify security evidence for configured release artifacts.",
-      "aliases": ["artifact scanning"],
+      "aliases": [
+        "artifact scanning",
+        "rootless Docker",
+        "Docker daemon selection"
+      ],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],
@@ -260,7 +264,12 @@
       "name": "supply-chain",
       "kind": "command",
       "description": "Inspect dependency versions, Python library compatibility, licenses, release age, and vulnerabilities.",
-      "aliases": ["dependency policy", "Python library compatibility"],
+      "aliases": [
+        "dependency policy",
+        "Python library compatibility",
+        "vulnerability assessment advisories",
+        "vulnerable package summary"
+      ],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],

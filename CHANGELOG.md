@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.31.7 - 2026-10-30
 
 - Run artifact scans on rootless Docker daemons. The scanner uses `0:0`, the
   calling user inside the daemon's namespace, for its cache, input and output
