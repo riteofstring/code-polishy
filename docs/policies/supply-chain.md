@@ -630,9 +630,11 @@ missing-coverage finding, never a workspace that declared nothing.
   invent human sign-off or external records. Scanner success checks structured
   policy, not the truth of the assessment's reasoning.
 - The human report adds a `VULNERABLE PACKAGES` table grouped by package, exact
-  version and scope, with open and accepted counts, the highest severity and the
-  fixes each advisory reports. It counts every finding in the filtered view,
-  including those beyond `--display-limit`, and shows at most that many rows.
+  version and scope, with open and accepted advisory counts, the highest severity
+  and the fixes each advisory reports. An advisory reported by several scanners
+  or under an alias counts once and is open if any report is open. The table
+  covers the filtered view, including findings beyond `--display-limit`, and
+  shows at most that many rows.
   Fixes stay attached to their advisories because a release fixing one may not
   fix another. Package ranges are listed without comparison to the installed
   version, so choose the fix on your release line and rescan it. The complete
