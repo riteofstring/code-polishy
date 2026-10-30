@@ -233,13 +233,16 @@ minimum-age policy remains active in either mode.
 
 A Git source has no wheel, so installing it runs its PEP 517 build backend, and
 `uv sync --frozen --no-build` stops at that package. uv has no flag that keeps
-`--no-build` while allowing named packages, so keep the two steps separate:
+`--no-build` while allowing named packages. `--no-build` also does not cover the
+current project or workspace members: uv still runs their build backends. Keep
+every local and Git build in a separate reviewed step:
 
 1. Pin the requirement to a full commit, then run `dependency-review` and
    `uv lock --check`.
-2. Review that commit's `[build-system]` table, backend and build hooks. The
-   build runs with the installer's privileges, and this review applies to
-   first-party sources too.
+2. Review the `[build-system]` table, backend and build hooks of that commit,
+   the current project, workspace members and path dependencies. These builds
+   run with the installer's privileges, and first-party sources need this review
+   too.
 3. Declare every package in the isolated build environment with an exact
    version and hashes. `uv.lock` does not record them, so a dependency change
    needs the same review:
@@ -251,17 +254,20 @@ A Git source has no wheel, so installing it runs its PEP 517 build backend, and
    ]
    ```
 
-4. Install registry wheels without executing package code, then build only what
-   remains:
+4. Install registry wheels without executing package code, then build the
+   reviewed packages that remain:
 
    ```sh
-   uv sync --frozen --no-build --no-install-package example-git-package
+   uv sync --frozen --no-build --no-install-local --no-install-package example-git-package
    uv sync --frozen --require-build-hashes
    ```
 
-The first command fails if any package other than the excluded ones would need a
-build. Repeat `--no-install-package` for each Git source, including transitive
-ones. The second command fails on a missing or mismatched build hash.
+The first command fails if any other package would need a build. Repeat
+`--no-install-package` for each Git source, including transitive ones.
+`--no-install-local` defers the current project, workspace members and path
+dependencies, so all of their build requirements need constraints too. The second
+command fails on a missing or mismatched build hash, but it may already have run
+other package backends by then. Finish the review before running it.
 
 ## GitLab CI control inputs
 
