@@ -164,12 +164,18 @@
     "vulnerabilityAssessment": {
       "type": "object",
       "unevaluatedProperties": false,
-      "required": ["id", "ecosystem", "advisory", "package"],
+      "required": ["id", "ecosystem", "package"],
       "properties": {
         "id": { "$ref": "code-polishy.schema.json#/$defs/identifier" },
         "ecosystem": { "enum": ["go", "npm", "pnpm", "pypi", "crates.io"] },
         "advisory": {
           "$ref": "code-polishy.schema.json#/$defs/nonemptyString"
+        },
+        "advisories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" }
         },
         "package": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "affectedVersion": {
@@ -189,7 +195,13 @@
         { "required": ["affectedVersion", "scope", "severity", "status"] },
         { "required": ["basis", "reason", "impact", "evidence"] },
         { "required": ["owner"] },
-        { "required": ["reviewed", "expires"] }
+        { "required": ["reviewed", "expires"] },
+        {
+          "oneOf": [
+            { "required": ["advisory"] },
+            { "required": ["advisories"] }
+          ]
+        }
       ],
       "oneOf": [
         {

@@ -431,6 +431,7 @@ func osvPackageFindings(scope string, observed osvPackageResult) []policy.Findin
 		identity := policy.VulnerabilityIdentity{
 			Ecosystem: ecosystem, Advisory: advisory, Aliases: identifiers, Package: observed.Package.Name,
 			AffectedVersion: observed.Package.Version, Scope: scope, Severity: severity,
+			FixedVersions: osvFixedVersions(observed, identifiers),
 		}
 		message := fmt.Sprintf("OSV reports %s in %s@%s (severity %s; %s)", advisory, observed.Package.Name, observed.Package.Version, severity, source)
 		findings = append(findings, policy.Finding{
@@ -455,6 +456,34 @@ func osvGroupIdentifiers(group osvGroup, vulnerabilities []osvVulnerability) []s
 		identifiers = append(identifiers, vulnerability.Aliases...)
 	}
 	return compactNonempty(identifiers)
+}
+
+func osvFixedVersions(observed osvPackageResult, identifiers []string) []string {
+	var fixed []string
+	for _, vulnerability := range observed.Vulnerabilities {
+		if !slices.Contains(identifiers, vulnerability.ID) {
+			continue
+		}
+		for _, affected := range vulnerability.Affected {
+			if affected.Package.Name == observed.Package.Name {
+				fixed = append(fixed, osvRecordFixedVersions(affected)...)
+			}
+		}
+	}
+	return compactNonempty(fixed)
+}
+
+func osvRecordFixedVersions(affected osvAffectedRecord) []string {
+	fixed := []string{}
+	for _, versionRange := range affected.Ranges {
+		if versionRange.Type == "GIT" {
+			continue
+		}
+		for _, event := range versionRange.Events {
+			fixed = append(fixed, event.Fixed)
+		}
+	}
+	return fixed
 }
 
 func osvEcosystem(ecosystem, scope string) string {

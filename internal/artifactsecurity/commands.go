@@ -15,6 +15,7 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 		return nil
 	}
 	commands := []policy.Command{
+		plannedDockerCommand("endpoint"),
 		plannedDockerCommand("preflight"),
 		plannedDockerCommand("platform"),
 		plannedDockerCommand("pull-source"),
@@ -87,7 +88,8 @@ func matchesPlannedDockerCommand(expected, actual policy.Command) bool {
 	if !samePlannedArtifactCommandBoundary(expected, actual) || !expectedDockerPlaceholder(expected) || !actualDockerCommand(actual) {
 		return false
 	}
-	return len(expected.Environment) == 0 && len(actual.Environment) == 0 && artifactSecurityResource(expected) && artifactSecurityResource(actual)
+	return sameStrings(expected.Environment, dockerClientEnvironment) && sameStrings(actual.Environment, dockerClientEnvironment) &&
+		artifactSecurityResource(expected) && artifactSecurityResource(actual)
 }
 
 func expectedDockerPlaceholder(command policy.Command) bool {

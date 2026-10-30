@@ -133,6 +133,12 @@ func findingFingerprint(finding Finding) string {
 	subject := finding.Subject
 	scope := finding.Scope
 	module := finding.Module
+	vulnerability := finding.Vulnerability
+	if vulnerability != nil {
+		stable := *vulnerability
+		stable.FixedVersions = nil
+		vulnerability = &stable
+	}
 	if len(finding.SemanticIdentity) > 0 {
 		path = ""
 		line = 0
@@ -160,7 +166,7 @@ func findingFingerprint(finding Finding) string {
 		Path: path, Line: line, Column: column, Subject: subject,
 		Module: module, Producer: finding.GeneratedProducer,
 		Fields: finding.Fields, Semantic: finding.SemanticIdentity,
-		Vulnerability: finding.Vulnerability, ReleaseAge: finding.ReleaseAge,
+		Vulnerability: vulnerability, ReleaseAge: finding.ReleaseAge,
 	}
 	data, _ := json.Marshal(identity)
 	digest := sha256.Sum256(data)

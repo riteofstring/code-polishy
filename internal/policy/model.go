@@ -468,21 +468,22 @@ type ArtifactProducer struct {
 }
 
 type VulnerabilityAssessment struct {
-	ID              string `json:"id"`
-	Ecosystem       string `json:"ecosystem"`
-	Advisory        string `json:"advisory"`
-	Package         string `json:"package"`
-	AffectedVersion string `json:"affectedVersion"`
-	Scope           string `json:"scope"`
-	Severity        string `json:"severity"`
-	Status          string `json:"status"`
-	Basis           string `json:"basis"`
-	Reason          string `json:"reason"`
-	Impact          string `json:"impact"`
-	Evidence        string `json:"evidence"`
-	Owner           string `json:"owner"`
-	Reviewed        Date   `json:"reviewed"`
-	Expires         Date   `json:"expires"`
+	ID              string   `json:"id"`
+	Ecosystem       string   `json:"ecosystem"`
+	Advisory        string   `json:"advisory,omitempty"`
+	Advisories      []string `json:"advisories,omitempty"`
+	Package         string   `json:"package"`
+	AffectedVersion string   `json:"affectedVersion"`
+	Scope           string   `json:"scope"`
+	Severity        string   `json:"severity"`
+	Status          string   `json:"status"`
+	Basis           string   `json:"basis"`
+	Reason          string   `json:"reason"`
+	Impact          string   `json:"impact"`
+	Evidence        string   `json:"evidence"`
+	Owner           string   `json:"owner"`
+	Reviewed        Date     `json:"reviewed"`
+	Expires         Date     `json:"expires"`
 }
 
 type ReleaseAgeAssessment struct {
@@ -733,6 +734,7 @@ type VulnerabilityIdentity struct {
 	Scope           string   `json:"scope"`
 	Severity        string   `json:"severity"`
 	KnownExploited  bool     `json:"knownExploited"`
+	FixedVersions   []string `json:"fixedVersions,omitempty"`
 }
 
 type ReleaseAgeIdentity struct {

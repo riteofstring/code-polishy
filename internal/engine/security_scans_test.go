@@ -299,7 +299,7 @@ func TestRecursiveScanCannotSatisfyAnUnavailableImageScan(t *testing.T) {
 			t.Fatalf("package evidence bypassed an unavailable image scan: %+v %v", report, err)
 		}
 	}
-	if countCommand(scanner.commands, "osv-scan-root") != 3 || countCommand(scanner.commands, "artifact-security-docker-preflight") != 2 {
+	if countCommand(scanner.commands, "osv-scan-root") != 3 || countCommand(scanner.commands, "artifact-security-docker-endpoint") != 2 {
 		t.Fatalf("deferred image verification or recursive scan was skipped: %v", scanner.commands)
 	}
 }

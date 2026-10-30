@@ -433,6 +433,9 @@ func (state *scannerRuntime) policyFinding(target policy.ArtifactTarget, artifac
 			Ecosystem: "container", Advisory: finding.ID, Package: packageID,
 			AffectedVersion: finding.AffectedVersion, Scope: result.Path,
 			Severity: policy.NormalizeVulnerabilitySeverity(finding.Severity),
+			FixedVersions: strings.FieldsFunc(finding.FixedVersion, func(character rune) bool {
+				return character == ',' || character == ' '
+			}),
 		}
 		result.Subject = policy.VulnerabilitySubject(identity)
 		result.Vulnerability = &identity

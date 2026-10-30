@@ -217,17 +217,22 @@ func validateVulnerabilityIdentity(assessment VulnerabilityAssessment, label str
 		return fmt.Errorf("duplicate vulnerability assessment id %q", assessment.ID)
 	}
 	seenIDs[assessment.ID] = true
-	if strings.ContainsAny(assessment.Advisory+assessment.Package, "*?[]") {
-		return fmt.Errorf("%s must identify an exact observed vulnerability; wildcards are forbidden", label)
+	if (assessment.Advisory == "") == (len(assessment.Advisories) == 0) {
+		return fmt.Errorf("%s must declare exactly one of advisory or advisories", label)
 	}
 	if !exactVulnerabilityAssessmentVersion(assessment.Ecosystem, assessment.AffectedVersion) {
 		return fmt.Errorf("%s.affectedVersion must be one exact version for %s", label, assessment.Ecosystem)
 	}
-	coordinate := vulnerabilityAssessmentCoordinate(assessment)
-	if seenCoordinates[coordinate] {
-		return fmt.Errorf("%s duplicates an existing vulnerability assessment coordinate", label)
+	for _, single := range expandedVulnerabilityAssessments([]VulnerabilityAssessment{assessment}) {
+		if single.Advisory == "" || strings.ContainsAny(single.Advisory+single.Package, "*?[]") {
+			return fmt.Errorf("%s must identify an exact observed vulnerability; wildcards are forbidden", label)
+		}
+		coordinate := vulnerabilityAssessmentCoordinate(single)
+		if seenCoordinates[coordinate] {
+			return fmt.Errorf("%s duplicates an existing vulnerability assessment coordinate", label)
+		}
+		seenCoordinates[coordinate] = true
 	}
-	seenCoordinates[coordinate] = true
 	return nil
 }
 

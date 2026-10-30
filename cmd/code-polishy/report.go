@@ -168,6 +168,17 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 	}
 }
 
+func printVulnerabilitySummary(output io.Writer, report engine.Report, limit int) {
+	summary, omitted := engine.VulnerabilitySummary(report, limit)
+	if len(summary.Rows) == 0 {
+		return
+	}
+	printTable(output, summary)
+	if omitted > 0 {
+		fmt.Fprintf(output, "OMITTED %d vulnerable package version(s) from the bounded terminal view\n", omitted)
+	}
+}
+
 func printReleaseAgeAssessments(output io.Writer, assessed []policy.AssessedReleaseAge) {
 	for _, assessment := range assessed {
 		fmt.Fprintf(output, "AGE-EXCEPTION %-25s %s [%s] by %s (%s, expires %s UTC)\n", assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID, assessment.Assessment.Category, assessment.Assessment.Expires.Format("2006-01-02"))

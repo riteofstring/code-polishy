@@ -64,6 +64,15 @@ gRPC, xDS, or containerd server and do not restore containers from checkpoints.
 Timeouts and resource limits remain defense in depth; they are not the basis
 for declaring a reachable denial of service unaffected.
 
+Docker client settings select the daemon and reach only the Docker CLI. The
+scanner's container environment stays `HOME=/tmp` plus the image's `GODEBUG`.
+Under a rootless daemon the scanner runs as `0:0`, the caller inside the daemon's
+user namespace, because any other identity maps to a subordinate user that cannot
+open the private mounts. This changes file ownership, not scanner inputs: the
+operations, mounts, network, dropped capabilities and absence of credentials are
+unchanged, so the CVE-2026-116587 path analysis below still applies. A remote
+daemon is refused because it cannot read those mounts.
+
 ## CVE-2026-116587: RSA JWK parsing
 
 The October 28 fresh-database scan reports

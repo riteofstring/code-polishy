@@ -20,14 +20,16 @@ a minimal scratch image with a fresh database before tagging and publication.
 
 Each run:
 
-1. verifies a reachable Docker server and supported server architecture;
+1. resolves the selected Docker endpoint, requires it to be local, and verifies
+   a reachable server and supported server architecture;
 2. builds and version-checks the minimal scanner without build network access;
 3. refreshes the vulnerability database in a networked container that receives
    only a private cache mount and no target input or credentials;
 4. validates database schema, freshness, timestamps, and hashes;
 5. self-scans the exact scanner runtime;
 6. captures each declared target into a private bounded archive;
-7. scans offline with a read-only root, non-root user, dropped capabilities,
+7. scans offline with a read-only root, the
+   [calling user's identity](#docker-daemon-selection), dropped capabilities,
    `no-new-privileges`, resource/time limits, no socket, and no credentials;
 8. verifies that the archive and vulnerability database did not change;
 9. writes normalized JSON/Markdown evidence, a CycloneDX SBOM, and a hash
@@ -53,6 +55,25 @@ release-owned OpenVEX policy remain required.
 Built images are saved by immutable Docker identity. Trivy reports must match
 the configuration digest from that exact saved archive; see
 [Container Archive Identity](design/artifact-identity.md).
+
+## Docker daemon selection
+
+Docker commands receive `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`,
+`DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH`, so a run uses the same daemon as the
+Docker CLI. These settings reach the CLI only; scanner containers never receive
+them. A verbose run and every failure after daemon selection name the daemon and
+its mode.
+
+The daemon must be on the calling machine, because scans bind-mount private
+local files. A `unix` or `npipe` endpoint, or `tcp`, `http` or `https` to a
+loopback address, is accepted. Any other endpoint, including `ssh`, fails before
+the daemon is contacted. Selecting a local daemon does not guarantee it can read
+`TMPDIR`; a daemon in a virtual machine must have that path shared.
+
+On a rootful daemon the scanner runs as the calling user's numeric identity. On
+a rootless daemon that identity maps to an unrelated subordinate user, so the
+scanner runs as `0:0`, which is the calling user inside the daemon's namespace.
+It gains no host authority, and every other container restriction still applies.
 
 ## Target modes
 

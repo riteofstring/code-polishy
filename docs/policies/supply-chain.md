@@ -229,6 +229,40 @@ comparison retains declared Git sources and full-commit resolutions without
 inventing a PyPI age. Ordinary pin, lock, license, vulnerability, and registry
 minimum-age policy remains active in either mode.
 
+### Script-free installs with Python Git sources
+
+A Git source has no wheel, so installing it runs its PEP 517 build backend, and
+`uv sync --frozen --no-build` stops at that package. uv has no flag that keeps
+`--no-build` while allowing named packages, so keep the two steps separate:
+
+1. Pin the requirement to a full commit, then run `dependency-review` and
+   `uv lock --check`.
+2. Review that commit's `[build-system]` table, backend and build hooks. The
+   build runs with the installer's privileges, and this review applies to
+   first-party sources too.
+3. Declare every package in the isolated build environment with an exact
+   version and hashes. `uv.lock` does not record them, so a dependency change
+   needs the same review:
+
+   ```toml
+   [tool.uv]
+   build-constraint-dependencies = [
+     { requirement = "setuptools==80.9.0", hashes = ["sha256:..."] },
+   ]
+   ```
+
+4. Install registry wheels without executing package code, then build only what
+   remains:
+
+   ```sh
+   uv sync --frozen --no-build --no-install-package example-git-package
+   uv sync --frozen --require-build-hashes
+   ```
+
+The first command fails if any package other than the excluded ones would need a
+build. Repeat `--no-install-package` for each Git source, including transitive
+ones. The second command fails on a missing or mismatched build hash.
+
 ## GitLab CI control inputs
 
 When `.gitlab-ci.yml` or `.gitlab-ci.yaml` exists, it is a policy-sensitive
@@ -535,6 +569,12 @@ missing-coverage finding, never a workspace that declared nothing.
   resolved version, lockfile scope, accepted severity ceiling, disposition,
   justification basis, impact, technical evidence, accountable owner, review
   date, and expiry. Ranges, wildcards, and duplicate coordinates fail.
+- Advisories that share one package, version, scope and justification may use
+  an `advisories` list instead of `advisory`. Declare exactly one of the two.
+  The list only shares the text: each advisory is matched and reported
+  separately as `ASSESSMENT_ID:ADVISORY`, and each receives its own severity,
+  known-exploited, expiry and unused-entry result. Its `severity` is the ceiling
+  for every listed advisory, so split the entry when dispositions diverge.
 - A `not-affected` assessment records the source-to-API trace and absent
   prerequisite. A `risk-accepted` assessment records actual exposure,
   compensating controls, residual risk, and why bounded acceptance is justified.
@@ -557,7 +597,10 @@ missing-coverage finding, never a workspace that declared nothing.
   conservative: a high `not-affected` assessment may cover matching low,
   moderate, or high reports; a critical report requires a critical assessment.
   An unknown or known-exploited report
-  remains blocking.
+  remains blocking. When a report exceeds the ceiling, re-review the advisory at
+  the new severity. If the analysis still holds, raise `severity` and renew
+  `reviewed` and `expires` inside the new window; high and critical still
+  require `not-affected`. Otherwise remediate the dependency.
 - Applied assessments remain visible as `VULN-ACCEPTANCE` findings, including
   disposition, actual owner, and expiry. Changed, expired, and unused
   assessments fail the complete online profile. Scanner failures and findings
@@ -566,6 +609,14 @@ missing-coverage finding, never a workspace that declared nothing.
   analysis or remediation plan. Link to the real technical record; do not
   invent human sign-off or external records. Scanner success checks structured
   policy, not the truth of the assessment's reasoning.
+- The human report adds a `VULNERABLE PACKAGES` table grouped by package, exact
+  version and scope, with open and accepted counts, the highest severity and the
+  fixes each advisory reports. It counts every finding in the filtered view,
+  including those beyond `--display-limit`, and shows at most that many rows.
+  Fixes stay attached to their advisories because a release fixing one may not
+  fix another. Package ranges are listed without comparison to the installed
+  version, so choose the fix on your release line and rescan it. The complete
+  report carries them in each finding's `vulnerability.fixedVersions`.
 
 Use target providers for repository secret scanning, SAST, signed provenance,
 and license rules outside a pnpm project where relevant. Use the shared artifact-security module for

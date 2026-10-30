@@ -20,14 +20,14 @@ import (
 )
 
 type scannerRuntime struct {
-	client   dockerClient
-	policy   scannerPolicy
-	root     string
-	cache    string
-	image    string
-	platform string
-	user     string
-	runID    string
+	client dockerClient
+	policy scannerPolicy
+	daemon dockerDaemon
+	root   string
+	cache  string
+	image  string
+	user   string
+	runID  string
 }
 
 type preparedArtifact struct {
@@ -54,19 +54,25 @@ func Run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 	}
 	configured, err := loadScannerPolicy(repo.PolicyRoot)
 	if err != nil {
-		return operationalResult("scanner-policy", err)
+		return operationalResult(operationContext{}, "scanner-policy", err)
 	}
-	runtimeState, err := prepareScannerRuntime(ctx, repo, configured, commandRunner)
+	client := dockerClient{root: repo.Root, executor: commandRunner}
+	daemon, err := inspectDockerDaemon(ctx, client)
 	if err != nil {
-		return operationalResult("scanner-runtime", err)
+		return operationalResult(operationContext{daemon: daemon}, "docker-daemon", err)
+	}
+	runtimeState, err := prepareScannerRuntime(ctx, repo, configured, client, daemon)
+	if err != nil {
+		return operationalResult(operationContext{daemon: daemon, user: daemon.scannerUser()}, "scanner-runtime", err)
 	}
 	defer recordRuntimeCleanup(&result, runtimeState)
 	database, err := runtimeState.updateDatabase(ctx)
 	if err != nil {
-		return operationalResult("vulnerability-database", err)
+		return operationalResult(runtimeState.operationContext(), "vulnerability-database", err)
 	}
+	result.Notes = append(result.Notes, fmt.Sprintf("artifact security Docker daemon: %s (%s), scanner user %s", daemon.endpoint, daemon.mode(), runtimeState.user))
 	if scannerErr := scanScannerRuntime(ctx, repo, runtimeState, database, &result); scannerErr != nil {
-		result.Findings = append(result.Findings, artifactOperationalFinding("code-polishy-scanner", "self-scan", scannerErr))
+		result.Findings = append(result.Findings, artifactOperationalFinding(runtimeState.operationContext(), "code-polishy-scanner", "self-scan", scannerErr))
 		return result
 	}
 
@@ -76,8 +82,9 @@ func Run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 }
 
 func recordRuntimeCleanup(result *Result, state *scannerRuntime) {
+	operation := state.operationContext()
 	if err := state.cleanup(); err != nil {
-		result.Findings = append(result.Findings, artifactOperationalFinding("scanner", "cleanup", err))
+		result.Findings = append(result.Findings, artifactOperationalFinding(operation, "scanner", "cleanup", err))
 	}
 }
 
@@ -94,15 +101,15 @@ func scanConfiguredTargets(ctx context.Context, repo repository.Repository, stat
 func scanConfiguredTarget(ctx context.Context, repo repository.Repository, state *scannerRuntime, database databaseEvidence, target policy.ArtifactTarget) ([]policy.Finding, string) {
 	prepared, err := prepareArtifact(ctx, repo, state, target)
 	if err != nil {
-		return []policy.Finding{artifactOperationalFinding(target.Name, "prepare", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "prepare", err)}, ""
 	}
 	scanned, scanErr := state.scan(ctx, repo, "target-"+target.Name, target, prepared, database)
 	if err := errors.Join(scanErr, prepared.cleanup()); err != nil {
-		return []policy.Finding{artifactOperationalFinding(target.Name, "scan", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "scan", err)}, ""
 	}
 	outputPath, err := writeArtifacts(repo, target, scanned)
 	if err != nil {
-		return []policy.Finding{artifactOperationalFinding(target.Name, "report", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "report", err)}, ""
 	}
 	return scanned.findings, fmt.Sprintf("artifact security report for %s: %s", target.Name, outputPath)
 }
@@ -110,7 +117,7 @@ func scanConfiguredTarget(ctx context.Context, repo repository.Repository, state
 func recordDatabaseImmutability(state *scannerRuntime, before databaseEvidence, result *Result) {
 	after, err := state.inspectDatabase(time.Now().UTC(), false)
 	if combined := errors.Join(err, databaseChangedError(before, after)); combined != nil {
-		result.Findings = append(result.Findings, artifactOperationalFinding("scanner", "database-immutability", combined))
+		result.Findings = append(result.Findings, artifactOperationalFinding(state.operationContext(), "scanner", "database-immutability", combined))
 	}
 }
 
@@ -149,25 +156,19 @@ func scanScannerRuntime(ctx context.Context, repo repository.Repository, state *
 	return nil
 }
 
-func operationalResult(subject string, err error) Result {
-	return Result{Findings: []policy.Finding{artifactOperationalFinding("scanner", subject, err)}}
+func operationalResult(operation operationContext, phase string, err error) Result {
+	return Result{Findings: []policy.Finding{artifactOperationalFinding(operation, "scanner", phase, err)}}
 }
 
-func artifactOperationalFinding(target, subject string, err error) policy.Finding {
-	message := "artifact security operation failed"
-	if err != nil {
-		message = err.Error()
-	}
-	return policy.Finding{Check: "artifactSecurity.operation", Path: policy.ConfigFilename, Subject: target + ":" + subject, Message: message}
+func (state *scannerRuntime) operationContext() operationContext {
+	return operationContext{daemon: state.daemon, user: state.user, workspace: state.root}
 }
 
-func prepareScannerRuntime(ctx context.Context, repo repository.Repository, configured scannerPolicy, commandRunner runner.Runner) (*scannerRuntime, error) {
-	client := dockerClient{root: repo.Root, executor: commandRunner}
-	platform, err := prepareScannerSource(ctx, client, configured.SourceImage)
-	if err != nil {
+func prepareScannerRuntime(ctx context.Context, repo repository.Repository, configured scannerPolicy, client dockerClient, daemon dockerDaemon) (*scannerRuntime, error) {
+	if err := prepareScannerSource(ctx, client, daemon.platform, configured.SourceImage); err != nil {
 		return nil, err
 	}
-	state, err := newScannerRuntime(client, configured, platform)
+	state, err := newScannerRuntime(client, configured, daemon)
 	if err != nil {
 		return nil, err
 	}
@@ -178,24 +179,14 @@ func prepareScannerRuntime(ctx context.Context, repo repository.Repository, conf
 	return state, nil
 }
 
-func prepareScannerSource(ctx context.Context, client dockerClient, sourceImage string) (string, error) {
-	if _, err := client.run(ctx, governedDockerCommandPrefix+"preflight", "version", "--format", "{{.Server.Version}}"); err != nil {
-		return "", fmt.Errorf("docker server preflight: %w", err)
-	}
-	platform, err := dockerPlatform(ctx, client, governedDockerCommandPrefix+"platform")
-	if err != nil {
-		return "", err
-	}
+func prepareScannerSource(ctx context.Context, client dockerClient, platform, sourceImage string) error {
 	if _, err := client.run(ctx, governedDockerCommandPrefix+"pull-source", "image", "pull", "--platform", platform, sourceImage); err != nil {
-		return "", fmt.Errorf("pull pinned Trivy source image: %w", err)
+		return fmt.Errorf("pull pinned Trivy source image: %w", err)
 	}
-	if err := verifyPinnedSourceImage(ctx, client, governedDockerCommandPrefix+"verify-source", sourceImage); err != nil {
-		return "", err
-	}
-	return platform, nil
+	return verifyPinnedSourceImage(ctx, client, governedDockerCommandPrefix+"verify-source", sourceImage)
 }
 
-func newScannerRuntime(client dockerClient, configured scannerPolicy, platform string) (*scannerRuntime, error) {
+func newScannerRuntime(client dockerClient, configured scannerPolicy, daemon dockerDaemon) (*scannerRuntime, error) {
 	runID, err := randomHex(6)
 	if err != nil {
 		return nil, err
@@ -219,8 +210,8 @@ func newScannerRuntime(client dockerClient, configured scannerPolicy, platform s
 		return nil, err
 	}
 	return &scannerRuntime{
-		client: client, policy: configured, root: root, cache: cache,
-		image: "code-polishy-artifact-scanner:" + runID, platform: platform, user: currentUserID(), runID: runID,
+		client: client, policy: configured, daemon: daemon, root: root, cache: cache,
+		image: "code-polishy-artifact-scanner:" + runID, user: daemon.scannerUser(), runID: runID,
 	}, nil
 }
 
@@ -229,7 +220,7 @@ func (state *scannerRuntime) buildAndVerify(ctx context.Context, policyRoot stri
 	contextRoot := filepath.Dir(dockerfile)
 	_, err := state.client.run(ctx, governedDockerCommandPrefix+"build-scanner",
 		"image", "build", "--network", "none", "--pull=false", "--provenance=false",
-		"--platform", state.platform, "--file", dockerfile,
+		"--platform", state.daemon.platform, "--file", dockerfile,
 		"--label", "com.code-polishy.security.role=scanner", "--tag", state.image, contextRoot,
 	)
 	if err != nil {
@@ -243,21 +234,6 @@ func (state *scannerRuntime) buildAndVerify(ctx context.Context, policyRoot stri
 		return errors.New("minimal scanner runtime version mismatch")
 	}
 	return nil
-}
-
-func dockerPlatform(ctx context.Context, client dockerClient, name string) (string, error) {
-	result, err := client.run(ctx, name, "info", "--format", "{{.Architecture}}")
-	if err != nil {
-		return "", err
-	}
-	switch strings.TrimSpace(result.stdout) {
-	case "arm64", "aarch64":
-		return "linux/arm64", nil
-	case "amd64", "x86_64":
-		return "linux/amd64", nil
-	default:
-		return "", fmt.Errorf("unsupported Docker server architecture %q", strings.TrimSpace(result.stdout))
-	}
 }
 
 func verifyPinnedSourceImage(ctx context.Context, client dockerClient, name, image string) error {
@@ -539,7 +515,7 @@ func (state *scannerRuntime) runScanner(ctx context.Context, operation, network 
 	}
 	name := "code-polishy-artifact-scan-" + state.runID + "-" + suffix
 	create := []string{
-		"container", "create", "--name", name, "--pull", "never", "--platform", state.platform,
+		"container", "create", "--name", name, "--pull", "never", "--platform", state.daemon.platform,
 		"--network", network, "--read-only", "--user", state.user,
 		"--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "256",
 		"--memory", "2g", "--cpus", "2", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=1073741824,mode=1777",

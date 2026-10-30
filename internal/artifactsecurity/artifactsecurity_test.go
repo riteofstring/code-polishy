@@ -296,7 +296,7 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	}
 	boundary := newScannerBoundary(t, policyRoot)
 	result := Run(t.Context(), repo, boundary)
-	if len(result.Findings) != 0 || len(result.Notes) != 4 {
+	if len(result.Findings) != 0 || len(result.Notes) != 5 || !strings.Contains(result.Notes[0], "unix:///var/run/docker.sock (rootful)") {
 		t.Fatalf("artifact security result = %+v", result)
 	}
 	for _, target := range []string{"agent", "image", "producer", "code-polishy-scanner"} {
@@ -405,7 +405,7 @@ func TestRunFailsClosedBeforeArtifactMutation(t *testing.T) {
 		}}},
 	}
 	unavailable := Run(t.Context(), repo, unavailableScannerBoundary{})
-	if len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:scanner-runtime" ||
+	if len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:docker-daemon" ||
 		!strings.Contains(unavailable.Findings[0].Message, "scanner unavailable") {
 		t.Fatalf("scanner startup failure = %+v", unavailable)
 	}
@@ -445,6 +445,9 @@ func TestPlannedArtifactAuthorizationIsExactAtTheSecurityBoundary(t *testing.T) 
 }
 
 type scannerBoundary struct {
+	endpoint         string
+	rootless         bool
+	databaseError    error
 	t                *testing.T
 	containers       map[string][]string
 	findings         []map[string]any
@@ -542,8 +545,10 @@ func (boundary *scannerBoundary) runOutput(_ context.Context, _ string, command 
 	switch arguments[1] {
 	case "version":
 		output.Stdout = []byte("27.0.0\n")
+	case "context":
+		output.Stdout = []byte(boundary.dockerEndpoint() + "\n")
 	case "info":
-		output.Stdout = []byte("amd64\n")
+		output.Stdout = []byte("amd64 " + boundary.securityOptions() + "\n")
 	case "image":
 		var err error
 		output, err = boundary.imageCommand(arguments[2:])
@@ -627,6 +632,9 @@ func (boundary *scannerBoundary) startContainer(arguments []string) (runner.Outp
 		return runner.Output{Stdout: []byte("Version: " + boundary.version + "\n")}, nil
 	}
 	if slices.Contains(arguments, "--download-db-only") {
+		if boundary.databaseError != nil {
+			return runner.Output{}, boundary.databaseError
+		}
 		cache, ok := mountSource(arguments, "/cache")
 		if !ok {
 			return runner.Output{}, fmt.Errorf("database download omitted cache")

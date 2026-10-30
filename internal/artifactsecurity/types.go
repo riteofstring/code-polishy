@@ -255,6 +255,7 @@ func (client dockerClient) runCommand(ctx context.Context, command policy.Comman
 func dockerCommand(name string, arguments ...string) policy.Command {
 	return policy.Command{
 		Name: name, Argv: append([]string{"docker"}, arguments...), Cwd: ".",
+		Environment:        append([]string{}, dockerClientEnvironment...),
 		ExclusiveResources: []string{"artifact-security"}, TimeoutSeconds: artifactCommandTimeoutSeconds,
 	}
 }

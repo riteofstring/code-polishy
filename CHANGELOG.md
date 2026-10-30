@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Run artifact scans on rootless Docker daemons. The scanner uses `0:0`, the
+  calling user inside the daemon's namespace, for its cache, input and output
+  mounts while keeping its container restrictions.
+- Honor `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CONFIG`, `DOCKER_TLS_VERIFY` and
+  `DOCKER_CERT_PATH` for Docker commands. Refuse remote endpoints before contacting
+  them, because scans bind-mount private local files.
+- Name the failing phase, Docker daemon and mode, scanner user and private mounts
+  in artifact operational failures, with a remedy specific to the failure.
+- Allow one vulnerability assessment to list `advisories` for the same package,
+  version and scope. Each advisory is still matched, reported and enforced
+  separately. Consumers must upgrade their lock before declaring the field.
+- Explain how to re-review an assessment after a severity increase instead of
+  directing its removal.
+- Add a `VULNERABLE PACKAGES` table to human reports, and carry reported fixes
+  from OSV and Trivy in `vulnerability.fixedVersions`.
+- Document script-free installation with Python Git sources through a reviewed,
+  hash-constrained build step.
+
 ## 0.31.6 - 2026-10-28
 
 - Support published Python library compatibility constraints in runtime and

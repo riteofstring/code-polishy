@@ -14,7 +14,13 @@ type osvAffectedRecord struct {
 		Name      string `json:"name"`
 		Ecosystem string `json:"ecosystem"`
 	} `json:"package"`
-	Severity         []json.RawMessage `json:"severity"`
+	Severity []json.RawMessage `json:"severity"`
+	Ranges   []struct {
+		Type   string `json:"type"`
+		Events []struct {
+			Fixed string `json:"fixed"`
+		} `json:"events"`
+	} `json:"ranges"`
 	DatabaseSpecific struct {
 		Informational string          `json:"informational"`
 		CVSS          json.RawMessage `json:"cvss"`

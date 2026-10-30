@@ -793,6 +793,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	if omitted := total - displayed; omitted > 0 {
 		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
 	}
+	printVulnerabilitySummary(stdout, report, limit)
 	printReportTables(stdout, report.Tables)
 	printReportNotes(stdout, report.Notes, verbose || report.Command == "dependency-review")
 	if report.ReportPath != "" {
