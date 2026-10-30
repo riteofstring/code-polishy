@@ -237,7 +237,8 @@ A Git source has no wheel, so installing it runs its PEP 517 build backend, and
 current project or workspace members: uv still runs their build backends. Keep
 every local and Git build in a separate reviewed step:
 
-1. Pin the requirement to a full commit, then run `dependency-review` and
+1. Pin the requirement to a full commit in the manifest. Do not run `uv lock`
+   yet: resolving dynamic metadata runs a package's build backend, even under
    `uv lock --check`.
 2. Review the `[build-system]` table, backend and build hooks of that commit,
    the current project, workspace members and path dependencies. These builds
@@ -254,7 +255,15 @@ every local and Git build in a separate reviewed step:
    ]
    ```
 
-4. Install registry wheels without executing package code, then build the
+4. Update the lock through the same reviewed path, then review the dependency
+   change:
+
+   ```sh
+   uv lock --require-build-hashes
+   code-polishy dependency-review --base MERGE_TARGET
+   ```
+
+5. Install registry wheels without executing package code, then build the
    reviewed packages that remain:
 
    ```sh
@@ -268,6 +277,11 @@ The first command fails if any other package would need a build. Repeat
 dependencies, so all of their build requirements need constraints too. The second
 command fails on a missing or mismatched build hash, but it may already have run
 other package backends by then. Finish the review before running it.
+
+For later validation, `uv lock --check --no-build` accepts a current lock without
+building and rejects a stale one without running a Git source's backend.
+`--no-build` does not stop a local package's backend from resolving dynamic
+metadata, so review local changes first.
 
 ## GitLab CI control inputs
 
