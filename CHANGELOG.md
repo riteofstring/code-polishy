@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.31.8 - 2026-10-30
+
+- Recognize pytest hook implementations as framework callbacks. Resolved
+  `pytest.hookimpl` decorators are preserved in any form, including import
+  aliases, wrappers and plugin classes, as are module-level `pytest_*` functions
+  in `conftest.py`. Exact `pytest.hookimpl` decorator contracts remain valid but
+  are no longer required.
+- Classify `conftest.py` at any depth as test infrastructure. Root files no longer
+  need `tests.paths`, and an existing declaration remains valid. A repository
+  that kept `conftest.py` in a production module must now declare its test
+  ownership in `tests.ownership`.
+- Reject stale `scope.pythonContracts` declarations that built-in evidence made
+  appear resolved. Autouse fixtures, `pytestmark` and `daemon_threads` no longer
+  count as a contract's match, so a stale declaration they previously hid now
+  fails with its existing diagnostic.
+
 ## 0.31.7 - 2026-10-30
 
 - Run artifact scans on rootless Docker daemons. The scanner uses `0:0`, the

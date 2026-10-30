@@ -116,8 +116,12 @@ findings. Unrelated same-named symbols remain subject to dead-code analysis.
 Repositories must derive declarations from their real runtime interfaces,
 not generate them mechanically from unused-code reports.
 
-Pytest autouse fixtures and module marks are bundled declarations interpreted
-by this same mechanism. Standard-library callbacks and SQLite construction
+Pytest autouse fixtures, hook implementations and module marks are bundled
+declarations interpreted by this same mechanism. An undecorated hook needs only
+its module-level `pytest_*` name in `conftest.py`: pytest registers those names
+and rejects unknown ones, so they cannot remain silently unused. Built-in
+evidence preserves those symbols but never counts as a match for a repository
+contract, so an unrelated hook cannot make a stale declaration appear resolved. Standard-library callbacks and SQLite construction
 semantics remain release-owned. Third-party model and state-machine behavior
 requires explicit declarations; adding another library does not require adding
 branches to the analyzer.

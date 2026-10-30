@@ -495,8 +495,10 @@ exact reachable symbols from PEP 621 `project.scripts`,
 `project.gui-scripts`, and every `project.entry-points.*` table.
 
 Built-in framework contracts also preserve `pytest.fixture(autouse=True)`
-functions, module-level `pytestmark` values built from resolved `pytest.mark`
-objects, `row_factory` writes on proven `sqlite3.Connection` receivers. They also preserve
+functions, functions decorated with a resolved `pytest.hookimpl`, module-level
+`pytest_*` functions in a file named `conftest.py`, module-level `pytestmark`
+values built from resolved `pytest.mark` objects, and `row_factory` writes on
+proven `sqlite3.Connection` receivers. They also preserve
 `readable` and `readinto` overrides on `io.RawIOBase` subclasses and `do_*`
 dispatch methods and `log_message` on `http.server.BaseHTTPRequestHandler`
 subclasses. Required raw-read buffer and HTTP logging parameters are part of
@@ -513,8 +515,9 @@ reassignment; uncertain branches, exception paths, and loop iterations do not
 borrow successful-path evidence. Unknown custom factories, shadowed framework
 imports, and ambiguous same-line writes
 do not receive positive evidence. Ordinary fixtures without literal
-`autouse=True`, unrelated methods, attributes, and local variables retain normal
-dead-code analysis. The built-in contracts model the named public APIs; they do
+`autouse=True`, `pytest_*` functions outside `conftest.py` without a resolved
+`pytest.hookimpl`, unrelated methods, attributes, and local variables retain
+normal dead-code analysis. The built-in contracts model the named public APIs; they do
 not authenticate installed dependency contents or replace supply-chain checks.
 
 Repositories declare third-party runtime contracts in `scope.pythonContracts`.

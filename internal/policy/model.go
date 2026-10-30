@@ -55,7 +55,7 @@ var DefaultGenerated = []string{
 }
 
 var DefaultTestPatterns = []string{
-	"**/*_test.go", "**/test_*.py", "**/*_test.py", "**/*.test.*", "**/*.spec.*", "tests/**",
+	"**/*_test.go", "**/test_*.py", "**/*_test.py", "**/conftest.py", "**/*.test.*", "**/*.spec.*", "tests/**",
 	"**/tests/**", "__tests__/**", "**/__tests__/**",
 }
 

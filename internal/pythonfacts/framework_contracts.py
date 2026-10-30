@@ -90,7 +90,7 @@ class _FrameworkVisitor(_ConnectionFlow):
         }
 
     def visit_FunctionDef(self, node):
-        if self.callback(node) or self.pytest_autouse(node):
+        if self.callback(node) or self.pytest_function(node):
             self.keep(node, node.name)
             self.callback_parameters(node)
         previous = self.scope, self.owner, self.connections, self.mutable_names
@@ -131,6 +131,9 @@ class _FrameworkVisitor(_ConnectionFlow):
                 result.add(path)
         return result
 
+    def pytest_function(self, node):
+        return self.pytest_autouse(node) or self.pytest_hook(node)
+
     def pytest_autouse(self, node):
         for value in node.decorator_list:
             target = value.func if isinstance(value, ast.Call) else value
@@ -143,6 +146,17 @@ class _FrameworkVisitor(_ConnectionFlow):
             if isinstance(autouse, ast.Constant) and autouse.value is True:
                 return True
         return False
+
+    def pytest_hook(self, node):
+        for value in node.decorator_list:
+            target = value.func if isinstance(value, ast.Call) else value
+            if self.qualified(target) == "pytest.hookimpl":
+                return True
+        return (
+            self.scope == "module"
+            and node.name.startswith("pytest_")
+            and self.module["path"].rpartition("/")[2] == "conftest.py"
+        )
 
     def pytest_mark_value(self, node):
         if isinstance(node, (ast.List, ast.Tuple)):

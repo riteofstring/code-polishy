@@ -27,6 +27,12 @@ class _ContractVisitor(_FrameworkVisitor):
             reference, self.roots
         )
 
+    def pytest_function(self, node):
+        return False
+
+    def class_binding(self, target, value=None):
+        return None
+
     def callback(self, node):
         decorators = {
             self.qualified(value.func if isinstance(value, ast.Call) else value)

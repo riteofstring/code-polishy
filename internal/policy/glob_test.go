@@ -59,3 +59,21 @@ func TestPatternsOverlapRecognizesSharedPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestIsTestPathClassifiesPytestConfiguration(t *testing.T) {
+	t.Parallel()
+	for path, expected := range map[string]bool{
+		"conftest.py":                 true,
+		"./conftest.py":               true,
+		"tests/conftest.py":           true,
+		"src/package/conftest.py":     true,
+		"src/my_conftest.py":          false,
+		"src/conftest_helpers.py":     false,
+		"src/conftest.pyi":            false,
+		"src/conftest.py/settings.py": false,
+	} {
+		if IsTestPath(path) != expected {
+			t.Errorf("IsTestPath(%q) = %t", path, !expected)
+		}
+	}
+}

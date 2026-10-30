@@ -131,6 +131,52 @@ func TestPythonRepositoryContractRejectsStaleCallbackParameters(t *testing.T) {
 	}
 }
 
+func TestBuiltInFrameworkEvidenceDoesNotResolveStaleContracts(t *testing.T) {
+	builtIn := map[string]map[string]string{
+		"undecorated conftest hook": {"conftest.py": "def pytest_configure(config):\n    return config\n"},
+		"decorated hook":            {"src/example.py": "import pytest\n@pytest.hookimpl\ndef pytest_configure(config):\n    return config\n"},
+		"autouse fixture":           {"src/example.py": "import pytest\n@pytest.fixture(autouse=True)\ndef prepare():\n    return 1\n"},
+		"module marks":              {"src/example.py": "import pytest\npytestmark = pytest.mark.integration\n"},
+		"threading attribute":       {"src/example.py": "import socketserver\nclass Server(socketserver.ThreadingMixIn):\n    daemon_threads = True\nprint(Server)\n"},
+	}
+	contracts := map[string]policy.PythonContract{
+		"type":           {Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Missing", Members: []string{"run"}},
+		"decorator":      {Project: "pyproject.toml", Kind: "decorator", Target: "vendor.api.missing"},
+		"module-binding": {Project: "pyproject.toml", Kind: "module-binding", Target: "vendor.api", Members: []string{"missing"}},
+	}
+	for sourceName, sources := range builtIn {
+		for contractName, contract := range contracts {
+			t.Run(sourceName+"/"+contractName, func(t *testing.T) {
+				_, _, response, _ := runContractVulture(t, sources, []policy.PythonContract{contract})
+				if response.Error != "" || response.FactsError != "" || len(response.Problems) != 1 || len(response.Resolved) != 0 {
+					t.Fatalf("stale contract was resolved by built-in evidence: %+v", response)
+				}
+			})
+		}
+	}
+}
+
+func TestPytestHookimplContractRequiresDecoratedHooks(t *testing.T) {
+	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "decorator", Target: "pytest.hookimpl"}
+	for name, test := range map[string]struct {
+		source   string
+		resolved int
+	}{
+		"decorated":   {"import pytest\n@pytest.hookimpl\ndef pytest_configure(config):\n    return config\n", 1},
+		"undecorated": {"def pytest_configure(config):\n    return config\n", 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, response, _ := runContractVulture(t, map[string]string{"conftest.py": test.source}, []policy.PythonContract{contract})
+			if response.Error != "" || response.FactsError != "" || len(response.Resolved) != test.resolved || len(response.Problems) != 1-test.resolved {
+				t.Fatalf("hookimpl contract resolution = %+v", response)
+			}
+			if slices.ContainsFunc(response.Diagnostics, func(d pythonVultureDiagnostic) bool { return d.Name == "pytest_configure" }) {
+				t.Fatalf("conftest hook reported dead: %+v", response.Diagnostics)
+			}
+		})
+	}
+}
+
 func TestPythonRepositoryContractCallbackParametersSpanFiles(t *testing.T) {
 	contract := policy.PythonContract{Project: "pyproject.toml", Kind: "type", Target: "vendor.api.Base", Members: []string{"run", "after"}, CallbackParameters: map[string][]string{"run": {"context"}, "after": {"result"}}, Reason: "Separate adapters implement different callback members."}
 	sources := map[string]string{}
