@@ -48,12 +48,11 @@ type trivyVulnerability struct {
 	PkgIdentifier   struct {
 		PURL string `json:"PURL"`
 	} `json:"PkgIdentifier"`
-	InstalledVersion string   `json:"InstalledVersion"`
-	FixedVersion     string   `json:"FixedVersion"`
-	Status           string   `json:"Status"`
-	Title            string   `json:"Title"`
-	Severity         string   `json:"Severity"`
-	VendorIDs        []string `json:"VendorIDs"`
+	InstalledVersion string `json:"InstalledVersion"`
+	FixedVersion     string `json:"FixedVersion"`
+	Status           string `json:"Status"`
+	Title            string `json:"Title"`
+	Severity         string `json:"Severity"`
 }
 
 type trivySecret struct {
@@ -321,7 +320,6 @@ func normalizeTrivyVulnerabilities(artifact, target string, values []trivyVulner
 			PackagePURL:     boundedText(vulnerability.PkgIdentifier.PURL, 1024),
 			AffectedVersion: boundedText(vulnerability.InstalledVersion, 256), FixedVersion: boundedText(vulnerability.FixedVersion, 256),
 			Status: boundedText(vulnerability.Status, 128), Title: boundedText(vulnerability.Title, 1024),
-			Aliases: boundedAliases(vulnerability.VendorIDs),
 		}
 		if finding.ID == "" || finding.Package == "" || finding.AffectedVersion == "" {
 			return nil, errors.New("trivy vulnerability omitted its exact identity")
@@ -329,16 +327,6 @@ func normalizeTrivyVulnerabilities(artifact, target string, values []trivyVulner
 		findings = append(findings, finding)
 	}
 	return findings, nil
-}
-
-func boundedAliases(values []string) []string {
-	aliases := []string{}
-	for _, value := range values[:min(len(values), maximumVulnerabilityAliases)] {
-		if alias := boundedText(value, 128); alias != "" {
-			aliases = append(aliases, alias)
-		}
-	}
-	return aliases
 }
 
 func normalizeTrivySecrets(artifact, target string, values []trivySecret) ([]normalizedFinding, error) {
@@ -446,7 +434,7 @@ func (state *scannerRuntime) policyFinding(target policy.ArtifactTarget, artifac
 			scope = result.Path
 		}
 		identity := policy.VulnerabilityIdentity{
-			Ecosystem: policy.ContainerEcosystem, Advisory: finding.ID, Aliases: finding.Aliases, Package: packageID,
+			Ecosystem: policy.ContainerEcosystem, Advisory: finding.ID, Package: packageID,
 			AffectedVersion: finding.AffectedVersion, Scope: scope,
 			Severity: policy.NormalizeVulnerabilitySeverity(finding.Severity),
 			FixedVersions: strings.FieldsFunc(finding.FixedVersion, func(character rune) bool {

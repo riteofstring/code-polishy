@@ -185,8 +185,9 @@ reachable, its deployment impact is limited, and no supported fix is usable yet:
 }
 ```
 
-`scope` is the declared target name and `package` is the scanner's exact PURL,
-including any qualifiers. It lasts at most 30 days and covers every copy of that
+`advisory` is the scanner's vulnerability ID, never a vendor bulletin such as an
+RHSA. `scope` is the declared target name and `package` is the scanner's exact
+PURL, including any qualifiers. It lasts at most 30 days and covers every copy of that
 package version inside the target, so review all of them. The scan and any
 OpenVEX reconciliation run unchanged first, and the artifact's evidence report
 keeps the raw finding and immutable artifact identity. The command report shows

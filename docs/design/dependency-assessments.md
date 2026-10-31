@@ -42,9 +42,12 @@ the only container non-exposure surface, so a `container` assessment can only be
 a high `risk-accepted` decision; lower severities do not block and critical cannot
 be accepted. It runs after OpenVEX reconciliation as a policy disposition of the
 remaining findings, and it never changes scanner results or synthesizes
-`not_affected` statements. Its scope is the declared target name because one
-Dockerfile can build several targets, and its package is the scanner's exact PURL
-including qualifiers, so a changed base distribution requires re-review. An
+`not_affected` statements. Its advisory is the scanner's primary vulnerability ID.
+Vendor IDs are not aliases: one bulletin such as an RHSA can cover many CVEs, so
+treating it as an identity would accept or count them together. Its scope is the
+declared target name because one Dockerfile can build several targets, and its
+package is the scanner's exact PURL including qualifiers, so a changed base
+distribution requires re-review. An
 assessment covers every copy of that package version inside the target; image
 paths are excluded because they change across rebuilds. Scanner self-check
 findings carry the lock path as their scope, so no target can match them.

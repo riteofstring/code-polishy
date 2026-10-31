@@ -28,9 +28,9 @@
   `policy.vulnerabilityAssessmentApproval` until someone approves them.
 - Report high and critical findings that passed under an assessment on an
   always-visible `ASSESSED HIGH OR CRITICAL` line.
-- Identify container vulnerabilities by declared target name and record Trivy
-  vendor IDs as aliases. Existing container findings get new fingerprints, so
-  open ones appear as new errors in the next upgrade plan.
+- Identify container vulnerabilities by declared target name. Existing container
+  findings get new fingerprints, so open ones appear as new errors in the next
+  upgrade plan.
 - Check the CISA Known Exploited Vulnerabilities catalog in the focused
   `artifact-security` command, not only in `supply-chain`.
 

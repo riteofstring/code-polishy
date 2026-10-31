@@ -46,28 +46,46 @@ func TestParseTrivyReportNormalizesFindingsWithoutSecretContent(t *testing.T) {
 	}
 }
 
-func TestContainerVulnerabilityIdentityNamesTheDeclaredTargetAndAliases(t *testing.T) {
+func TestContainerVulnerabilityIdentityNamesTheDeclaredTarget(t *testing.T) {
 	t.Parallel()
-	imageID := "sha256:" + strings.Repeat("a", 64)
-	payload := []byte(`{
-  "SchemaVersion": 2,
-  "Trivy": {"Version":"0.72.0"},
-  "ArtifactType":"container_image",
-  "Metadata":{"ImageID":"` + imageID + `"},
-  "Results":[{"Target":"app","Vulnerabilities":[{"VulnerabilityID":"CVE-2026-1000","VendorIDs":["GHSA-aaaa-bbbb-cccc"],"PkgName":"example","PkgIdentifier":{"PURL":"pkg:apk/alpine/example@1.2.3"},"InstalledVersion":"1.2.3","Severity":"HIGH"}]}]
-}`)
-	findings, _, err := parseTrivyReport("agent", imageID, "0.72.0", payload)
-	if err != nil || len(findings) != 1 {
-		t.Fatalf("findings=%+v err=%v", findings, err)
-	}
+	finding := normalizedFinding{Artifact: "agent", Kind: "vulnerability", ID: "CVE-2026-1000", Severity: "HIGH", Package: "example", PackagePURL: "pkg:apk/alpine/example@1.2.3", AffectedVersion: "1.2.3"}
 	target := policy.ArtifactTarget{Name: "api", Mode: "dockerfile", Dockerfile: "Dockerfile"}
-	identity := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "dockerfile"}, findings[0]).Vulnerability
-	if identity.Scope != "api" || !slices.Equal(identity.Aliases, []string{"GHSA-aaaa-bbbb-cccc"}) {
+	if identity := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "dockerfile"}, finding).Vulnerability; identity.Scope != "api" {
 		t.Fatalf("identity = %+v", identity)
 	}
-	scanner := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "scanner"}, findings[0]).Vulnerability
-	if scanner.Scope != policy.LockFilename {
+	if scanner := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "scanner"}, finding).Vulnerability; scanner.Scope != policy.LockFilename {
 		t.Fatalf("scanner identity = %+v", scanner)
+	}
+}
+
+func TestVendorBulletinSharedByTwoAdvisoriesIsNotAnIdentity(t *testing.T) {
+	t.Parallel()
+	imageID := "sha256:" + strings.Repeat("a", 64)
+	vulnerability := func(advisory string) string {
+		return `{"VulnerabilityID":"` + advisory + `","VendorIDs":["RHSA-2026:1234"],"PkgName":"openssl","PkgIdentifier":{"PURL":"pkg:rpm/redhat/openssl@3.0.7"},"InstalledVersion":"3.0.7","Severity":"HIGH"}`
+	}
+	payload := []byte(`{"SchemaVersion":2,"Trivy":{"Version":"0.72.0"},"ArtifactType":"container_image","Metadata":{"ImageID":"` + imageID + `"},
+  "Results":[{"Target":"app","Vulnerabilities":[` + vulnerability("CVE-2026-1000") + `,` + vulnerability("CVE-2026-2000") + `]}]}`)
+	normalized, _, err := parseTrivyReport("agent", imageID, "0.72.0", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := policy.ArtifactTarget{Name: "api", Mode: "dockerfile", Dockerfile: "Dockerfile"}
+	findings := make([]policy.Finding, 0, len(normalized))
+	for _, finding := range normalized {
+		findings = append(findings, (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "dockerfile"}, finding))
+	}
+	now := time.Now().UTC()
+	assessment := policy.VulnerabilityAssessment{
+		ID: "accepted", Ecosystem: policy.ContainerEcosystem, Package: "pkg:rpm/redhat/openssl@3.0.7", AffectedVersion: "3.0.7", Scope: "api",
+		Severity: "high", Status: policy.RiskAcceptedAssessment, ApprovedBy: "A Maintainer", Expires: policy.Date{Time: now.AddDate(0, 0, 7)},
+	}
+	for advisory, want := range map[string]int{"RHSA-2026:1234": 0, "CVE-2026-1000": 1} {
+		assessment.Advisory = advisory
+		_, accepted := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, false)
+		if len(accepted) != want {
+			t.Fatalf("assessment of %s accepted %+v, want %d finding(s)", advisory, accepted, want)
+		}
 	}
 }
 
