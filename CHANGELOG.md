@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- List the declared modules when `--module` names an unknown module, in every
+  command that accepts one.
+- Name the JSON pointer and target of a stale `scope.pythonContracts` entry in
+  its diagnostic, and record each diagnostic's line and subject in upgrade plans
+  and the `upgrade plan` terminal output. The plan is where to read an incoming
+  release's new findings before cutover.
+- Show how many advisories each fix covers in the `VULNERABLE PACKAGES` table
+  instead of listing every advisory ID. The JSON report keeps the full list.
+- Name the reported fixed versions and the assessment workflow in vulnerability
+  remedies.
+- Accept `--display-limit all` to list every finding in the human report.
+- Add `check --git-changes` to the task-completion step in the agent workflow, so
+  lint findings surface before a merge gate.
+- Document how to find a release's index URL and digest, and attest the
+  publication index in the release workflow. Verify it with
+  `gh attestation verify`. The `.sha256` asset detects corruption only.
+
 ## 0.31.8 - 2026-10-30
 
 - Recognize pytest hook implementations as framework callbacks. Resolved

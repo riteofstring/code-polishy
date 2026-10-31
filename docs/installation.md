@@ -595,6 +595,32 @@ reviewed repository authority, so the same lock selects one release across all
 supported hosts. This authenticates acquired bytes relative to the lock; it is
 not authenticated builder provenance.
 
+### Find a release index and digest
+
+List published versions with `gh release list --repo riteofstring/code-polishy`
+or on the [releases page](https://github.com/riteofstring/code-polishy/releases).
+Each release publishes its index at a version-specific URL. Download it, verify
+it, then compute the digest yourself:
+
+```sh
+version=<exact-version>
+index_url="https://github.com/riteofstring/code-polishy/releases/download/v${version}/code-polishy-release-index.json"
+curl --fail --location --output code-polishy-release-index.json "${index_url}"
+gh attestation verify code-polishy-release-index.json \
+  --repo riteofstring/code-polishy \
+  --signer-workflow riteofstring/code-polishy/.github/workflows/release.yml
+shasum -a 256 code-polishy-release-index.json
+```
+
+Pass `index_url` and the printed digest to `lock` or `upgrade plan`. The
+attestation is a Sigstore signature that only the release workflow can produce,
+so replacing the release assets does not forge it. It starts with the first
+release after 0.31.8.
+
+The `code-polishy-release-index.json.sha256` asset and the digest in the release
+notes detect corruption only. Anyone who can replace the index can replace them
+too, so do not treat them as authentication.
+
 `lock --index URL --sha256 DIGEST` verifies that the index describes the
 executing installed release and writes this v2 lock without redownloading an
 archive. Every new lock requires publication metadata. Move between v2 releases
@@ -607,7 +633,9 @@ code-polishy upgrade apply --plan <reported-plan-path>
 
 Planning verifies the selected index, installs the host candidate, authenticates
 the capability delta, and compares outgoing and incoming diagnostics without
-changing repository authority. Applying the plan revalidates its evidence and
+changing repository authority. The terminal shows the first eight diagnostic
+changes; the reported plan file records all of them with their locations and
+subjects. Applying the plan revalidates its evidence and
 replaces managed guidance, wrappers, ignore rules, and the lock in one
 rollback-capable transaction with the lock last. New errors can be acknowledged
 without fixing them by adding `--accept-new-findings`. Neither phase edits

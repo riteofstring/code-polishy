@@ -67,9 +67,9 @@
   its findings, and skip application tests. Verify control and product-input
   Markdown as source.
 - During development, run the narrowest useful exact test after a coherent
-  runnable change, not after every edit or chat turn. Use
-  `code-polishy test --changed` at a completed source boundary only when a final
-  gate will not immediately follow. Resolve its base using `agent-workflows`.
+  runnable change, not after every edit or chat turn. At a completed source
+  boundary with no final gate next, run `check --git-changes` before committing,
+  then `test --changed`; resolve its base using `agent-workflows`.
 - Run `code-polishy merge-gate --base REF` only at a genuine merge or release
   checkpoint through `verification.finalGateOwner`. Ordinary task completion,
   commits, and delivery do not select it. Duplicate only on request; an exact

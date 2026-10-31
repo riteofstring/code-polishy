@@ -1101,6 +1101,7 @@
         },
         "groupBy": { "enum": ["rule", "module", "path", "relation"] },
         "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "all": { "type": "boolean" },
         "total": { "type": "integer", "minimum": 0 },
         "displayed": { "type": "integer", "minimum": 0 },
         "omitted": { "type": "integer", "minimum": 0 }

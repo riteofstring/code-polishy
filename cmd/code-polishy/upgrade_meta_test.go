@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
 )
 
@@ -154,6 +155,25 @@ func TestUpgradeDiagnosticDeltaSeparatesPolicyEffects(t *testing.T) {
 	}
 	if !sameUpgradeDiagnosticDelta(delta, compareUpgradeDiagnostics(before, after)) {
 		t.Fatal("equivalent diagnostic deltas did not compare equal")
+	}
+}
+
+func TestUpgradeDiagnosticsRecordWhichDeclarationIsWrong(t *testing.T) {
+	findings := []policy.Finding{
+		policy.NormalizeFinding(policy.Finding{Check: "policy.pythonContract", Path: ".code-polishy.json", Subject: "contract:pyproject.toml:type:app.Missing", Message: "stale"}),
+		policy.NormalizeFinding(policy.Finding{Check: "quality.lint", Path: "src/app.py", Line: 7, Subject: "unused", Message: "unused"}),
+	}
+	diagnostics := diagnosticsFromFindings(findings)
+	delta := compareUpgradeDiagnostics(nil, diagnostics)
+	var output bytes.Buffer
+	printUpgradeDiagnosticDelta(&output, delta)
+	for _, want := range []string{
+		"ADDED policy.pythonContract .code-polishy.json [contract:pyproject.toml:type:app.Missing]: stale",
+		"ADDED quality.lint src/app.py:7 [unused]: unused",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("output %q lacks %q", output.String(), want)
+		}
 	}
 }
 

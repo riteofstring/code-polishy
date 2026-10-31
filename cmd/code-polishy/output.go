@@ -102,9 +102,13 @@ func consumeSingleReportOption(options *reportOutputOptions, seen map[string]boo
 	case "--group-by":
 		options.display.GroupBy = value
 	case "--display-limit":
+		if value == "all" {
+			options.display.All = true
+			return nil
+		}
 		limit, err := strconv.Atoi(value)
 		if err != nil {
-			return errors.New("--display-limit must be an integer")
+			return errors.New("--display-limit must be an integer or all")
 		}
 		options.display.Limit = limit
 	}
@@ -136,8 +140,12 @@ func validateReportOutputOptions(options reportOutputOptions) error {
 	if options.display.GroupBy != "" && options.display.GroupBy != "rule" && options.display.GroupBy != "module" && options.display.GroupBy != "path" && options.display.GroupBy != "relation" {
 		return errors.New("--group-by must be rule, module, path, or relation")
 	}
-	if options.display.Limit < 1 || options.display.Limit > engine.MaximumFindingDisplayLimit {
-		return fmt.Errorf("--display-limit must be between 1 and %d", engine.MaximumFindingDisplayLimit)
+	return validateDisplayLimit(options.display)
+}
+
+func validateDisplayLimit(display engine.DisplayOptions) error {
+	if !display.All && (display.Limit < 1 || display.Limit > engine.MaximumFindingDisplayLimit) {
+		return fmt.Errorf("--display-limit must be between 1 and %d, or all", engine.MaximumFindingDisplayLimit)
 	}
 	return nil
 }

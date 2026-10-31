@@ -107,7 +107,7 @@ func planUpgrade(invocation invocation, arguments []string) int {
 	}
 	fmt.Printf("PASS upgrade plan: Code Polishy %s -> %s\n", result.outgoing.CodePolishyVersion, result.incoming.CodePolishyVersion)
 	fmt.Println(capabilityDeltaHuman(result.capability))
-	printUpgradeDiagnosticDelta(result.diagnostics)
+	printUpgradeDiagnosticDelta(os.Stdout, result.diagnostics)
 	fmt.Printf("PLAN: %s\n", result.planPath)
 	fmt.Printf("NEXT: %s --repo-root %s upgrade apply --plan %s\n", filepath.Join(result.nextRoot, filepath.FromSlash(release.BinaryPath)), invocation.repoRoot, result.planPath)
 	if upgradeDeltaHasNewErrors(result.diagnostics) {
@@ -440,7 +440,7 @@ func diagnosticsFromFindings(findings []policy.Finding) []release.UpgradeDiagnos
 	for _, finding := range findings {
 		diagnostics = append(diagnostics, release.UpgradeDiagnostic{
 			Fingerprint: finding.Fingerprint, RuleID: finding.Check, Severity: string(finding.Severity),
-			Path: finding.Path, Message: finding.Message,
+			Path: finding.Path, Line: finding.Line, Subject: finding.Subject, Message: finding.Message,
 		})
 	}
 	slices.SortFunc(diagnostics, func(left, right release.UpgradeDiagnostic) int {
@@ -504,8 +504,8 @@ func upgradeDeltaHasNewErrors(delta release.UpgradeDiagnosticDelta) bool {
 	return false
 }
 
-func printUpgradeDiagnosticDelta(delta release.UpgradeDiagnosticDelta) {
-	fmt.Printf("DIAGNOSTIC DELTA: added %d; removed %d; changed %d.\n", len(delta.Added), len(delta.Removed), len(delta.Changed))
+func printUpgradeDiagnosticDelta(output io.Writer, delta release.UpgradeDiagnosticDelta) {
+	fmt.Fprintf(output, "DIAGNOSTIC DELTA: added %d; removed %d; changed %d.\n", len(delta.Added), len(delta.Removed), len(delta.Changed))
 	shown := 0
 	for _, group := range []struct {
 		label       string
@@ -515,7 +515,7 @@ func printUpgradeDiagnosticDelta(delta release.UpgradeDiagnosticDelta) {
 			if shown == 8 {
 				break
 			}
-			fmt.Printf("  %s %s %s: %s\n", group.label, diagnostic.RuleID, diagnostic.Path, diagnostic.Message)
+			printUpgradeDiagnostic(output, group.label, diagnostic)
 			shown++
 		}
 	}
@@ -523,12 +523,23 @@ func printUpgradeDiagnosticDelta(delta release.UpgradeDiagnosticDelta) {
 		if shown == 8 {
 			break
 		}
-		fmt.Printf("  CHANGED %s %s: %s\n", change.After.RuleID, change.After.Path, change.After.Message)
+		printUpgradeDiagnostic(output, "CHANGED", change.After)
 		shown++
 	}
 	if remaining := len(delta.Added) + len(delta.Removed) + len(delta.Changed) - shown; remaining > 0 {
-		fmt.Printf("  %d more changes are recorded in the plan.\n", remaining)
+		fmt.Fprintf(output, "  %d more changes are recorded in the plan.\n", remaining)
 	}
+}
+
+func printUpgradeDiagnostic(output io.Writer, label string, diagnostic release.UpgradeDiagnostic) {
+	location := diagnostic.Path
+	if diagnostic.Line > 0 {
+		location = fmt.Sprintf("%s:%d", location, diagnostic.Line)
+	}
+	if diagnostic.Subject != "" {
+		location += " [" + diagnostic.Subject + "]"
+	}
+	fmt.Fprintf(output, "  %s %s %s: %s\n", label, diagnostic.RuleID, location, diagnostic.Message)
 }
 
 func readUpgradeOutgoingLock(repoRoot string) (release.Lock, []byte, error) {

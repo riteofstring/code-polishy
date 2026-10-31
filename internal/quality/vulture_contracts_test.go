@@ -490,3 +490,19 @@ func TestPythonContractExtendsBundledType(t *testing.T) {
 		t.Fatal("unrelated hook was hidden")
 	}
 }
+
+func TestStaleContractDiagnosticNamesItsDeclaration(t *testing.T) {
+	sources := map[string]string{"src/example.py": "def live():\n    return 1\nprint(live())\n"}
+	contracts := []policy.PythonContract{
+		{Project: "pyproject.toml", Kind: "decorator", Target: "example.live"},
+		{Project: "pyproject.toml", Kind: "decorator", Target: "vendor.api.missing"},
+	}
+	repo, project, _, data := runContractVulture(t, sources, contracts)
+	findings := pythonVultureFindingsForSources(repo, project, nil, data)
+	matched := slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.pythonContract" && strings.Contains(finding.Message, "/scope/pythonContracts/1 (vendor.api.missing): ")
+	})
+	if !matched {
+		t.Fatalf("findings = %+v", findings)
+	}
+}

@@ -774,10 +774,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printReportHeaders(stdout, report, verbose)
 	printExecutionTelemetry(stdout, report.Execution, verbose)
 	printRepositoryContext(stdout, report.RepositoryContext)
-	limit := engine.DefaultFindingDisplayLimit
-	if report.Display != nil && report.Display.Limit > 0 {
-		limit = report.Display.Limit
-	}
+	limit := report.Display.FindingLimit()
 	remaining := limit
 	findings := boundedReportItems(report.Findings, &remaining)
 	suppressed := boundedReportItems(report.Suppressed, &remaining)

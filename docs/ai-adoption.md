@@ -678,9 +678,10 @@ When asked to upgrade Code Polishy, the AI agent should:
 
 1. read the outgoing locked instructions and preserve the working tree; those
    instructions govern until the lock cutover;
-2. obtain the published release's exact HTTPS publication-index URL and its
-   separately published SHA-256; never select floating `main`, a mutable
-   channel, an unpublished candidate, or an unpinned index;
+2. [obtain the published release's exact HTTPS publication-index URL and
+   SHA-256](installation.md#find-a-release-index-and-digest) and verify its
+   attestation; never select floating `main`, a mutable channel, an unpublished
+   candidate, or an unpinned index;
 3. for an outgoing v2 lock, run
    `upgrade plan --index URL --sha256 DIGEST` through a release that implements
    the upgrade protocol. If the outgoing release predates that command or cannot
@@ -690,7 +691,10 @@ When asked to upgrade Code Polishy, the AI agent should:
    [bootstrap commands](installation.md#the-target-lock) rather than the
    repository wrapper, which still selects the outgoing release;
 4. inspect its authenticated capability delta and its added, removed, and
-   changed diagnostics. Planning may install the immutable candidate and write
+   changed diagnostics. The terminal shows the first eight; the reported plan
+   file records every one with its rule, path, line, subject, and message. The
+   incoming release cannot run other commands before cutover, so read new
+   findings there. Planning may install the immutable candidate and write
    managed evidence, but it must not change the target lock or application
    source;
 5. read every intervening `CHANGELOG.md` entry. Fix newly exposed issues and

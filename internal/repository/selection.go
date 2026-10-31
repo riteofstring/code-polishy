@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 type RequestedSelection struct {
@@ -202,7 +204,7 @@ func (repo Repository) moduleSelectionWithFiles(names []string, requireFiles boo
 		}
 		seen[name] = true
 		if !repo.hasModule(name) {
-			return Selection{}, fmt.Errorf("module selection names an unknown module: %s", name)
+			return Selection{}, fmt.Errorf("module selection names an unknown module: %s\n%s", name, policy.DeclaredModules(repo.Config))
 		}
 	}
 	allFiles, err := repo.AllFiles()

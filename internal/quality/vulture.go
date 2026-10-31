@@ -648,8 +648,8 @@ func pythonQualityConfigDynamicReferenceProjects(repo repository.Repository, pro
 func pythonQualityConfiguredReferenceOrigins(repo repository.Repository) map[string][]pythonVultureReferenceOrigin {
 	origins := map[string][]pythonVultureReferenceOrigin{}
 	configPath := pythonVultureConfigPath(repo)
-	for _, contract := range repo.Config.Scope.PythonContracts {
-		origins[contract.Project] = append(origins[contract.Project], pythonContractOrigin(repo, contract))
+	for index, contract := range repo.Config.Scope.PythonContracts {
+		origins[contract.Project] = append(origins[contract.Project], pythonContractOrigin(repo, index))
 	}
 	for _, reference := range repo.Config.Scope.PythonDynamicReferences {
 		origins[reference.Project] = append(origins[reference.Project], pythonVultureReferenceOrigin{

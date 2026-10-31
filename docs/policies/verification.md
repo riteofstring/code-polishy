@@ -119,7 +119,7 @@ turns:
 | Clean checkout, fetch, merge, rebase, tag, or push prep | None                                              |
 | Manually resolved source conflict                       | One narrow affected test                          |
 | Coherent runnable source change                         | One narrow affected test                          |
-| Completed source task with no final gate next           | `test --changed`                                  |
+| Completed source task with no final gate next           | `check --git-changes`, then `test --changed`      |
 | Genuine merge or release candidate                      | One base-aware merge gate, owned locally or by CI |
 | Stable release candidate                                | Only explicitly selected supplemental suites      |
 

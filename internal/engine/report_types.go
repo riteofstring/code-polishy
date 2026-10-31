@@ -118,6 +118,7 @@ type ReportDisplay struct {
 	Filters   ReportFilters `json:"filters"`
 	GroupBy   string        `json:"groupBy,omitempty"`
 	Limit     int           `json:"limit,omitempty"`
+	All       bool          `json:"all,omitempty"`
 	Total     int           `json:"total"`
 	Displayed int           `json:"displayed"`
 	Omitted   int           `json:"omitted"`
@@ -127,6 +128,7 @@ type DisplayOptions struct {
 	Filters ReportFilters
 	GroupBy string
 	Limit   int
+	All     bool
 }
 
 type MergePolicy struct {

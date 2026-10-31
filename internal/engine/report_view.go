@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -17,7 +18,7 @@ func PrepareReportDisplay(report Report, options DisplayOptions) Report {
 	options = normalizedDisplayOptions(options)
 	displayed := filteredReport(report, options.Filters)
 	report.Display = &ReportDisplay{
-		Filters: options.Filters, GroupBy: options.GroupBy, Limit: options.Limit,
+		Filters: options.Filters, GroupBy: options.GroupBy, Limit: options.Limit, All: options.All,
 		Total: reportOccurrenceCount(report), Displayed: reportOccurrenceCount(displayed),
 	}
 	report.Display.Omitted = report.Display.Total - report.Display.Displayed
@@ -29,18 +30,31 @@ func ReportView(report Report, options DisplayOptions) Report {
 	view := filteredReport(report, options.Filters)
 	orderReportFindings(view.Findings, options.GroupBy)
 	view.Display = &ReportDisplay{
-		Filters: options.Filters, GroupBy: options.GroupBy, Limit: options.Limit,
+		Filters: options.Filters, GroupBy: options.GroupBy, Limit: options.Limit, All: options.All,
 		Total: reportOccurrenceCount(report), Displayed: reportOccurrenceCount(view),
 	}
 	view.Display.Omitted = view.Display.Total - view.Display.Displayed
 	return view
 }
 
-func normalizedDisplayOptions(options DisplayOptions) DisplayOptions {
-	if options.Limit <= 0 {
-		options.Limit = DefaultFindingDisplayLimit
+func (display *ReportDisplay) FindingLimit() int {
+	switch {
+	case display == nil || !display.All && display.Limit <= 0:
+		return DefaultFindingDisplayLimit
+	case display.All:
+		return math.MaxInt
+	default:
+		return display.Limit
 	}
-	if options.Limit > MaximumFindingDisplayLimit {
+}
+
+func normalizedDisplayOptions(options DisplayOptions) DisplayOptions {
+	switch {
+	case options.All:
+		options.Limit = 0
+	case options.Limit <= 0:
+		options.Limit = DefaultFindingDisplayLimit
+	case options.Limit > MaximumFindingDisplayLimit:
 		options.Limit = MaximumFindingDisplayLimit
 	}
 	options.Filters.Rules = reportSortedUniqueStrings(options.Filters.Rules)

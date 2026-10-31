@@ -56,7 +56,7 @@ func (repo Repository) designScope(paths, modules []string) (designScope, error)
 	scope := designScope{files: map[string]bool{}, modules: map[string]bool{}, explicitModules: map[string]bool{}, coveredFiles: map[string]bool{}, coveredModules: map[string]bool{}, matchedModules: map[string]bool{}}
 	for _, module := range modules {
 		if !repo.hasModule(module) {
-			return scope, fmt.Errorf("unknown module %q", module)
+			return scope, fmt.Errorf("unknown module %q\n%s", module, policy.DeclaredModules(repo.Config))
 		}
 		if scope.explicitModules[module] {
 			return scope, fmt.Errorf("module %q was specified more than once", module)

@@ -32,10 +32,11 @@ func pythonVultureFindingsForSources(repo repository.Repository, project reposit
 	for id, origin := range attributeOrigins {
 		origins[id] = origin
 	}
-	contracts := pythonVultureContracts(repo, project)
-	for _, contract := range contracts {
-		origins[contract.ID] = pythonContractOrigin(repo, contract.PythonContract)
+	for index := range repo.Config.Scope.PythonContracts {
+		origin := pythonContractOrigin(repo, index)
+		origins[origin.Subject] = origin
 	}
+	contracts := pythonVultureContracts(repo, project)
 	requireContracts := len(sources) == 0 || len(sources) == len(project.Files)
 	if err := validatePythonVultureResponse(project.Files, sources, references, backends, attributes, contracts, requireContracts, response); err != nil {
 		return pythonVultureCoverage(sources, "the policy-owned Vulture output cannot be used: "+err.Error())

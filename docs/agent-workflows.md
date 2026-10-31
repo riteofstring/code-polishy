@@ -43,15 +43,15 @@ alias. See [task selection and intent](capabilities.md#start-a-task).
 
 ## Choose verification from the event
 
-| Event                                                                                                | Action                                                                        |
-| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Read-only question, status request, checkout, fetch, clean merge or rebase, tag, or push preparation | None                                                                          |
-| Ordinary prose-only Markdown change                                                                  | Format and documentation checks                                               |
-| Coherent runnable source change or manually resolved source conflict                                 | One affected exact test                                                       |
-| Completed source task with no final gate immediately next                                            | `test --changed --base TASK_BASE`                                             |
-| Completed source task on a long-lived branch                                                         | `checkpoint-gate --base PREVIOUS_CHECKPOINT` after commit and selected review |
-| Genuine merge or release checkpoint                                                                  | One `merge-gate --base MERGE_TARGET` through its configured owner             |
-| Stable release candidate                                                                             | Only explicitly selected supplemental suites                                  |
+| Event                                                                                                | Action                                                                          |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Read-only question, status request, checkout, fetch, clean merge or rebase, tag, or push preparation | None                                                                            |
+| Ordinary prose-only Markdown change                                                                  | Format and documentation checks                                                 |
+| Coherent runnable source change or manually resolved source conflict                                 | One affected exact test                                                         |
+| Completed source task with no final gate immediately next                                            | `check --git-changes` before committing, then `test --changed --base TASK_BASE` |
+| Completed source task on a long-lived branch                                                         | `checkpoint-gate --base PREVIOUS_CHECKPOINT` after commit and selected review   |
+| Genuine merge or release checkpoint                                                                  | One `merge-gate --base MERGE_TARGET` through its configured owner               |
+| Stable release candidate                                                                             | Only explicitly selected supplemental suites                                    |
 
 Control Markdown and product-input Markdown follow source verification. A
 prose-only conflict remains documentation-only. Do not test after every edit or

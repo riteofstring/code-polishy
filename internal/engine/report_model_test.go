@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -179,6 +180,21 @@ func TestReportViewFiltersWithoutChangingCompleteSummary(t *testing.T) {
 	hidden := ReportView(complete, DisplayOptions{Filters: ReportFilters{Rules: []string{"missing.rule"}}})
 	if HasFindings(hidden) || hidden.Summary.Errors != 2 || hidden.Display.Total != 2 || hidden.Display.Displayed != 0 {
 		t.Fatalf("hidden view = %+v", hidden)
+	}
+}
+
+func TestReportDisplayFindingLimit(t *testing.T) {
+	report := (&Engine{}).finish(nil, nil)
+	var absent *ReportDisplay
+	if absent.FindingLimit() != DefaultFindingDisplayLimit {
+		t.Fatalf("absent display limit = %d", absent.FindingLimit())
+	}
+	if limit := PrepareReportDisplay(report, DisplayOptions{Limit: MaximumFindingDisplayLimit + 1}).Display.FindingLimit(); limit != MaximumFindingDisplayLimit {
+		t.Fatalf("clamped limit = %d", limit)
+	}
+	display := PrepareReportDisplay(report, DisplayOptions{Limit: 7, All: true}).Display
+	if !display.All || display.Limit != 0 || display.FindingLimit() != math.MaxInt {
+		t.Fatalf("all display = %+v", display)
 	}
 }
 

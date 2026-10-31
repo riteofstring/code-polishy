@@ -23,6 +23,8 @@ type UpgradeDiagnostic struct {
 	RuleID      string `json:"ruleId"`
 	Severity    string `json:"severity"`
 	Path        string `json:"path"`
+	Line        int    `json:"line,omitempty"`
+	Subject     string `json:"subject,omitempty"`
 	Message     string `json:"message"`
 }
 

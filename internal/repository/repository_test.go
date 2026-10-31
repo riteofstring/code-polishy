@@ -499,6 +499,14 @@ func TestModuleSelectionExpandsExactlyTheNamedDeclaredModules(t *testing.T) {
 			t.Fatalf("Select(modules, %v) error = %v", testCase.names, err)
 		}
 	}
+	declared := Repository{Root: t.TempDir(), Config: policy.Config{Modules: []policy.Module{{Name: "numerics"}, {Name: "benchmarks"}}}}
+	want := "module selection names an unknown module: losses\ndeclared modules: benchmarks, numerics"
+	if _, err := declared.Select("modules", []string{"losses"}); err == nil || err.Error() != want {
+		t.Fatalf("unknown module error = %v", err)
+	}
+	if _, err := declared.ResolveDesignContext(nil, []string{"losses"}); err == nil || !strings.HasSuffix(err.Error(), "\ndeclared modules: benchmarks, numerics") {
+		t.Fatalf("design context unknown module error = %v", err)
+	}
 	emptyRepo := Repository{Root: t.TempDir(), Config: policy.Config{Modules: []policy.Module{{Name: "empty", Paths: []string{"src/**"}}}}}
 	if _, err := emptyRepo.Select("modules", []string{"empty"}); err == nil || !strings.Contains(err.Error(), "no governed files") {
 		t.Fatalf("empty module error = %v", err)

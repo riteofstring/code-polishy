@@ -1,6 +1,9 @@
 package policy
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var packRemediationRules = map[string]string{
 	"pack.format": "quality.format", "pack.lint": "quality.lint", "pack.typecheck": "quality.typecheck",
@@ -83,7 +86,7 @@ var findingRemediationRules = []struct {
 	{"supplyChain.workflow supplyChain.gitLabCoverage", "Correct the workflow's supported structure and contained include graph so every security-relevant image, action, and command is resolved and checked."},
 	{"supplyChain.dependencyLicense", "Replace the dependency with an admissibly licensed exact version or remove it; retain complete license evidence for the resolved graph."},
 	{"supplyChain.licenseCoverage", "Provide current verifiable license evidence for every resolved dependency; unknown or incomplete licensing cannot count as approval."},
-	{"supplyChain.nodeVulnerability supplyChain.goVulnerability supplyChain.osvVulnerability supplyChain.gitVulnerability", "Remove or update the exact affected dependency to a verified fixed candidate and run dependency review; retain advisory identity and complete transitive vulnerability coverage."},
+	{vulnerabilityRemediationRules, "Remove or update the exact affected dependency to a verified fixed candidate and run dependency review; retain advisory identity and complete transitive vulnerability coverage."},
 	{"supplyChain.gitEvidence", "Obtain current signed security, license, and trusted age evidence from the declared authorized provider for the exact Git contents and complete lock inventory; keep private identities out of public providers."},
 	{"supplyChain.releaseAge supplyChain.newDependencyAge", "Prefer an admissible exact dependency with sufficient authoritative release-age evidence; any necessary exception must satisfy the exact evidence, ownership, and expiry policy."},
 	{"supplyChain.releaseAgeCoverage", "Restore authoritative release or trusted commit-observation timestamps for the exact dependency; self-reported Git dates do not establish age."},
@@ -99,7 +102,22 @@ var findingRemediationRules = []struct {
 	{"repository.changeBoundary", "Move task edits back inside the caller-authorized boundary or obtain an explicit scope correction; preserve unrelated work and do not broaden the task silently."},
 }
 
+const vulnerabilityRemediationRules = "supplyChain.nodeVulnerability supplyChain.goVulnerability supplyChain.osvVulnerability supplyChain.gitVulnerability"
+
+func vulnerabilityRemediationSummary(identity VulnerabilityIdentity) string {
+	const assessment = "or record a vulnerability assessment if the affected API is unreachable (code-polishy docs read supply-chain); retain advisory identity and complete transitive vulnerability coverage."
+	if len(identity.FixedVersions) == 0 {
+		return "No fixed " + identity.Package + " version is reported: remove or replace the dependency and run dependency review, " + assessment
+	}
+	fixes := slices.Clone(identity.FixedVersions)
+	slices.Sort(fixes)
+	return "Fixed in " + identity.Package + " " + strings.Join(slices.Compact(fixes), " or ") + ": upgrade to a verified fixed candidate and run dependency review, " + assessment
+}
+
 func findingRemediationSummary(finding Finding) string {
+	if finding.Vulnerability != nil && slices.Contains(strings.Fields(vulnerabilityRemediationRules), finding.Check) {
+		return vulnerabilityRemediationSummary(*finding.Vulnerability)
+	}
 	if rule, exists := packRemediationRules[finding.Check]; exists {
 		finding.Check = rule
 	}

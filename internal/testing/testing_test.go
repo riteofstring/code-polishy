@@ -120,6 +120,14 @@ func TestExecutionPlanForDirectTestUsesTheResolvedSelectionBase(t *testing.T) {
 	}
 }
 
+func TestUnknownModuleErrorListsDeclaredModules(t *testing.T) {
+	config := policy.Config{Modules: []policy.Module{{Name: "numerics"}, {Name: "benchmarks"}}, ModuleByName: map[string]int{"numerics": 0, "benchmarks": 1}}
+	err := validateModuleNames(config, []string{"losses"})
+	if err == nil || err.Error() != "unknown module \"losses\"\ndeclared modules: benchmarks, numerics" {
+		t.Fatalf("unknown module error = %v", err)
+	}
+}
+
 func TestExplicitModulePlanStaysFocused(t *testing.T) {
 	t.Parallel()
 	config := planningConfig()

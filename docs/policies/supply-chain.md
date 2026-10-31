@@ -631,14 +631,16 @@ missing-coverage finding, never a workspace that declared nothing.
   policy, not the truth of the assessment's reasoning.
 - The human report adds a `VULNERABLE PACKAGES` table grouped by package, exact
   version and scope, with open and accepted advisory counts, the highest severity
-  and the fixes each advisory reports. An advisory reported by several scanners
+  and how many advisories each reported fix covers. An advisory reported by several scanners
   or under an alias counts once and is open if any report is open. The table
   covers the filtered view, including findings beyond `--display-limit`, and
-  shows at most that many rows.
-  Fixes stay attached to their advisories because a release fixing one may not
-  fix another. Package ranges are listed without comparison to the installed
+  shows at most that many rows. Use `--display-limit all` to list every finding
+  and table row.
+  Fix counts stay separate because a release fixing one advisory may not fix
+  another. Package ranges are listed without comparison to the installed
   version, so choose the fix on your release line and rescan it. The complete
-  report carries them in each finding's `vulnerability.fixedVersions`.
+  report carries them in each finding's `vulnerability.fixedVersions`, and each
+  finding's remedy names its own fixes.
 
 Use target providers for repository secret scanning, SAST, signed provenance,
 and license rules outside a pnpm project where relevant. Use the shared artifact-security module for

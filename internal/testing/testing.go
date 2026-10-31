@@ -382,7 +382,7 @@ func explicitSuitePlan(suites []policy.TestSuite, names []string) (Plan, error) 
 func validateModuleNames(config policy.Config, names []string) error {
 	for _, name := range names {
 		if _, exists := config.ModuleByName[name]; !exists {
-			return fmt.Errorf("unknown module %q", name)
+			return fmt.Errorf("unknown module %q\n%s", name, policy.DeclaredModules(config))
 		}
 	}
 	return nil

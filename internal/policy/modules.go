@@ -2,8 +2,21 @@ package policy
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
+
+func DeclaredModules(config Config) string {
+	names := make([]string, 0, len(config.Modules))
+	for _, module := range config.Modules {
+		names = append(names, module.Name)
+	}
+	if len(names) == 0 {
+		return "declared modules: none"
+	}
+	slices.Sort(names)
+	return "declared modules: " + strings.Join(names, ", ")
+}
 
 func ValidateModuleGraph(modules []Module) error {
 	return validateModules(&Config{Modules: modules})
