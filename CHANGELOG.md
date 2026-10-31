@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.31.9 - 2026-10-30
+
 - List the declared modules when `--module` names an unknown module, in every
   command that accepts one.
 - Name the JSON pointer and target of a stale `scope.pythonContracts` entry in
@@ -33,6 +35,14 @@
   upgrade plan.
 - Check the CISA Known Exploited Vulnerabilities catalog in the focused
   `artifact-security` command, not only in `supply-chain`.
+- Match container assessments to the exact vulnerability ID reported by Trivy.
+  Vendor bulletins that cover multiple vulnerabilities no longer act as aliases
+  or merge distinct findings in the package summary.
+- Update the optional JavaScript provider's transitive `source-map-js` dependency
+  to the aged `1.2.2` fix and remove its expired vulnerability assessment.
+- Assess minimatch's globparts amplification advisory against the exact resolved
+  implementations and disabled optimization paths, with expiring non-exposure
+  records for both JavaScript dependency graphs.
 
 ## 0.31.8 - 2026-10-30
 

@@ -4,6 +4,7 @@ Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
 The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
 reviewed on 2026-10-23 UTC.
+Minimatch globparts amplification reviewed on 2026-10-31 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -134,6 +135,46 @@ or direct-pin changes. Frozen installation keeps lifecycle execution disabled.
 Official provenance and age reduce admission uncertainty without proving the
 absence of upstream compromise or regressions. Ordinary analyzer and provider
 contracts remain the compatibility evidence.
+
+## Minimatch globparts amplification
+
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
+published on 2026-10-30, describes pattern amplification when
+`optimizationLevel >= 2`: `firstPhasePreProcess` repeatedly clones `**/..`
+entries, then `secondPhasePreProcess` compares the expanded set pairwise.
+Repository-selected patterns could exhaust CPU and memory if they reached
+those operations with that option enabled.
+
+Both JavaScript locks resolve minimatch 3.1.5. Its registry-integrity-verified
+source contains neither preprocessing method nor `optimizationLevel`; the
+advisory's broad `<11.0.1` range includes code without the described mechanism.
+Record exact `false-positive` assessments for those two lock scopes.
+
+The native bundle also resolves 10.2.5 and the provider resolves 10.2.6.
+Both verified archives default `optimizationLevel` to 1 and enter the affected
+preprocessing only at level 2 or higher. Their sole resolved direct consumer
+is `@typescript-eslint/typescript-estree` 8.64.0. Its
+`dist/useProgramFromProjectService.js` calls minimatch with only `{ dot: true }`
+for `allowDefaultProject`, retaining level 1. Its default-project validator
+also rejects `**` patterns. Neither the
+[native parser configuration](../../tools/javascript/runner.mjs) nor the
+[provider parser configuration](../../providers/javascript/analysis.mjs)
+enables `projectService` or `allowDefaultProject`. Target ESLint configuration
+and inline directives cannot change those options. Record exact `unreachable`
+assessments for these two versions and lock scopes.
+
+The [upstream fix](https://github.com/isaacs/minimatch/commit/77a0f5c4b80bdc641c3c930a1d9edf5ad2db57f8)
+bounds that level-2 expansion and skips quadratic deduplication for large sets.
+The first fixed release, 11.0.1, was
+[published](https://registry.npmjs.org/minimatch) at 2026-10-27T22:26:03.755Z;
+there is no aged fix or compatible 3.x/10.x backport. Forcing a fresh major
+outside the callers' supported ranges would add admission and compatibility
+risk without removing a reachable path. Retain the aged versions with these
+four assessments, owned by Codex and expiring on 2026-11-14. Recheck upstream
+ranges and supported backports by expiry; evaluate a compatible fixed upgrade
+when available. Reassess immediately if the caller graph, parser authority,
+or minimatch options change. Do not extend this conclusion to other glob
+libraries or advisories.
 
 ## URI processing
 
@@ -388,12 +429,20 @@ loads PostCSS, but does not execute that rule or deliver maps to the affected AP
 The provider's CSS comment scanner uses `vscode-css-languageservice`, and its
 compiler mappings use `@jridgewell/trace-mapping`, not source-map-js.
 
-Retain an exact high-severity `not-affected` assessment until 2026-10-30. Update
-to official 1.2.2 on or after 14:08:10 UTC that day, 30 days after its
-[npm publication](https://registry.npmjs.org/source-map-js), and remove the
-assessment. The disabled call path makes waiting preferable to fresh-code
-admission. Reassess immediately if CSS rule activation, map processing, or
-configuration authority changes.
+On 2026-10-30, update the provider's transitive lock entry to official 1.2.2
+and remove the expired `not-affected` assessment. Its
+[npm publication](https://registry.npmjs.org/source-map-js) at
+2026-09-30T14:08:09.382Z passed the 30-day admission window before this update.
+The official package bounds indexed section offsets, avoids repeated nested
+source lookups, and skips work beyond the generated source. Its remaining
+change permits sorting when dynamic function construction is disabled. It adds
+no dependencies or lifecycle scripts; PostCSS's compatible range and every
+other resolved package remain unchanged.
+
+The disabled call path justified retaining 1.2.1 during the waiting period.
+The aged fix now removes the advisory without an early admission or replacement
+assessment. Frozen installation keeps scripts disabled. Reassess immediately
+if CSS rule activation, map processing, or configuration authority changes.
 
 ## Verification and limits
 
