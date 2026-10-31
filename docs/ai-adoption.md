@@ -679,9 +679,9 @@ When asked to upgrade Code Polishy, the AI agent should:
 1. read the outgoing locked instructions and preserve the working tree; those
    instructions govern until the lock cutover;
 2. [obtain the published release's exact HTTPS publication-index URL and
-   SHA-256](installation.md#find-a-release-index-and-digest) and verify its
-   attestation; never select floating `main`, a mutable channel, an unpublished
-   candidate, or an unpinned index;
+   SHA-256](installation.md#find-a-release-index-and-digest); never select
+   floating `main`, a mutable channel, an unpublished candidate, or an unpinned
+   index;
 3. for an outgoing v2 lock, run
    `upgrade plan --index URL --sha256 DIGEST` through a release that implements
    the upgrade protocol. If the outgoing release predates that command or cannot

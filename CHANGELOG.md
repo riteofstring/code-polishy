@@ -16,9 +16,8 @@
 - Accept `--display-limit all` to list every finding in the human report.
 - Add `check --git-changes` to the task-completion step in the agent workflow, so
   lint findings surface before a merge gate.
-- Document how to find a release's index URL and digest, and attest the
-  publication index in the release workflow. Verify it with
-  `gh attestation verify`. The `.sha256` asset detects corruption only.
+- Document how to find a release's index URL and digest, and that the published
+  digest detects corruption only.
 
 ## 0.31.8 - 2026-10-30
 

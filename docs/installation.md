@@ -599,27 +599,20 @@ not authenticated builder provenance.
 
 List published versions with `gh release list --repo riteofstring/code-polishy`
 or on the [releases page](https://github.com/riteofstring/code-polishy/releases).
-Each release publishes its index at a version-specific URL. Download it, verify
-it, then compute the digest yourself:
+Each release publishes its index and digest at version-specific URLs:
 
 ```sh
 version=<exact-version>
-index_url="https://github.com/riteofstring/code-polishy/releases/download/v${version}/code-polishy-release-index.json"
-curl --fail --location --output code-polishy-release-index.json "${index_url}"
-gh attestation verify code-polishy-release-index.json \
-  --repo riteofstring/code-polishy \
-  --signer-workflow riteofstring/code-polishy/.github/workflows/release.yml
-shasum -a 256 code-polishy-release-index.json
+base="https://github.com/riteofstring/code-polishy/releases/download/v${version}"
+curl --fail --location "${base}/code-polishy-release-index.json.sha256"
 ```
 
-Pass `index_url` and the printed digest to `lock` or `upgrade plan`. The
-attestation is a Sigstore signature that only the release workflow can produce,
-so replacing the release assets does not forge it. It starts with the first
-release after 0.31.8.
+Pass `${base}/code-polishy-release-index.json` and the printed digest to `lock`
+or `upgrade plan`.
 
-The `code-polishy-release-index.json.sha256` asset and the digest in the release
-notes detect corruption only. Anyone who can replace the index can replace them
-too, so do not treat them as authentication.
+The digest is a release asset and also appears in the release notes, so it
+detects corruption only. Anyone who can replace the index can replace it too, and
+releases do not yet carry an independently verifiable signature.
 
 `lock --index URL --sha256 DIGEST` verifies that the index describes the
 executing installed release and writes this v2 lock without redownloading an

@@ -100,9 +100,7 @@ manual dispatch authorizes the same operation for an existing tag.
    directories and reuses the verified Linux x64 archive's engine to combine
    their descriptors into `code-polishy-release-index.json`. It records the
    canonical index SHA-256, creates an index checksum sidecar, and requires the
-   complete 32-file publication. It then attests the index through GitHub's
-   Sigstore-backed attestations, which is what consumers verify; the sidecar only
-   detects corruption. Before any publication, the job extracts the
+   complete 32-file publication. Before any publication, the job extracts the
    release changelog with the same validator used by preflight. Empty or
    duplicate sections fail before an immutable image tag can be created.
 
