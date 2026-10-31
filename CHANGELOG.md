@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.31.10 - 2026-10-30
+
 - Use GitHub immutable releases for future publications, with automatically
   signed records binding the release tag, source commit and asset digests.
   Document how to obtain a verified index digest and authenticate downloads
