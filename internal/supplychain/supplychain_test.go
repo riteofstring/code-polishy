@@ -308,7 +308,7 @@ func TestHighNotAffectedAssessmentCoversNativeAuditAndOSVIdentities(t *testing.T
 		AffectedVersion: "1.2.3", Scope: "pnpm-lock.yaml", Severity: "high", Status: "not-affected", Basis: "unreachable",
 		Reason: "the affected code path is not reachable", Impact: "the vulnerable capability is not shipped",
 		Evidence: "https://example.test/analysis", Owner: "runtime", Reviewed: policy.Date{Time: now},
-		Expires: policy.Date{Time: now.AddDate(0, 0, policy.MaximumHighNotAffectedVulnerabilityDays)},
+		Expires: policy.Date{Time: now.AddDate(0, 0, policy.MaximumHighVulnerabilityDays)},
 	}
 	native := nodeAuditFindings("low", javascript.AuditResult{Advisories: []javascript.Advisory{{
 		ID: "GHSA-abcd-1234-5678", Aliases: []string{"CVE-2026-1000"}, Package: "example", Severity: "high", Versions: []string{"1.2.3"},

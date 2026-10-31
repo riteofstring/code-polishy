@@ -16,28 +16,28 @@ const (
 
 	ConfigFilename = ".code-polishy.json"
 
-	LockFilename                            = ".code-polishy.lock.json"
-	ReviewFileLines                         = 1000
-	ReviewTestFileLines                     = 1000
-	MaxFileLines                            = 2500
-	MaxTestFileLines                        = 2500
-	MaxGoComplexity                         = 12
-	MaxGoTestComplexity                     = 20
-	MaxRustComplexity                       = 12
-	MaxRustTestComplexity                   = 20
-	MaxPythonComplexity                     = 10
-	MaxTypeScriptComplexity                 = 10
-	MaxTypeScriptTestComplexity             = 10
-	MaxTypeScriptDepth                      = 4
-	MaxTypeScriptTestDepth                  = 8
-	MaxTypeScriptParams                     = 5
-	MaxTypeScriptTestParams                 = 8
-	MinimumReleaseAgeDays                   = 30
-	PreferredNewDependencyAgeDays           = 90
-	MaximumLowVulnerabilityDays             = 90
-	MaximumModerateVulnerabilityDays        = 30
-	MaximumHighNotAffectedVulnerabilityDays = 30
-	MaximumExceptionDays                    = 366
+	LockFilename                     = ".code-polishy.lock.json"
+	ReviewFileLines                  = 1000
+	ReviewTestFileLines              = 1000
+	MaxFileLines                     = 2500
+	MaxTestFileLines                 = 2500
+	MaxGoComplexity                  = 12
+	MaxGoTestComplexity              = 20
+	MaxRustComplexity                = 12
+	MaxRustTestComplexity            = 20
+	MaxPythonComplexity              = 10
+	MaxTypeScriptComplexity          = 10
+	MaxTypeScriptTestComplexity      = 10
+	MaxTypeScriptDepth               = 4
+	MaxTypeScriptTestDepth           = 8
+	MaxTypeScriptParams              = 5
+	MaxTypeScriptTestParams          = 8
+	MinimumReleaseAgeDays            = 30
+	PreferredNewDependencyAgeDays    = 90
+	MaximumLowVulnerabilityDays      = 90
+	MaximumModerateVulnerabilityDays = 30
+	MaximumHighVulnerabilityDays     = 30
+	MaximumExceptionDays             = 366
 )
 
 const MaximumCriticalNotAffectedVulnerabilityDays = 7
@@ -482,6 +482,7 @@ type VulnerabilityAssessment struct {
 	Impact          string   `json:"impact"`
 	Evidence        string   `json:"evidence"`
 	Owner           string   `json:"owner"`
+	ApprovedBy      string   `json:"approvedBy,omitempty"`
 	Reviewed        Date     `json:"reviewed"`
 	Expires         Date     `json:"expires"`
 }

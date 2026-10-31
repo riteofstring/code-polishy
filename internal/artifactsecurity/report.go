@@ -135,12 +135,13 @@ func renderMarkdown(report artifactReport) string {
 	}
 	fmt.Fprintf(builder, "- Artifact SHA-256: `%s`\n", report.ArchiveSHA256)
 	fmt.Fprintf(builder, "- Database SHA-256: `%s`\n", report.DatabaseSHA256)
-	fmt.Fprintf(builder, "- Blocking findings: %d\n", len(report.Findings))
+	fmt.Fprintf(builder, "- Findings before assessments: %d\n", len(report.Findings))
 	fmt.Fprintf(builder, "- Accepted OpenVEX findings: %d\n\n", len(report.AcceptedFindings))
 	if len(report.Findings) == 0 {
 		builder.WriteString("No HIGH or CRITICAL vulnerability, secret, misconfiguration, or end-of-life findings.\n")
 	} else {
-		builder.WriteString("## Blocking findings\n\n")
+		builder.WriteString("## Findings before assessments\n\n")
+		builder.WriteString("A vulnerability assessment may accept a finding after this scan. The command report shows each final disposition.\n\n")
 		for _, finding := range report.Findings {
 			fmt.Fprintf(builder, "- **%s %s** — %s (`%s`)\n", markdownText(finding.Severity), markdownText(finding.Kind), markdownText(finding.ID), markdownText(finding.Target))
 		}

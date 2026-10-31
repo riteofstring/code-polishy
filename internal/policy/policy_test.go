@@ -1050,9 +1050,9 @@ func TestVulnerabilityAssessmentValidationRequiresExactEvidenceAndBoundedExpiry(
 	if err := validateVulnerabilityAssessmentSchema(t, assessment); err != nil {
 		t.Fatalf("valid assessment schema: %v", err)
 	}
-	high := assessment
-	high.Severity = "high"
-	if err := validateVulnerabilityAssessmentSchema(t, high); err == nil || !strings.Contains(err.Error(), schemaRejection) {
+	critical := assessment
+	critical.Severity = "critical"
+	if err := validateVulnerabilityAssessmentSchema(t, critical); err == nil || !strings.Contains(err.Error(), schemaRejection) {
 		t.Fatalf("expected severity error, got %v", err)
 	}
 	broad := assessment
@@ -1095,8 +1095,8 @@ func TestHighNotAffectedVulnerabilityAssessmentDispositionMatrix(t *testing.T) {
 		riskAccepted := assessment
 		riskAccepted.Status = "risk-accepted"
 		riskAccepted.Basis = basis
-		if err := validateVulnerabilityAssessmentSchema(t, riskAccepted); err == nil || !strings.Contains(err.Error(), schemaRejection) {
-			t.Fatalf("high risk acceptance with %q was not rejected by disposition: %v", basis, err)
+		if err := validateVulnerabilityAssessmentSchema(t, riskAccepted); err != nil {
+			t.Fatalf("high risk acceptance with %q was rejected: %v", basis, err)
 		}
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
@@ -1129,7 +1129,7 @@ func TestHighNotAffectedAssessmentReviewWindowIncludesExpiryDate(t *testing.T) {
 		t.Fatalf("maximum high not-affected window was rejected: %v", err)
 	}
 	overlong := assessment
-	overlong.Expires = Date{Time: now.AddDate(0, 0, MaximumHighNotAffectedVulnerabilityDays+1)}
+	overlong.Expires = Date{Time: now.AddDate(0, 0, MaximumHighVulnerabilityDays+1)}
 	if err := validate(overlong); err == nil || !strings.Contains(err.Error(), "within 30 days") {
 		t.Fatalf("overlong high not-affected window was accepted: %v", err)
 	}
@@ -1197,7 +1197,7 @@ func highNotAffectedAssessment(now time.Time) VulnerabilityAssessment {
 		AffectedVersion: "1.2.3", Scope: "pnpm-lock.yaml", Severity: "high", Status: "not-affected", Basis: "unreachable",
 		Reason: "the affected code path is not reachable", Impact: "the vulnerable capability is not shipped",
 		Evidence: "https://example.test/analysis", Owner: "runtime", Reviewed: Date{Time: now},
-		Expires: Date{Time: now.AddDate(0, 0, MaximumHighNotAffectedVulnerabilityDays)},
+		Expires: Date{Time: now.AddDate(0, 0, MaximumHighVulnerabilityDays)},
 	}
 }
 
@@ -1256,8 +1256,8 @@ func TestLoadValidatesVulnerabilityAndOverrideGovernance(t *testing.T) {
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {
 		highRiskAccepted := strings.Replace(highNotAffected, `"status":"not-affected","basis":"unreachable"`, `"status":"risk-accepted","basis":"`+basis+`"`, 1)
-		if _, err := Load(writeConfig(t, highRiskAccepted), ""); err == nil || !strings.Contains(err.Error(), schemaRejection) {
-			t.Fatalf("high risk-accepted governance config with %s was accepted: %v", basis, err)
+		if _, err := Load(writeConfig(t, highRiskAccepted), ""); err != nil {
+			t.Fatalf("high risk-accepted governance config with %s was rejected: %v", basis, err)
 		}
 	}
 	for _, basis := range []string{"mitigated", "temporary-no-fix"} {

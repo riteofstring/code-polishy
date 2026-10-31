@@ -598,24 +598,32 @@ missing-coverage finding, never a workspace that declared nothing.
 - A `not-affected` assessment records the source-to-API trace and absent
   prerequisite. A `risk-accepted` assessment records actual exposure,
   compensating controls, residual risk, and why bounded acceptance is justified.
-  Both require a remediation plan, which may share the checked-in technical
-  evidence document. Agents can make either decision within the severity and
-  expiry limits below; neither requires human approval or an external tracker.
-- Low and moderate findings are assessable. High and critical findings are assessable only as
-  an exact `not-affected` decision; neither permits risk acceptance. Low
-  assessments may last at most 90 days from review; moderate assessments and
-  high `not-affected` assessments at most 30 days; critical `not-affected`
-  assessments at most seven days. Critical assessments must trace the enabled
+  It must also explain why a supported fix or practical mitigation is not
+  appropriate yet. Both require a remediation plan, which may share the
+  checked-in technical evidence document. Agents can make a `not-affected`
+  decision within the severity and expiry limits below. Accepting a risk needs a
+  person: stop and ask the caller, then name who approved it in `approvedBy`. An
+  agent cannot approve it, and a missing `approvedBy` blocks the finding.
+  Neither status needs an external tracker.
+- Low, moderate, and high findings are assessable either way. Critical findings
+  are assessable only as an exact `not-affected` decision. Low assessments may
+  last at most 90 days from review; moderate and high assessments at most
+  30 days; critical `not-affected` assessments at most seven days. Critical assessments must trace the enabled
   caller, input authority, vulnerable API and absent prerequisite, and identify
   integration changes that require renewed review. Unknown-severity findings
   and CISA Known Exploited Vulnerabilities remain blocking. When an assessment
   can match a CVE-addressable finding, the online profile refreshes CISA's
   catalog and fails closed if it cannot be validated.
 - `not-affected` assessments require a `false-positive` or `unreachable` basis.
-  `risk-accepted` assessments remain limited to low and moderate findings and
-  require `mitigated` or `temporary-no-fix`. Scanner disagreement is
-  conservative: a high `not-affected` assessment may cover matching low,
-  moderate, or high reports; a critical report requires a critical assessment.
+  `risk-accepted` assessments cover low, moderate, and high findings and require
+  `mitigated` or `temporary-no-fix`. A fix the scanner reports may still not be
+  usable, for example when a tool bundles the library and has not released an
+  update, so a reported fix does not rule out either basis. Scanner disagreement
+  is conservative: a high assessment may cover matching low, moderate, or high
+  reports; a critical report requires a critical assessment.
+- Renewing an acceptance is a new decision, not a date change. Re-check the
+  deployment's controls and whether a supported fix is now usable, and obtain
+  approval again.
   An unknown or known-exploited report
   remains blocking. When a report exceeds the ceiling, re-review the advisory at
   the new severity. If the analysis still holds, raise `severity` and renew
@@ -629,6 +637,10 @@ missing-coverage finding, never a workspace that declared nothing.
   analysis or remediation plan. Link to the real technical record; do not
   invent human sign-off or external records. Scanner success checks structured
   policy, not the truth of the assessment's reasoning.
+- The human report always states how many high and critical findings passed
+  under an assessment, split into `risk-accepted` and `not-affected`, and
+  `--display-limit` does not hide that line. `VULN-ACCEPTANCE` lines and the JSON
+  report name each assessment, owner, approver, and expiry.
 - The human report adds a `VULNERABLE PACKAGES` table grouped by package, exact
   version and scope, with open and accepted advisory counts, the highest severity
   and how many advisories each reported fix covers. An advisory reported by several scanners
@@ -867,11 +879,13 @@ Apply this section before changing a dependency to address an advisory. The
 not the advisory's publication date. Check the existing version's exposure
 before choosing an upgrade or a vulnerability assessment.
 
-Agents own the technical investigation and decision within these policy limits;
-neither vulnerability nor release-age assessments require human sign-off. Name
-the actual assessor as owner instead of attributing a review to the caller.
-Do not ask the caller to choose between assessment categories or supply approval
-URLs. This authority does not waive mandatory checks, other external approval
+Agents own the technical investigation, `not-affected` decisions, and release-age
+assessments within these policy limits; those need no human sign-off. Name the
+actual assessor as owner instead of attributing a review to the caller.
+`risk-accepted` is the exception: present the exposure, controls, residual risk,
+and plan, and ask the caller to approve it. Do not otherwise ask the caller to
+choose between assessment categories or supply approval URLs. This authority does
+not waive mandatory checks, other external approval
 gates, or authorization for publishing and other out-of-scope operations.
 
 Trace the advisory's prerequisites through the actual application: the input
@@ -917,7 +931,7 @@ past its severity or known-exploited limits just to keep the gate green.
 Keep the analysis and remediation plan in a checked-in technical record linked
 from the assessment. An upstream advisory explains the vulnerability; it does
 not record this repository's exposure analysis or decision. Do not invent
-external records, human approval, or certainty that source inspection and
+external records, an `approvedBy` value, other human approval, or certainty that source inspection and
 scanners cannot establish.
 
 Report release-age admissions and vulnerability assessments separately.

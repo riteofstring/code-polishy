@@ -6,22 +6,48 @@ vulnerability assessment explains how an exact advisory applies to an already
 resolved package. Neither assessment can supply evidence for the other merely
 because the package names match.
 
-Dependency assessments are technical decisions that agents may own without
-human sign-off. Both dispositions require an identified assessor, exact
-coordinates, technical evidence, a remediation plan, review date, and expiry.
-The plan may share the checked-in evidence document; a second approval or
-external issue is not intrinsic to the decision.
+Both dispositions require an identified assessor, exact coordinates, technical
+evidence, a remediation plan, review date, and expiry. The plan may share the
+checked-in evidence document; an external issue is not intrinsic to the decision.
 
-`not-affected` establishes why the advisory's input and API prerequisites cannot
-occur. `risk-accepted` permits a bounded, justified residual risk only for low
-and moderate severity. High and critical findings permit only demonstrated
-non-exposure. Critical assessments expire within seven days, retain their
-critical severity, and require renewed review when the traced integration or
-its input authority changes. Unknown-severity and known-exploited findings
-remain blocking.
-Reports identify the actual assessment owner without implying human approval.
+`not-affected` is a factual claim: it establishes why the advisory's input and
+API prerequisites cannot occur. Agents may own it without human sign-off, because
+the claim can be traced in source. `risk-accepted` is a decision to tolerate a
+reachable exposure. It permits bounded residual risk for low, moderate, and high
+severity, and a person must approve it, because tolerating harm is not something
+source analysis can settle. Critical findings permit only demonstrated
+non-exposure, so a reachable critical has no passing path. Critical assessments
+expire within seven days, retain their critical severity, and require renewed
+review when the traced integration or its input authority changes.
+Unknown-severity and known-exploited findings remain blocking.
+
+The two statuses stay separate because they go stale differently: non-exposure
+ends when the integration changes, and acceptance ends when a usable fix arrives
+or the deployment's controls change. Collapsing them would force a false claim of
+non-exposure for exactly the cases acceptance exists to describe. Reports count
+high and critical assessments of both kinds together, so choosing `not-affected`
+gains no visibility advantage over an honest acceptance.
+
+`approvedBy` names the person who approved an acceptance. Code Polishy cannot tell
+a person from an agent, so the field makes approval attributable, not proven. A
+missing value blocks the finding through a policy finding instead of failing
+configuration loading, so `upgrade plan` still works for repositories with older
+acceptances and reports them as new errors. Reports identify the actual assessment
+owner separately from the approver.
 Exact matching, expiry, severity ceilings, and unused-assessment checks still
 apply to both dispositions.
+
+Container findings use the same mechanism with narrower limits. OpenVEX remains
+the only container non-exposure surface, so a `container` assessment can only be
+a high `risk-accepted` decision; lower severities do not block and critical cannot
+be accepted. It runs after OpenVEX reconciliation as a policy disposition of the
+remaining findings, and it never changes scanner results or synthesizes
+`not_affected` statements. Its scope is the declared target name because one
+Dockerfile can build several targets, and its package is the scanner's exact PURL
+including qualifiers, so a changed base distribution requires re-review. An
+assessment covers every copy of that package version inside the target; image
+paths are excluded because they change across rebuilds. Scanner self-check
+findings carry the lock path as their scope, so no target can match them.
 
 Autonomy does not make fresh releases safe. The 30-day delay gives compromised
 or defective releases time to be discovered. A reachable advisory alone cannot

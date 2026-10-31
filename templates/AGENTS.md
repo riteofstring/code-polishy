@@ -41,7 +41,7 @@
   update locks without scripts. Before installation, run
   `code-polishy dependency-review --base <merge-target>`; then install frozen
   with scripts off, complete its reported deferred checks, and test.
-- Agents own dependency assessments; no human sign-off. Trace advisory inputs
+- Agents own `not-affected`; users approve `risk-accepted`. Trace advisory inputs
   to API and impact; presence is not exposure. Retain aged versions if unaffected.
   Admit fixes under 30 days only if waiting is riskier and no aged fix or practical
   mitigation suffices. Document both risks; unknown is not unaffected.

@@ -774,6 +774,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printReportHeaders(stdout, report, verbose)
 	printExecutionTelemetry(stdout, report.Execution, verbose)
 	printRepositoryContext(stdout, report.RepositoryContext)
+	printAssessedSevereFindings(stdout, report.Assessed)
 	limit := report.Display.FindingLimit()
 	remaining := limit
 	findings := boundedReportItems(report.Findings, &remaining)

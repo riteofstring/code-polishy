@@ -167,7 +167,9 @@
       "required": ["id", "ecosystem", "package"],
       "properties": {
         "id": { "$ref": "code-polishy.schema.json#/$defs/identifier" },
-        "ecosystem": { "enum": ["go", "npm", "pnpm", "pypi", "crates.io"] },
+        "ecosystem": {
+          "enum": ["container", "go", "npm", "pnpm", "pypi", "crates.io"]
+        },
         "advisory": {
           "$ref": "code-polishy.schema.json#/$defs/nonemptyString"
         },
@@ -178,18 +180,32 @@
           "items": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" }
         },
         "package": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
-        "affectedVersion": {
-          "type": "string",
-          "pattern": "^[^*?\\[\\]<>=~^|,\\s]+$"
-        },
+        "affectedVersion": { "type": "string" },
         "scope": { "$ref": "code-polishy.schema.json#/$defs/concretePath" },
         "severity": { "enum": ["low", "moderate", "high", "critical"] },
         "reason": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "impact": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
         "evidence": { "type": "string", "pattern": "^https://" },
         "owner": { "$ref": "code-polishy.schema.json#/$defs/nonemptyString" },
+        "approvedBy": {
+          "$ref": "code-polishy.schema.json#/$defs/nonemptyString"
+        },
         "reviewed": { "type": "string", "format": "date" },
         "expires": { "type": "string", "format": "date" }
+      },
+      "if": {
+        "required": ["ecosystem"],
+        "properties": { "ecosystem": { "const": "container" } }
+      },
+      "then": {
+        "properties": {
+          "affectedVersion": { "pattern": "^[^*?\\[\\]<>=|,\\s]+$" }
+        }
+      },
+      "else": {
+        "properties": {
+          "affectedVersion": { "pattern": "^[^*?\\[\\]<>=~^|,\\s]+$" }
+        }
       },
       "allOf": [
         { "required": ["affectedVersion", "scope", "severity", "status"] },
@@ -208,11 +224,12 @@
           "properties": {
             "status": { "const": "not-affected" },
             "basis": { "enum": ["false-positive", "unreachable"] }
-          }
+          },
+          "not": { "required": ["approvedBy"] }
         },
         {
           "properties": {
-            "severity": { "enum": ["low", "moderate"] },
+            "severity": { "enum": ["low", "moderate", "high"] },
             "status": { "const": "risk-accepted" },
             "basis": { "enum": ["mitigated", "temporary-no-fix"] }
           }

@@ -53,7 +53,7 @@ func TestRuntimeSchemaOwnsConditionalBoundaries(t *testing.T) {
 		"dockerfile target":            artifactConfig(`{"name":"image","mode":"dockerfile","dockerfile":"Dockerfile"}`),
 		"archive target":               artifactConfig(`{"name":"archive","mode":"archive","archive":"dist/app.tar","dockerfile":"Dockerfile"}`),
 		"command target":               artifactConfig(`{"name":"binary","mode":"command"}`),
-		"high vulnerability":           vulnerabilityConfig(strings.Replace(vulnerability, `"status":"not-affected","basis":"unreachable"`, `"status":"risk-accepted","basis":"mitigated"`, 1)),
+		"critical risk acceptance":     vulnerabilityConfig(strings.Replace(strings.Replace(vulnerability, `"severity":"high"`, `"severity":"critical"`, 1), `"status":"not-affected","basis":"unreachable"`, `"status":"risk-accepted","basis":"mitigated"`, 1)),
 		"not affected basis":           vulnerabilityConfig(strings.Replace(vulnerability, `"basis":"unreachable"`, `"basis":"mitigated"`, 1)),
 		"risk accepted basis":          vulnerabilityConfig(strings.Replace(strings.Replace(vulnerability, `"severity":"high"`, `"severity":"moderate"`, 1), `"status":"not-affected"`, `"status":"risk-accepted"`, 1)),
 		"enabled policy metadata":      strings.Replace(minimalConfig(), `"quality":{}`, `"policyModules":{"overrides":[{"name":"ruff","mode":"enabled","reason":"temporary"}]},"quality":{}`, 1),

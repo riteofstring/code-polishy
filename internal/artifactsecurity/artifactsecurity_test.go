@@ -46,6 +46,31 @@ func TestParseTrivyReportNormalizesFindingsWithoutSecretContent(t *testing.T) {
 	}
 }
 
+func TestContainerVulnerabilityIdentityNamesTheDeclaredTargetAndAliases(t *testing.T) {
+	t.Parallel()
+	imageID := "sha256:" + strings.Repeat("a", 64)
+	payload := []byte(`{
+  "SchemaVersion": 2,
+  "Trivy": {"Version":"0.72.0"},
+  "ArtifactType":"container_image",
+  "Metadata":{"ImageID":"` + imageID + `"},
+  "Results":[{"Target":"app","Vulnerabilities":[{"VulnerabilityID":"CVE-2026-1000","VendorIDs":["GHSA-aaaa-bbbb-cccc"],"PkgName":"example","PkgIdentifier":{"PURL":"pkg:apk/alpine/example@1.2.3"},"InstalledVersion":"1.2.3","Severity":"HIGH"}]}]
+}`)
+	findings, _, err := parseTrivyReport("agent", imageID, "0.72.0", payload)
+	if err != nil || len(findings) != 1 {
+		t.Fatalf("findings=%+v err=%v", findings, err)
+	}
+	target := policy.ArtifactTarget{Name: "api", Mode: "dockerfile", Dockerfile: "Dockerfile"}
+	identity := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "dockerfile"}, findings[0]).Vulnerability
+	if identity.Scope != "api" || !slices.Equal(identity.Aliases, []string{"GHSA-aaaa-bbbb-cccc"}) {
+		t.Fatalf("identity = %+v", identity)
+	}
+	scanner := (&scannerRuntime{}).policyFinding(target, preparedArtifact{mode: "scanner"}, findings[0]).Vulnerability
+	if scanner.Scope != policy.LockFilename {
+		t.Fatalf("scanner identity = %+v", scanner)
+	}
+}
+
 func TestParseTrivyReportRejectsNonBlockingSeverity(t *testing.T) {
 	t.Parallel()
 	imageID := "sha256:" + strings.Repeat("a", 64)
@@ -348,7 +373,7 @@ func TestScannerFindingsIdentifyReleaseOwnership(t *testing.T) {
 		}
 	}
 	requireScannerFindingOwnership(t, scanner, boundary.version)
-	if application.Path != "application.tar" || application.Vulnerability.Scope != "application.tar" ||
+	if application.Path != "application.tar" || application.Vulnerability.Scope != "application" ||
 		strings.Contains(application.Message, "Code Polishy's scanner") || !strings.Contains(application.Remediation.Summary, "rebuild the declared target") ||
 		application.Fingerprint == scanner.Fingerprint {
 		t.Fatalf("application finding acquired scanner ownership: %+v", application)

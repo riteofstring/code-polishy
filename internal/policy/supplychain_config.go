@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +37,7 @@ func validateSupplyChain(supply SupplyChain) error {
 	if err := validateSupplyChainInputs(supply); err != nil {
 		return err
 	}
-	if err := validateVulnerabilityAssessments(supply.VulnerabilityAssessments); err != nil {
+	if err := validateVulnerabilityAssessments(supply.VulnerabilityAssessments, supply.ArtifactSecurity.Targets); err != nil {
 		return err
 	}
 	if err := validateReleaseAgeAssessments(supply.ReleaseAgeAssessments); err != nil {
@@ -189,7 +190,7 @@ func validateArtifactProducer(producer ArtifactProducer, label string) error {
 	return nil
 }
 
-func validateVulnerabilityAssessments(assessments []VulnerabilityAssessment) error {
+func validateVulnerabilityAssessments(assessments []VulnerabilityAssessment, targets []ArtifactTarget) error {
 	seenIDs := map[string]bool{}
 	seenCoordinates := map[string]bool{}
 	now := time.Now().UTC().Truncate(24 * time.Hour)
@@ -198,6 +199,26 @@ func validateVulnerabilityAssessments(assessments []VulnerabilityAssessment) err
 		if err := validateVulnerabilityAssessment(assessment, label, seenIDs, seenCoordinates, now); err != nil {
 			return err
 		}
+		if err := validateContainerAssessment(assessment, label, targets); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateContainerAssessment(assessment VulnerabilityAssessment, label string, targets []ArtifactTarget) error {
+	if assessment.Ecosystem != ContainerEcosystem {
+		return nil
+	}
+	if assessment.Status != RiskAcceptedAssessment || assessment.Severity != "high" {
+		return fmt.Errorf("%s must be a high risk-accepted assessment; OpenVEX carries container non-exposure", label)
+	}
+	if !slices.ContainsFunc(targets, func(target ArtifactTarget) bool { return target.Name == assessment.Scope }) {
+		return fmt.Errorf("%s.scope must name a declared artifact security target", label)
+	}
+	at := strings.LastIndex(assessment.Package, "@")
+	if !strings.HasPrefix(assessment.Package, "pkg:") || at < 0 || at == len(assessment.Package)-1 {
+		return fmt.Errorf("%s.package must be one exact versioned package PURL", label)
 	}
 	return nil
 }
@@ -224,7 +245,7 @@ func validateVulnerabilityIdentity(assessment VulnerabilityAssessment, label str
 		return fmt.Errorf("%s.affectedVersion must be one exact version for %s", label, assessment.Ecosystem)
 	}
 	for _, single := range expandedVulnerabilityAssessments([]VulnerabilityAssessment{assessment}) {
-		if single.Advisory == "" || strings.ContainsAny(single.Advisory+single.Package, "*?[]") {
+		if single.Advisory == "" || vulnerabilityAssessmentHasWildcard(single) {
 			return fmt.Errorf("%s must identify an exact observed vulnerability; wildcards are forbidden", label)
 		}
 		coordinate := vulnerabilityAssessmentCoordinate(single)
@@ -245,7 +266,7 @@ func validateVulnerabilityReviewWindow(assessment VulnerabilityAssessment, label
 	case "moderate":
 		maximumDays = MaximumModerateVulnerabilityDays
 	case "high":
-		maximumDays = MaximumHighNotAffectedVulnerabilityDays
+		maximumDays = MaximumHighVulnerabilityDays
 	case "critical":
 		maximumDays = MaximumCriticalNotAffectedVulnerabilityDays
 	}
@@ -259,7 +280,17 @@ func vulnerabilityAssessmentCoordinate(assessment VulnerabilityAssessment) strin
 	return assessment.Ecosystem + "\x00" + assessment.Advisory + "\x00" + assessment.Package + "\x00" + assessment.AffectedVersion + "\x00" + assessment.Scope
 }
 
+func vulnerabilityAssessmentHasWildcard(assessment VulnerabilityAssessment) bool {
+	if assessment.Ecosystem == ContainerEcosystem {
+		return strings.ContainsAny(assessment.Advisory, "*?[]") || strings.ContainsAny(assessment.Package, "*[]")
+	}
+	return strings.ContainsAny(assessment.Advisory+assessment.Package, "*?[]")
+}
+
 func exactVulnerabilityAssessmentVersion(ecosystem, version string) bool {
+	if ecosystem == ContainerEcosystem {
+		return version != "" && !strings.ContainsAny(version, "*?[]<>=|, \t\r\n")
+	}
 	return exactReleaseAssessmentVersion(ecosystem, version)
 }
 

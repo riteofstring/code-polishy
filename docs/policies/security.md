@@ -67,8 +67,9 @@ inputs, a release-age delay, lifecycle-script allowlists, and vulnerability
 audits. Native and OSV dependency scans run in local and CI policy checks;
 repositories can additionally opt into required recurring external monitoring.
 A low or moderate finding may be dispositioned through an exact, expiring
-vulnerability assessment. Agents may own both demonstrated `not-affected`
-decisions and bounded low/moderate risk acceptance without human sign-off;
+vulnerability assessment. Agents may own demonstrated `not-affected` decisions
+without human sign-off; bounded risk acceptance needs a person named in
+`approvedBy`;
 technical evidence and a remediation plan remain mandatory. A high finding may
 only be recorded as an
 exact `not-affected` decision with a `false-positive` or `unreachable` basis;

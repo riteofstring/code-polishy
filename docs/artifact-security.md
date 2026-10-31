@@ -154,10 +154,48 @@ It reconciles the full normalized result sets and fails when VEX:
 - contains an unused statement.
 
 Accepted VEX findings remain visible in the report. General supply-chain
-`vulnerabilityAssessments` are a separate exact governance surface for
-structured dependency findings and do not loosen OpenVEX reconciliation.
-Container HIGH/CRITICAL findings remain governed only by the stricter OpenVEX
-contract.
+`vulnerabilityAssessments` are a separate exact governance surface and do not
+loosen OpenVEX reconciliation. OpenVEX remains the only way to record container
+non-exposure.
+
+## Risk acceptance
+
+A HIGH finding that OpenVEX does not cover blocks unless a person approves an
+exact, expiring `risk-accepted` assessment. Use it when the vulnerability is
+reachable, its deployment impact is limited, and no supported fix is usable yet:
+
+```json
+{
+  "id": "api-urllib3-memory",
+  "ecosystem": "container",
+  "advisory": "CVE-2026-97689",
+  "package": "pkg:pypi/urllib3@2.5.0",
+  "affectedVersion": "2.5.0",
+  "scope": "api",
+  "severity": "high",
+  "status": "risk-accepted",
+  "basis": "temporary-no-fix",
+  "reason": "The bundling tool has no release with the fix yet.",
+  "impact": "Downloads use trusted registries; a memory limit bounds a failed job.",
+  "evidence": "https://example.invalid/assessments/api-urllib3-memory",
+  "owner": "Codex",
+  "approvedBy": "A Maintainer",
+  "reviewed": "2026-10-31",
+  "expires": "2026-11-30"
+}
+```
+
+`scope` is the declared target name and `package` is the scanner's exact PURL,
+including any qualifiers. It lasts at most 30 days and covers every copy of that
+package version inside the target, so review all of them. The scan and any
+OpenVEX reconciliation run unchanged first, and the artifact's evidence report
+keeps the raw finding and immutable artifact identity. The command report shows
+the final disposition.
+
+CRITICAL, unknown-severity, and CISA-known-exploited findings cannot be accepted.
+Scan failures, secrets, misconfigurations, end-of-life findings, and scanner
+self-check findings are not vulnerability assessment subjects. Other changes to
+the finding block it again.
 
 ## Commands and prerequisites
 

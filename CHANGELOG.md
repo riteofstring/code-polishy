@@ -18,6 +18,21 @@
   lint findings surface before a merge gate.
 - Document how to find a release's index URL and digest, and that the published
   digest detects corruption only.
+- Allow exact, expiring `risk-accepted` assessments for High findings, in
+  dependencies and in declared container artifacts through the `container`
+  ecosystem. Critical, unknown-severity and known-exploited findings stay
+  ineligible, and OpenVEX remains the only container non-exposure surface.
+- Require a person's approval for every `risk-accepted` assessment, named in the
+  new `approvedBy` field. Existing Low and Moderate acceptances without it still
+  load, but they stop applying and report
+  `policy.vulnerabilityAssessmentApproval` until someone approves them.
+- Report high and critical findings that passed under an assessment on an
+  always-visible `ASSESSED HIGH OR CRITICAL` line.
+- Identify container vulnerabilities by declared target name and record Trivy
+  vendor IDs as aliases. Existing container findings get new fingerprints, so
+  open ones appear as new errors in the next upgrade plan.
+- Check the CISA Known Exploited Vulnerabilities catalog in the focused
+  `artifact-security` command, not only in `supply-chain`.
 
 ## 0.31.8 - 2026-10-30
 

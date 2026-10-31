@@ -70,7 +70,8 @@ var findingRemediationRules = []struct {
 	{"policy.dependencyOverridePolicyUnused policy.releaseAgeAssessmentUnused policy.vulnerabilityAssessmentUnused", "Remove the stale assessment, listed advisory, or override declaration that no longer matches a current dependency finding."},
 	{"policy.releaseAgeAssessmentWindow", "Correct the assessment dates to the allowed evidence window; do not extend an exception merely to bypass release-age policy."},
 	{"policy.vulnerabilityAssessmentKnownExploited", "Remove the inadmissible vulnerability assessment and replace or remediate the affected dependency; known-exploited findings cannot be assessed."},
-	{"policy.vulnerabilityAssessmentSeverity", "Re-review the advisory at the reported severity. If the analysis still holds, raise the assessment's severity field to that level and update its reviewed and expires dates. High and critical require status not-affected, and expiry must stay inside the new severity's review window. Otherwise, or when the reported severity is unknown, remediate the affected dependency. Split a multi-advisory assessment when one advisory no longer shares its disposition."},
+	{"policy.vulnerabilityAssessmentApproval", "Ask the caller whether to accept this risk, then name the person who approved it in approvedBy. An agent cannot approve risk acceptance. Otherwise remediate the dependency or artifact."},
+	{"policy.vulnerabilityAssessmentSeverity", "Re-review the advisory at the reported severity. If the analysis still holds, raise the assessment's severity field to that level and update its reviewed and expires dates. Critical requires status not-affected, a high risk-accepted assessment needs renewed caller approval, and expiry must stay inside the new severity's review window. Otherwise, or when the reported severity is unknown, remediate the affected dependency. Split a multi-advisory assessment when one advisory no longer shares its disposition."},
 	{"policy.securityMonitoring policy.securityProvider policy.securityScanner policy.supplyChain policy.supplyChainCoverage", "Restore the required locked security provider, current authenticated evidence, and complete dependency coverage before relying on security acceptance."},
 	{"policy.artifactSecurityCoverage artifactSecurity.operation", "Restore the declared artifact, exact producer prerequisites, and complete supported security analysis for the intended artifact identity."},
 	{"policy.finalGateOwner", "Run the final gate through its configured local or checked-in CI owner and retain evidence for the exact candidate."},
@@ -95,7 +96,7 @@ var findingRemediationRules = []struct {
 	{"supplyChain.peerDependency", "Declare and lock a compatible exact peer dependency in the correct importer scope rather than borrowing an unrelated workspace resolution."},
 	{"supplyChain.pythonCompatibility", "Pair each published Python compatibility declaration with an exact dependency-group pin covering its extras and marker, verify range membership, and validate the complete frozen development lock."},
 	{"policy.pythonLibrary", "Declare the exact governed pyproject.toml path of each published Python library in supplyChain.pythonLibraries."},
-	{"artifactSecurity.vulnerability", "Update or remove the affected component in the authoritative artifact inputs, rebuild the declared target, and rescan the exact resulting artifact for the reported advisory."},
+	{"artifactSecurity.vulnerability", "Update or remove the affected component in the authoritative artifact inputs, rebuild the declared target, and rescan the exact resulting artifact for the reported advisory. Use OpenVEX for proven non-exposure. If the finding is reachable and no supported fix is usable yet, the caller may approve an exact, expiring risk-accepted assessment."},
 	{"artifactSecurity.secret", "Remove the exposed secret from the authoritative artifact inputs and arrange credential revocation through the authorized owner; rebuild and rescan without copying the secret into reports."},
 	{"artifactSecurity.misconfiguration", "Correct the reported security setting in the authoritative image or artifact configuration, then rebuild and rescan the declared target."},
 	{"artifactSecurity.end-of-life", "Replace the unsupported operating-system base with an exact supported image identity, rebuild the target, and rerun its security scan."},
@@ -105,7 +106,7 @@ var findingRemediationRules = []struct {
 const vulnerabilityRemediationRules = "supplyChain.nodeVulnerability supplyChain.goVulnerability supplyChain.osvVulnerability supplyChain.gitVulnerability"
 
 func vulnerabilityRemediationSummary(identity VulnerabilityIdentity) string {
-	const assessment = "or record a vulnerability assessment if the affected API is unreachable (code-polishy docs read supply-chain); retain advisory identity and complete transitive vulnerability coverage."
+	const assessment = "or record a not-affected assessment if the affected API is unreachable, or ask the caller to approve a bounded risk-accepted assessment if it is reachable and no supported fix is usable yet (code-polishy docs read supply-chain); retain advisory identity and complete transitive vulnerability coverage."
 	if len(identity.FixedVersions) == 0 {
 		return "No fixed " + identity.Package + " version is reported: remove or replace the dependency and run dependency review, " + assessment
 	}

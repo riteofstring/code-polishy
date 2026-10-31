@@ -160,11 +160,35 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 		}
 		fmt.Fprintf(
 			output,
-			"VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, owned by %s, expires %s)\n",
+			"VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, owned by %s%s, expires %s)\n",
 			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID,
 			observedSeverity, assessment.Assessment.Severity, assessment.Assessment.Status, assessment.Assessment.Basis, assessment.Assessment.Owner,
-			assessment.Assessment.Expires.Format("2006-01-02")+" UTC",
+			vulnerabilityApproval(assessment.Assessment), assessment.Assessment.Expires.Format("2006-01-02")+" UTC",
 		)
+	}
+}
+
+func vulnerabilityApproval(assessment policy.VulnerabilityAssessment) string {
+	if assessment.ApprovedBy == "" {
+		return ""
+	}
+	return ", approved by " + assessment.ApprovedBy
+}
+
+func printAssessedSevereFindings(output io.Writer, assessed []policy.AssessedVulnerability) {
+	statuses := map[string]int{}
+	for _, assessment := range assessed {
+		if assessment.Finding.Vulnerability == nil {
+			continue
+		}
+		severity := policy.NormalizeVulnerabilitySeverity(assessment.Finding.Vulnerability.Severity)
+		if severity == "high" || severity == "critical" {
+			statuses[assessment.Assessment.Status]++
+		}
+	}
+	accepted, notAffected := statuses[policy.RiskAcceptedAssessment], statuses[policy.NotAffectedAssessment]
+	if accepted+notAffected > 0 {
+		fmt.Fprintf(output, "ASSESSED HIGH OR CRITICAL: %d (%d risk-accepted, %d not-affected)\n", accepted+notAffected, accepted, notAffected)
 	}
 }
 

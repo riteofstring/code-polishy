@@ -29,6 +29,7 @@ const (
 	metadataMaximumBytes          = 64 * 1024
 	artifactCommandTimeoutSeconds = 15 * 60
 	artifactCleanupTimeoutSeconds = 30
+	maximumVulnerabilityAliases   = 32
 )
 
 var exactDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -51,17 +52,18 @@ type scannerPolicy struct {
 }
 
 type normalizedFinding struct {
-	Artifact        string `json:"artifact"`
-	Kind            string `json:"kind"`
-	ID              string `json:"id"`
-	Severity        string `json:"severity"`
-	Target          string `json:"target"`
-	Package         string `json:"package,omitempty"`
-	PackagePURL     string `json:"packagePurl,omitempty"`
-	AffectedVersion string `json:"affectedVersion,omitempty"`
-	FixedVersion    string `json:"fixedVersion,omitempty"`
-	Status          string `json:"status,omitempty"`
-	Title           string `json:"title,omitempty"`
+	Artifact        string   `json:"artifact"`
+	Kind            string   `json:"kind"`
+	ID              string   `json:"id"`
+	Severity        string   `json:"severity"`
+	Target          string   `json:"target"`
+	Package         string   `json:"package,omitempty"`
+	PackagePURL     string   `json:"packagePurl,omitempty"`
+	AffectedVersion string   `json:"affectedVersion,omitempty"`
+	FixedVersion    string   `json:"fixedVersion,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	Title           string   `json:"title,omitempty"`
+	Aliases         []string `json:"aliases,omitempty"`
 }
 
 type acceptedFinding struct {
