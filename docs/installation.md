@@ -634,8 +634,8 @@ code-polishy upgrade apply --plan <reported-plan-path>
 Planning verifies the selected index, installs the host candidate, authenticates
 the capability delta, and compares outgoing and incoming diagnostics without
 changing repository authority. The terminal shows the first eight diagnostic
-changes; the reported plan file records all of them with their locations and
-subjects. Applying the plan revalidates its evidence and
+changes; the reported plan file records all of them. The outgoing release
+writes the plan, so lines and subjects appear only when it is newer than 0.31.8. Applying the plan revalidates its evidence and
 replaces managed guidance, wrappers, ignore rules, and the lock in one
 rollback-capable transaction with the lock last. New errors can be acknowledged
 without fixing them by adding `--accept-new-findings`. Neither phase edits

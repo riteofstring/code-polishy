@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/engine"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
 )
@@ -174,6 +176,75 @@ func TestUpgradeDiagnosticsRecordWhichDeclarationIsWrong(t *testing.T) {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q lacks %q", output.String(), want)
 		}
+	}
+}
+
+func TestUpgradeApplicationAcceptsPlansFromPlannersWithoutDiagnosticLocations(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX fixture executables")
+	}
+	finding := policy.NormalizeFinding(policy.Finding{Check: "quality.lint", Path: "src/app.py", Line: 7, Subject: "unused", Message: "unused variable"})
+	record := fmt.Sprintf(`{
+      "fingerprint": %q,
+      "ruleId": "quality.lint",
+      "severity": "error",
+      "path": "src/app.py",
+      "message": "unused variable"
+    }`, finding.Fingerprint)
+	planned := release.UpgradeDiagnostic{Fingerprint: finding.Fingerprint, RuleID: "quality.lint", Severity: "error", Path: "src/app.py", Message: "unused variable"}
+	emptySnapshot := "{\n  \"protocol\": \"code-polishy-upgrade-diagnostics/v1\",\n  \"diagnostics\": []\n}\n"
+	foundSnapshot := "{\n  \"protocol\": \"code-polishy-upgrade-diagnostics/v1\",\n  \"diagnostics\": [\n    " + record + "\n  ]\n}\n"
+	unchanged := release.UpgradeDiagnosticDelta{Added: []release.UpgradeDiagnostic{}, Removed: []release.UpgradeDiagnostic{}, Changed: []release.UpgradeDiagnosticChange{}}
+	added := unchanged
+	added.Added = []release.UpgradeDiagnostic{planned}
+	reworded := finding
+	reworded.Message = "reworded"
+	for name, testCase := range map[string]struct {
+		before, after []policy.Finding
+		snapshot      string
+		delta         release.UpgradeDiagnosticDelta
+		want          string
+	}{
+		"existing finding": {before: []policy.Finding{finding}, after: []policy.Finding{finding}, snapshot: foundSnapshot, delta: unchanged},
+		"new finding":      {before: []policy.Finding{}, after: []policy.Finding{finding}, snapshot: emptySnapshot, delta: added},
+		"changed evidence": {before: []policy.Finding{reworded}, after: []policy.Finding{finding}, snapshot: foundSnapshot, delta: unchanged, want: "changed after upgrade planning"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			prefix := t.TempDir()
+			outgoing := release.Lock{CodePolishyVersion: "0.31.8", ReleaseDigest: strings.Repeat("a", 64)}
+			incoming := release.Lock{CodePolishyVersion: "0.31.9", ReleaseDigest: strings.Repeat("b", 64)}
+			report, err := json.Marshal(engine.Report{Protocol: engine.ReportProtocol, Command: "check", Findings: testCase.before})
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := json.MarshalIndent(upgradeDiagnosticSnapshot{Protocol: upgradeDiagnosticProtocol, Diagnostics: diagnosticsFromFindings(testCase.after)}, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeUpgradeOutputExecutable(t, release.Directory(prefix, outgoing), report)
+			writeUpgradeOutputExecutable(t, release.Directory(prefix, incoming), snapshot)
+			plan := release.UpgradePlan{
+				Outgoing: outgoing, Incoming: incoming, InstallPrefix: prefix, DiagnosticDelta: testCase.delta,
+				OutgoingDiagnosticsSHA256: release.LockBytesSHA256([]byte(testCase.snapshot)),
+				IncomingDiagnosticsSHA256: release.LockBytesSHA256(append(snapshot, '\n')),
+			}
+			err = revalidateUpgradeEvidence(invocation{repoRoot: t.TempDir()}, plan, release.Directory(prefix, incoming))
+			if testCase.want == "" && err != nil || testCase.want != "" && (err == nil || !strings.Contains(err.Error(), testCase.want)) {
+				t.Fatalf("revalidation error = %v", err)
+			}
+		})
+	}
+}
+
+func writeUpgradeOutputExecutable(t *testing.T, root string, output []byte) {
+	t.Helper()
+	binary := filepath.Join(root, filepath.FromSlash(release.BinaryPath))
+	if err := os.MkdirAll(filepath.Dir(binary), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\ncat <<'UPGRADE_OUTPUT'\n" + string(output) + "\nUPGRADE_OUTPUT\n"
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
 	}
 }
 

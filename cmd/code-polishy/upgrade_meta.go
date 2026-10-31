@@ -428,11 +428,36 @@ func parseOutgoingUpgradeDiagnostics(data []byte) (upgradeDiagnosticSnapshot, []
 		return upgradeDiagnosticSnapshot{}, nil, errors.New("outgoing release returned an invalid check report")
 	}
 	snapshot := upgradeDiagnosticSnapshot{Protocol: upgradeDiagnosticProtocol, Diagnostics: diagnosticsFromFindings(report.Findings)}
-	canonical, err := json.MarshalIndent(snapshot, "", "  ")
+	evidence := upgradeDiagnosticSnapshot{Protocol: upgradeDiagnosticProtocol, Diagnostics: upgradeDiagnosticsEvidence(snapshot.Diagnostics)}
+	canonical, err := json.MarshalIndent(evidence, "", "  ")
 	if err != nil {
 		return upgradeDiagnosticSnapshot{}, nil, err
 	}
 	return snapshot, append(canonical, '\n'), nil
+}
+
+func upgradeDiagnosticEvidence(diagnostic release.UpgradeDiagnostic) release.UpgradeDiagnostic {
+	diagnostic.Line, diagnostic.Subject = 0, ""
+	return diagnostic
+}
+
+func upgradeDiagnosticsEvidence(diagnostics []release.UpgradeDiagnostic) []release.UpgradeDiagnostic {
+	evidence := make([]release.UpgradeDiagnostic, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		evidence = append(evidence, upgradeDiagnosticEvidence(diagnostic))
+	}
+	return evidence
+}
+
+func upgradeDeltaEvidence(delta release.UpgradeDiagnosticDelta) release.UpgradeDiagnosticDelta {
+	evidence := release.UpgradeDiagnosticDelta{
+		Added: upgradeDiagnosticsEvidence(delta.Added), Removed: upgradeDiagnosticsEvidence(delta.Removed),
+		Changed: make([]release.UpgradeDiagnosticChange, 0, len(delta.Changed)),
+	}
+	for _, change := range delta.Changed {
+		evidence.Changed = append(evidence.Changed, release.UpgradeDiagnosticChange{Before: upgradeDiagnosticEvidence(change.Before), After: upgradeDiagnosticEvidence(change.After)})
+	}
+	return evidence
 }
 
 func diagnosticsFromFindings(findings []policy.Finding) []release.UpgradeDiagnostic {
@@ -463,7 +488,7 @@ func compareUpgradeDiagnostics(before, after []release.UpgradeDiagnostic) releas
 		prior, exists := previous[fingerprint]
 		if !exists {
 			delta.Added = append(delta.Added, diagnostic)
-		} else if prior != diagnostic {
+		} else if upgradeDiagnosticEvidence(prior) != upgradeDiagnosticEvidence(diagnostic) {
 			delta.Changed = append(delta.Changed, release.UpgradeDiagnosticChange{Before: prior, After: diagnostic})
 		}
 	}
@@ -485,8 +510,8 @@ func compareUpgradeDiagnostics(before, after []release.UpgradeDiagnostic) releas
 }
 
 func sameUpgradeDiagnosticDelta(left, right release.UpgradeDiagnosticDelta) bool {
-	first, _ := json.Marshal(left)
-	second, _ := json.Marshal(right)
+	first, _ := json.Marshal(upgradeDeltaEvidence(left))
+	second, _ := json.Marshal(upgradeDeltaEvidence(right))
 	return bytes.Equal(first, second)
 }
 

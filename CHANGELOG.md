@@ -5,9 +5,10 @@
 - List the declared modules when `--module` names an unknown module, in every
   command that accepts one.
 - Name the JSON pointer and target of a stale `scope.pythonContracts` entry in
-  its diagnostic, and record each diagnostic's line and subject in upgrade plans
-  and the `upgrade plan` terminal output. The plan is where to read an incoming
-  release's new findings before cutover.
+  its diagnostic, including in plans written by older releases. Record each
+  diagnostic's line and subject in upgrade plans and the `upgrade plan` terminal
+  output once the outgoing release has this change. The plan is where to read an
+  incoming release's new findings before cutover.
 - Show how many advisories each fix covers in the `VULNERABLE PACKAGES` table
   instead of listing every advisory ID. The JSON report keeps the full list.
 - Name the reported fixed versions and the assessment workflow in vulnerability

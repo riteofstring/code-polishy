@@ -692,9 +692,10 @@ When asked to upgrade Code Polishy, the AI agent should:
    repository wrapper, which still selects the outgoing release;
 4. inspect its authenticated capability delta and its added, removed, and
    changed diagnostics. The terminal shows the first eight; the reported plan
-   file records every one with its rule, path, line, subject, and message. The
-   incoming release cannot run other commands before cutover, so read new
-   findings there. Planning may install the immutable candidate and write
+   file records every one with its rule, path, and message, plus its line and
+   subject when the outgoing release is newer than 0.31.8. The incoming release
+   cannot run other commands before cutover, so read new findings there.
+   Planning may install the immutable candidate and write
    managed evidence, but it must not change the target lock or application
    source;
 5. read every intervening `CHANGELOG.md` entry. Fix newly exposed issues and

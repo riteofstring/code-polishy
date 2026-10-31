@@ -148,6 +148,12 @@ both wrappers, ignore rules, and the incoming lock as one rollback-capable
 transaction; the lock is renamed last. That rename is the guidance cutover.
 Upgrade never edits governed application source.
 
+The outgoing release writes the plan and the incoming release revalidates it, so
+the digested diagnostic form must stay identical across releases. A diagnostic's
+line and subject are display fields: plans may record them, but the outgoing
+digest and delta comparison exclude them. New evidence fields need a protocol
+change, not an addition to that form.
+
 Upgrade artifacts use the incoming release digest as their stable directory
 identity rather than hashing rendered lock bytes. Apply accepts an older plan
 only when its plan and capability-record paths share one bounded digest
