@@ -8,6 +8,19 @@ every tag push and target lock change. Pushing an annotated version tag
 explicitly authorizes the checked-in release workflow to publish that release;
 manual dispatch authorizes the same operation for an existing tag.
 
+The GitHub repository must have **Enable release immutability** turned on.
+Before preparing a release, a maintainer checks it with:
+
+```sh
+gh api repos/riteofstring/code-polishy/immutable-releases --jq .enabled
+```
+
+Require `true`; resolve a disabled setting or failed read before tagging.
+This administration check uses the maintainer's credentials, not an elevated
+workflow token. GitHub automatically signs the release's tag, source commit
+and asset digests when the completed draft becomes public. The setting applies
+only to future publications; it does not add signatures to older releases.
+
 1. Bring the candidate to release shape as one reviewed commit. `VERSION` must
    contain a strict `MAJOR.MINOR.PATCH` version, optionally followed by a SemVer
    prerelease suffix such as `-beta.1`, and `CHANGELOG.md` must have
@@ -120,6 +133,24 @@ manual dispatch authorizes the same operation for an existing tag.
    access only in the final publish job. Release notes publish the source
    revision, index SHA-256, and digest-pinned OCI image alongside the prepared
    changelog entries, including migration notes.
+
+   Confirm the published release is marked **Immutable**, then verify its signed
+   record and the downloaded index before treating publication as complete:
+
+   ```sh
+   version="$(./scripts/release-version.sh VERSION)"
+   verification_directory="$(mktemp -d)"
+   gh release verify "v${version}" --repo riteofstring/code-polishy
+   gh release download "v${version}" --repo riteofstring/code-polishy \
+     --pattern code-polishy-release-index.json --dir "${verification_directory}"
+   gh release verify-asset "v${version}" "${verification_directory}/code-polishy-release-index.json" \
+     --repo riteofstring/code-polishy
+   ```
+
+   A failed verification is incomplete publication evidence. Investigate it
+   without deleting, replacing or republishing an existing release. GitHub's
+   signature authenticates publication custody; the separate authenticated-build
+   plan retains its stronger native-builder and SBOM provenance requirements.
 
 9. Move each consuming repository with a publication-backed
    `upgrade plan --index URL --sha256 DIGEST`, inspect its capability and

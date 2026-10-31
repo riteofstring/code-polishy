@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Use GitHub immutable releases for future publications, with automatically
+  signed records binding the release tag, source commit and asset digests.
+  Document how to obtain a verified index digest and authenticate downloads
+  with GitHub CLI. Existing releases through `0.31.9` remain unattested.
+
 ## 0.31.9 - 2026-10-30
 
 - List the declared modules when `--module` names an unknown module, in every

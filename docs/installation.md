@@ -599,20 +599,40 @@ not authenticated builder provenance.
 
 List published versions with `gh release list --repo riteofstring/code-polishy`
 or on the [releases page](https://github.com/riteofstring/code-polishy/releases).
-Each release publishes its index and digest at version-specific URLs:
+For a release marked **Immutable**, obtain the index digest from GitHub's
+cryptographically verified release attestation:
 
 ```sh
 version=<exact-version>
 base="https://github.com/riteofstring/code-polishy/releases/download/v${version}"
-curl --fail --location "${base}/code-polishy-release-index.json.sha256"
+gh release verify "v${version}" --repo riteofstring/code-polishy --format json \
+  --jq '.verificationResult.statement.subject[] | select(.name == "code-polishy-release-index.json") | .digest.sha256'
 ```
 
-Pass `${base}/code-polishy-release-index.json` and the printed digest to `lock`
-or `upgrade plan`.
+Require successful verification and one nonempty SHA-256. Pass
+`${base}/code-polishy-release-index.json` and that verified digest to `lock`
+or `upgrade plan`; these commands verify the downloaded index against it.
+Use a trusted installation of GitHub CLI with `release verify` support.
 
-The digest is a release asset and also appears in the release notes, so it
-detects corruption only. Anyone who can replace the index can replace it too, and
-releases do not yet carry an independently verifiable signature.
+GitHub signs the release's repository identity, tag, source commit and asset
+digests when the completed draft becomes public. Its immutable-release service
+also prevents changing the published assets or moving their tag. This proves
+which bytes GitHub published for that release; it does not attest how each
+native archive was built. Release notes remain editable and are not the
+authentication source.
+
+To verify a local download directly, use:
+
+```sh
+gh release verify-asset "v${version}" ./code-polishy-release-index.json \
+  --repo riteofstring/code-polishy
+```
+
+The setting applies only to future publications. `v0.31.9` and earlier do not
+have these release attestations. Their `.sha256` assets and release-note digests
+detect corruption but do not independently authenticate the index. Do not
+describe an unattested release as having passed signature verification.
+See GitHub's [release-integrity verification instructions](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity).
 
 `lock --index URL --sha256 DIGEST` verifies that the index describes the
 executing installed release and writes this v2 lock without redownloading an
