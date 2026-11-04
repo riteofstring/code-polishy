@@ -42,16 +42,12 @@ func TestProjectPrinciplesRejectInvalidStructureAndBounds(t *testing.T) {
 		want   string
 	}{
 		"section size": {
-			suffix: "\n## Project principles\n\n1. **Keep principles bounded.** " + strings.Repeat("a", maximumProjectPrinciplesBytes) + "\n",
+			suffix: projectPrinciplesWithItems(100),
 			want:   "project principles use",
 		},
 		"item size": {
 			suffix: "\n## Project principles\n\n" + itemPrefix + strings.Repeat("a", maximumProjectPrincipleBytes-len(itemPrefix)) + "\n",
 			want:   "maximum 400",
-		},
-		"item count": {
-			suffix: projectPrinciplesWithItems(13),
-			want:   "more than 12",
 		},
 		"numbering": {
 			suffix: "\n## Project principles\n\n1. **Keep order stable.** First.\n3. **Append deliberately.** Third.\n",
@@ -151,7 +147,8 @@ func TestProjectPrinciplesRejectInvalidStructureAndBounds(t *testing.T) {
 
 func TestRenderSynchronizedAgentsPreservesProjectPrinciplesBytes(t *testing.T) {
 	t.Parallel()
-	existing := []byte("# Stale guidance\n" + projectPrinciplesText)
+	principles := projectPrinciplesWithItems(13)
+	existing := []byte("# Stale guidance\n" + principles)
 	updated, changed, err := renderSynchronizedAgents(existing, []byte(canonicalAgentsText))
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +156,7 @@ func TestRenderSynchronizedAgentsPreservesProjectPrinciplesBytes(t *testing.T) {
 	if !changed {
 		t.Fatal("stale canonical guidance was not synchronized")
 	}
-	want := []byte(canonicalAgentsText + projectPrinciplesText)
+	want := []byte(canonicalAgentsText + principles)
 	if !bytes.Equal(updated, want) {
 		t.Fatalf("updated guidance = %q, want %q", updated, want)
 	}

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Remove the 12-item limit on `AGENTS.md` project principles. The section remains
+  limited to 5 KiB, with at most 400 UTF-8 bytes per principle.
+
 ## 0.31.10 - 2026-10-30
 
 - Use GitHub immutable releases for future publications, with automatically

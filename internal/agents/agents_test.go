@@ -69,7 +69,7 @@ func TestInstallAcceptsCanonicalGuidanceWithProjectPrinciples(t *testing.T) {
 	repoRoot := t.TempDir()
 	agentsPath := filepath.Join(repoRoot, agentsTargetFilename)
 	ignorePath := filepath.Join(repoRoot, ignoreTargetFilename)
-	wantAgents := []byte(canonicalAgentsText + projectPrinciplesText)
+	wantAgents := []byte(canonicalAgentsText + projectPrinciplesWithItems(13))
 	writeFile(t, agentsPath, wantAgents, 0o600)
 	writeFile(t, ignorePath, []byte(expectedArtifactIgnores), 0o640)
 	writeCanonicalWrappers(t, repoRoot, policyRoot)
@@ -449,7 +449,7 @@ func TestCheckValidatesCanonicalGuidanceAndProjectPrinciples(t *testing.T) {
 		t.Fatalf("stale status = %+v", status)
 	}
 
-	writeFile(t, agentsPath, []byte(canonicalAgentsText+projectPrinciplesText), 0o600)
+	writeFile(t, agentsPath, []byte(canonicalAgentsText+projectPrinciplesWithItems(13)), 0o600)
 	status = Check(repoRoot, policyRoot)
 	if status.Current || len(status.Issues) != 1 || status.Issues[0].Check != "policy.reportArtifacts" ||
 		status.Issues[0].Path != ignoreTargetFilename || status.Issues[0].Subject != "workspace-ignore" {

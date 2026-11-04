@@ -15,7 +15,6 @@ const (
 	maximumCanonicalAgentsBytes       = 5 << 10
 	projectPrinciplesHeading          = "## Project principles"
 	maximumProjectPrinciplesBytes     = 5 << 10
-	maximumProjectPrinciples          = 12
 	maximumProjectPrincipleBytes      = 400
 	maximumProjectPrincipleTitleWords = 8
 )
@@ -170,9 +169,6 @@ func (state *projectPrincipleListState) startItem(section []byte, start, number 
 	state.number++
 	if number != state.number {
 		return fmt.Errorf("project principles must use consecutive numbering; expected %d, found %d", state.number, number)
-	}
-	if state.number > maximumProjectPrinciples {
-		return fmt.Errorf("project principles contain more than %d items", maximumProjectPrinciples)
 	}
 	if err := validateProjectPrincipleStart(body, state.number); err != nil {
 		return err

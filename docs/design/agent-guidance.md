@@ -60,14 +60,16 @@ file. Synchronization replaces a stale prefix and preserves a valid principles
 section byte-for-byte. A recognized but malformed section blocks the complete
 transaction so synchronization cannot erase or normalize repository decisions.
 
-The section has one flat, consecutively numbered list with at most 12 items.
+The section has one flat, consecutively numbered list without a separate item-count limit.
 Each item begins with one bold title of at most eight whitespace-delimited words
 and continues as one paragraph. The complete repository-owned suffix, including
 its required leading blank line and heading, is at most 5 KiB, and each complete
 item, including its Markdown and line endings, is at most 400 UTF-8 bytes.
 Nested lists, extra headings, tables, code blocks, images, and links are invalid.
 These deterministic limits keep the persistent prompt bounded, the list
-scannable, and each principle focused on one decision.
+scannable, and each principle focused on one decision. The section's byte budget
+bounds total instruction space while allowing repositories to choose how many
+focused principles fit within it.
 
 Titles use imperative phrasing. Principles state durable, testable repository
 decisions and ownership boundaries, not aspirations. They omit paths, commands,
