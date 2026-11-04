@@ -39,6 +39,19 @@
   "documentation": {
     "design": [
       {
+        "path": "docs/design/bundled-javascript-dependencies.md",
+        "sourcePaths": [
+          "internal/architecture/bundled_dependencies.go",
+          "internal/architecture/bundled_dependencies_test.go",
+          "internal/architecture/javascript.go",
+          "internal/javascript/package_imports.go",
+          "internal/javascript/package_imports_test.go",
+          "internal/policy/bundled_dependencies.go",
+          "internal/policy/bundled_dependencies_test.go",
+          "tools/javascript/package-imports.mjs"
+        ]
+      },
+      {
         "path": "docs/design/python-library-dependencies.md",
         "sourcePaths": [
           "internal/pythonfacts/specifiers.go",

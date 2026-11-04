@@ -143,7 +143,7 @@ function collectCalledSpecifier(node, specifiers, computed) {
   }
 }
 
-function sourceSpecifiers(source) {
+export function sourceSpecifiers(source) {
   const specifiers = [];
   const computed = [];
   const visit = (node) => {
@@ -159,7 +159,7 @@ function nodePosition(source, node) {
   return { line: position.line + 1, column: position.character + 1 };
 }
 
-function specifiedPackage(specifier) {
+export function specifiedPackage(specifier) {
   if (/^[./#]/.test(specifier) || specifier.startsWith("node:")) {
     return "";
   }

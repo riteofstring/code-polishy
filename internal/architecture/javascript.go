@@ -1,6 +1,7 @@
 package architecture
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -78,7 +79,7 @@ func nodePackageFinding(repo repository.Repository, packages *nodePackages, sour
 	message := ""
 	switch {
 	case owner.development[name]:
-		if repo.IsDevelopment(source) {
+		if repo.IsDevelopment(source) || owner.bundled[name] {
 			return policy.Finding{}, false
 		}
 		message = fmt.Sprintf("line %d package %q imports development dependency %q from source that ships",
@@ -105,6 +106,7 @@ func importCoverageFinding(path, message string) policy.Finding {
 const nodeManifestName = "package.json"
 
 type nodePackages struct {
+	ctx      context.Context
 	repo     repository.Repository
 	owners   map[string]bool
 	read     map[string]nodePackage
@@ -116,17 +118,24 @@ type nodePackage struct {
 	name        string
 	runtime     map[string]bool
 	development map[string]bool
+	bundled     map[string]bool
 	readable    bool
 }
 
-func newNodePackages(repo repository.Repository, allFiles []string) *nodePackages {
+func newNodePackages(ctx context.Context, repo repository.Repository, allFiles []string) *nodePackages {
 	owners := map[string]bool{}
 	for _, path := range allFiles {
 		if filepath.Base(path) == nodeManifestName {
 			owners[filepath.ToSlash(filepath.Dir(path))] = true
 		}
 	}
-	return &nodePackages{repo: repo, owners: owners, read: map[string]nodePackage{}}
+	packages := &nodePackages{ctx: ctx, repo: repo, owners: owners, read: map[string]nodePackage{}}
+	for _, declaration := range repo.Config.Scope.BundledDependencies {
+		if !owners[filepath.ToSlash(filepath.Dir(declaration.Manifest))] {
+			packages.coverage = append(packages.coverage, importCoverageFinding(declaration.Manifest, "bundled dependency declaration names no governed package manifest"))
+		}
+	}
+	return packages
 }
 
 func (packages *nodePackages) owning(path string) (nodePackage, bool) {
@@ -148,13 +157,15 @@ func (packages *nodePackages) declared(directory string) (nodePackage, bool) {
 		return cached, cached.readable
 	}
 	declared, err := readNodePackage(packages.repo, directory)
-	packages.read[directory] = declared
 	if err != nil {
 		packages.coverage = append(packages.coverage, policy.Finding{
 			Check: "architecture.importCoverage", Path: nodeManifestPath(directory), Subject: nodeManifestName,
 			Message: "the owning package manifest could not be read: " + err.Error(),
 		})
+	} else {
+		packages.verifyBundledDependencies(&declared)
 	}
+	packages.read[directory] = declared
 	return declared, declared.readable
 }
 

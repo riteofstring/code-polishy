@@ -151,7 +151,7 @@ func providerFactInput(command policy.Command, result pack.Result, nodes []sourc
 	return input, nil
 }
 
-func connectProviderImports(repo repository.Repository, allFiles []string, part *sourceGraphPart) {
+func connectProviderImports(repo repository.Repository, allFiles []string, part *sourceGraphPart, packages *nodePackages) {
 	nodes := map[string]sourcegraph.Node{}
 	for _, node := range part.nodes {
 		nodes[node.Path] = node
@@ -160,14 +160,12 @@ func connectProviderImports(repo repository.Repository, allFiles []string, part 
 	for _, path := range allFiles {
 		governed[path] = true
 	}
-	packages := newNodePackages(repo, allFiles)
 	for _, fact := range part.imports {
 		connection := connectProviderImport(repo, packages, governed, nodes, fact)
 		part.findings = append(part.findings, connection.findings...)
 		part.edges = append(part.edges, connection.edges...)
 		part.incomplete = part.incomplete || connection.incomplete
 	}
-	part.findings = append(part.findings, packages.coverage...)
 }
 
 func connectProviderImport(repo repository.Repository, packages *nodePackages, governed map[string]bool, nodes map[string]sourcegraph.Node, fact pack.ImportFact) sourceGraphPart {

@@ -151,6 +151,7 @@ type Scope struct {
 
 	EntryPoints                 []string                     `json:"entryPoints,omitempty"`
 	GeneratedJavaScript         []GeneratedJavaScript        `json:"generatedJavaScript,omitempty"`
+	BundledDependencies         []BundledDependencies        `json:"bundledDependencies,omitempty"`
 	PythonDynamicReferences     []PythonDynamicReference     `json:"pythonDynamicReferences,omitempty"`
 	PythonComputedImports       []PythonComputedImport       `json:"pythonComputedImports,omitempty"`
 	PythonExternalPluginImports []PythonExternalPluginImport `json:"pythonExternalPluginImports,omitempty"`
@@ -163,6 +164,11 @@ type Scope struct {
 type GeneratedJavaScript struct {
 	Paths         []string `json:"paths"`
 	SourcePackage string   `json:"sourcePackage"`
+}
+
+type BundledDependencies struct {
+	Manifest string   `json:"manifest"`
+	Packages []string `json:"packages"`
 }
 
 type PythonDynamicReference struct {

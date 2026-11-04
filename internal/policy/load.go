@@ -332,6 +332,9 @@ func validateScope(config *Config) error {
 	if err := validateGeneratedJavaScript(config.Scope.GeneratedJavaScript); err != nil {
 		return err
 	}
+	if err := validateBundledDependencies(config.Scope.BundledDependencies); err != nil {
+		return err
+	}
 	if err := validatePythonDeclarations(&config.Scope); err != nil {
 		return err
 	}

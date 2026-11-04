@@ -6,6 +6,11 @@
 
 - Fix `merge-gate` aborting during artifact-security scanner self-scanning by
   matching the planned scanner image command names and order to execution.
+- Allow exact `scope.bundledDependencies` declarations for packages inlined from
+  `devDependencies`. Verify built JavaScript and reachable public declarations
+  before admitting their source imports; missing artifacts, leaked imports, and
+  contradictory manifest declarations remain blocking. Upgrade the locked
+  release before using the new configuration.
 
 ## 0.32.0 - 2026-11-03
 

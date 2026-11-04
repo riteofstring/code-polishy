@@ -313,6 +313,41 @@ A manifest the reader could not read is an `architecture.importCoverage`
 finding on that manifest, reported once for the package rather than once for
 every import decided against it.
 
+A library that inlines development dependencies into its built artifact can
+declare those exact packages without marking production source as development:
+
+```json
+{
+  "scope": {
+    "bundledDependencies": [
+      {
+        "manifest": "packages/editor/package.json",
+        "packages": ["@codemirror/state", "@codemirror/view"]
+      }
+    ]
+  }
+}
+```
+
+Each listed package must be declared only in that manifest's `devDependencies`.
+Exact package names are required; wildcards, undeclared packages, and conflicting
+runtime, peer, or optional declarations fail. This allowance applies only to the
+owning package and does not change any source classification or other rule.
+
+Build the package before running `architecture` or a gate. Code Polishy parses
+its exact `exports` and explicit `main`, `module`, `types`, and `typings` entry
+files, follows local JavaScript and public declaration imports, and refuses the
+allowance if that closure still imports a bundled package. Missing artifacts,
+unresolved local imports, computed imports or requires, escaping paths, and
+unreadable output block verification. Export patterns and `browser` or
+`typesVersions` mappings are not supported by this verification. Existing
+declaration companions are included; unreachable private declarations are not.
+
+Keep build-freshness and packed-consumer tests in the package's ordinary suites.
+The check reads the current outputs and does not execute the build or prove
+arbitrary runtime behavior. Upgrade the locked Code Polishy release before
+adding this configuration. See the [bundled dependency design](../design/bundled-javascript-dependencies.md).
+
 Coverage fails closed instead of reading as clean. Governed source the reader
 cannot parse without a compiler, a file it could not read, and a dynamic import
 whose specifier is computed are each an `architecture.importCoverage` finding:

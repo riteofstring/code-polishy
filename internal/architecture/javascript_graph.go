@@ -16,7 +16,7 @@ import (
 
 const javascriptImportBatchSize = 4096
 
-func javascriptSourceGraph(ctx context.Context, repo repository.Repository, selected, allFiles []string) sourceGraphPart {
+func javascriptSourceGraph(ctx context.Context, repo repository.Repository, selected, allFiles []string, packages *nodePackages) sourceGraphPart {
 	scope := newJavaScriptGraphScope(repo, selected, allFiles)
 	part := sourceGraphPart{}
 	bounded, cancel := context.WithTimeout(ctx, javascriptImportBudget)
@@ -47,9 +47,7 @@ func javascriptSourceGraph(ctx context.Context, repo repository.Repository, sele
 	for _, path := range allFiles {
 		governed[path] = true
 	}
-	packages := newNodePackages(repo, allFiles)
 	part.findings = append(part.findings, javascriptFactFindings(repo, packages, governed, facts)...)
-	part.findings = append(part.findings, packages.coverage...)
 	for _, finding := range part.findings {
 		if finding.Check == "architecture.importCoverage" {
 			part.incomplete = true

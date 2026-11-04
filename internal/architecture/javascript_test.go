@@ -207,7 +207,7 @@ func TestGeneratedJavaScriptInheritsSourcePackageDependencies(t *testing.T) {
 	writeArchitectureFile(t, root, "packages/domain/model.ts", "export const model = 1;\n")
 	writeArchitectureFile(t, root, "generated/client.ts", "export {};\n")
 	files := []string{"generated/client.ts", "packages/app/package.json", "packages/domain/model.ts"}
-	packages := newNodePackages(repo, files)
+	packages := newNodePackages(t.Context(), repo, files)
 	facts := []javascript.ImportFact{
 		{Path: "generated/client.ts", Line: 1, Package: "left-pad", Resolved: "node_modules/left-pad/index.js"},
 		{Path: "generated/client.ts", Line: 2, Resolved: "packages/domain/model.ts"},

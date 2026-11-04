@@ -22,6 +22,7 @@ import { audit } from "./audit.mjs";
 import { parseLiteralDataModule } from "./data-modules.mjs";
 import { deadcode, requireWorkspaces } from "./deadcode.mjs";
 import { imports } from "./imports.mjs";
+import { packageImports } from "./package-imports.mjs";
 import { gitlab } from "./gitlab.mjs";
 import { licenses } from "./licenses.mjs";
 import { lintPage } from "./lint-pages.mjs";
@@ -68,6 +69,7 @@ const OPERATIONS = {
   },
   deadcode: { fields: ["root", "directory", "workspaces"], run: deadcode },
   imports: { fields: ["root", "paths"], run: imports },
+  "package-imports": { fields: ["root", "paths"], run: packageImports },
   gitlab: { fields: ["root", "paths", "governedPaths"], run: gitlab },
   packages: { fields: ["root", "directory"], run: packages },
   workspace: { fields: ["root", "paths"], run: workspace },

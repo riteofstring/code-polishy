@@ -11,6 +11,7 @@ audit.mjs
 deadcode.mjs
 glob-inputs.mjs
 imports.mjs
+package-imports.mjs
 gitlab.mjs
 licenses.mjs
 packages.mjs

@@ -247,6 +247,14 @@
       "public": true
     },
     {
+      "id": "bundled-javascript-dependencies",
+      "path": "docs/design/bundled-javascript-dependencies.md",
+      "title": "Bundled JavaScript dependencies",
+      "summary": "Admit exact inlined development dependencies after checking built JavaScript and public declarations.",
+      "aliases": ["bundled-dependencies"],
+      "public": true
+    },
+    {
       "id": "javascript-glob-inputs",
       "path": "docs/design/javascript-glob-inputs.md",
       "title": "Bounded JavaScript glob inputs",

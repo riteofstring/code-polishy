@@ -23,6 +23,12 @@ func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected
 		return Analysis{Findings: []policy.Finding{{Check: "architecture.inventory", Path: "repository", Subject: "files", Message: err.Error()}}}
 	}
 	goInventory := repo.InspectGoModules(allFiles)
+	packages := newNodePackages(ctx, repo, allFiles)
+	for _, path := range selected {
+		if repo.Language(path) == "typescript" || filepath.Base(path) == nodeManifestName {
+			_, _ = packages.owning(path)
+		}
+	}
 	providers := providerSourceGraph(ctx, repo, selected, allFiles, commandRunner)
 	nativeSelected := append([]string{}, selected...)
 	for _, fact := range providers.imports {
@@ -33,11 +39,15 @@ func AnalyzeWithRunner(ctx context.Context, repo repository.Repository, selected
 	part := mergeSourceGraphParts(
 		providers,
 		goSourceGraph(repo, nativeSelected, allFiles, goInventory),
-		javascriptSourceGraph(ctx, repo, nativeSelected, allFiles),
+		javascriptSourceGraph(ctx, repo, nativeSelected, allFiles, packages),
 		pythonSourceGraph(ctx, repo, nativeSelected, allFiles, commandRunner),
 		rustSourceGraph(ctx, repo, nativeSelected, allFiles, commandRunner),
 	)
-	connectProviderImports(repo, allFiles, &part)
+	connectProviderImports(repo, allFiles, &part, packages)
+	part.findings = append(part.findings, packages.coverage...)
+	for _, finding := range packages.coverage {
+		part.incomplete = part.incomplete || finding.Check == "architecture.importCoverage"
+	}
 	if !part.incomplete {
 		part.testImports = resolvedTestImports(part.nodes, part.edges)
 	}

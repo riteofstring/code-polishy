@@ -179,6 +179,11 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/generatedJavaScript" }
         },
+        "bundledDependencies": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/bundledDependencies" }
+        },
         "pythonRuntimeLoaders": {
           "type": "array",
           "maxItems": 256,
@@ -241,6 +246,28 @@
         "sourcePackage": {
           "$ref": "#/$defs/exactPath",
           "pattern": "(?:^|/)package\\.json$"
+        }
+      }
+    },
+    "bundledDependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "packages"],
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/exactPath",
+          "pattern": "(?:^|/)package\\.json$"
+        },
+        "packages": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 214,
+            "pattern": "^(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$"
+          }
         }
       }
     },
