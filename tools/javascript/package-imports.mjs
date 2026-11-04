@@ -22,6 +22,10 @@ const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
 const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
 
+function typeCondition(condition) {
+  return condition === "types" || condition.startsWith("types@");
+}
+
 function exportTargets(value, entries, kind) {
   if (value === null) return;
   if (typeof value === "string") {
@@ -36,7 +40,7 @@ function exportTargets(value, entries, kind) {
   if (typeof value !== "object")
     throw new Error("package exports are not readable");
   for (const [condition, target] of Object.entries(value))
-    exportTargets(target, entries, condition === "types" ? "types" : kind);
+    exportTargets(target, entries, typeCondition(condition) ? "types" : kind);
 }
 
 function fieldTarget(name, value, entries, kind) {

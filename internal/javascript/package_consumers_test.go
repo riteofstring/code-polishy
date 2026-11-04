@@ -518,6 +518,16 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			files:   map[string]string{"dist/types.d.ts": `export type { Value } from "dep";`},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
+		"versioned types condition": {
+			manifest:    `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts","exports":{".":{"types@>=5.0":"./dist/types.d.ts","default":"./dist/index.js"}}}`,
+			declaration: `export type Value = string;`, files: map[string]string{"dist/types.d.ts": `export type Value = string;`},
+		},
+		"versioned types condition dependency": {
+			manifest:    `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts","exports":{".":{"types@>=5.0":"./dist/types.d.ts","default":"./dist/index.js"}}}`,
+			declaration: `export type Value = string;`, identity: "dep",
+			files:   map[string]string{"dist/types.d.ts": `export type { Value } from "dep";`},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
 		"unreachable private declaration": {
 			declaration: `export declare const value: string;`,
 			files:       map[string]string{"dist/private.d.ts": `export type { Value } from "dep";`},

@@ -37,7 +37,8 @@ enumeration, because a consumer may select any of them. `main` and the
 package's own name join through Node's entry selection: the files Node's
 CommonJS and ESM resolvers select for the package from a consumer, and the file
 Node selects for `main`, so extension search and directory `main` match Node.
-Type entries are `types` and `typings` fields and `types` export conditions.
+Type entries are `types` and `typings` fields and `types` export conditions,
+including TypeScript's versioned `types@<range>` conditions.
 They go only to TypeScript, which resolves them with its own extension
 substitution and directory rules; a declared type entry that no consumer
 configuration resolves fails verification.

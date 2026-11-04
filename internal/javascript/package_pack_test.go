@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,17 +46,13 @@ func versionManifest(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := map[string]any{}
+	manifest := map[string]json.RawMessage{}
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatal(err)
 	}
 	if _, found := manifest["version"]; !found {
-		manifest["version"] = "1.0.0"
+		writeScript(t, path, strings.Replace(string(data), "{", `{"version":"1.0.0",`, 1))
 	}
-	if data, err = json.Marshal(manifest); err != nil {
-		t.Fatal(err)
-	}
-	writeScript(t, path, string(data))
 }
 
 func installPacked(t *testing.T, archive, target string) {
@@ -131,17 +128,15 @@ func namedManifest(t *testing.T, root string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := map[string]any{}
+	var manifest struct {
+		Name *string `json:"name"`
+	}
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if name, found := manifest["name"].(string); found {
-		return name
+	if manifest.Name != nil {
+		return *manifest.Name
 	}
-	manifest["name"] = "pkg"
-	if data, err = json.Marshal(manifest); err != nil {
-		t.Fatal(err)
-	}
-	writeScript(t, path, string(data))
+	writeScript(t, path, strings.Replace(string(data), "{", `{"name":"pkg",`, 1))
 	return "pkg"
 }
