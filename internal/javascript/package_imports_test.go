@@ -68,6 +68,54 @@ func TestInstalledPackageImportsCheckImplicitTypesAndReferences(t *testing.T) {
 	}
 }
 
+func TestInstalledPackageImportsFollowExecutableAndImplicitEntries(t *testing.T) {
+	root := t.TempDir()
+	writeScript(t, filepath.Join(root, "package.json"), `{"main":"dist/index","bin":{"tool":"bin/tool"}}`)
+	writeScript(t, filepath.Join(root, "dist/index"), `module.exports = require("runtime-dep");`)
+	writeScript(t, filepath.Join(root, "bin/tool"), "#!/usr/bin/env node\nrequire(\"cli-dep\");\n")
+	writeScript(t, filepath.Join(root, "index.d.ts"), `export type { Value } from "type-dep";`)
+	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
+	if err != nil || len(result.Unsupported) != 0 {
+		t.Fatalf("PackageImports = %+v, %v", result, err)
+	}
+	packages := []string{}
+	for _, fact := range result.Imports {
+		packages = append(packages, fact.Package)
+	}
+	slices.Sort(packages)
+	if !slices.Equal(packages, []string{"cli-dep", "runtime-dep", "type-dep"}) {
+		t.Fatalf("published imports = %+v", result)
+	}
+}
+
+func TestInstalledPackageImportsRejectUnmodeledRuntimeTargets(t *testing.T) {
+	bundle := installedPackageImportBundle(t)
+	for name, files := range map[string]map[string]string{
+		"nested package manifest": {
+			"dist/index.cjs":          `module.exports = require("./chunk");`,
+			"dist/chunk/package.json": `{"main":"actual.cjs"}`,
+			"dist/chunk/actual.cjs":   `module.exports = require("dep");`,
+			"dist/chunk/index.js":     `module.exports = {};`,
+		},
+		"unknown artifact type": {
+			"dist/index.cjs": `module.exports = require("./data.txt");`,
+			"dist/data.txt":  `require("dep");`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeScript(t, filepath.Join(root, "package.json"), `{"main":"dist/index.cjs"}`)
+			for path, source := range files {
+				writeScript(t, filepath.Join(root, path), source)
+			}
+			result, err := bundle.PackageImports(t.Context(), root, "package.json")
+			if err != nil || len(result.Unsupported) != 1 {
+				t.Fatalf("PackageImports = %+v, %v", result, err)
+			}
+		})
+	}
+}
+
 func TestInstalledPackageImportsRequireBuiltContainedEntries(t *testing.T) {
 	bundle := installedPackageImportBundle(t)
 	for name, manifest := range map[string]string{
@@ -77,6 +125,8 @@ func TestInstalledPackageImportsRequireBuiltContainedEntries(t *testing.T) {
 		"escaping exports":  `{"exports":"../outside.js"}`,
 		"unmodeled types":   `{"exports":"./dist/index.js","typesVersions":{"*":{}}}`,
 		"unmodeled browser": `{"exports":"./dist/index.js","browser":{}}`,
+		"unmodeled bin dir": `{"exports":"./dist/index.js","directories":{"bin":"bin"}}`,
+		"unreadable bin":    `{"bin":7}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()

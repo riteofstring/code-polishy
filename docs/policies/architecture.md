@@ -335,13 +335,17 @@ runtime, peer, or optional declarations fail. This allowance applies only to the
 owning package and does not change any source classification or other rule.
 
 Build the package before running `architecture` or a gate. Code Polishy parses
-its exact `exports` and explicit `main`, `module`, `types`, and `typings` entry
-files, follows local JavaScript and public declaration imports, and refuses the
-allowance if that closure still imports a bundled package. Missing artifacts,
-unresolved local imports, computed imports or requires, escaping paths, and
-unreadable output block verification. Export patterns and `browser` or
-`typesVersions` mappings are not supported by this verification. Existing
-declaration companions are included; unreachable private declarations are not.
+its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
+entry files, plus root `index.js` and `index.d.ts` fallbacks when the matching
+fields are absent. It follows local JavaScript and public declaration imports,
+parses extensionless files as JavaScript, and refuses the allowance if that
+closure still imports a bundled package. Missing artifacts, unresolved local
+imports, computed imports or requires, escaping paths, artifacts other than
+JavaScript, TypeScript, JSON, or CSS, and unreadable output block verification.
+Export patterns, `browser`, `typesVersions`, `directories.bin`, and directory
+imports through a nested `package.json` are not supported by this verification.
+Existing declaration companions are included; unreachable private declarations
+are not.
 
 Keep build-freshness and packed-consumer tests in the package's ordinary suites.
 The check reads the current outputs and does not execute the build or prove

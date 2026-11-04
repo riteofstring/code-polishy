@@ -14,19 +14,26 @@ The declaration does not change source classification, dependency direction,
 quality checks, supply-chain analysis, or other packages' dependency authority.
 
 The sealed TypeScript parser reads the package's existing built entry files.
-It covers every exact `exports` target and explicit `main`, `module`, `types`,
-and `typings` entry, plus existing declaration companions of JavaScript entries.
+It covers every exact `exports` target, explicit `main`, `module`, `types`,
+`typings`, and `bin` entry, and existing declaration companions of JavaScript
+and extensionless entries. Consumers also reach the root `index.js` when neither
+`exports` nor `main` is declared, and the root `index.d.ts` when neither `types`
+nor `typings` is declared, so existing fallback files join the closure.
 It follows local runtime imports through actual JavaScript files, never their
 TypeScript substitutes, and follows reachable public declarations separately.
 Private declaration files outside that closure do not impose consumer needs.
-Re-exports, literal dynamic imports, literal `require`, import types, and
-declaration references participate. A remaining import of a declared bundled
-name blocks both the artifact and the source allowance.
+Extensionless files are parsed as JavaScript because Node executes them; only
+JSON and CSS remain opaque. Re-exports, literal dynamic imports, literal
+`require`, import types, and declaration references participate. A remaining
+import of a declared bundled name blocks both the artifact and the source
+allowance.
 
-Missing or malformed files, escaping or linked paths, computed loaders, and
-unresolved local imports fail verification. Export patterns and `browser` or
-`typesVersions` mappings remain unsupported rather than silently losing a
-possible consumer entry. File, import, byte, and process limits bound analysis.
+Missing or malformed files, escaping or linked paths, computed loaders, other
+artifact types, and unresolved local imports fail verification. Export patterns,
+`browser`, `typesVersions`, `directories.bin`, and directory imports governed by
+a nested `package.json` remain unsupported rather than silently losing or
+misresolving a possible consumer entry. File, import, byte, and process limits
+bound analysis.
 The reader does not execute repository code, build artifacts, or install packages.
 
 Repositories build before architecture verification and keep their ordinary

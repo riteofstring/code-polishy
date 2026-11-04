@@ -19,6 +19,7 @@ const CODE_EXTENSIONS = new Set([
   ".jsx",
   ".tsx",
 ]);
+const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 
 function exportTargets(value, targets) {
   if (value === null) return;
@@ -36,31 +37,66 @@ function exportTargets(value, targets) {
   for (const target of Object.values(value)) exportTargets(target, targets);
 }
 
+function fieldTarget(name, value, targets) {
+  if (typeof value !== "string")
+    throw new Error(`package ${name} must name a file`);
+  exportTargets(value.startsWith("./") ? value : `./${value}`, targets);
+}
+
+function executableEntries(manifest) {
+  const executables = [];
+  if (manifest.bin === undefined) return executables;
+  if (
+    manifest.bin === null ||
+    !["string", "object"].includes(typeof manifest.bin)
+  )
+    throw new Error("package bin is not readable");
+  const targets =
+    typeof manifest.bin === "string"
+      ? [manifest.bin]
+      : Object.values(manifest.bin);
+  for (const target of targets) fieldTarget("bin", target, executables);
+  return executables;
+}
+
+function rejectUnmodeledMappings(manifest) {
+  if (
+    manifest.typesVersions !== undefined ||
+    manifest.browser !== undefined ||
+    manifest.directories?.bin !== undefined
+  ) {
+    throw new Error(
+      "bundled dependency verification does not support browser, typesVersions, or directories.bin mappings; use exact exports, entry fields, or bin files",
+    );
+  }
+}
+
 function packageEntries(manifest) {
   const entries = [];
   if (manifest.exports !== undefined) exportTargets(manifest.exports, entries);
   for (const name of ["main", "module", "types", "typings"]) {
-    if (manifest[name] !== undefined) {
-      if (typeof manifest[name] !== "string")
-        throw new Error(`package ${name} must name a file`);
-      exportTargets(
-        manifest[name].startsWith("./")
-          ? manifest[name]
-          : `./${manifest[name]}`,
-        entries,
-      );
-    }
+    if (manifest[name] !== undefined)
+      fieldTarget(name, manifest[name], entries);
   }
-  if (manifest.typesVersions !== undefined || manifest.browser !== undefined) {
+  const executables = executableEntries(manifest);
+  rejectUnmodeledMappings(manifest);
+  if (entries.length === 0 && executables.length === 0)
     throw new Error(
-      "bundled dependency verification does not support browser or typesVersions mappings; use exact exports or entry fields",
+      "package has no explicit published entry files; declare exports, main/types, or bin before claiming bundled dependencies",
     );
+  return { entries, executables };
+}
+
+function implicitEntries(state, manifest) {
+  const implicit = [];
+  if (manifest.exports === undefined && manifest.main === undefined)
+    implicit.push("index.js");
+  if (manifest.types === undefined && manifest.typings === undefined)
+    implicit.push("index.d.ts");
+  for (const entry of implicit) {
+    const path = packagePath(state, entry);
+    if (optionalArtifactInfo(state.request.root, path)) enqueue(state, path);
   }
-  if (entries.length === 0)
-    throw new Error(
-      "package has no explicit published entry files; declare exports or main/types before claiming bundled dependencies",
-    );
-  return entries;
 }
 
 function containedPackagePath(state, path) {
@@ -113,18 +149,19 @@ function localArtifact(state, from, specifier) {
           suffix === ".js" ? ".d.ts" : suffix === ".mjs" ? ".d.mts" : ".d.cts",
         ),
         `${candidate}.d.ts`,
-        `${candidate}/index.d.ts`,
       ]
-    : [
-        candidate,
-        `${candidate}.js`,
-        `${candidate}.cjs`,
-        `${candidate}/index.js`,
-      ];
+    : [candidate, `${candidate}.js`, `${candidate}.cjs`];
   for (const path of candidates) {
     const info = optionalArtifactInfo(state.request.root, path);
     if (info && !info.isDirectory()) return enqueue(state, path);
   }
+  if (optionalArtifactInfo(state.request.root, `${candidate}/package.json`))
+    throw new Error(
+      `published import ${JSON.stringify(specifier)} from ${from} resolves through a nested package manifest; import its file directly`,
+    );
+  const index = `${candidate}/index${declaration ? ".d.ts" : ".js"}`;
+  const info = optionalArtifactInfo(state.request.root, index);
+  if (info && !info.isDirectory()) return enqueue(state, index);
   throw new Error(
     `published import ${JSON.stringify(specifier)} from ${from} has no contained artifact`,
   );
@@ -163,6 +200,26 @@ function artifactReference(state, source, specifier, position, kind) {
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
 }
 
+function parsedArtifact(path, text) {
+  const extension = extname(path);
+  if (extension !== "" && !CODE_EXTENSIONS.has(extension))
+    throw new Error(
+      "published artifact is not JavaScript, TypeScript, JSON, or CSS",
+    );
+  const source = typescript.createSourceFile(
+    path,
+    text,
+    typescript.ScriptTarget.Latest,
+    true,
+    extension === "" ? typescript.ScriptKind.JS : undefined,
+  );
+  if (source.parseDiagnostics.length > 0)
+    throw new Error(
+      "published artifact has invalid JavaScript or TypeScript syntax",
+    );
+  return source;
+}
+
 function readArtifact(state, path) {
   const text = readTargetFile(
     join(state.request.root, path),
@@ -170,20 +227,11 @@ function readArtifact(state, path) {
     state.unsupported,
   );
   if (text === null) return;
-  if (!CODE_EXTENSIONS.has(extname(path))) {
+  if (OPAQUE_EXTENSIONS.has(extname(path))) {
     state.analyzed.push(path);
     return;
   }
-  const source = typescript.createSourceFile(
-    path,
-    text,
-    typescript.ScriptTarget.Latest,
-    true,
-  );
-  if (source.parseDiagnostics.length > 0)
-    throw new Error(
-      "published artifact has invalid JavaScript or TypeScript syntax",
-    );
+  const source = parsedArtifact(path, text);
   const { specifiers, computed } = sourceSpecifiers(source);
   if (computed.length > 0)
     throw new Error("published artifact has a computed dynamic import");
@@ -211,17 +259,32 @@ function readArtifact(state, path) {
     );
 }
 
+function packagePath(state, entry) {
+  return normalize(join(state.directory, entry).split("\\").join("/"));
+}
+
 function enqueueEntry(state, entry) {
-  const path = enqueue(
-    state,
-    normalize(join(state.directory, entry).split("\\").join("/")),
-  );
-  if (!/\.[cm]?js$/.test(path)) return;
-  const declaration = path.replace(/\.[cm]?js$/, (suffix) =>
-    suffix === ".js" ? ".d.ts" : suffix === ".mjs" ? ".d.mts" : ".d.cts",
-  );
-  if (optionalArtifactInfo(state.request.root, declaration))
+  return enqueue(state, packagePath(state, entry));
+}
+
+function enqueueLibraryEntry(state, entry) {
+  const path = enqueueEntry(state, entry);
+  const extension = extname(path);
+  let declaration = null;
+  if (extension === "") declaration = `${path}.d.ts`;
+  else if (/^\.[cm]?js$/.test(extension))
+    declaration = path.replace(/\.[cm]?js$/, (suffix) =>
+      suffix === ".js" ? ".d.ts" : suffix === ".mjs" ? ".d.mts" : ".d.cts",
+    );
+  if (declaration && optionalArtifactInfo(state.request.root, declaration))
     enqueue(state, declaration);
+}
+
+function enqueuePackageEntries(state, manifest) {
+  const { entries, executables } = packageEntries(manifest);
+  for (const entry of entries) enqueueLibraryEntry(state, entry);
+  for (const entry of executables) enqueueEntry(state, entry);
+  implicitEntries(state, manifest);
 }
 
 function rejectComputedRequires(source) {
@@ -264,8 +327,7 @@ export function packageImports(request) {
     );
     if (text === null)
       return { analyzed: [], imports: [], unsupported: state.unsupported };
-    for (const entry of packageEntries(JSON.parse(text)))
-      enqueueEntry(state, entry);
+    enqueuePackageEntries(state, JSON.parse(text));
     state.analyzed.push(manifestPath);
     for (const path of state.pending) {
       if (path === manifestPath) continue;
