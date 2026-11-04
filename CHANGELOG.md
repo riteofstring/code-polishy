@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.32.1 - 2026-11-03
+
+- Fix `merge-gate` aborting during artifact-security scanner self-scanning by
+  matching the planned scanner image command names and order to execution.
+
 ## 0.32.0 - 2026-11-03
 
 - Remove the 12-item limit on `AGENTS.md` project principles. The section remains
